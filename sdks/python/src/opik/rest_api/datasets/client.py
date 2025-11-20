@@ -8,6 +8,7 @@ from ..types.dataset_expansion_response import DatasetExpansionResponse
 from ..types.dataset_item_page_compare import DatasetItemPageCompare
 from ..types.dataset_item_page_public import DatasetItemPagePublic
 from ..types.dataset_item_public import DatasetItemPublic
+from ..types.dataset_item_update import DatasetItemUpdate
 from ..types.dataset_item_write import DatasetItemWrite
 from ..types.dataset_item_write_source import DatasetItemWriteSource
 from ..types.dataset_page_public import DatasetPagePublic
@@ -39,6 +40,46 @@ class DatasetsClient:
         RawDatasetsClient
         """
         return self._raw_client
+
+    def batch_update_dataset_items(
+        self,
+        *,
+        ids: typing.Sequence[str],
+        update: DatasetItemUpdate,
+        merge_tags: typing.Optional[bool] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> None:
+        """
+        Update multiple dataset items
+
+        Parameters
+        ----------
+        ids : typing.Sequence[str]
+            List of dataset item IDs to update (max 1000)
+
+        update : DatasetItemUpdate
+
+        merge_tags : typing.Optional[bool]
+            If true, merge tags with existing tags instead of replacing them. Default: false
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        None
+
+        Examples
+        --------
+        from Opik import OpikApi
+        from Opik import DatasetItemUpdate
+        client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        client.datasets.batch_update_dataset_items(ids=['ids'], update=DatasetItemUpdate(), )
+        """
+        _response = self._raw_client.batch_update_dataset_items(
+            ids=ids, update=update, merge_tags=merge_tags, request_options=request_options
+        )
+        return _response.data
 
     def find_datasets(
         self,
@@ -182,6 +223,41 @@ class DatasetsClient:
         """
         _response = self._raw_client.create_or_update_dataset_items(
             items=items, dataset_name=dataset_name, dataset_id=dataset_id, request_options=request_options
+        )
+        return _response.data
+
+    def create_dataset_items_from_csv(
+        self,
+        *,
+        file: typing.Dict[str, typing.Optional[typing.Any]],
+        dataset_id: str,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> None:
+        """
+        Create dataset items from uploaded CSV file. CSV should have headers in the first row. Processing happens asynchronously in batches.
+
+        Parameters
+        ----------
+        file : typing.Dict[str, typing.Optional[typing.Any]]
+
+        dataset_id : str
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        None
+
+        Examples
+        --------
+        from Opik import OpikApi
+        client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        client.datasets.create_dataset_items_from_csv(file={'key': 'value'
+        }, dataset_id='dataset_id', )
+        """
+        _response = self._raw_client.create_dataset_items_from_csv(
+            file=file, dataset_id=dataset_id, request_options=request_options
         )
         return _response.data
 
@@ -833,6 +909,49 @@ class AsyncDatasetsClient:
         """
         return self._raw_client
 
+    async def batch_update_dataset_items(
+        self,
+        *,
+        ids: typing.Sequence[str],
+        update: DatasetItemUpdate,
+        merge_tags: typing.Optional[bool] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> None:
+        """
+        Update multiple dataset items
+
+        Parameters
+        ----------
+        ids : typing.Sequence[str]
+            List of dataset item IDs to update (max 1000)
+
+        update : DatasetItemUpdate
+
+        merge_tags : typing.Optional[bool]
+            If true, merge tags with existing tags instead of replacing them. Default: false
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        None
+
+        Examples
+        --------
+        from Opik import AsyncOpikApi
+        from Opik import DatasetItemUpdate
+        import asyncio
+        client = AsyncOpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        async def main() -> None:
+            await client.datasets.batch_update_dataset_items(ids=['ids'], update=DatasetItemUpdate(), )
+        asyncio.run(main())
+        """
+        _response = await self._raw_client.batch_update_dataset_items(
+            ids=ids, update=update, merge_tags=merge_tags, request_options=request_options
+        )
+        return _response.data
+
     async def find_datasets(
         self,
         *,
@@ -984,6 +1103,44 @@ class AsyncDatasetsClient:
         """
         _response = await self._raw_client.create_or_update_dataset_items(
             items=items, dataset_name=dataset_name, dataset_id=dataset_id, request_options=request_options
+        )
+        return _response.data
+
+    async def create_dataset_items_from_csv(
+        self,
+        *,
+        file: typing.Dict[str, typing.Optional[typing.Any]],
+        dataset_id: str,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> None:
+        """
+        Create dataset items from uploaded CSV file. CSV should have headers in the first row. Processing happens asynchronously in batches.
+
+        Parameters
+        ----------
+        file : typing.Dict[str, typing.Optional[typing.Any]]
+
+        dataset_id : str
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        None
+
+        Examples
+        --------
+        from Opik import AsyncOpikApi
+        import asyncio
+        client = AsyncOpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        async def main() -> None:
+            await client.datasets.create_dataset_items_from_csv(file={'key': 'value'
+            }, dataset_id='dataset_id', )
+        asyncio.run(main())
+        """
+        _response = await self._raw_client.create_dataset_items_from_csv(
+            file=file, dataset_id=dataset_id, request_options=request_options
         )
         return _response.data
 

@@ -16,6 +16,8 @@ from ..types.project_stats_public import ProjectStatsPublic
 from ..types.span_filter_public import SpanFilterPublic
 from ..types.span_page_public import SpanPagePublic
 from ..types.span_public import SpanPublic
+from ..types.span_update import SpanUpdate
+from ..types.span_update_type import SpanUpdateType
 from ..types.span_write import SpanWrite
 from ..types.span_write_type import SpanWriteType
 from ..types.value_entry import ValueEntry
@@ -24,7 +26,6 @@ from .types.find_feedback_score_names_1_request_type import FindFeedbackScoreNam
 from .types.get_span_stats_request_type import GetSpanStatsRequestType
 from .types.get_spans_by_project_request_type import GetSpansByProjectRequestType
 from .types.span_search_stream_request_public_type import SpanSearchStreamRequestPublicType
-from .types.span_update_type import SpanUpdateType
 
 # this is used as the default value for optional parameters
 OMIT = typing.cast(typing.Any, ...)
@@ -170,6 +171,74 @@ class SpansClient:
             last_updated_by=last_updated_by,
             value_by_author=value_by_author,
             request_options=request_options,
+        )
+        return _response.data
+
+    def create_spans(
+        self, *, spans: typing.Sequence[SpanWrite], request_options: typing.Optional[RequestOptions] = None
+    ) -> None:
+        """
+        Create spans
+
+        Parameters
+        ----------
+        spans : typing.Sequence[SpanWrite]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        None
+
+        Examples
+        --------
+        from Opik import OpikApi
+        from Opik import SpanWrite
+        import datetime
+        client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        client.spans.create_spans(spans=[SpanWrite(start_time=datetime.datetime.fromisoformat("2024-01-15 09:30:00+00:00", ), )], )
+        """
+        _response = self._raw_client.create_spans(spans=spans, request_options=request_options)
+        return _response.data
+
+    def batch_update_spans(
+        self,
+        *,
+        ids: typing.Sequence[str],
+        update: SpanUpdate,
+        merge_tags: typing.Optional[bool] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> None:
+        """
+        Update multiple spans
+
+        Parameters
+        ----------
+        ids : typing.Sequence[str]
+            List of span IDs to update (max 1000)
+
+        update : SpanUpdate
+
+        merge_tags : typing.Optional[bool]
+            If true, merge tags with existing tags instead of replacing them. Default: false
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        None
+
+        Examples
+        --------
+        from Opik import OpikApi
+        from Opik import SpanUpdate
+        client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        client.spans.batch_update_spans(ids=['ids'], update=SpanUpdate(trace_id='trace_id', ), )
+        """
+        _response = self._raw_client.batch_update_spans(
+            ids=ids, update=update, merge_tags=merge_tags, request_options=request_options
         )
         return _response.data
 
@@ -358,34 +427,6 @@ class SpansClient:
             total_estimated_cost_version=total_estimated_cost_version,
             request_options=request_options,
         )
-        return _response.data
-
-    def create_spans(
-        self, *, spans: typing.Sequence[SpanWrite], request_options: typing.Optional[RequestOptions] = None
-    ) -> None:
-        """
-        Create spans
-
-        Parameters
-        ----------
-        spans : typing.Sequence[SpanWrite]
-
-        request_options : typing.Optional[RequestOptions]
-            Request-specific configuration.
-
-        Returns
-        -------
-        None
-
-        Examples
-        --------
-        from Opik import OpikApi
-        from Opik import SpanWrite
-        import datetime
-        client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
-        client.spans.create_spans(spans=[SpanWrite(start_time=datetime.datetime.fromisoformat("2024-01-15 09:30:00+00:00", ), )], )
-        """
-        _response = self._raw_client.create_spans(spans=spans, request_options=request_options)
         return _response.data
 
     def get_span_by_id(
@@ -1032,6 +1073,80 @@ class AsyncSpansClient:
         )
         return _response.data
 
+    async def create_spans(
+        self, *, spans: typing.Sequence[SpanWrite], request_options: typing.Optional[RequestOptions] = None
+    ) -> None:
+        """
+        Create spans
+
+        Parameters
+        ----------
+        spans : typing.Sequence[SpanWrite]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        None
+
+        Examples
+        --------
+        from Opik import AsyncOpikApi
+        from Opik import SpanWrite
+        import datetime
+        import asyncio
+        client = AsyncOpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        async def main() -> None:
+            await client.spans.create_spans(spans=[SpanWrite(start_time=datetime.datetime.fromisoformat("2024-01-15 09:30:00+00:00", ), )], )
+        asyncio.run(main())
+        """
+        _response = await self._raw_client.create_spans(spans=spans, request_options=request_options)
+        return _response.data
+
+    async def batch_update_spans(
+        self,
+        *,
+        ids: typing.Sequence[str],
+        update: SpanUpdate,
+        merge_tags: typing.Optional[bool] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> None:
+        """
+        Update multiple spans
+
+        Parameters
+        ----------
+        ids : typing.Sequence[str]
+            List of span IDs to update (max 1000)
+
+        update : SpanUpdate
+
+        merge_tags : typing.Optional[bool]
+            If true, merge tags with existing tags instead of replacing them. Default: false
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        None
+
+        Examples
+        --------
+        from Opik import AsyncOpikApi
+        from Opik import SpanUpdate
+        import asyncio
+        client = AsyncOpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        async def main() -> None:
+            await client.spans.batch_update_spans(ids=['ids'], update=SpanUpdate(trace_id='trace_id', ), )
+        asyncio.run(main())
+        """
+        _response = await self._raw_client.batch_update_spans(
+            ids=ids, update=update, merge_tags=merge_tags, request_options=request_options
+        )
+        return _response.data
+
     async def get_spans_by_project(
         self,
         *,
@@ -1223,37 +1338,6 @@ class AsyncSpansClient:
             total_estimated_cost_version=total_estimated_cost_version,
             request_options=request_options,
         )
-        return _response.data
-
-    async def create_spans(
-        self, *, spans: typing.Sequence[SpanWrite], request_options: typing.Optional[RequestOptions] = None
-    ) -> None:
-        """
-        Create spans
-
-        Parameters
-        ----------
-        spans : typing.Sequence[SpanWrite]
-
-        request_options : typing.Optional[RequestOptions]
-            Request-specific configuration.
-
-        Returns
-        -------
-        None
-
-        Examples
-        --------
-        from Opik import AsyncOpikApi
-        from Opik import SpanWrite
-        import datetime
-        import asyncio
-        client = AsyncOpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
-        async def main() -> None:
-            await client.spans.create_spans(spans=[SpanWrite(start_time=datetime.datetime.fromisoformat("2024-01-15 09:30:00+00:00", ), )], )
-        asyncio.run(main())
-        """
-        _response = await self._raw_client.create_spans(spans=spans, request_options=request_options)
         return _response.data
 
     async def get_span_by_id(

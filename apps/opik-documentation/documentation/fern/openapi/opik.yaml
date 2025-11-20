@@ -1267,6 +1267,27 @@ paths:
           description: Dashboard not found
         "409":
           description: Conflict - dashboard with this name already exists
+  /v1/private/datasets/items/batch:
+    patch:
+      tags:
+      - Datasets
+      summary: Batch update dataset items
+      description: Update multiple dataset items
+      operationId: batchUpdateDatasetItems
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DatasetItemBatchUpdate"
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
   /v1/private/datasets:
     get:
       tags:
@@ -1357,6 +1378,43 @@ paths:
       responses:
         "204":
           description: No content
+  /v1/private/datasets/items/from-csv:
+    post:
+      tags:
+      - Datasets
+      summary: Create dataset items from CSV file
+      description: Create dataset items from uploaded CSV file. CSV should have headers
+        in the first row. Processing happens asynchronously in batches.
+      operationId: createDatasetItemsFromCsv
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              required:
+              - dataset_id
+              - file
+              type: object
+              properties:
+                file:
+                  type: object
+                dataset_id:
+                  type: string
+                  format: uuid
+      responses:
+        "202":
+          description: Accepted - CSV processing started
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "404":
+          description: Not Found - CSV upload feature is disabled
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
   /v1/private/datasets/{dataset_id}/items/from-spans:
     post:
       tags:
@@ -3437,6 +3495,41 @@ paths:
       responses:
         "204":
           description: No Content
+  /v1/private/spans/batch:
+    post:
+      tags:
+      - Spans
+      summary: Create spans
+      description: Create spans
+      operationId: createSpans
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SpanBatch_Write"
+      responses:
+        "204":
+          description: No Content
+    patch:
+      tags:
+      - Spans
+      summary: Batch update spans
+      description: Update multiple spans
+      operationId: batchUpdateSpans
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SpanBatchUpdate"
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
   /v1/private/spans:
     get:
       tags:
@@ -3556,21 +3649,6 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorMessage"
-  /v1/private/spans/batch:
-    post:
-      tags:
-      - Spans
-      summary: Create spans
-      description: Create spans
-      operationId: createSpans
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/SpanBatch_Write"
-      responses:
-        "204":
-          description: No Content
   /v1/private/spans/{id}:
     get:
       tags:
@@ -3952,6 +4030,62 @@ paths:
       responses:
         "204":
           description: No Content
+  /v1/private/traces/batch:
+    post:
+      tags:
+      - Traces
+      summary: Create traces
+      description: Create traces
+      operationId: createTraces
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TraceBatch_Write"
+      responses:
+        "204":
+          description: No Content
+    patch:
+      tags:
+      - Traces
+      summary: Batch update traces
+      description: Update multiple traces
+      operationId: batchUpdateTraces
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TraceBatchUpdate"
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+  /v1/private/traces/threads/batch:
+    patch:
+      tags:
+      - Traces
+      summary: Batch update threads
+      description: Update multiple threads
+      operationId: batchUpdateThreads
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TraceThreadBatchUpdate"
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
   /v1/private/traces/threads/close:
     put:
       tags:
@@ -4071,21 +4205,6 @@ paths:
               schema:
                 type: string
               example: "${basePath}/v1/private/traces/{traceId}"
-  /v1/private/traces/batch:
-    post:
-      tags:
-      - Traces
-      summary: Create traces
-      description: Create traces
-      operationId: createTraces
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/TraceBatch_Write"
-      responses:
-        "204":
-          description: No Content
   /v1/private/traces/{id}:
     get:
       tags:
@@ -5216,6 +5335,7 @@ components:
           - threshold:feedback_score
           - threshold:cost
           - threshold:latency
+          - threshold:errors
         config_value:
           type: object
           additionalProperties:
@@ -5284,6 +5404,7 @@ components:
           - threshold:feedback_score
           - threshold:cost
           - threshold:latency
+          - threshold:errors
         config_value:
           type: object
           additionalProperties:
@@ -5416,6 +5537,7 @@ components:
           - threshold:feedback_score
           - threshold:cost
           - threshold:latency
+          - threshold:errors
         config_value:
           type: object
           additionalProperties:
@@ -7420,6 +7542,52 @@ components:
           type: string
         config:
           $ref: "#/components/schemas/JsonNode_Public"
+    DatasetItemBatchUpdate:
+      required:
+      - ids
+      - update
+      type: object
+      properties:
+        ids:
+          maxItems: 1000
+          minItems: 1
+          uniqueItems: true
+          type: array
+          description: List of dataset item IDs to update (max 1000)
+          items:
+            type: string
+            description: List of dataset item IDs to update (max 1000)
+            format: uuid
+        update:
+          $ref: "#/components/schemas/DatasetItemUpdate"
+        merge_tags:
+          type: boolean
+          description: "If true, merge tags with existing tags instead of replacing\
+            \ them. Default: false"
+      description: Request to batch update multiple dataset items
+    DatasetItemUpdate:
+      type: object
+      properties:
+        input:
+          pattern: (?s)^\s*(\S.*\S|\S)\s*$
+          type: string
+          description: Dataset item input
+        expected_output:
+          pattern: (?s)^\s*(\S.*\S|\S)\s*$
+          type: string
+          description: Dataset item expected output
+        metadata:
+          $ref: "#/components/schemas/JsonNode"
+        data:
+          $ref: "#/components/schemas/JsonNode"
+        tags:
+          uniqueItems: true
+          type: array
+          description: Tags
+          items:
+            type: string
+            description: Tags
+      description: Dataset item update request
     Dataset:
       required:
       - name
@@ -11571,6 +11739,7 @@ components:
     ServiceTogglesConfig:
       required:
       - alertsEnabled
+      - csvUploadEnabled
       - guardrailsEnabled
       - opikAIEnabled
       - pythonEvaluatorEnabled
@@ -11590,6 +11759,89 @@ components:
           type: boolean
         welcomeWizardEnabled:
           type: boolean
+        csvUploadEnabled:
+          type: boolean
+    SpanBatchUpdate:
+      required:
+      - ids
+      - update
+      type: object
+      properties:
+        ids:
+          maxItems: 1000
+          minItems: 1
+          uniqueItems: true
+          type: array
+          description: List of span IDs to update (max 1000)
+          items:
+            type: string
+            description: List of span IDs to update (max 1000)
+            format: uuid
+        update:
+          $ref: "#/components/schemas/SpanUpdate"
+        merge_tags:
+          type: boolean
+          description: "If true, merge tags with existing tags instead of replacing\
+            \ them. Default: false"
+      description: Request to batch update multiple spans
+    SpanUpdate:
+      required:
+      - trace_id
+      type: object
+      properties:
+        project_name:
+          pattern: (?s)^\s*(\S.*\S|\S)\s*$
+          type: string
+          description: "If null and project_id not specified, Default Project is assumed"
+        project_id:
+          type: string
+          description: "If null and project_name not specified, Default Project is\
+            \ assumed"
+          format: uuid
+        trace_id:
+          type: string
+          format: uuid
+        parent_span_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        type:
+          type: string
+          enum:
+          - general
+          - tool
+          - llm
+          - guardrail
+        end_time:
+          type: string
+          format: date-time
+        input:
+          $ref: "#/components/schemas/JsonListString"
+        output:
+          $ref: "#/components/schemas/JsonListString"
+        metadata:
+          $ref: "#/components/schemas/JsonListString"
+        model:
+          type: string
+        provider:
+          type: string
+        tags:
+          uniqueItems: true
+          type: array
+          items:
+            type: string
+        usage:
+          type: object
+          additionalProperties:
+            type: integer
+            format: int32
+        total_estimated_cost:
+          minimum: 0.0
+          exclusiveMinimum: false
+          type: number
+        error_info:
+          $ref: "#/components/schemas/ErrorInfo"
     ErrorInfo_Write:
       required:
       - exception_type
@@ -12012,9 +12264,30 @@ components:
           description: "Filter spans created up to this time (ISO-8601 format). If\
             \ not provided, defaults to current time. Must be after 'from_time'."
           format: date-time
-    SpanUpdate:
+    TraceBatchUpdate:
       required:
-      - trace_id
+      - ids
+      - update
+      type: object
+      properties:
+        ids:
+          maxItems: 1000
+          minItems: 1
+          uniqueItems: true
+          type: array
+          description: List of trace IDs to update (max 1000)
+          items:
+            type: string
+            description: List of trace IDs to update (max 1000)
+            format: uuid
+        update:
+          $ref: "#/components/schemas/TraceUpdate"
+        merge_tags:
+          type: boolean
+          description: "If true, merge tags with existing tags instead of replacing\
+            \ them. Default: false"
+      description: Request to batch update multiple traces
+    TraceUpdate:
       type: object
       properties:
         project_name:
@@ -12026,21 +12299,8 @@ components:
           description: "If null and project_name not specified, Default Project is\
             \ assumed"
           format: uuid
-        trace_id:
-          type: string
-          format: uuid
-        parent_span_id:
-          type: string
-          format: uuid
         name:
           type: string
-        type:
-          type: string
-          enum:
-          - general
-          - tool
-          - llm
-          - guardrail
         end_time:
           type: string
           format: date-time
@@ -12050,26 +12310,46 @@ components:
           $ref: "#/components/schemas/JsonListString"
         metadata:
           $ref: "#/components/schemas/JsonListString"
-        model:
-          type: string
-        provider:
-          type: string
         tags:
           uniqueItems: true
           type: array
           items:
             type: string
-        usage:
-          type: object
-          additionalProperties:
-            type: integer
-            format: int32
-        total_estimated_cost:
-          minimum: 0.0
-          exclusiveMinimum: false
-          type: number
         error_info:
           $ref: "#/components/schemas/ErrorInfo"
+        thread_id:
+          type: string
+    TraceThreadBatchUpdate:
+      required:
+      - ids
+      - update
+      type: object
+      properties:
+        ids:
+          maxItems: 1000
+          minItems: 1
+          uniqueItems: true
+          type: array
+          description: List of thread model IDs to update (max 1000)
+          items:
+            type: string
+            description: List of thread model IDs to update (max 1000)
+            format: uuid
+        update:
+          $ref: "#/components/schemas/TraceThreadUpdate"
+        merge_tags:
+          type: boolean
+          description: "If true, merge tags with existing tags instead of replacing\
+            \ them. Default: false"
+      description: Request to batch update multiple trace threads
+    TraceThreadUpdate:
+      type: object
+      properties:
+        tags:
+          uniqueItems: true
+          type: array
+          items:
+            type: string
     TraceThreadBatchIdentifier:
       type: object
       properties:
@@ -12605,46 +12885,6 @@ components:
           description: "Filter traces created up to this time (ISO-8601 format). If\
             \ not provided, defaults to current time. Must be after 'from_time'."
           format: date-time
-    TraceUpdate:
-      type: object
-      properties:
-        project_name:
-          pattern: (?s)^\s*(\S.*\S|\S)\s*$
-          type: string
-          description: "If null and project_id not specified, Default Project is assumed"
-        project_id:
-          type: string
-          description: "If null and project_name not specified, Default Project is\
-            \ assumed"
-          format: uuid
-        name:
-          type: string
-        end_time:
-          type: string
-          format: date-time
-        input:
-          $ref: "#/components/schemas/JsonListString"
-        output:
-          $ref: "#/components/schemas/JsonListString"
-        metadata:
-          $ref: "#/components/schemas/JsonListString"
-        tags:
-          uniqueItems: true
-          type: array
-          items:
-            type: string
-        error_info:
-          $ref: "#/components/schemas/ErrorInfo"
-        thread_id:
-          type: string
-    TraceThreadUpdate:
-      type: object
-      properties:
-        tags:
-          uniqueItems: true
-          type: array
-          items:
-            type: string
     WelcomeWizardTracking:
       type: object
       properties:
