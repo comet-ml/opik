@@ -1,14 +1,14 @@
 import opik  # noqa: E402
 from opik_optimizer import ChatPrompt  # noqa: E402
 from opik_optimizer import FewShotBayesianOptimizer  # noqa: E402
-from opik_optimizer.datasets import hotpot_300  # noqa: E402
+from opik_optimizer.datasets import hotpot  # noqa: E402
 from opik_optimizer.utils import search_wikipedia  # noqa: E402
 
 from utils.metrics import answer_correctness_score
 
 
 # Load dataset
-dataset = hotpot_300()
+dataset = hotpot(count=300)
 
 # Define initial prompt
 system_prompt = """Answer the question with a direct, accurate response.

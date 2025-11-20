@@ -8,7 +8,7 @@ from opik_optimizer import (
     ChatPrompt,
     MetaPromptOptimizer,
 )
-from opik_optimizer.datasets import hotpot_300
+from opik_optimizer.datasets import hotpot
 from pydantic_ai_agent import PydanticAIAgent
 
 
@@ -17,7 +17,7 @@ def levenshtein_ratio(dataset_item: dict[str, Any], llm_output: str) -> ScoreRes
     return metric.score(reference=dataset_item["answer"], output=llm_output)
 
 
-dataset = hotpot_300()
+dataset = hotpot(count=300)
 
 system_prompt = """Use the `search_wikipedia` function to find details
 on a topic. Respond with a short, concise answer without

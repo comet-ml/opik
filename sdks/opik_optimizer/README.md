@@ -113,18 +113,16 @@ chained_result = another_optimizer.optimize_prompt(
 
 Here's a brief example of how to use the `FewShotBayesianOptimizer`. We'll use a sample dataset provided by Opik.
 
-Available sample datasets for testing:
-*   `"tiny-test"`
-*   `"halu-eval-300"`
-*   `"hotpot-300"`
+Available sample datasets for testing include `"tiny-test"`, `"halu-eval-300"`, and the
+full HotpotQA splits via `hotpot(split="train", count=300)`.
 
 ```python
 from opik.evaluation.metrics import LevenshteinRatio
 from opik_optimizer import FewShotBayesianOptimizer, ChatPrompt
-from opik_optimizer.datasets import hotpot_300
+from opik_optimizer.datasets import hotpot
 
 # Load a sample dataset
-hot_pot_dataset = hotpot_300()
+hot_pot_dataset = hotpot(count=300)
 
 project_name = "optimize-few-shot-bayesian-hotpot" # For Comet logging
 

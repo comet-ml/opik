@@ -8,11 +8,11 @@ from opik_optimizer import FewShotBayesianOptimizer
 
 from opik.evaluation.metrics import LevenshteinRatio
 from opik.evaluation.metrics.score_result import ScoreResult
-from opik_optimizer.datasets import hotpot_300
+from opik_optimizer.datasets import hotpot
 
 from mcp_agent import create_mcp_prompt, MCPAgent
 
-dataset = hotpot_300()
+dataset = hotpot(count=300)
 
 system_prompt = """Answer the question with a direct, accurate response.
 You have access to a Wikipedia search tool - use it to find relevant information before answering.

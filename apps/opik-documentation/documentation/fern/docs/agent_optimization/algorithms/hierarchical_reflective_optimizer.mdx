@@ -42,7 +42,7 @@ from opik_optimizer import HierarchicalReflectiveOptimizer, ChatPrompt, datasets
 from opik.evaluation.metrics.score_result import ScoreResult
 
 # 1. Define your evaluation dataset
-dataset = datasets.hotpot_300()  # or use your own dataset
+dataset = datasets.hotpot(count=300)  # or use your own dataset
 
 # 2. Configure the evaluation metric (MUST return reasons!)
 def answer_quality_metric(dataset_item, llm_output):

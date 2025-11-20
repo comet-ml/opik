@@ -41,7 +41,7 @@ Every item is a JSON object. Required keys depend on your prompt template; optio
     The optimizer SDK provides ready-made datasets for quick experiments:
     ```python
     from opik_optimizer import datasets
-    hotpot = datasets.hotpot_300()
+    hotpot = datasets.hotpot(count=300)
     tiny = datasets.tiny_test()
     ```
     These datasets live in `sdks/opik_optimizer/src/opik_optimizer/datasets` and mirror the notebook examples.

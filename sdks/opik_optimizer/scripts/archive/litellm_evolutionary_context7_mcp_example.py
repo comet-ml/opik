@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from opik_optimizer import ChatPrompt, EvolutionaryOptimizer
-from opik_optimizer.datasets.context7_eval import load_context7_dataset
+from opik_optimizer.datasets import context7_eval
 from opik_optimizer.mcp_utils.mcp import system_prompt_from_tool, MCPManifest
 from opik_optimizer.mcp_utils import mcp_workflow as mcp_flow
 from opik_optimizer.mcp_utils.mcp_second_pass import MCPSecondPassCoordinator
@@ -33,7 +33,7 @@ MCP_SERVER_CONFIG: dict[str, Any] = {
     "env": {},
 }
 
-dataset = load_context7_dataset()
+dataset = context7_eval()
 TOOL_NAME = "get-library-docs"
 context7_metric = mcp_flow.make_similarity_metric("context7")
 

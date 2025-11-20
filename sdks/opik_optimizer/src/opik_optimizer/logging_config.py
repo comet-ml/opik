@@ -91,9 +91,17 @@ def setup_logging(
     logging.getLogger("requests").setLevel(logging.WARNING)
     logging.getLogger("httpx").setLevel(logging.WARNING)
     logging.getLogger("dspy").setLevel(logging.WARNING)
-    logging.getLogger("datasets").setLevel(logging.WARNING)
     logging.getLogger("optuna").setLevel(logging.WARNING)
     logging.getLogger("filelock").setLevel(logging.WARNING)
+
+    # Align Hugging Face/datasets logging style
+    for name in ("datasets", "huggingface_hub"):
+        hf_logger = logging.getLogger(name)
+        for h in list(hf_logger.handlers):
+            hf_logger.removeHandler(h)
+        hf_logger.addHandler(console_handler)
+        hf_logger.setLevel(target_level)
+        hf_logger.propagate = False
 
     _logging_configured = True
     _configured_level = target_level
