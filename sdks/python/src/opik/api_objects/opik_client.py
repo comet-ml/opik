@@ -991,7 +991,7 @@ class Opik:
         """
         if not id:
             raise ValueError(
-                "id must be provided and can not be None or empty, " f"id: {id}"
+                f"id must be provided and can not be None or empty, id: {id}"
             )
 
         self._rest_client.experiments.update_experiment(
