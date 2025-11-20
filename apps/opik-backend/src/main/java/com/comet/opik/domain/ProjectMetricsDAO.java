@@ -589,8 +589,8 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                 AND entity_type = :entity_type
                 AND name = :feedback_score_name
                 <if(project_ids)> AND project_id IN :project_ids <endif>
-                <if(uuid_from_time)>AND id >= :uuid_from_time<endif>
-                <if(uuid_to_time)>AND id \\<= :uuid_to_time<endif>;
+                <if(uuid_from_time)>AND entity_id >= :uuid_from_time<endif>
+                <if(uuid_to_time)>AND entity_id \\<= :uuid_to_time<endif>;
             """;
 
     private static final String GET_THREAD_COUNT = """

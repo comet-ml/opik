@@ -31,7 +31,6 @@ import com.comet.opik.api.resources.utils.ClientSupportUtils;
 import com.comet.opik.api.resources.utils.MigrationUtils;
 import com.comet.opik.api.resources.utils.MySQLContainerUtils;
 import com.comet.opik.api.resources.utils.RedisContainerUtils;
-import com.comet.opik.api.resources.utils.StatsUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
@@ -106,10 +105,11 @@ import java.util.stream.Stream;
 import static com.comet.opik.api.AlertEventType.PROMPT_COMMITTED;
 import static com.comet.opik.api.AlertEventType.PROMPT_CREATED;
 import static com.comet.opik.api.AlertEventType.PROMPT_DELETED;
+import static com.comet.opik.api.AlertTriggerConfig.NAME_CONFIG_KEY;
+import static com.comet.opik.api.AlertTriggerConfig.OPERATOR_CONFIG_KEY;
 import static com.comet.opik.api.AlertTriggerConfig.PROJECT_IDS_CONFIG_KEY;
 import static com.comet.opik.api.AlertTriggerConfig.THRESHOLD_CONFIG_KEY;
 import static com.comet.opik.api.AlertTriggerConfig.WINDOW_CONFIG_KEY;
-import static com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItem;
 import static com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItemThread;
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.api.resources.v1.events.webhooks.WebhookHttpClient.BEARER_PREFIX;
@@ -1050,10 +1050,6 @@ class AlertResourceTest {
         private static final String WEBHOOK_PATH = "/webhook";
         private String webhookUrl;
 
-        private static final String[] IGNORED_FIELDS_FEEDBACK_SCORES_BATCH_ITEM = {"id", "projectId", "projectName",
-                "createdAt",
-                "lastUpdatedAt", "createdBy", "lastUpdatedBy", "author"};
-
         @BeforeAll
         void setUpAll() {
             externalWebhookServer = new WireMockServer(0);
@@ -1220,144 +1216,66 @@ class AlertResourceTest {
         }
 
         @ParameterizedTest
-        @MethodSource("traceFeedbackScoreProjectScopeProvider")
-        @DisplayName("when single trace feedback score is created, then webhook is called based on project scope")
-        void whenSingleTraceFeedbackScoreIsCreated_thenWebhookIsCalledBasedOnProjectScope(
-                Function<UUID, AlertTrigger> getAlertTrigger) {
+        @ValueSource(booleans = {true, false})
+        @DisplayName("when trace feedback score exceeds threshold, then feedback score alert webhook is called")
+        void whenSingleTraceFeedbackScoreIsCreated_thenWebhookIsCalledBasedOnProjectScope(boolean isProjectScoped) {
             var mock = prepareMockWorkspace();
 
             // Create a project
             String projectName = RandomStringUtils.randomAlphabetic(10);
             UUID projectId = projectResourceClient.createProject(projectName, mock.getLeft(), mock.getRight());
 
-            // Create an alert with or without project scope configuration
-            var alert = createAlertForEvent(getAlertTrigger.apply(projectId));
-            alertResourceClient.createAlert(alert, mock.getLeft(), mock.getRight(),
-                    HttpStatus.SC_CREATED);
-
             // Create a trace
             Trace trace = factory.manufacturePojo(Trace.class).toBuilder()
                     .projectName(projectName)
                     .build();
             traceResourceClient.createTrace(trace, mock.getLeft(), mock.getRight());
 
-            // Create a feedback score
+            // Create a feedback score with value 0.8
+            String feedbackScoreName = "accuracy";
             FeedbackScore feedbackScore = factory.manufacturePojo(FeedbackScore.class).toBuilder()
+                    .name(feedbackScoreName)
+                    .value(BigDecimal.valueOf(0.8))
                     .source(ScoreSource.SDK)
                     .build();
             traceResourceClient.feedbackScore(trace.id(), feedbackScore, mock.getRight(), mock.getLeft());
 
-            // Wait for webhook call and verify
-            var payload = verifyWebhookCalledAndGetPayload(alert);
-            List<FeedbackScoreBatchItem> feedbackScores = JsonUtils.readCollectionValue(
-                    payload, List.class, FeedbackScoreBatchItem.class);
+            // Create an alert with feedback score threshold configuration
+            // Threshold: 0.5, Window: 60 seconds, Operator: > (value 0.8 > 0.5)
+            var alertTrigger = triggerWithFeedbackScoreThreshold(AlertEventType.TRACE_FEEDBACK_SCORE,
+                    isProjectScoped ? projectId : null, feedbackScoreName, "0.5", "60", ">");
 
-            assertThat(feedbackScores).hasSize(1);
-            FeedbackScoreBatchItem actualScore = feedbackScores.getFirst();
-
-            // Assert feedback score details using recursive comparison
-            assertThat(actualScore)
-                    .usingRecursiveComparison(
-                            RecursiveComparisonConfiguration.builder()
-                                    .withComparatorForType(Comparator.naturalOrder(), Instant.class)
-                                    .withComparatorForType(StatsUtils::bigDecimalComparator, BigDecimal.class)
-                                    .withIgnoredFields(IGNORED_FIELDS_FEEDBACK_SCORES_BATCH_ITEM)
-                                    .build())
-                    .isEqualTo(feedbackScore);
-
-            assertThat(actualScore.id()).isEqualTo(trace.id());
-            assertThat(actualScore.author()).isEqualTo(USER);
-        }
-
-        static Stream<Arguments> traceFeedbackScoreProjectScopeProvider() {
-            return Stream.of(
-                    Arguments.of((Function<UUID, AlertTrigger>) projectId -> AlertTrigger.builder()
-                            .eventType(AlertEventType.TRACE_FEEDBACK_SCORE)
-                            .build()),
-                    Arguments.of((Function<UUID, AlertTrigger>) projectId -> AlertTrigger.builder()
-                            .eventType(AlertEventType.TRACE_FEEDBACK_SCORE)
-                            .triggerConfigs(List.of(
-                                    AlertTriggerConfig.builder()
-                                            .type(AlertTriggerConfigType.SCOPE_PROJECT)
-                                            .configValue(Map.of(
-                                                    PROJECT_IDS_CONFIG_KEY,
-                                                    JsonUtils.writeValueAsString(Set.of(projectId))))
-                                            .build()))
-                            .build()));
-        }
-
-        @Test
-        @DisplayName("when batch of trace feedback scores is created, then webhook is called")
-        void whenBatchOfTraceFeedbackScoresIsCreated_thenWebhookIsCalled() {
-            var mock = prepareMockWorkspace();
-
-            // Create a project
-            String projectName = RandomStringUtils.randomAlphabetic(10);
-            projectResourceClient.createProject(projectName, mock.getLeft(), mock.getRight());
-
-            // Create an alert for feedback score events
-            var alertTrigger = AlertTrigger.builder()
-                    .eventType(AlertEventType.TRACE_FEEDBACK_SCORE)
-                    .build();
             var alert = createAlertForEvent(alertTrigger);
-            alertResourceClient.createAlert(alert, mock.getLeft(), mock.getRight(),
+            var alertId = alertResourceClient.createAlert(alert, mock.getLeft(), mock.getRight(),
                     HttpStatus.SC_CREATED);
 
-            // Create a trace
-            Trace trace = factory.manufacturePojo(Trace.class).toBuilder()
-                    .projectName(projectName)
-                    .build();
-            traceResourceClient.createTrace(trace, mock.getLeft(), mock.getRight());
-
-            // Create a batch of feedback scores
-            List<FeedbackScoreBatchItem> feedbackScores = PodamFactoryUtils
-                    .manufacturePojoList(factory, FeedbackScoreBatchItem.class)
-                    .stream()
-                    .map(item -> (FeedbackScoreBatchItem) item.toBuilder()
-                            .source(ScoreSource.SDK)
-                            .id(trace.id())
-                            .projectName(projectName)
-                            .build())
-                    .toList();
-
-            traceResourceClient.feedbackScores(feedbackScores, mock.getLeft(), mock.getRight());
-
-            // Wait for webhook call and verify
+            // Wait for MetricsAlertJob to run and verify webhook was called
             var payload = verifyWebhookCalledAndGetPayload(alert);
-            List<FeedbackScoreBatchItem> actualFeedbackScores = JsonUtils.readCollectionValue(
-                    payload, List.class, FeedbackScoreBatchItem.class);
 
-            assertThat(actualFeedbackScores).hasSize(feedbackScores.size());
+            // Verify payload contains feedback score metrics information
+            MetricsAlertPayload feedbackScorePayload = JsonUtils.readValue(payload, MetricsAlertPayload.class);
 
-            // Assert feedback score details using recursive comparison
-            assertThat(actualFeedbackScores)
-                    .usingRecursiveComparison()
-                    .withComparatorForType(StatsUtils::bigDecimalComparator, BigDecimal.class)
-                    .ignoringFields(IGNORED_FIELDS_FEEDBACK_SCORES_BATCH_ITEM)
-                    .ignoringCollectionOrder()
-                    .isEqualTo(feedbackScores);
+            verifyMetricsPayload(feedbackScorePayload, "TRACE_FEEDBACK_SCORE", "0.8000", "0.5000", "60",
+                    isProjectScoped ? projectId : null, isProjectScoped ? projectName : null);
 
-            actualFeedbackScores.forEach(actualScore -> {
-                assertThat(actualScore.id()).isEqualTo(trace.id());
-                assertThat(actualScore.author()).isEqualTo(USER);
-            });
+            var batchDelete = BatchDelete.builder()
+                    .ids(Set.of(alertId))
+                    .build();
+
+            alertResourceClient.deleteAlertBatch(batchDelete, mock.getLeft(), mock.getRight(),
+                    HttpStatus.SC_NO_CONTENT);
         }
 
         @ParameterizedTest
-        @MethodSource("traceThreadFeedbackScoreProjectScopeProvider")
-        @DisplayName("when single trace thread feedback score is created, then webhook is called based on project scope")
+        @ValueSource(booleans = {true, false})
+        @DisplayName("when thread feedback score exceeds threshold, then thread feedback score alert webhook is called")
         void whenSingleTraceThreadFeedbackScoreIsCreated_thenWebhookIsCalledBasedOnProjectScope(
-                Function<UUID, AlertTrigger> getAlertTrigger) {
+                boolean isProjectScoped) {
             var mock = prepareMockWorkspace();
 
             // Create a project
             var project = factory.manufacturePojo(Project.class);
             var projectId = projectResourceClient.createProject(project, mock.getLeft(), mock.getRight());
-
-            // Create an alert with or without project scope configuration
-            var alert = createAlertForEvent(getAlertTrigger.apply(projectId));
-            alertResourceClient.createAlert(alert, mock.getLeft(), mock.getRight(),
-                    HttpStatus.SC_CREATED);
 
             // Create a thread with multiple traces
             var threadId = UUID.randomUUID().toString();
@@ -1382,59 +1300,42 @@ class AlertResourceTest {
             traceResourceClient.closeTraceThread(thread.id(), projectId, project.name(), mock.getLeft(),
                     mock.getRight());
 
-            // Create a feedback score for the thread
-            FeedbackScore feedbackScore = factory.manufacturePojo(FeedbackScore.class).toBuilder()
-                    .source(ScoreSource.SDK)
-                    .build();
-
+            // Create a feedback score for the thread with value 0.9
+            String feedbackScoreName = "helpfulness";
             var feedbackScoreBatchItem = FeedbackScoreBatchItemThread.builder()
                     .threadId(thread.id())
                     .projectName(project.name())
-                    .name(feedbackScore.name())
-                    .value(feedbackScore.value())
-                    .reason(feedbackScore.reason())
-                    .source(feedbackScore.source())
+                    .name(feedbackScoreName)
+                    .value(BigDecimal.valueOf(0.9))
+                    .source(ScoreSource.SDK)
                     .build();
 
             traceResourceClient.threadFeedbackScores(List.of(feedbackScoreBatchItem), mock.getLeft(), mock.getRight());
 
-            // Wait for webhook call and verify
+            // Create an alert with thread feedback score threshold configuration
+            // Threshold: 0.7, Window: 60 seconds, Operator: > (value 0.9 > 0.7)
+            var alertTrigger = triggerWithFeedbackScoreThreshold(AlertEventType.TRACE_THREAD_FEEDBACK_SCORE,
+                    isProjectScoped ? projectId : null, feedbackScoreName, "0.7", "60", ">");
+
+            var alert = createAlertForEvent(alertTrigger);
+            var alertId = alertResourceClient.createAlert(alert, mock.getLeft(), mock.getRight(),
+                    HttpStatus.SC_CREATED);
+
+            // Wait for MetricsAlertJob to run and verify webhook was called
             var payload = verifyWebhookCalledAndGetPayload(alert);
-            List<FeedbackScoreBatchItemThread> feedbackScores = JsonUtils.readCollectionValue(
-                    payload, List.class, FeedbackScoreBatchItemThread.class);
 
-            assertThat(feedbackScores).hasSize(1);
-            FeedbackScoreBatchItemThread actualScore = feedbackScores.getFirst();
+            // Verify payload contains feedback score metrics information
+            MetricsAlertPayload feedbackScorePayload = JsonUtils.readValue(payload, MetricsAlertPayload.class);
 
-            // Assert feedback score details using recursive comparison
-            assertThat(actualScore)
-                    .usingRecursiveComparison(
-                            RecursiveComparisonConfiguration.builder()
-                                    .withComparatorForType(Comparator.naturalOrder(), Instant.class)
-                                    .withComparatorForType(StatsUtils::bigDecimalComparator, BigDecimal.class)
-                                    .withIgnoredFields(IGNORED_FIELDS_FEEDBACK_SCORES_BATCH_ITEM)
-                                    .build())
-                    .isEqualTo(feedbackScoreBatchItem);
+            verifyMetricsPayload(feedbackScorePayload, "TRACE_THREAD_FEEDBACK_SCORE", "0.9000", "0.7000", "60",
+                    isProjectScoped ? projectId : null, isProjectScoped ? project.name() : null);
 
-            assertThat(actualScore.threadId()).isEqualTo(thread.id());
-            assertThat(actualScore.author()).isEqualTo(USER);
-        }
+            var batchDelete = BatchDelete.builder()
+                    .ids(Set.of(alertId))
+                    .build();
 
-        static Stream<Arguments> traceThreadFeedbackScoreProjectScopeProvider() {
-            return Stream.of(
-                    Arguments.of((Function<UUID, AlertTrigger>) projectId -> AlertTrigger.builder()
-                            .eventType(AlertEventType.TRACE_THREAD_FEEDBACK_SCORE)
-                            .build()),
-                    Arguments.of((Function<UUID, AlertTrigger>) projectId -> AlertTrigger.builder()
-                            .eventType(AlertEventType.TRACE_THREAD_FEEDBACK_SCORE)
-                            .triggerConfigs(List.of(
-                                    AlertTriggerConfig.builder()
-                                            .type(AlertTriggerConfigType.SCOPE_PROJECT)
-                                            .configValue(Map.of(
-                                                    PROJECT_IDS_CONFIG_KEY,
-                                                    JsonUtils.writeValueAsString(Set.of(projectId))))
-                                            .build()))
-                            .build()));
+            alertResourceClient.deleteAlertBatch(batchDelete, mock.getLeft(), mock.getRight(),
+                    HttpStatus.SC_NO_CONTENT);
         }
 
         @ParameterizedTest
@@ -2048,7 +1949,7 @@ class AlertResourceTest {
 
         @ParameterizedTest
         @MethodSource("alertTypeProvider")
-        @DisplayName("Success: should send webhook formatted trace feedback score event")
+        @DisplayName("Success: should send webhook formatted trace feedback score alert event")
         void testTraceFeedbackScoreEvent(AlertType alertType) {
             // Given
             var mock = prepareMockWorkspace();
@@ -2057,42 +1958,46 @@ class AlertResourceTest {
             String projectName = RandomStringUtils.randomAlphabetic(10);
             UUID projectId = projectResourceClient.createProject(projectName, mock.getLeft(), mock.getRight());
 
-            // Create alert with webhook
-            var alert = createAlertForEvent(AlertTrigger.builder()
-                    .eventType(AlertEventType.TRACE_FEEDBACK_SCORE)
-                    .build(), alertType);
-
-            alertResourceClient.createAlert(alert, mock.getLeft(), mock.getRight(), HttpStatus.SC_CREATED);
-
             // Create a trace
             Trace trace = factory.manufacturePojo(Trace.class).toBuilder()
                     .projectName(projectName)
                     .build();
             traceResourceClient.createTrace(trace, mock.getLeft(), mock.getRight());
 
-            // Create a feedback score
-            FeedbackScore feedbackScore = factory.manufacturePojo(FeedbackScore.class).toBuilder()
+            // Create a feedback score with value 0.85
+            String feedbackScoreName = "accuracy";
+            FeedbackScore feedbackScore = FeedbackScore.builder()
+                    .name(feedbackScoreName)
+                    .value(BigDecimal.valueOf(0.85))
                     .source(ScoreSource.SDK)
                     .build();
             traceResourceClient.feedbackScore(trace.id(), feedbackScore, mock.getRight(), mock.getLeft());
 
-            // Construct expected URL
-            String expectedUrl = String.format(
-                    BASE_URL + "/%s/projects/%s/traces?trace=%s&traceTab=feedback_scores",
-                    mock.getRight(), projectId, trace.id());
+            // Create alert with feedback score threshold configuration
+            // Threshold: 0.6, Window: 60 seconds, Operator: > (value 0.85 > 0.6)
+            var alertTrigger = triggerWithFeedbackScoreThreshold(AlertEventType.TRACE_FEEDBACK_SCORE,
+                    projectId, feedbackScoreName, "0.6", "60", ">");
 
-            // Verify webhook payload based on alert type
+            var alert = createAlertForEvent(alertTrigger, alertType);
+            var alertId = alertResourceClient.createAlert(alert, mock.getLeft(), mock.getRight(),
+                    HttpStatus.SC_CREATED);
+
+            // Verify webhook was called and payload is properly formatted
             verifyPayload(alertType, 1, "Trace Feedback Score",
-                    List.of("*Traces Feedback Scores:*\n",
-                            "Trace Score",
-                            feedbackScore.name(),
-                            String.format("%.2f", feedbackScore.value()),
-                            expectedUrl));
+                    List.of("Trace Feedback Score Alert Triggered", "Current Trace Feedback Score", "Threshold",
+                            "Time Window"));
+
+            var batchDelete = BatchDelete.builder()
+                    .ids(Set.of(alertId))
+                    .build();
+
+            alertResourceClient.deleteAlertBatch(batchDelete, mock.getLeft(), mock.getRight(),
+                    HttpStatus.SC_NO_CONTENT);
         }
 
         @ParameterizedTest
         @MethodSource("alertTypeProvider")
-        @DisplayName("Success: should send webhook formatted thread feedback score event")
+        @DisplayName("Success: should send webhook formatted thread feedback score alert event")
         void testThreadFeedbackScoreEvent(AlertType alertType) {
             // Given
             var mock = prepareMockWorkspace();
@@ -2100,13 +2005,6 @@ class AlertResourceTest {
             // Create a project
             var project = factory.manufacturePojo(Project.class);
             var projectId = projectResourceClient.createProject(project, mock.getLeft(), mock.getRight());
-
-            // Create alert with webhook
-            var alert = createAlertForEvent(AlertTrigger.builder()
-                    .eventType(AlertEventType.TRACE_THREAD_FEEDBACK_SCORE)
-                    .build(), alertType);
-
-            alertResourceClient.createAlert(alert, mock.getLeft(), mock.getRight(), HttpStatus.SC_CREATED);
 
             // Create a thread with multiple traces
             var threadId = UUID.randomUUID().toString();
@@ -2131,34 +2029,38 @@ class AlertResourceTest {
             traceResourceClient.closeTraceThread(thread.id(), projectId, project.name(), mock.getLeft(),
                     mock.getRight());
 
-            // Create a feedback score for the thread
-            FeedbackScore feedbackScore = factory.manufacturePojo(FeedbackScore.class).toBuilder()
-                    .source(ScoreSource.SDK)
-                    .build();
-
+            // Create a feedback score for the thread with value 0.75
+            String feedbackScoreName = "helpfulness";
             var feedbackScoreBatchItem = FeedbackScoreBatchItemThread.builder()
                     .threadId(thread.id())
                     .projectName(project.name())
-                    .name(feedbackScore.name())
-                    .value(feedbackScore.value())
-                    .reason(feedbackScore.reason())
-                    .source(feedbackScore.source())
+                    .name(feedbackScoreName)
+                    .value(BigDecimal.valueOf(0.75))
+                    .source(ScoreSource.SDK)
                     .build();
 
             traceResourceClient.threadFeedbackScores(List.of(feedbackScoreBatchItem), mock.getLeft(), mock.getRight());
 
-            // Construct expected URL
-            String expectedUrl = String.format(
-                    BASE_URL + "/%s/projects/%s/traces?type=threads&thread=%s&threadTab=feedback_scores",
-                    mock.getRight(), projectId, thread.id());
+            // Create alert with thread feedback score threshold configuration
+            // Threshold: 0.5, Window: 60 seconds, Operator: > (value 0.75 > 0.5)
+            var alertTrigger = triggerWithFeedbackScoreThreshold(AlertEventType.TRACE_THREAD_FEEDBACK_SCORE,
+                    projectId, feedbackScoreName, "0.5", "60", ">");
 
-            // Verify webhook payload based on alert type
+            var alert = createAlertForEvent(alertTrigger, alertType);
+            var alertId = alertResourceClient.createAlert(alert, mock.getLeft(), mock.getRight(),
+                    HttpStatus.SC_CREATED);
+
+            // Verify webhook was called and payload is properly formatted
             verifyPayload(alertType, 1, "Thread Feedback Score",
-                    List.of("*Threads Feedback Scores:*\n",
-                            "Thread Score",
-                            feedbackScore.name(),
-                            String.format("%.2f", feedbackScore.value()),
-                            expectedUrl));
+                    List.of("Thread Feedback Score Alert Triggered", "Current Thread Feedback Score", "Threshold",
+                            "Time Window"));
+
+            var batchDelete = BatchDelete.builder()
+                    .ids(Set.of(alertId))
+                    .build();
+
+            alertResourceClient.deleteAlertBatch(batchDelete, mock.getLeft(), mock.getRight(),
+                    HttpStatus.SC_NO_CONTENT);
         }
 
         @ParameterizedTest
@@ -2369,117 +2271,6 @@ class AlertResourceTest {
             String fallbackText = String.format(
                     "Overall %d Prompts commits created, you could check them here: <%s|View All>",
                     commitsCnt, url);
-            verifySlackBlockStructureWithFallback(slackPayload, fallbackText);
-        }
-
-        @Test
-        @DisplayName("Success: should send webhook with fallback block when trace feedback scores exceed Slack text limit")
-        void testTraceFeedbackScoreEventWithFallback() {
-            // Given
-            var mock = prepareMockWorkspace();
-
-            // Create a project
-            String projectName = RandomStringUtils.randomAlphabetic(10);
-            projectResourceClient.createProject(projectName, mock.getLeft(), mock.getRight());
-
-            // Create alert with webhook for Slack only
-            var alert = createAlertForEvent(AlertTrigger.builder()
-                    .eventType(AlertEventType.TRACE_FEEDBACK_SCORE)
-                    .build(), AlertType.SLACK);
-
-            alertResourceClient.createAlert(alert, mock.getLeft(), mock.getRight(), HttpStatus.SC_CREATED);
-
-            // Create many traces with feedback scores to exceed Slack's 3000 character limit
-            // Each feedback score line is ~180 characters, so we need ~17 scores to exceed the limit
-            Trace trace = factory.manufacturePojo(Trace.class).toBuilder()
-                    .projectName(projectName)
-                    .build();
-            traceResourceClient.createTrace(trace, mock.getLeft(), mock.getRight());
-
-            int scoresCnt = 25;
-            IntStream.range(0, scoresCnt).forEach(i -> {
-                FeedbackScore feedbackScore = factory.manufacturePojo(FeedbackScore.class).toBuilder()
-                        .source(ScoreSource.SDK)
-                        .build();
-                traceResourceClient.feedbackScore(trace.id(), feedbackScore, mock.getRight(), mock.getLeft());
-            });
-
-            // Verify webhook was called
-            var slackPayload = verifyWebhookCalledAndGetPayload(SlackWebhookPayload.class);
-
-            // Verify Slack payload has fallback block due to text truncation
-            String url = BASE_URL + "/" + mock.getRight() + "/projects";
-            String fallbackText = String.format(
-                    "Overall %d Traces Feedback Scores created, you could check them here: <%s|View All>",
-                    scoresCnt, url);
-            verifySlackBlockStructureWithFallback(slackPayload, fallbackText);
-        }
-
-        @Test
-        @DisplayName("Success: should send webhook with fallback block when thread feedback scores exceed Slack text limit")
-        void testThreadFeedbackScoreEventWithFallback() {
-            // Given
-            var mock = prepareMockWorkspace();
-
-            // Create a project
-            var project = factory.manufacturePojo(Project.class);
-            var projectId = projectResourceClient.createProject(project, mock.getLeft(), mock.getRight());
-
-            // Create alert with webhook for Slack only
-            var alert = createAlertForEvent(AlertTrigger.builder()
-                    .eventType(AlertEventType.TRACE_THREAD_FEEDBACK_SCORE)
-                    .build(), AlertType.SLACK);
-
-            alertResourceClient.createAlert(alert, mock.getLeft(), mock.getRight(), HttpStatus.SC_CREATED);
-
-            // Create many threads with feedback scores to exceed Slack's 3000 character limit
-            // Each feedback score line is ~190 characters, so we need ~16 scores to exceed the limit
-            int scoresCnt = 25;
-
-            var threadId = UUID.randomUUID().toString();
-            Trace trace = factory.manufacturePojo(Trace.class).toBuilder()
-                    .threadId(threadId)
-                    .projectName(project.name())
-                    .build();
-            traceResourceClient.createTrace(trace, mock.getLeft(), mock.getRight());
-
-            // Wait for the thread to be created and close it
-            Awaitility.await().untilAsserted(() -> {
-                var thread = traceResourceClient.getTraceThread(threadId, projectId, mock.getLeft(),
-                        mock.getRight());
-                assertThat(thread.threadModelId()).isNotNull();
-
-                traceResourceClient.closeTraceThread(thread.id(), projectId, project.name(), mock.getLeft(),
-                        mock.getRight());
-
-                IntStream.range(0, scoresCnt).forEach(i -> {
-                    // Create feedback score for the thread
-                    FeedbackScore feedbackScore = factory.manufacturePojo(FeedbackScore.class).toBuilder()
-                            .source(ScoreSource.SDK)
-                            .build();
-
-                    var feedbackScoreBatchItem = FeedbackScoreBatchItemThread.builder()
-                            .threadId(thread.id())
-                            .projectName(project.name())
-                            .name(feedbackScore.name())
-                            .value(feedbackScore.value())
-                            .reason(feedbackScore.reason())
-                            .source(feedbackScore.source())
-                            .build();
-
-                    traceResourceClient.threadFeedbackScores(List.of(feedbackScoreBatchItem), mock.getLeft(),
-                            mock.getRight());
-                });
-            });
-
-            // Verify webhook was called
-            var slackPayload = verifyWebhookCalledAndGetPayload(SlackWebhookPayload.class);
-
-            // Verify Slack payload has fallback block due to text truncation
-            String url = BASE_URL + "/" + mock.getRight() + "/projects";
-            String fallbackText = String.format(
-                    "Overall %d Threads Feedback Scores created, you could check them here: <%s|View All>",
-                    scoresCnt, url);
             verifySlackBlockStructureWithFallback(slackPayload, fallbackText);
         }
 
@@ -2815,6 +2606,31 @@ class AlertResourceTest {
                 .configValue(Map.of(
                         THRESHOLD_CONFIG_KEY, threshold,
                         WINDOW_CONFIG_KEY, window))
+                .build());
+        if (projectId != null) {
+            triggerConfigs.add(AlertTriggerConfig.builder()
+                    .type(AlertTriggerConfigType.SCOPE_PROJECT)
+                    .configValue(Map.of(
+                            PROJECT_IDS_CONFIG_KEY,
+                            JsonUtils.writeValueAsString(Set.of(projectId))))
+                    .build());
+        }
+        return AlertTrigger.builder()
+                .eventType(eventType)
+                .triggerConfigs(triggerConfigs)
+                .build();
+    }
+
+    private static AlertTrigger triggerWithFeedbackScoreThreshold(AlertEventType eventType, UUID projectId,
+            String feedbackScoreName, String threshold, String window, String operator) {
+        List<AlertTriggerConfig> triggerConfigs = new ArrayList<>();
+        triggerConfigs.add(AlertTriggerConfig.builder()
+                .type(AlertTriggerConfigType.THRESHOLD_FEEDBACK_SCORE)
+                .configValue(Map.of(
+                        NAME_CONFIG_KEY, feedbackScoreName,
+                        THRESHOLD_CONFIG_KEY, threshold,
+                        WINDOW_CONFIG_KEY, window,
+                        OPERATOR_CONFIG_KEY, operator))
                 .build());
         if (projectId != null) {
             triggerConfigs.add(AlertTriggerConfig.builder()
