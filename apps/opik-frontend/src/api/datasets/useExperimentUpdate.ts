@@ -35,7 +35,7 @@ const useExperimentUpdateMutation = () => {
         variant: "destructive",
       });
     },
-    onSettled: (data, error, variables) => {
+    onSuccess: (data, variables) => {
       queryClient.invalidateQueries({
         queryKey: ["experiment", { experimentId: variables.experiment.id }],
       });
