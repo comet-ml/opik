@@ -28,6 +28,21 @@ dataset_sizes = {
     "context7_eval": 3,
 }
 
+# Extra kwargs passed to dataset helpers so we can request the legacy slice sizes
+# without relying on default behavior (which now streams the entire split).
+DATASET_CALL_KWARGS = {
+    "gsm8k": {"count": dataset_sizes["gsm8k"]},
+    "ai2_arc": {"count": dataset_sizes["ai2_arc"]},
+    "truthful_qa": {"count": dataset_sizes["truthful_qa"]},
+    "cnn_dailymail": {"count": dataset_sizes["cnn_dailymail"]},
+    "ragbench_sentence_relevance": {
+        "count": dataset_sizes["ragbench_sentence_relevance"]
+    },
+    "election_questions": {"count": dataset_sizes["election_questions"]},
+    "medhallu": {"count": dataset_sizes["medhallu"]},
+    "rag_hallucinations": {"count": dataset_sizes["rag_hallucinations"]},
+}
+
 # Get dataset functions from opik_optimizer.datasets for which we have expected sizes
 full_dataset_functions = [
     (name, func, dataset_sizes[name])
@@ -56,7 +71,7 @@ def test_full_datasets(
         mock_create_dataset = mock.Mock(return_value=mock_dataset)
         with mock.patch.object(opik_client.Opik, "create_dataset", mock_create_dataset):
             # Test the dataset function when get_dataset fails with 404
-            dataset = dataset_func()
+            dataset = dataset_func(**DATASET_CALL_KWARGS.get(dataset_name, {}))
 
             # Check that the dataset has the expected number of items
             assert len(dataset._hashes) == expected_size, (
@@ -99,7 +114,9 @@ def test_test_datasets(
         mock_create_dataset = mock.Mock(return_value=mock_dataset)
         with mock.patch.object(opik_client.Opik, "create_dataset", mock_create_dataset):
             # Test the dataset function when get_dataset fails with 404
-            dataset = dataset_func(test_mode=True)
+            dataset = dataset_func(
+                test_mode=True, **DATASET_CALL_KWARGS.get(dataset_name, {})
+            )
 
             # Check that the dataset has the expected number of items
             assert len(dataset._hashes) == expected_size, (
