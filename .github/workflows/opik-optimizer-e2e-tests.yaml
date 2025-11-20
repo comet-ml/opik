@@ -1,5 +1,8 @@
 name: "Opik Optimizer - E2E Tests"
 run-name: "Opik Optimizer E2E Tests ${{ github.ref_name }} by @${{ github.actor }}"
+concurrency:
+    group: opik-optimizer-e2e-${{ github.ref }}
+    cancel-in-progress: true
 on:
     workflow_dispatch:
     pull_request:
