@@ -324,12 +324,24 @@ jobs:
           
           echo ""
           echo "Collected verified digests: $DIGESTS"
-          echo "Tags from metadata: ${{ steps.meta.outputs.tags }}"
-          echo "Labels from metadata: ${{ steps.meta.outputs.labels }}"
+          echo "Tags from metadata:"
+          echo "${{ steps.meta.outputs.tags }}"
+          echo "Labels from metadata:"
+          echo "${{ steps.meta.outputs.labels }}"
           
           # Create and push manifest using metadata tags
-          # Metadata outputs tags as JSON array, convert to -t flags
-          TAG_ARGS=$(echo "${{ steps.meta.outputs.tags }}" | jq -r '.[] | "-t " + .' | tr '\n' ' ')
+          # Metadata outputs tags as newline-separated string, convert to -t flags
+          TAG_ARGS=""
+          while IFS= read -r tag; do
+            if [ -n "$tag" ]; then
+              TAG_ARGS="$TAG_ARGS -t $tag"
+            fi
+          done <<< "${{ steps.meta.outputs.tags }}"
+          
+          if [ -z "$TAG_ARGS" ]; then
+            echo "ERROR: No tags generated from metadata!"
+            exit 1
+          fi
           
           echo "Creating manifest with tags: $TAG_ARGS"
           echo "Using digests: $DIGESTS"
@@ -339,7 +351,7 @@ jobs:
         if: steps.check.outputs.should_run == 'true'
         run: |
           echo "### Docker images pushed: ${{ steps.set_vars.outputs.image_name }}" >> $GITHUB_STEP_SUMMARY
-          echo "${{ steps.meta.outputs.tags }}" | jq -r '.[]' >> $GITHUB_STEP_SUMMARY
+          echo "${{ steps.meta.outputs.tags }}" >> $GITHUB_STEP_SUMMARY
           if [[ "${{ inputs.image }}" == "opik-guardrails-backend" ]]; then
             echo "Built for platforms: linux/amd64" >> $GITHUB_STEP_SUMMARY
           else
