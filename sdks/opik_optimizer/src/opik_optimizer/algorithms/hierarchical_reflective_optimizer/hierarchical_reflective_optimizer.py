@@ -159,7 +159,7 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
             new_prompt = prompt.copy()
             messages = new_prompt.get_messages(dataset_item)
             new_prompt.set_messages(messages)
-            agent = self.agent_class(prompt=new_prompt)
+            agent = self._instantiate_agent(prompt=new_prompt)
 
             try:
                 logger.debug(
@@ -401,8 +401,8 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
         optimization = self.opik_client.create_optimization(
             dataset_name=dataset.name,
             objective_name=getattr(metric, "__name__", str(metric)),
+            metadata=self._build_optimization_metadata(),
             name=self.name,
-            metadata=self._build_optimization_config(),
             optimization_id=optimization_id,
         )
         self.current_optimization_id = optimization.id

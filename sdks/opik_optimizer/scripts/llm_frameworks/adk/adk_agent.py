@@ -1,4 +1,5 @@
 from typing import Any
+import os
 
 from opik_optimizer import (
     OptimizableAgent,
@@ -15,6 +16,9 @@ from google.adk.sessions import InMemorySessionService
 from google.genai import types
 
 from pydantic import BaseModel, Field
+
+ADK_APP_NAME = os.environ.get("ADK_APP_NAME", "agents")
+ADK_USER_ID = os.environ.get("ADK_USER_ID", "test_user_456")
 
 
 # Create a wrapper without default parameters for ADK compatibility
@@ -66,19 +70,16 @@ class ADKAgent(OptimizableAgent):
     def invoke(self, messages: list[dict[str, str]], seed: int | None = None) -> str:
         import asyncio
 
-        APP_NAME = "agent_comparison_app"
-        USER_ID = "test_user_456"
-
         session_service = InMemorySessionService()
         # Create a runner for EACH agent
         runner = Runner(
-            agent=self.agent, app_name=APP_NAME, session_service=session_service
+            agent=self.agent, app_name=ADK_APP_NAME, session_service=session_service
         )
 
         async def _invoke_async() -> str:
             # Create separate sessions for clarity, though not strictly necessary if context is managed
             session = await session_service.create_session(
-                app_name=APP_NAME, user_id=USER_ID
+                app_name=ADK_APP_NAME, user_id=ADK_USER_ID
             )
             final_response_content = "No response received from agent."
             for message in messages:
@@ -86,9 +87,7 @@ class ADKAgent(OptimizableAgent):
                     role=message["role"], parts=[types.Part(text=message["content"])]
                 )
                 async for event in runner.run_async(
-                    user_id=USER_ID,
-                    session_id=session.id,
-                    new_message=adk_message,
+                    user_id=ADK_USER_ID, session_id=session.id, new_message=adk_message
                 ):
                     # print(f"Event: {event}") # Uncomment for detailed logging
                     if (

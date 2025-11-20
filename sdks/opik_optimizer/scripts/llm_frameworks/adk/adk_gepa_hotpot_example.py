@@ -2,7 +2,7 @@ from typing import Any
 
 from opik_optimizer import (
     ChatPrompt,
-    FewShotBayesianOptimizer,
+    GepaOptimizer,
 )
 from opik_optimizer.datasets import hotpot_300
 
@@ -27,22 +27,30 @@ The user will provide a question string like "Who is Barack Obama?".
 3. Respond clearly to the user, stating the answer found by the tool.
 """
 
-prompt = ChatPrompt(system=system_prompt, user="{question}")
+prompt = ChatPrompt(
+    system=system_prompt,
+    user="{question}",
+)
 
 # Optimize it:
-optimizer = FewShotBayesianOptimizer(
+optimizer = GepaOptimizer(
     model="openai/gpt-4o-mini",
-    min_examples=3,
-    max_examples=8,
-    n_threads=16,
-    seed=42,
+    model_parameters={
+        "temperature": 0.0,
+        "max_tokens": 400,
+    },
 )
 optimization_result = optimizer.optimize_prompt(
     prompt=prompt,
     agent_class=ADKAgent,
     dataset=dataset,
     metric=levenshtein_ratio,
-    max_trials=10,
-    n_samples=50,
+    n_samples=10,
+    max_trials=8,
+    reflection_minibatch_size=3,
+    candidate_selection_strategy="pareto",
+    skip_perfect_score=False,
+    display_progress_bar=True,
 )
+
 optimization_result.display()

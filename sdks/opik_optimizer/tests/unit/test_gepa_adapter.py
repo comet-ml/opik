@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any
 from pathlib import Path
 
+from opik_optimizer import ChatPrompt
 import pytest
 
 try:
@@ -16,11 +17,25 @@ class DummyMetricResult:
         self.value = value
 
 
+class DummyAgent:
+    project_name = "dummy"
+
+    def __init__(self, prompt: ChatPrompt) -> None:
+        self.prompt = prompt
+        self.optimizer: Any | None = None  # Set by DummyOptimizer._instantiate_agent
+
+    def invoke(self, messages: Any) -> str:
+        # Echo back the question as answer for deterministic scoring
+        return "A"
+
+
 class DummyOptimizer:
     def __init__(self) -> None:
         self._gepa_live_metric_calls = 0
         self.llm_call_counter = 0
         self.tool_call_counter = 0
+        self.project_name = "dummy"
+        self.name = "DummyOptimizer"
 
     def _increment_llm_counter(self) -> None:
         self.llm_call_counter += 1
@@ -31,6 +46,14 @@ class DummyOptimizer:
     def _reset_counters(self) -> None:
         self.llm_call_counter = 0
         self.tool_call_counter = 0
+
+    def _instantiate_agent(
+        self, prompt: ChatPrompt, agent_class: Any | None = None
+    ) -> Any:
+        cls = agent_class or (lambda p: DummyAgent(p))
+        agent = cls(prompt)
+        agent.optimizer = self  # Mimic BaseOptimizer behavior
+        return agent
 
 
 def test_adapter_evaluate_uses_metric(
@@ -45,17 +68,6 @@ def test_adapter_evaluate_uses_metric(
     from opik_optimizer import ChatPrompt
 
     prompt = ChatPrompt(system="Answer", user="{input}")
-
-    # Fake agent class returned by create_litellm_agent_class
-    class DummyAgent:
-        project_name = "dummy"
-
-        def __init__(self, prompt: ChatPrompt) -> None:
-            self.prompt = prompt
-
-        def invoke(self, messages: Any) -> str:
-            # Echo back the question as answer for deterministic scoring
-            return "A"
 
     monkeypatch.setattr(
         "opik_optimizer.algorithms.gepa_optimizer.adapter.create_litellm_agent_class",
