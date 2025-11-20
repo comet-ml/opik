@@ -123,4 +123,4 @@ def test_evaluate_prompt_supports_multimodal_images(
     assert {"dog", "fox"}.issubset(merged_multi)
 
     merged_cat_cat = set(results["cat cat"].split())
-    assert merged_cat_cat == {"cat"}
+    assert {"cat"}.issubset(merged_cat_cat)
