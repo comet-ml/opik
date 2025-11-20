@@ -26,6 +26,7 @@ public enum TemplateStructure {
                 return structure;
             }
         }
-        throw new IllegalArgumentException("Unknown template structure: " + value);
+        // Default to TEXT for unknown values (backward compatibility)
+        return TEXT;
     }
 }
