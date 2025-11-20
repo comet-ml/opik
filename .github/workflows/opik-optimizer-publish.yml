@@ -1,5 +1,5 @@
-name: "Optimizer SDK - Publish"
-run-name: "Publish Optimizer SDK ${{ github.ref_name }} by @${{ github.actor }}"
+name: "Opik Optimizer - Publish SDK"
+run-name: "Opik Optimizer Publish SDK ${{ github.ref_name }} by @${{ github.actor }}"
 
 permissions:
     contents: read
