@@ -61,3 +61,19 @@ Content = Union[str, list[ContentPart]]
 class Message(pydantic.BaseModel):
     role: Literal["user", "assistant", "system"]
     content: Content
+
+
+class DatasetSpec(pydantic.BaseModel):
+    """Declarative description of an optimizer dataset."""
+
+    model_config = pydantic.ConfigDict(arbitrary_types_allowed=True)
+
+    name: str
+    default_source_split: str = "train"
+    hf_path: str | None = None
+    hf_name: str | None = None
+    load_kwargs_resolver: Callable[[str], dict[str, Any]] | None = None
+    presets: dict[str, DatasetSplitPreset] = pydantic.Field(default_factory=dict)
+    prefer_presets: bool = False
+    custom_loader: Callable[[str, int, int | None, int], list[dict[str, Any]]] | None = None
+    records_transform: Callable[[list[dict[str, Any]]], list[dict[str, Any]]] | None = None
