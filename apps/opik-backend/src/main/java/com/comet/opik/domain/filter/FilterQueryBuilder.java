@@ -377,6 +377,8 @@ public class FilterQueryBuilder {
                     .put(ExperimentsComparisonValidKnownField.DURATION, DURATION_ANALYTICS_DB)
                     .put(ExperimentsComparisonValidKnownField.FEEDBACK_SCORES, VALUE_ANALYTICS_DB)
                     .put(ExperimentsComparisonValidKnownField.OUTPUT, OUTPUT_ANALYTICS_DB)
+                    .put(ExperimentsComparisonValidKnownField.TOTAL_ESTIMATED_COST, TOTAL_ESTIMATED_COST_ANALYTICS_DB)
+                    .put(ExperimentsComparisonValidKnownField.USAGE_TOTAL_TOKENS, USAGE_TOTAL_TOKENS_ANALYTICS_DB)
                     .build());
 
     private static final Map<FilterStrategy, Set<? extends Field>> FILTER_STRATEGY_MAP = createFilterStrategyMap();

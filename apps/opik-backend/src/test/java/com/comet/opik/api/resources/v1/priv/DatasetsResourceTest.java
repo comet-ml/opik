@@ -7916,4 +7916,211 @@ class DatasetsResourceTest {
             });
         }
     }
+
+    @Nested
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    @DisplayName("Experiment Items Sorting and Filtering: OPIK-2936")
+    class ExperimentItemsSortingAndFiltering {
+
+        @Test
+        @DisplayName("should sort experiment items by total_estimated_cost in descending order")
+        void sortByTotalEstimatedCost__whenDescendingOrder__thenReturnSorted() {
+            var apiKey = UUID.randomUUID().toString();
+            var workspaceName = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            // Create project name for traces
+            var projectName = RandomStringUtils.randomAlphanumeric(10);
+
+            // Create dataset
+            var dataset = factory.manufacturePojo(Dataset.class);
+            var datasetId = createAndAssert(dataset, apiKey, workspaceName);
+
+            // Create 3 dataset items
+            var datasetItemBatch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+                    .datasetId(datasetId)
+                    .items(IntStream.range(0, 3)
+                            .mapToObj(i -> factory.manufacturePojo(DatasetItem.class))
+                            .toList())
+                    .build();
+            putAndAssert(datasetItemBatch, workspaceName, apiKey);
+            var datasetItems = datasetItemBatch.items();
+
+            // Create traces and spans with costs
+            var costValues = List.of(
+                    BigDecimal.valueOf(10.50),
+                    BigDecimal.valueOf(25.75),
+                    BigDecimal.valueOf(5.25));
+
+            // Create traces using PodamFactoryUtils
+            var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class).stream()
+                    .limit(3)
+                    .map(trace -> trace.toBuilder().projectName(projectName).build())
+                    .toList();
+
+            var traceIds = traces.stream()
+                    .map(trace -> createTrace(trace, apiKey, workspaceName))
+                    .toList();
+
+            // Create spans in batch
+            var spans = IntStream.range(0, 3)
+                    .mapToObj(i -> factory.manufacturePojo(Span.class).toBuilder()
+                            .projectName(projectName)
+                            .traceId(traceIds.get(i))
+                            .totalEstimatedCost(costValues.get(i))
+                            .build())
+                    .toList();
+
+            spanResourceClient.batchCreateSpans(spans, apiKey, workspaceName);
+
+            // Create experiment
+            var experimentId = GENERATOR.generate();
+
+            // Create experiment items linked to traces
+            var experimentItems = IntStream.range(0, 3)
+                    .mapToObj(i -> factory.manufacturePojo(ExperimentItem.class).toBuilder()
+                            .experimentId(experimentId)
+                            .datasetItemId(datasetItems.get(i).id())
+                            .traceId(traceIds.get(i))
+                            .build())
+                    .toList();
+
+            var experimentItemsBatch = ExperimentItemsBatch.builder()
+                    .experimentItems(new HashSet<>(experimentItems))
+                    .build();
+            createAndAssert(experimentItemsBatch, apiKey, workspaceName);
+
+            // Query with sorting by total_estimated_cost DESC
+            var sorting = toURLEncodedQueryParam(
+                    List.of(new SortingField("total_estimated_cost", Direction.DESC)));
+            var experimentIdsParam = JsonUtils.writeValueAsString(List.of(experimentId));
+
+            try (var actualResponse = client.target(BASE_RESOURCE_URI.formatted(baseURI))
+                    .path(datasetId.toString())
+                    .path(DATASET_ITEMS_WITH_EXPERIMENT_ITEMS_PATH)
+                    .queryParam("experiment_ids", experimentIdsParam)
+                    .queryParam("sorting", sorting)
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, apiKey)
+                    .header(WORKSPACE_HEADER, workspaceName)
+                    .get()) {
+
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
+                var actualPage = actualResponse.readEntity(DatasetItemPage.class);
+
+                assertThat(actualPage.content()).hasSize(3);
+
+                // Verify sorting order: 25.75, 10.50, 5.25
+                var costs = actualPage.content().stream()
+                        .map(item -> item.experimentItems().get(0).totalEstimatedCost())
+                        .toList();
+
+                assertThat(costs).hasSize(3);
+                assertThat(costs.get(0)).isEqualByComparingTo(BigDecimal.valueOf(25.75));
+                assertThat(costs.get(1)).isEqualByComparingTo(BigDecimal.valueOf(10.50));
+                assertThat(costs.get(2)).isEqualByComparingTo(BigDecimal.valueOf(5.25));
+            }
+        }
+
+        @Test
+        @DisplayName("should sort experiment items by usage.total_tokens in ascending order")
+        void sortByUsageTotalTokens__whenAscendingOrder__thenReturnSorted() {
+            var apiKey = UUID.randomUUID().toString();
+            var workspaceName = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            // Create project name for traces
+            var projectName = RandomStringUtils.randomAlphanumeric(10);
+
+            // Create dataset
+            var dataset = factory.manufacturePojo(Dataset.class);
+            var datasetId = createAndAssert(dataset, apiKey, workspaceName);
+
+            // Create 3 dataset items
+            var datasetItemBatch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+                    .datasetId(datasetId)
+                    .items(IntStream.range(0, 3)
+                            .mapToObj(i -> factory.manufacturePojo(DatasetItem.class))
+                            .toList())
+                    .build();
+            putAndAssert(datasetItemBatch, workspaceName, apiKey);
+            var datasetItems = datasetItemBatch.items();
+
+            // Create traces and spans with usage data
+            var usageValues = List.of(
+                    Map.of("total_tokens", 150, "prompt_tokens", 100, "completion_tokens", 50),
+                    Map.of("total_tokens", 50, "prompt_tokens", 30, "completion_tokens", 20),
+                    Map.of("total_tokens", 100, "prompt_tokens", 60, "completion_tokens", 40));
+
+            // Create traces using PodamFactoryUtils
+            var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class).stream()
+                    .limit(3)
+                    .map(trace -> trace.toBuilder().projectName(projectName).build())
+                    .toList();
+
+            var traceIds = traces.stream()
+                    .map(trace -> createTrace(trace, apiKey, workspaceName))
+                    .toList();
+
+            // Create spans in batch
+            var spans = IntStream.range(0, 3)
+                    .mapToObj(i -> factory.manufacturePojo(Span.class).toBuilder()
+                            .projectName(projectName)
+                            .traceId(traceIds.get(i))
+                            .usage(usageValues.get(i))
+                            .build())
+                    .toList();
+
+            spanResourceClient.batchCreateSpans(spans, apiKey, workspaceName);
+
+            // Create experiment
+            var experimentId = GENERATOR.generate();
+
+            // Create experiment items linked to traces
+            var experimentItems = IntStream.range(0, 3)
+                    .mapToObj(i -> factory.manufacturePojo(ExperimentItem.class).toBuilder()
+                            .experimentId(experimentId)
+                            .datasetItemId(datasetItems.get(i).id())
+                            .traceId(traceIds.get(i))
+                            .build())
+                    .toList();
+
+            var experimentItemsBatch = ExperimentItemsBatch.builder()
+                    .experimentItems(new HashSet<>(experimentItems))
+                    .build();
+            createAndAssert(experimentItemsBatch, apiKey, workspaceName);
+
+            // Query with sorting by usage.total_tokens ASC
+            var sorting = toURLEncodedQueryParam(
+                    List.of(new SortingField("usage.total_tokens", Direction.ASC)));
+            var experimentIdsParam = JsonUtils.writeValueAsString(List.of(experimentId));
+
+            try (var actualResponse = client.target(BASE_RESOURCE_URI.formatted(baseURI))
+                    .path(datasetId.toString())
+                    .path(DATASET_ITEMS_WITH_EXPERIMENT_ITEMS_PATH)
+                    .queryParam("experiment_ids", experimentIdsParam)
+                    .queryParam("sorting", sorting)
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, apiKey)
+                    .header(WORKSPACE_HEADER, workspaceName)
+                    .get()) {
+
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
+                var actualPage = actualResponse.readEntity(DatasetItemPage.class);
+
+                assertThat(actualPage.content()).hasSize(3);
+
+                // Verify sorting order: 50, 100, 150
+                var tokens = actualPage.content().stream()
+                        .map(item -> item.experimentItems().get(0).usage().get("total_tokens"))
+                        .toList();
+
+                assertThat(tokens).containsExactly(50L, 100L, 150L);
+            }
+        }
+    }
 }
