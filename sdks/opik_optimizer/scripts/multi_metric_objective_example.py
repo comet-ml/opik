@@ -11,7 +11,8 @@ from opik.evaluation.metrics import LevenshteinRatio, Equals
 from opik.evaluation.metrics.score_result import ScoreResult
 
 
-dataset = hotpot(count=300)
+# Use test_mode to avoid heavy downloads when running the example locally.
+dataset = hotpot(count=300, test_mode=True)
 
 
 def levenshtein_ratio(dataset_item: dict[str, Any], llm_output: str) -> ScoreResult:
