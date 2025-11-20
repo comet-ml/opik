@@ -38,7 +38,6 @@ import org.reactivestreams.Publisher;
 import org.stringtemplate.v4.ST;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
-import java.util.Map;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -2146,8 +2145,7 @@ class SpanDAO {
                 })
                 .flatMap(result -> result.map((row, rowMetadata) -> Map.entry(
                         row.get("id", UUID.class),
-                        row.get("project_id", UUID.class)
-                )))
+                        row.get("project_id", UUID.class))))
                 .collectMap(Map.Entry::getKey, Map.Entry::getValue);
     }
 

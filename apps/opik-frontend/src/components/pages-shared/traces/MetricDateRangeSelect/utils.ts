@@ -85,9 +85,9 @@ export const calculateIntervalStartAndEnd = (
   const daysDiff = dayjs(dateRange.to).diff(dayjs(dateRange.from), "days");
   const startOf = daysDiff <= 1 ? "hour" : "day";
 
-  const isEndDateToday = dayjs(dateRange.to).isSame(dayjs(), "day");
+  const isEndDateToday = dayjs(dateRange.to).utc().isSame(dayjs().utc(), "day");
   const preset = getRangePreset(dateRange);
-  const isPresetRange = preset && preset !== DATE_RANGE_PRESET_ALLTIME;
+  const isPresetRange = !!preset && preset !== DATE_RANGE_PRESET_ALLTIME;
 
   let endTime: dayjs.Dayjs | undefined;
   let startTime: dayjs.Dayjs;

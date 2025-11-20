@@ -771,7 +771,8 @@ public class TracesResource {
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
 
-        log.info("Deleted trace threads with size '{}' on workspaceId '{}'", traceThreads.threadIds().size(), workspaceId);
+        log.info("Deleted trace threads with size '{}' on workspaceId '{}'", traceThreads.threadIds().size(),
+                workspaceId);
 
         return Response.noContent().build();
     }

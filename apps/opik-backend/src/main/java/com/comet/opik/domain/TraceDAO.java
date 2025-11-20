@@ -3007,8 +3007,8 @@ class TraceDAOImpl implements TraceDAO {
                 .bind("traceIds", traceIds.toArray(UUID[]::new));
 
         return makeMonoContextAware(bindWorkspaceIdToMono(statement))
-                .flatMapMany(result -> result.map((row, rowMetadata) ->
-                        Map.entry(row.get("id", UUID.class), row.get("project_id", UUID.class))))
+                .flatMapMany(result -> result.map(
+                        (row, rowMetadata) -> Map.entry(row.get("id", UUID.class), row.get("project_id", UUID.class))))
                 .collectMap(Map.Entry::getKey, Map.Entry::getValue);
     }
 

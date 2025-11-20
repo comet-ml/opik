@@ -1,7 +1,6 @@
 package com.comet.opik.domain;
 
 import com.comet.opik.api.Comment;
-import com.comet.opik.utils.TemplateUtils;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.utils.template.TemplateUtils;
 import com.google.inject.ImplementedBy;
@@ -41,7 +40,8 @@ public interface CommentDAO {
 
     Mono<Long> addComment(UUID commentId, UUID entityId, EntityType entityType, UUID projectId, Comment comment);
 
-    Mono<Long> addCommentsBatch(EntityType entityType, List<UUID> entityIds, List<UUID> commentIds, List<UUID> projectIds, Comment comment);
+    Mono<Long> addCommentsBatch(EntityType entityType, List<UUID> entityIds, List<UUID> commentIds,
+            List<UUID> projectIds, Comment comment);
 
     Mono<Comment> findById(UUID entityId, UUID commentId);
 
@@ -178,7 +178,7 @@ class CommentDAOImpl implements CommentDAO {
             @NonNull List<UUID> commentIds, @NonNull List<UUID> projectIds, @NonNull Comment comment) {
         return asyncTemplate.nonTransaction(connection -> {
             var items = TemplateUtils.getQueryItemPlaceHolder(entityIds.size());
-            var template = new ST(INSERT_COMMENTS_BATCH).add("items", items);
+            var template = TemplateUtils.newST(INSERT_COMMENTS_BATCH).add("items", items);
 
             var statement = connection.createStatement(template.render())
                     .bind("entity_type", entityType.getType())

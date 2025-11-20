@@ -6,16 +6,16 @@ import com.comet.opik.domain.threads.TraceThreadDAO;
 import com.google.inject.ImplementedBy;
 import com.google.inject.Singleton;
 import jakarta.inject.Inject;
+import jakarta.ws.rs.NotFoundException;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import reactor.core.publisher.Mono;
+
 import java.util.List;
 import java.util.Map;
-
 import java.util.Set;
 import java.util.UUID;
-import jakarta.ws.rs.NotFoundException;
 
 import static com.comet.opik.utils.ErrorUtils.failWithNotFound;
 
@@ -47,7 +47,6 @@ class CommentServiceImpl implements CommentService {
     private final @NonNull SpanDAO spanDAO;
     private final @NonNull TraceThreadDAO traceThreadDAO;
     private final @NonNull IdGenerator idGenerator;
-    
 
     @Override
     public Mono<UUID> create(@NonNull UUID entityId, @NonNull Comment comment, CommentDAO.EntityType entityType) {
@@ -110,9 +109,9 @@ class CommentServiceImpl implements CommentService {
     }
 
     private Mono<Long> createBatch(Set<UUID> idsSet,
-                                   String text,
-                                   Mono<Map<UUID, UUID>> idsToProjectIds,
-                                   CommentDAO.EntityType entityType) {
+            String text,
+            Mono<Map<UUID, UUID>> idsToProjectIds,
+            CommentDAO.EntityType entityType) {
         if (idsSet.isEmpty()) {
             return Mono.just(0L);
         }
