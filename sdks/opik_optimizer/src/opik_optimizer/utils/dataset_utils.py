@@ -9,7 +9,7 @@ from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass
 from functools import lru_cache
 from importlib import resources
-from typing import Any, cast
+from typing import Any
 
 import opik
 from datasets import load_dataset
@@ -68,6 +68,13 @@ def resolve_test_mode_count(test_count: int | None) -> int:
     )
 
 
+def dataset_name_for_mode(dataset_name: str, test_mode: bool) -> str:
+    """Apply the `_sample` suffix when test mode datasets are created."""
+    if test_mode and not dataset_name.endswith("_sample"):
+        return f"{dataset_name}_sample"
+    return dataset_name
+
+
 def create_dataset_from_records(
     *,
     dataset_name: str,
@@ -76,8 +83,7 @@ def create_dataset_from_records(
     test_mode: bool,
 ) -> opik.Dataset:
     """Create or reuse an Opik dataset with the provided records and size checks."""
-    suffix = "_sample" if test_mode and not dataset_name.endswith("_sample") else ""
-    full_name = f"{dataset_name}{suffix}"
+    full_name = dataset_name_for_mode(dataset_name, test_mode)
     client = opik.Opik()
     dataset = client.get_or_create_dataset(full_name)
     existing = dataset.get_items()
@@ -224,31 +230,30 @@ def resolve_slice_request(
     if requested_split is None and not prefer_presets:
         preset = None
 
-    if preset is not None:
-        source_split = preset.get("source_split", normalized_split)
-    elif requested_split is not None:
-        source_split = normalized_split
-    else:
-        source_split = default_source_split
-
-    raw_start: Any = (
-        start
-        if start is not None
-        else (preset.get("start") if preset and "start" in preset else default_start)
+    source_split = _resolve_slice_field(
+        explicit=requested_split,
+        preset=preset,
+        preset_key="source_split",
+        default=default_source_split,
+        coerce=str,
+        fallback_alias=True,
     )
-    if raw_start is None:
-        raw_start = default_start
-    resolved_start = cast(int, raw_start)
 
-    raw_count: Any = (
-        count
-        if count is not None
-        else (preset.get("count") if preset and "count" in preset else default_count)
+    resolved_start = _resolve_slice_field(
+        explicit=start,
+        preset=preset,
+        preset_key="start",
+        default=default_start,
+        coerce=int,
     )
-    if raw_count is None:
-        resolved_count: int | None = None
-    else:
-        resolved_count = cast(int, raw_count)
+
+    resolved_count = _resolve_slice_field(
+        explicit=count,
+        preset=preset,
+        preset_key="count",
+        default=default_count,
+        coerce=lambda value: int(value) if value is not None else None,
+    )
 
     if dataset_name:
         resolved_name = dataset_name
@@ -468,6 +473,7 @@ __all__ = [
     "attach_uuids",
     "resolve_dataset_seed",
     "resolve_test_mode_count",
+    "dataset_name_for_mode",
     "create_dataset_from_records",
     "download_and_slice_hf_dataset",
     "fetch_records_for_slice",
@@ -479,3 +485,37 @@ __all__ = [
     "DatasetHandle",
     "warn_deprecated_dataset",
 ]
+
+
+def _resolve_slice_field(
+    *,
+    explicit: Any,
+    preset: dict[str, Any] | None,
+    preset_key: str,
+    default: Any,
+    coerce: Callable[[Any], Any],
+    fallback_alias: bool = False,
+) -> Any:
+    """
+    Helper to resolve `start`/`count`/`split` values with consistent precedence.
+
+    Args:
+        explicit: Value provided directly by the caller.
+        preset: Optional preset dict for the requested split.
+        preset_key: Key to look up inside the preset.
+        default: Fallback if neither explicit nor preset provided.
+        coerce: Callable to coerce the final value into the desired type.
+        fallback_alias: When resolving the split name we already normalized via aliases;
+            set this to ``True`` so we can reuse that normalization.
+    """
+    if explicit is not None:
+        value = explicit
+    elif preset and preset_key in preset:
+        value = preset[preset_key]
+    else:
+        value = default
+
+    if preset_key == "source_split" and fallback_alias and isinstance(value, str):
+        value = _SPLIT_ALIASES.get(value.lower(), value)
+
+    return coerce(value)
