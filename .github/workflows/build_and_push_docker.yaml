@@ -168,7 +168,19 @@ jobs:
         run: |
           mkdir -p /tmp/digests/${{ steps.set_vars.outputs.image_name }}
           digest="${{ steps.build.outputs.digest }}"
-          echo "${digest#sha256:}" > "/tmp/digests/${{ steps.set_vars.outputs.image_name }}/${{ matrix.platform }}.digest"
+          if [ -z "$digest" ]; then
+            echo "ERROR: Digest is empty!"
+            exit 1
+          fi
+          echo "Raw digest from build: $digest"
+          # Remove sha256: prefix if present, otherwise use as-is
+          if [[ "$digest" == sha256:* ]]; then
+            HASH="${digest#sha256:}"
+          else
+            HASH="$digest"
+          fi
+          echo "$HASH" > "/tmp/digests/${{ steps.set_vars.outputs.image_name }}/${{ matrix.platform }}.digest"
+          echo "Saved digest hash: $HASH"
 
       - name: Upload digest
         if: steps.check.outputs.should_run == 'true'
@@ -238,11 +250,42 @@ jobs:
         run: |
           cd /tmp/digests/${{ steps.set_vars.outputs.image_name }}
           
-          # Collect all digests
+          # Debug: Show directory structure
+          echo "Directory structure:"
+          find . -type f | sort
+          
+          # Collect all digests - handle subdirectories from artifact downloads
           DIGESTS=""
-          for digest_file in $(find . -name "*.digest" -type f); do
-            DIGESTS="$DIGESTS ${{ env.DOCKER_REGISTRY }}/${{ steps.set_vars.outputs.image_name }}@sha256:$(cat $digest_file)"
-          done
+          while IFS= read -r digest_file; do
+            if [ -f "$digest_file" ]; then
+              DIGEST_VALUE=$(cat "$digest_file" | tr -d '\n\r ' | xargs)
+              if [ -n "$DIGEST_VALUE" ] && [ ${#DIGEST_VALUE} -eq 64 ]; then
+                DIGEST_REF="${{ env.DOCKER_REGISTRY }}/${{ steps.set_vars.outputs.image_name }}@sha256:$DIGEST_VALUE"
+                echo "Found digest file: $digest_file"
+                echo "  Hash: $DIGEST_VALUE"
+                echo "  Reference: $DIGEST_REF"
+                
+                # Verify digest exists in registry
+                if docker buildx imagetools inspect "$DIGEST_REF" >/dev/null 2>&1; then
+                  echo "  ✓ Verified digest exists in registry"
+                  DIGESTS="$DIGESTS $DIGEST_REF"
+                else
+                  echo "  ✗ WARNING: Digest not found in registry, skipping: $DIGEST_REF"
+                fi
+              else
+                echo "  ✗ WARNING: Invalid digest value in $digest_file: '$DIGEST_VALUE'"
+              fi
+            fi
+          done < <(find . -name "*.digest" -type f | sort)
+          
+          if [ -z "$DIGESTS" ]; then
+            echo "ERROR: No valid digests found or verified!"
+            echo "Searched for *.digest files in: $(pwd)"
+            exit 1
+          fi
+          
+          echo ""
+          echo "Collected verified digests: $DIGESTS"
           
           # Build tags
           TAGS="${{ env.DOCKER_REGISTRY }}/${{ steps.set_vars.outputs.image_name }}:${{ inputs.version }}"
@@ -258,6 +301,10 @@ jobs:
           for tag in $TAGS; do
             TAG_ARGS="$TAG_ARGS -t $tag"
           done
+          
+          echo ""
+          echo "Creating manifest with tags: $TAG_ARGS"
+          echo "Using digests: $DIGESTS"
           docker buildx imagetools create $TAG_ARGS $DIGESTS
 
       - name: Write Build Summary
