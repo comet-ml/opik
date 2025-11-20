@@ -63,6 +63,17 @@ class Message(pydantic.BaseModel):
     content: Content
 
 
+class DatasetSplitPreset(pydantic.BaseModel):
+    """Configuration for a named dataset split slice."""
+
+    model_config = pydantic.ConfigDict(arbitrary_types_allowed=True)
+
+    source_split: str
+    start: int | None = None
+    count: int | None = None
+    dataset_name: str | None = None
+
+
 class DatasetSpec(pydantic.BaseModel):
     """Declarative description of an optimizer dataset."""
 
