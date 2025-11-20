@@ -274,10 +274,7 @@ class PromptServiceImpl implements PromptService {
 
         IdGenerator.validateVersion(id, "prompt version");
 
-        // Get template_structure from request, defaulting to TEXT if not provided
-        TemplateStructure templateStructure = createPromptVersion.templateStructure() != null
-                ? createPromptVersion.templateStructure()
-                : TemplateStructure.TEXT;
+        TemplateStructure templateStructure = createPromptVersion.templateStructure();
 
         Prompt prompt = getOrCreatePrompt(workspaceId, createPromptVersion.name(), userName, templateStructure);
 
@@ -409,9 +406,6 @@ class PromptServiceImpl implements PromptService {
         log.info("Creating prompt version for prompt id '{}'", promptVersion.promptId());
 
         IdGenerator.validateVersion(promptVersion.id(), "prompt version");
-
-        // Get parent prompt to inherit template structure
-        Prompt prompt = getById(promptVersion.promptId());
 
         transactionTemplate.inTransaction(WRITE, handle -> {
             PromptVersionDAO promptVersionDAO = handle.attach(PromptVersionDAO.class);
