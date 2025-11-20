@@ -89,9 +89,15 @@ class ParameterOptimizer(BaseOptimizer):
         agent_class: type[OptimizableAgent] | None = None,
         project_name: str = "Optimization",
         optimization_id: str | None = None,
+        dataset_validation: Dataset | None = None,
         *args: Any,
         **kwargs: Any,
     ) -> OptimizationResult:
+        if dataset_validation is not None:
+            logger.warning(
+                f"{self.__class__.__name__} currently does not support validation dataset. "
+                f"Using `dataset` (training) for now. Ignoring `dataset_validation` parameter."
+            )
         raise NotImplementedError(
             "ParameterOptimizer.optimize_prompt is not supported. "
             "Use optimize_parameter(prompt, dataset, metric, parameter_space) instead, "
