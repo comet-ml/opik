@@ -53,6 +53,9 @@ export function UpdateExperimentDialog({
     name !== latestName ||
     configuration !== JSON.stringify(latestConfiguration || {}, null, 2);
 
+  // Validate name is not empty
+  const isValid = Boolean(name.trim().length);
+
   const handleUpdate = () => {
     let parsedConfiguration: object = {};
     try {
@@ -107,7 +110,11 @@ export function UpdateExperimentDialog({
             <Button variant="outline">Cancel</Button>
           </DialogClose>
           <DialogClose asChild>
-            <Button type="submit" onClick={handleUpdate} disabled={!hasChanges}>
+            <Button
+              type="submit"
+              onClick={handleUpdate}
+              disabled={!isValid || !hasChanges}
+            >
               Update experiment
             </Button>
           </DialogClose>
