@@ -45,7 +45,6 @@ IFBENCH_SPEC = DatasetSpec(
             dataset_name="ifbench_test",
         ),
     },
-    prefer_presets=True,
 )
 
 _IFBENCH_HANDLE = DatasetHandle(IFBENCH_SPEC)

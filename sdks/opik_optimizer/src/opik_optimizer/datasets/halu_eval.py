@@ -31,7 +31,6 @@ HALU_EVAL_SPEC = DatasetSpec(
             dataset_name="halu_eval_300_train",
         )
     },
-    prefer_presets=True,
     records_transform=_halu_records_transform,
 )
 

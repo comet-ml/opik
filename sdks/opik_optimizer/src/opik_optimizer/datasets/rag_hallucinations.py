@@ -17,7 +17,6 @@ RAG_HALLU_SPEC = DatasetSpec(
             dataset_name="rag_hallucination_train",
         )
     },
-    prefer_presets=True,
 )
 
 _RAG_HALLU_HANDLE = DatasetHandle(RAG_HALLU_SPEC)

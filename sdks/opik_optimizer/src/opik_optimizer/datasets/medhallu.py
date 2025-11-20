@@ -18,7 +18,6 @@ MEDHALLU_SPEC = DatasetSpec(
             dataset_name="medhallu_train",
         )
     },
-    prefer_presets=True,
 )
 
 _MEDHALLU_HANDLE = DatasetHandle(MEDHALLU_SPEC)

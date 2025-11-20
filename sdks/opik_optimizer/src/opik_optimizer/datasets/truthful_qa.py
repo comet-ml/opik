@@ -76,7 +76,6 @@ TRUTHFUL_QA_SPEC = DatasetSpec(
             dataset_name="truthful_qa_train",
         )
     },
-    prefer_presets=True,
     records_transform=_truthful_transform,
     custom_loader=_truthful_custom_loader,
 )

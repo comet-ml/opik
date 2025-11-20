@@ -30,7 +30,6 @@ PUPA_SPEC = DatasetSpec(
             dataset_name="pupa_test",
         ),
     },
-    prefer_presets=True,
 )
 
 _PUPA_HANDLE = DatasetHandle(PUPA_SPEC)

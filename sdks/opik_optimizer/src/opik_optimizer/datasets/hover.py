@@ -29,7 +29,6 @@ HOVER_SPEC = DatasetSpec(
             dataset_name="hover_test",
         ),
     },
-    prefer_presets=True,
 )
 
 _HOVER_HANDLE = DatasetHandle(HOVER_SPEC)

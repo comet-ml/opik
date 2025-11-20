@@ -36,7 +36,6 @@ TINY_TEST_SPEC = DatasetSpec(
             dataset_name="tiny_test_train",
         )
     },
-    prefer_presets=True,
     records_transform=_tiny_records_transform,
 )
 

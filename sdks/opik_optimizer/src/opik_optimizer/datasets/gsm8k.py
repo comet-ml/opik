@@ -18,7 +18,6 @@ GSM8K_SPEC = DatasetSpec(
             dataset_name="gsm8k_train",
         )
     },
-    prefer_presets=True,
 )
 
 _GSM8K_HANDLE = DatasetHandle(GSM8K_SPEC)

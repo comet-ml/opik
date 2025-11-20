@@ -17,7 +17,6 @@ RAGBENCH_SPEC = DatasetSpec(
             dataset_name="ragbench_sentence_relevance_train",
         )
     },
-    prefer_presets=True,
 )
 
 _RAGBENCH_HANDLE = DatasetHandle(RAGBENCH_SPEC)

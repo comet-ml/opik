@@ -61,7 +61,6 @@ HOT_POT_SPEC = DatasetSpec(
             dataset_name="hotpot_test",
         ),
     },
-    prefer_presets=True,
 )
 
 _HOT_POT_HANDLE = DatasetHandle(HOT_POT_SPEC)
