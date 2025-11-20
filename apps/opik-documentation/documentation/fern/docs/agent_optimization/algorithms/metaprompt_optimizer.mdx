@@ -51,7 +51,7 @@ optimizer = MetaPromptOptimizer(
 )
 
 # Prepare dataset
-dataset = datasets.hotpot_300()
+dataset = datasets.hotpot(count=300)
 
 # Define metric and task configuration (see docs for more options)
 def levenshtein_ratio(dataset_item, llm_output):

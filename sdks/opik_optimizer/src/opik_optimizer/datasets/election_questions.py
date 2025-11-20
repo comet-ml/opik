@@ -1,37 +1,44 @@
+from __future__ import annotations
+
 import opik
+from opik_optimizer.api_objects.types import DatasetSpec, DatasetSplitPreset
+from opik_optimizer.utils.dataset_utils import DatasetHandle
+
+ELECTION_QUESTIONS_SPEC = DatasetSpec(
+    name="election_questions",
+    hf_path="Anthropic/election_questions",
+    default_source_split="test",
+    prefer_presets=True,
+    presets={
+        "test": DatasetSplitPreset(
+            source_split="test",
+            start=0,
+            count=300,
+            dataset_name="election_questions_train",
+        )
+    },
+)
+
+_ELECTION_QUESTIONS_HANDLE = DatasetHandle(ELECTION_QUESTIONS_SPEC)
 
 
-def election_questions(test_mode: bool = False) -> opik.Dataset:
-    dataset_name = (
-        "election_questions_train" if not test_mode else "election_questions_sample"
+def election_questions(
+    *,
+    split: str | None = None,
+    count: int | None = None,
+    start: int | None = None,
+    dataset_name: str | None = None,
+    test_mode: bool = False,
+    seed: int | None = None,
+    test_mode_count: int | None = None,
+) -> opik.Dataset:
+    """Anthropic election question classification slices."""
+    return _ELECTION_QUESTIONS_HANDLE.load(
+        split=split,
+        count=count,
+        start=start,
+        dataset_name=dataset_name,
+        test_mode=test_mode,
+        seed=seed,
+        test_mode_count=test_mode_count,
     )
-    nb_items = 300 if not test_mode else 5
-
-    client = opik.Opik()
-    dataset = client.get_or_create_dataset(dataset_name)
-
-    items = dataset.get_items()
-    if len(items) == nb_items:
-        return dataset
-    elif len(items) != 0:
-        raise ValueError(
-            f"Dataset {dataset_name} contains {len(items)} items, expected {nb_items}. We recommend deleting the dataset and re-creating it."
-        )
-    elif len(items) == 0:
-        import datasets as ds
-
-        # Load data from file and insert into the dataset
-        download_config = ds.DownloadConfig(download_desc=False, disable_tqdm=True)
-        ds.disable_progress_bar()
-        hf_dataset = ds.load_dataset(
-            "Anthropic/election_questions", download_config=download_config
-        )
-
-        data = [
-            {"question": item["question"], "label": item["label"]}
-            for item in hf_dataset["test"].select(range(nb_items))
-        ]
-        ds.enable_progress_bar()
-        dataset.insert(data)
-
-        return dataset

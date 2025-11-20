@@ -5,14 +5,14 @@ from opik_optimizer import (
     ParameterOptimizer,
     ParameterSearchSpace,
 )
-from opik_optimizer.datasets import hotpot_300
+from opik_optimizer.datasets import hotpot
 
 from opik.evaluation.metrics import LevenshteinRatio
 from opik.evaluation.metrics.score_result import ScoreResult
 
 from adk_agent import ADKAgent
 
-dataset = hotpot_300()
+dataset = hotpot(count=300)
 
 
 def levenshtein_ratio(dataset_item: dict[str, Any], llm_output: str) -> ScoreResult:

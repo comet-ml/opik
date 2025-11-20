@@ -50,31 +50,31 @@ def get_or_create_dataset(
         stacklevel=2,
     )
     if name == "hotpot-300":
-        dataset = hotpot_300(test_mode)
+        dataset = hotpot_300(test_mode=test_mode)
     elif name == "hotpot-500":
-        dataset = hotpot_500(test_mode)
+        dataset = hotpot_500(test_mode=test_mode)
     elif name == "halu-eval-300":
-        dataset = halu_eval_300(test_mode)
+        dataset = halu_eval_300(test_mode=test_mode, seed=seed)
     elif name == "tiny-test":
         dataset = tiny_test()
     elif name == "gsm8k":
-        dataset = gsm8k(test_mode)
+        dataset = gsm8k(test_mode=test_mode, seed=seed)
     elif name == "hotpot_qa":
         raise HaltError("HotpotQA dataset is no longer available in the demo datasets.")
     elif name == "ai2_arc":
-        dataset = ai2_arc(test_mode)
+        dataset = ai2_arc(test_mode=test_mode, seed=seed)
     elif name == "truthful_qa":
-        dataset = truthful_qa(test_mode)
+        dataset = truthful_qa(test_mode=test_mode, seed=seed)
     elif name == "cnn_dailymail":
-        dataset = cnn_dailymail(test_mode)
+        dataset = cnn_dailymail(test_mode=test_mode, seed=seed)
     elif name == "ragbench_sentence_relevance":
-        dataset = ragbench_sentence_relevance(test_mode)
+        dataset = ragbench_sentence_relevance(test_mode=test_mode, seed=seed)
     elif name == "election_questions":
-        dataset = election_questions(test_mode)
+        dataset = election_questions(test_mode=test_mode, seed=seed)
     elif name == "medhallu":
-        dataset = medhallu(test_mode)
+        dataset = medhallu(test_mode=test_mode, seed=seed)
     elif name == "rag_hallucinations":
-        dataset = rag_hallucinations(test_mode)
+        dataset = rag_hallucinations(test_mode=test_mode, seed=seed)
     else:
         raise HaltError(f"Unknown dataset: {name}")
 
