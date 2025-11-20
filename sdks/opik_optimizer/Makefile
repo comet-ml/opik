@@ -61,5 +61,18 @@ build:
 	$(PYTHON) setup.py sdist bdist_wheel
 
 clean:
-	rm -rf build dist *.egg-info
-	rm -rf $(VENV)
+	@echo "Cleaning build artifacts and cache files..."
+	@rm -rf build dist
+	@find . -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
+	@find . -type d -name "*.egg-info" -exec rm -rf {} + 2>/dev/null || true
+	@find . -type d -name ".pytest_cache" -exec rm -rf {} + 2>/dev/null || true
+	@find . -type d -name ".mypy_cache" -exec rm -rf {} + 2>/dev/null || true
+	@find . -type d -name ".ruff_cache" -exec rm -rf {} + 2>/dev/null || true
+	@find . -type d -name ".cache" -exec rm -rf {} + 2>/dev/null || true
+	@find . -type d -name ".litellm_cache" -exec rm -rf {} + 2>/dev/null || true
+	@find . -type f -name "*.pyc" -delete 2>/dev/null || true
+	@find . -type f -name "*.pyo" -delete 2>/dev/null || true
+	@find . -type f -name ".coverage" -delete 2>/dev/null || true
+	@rm -rf htmlcov coverage.xml
+	@rm -rf $(VENV)
+	@echo "Clean complete."
