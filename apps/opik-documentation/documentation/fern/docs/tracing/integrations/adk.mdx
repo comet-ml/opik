@@ -7,8 +7,8 @@ description: Start here to integrate Opik into your Google Agent Development Kit
 
 In this guide, we will showcase how to integrate Opik with Google ADK so that all the ADK calls are logged as traces in Opik. We'll cover three key integration patterns:
 
-1. **Basic Agent Example** - Simple single-agent setup with Opik tracing
-2. **Multi-Agent Example** - Complex multi-agent workflow showing hierarchical tracing
+1. **Automatic Agent Tracking** - Recommended approach using `track_adk_agent_recursive` for effortless instrumentation
+2. **Manual Callback Configuration** - Alternative approach with explicit callback setup for fine-grained control
 3. **Hybrid Tracing** - Combining Opik decorators with ADK callbacks for comprehensive observability
 
 ## Account Setup
@@ -21,12 +21,12 @@ Opik provides comprehensive integration with ADK, automatically logging traces f
 
 ## Key Features
 
+- **One-line instrumentation** with `track_adk_agent_recursive` for automatic tracing of entire agent hierarchies
 - **Automatic cost tracking** for all supported LLM providers including LiteLLM models (OpenAI, Anthropic, Google AI, AWS Bedrock, and more)
 - **Full compatibility** with the `@opik.track` decorator for hybrid tracing approaches
 - **Thread support** for conversational applications using ADK sessions
 - **Automatic agent graph visualization** with Mermaid diagrams for complex multi-agent workflows
 - **Comprehensive error tracking** with detailed error information and stack traces
-- **Multi-agent instrumentation** with `track_adk_agent_recursive` for complex agent hierarchies
 
 ## Getting Started
 
@@ -67,9 +67,9 @@ if "OPENAI_API_KEY" not in os.environ:
     os.environ["OPENAI_API_KEY"] = getpass.getpass("Enter your OpenAI API key: ")
 ```
 
-## Example 1: Basic Agent Setup with Opik Tracing
+## Example 1: Automatic Agent Tracking (Recommended)
 
-The [`OpikTracer`](https://www.comet.com/docs/opik/python-sdk-reference/integrations/adk/OpikTracer.html) automatically captures detailed information about your ADK agent executions, including inputs, outputs, metadata, token usage, and error information. Here's a basic example:
+The recommended way to track ADK agents is using [`track_adk_agent_recursive`](https://www.comet.com/docs/opik/python-sdk-reference/integrations/adk/track_adk_agent_recursive.html) and [`OpikTracer`](https://www.comet.com/docs/opik/python-sdk-reference/integrations/adk/OpikTracer.html), which automatically instruments your entire agent hierarchy with a single function call. This approach is ideal for both single agents and complex multi-agent setups:
 
 ```python
 import datetime
@@ -77,7 +77,7 @@ from zoneinfo import ZoneInfo
 
 from google.adk.agents import LlmAgent
 from google.adk.models.lite_llm import LiteLlm
-from opik.integrations.adk import OpikTracer
+from opik.integrations.adk import OpikTracer, track_adk_agent_recursive
 
 def get_weather(city: str) -> dict:
     """Get weather information for a city."""
@@ -111,6 +111,18 @@ def get_current_time(city: str) -> dict:
         }
     return {"status": "error", "error_message": f"No timezone info for '{city}'."}
 
+# Initialize LiteLLM with OpenAI gpt-4o
+llm = LiteLlm(model="openai/gpt-4o")
+
+# Create the basic agent
+basic_agent = LlmAgent(
+    name="weather_time_agent",
+    model=llm,
+    description="Agent for answering time & weather questions",
+    instruction="Answer questions about the time or weather in a city. Be helpful and provide clear information.",
+    tools=[get_weather, get_current_time],
+)
+
 # Configure Opik tracer
 opik_tracer = OpikTracer(
     name="basic-weather-agent",
@@ -124,10 +136,41 @@ opik_tracer = OpikTracer(
     project_name="adk-basic-demo"
 )
 
-# Initialize LiteLLM with OpenAI gpt-4o
-llm = LiteLlm(model="openai/gpt-4o")
+# Instrument the agent with a single function call - this is the recommended approach
+track_adk_agent_recursive(basic_agent, opik_tracer)
+```
 
-# Create the basic agent with Opik callbacks
+Each agent execution will now be automatically logged to the Opik platform with detailed trace information:
+
+<Frame>
+  <img src="/img/cookbook/google_adk_integration_basic_agent.png" />
+</Frame>
+
+This approach automatically handles:
+- **All agent callbacks** (before/after agent, model, and tool executions)
+- **Sub-agents** and nested agent hierarchies
+- **Agent tools** that contain other agents
+- **Complex workflows** with minimal code
+
+## Example 2: Manual Callback Configuration (Alternative Approach)
+
+For a fine-grained control over which callbacks to instrument, you can manually configure the [`OpikTracer`](https://www.comet.com/docs/opik/python-sdk-reference/integrations/adk/OpikTracer.html) callbacks. This approach gives you explicit control but requires more setup code:
+
+```python
+# Configure Opik tracer (same as before)
+opik_tracer = OpikTracer(
+    name="basic-weather-agent",
+    tags=["basic", "weather", "time", "single-agent"],
+    metadata={
+        "environment": "development",
+        "model": "gpt-4o",
+        "framework": "google-adk",
+        "example": "basic"
+    },
+    project_name="adk-basic-demo"
+)
+
+# Create the agent with explicit callback configuration
 basic_agent = LlmAgent(
     name="weather_time_agent",
     model=llm,
@@ -143,15 +186,13 @@ basic_agent = LlmAgent(
 )
 ```
 
-Each agent execution will now be automatically logged to the Opik platform with the detailed trace information:
+<Note>
+For most use cases, we recommend using `track_adk_agent_recursive` (shown in Example 1) as it requires less code and automatically handles complex agent hierarchies.
+</Note>
 
-<Frame>
-  <img src="/img/cookbook/google_adk_integration_basic_agent.png" />
-</Frame>
+## Example 3: Multi-Agent Setup with Hierarchical Tracing
 
-## Example 2: Multi-Agent Setup with Hierarchical Tracing
-
-This example demonstrates a more complex multi-agent setup where we have specialized agents for different tasks. The key insight is that **you only need to add Opik callbacks to the top-level agent** - all child agent calls will be automatically traced in the same trace tree.
+This example demonstrates a complex multi-agent setup where we have specialized agents for different tasks. Using `track_adk_agent_recursive`, you can instrument the entire hierarchy with a single function call:
 
 ```python
 def get_detailed_weather(city: str) -> dict:
@@ -284,24 +325,28 @@ coordinator_agent = LlmAgent(
     sub_agents=[weather_agent, time_agent, travel_agent],
 )
 
-# Use the experimental recursive tracking feature to instrument all agents at once
+# Use track_adk_agent_recursive to instrument all agents at once
+# This automatically adds callbacks to the coordinator and ALL sub-agents
 from opik.integrations.adk import track_adk_agent_recursive
 track_adk_agent_recursive(coordinator_agent, multi_agent_tracer)
 ```
 
-The trace can now be viewed in the UI:
+The trace can now be viewed in the UI, showing the complete hierarchy:
 
 <Frame>
   <img src="/img/cookbook/google_adk_integration_multi_agent.png" />
 </Frame>
 
-This approach is particularly useful for:
+The `track_adk_agent_recursive` approach is particularly powerful for:
 
+- **Multi-agent systems** with coordinator and specialist agents
 - **Sequential agents** with multiple processing steps
 - **Parallel agents** executing tasks concurrently
 - **Loop agents** with iterative workflows
 - **Agent tools** that contain nested agents
 - **Complex hierarchies** with deeply nested agent structures
+
+By calling `track_adk_agent_recursive` once on the top-level agent, all child agents and their operations are automatically instrumented without any additional code
 
 ## Cost Tracking
 
@@ -335,9 +380,11 @@ For more complex agent architectures displaying a graph may be even more benefic
   <img src="/img/tracing/adk/adk_code_assistant_graph_screenshot.png" />
 </Frame>
 
-## Example 3: Hybrid Tracing - Combining Opik Decorators with ADK Callbacks
+## Example 4: Hybrid Tracing - Combining Opik Decorators with ADK Callbacks
 
 This advanced example shows how to combine Opik's `@opik.track` decorator with ADK's callback system. This is powerful when you have complex multi-step tools that perform their own internal operations that you want to trace separately, while still maintaining the overall agent trace context.
+
+You can use `track_adk_agent_recursive` together with `@opik.track` decorators on your tool functions for maximum visibility:
 
 ```python
 from opik import track
@@ -440,14 +487,12 @@ hybrid_agent = LlmAgent(
     Your tools perform multi-step operations that are individually traced, giving detailed visibility into the processing pipeline.
     Use the advanced weather and time tools to provide thorough, well-processed information to users.""",
     tools=[get_advanced_weather],
-    # ADK callbacks for agent-level tracing
-    before_agent_callback=hybrid_tracer.before_agent_callback,
-    after_agent_callback=hybrid_tracer.after_agent_callback,
-    before_model_callback=hybrid_tracer.before_model_callback,
-    after_model_callback=hybrid_tracer.after_model_callback,
-    before_tool_callback=hybrid_tracer.before_tool_callback,
-    after_tool_callback=hybrid_tracer.after_tool_callback,
 )
+
+# Instrument the agent with track_adk_agent_recursive
+# The @opik.track decorators in your tools will automatically create child spans
+from opik.integrations.adk import track_adk_agent_recursive
+track_adk_agent_recursive(hybrid_agent, hybrid_tracer)
 ```
 
 The trace can now be viewed in the UI:
