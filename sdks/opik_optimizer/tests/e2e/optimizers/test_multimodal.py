@@ -16,16 +16,19 @@ def test_multimodal_hierarchical_reflective_optimizer() -> None:
         pytest.fail("OPENAI_API_KEY environment variable must be set for e2e tests")
 
     # Load multimodal dataset (driving hazard detection)
-    dataset = opik_optimizer.datasets.driving_hazard_50(test_mode=True)
+    dataset = opik_optimizer.datasets.driving_hazard(test_mode=True)
 
     # Define metric with reason field for hierarchical analysis
     def levenshtein_ratio(dataset_item: dict[str, Any], llm_output: str) -> ScoreResult:
         metric = LevenshteinRatio()
-        metric_score = metric.score(reference=dataset_item["hazard"], output=llm_output)
+        metric_score = metric.score(
+            reference=dataset_item.get("hazard") or dataset_item.get("label"),
+            output=llm_output,
+        )
         return ScoreResult(
             value=metric_score.value,
             name=metric_score.name,
-            reason=f"Levenshtein ratio between `{dataset_item['hazard']}` and `{llm_output}` is `{metric_score.value}`.",
+            reason=f"Levenshtein ratio between `{dataset_item.get('hazard') or dataset_item.get('label')}` and `{llm_output}` is `{metric_score.value}`.",
         )
 
     # Create multimodal prompt with structured content (text + image)
@@ -61,9 +64,12 @@ Be precise and actionable in your hazard descriptions. Focus on safety-critical 
 
     # Initialize optimizer with minimal parameters for faster testing
     optimizer = opik_optimizer.HierarchicalReflectiveOptimizer(
-        model="openai/gpt-4.1-nano",
-        model_parameters={"temperature": 1, "max_tokens": 256},
-        n_threads=2,
+        model="openai/gpt-5-mini",
+        model_parameters={
+            "temperature": 1,
+            "reasoning_effort": "minimal",
+        },
+        n_threads=1,
         max_parallel_batches=2,
         batch_size=2,
         convergence_threshold=0.01,
@@ -77,7 +83,7 @@ Be precise and actionable in your hazard descriptions. Focus on safety-critical 
         dataset=dataset,
         metric=levenshtein_ratio,
         max_trials=2,
-        n_samples=1,
+        n_samples=2,
         max_retries=1,
     )
 

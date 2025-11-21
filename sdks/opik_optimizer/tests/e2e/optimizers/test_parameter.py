@@ -29,9 +29,13 @@ def test_parameter_optimizer() -> None:
 
     # Initialize optimizer with reduced parameters for faster testing
     optimizer = opik_optimizer.ParameterOptimizer(
-        model="openai/gpt-4.1-nano",
+        model="openai/gpt-5-mini",
+        model_parameters={
+            "temperature": 1,
+            "max_tokens": 1000,
+            "reasoning_effort": "minimal",
+        },
         default_n_trials=1,
-        model_parameters={"temperature": 0.1, "max_tokens": 256},
         n_threads=2,
         seed=42,
         local_search_ratio=0.5,
