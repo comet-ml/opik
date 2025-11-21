@@ -27,8 +27,8 @@ def test_metaprompt_optimizer() -> None:
 
     # Initialize optimizer with reduced parameters for faster testing
     optimizer = opik_optimizer.MetaPromptOptimizer(
-        model="openai/gpt-5-nano",
-        model_parameters={"temperature": 1, "max_tokens": 256},
+        model="openai/gpt-5-mini",
+        model_parameters={"temperature": 0.1, "max_tokens": 256},
         n_threads=2,
         prompts_per_round=2,  # Reduced from 4
         seed=42,
@@ -124,13 +124,13 @@ def test_metaprompt_optimizer() -> None:
 
     # Validate model configuration in details
     assert "model" in results.details, "Details should contain 'model'"
-    assert results.details["model"] == "openai/gpt-5-nano", (
-        f"Expected openai/gpt-5-nano, got {results.details['model']}"
+    assert results.details["model"] == optimizer.model, (
+        f"Expected {optimizer.model}, got {results.details['model']}"
     )
 
     assert "temperature" in results.details, "Details should contain 'temperature'"
-    assert results.details["temperature"] == 0.1, (
-        f"Expected temperature 0.1, got {results.details['temperature']}"
+    assert results.details["temperature"] == optimizer.model_parameters["temperature"], (
+        f"Expected temperature {optimizer.model_parameters['temperature']}, got {results.details['temperature']}"
     )
 
     # History validation - MetaPrompt uses details['rounds'] instead of history
