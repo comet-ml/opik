@@ -249,7 +249,7 @@ class MetaPromptOptimizer(BaseOptimizer):
             new_prompt = prompt.copy()
             messages = new_prompt.get_messages(dataset_item)
             new_prompt.set_messages(messages)
-            agent = self.agent_class(new_prompt)
+            agent = self._instantiate_agent(new_prompt)
 
             if mcp_config is not None:
                 coordinator = mcp_config.coordinator
@@ -460,8 +460,8 @@ class MetaPromptOptimizer(BaseOptimizer):
             optimization = self.opik_client.create_optimization(
                 dataset_name=dataset.name,
                 objective_name=getattr(metric, "__name__", str(metric)),
+                metadata=self._build_optimization_metadata(),
                 name=self.name,
-                metadata=self._build_optimization_config(),
                 optimization_id=optimization_id,
             )
             self.current_optimization_id = optimization.id

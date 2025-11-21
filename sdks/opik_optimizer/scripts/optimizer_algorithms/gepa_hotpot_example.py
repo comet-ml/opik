@@ -1,14 +1,14 @@
 import opik  # noqa: E402
 from opik_optimizer import ChatPrompt  # noqa: E402
 from opik_optimizer import GepaOptimizer  # noqa: E402
-from opik_optimizer.datasets import hotpot_300  # noqa: E402
+from opik_optimizer.datasets import hotpot  # noqa: E402
 from opik_optimizer.utils import search_wikipedia  # noqa: E402
 
 from utils.metrics import answer_correctness_score
 
 
 # Load dataset
-dataset = hotpot_300()
+dataset = hotpot(count=300)
 
 # Define initial prompt
 system_prompt = """Answer the question with a direct, accurate response.
@@ -65,7 +65,7 @@ result = optimizer.optimize_prompt(
     n_samples=10,
     max_trials=8,
     reflection_minibatch_size=3,
-    candidate_selection_strategy="best",
+    candidate_selection_strategy="pareto",
     skip_perfect_score=False,
     display_progress_bar=True,
 )

@@ -433,8 +433,8 @@ class EvolutionaryOptimizer(BaseOptimizer):
             opik_optimization_run = self.opik_client.create_optimization(
                 dataset_name=dataset.name,
                 objective_name=metric.__name__,
+                metadata=self._build_optimization_metadata(),
                 name=self.name,
-                metadata=self._build_optimization_config(),
                 optimization_id=optimization_id,
             )
             self.current_optimization_id = opik_optimization_run.id

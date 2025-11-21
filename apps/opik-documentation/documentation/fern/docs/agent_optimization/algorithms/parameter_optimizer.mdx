@@ -113,7 +113,7 @@ optimizer = ParameterOptimizer(
 )
 
 # Prepare dataset
-dataset = datasets.hotpot_300()
+dataset = datasets.hotpot(count=300)
 
 # Define metric
 def levenshtein_ratio(dataset_item, llm_output):
