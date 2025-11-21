@@ -150,7 +150,7 @@ class ParameterOptimizer(BaseOptimizer):
         if validation_dataset is not None:
             logger.warning(
                 f"Due to the internal implementation of {self.__class__.__name__}, it currently"
-                "fully ignores the dataset if `validation_dataset` is provided. We recommend not"
+                "fully ignores the `dataset` if `validation_dataset` is provided. We recommend not"
                 "using the `validation_dataset` parameter."
             )
 
