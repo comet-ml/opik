@@ -143,13 +143,7 @@ class OpikGEPAAdapter(GEPAAdapter[OpikDataInst, dict[str, Any], dict[str, Any]])
             for inst in batch:
                 dataset_item = inst.opik_item
                 messages = prompt_variant.get_messages(dataset_item)
-                try:
-                    raw_output = agent.invoke(messages).strip()
-                except Exception as exc:
-                    raise RuntimeError(
-                        f"GEPA Opik adapter LLM call failed (model={prompt_variant.model}, "
-                        f"kwargs={prompt_variant.model_kwargs})"
-                    ) from exc
+                raw_output = agent.invoke(messages).strip()
 
                 metric_result = self._metric(dataset_item, raw_output)
                 if hasattr(metric_result, "value"):
@@ -189,13 +183,7 @@ class OpikGEPAAdapter(GEPAAdapter[OpikDataInst, dict[str, Any], dict[str, Any]])
 
         def llm_task(dataset_item: dict[str, Any]) -> dict[str, str]:
             messages = prompt_variant.get_messages(dataset_item)
-            try:
-                raw_output = agent.invoke(messages).strip()
-            except Exception as exc:
-                raise RuntimeError(
-                    f"GEPA Opik adapter LLM call failed (model={prompt_variant.model}, "
-                    f"kwargs={prompt_variant.model_kwargs})"
-                ) from exc
+            raw_output = agent.invoke(messages).strip()
             return {"llm_output": raw_output}
 
         try:
