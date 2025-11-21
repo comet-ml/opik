@@ -30,8 +30,9 @@ if TYPE_CHECKING:
 ALLOWED_URL_CHARACTERS: Final[str] = ":/&?="
 logger = logging.getLogger(__name__)
 _DEFAULT_LOG_LEVEL = os.environ.get("OPIK_OPTIMIZER_LOG_LEVEL", "WARNING").upper()
-if _DEFAULT_LOG_LEVEL in logging._nameToLevel:
-    logger.setLevel(logging._nameToLevel[_DEFAULT_LOG_LEVEL])
+numeric_level = logging.getLevelName(_DEFAULT_LOG_LEVEL)
+if isinstance(numeric_level, int):
+    logger.setLevel(numeric_level)
 
 
 class OptimizationContextManager:
