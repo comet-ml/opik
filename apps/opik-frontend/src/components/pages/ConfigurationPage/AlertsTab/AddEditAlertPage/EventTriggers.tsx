@@ -93,8 +93,7 @@ const FeedbackScoreNameSelector: React.FC<FeedbackScoreNameSelectorProps> = ({
     );
 
   // Fetch actual feedback score names based on trigger type
-  const isTraceTrigger =
-    eventType === ALERT_EVENT_TYPE.trace_feedback_score;
+  const isTraceTrigger = eventType === ALERT_EVENT_TYPE.trace_feedback_score;
   const isThreadTrigger =
     eventType === ALERT_EVENT_TYPE.trace_thread_feedback_score;
 
