@@ -188,7 +188,9 @@ class BenchmarkRunner:
 
             with ProcessPoolExecutor(max_workers=self.max_workers) as executor:
                 # Submit all tasks and map futures to metadata
-                future_to_info: dict[Future[TaskResult], tuple[str, str, str, str]] = {}
+                future_to_info: dict[
+                    Future[TaskResult], tuple[str, str, str, str, str]
+                ] = {}
 
                 failed_ids = {
                     x.id

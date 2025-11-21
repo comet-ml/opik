@@ -655,7 +655,7 @@ class BenchmarkLogger:
 
                 display_dataset = dataset_text if metric_i == 0 else ""
                 display_id = (
-                    _short_id(data_for_run_key.get("task_id", ""))
+                    f"[dim]{_short_id(str(data_for_run_key.get('task_id', '')))}[/dim]"
                     if metric_i == 0
                     else ""
                 )
