@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { ChevronRight, Search } from "lucide-react";
+import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import { Input } from "@/components/ui/input";
 
 import {
@@ -283,21 +284,23 @@ const PromptModelSelect = ({
     ) : null;
 
     return (
-      <SelectTrigger
-        className={cn("size-full data-[placeholder]:text-light-slate", {
-          "border-destructive": hasError,
-        })}
-      >
-        <SelectValue
-          placeholder="Select an LLM model"
-          data-testid="select-a-llm-model"
+      <TooltipWrapper content={title}>
+        <SelectTrigger
+          className={cn("size-full data-[placeholder]:text-light-slate", {
+            "border-destructive": hasError,
+          })}
         >
-          <div className="flex items-center gap-2">
-            {icon}
-            <span className="truncate">{title}</span>
-          </div>
-        </SelectValue>
-      </SelectTrigger>
+          <SelectValue
+            placeholder="Select an LLM model"
+            data-testid="select-a-llm-model"
+          >
+            <div className="flex items-center gap-2">
+              {icon}
+              <span className="truncate">{title}</span>
+            </div>
+          </SelectValue>
+        </SelectTrigger>
+      </TooltipWrapper>
     );
   };
 

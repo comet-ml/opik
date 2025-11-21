@@ -138,6 +138,7 @@ const TRACE_COLUMNS: ColumnData<Trace>[] = [
     id: "tags",
     label: "Tags",
     type: COLUMN_TYPE.list,
+    iconType: "tags",
     cell: ListCell as never,
   },
   {

@@ -36,6 +36,7 @@ interface BaseLoadableSelectBoxProps {
   actionPanel?: ReactElement;
   minWidth?: number;
   emptyState?: ReactElement;
+  showTooltip?: boolean;
 }
 
 interface SingleSelectProps extends BaseLoadableSelectBoxProps {
@@ -73,6 +74,7 @@ export const LoadableSelectBox = ({
   actionPanel,
   minWidth = 0,
   multiselect = false,
+  showTooltip = false,
   emptyState,
   ...props
 }: LoadableSelectBoxProps) => {
@@ -209,10 +211,21 @@ export const LoadableSelectBox = ({
   const hasBottomActions = hasMoreSection || hasActionPanel;
 
   const tooltipContent = useMemo(() => {
-    if (!multiselect || !selectedValues.length || isOpen) return null;
+    if (isOpen) return null;
 
-    return titleText;
-  }, [multiselect, selectedValues.length, titleText, isOpen]);
+    if (multiselect) {
+      return selectedValues.length ? titleText : null;
+    } else {
+      return showTooltip && value ? titleText : null;
+    }
+  }, [
+    showTooltip,
+    multiselect,
+    selectedValues.length,
+    titleText,
+    isOpen,
+    value,
+  ]);
 
   const buttonElement = (
     <Button
@@ -234,7 +247,7 @@ export const LoadableSelectBox = ({
 
   return (
     <Popover onOpenChange={openChangeHandler} open={isOpen} modal>
-      {multiselect && tooltipContent ? (
+      {tooltipContent ? (
         <TooltipWrapper content={tooltipContent}>
           <PopoverTrigger asChild>{buttonElement}</PopoverTrigger>
         </TooltipWrapper>

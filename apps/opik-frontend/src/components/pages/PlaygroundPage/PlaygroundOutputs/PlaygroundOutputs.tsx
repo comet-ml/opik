@@ -28,20 +28,24 @@ const PlaygroundOutputs = ({
   const [page, setPage] = useState(1);
   const [size, setSize] = useState(100);
 
-  const { data: datasetItemsData, isLoading: isLoadingDatasetItems } =
-    useDatasetItemsList(
-      {
-        datasetId: datasetId!,
-        page,
-        size,
-        truncate: true,
-        filters,
-      },
-      {
-        enabled: !!datasetId,
-        placeholderData: keepPreviousData,
-      },
-    );
+  const {
+    data: datasetItemsData,
+    isLoading: isLoadingDatasetItems,
+    isPlaceholderData: isPlaceholderDatasetItems,
+    isFetching: isFetchingDatasetItems,
+  } = useDatasetItemsList(
+    {
+      datasetId: datasetId!,
+      page,
+      size,
+      truncate: true,
+      filters,
+    },
+    {
+      enabled: !!datasetId,
+      placeholderData: keepPreviousData,
+    },
+  );
 
   const datasetItems = datasetItemsData?.content || EMPTY_ITEMS;
   const datasetColumns = datasetItemsData?.columns || EMPTY_COLUMNS;
@@ -65,6 +69,7 @@ const PlaygroundOutputs = ({
             datasetItems={datasetItems}
             datasetColumns={datasetColumns}
             isLoadingDatasetItems={isLoadingDatasetItems}
+            isFetchingData={isFetchingDatasetItems && isPlaceholderDatasetItems}
           />
         </div>
       );

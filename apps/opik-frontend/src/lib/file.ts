@@ -117,3 +117,10 @@ export const validateFileSize = (
 
   return { valid: true };
 };
+
+/**
+ * Extracts filename without the extension
+ */
+export const getCsvFilenameWithoutExtension = (filename: string): string => {
+  return filename.replace(/\.csv$/i, "");
+};

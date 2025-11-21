@@ -132,6 +132,7 @@ const SHARED_COLUMNS: ColumnData<Thread>[] = [
     id: "tags",
     label: "Tags",
     type: COLUMN_TYPE.list,
+    iconType: "tags",
     cell: ListCell as never,
   },
   {
