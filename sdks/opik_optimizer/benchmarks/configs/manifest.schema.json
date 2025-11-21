@@ -39,7 +39,25 @@
           "model_parameters": { "type": "object", "description": "Model parameters forwarded to the optimizer constructor." },
           "optimizer_params": { "type": "object", "description": "Constructor kwargs merged into the optimizer (per-task override)." },
           "optimizer_prompt_params": { "type": "object", "description": "optimize_prompt kwargs (per-task override), e.g., max_trials, n_samples." },
-          "metrics": { "type": "array", "items": { "type": "string" }, "description": "Optional metric callables (module.attr) overriding dataset defaults." }
+          "metrics": {
+            "type": "array",
+            "description": "Optional metrics overriding dataset defaults. String => module.attr callable; object => {path, args?, kwargs?}.",
+            "items": {
+              "oneOf": [
+                { "type": "string" },
+                {
+                  "type": "object",
+                  "required": ["path"],
+                  "properties": {
+                    "path": { "type": "string" },
+                    "args": { "type": "array" },
+                    "kwargs": { "type": "object" }
+                  },
+                  "additionalProperties": false
+                }
+              ]
+            }
+          }
         },
         "additionalProperties": false
       }
@@ -104,7 +122,24 @@
               "additionalProperties": false
             }
           },
-          "metrics": { "type": "array", "items": { "type": "string" } },
+          "metrics": {
+            "type": "array",
+            "items": {
+              "oneOf": [
+                { "type": "string" },
+                {
+                  "type": "object",
+                  "required": ["path"],
+                  "properties": {
+                    "path": { "type": "string" },
+                    "args": { "type": "array" },
+                    "kwargs": { "type": "object" }
+                  },
+                  "additionalProperties": false
+                }
+              ]
+            }
+          },
           "test_mode": { "type": "boolean" }
         },
         "additionalProperties": false
