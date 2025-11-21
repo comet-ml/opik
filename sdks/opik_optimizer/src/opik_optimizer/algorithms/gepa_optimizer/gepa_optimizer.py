@@ -133,12 +133,6 @@ class GepaOptimizer(BaseOptimizer):
             )
         return data_insts
 
-    def _track_gepa_metric_call(self) -> None:
-        try:
-            self._gepa_live_metric_calls += 1
-        except Exception:
-            pass
-
     def _adapter_instantiate_agent(
         self, prompt_obj: chat_prompt.ChatPrompt, project_name: str | None
     ) -> OptimizableAgent:
