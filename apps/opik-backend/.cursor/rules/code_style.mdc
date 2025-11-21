@@ -96,14 +96,11 @@ public void processUsers(com.external.lib.User externalUser, User internalUser) 
 }
 ```
 
-## Style Conventions
-
-### Prefer shared helpers
+## Prefer shared helpers
 
 **Rule**: Always lean on the existing clean-code helpers instead of re-implementing the same patterns.
 
 - **Shared defaults**: When classes need “zeroed” values, provide a single factory such as `ModelPrice.empty()` (optionally via `@Builder(toBuilder = true)`) instead of sprinkling literal zeros across call sites.
-- **Lombok for boilerplate**: If a type already uses Lombok, prefer annotations like `@RequiredArgsConstructor` and `@NonNull` to replace handwritten constructors or `Objects.requireNonNull` checks.
 - **String checks**: Use Apache Commons `StringUtils.isBlank/isNotBlank` for null-safe mode/provider parsing rather than manual `null` + `.isEmpty()` chains.
 - **ObjectMapper usage**: Reuse the project-provided `JsonUtils` (or other shared mappers) instead of instantiating raw `ObjectMapper`s; tests are the only acceptable place for ad hoc mappers when necessary.
 
