@@ -75,10 +75,7 @@ def infer_output_style_from_dataset(
                 is_reasoning=True,
                 response_model=StyleInferenceResponse,
             )
-            if isinstance(inferred_style_response, StyleInferenceResponse):
-                inferred_style = inferred_style_response.style.strip()
-            else:
-                inferred_style = str(inferred_style_response).strip()
+            inferred_style = inferred_style_response.style.strip()
             if inferred_style:
                 report_infer_output_style.success(inferred_style)
                 return inferred_style
