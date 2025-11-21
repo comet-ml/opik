@@ -154,6 +154,14 @@ Examples:
         print("🌩️  Running on Modal (cloud execution)")
         print("-" * 80)
 
+        try:
+            import modal  # noqa: F401
+        except ModuleNotFoundError:
+            print(
+                "❌ Modal is not installed. Install it with `pip install modal` or rerun without --modal."
+            )
+            return
+
         # Import Modal submission function
         from benchmarks.runners.run_benchmark_modal import app, submit_benchmark_tasks
 

@@ -4,6 +4,7 @@ import os
 import re
 import sys
 import typing
+import hashlib
 from datetime import datetime
 from typing import Any, Optional
 from collections.abc import Callable
@@ -157,6 +158,7 @@ class BenchmarkLogger:
         optimizer_name: str,
         model_name: str,
         status: str,
+        short_id: str | None = None,
     ) -> None:
         self.tasks_status[future] = {
             "desc": f"Running: {dataset_name} - {optimizer_name} - {model_name}",
@@ -164,6 +166,7 @@ class BenchmarkLogger:
             "optimizer_name": optimizer_name,
             "model_name": model_name,
             "status": status,
+            "short_id": short_id,
         }
 
     def remove_active_task_status(
@@ -181,8 +184,14 @@ class BenchmarkLogger:
             dataset_name = status_info.get("dataset_name", "Unknown Task")
             optimizer_name = status_info.get("optimizer_name", "?")
             model_name = status_info.get("model_name", "?")
+            short_id = status_info.get("short_id")
 
-            display_text = f" • {dataset_name} + {model_name}"
+            if short_id:
+                display_text = (
+                    f" • [[dim]{short_id}[/dim]] {dataset_name} + {model_name}"
+                )
+            else:
+                display_text = f" • {dataset_name} + {model_name}"
             if status_info["status"] == "Running":
                 active_list.append(
                     Text.assemble(
@@ -511,6 +520,7 @@ class BenchmarkLogger:
                 overflow="ellipsis",
                 no_wrap=True,
             )
+            results_table.add_column("ID", no_wrap=True, width=7)
             results_table.add_column(
                 "Optimizer", max_width=25, overflow="fold", no_wrap=False
             )
@@ -527,6 +537,14 @@ class BenchmarkLogger:
 
             all_metrics_names = set()
             processed_data_for_table = {}
+
+            def _short_id(task_id: str) -> str:
+                base = (
+                    f"{getattr(self, 'run_id', '')}:{task_id}"
+                    if getattr(self, "run_id", None)
+                    else task_id
+                )
+                return hashlib.sha1(base.encode()).hexdigest()[:5]
 
             for task_summary in results:  # task_summary is an item from self.results
                 if task_summary.status != "Success":
@@ -635,35 +653,39 @@ class BenchmarkLogger:
                         model_text = Text("\n".join(model_parts), overflow="ellipsis")
                         model_text.truncate(20)
 
-                        display_dataset = dataset_text if metric_i == 0 else ""
-                        display_optimizer = optimizer if metric_i == 0 else ""
-                        display_model = model_text if metric_i == 0 else ""
-                        # display_temp = f"{temperature_for_run:.1f}" if isinstance(temperature_for_run, (int, float)) else "[dim]-[/dim]" if metric_i == 0 else ""
-                        display_llm_calls = (
-                            str(llm_calls_for_run)
-                            if llm_calls_for_run is not None and metric_i == 0
-                            else ("[dim]-[/dim]" if metric_i == 0 else "")
-                        )  # Display LLM calls
-                        display_time = (
-                            f"{time_taken_for_run:.2f}" if metric_i == 0 else ""
-                        )
+                display_dataset = dataset_text if metric_i == 0 else ""
+                display_id = (
+                    _short_id(data_for_run_key.get("task_id", ""))
+                    if metric_i == 0
+                    else ""
+                )
+                display_optimizer = optimizer if metric_i == 0 else ""
+                display_model = model_text if metric_i == 0 else ""
+                # display_temp = f"{temperature_for_run:.1f}" if isinstance(temperature_for_run, (int, float)) else "[dim]-[/dim]" if metric_i == 0 else ""
+                display_llm_calls = (
+                    str(llm_calls_for_run)
+                    if llm_calls_for_run is not None and metric_i == 0
+                    else ("[dim]-[/dim]" if metric_i == 0 else "")
+                )  # Display LLM calls
+                display_time = f"{time_taken_for_run:.2f}" if metric_i == 0 else ""
 
-                        # Add a line (end_section)
-                        end_section_flag = is_new_block and i > 0 and metric_i == 0
+                # Add a line (end_section)
+                end_section_flag = is_new_block and i > 0 and metric_i == 0
 
-                        results_table.add_row(
-                            display_dataset,
-                            display_optimizer,
-                            display_model,
-                            # display_temp,
-                            display_llm_calls,
-                            metric_name_to_display,
-                            display_time,
-                            initial_str,
-                            final_str,
-                            percent_change_text,
-                            end_section=end_section_flag,
-                        )
+                results_table.add_row(
+                    display_dataset,
+                    display_id,
+                    display_optimizer,
+                    display_model,
+                    # display_temp,
+                    display_llm_calls,
+                    metric_name_to_display,
+                    display_time,
+                    initial_str,
+                    final_str,
+                    percent_change_text,
+                    end_section=end_section_flag,
+                )
                 last_dataset_optimizer_model = key_tuple
 
             if not processed_data_for_table:

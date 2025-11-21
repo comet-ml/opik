@@ -255,37 +255,46 @@ def preflight_tasks(
         "opik_optimizer", _safe_version("opik-optimizer") or "[dim]unknown[/dim]"
     )
 
-    def _role_token(role: str, spec: dict[str, Any] | None, present: bool) -> str:
-        if spec is not None:
-            count = spec.get("count") if isinstance(spec, dict) else None
+    def _role_display(
+        role: str,
+        ds_name: str | None,
+        spec: dict[str, Any] | None,
+        present: bool,
+    ) -> str:
+        # Prefer explicit dataset_name in the manifest, then fall back to the loader,
+        # then whatever name came from the resolved bundle.
+        base = None
+        if spec and isinstance(spec, dict):
+            base = spec.get("dataset_name") or spec.get("loader")
+        base = base or ds_name
+        if spec is not None and isinstance(spec, dict):
+            count = spec.get("count")
             if count is not None:
-                return f"{role}={count}"
-            return f"{role}=present"
-        return f"{role}={'present' if present else 'None'}"
+                return f"{role}={base or 'None'}({count})"
+        if not present:
+            return f"{role}=None"
+        return f"{role}={base or 'None'}"
 
     def _format_splits(bundle: DatasetBundle, task: BenchmarkTaskSpec) -> str:
-        """Human-friendly split summary with counts/presence."""
+        """Human-friendly split summary with dataset names and counts."""
         tokens: list[str] = []
-        if task.datasets:
-            tokens.append(
-                _role_token(
-                    "train", task.datasets.get("train"), "train" in task.datasets
-                )
+        train_spec = task.datasets.get("train") if task.datasets else None
+        val_spec = task.datasets.get("validation") if task.datasets else None
+        test_spec = task.datasets.get("test") if task.datasets else None
+
+        tokens.append(
+            _role_display(
+                "train", bundle.train_name, train_spec, bundle.train is not None
             )
-            tokens.append(
-                _role_token(
-                    "val",
-                    task.datasets.get("validation"),
-                    "validation" in task.datasets,
-                )
+        )
+        tokens.append(
+            _role_display(
+                "val", bundle.validation_name, val_spec, bundle.validation is not None
             )
-            tokens.append(
-                _role_token("test", task.datasets.get("test"), "test" in task.datasets)
-            )
-        else:
-            tokens.append(_role_token("train", None, True))
-            tokens.append(_role_token("val", None, bundle.validation is not None))
-            tokens.append(_role_token("test", None, bundle.test is not None))
+        )
+        tokens.append(
+            _role_display("test", bundle.test_name, test_spec, bundle.test is not None)
+        )
         return ", ".join(tokens)
 
     for task in task_specs:
@@ -400,11 +409,14 @@ def preflight_tasks(
     )
 
     # Render lines (two-line per entry)
-    task_lines: list[Text] = []
+    task_lines: list[Text] = [Text("Tasks Preflight:", style="bold"), Text("")]
     for idx, entry in enumerate(entries, 1):
         icon = "[green]✓[/green]" if entry.status == "ok" else "[red]✗[/red]"
         line1 = Text.from_markup(
-            f"{icon} (#[bold]{idx}[/bold] {entry.short_id}) {entry.dataset_name} | {entry.optimizer_name} | {entry.model_name}"
+            f"{icon} ([dim]#[bold]{idx}[/bold] {entry.short_id}[/dim]) "
+            f"[bold]{entry.dataset_name}[/bold] | "
+            f"[cyan]{entry.optimizer_name}[/cyan] | "
+            f"[magenta]{entry.model_name}[/magenta]"
         )
         splits_text = entry.splits or "train=None, val=None, test=None"
         line2 = Text.from_markup(f"    {splits_text}")

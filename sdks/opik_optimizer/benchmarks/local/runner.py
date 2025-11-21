@@ -17,6 +17,7 @@ import traceback
 from concurrent.futures import Future, ProcessPoolExecutor, wait, FIRST_COMPLETED
 from datetime import datetime
 from typing import Any
+import hashlib
 import json
 
 from benchmarks.local import checkpoint as benchmark_checkpoint
@@ -228,8 +229,12 @@ class BenchmarkRunner:
                         prompt_messages=task.prompt_messages,
                     )
 
+                    short_id = hashlib.sha1(
+                        f"{self.run_id}:{task_id}".encode()
+                    ).hexdigest()[:5]
                     future_to_info[future] = (
                         task_id,
+                        short_id,
                         task.dataset_name,
                         task.optimizer_name,
                         task.model_name,
@@ -247,6 +252,7 @@ class BenchmarkRunner:
                     )
                     self.benchmark_logger.update_active_task_status(
                         future=future,
+                        short_id=short_id,
                         dataset_name=task.dataset_name,
                         optimizer_name=task.optimizer_name,
                         model_name=task.model_name,
@@ -276,6 +282,7 @@ class BenchmarkRunner:
                     for running_future in current_running[:slots_available]:
                         (
                             tid,
+                            sid,
                             dn,
                             on,
                             mn,
@@ -293,6 +300,7 @@ class BenchmarkRunner:
                         )
                         self.benchmark_logger.update_active_task_status(
                             future=running_future,
+                            short_id=sid,
                             dataset_name=dn,
                             optimizer_name=on,
                             model_name=mn,
@@ -318,6 +326,7 @@ class BenchmarkRunner:
                         for future in done:
                             (
                                 task_id,
+                                short_id,
                                 dataset_name,
                                 optimizer_name,
                                 model_name,
@@ -331,6 +340,7 @@ class BenchmarkRunner:
                                 checkpoint_manager.update_task_result(result)
                                 self.benchmark_logger.update_active_task_status(
                                     future=future,
+                                    short_id=short_id,
                                     dataset_name=dataset_name,
                                     optimizer_name=optimizer_name,
                                     model_name=model_name,
@@ -350,6 +360,7 @@ class BenchmarkRunner:
                                 checkpoint_manager.update_task_result(result)
                                 self.benchmark_logger.update_active_task_status(
                                     future=future,
+                                    short_id=future_to_info[future][1],
                                     dataset_name=dataset_name,
                                     optimizer_name=optimizer_name,
                                     model_name=model_name,
