@@ -1,7 +1,6 @@
 from typing import Any, TYPE_CHECKING
 import json
 import os
-import copy
 
 from opik.opik_context import get_current_span_data
 
@@ -74,7 +73,9 @@ class OptimizableAgent:
         if getattr(prompt, "model", None) is not None:
             self.model = prompt.model
         if getattr(prompt, "model_kwargs", None) is not None:
-            self.model_kwargs = copy.deepcopy(prompt.model_kwargs or {})
+            # Use a shallow copy to avoid deepcopying unpicklable objects (e.g., locks
+            # added by monitoring/clients inside model kwargs).
+            self.model_kwargs = dict(prompt.model_kwargs or {})
         else:
             self.model_kwargs = {}
 
@@ -85,18 +86,29 @@ class OptimizableAgent:
         tools: list[dict[str, str]] | None,
         seed: int | None = None,
     ) -> Any:
+        # Merge any caller-provided metadata with Opik tracing keys to avoid duplicates.
+        model_kwargs = dict(self.model_kwargs)
+        if "metadata" in model_kwargs:
+            existing = model_kwargs["metadata"] or {}
+            opik_meta = existing.get("opik") or {}
+            opik_meta.setdefault("current_span_data", get_current_span_data())
+            opik_meta.setdefault("project_name", self.project_name)
+            existing["opik"] = opik_meta
+            model_kwargs["metadata"] = existing
+        else:
+            model_kwargs["metadata"] = {
+                "opik": {
+                    "current_span_data": get_current_span_data(),
+                    "project_name": self.project_name,
+                },
+            }
+
         response = litellm.completion(
             model=self.model,
             messages=messages,
             seed=seed,
             tools=tools,
-            metadata={
-                "opik": {
-                    "current_span_data": get_current_span_data(),
-                    "project_name": self.project_name,
-                },
-            },
-            **self.model_kwargs,
+            **model_kwargs,
         )
         return response
 
