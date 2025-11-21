@@ -155,7 +155,7 @@ Examples:
         print("-" * 80)
 
         # Import Modal submission function
-        from run_benchmark_modal import app, submit_benchmark_tasks
+        from benchmarks.runners.run_benchmark_modal import app, submit_benchmark_tasks
 
         # Call the function within app context
         with app.run():
@@ -176,7 +176,7 @@ Examples:
         print("-" * 80)
 
         # Import local benchmark function
-        from run_benchmark_local import run_benchmark
+        from benchmarks.runners.run_benchmark_local import run_benchmark
 
         run_benchmark(
             demo_datasets=args.demo_datasets,
