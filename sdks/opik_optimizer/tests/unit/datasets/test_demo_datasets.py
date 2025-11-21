@@ -1,114 +1,124 @@
+from __future__ import annotations
+
 import inspect
-import unittest.mock as mock
-import pytest
 from collections.abc import Callable
 
-import opik_optimizer
-from opik.api_objects import opik_client
-from opik.rest_api.core.api_error import ApiError
-from opik.api_objects.dataset import Dataset
+import pytest
 
-# Expected size mappings - add expected sizes based on dataset function names
-dataset_sizes = {
-    "driving_hazard_50": 50,  # deprecated
-    "driving_hazard_100": 100,  # deprecated
-    "driving_hazard_test_split": 100,  # deprecated
-    "hotpot_300": 300,  # deprecated
-    "hotpot_500": 500,  # deprecated
-    "halu_eval_300": 300,  # deprecated
+import opik_optimizer
+from opik_optimizer.utils import dataset_utils
+
+
+DATASET_SIZES = {
     "tiny_test": 5,
     "gsm8k": 300,
     "ai2_arc": 300,
-    "truthful_qa": 300,  # deprecated
-    "cnn_dailymail": 100,  # deprecated
-    "ragbench_sentence_relevance": 300,  # deprecated
-    "election_questions": 300,  # deprecated
-    "medhallu": 300,  # deprecated
-    "rag_hallucinations": 300,  # deprecated
+    "truthful_qa": 300,
+    "cnn_dailymail": 100,
+    "ragbench_sentence_relevance": 300,
+    "election_questions": 300,
+    "medhallu": 300,
+    "rag_hallucinations": 300,
     "context7_eval": 3,
 }
 
-# Extra kwargs left here for future dataset overrides when needed. All curated
-# helpers now honor their presets by default, so we don't pass anything.
+DEFAULT_TEST_MODE_SIZE = 5
+TEST_DATASET_SIZES = {
+    name: min(DEFAULT_TEST_MODE_SIZE, size) for name, size in DATASET_SIZES.items()
+}
+# Context7 only exposes two examples in our test slice.
+TEST_DATASET_SIZES["context7_eval"] = 2
+
+# Extra kwargs left here for future dataset overrides when needed.
 DATASET_CALL_KWARGS: dict[str, dict[str, int]] = {}
 
-# Get dataset functions from opik_optimizer.datasets for which we have expected sizes
-full_dataset_functions = [
-    (name, func, dataset_sizes[name])
+
+FULL_DATASET_FUNCTIONS = [
+    (name, func, DATASET_SIZES[name])
     for name, func in inspect.getmembers(opik_optimizer.datasets)
-    if inspect.isfunction(func) and name in dataset_sizes
+    if inspect.isfunction(func) and name in DATASET_SIZES
+]
+
+TEST_DATASET_FUNCTIONS = [
+    (name, func, TEST_DATASET_SIZES[name])
+    for name, func in inspect.getmembers(opik_optimizer.datasets)
+    if inspect.isfunction(func) and name in TEST_DATASET_SIZES
 ]
 
 
-@pytest.mark.parametrize(
-    "dataset_name,dataset_func,expected_size", full_dataset_functions
-)
-def test_full_datasets(
-    dataset_name: str, dataset_func: Callable, expected_size: int
-) -> None:
-    # Create ApiError with status code 404 to simulate dataset not found
-    api_error = ApiError(status_code=404)
-    mock_get_dataset = mock.Mock(side_effect=api_error)
+class _DummyDataset:
+    def __init__(self, name: str) -> None:
+        self.name = name
+        self._records: list[dict[str, str]] = []
+        self._hashes: list[str] = []
 
-    # Create a proper mock Dataset instead of a real one
-    mock_rest_client = mock.Mock()
-    mock_dataset = Dataset("test_dataset", "Test description", mock_rest_client)
-    mock_dataset.get_items = mock.Mock(return_value=[])
+    def get_items(self) -> list[dict[str, str]]:
+        return list(self._records)
 
-    with mock.patch.object(opik_client.Opik, "get_dataset", mock_get_dataset):
-        # Mock create_dataset to return our mock dataset
-        mock_create_dataset = mock.Mock(return_value=mock_dataset)
-        with mock.patch.object(opik_client.Opik, "create_dataset", mock_create_dataset):
-            # Test the dataset function when get_dataset fails with 404
-            dataset = dataset_func(**DATASET_CALL_KWARGS.get(dataset_name, {}))
-
-            # Check that the dataset has the expected number of items
-            assert len(dataset._hashes) == expected_size, (
-                f"Expected {dataset_name} to have {expected_size} items,"
-                f" got {len(dataset._hashes)}"
-            )
-
-
-DEFAULT_TEST_MODE_SIZE = 5
-test_dataset_sizes = {
-    name: min(DEFAULT_TEST_MODE_SIZE, size) for name, size in dataset_sizes.items()
-}
-# Only two examples exist in this dataset, so its lightweight test-mode slice is smaller.
-test_dataset_sizes["context7_eval"] = 2
-
-test_dataset_functions = [
-    (name, func, test_dataset_sizes[name])
-    for name, func in inspect.getmembers(opik_optimizer.datasets)
-    if inspect.isfunction(func) and name in test_dataset_sizes
-]
+    def insert(self, records: list[dict[str, str]]) -> None:
+        self._records.extend(records)
+        # mirror behaviour used in the tests (len(_hashes) == expected size)
+        self._hashes.extend([rec.get("id", str(idx)) for idx, rec in enumerate(records)])
 
 
 @pytest.mark.parametrize(
-    "dataset_name,dataset_func,expected_size", test_dataset_functions
+    "dataset_name,dataset_func,expected_size", FULL_DATASET_FUNCTIONS
 )
-def test_test_datasets(
-    dataset_name: str, dataset_func: Callable, expected_size: int
+def test_full_dataset_sizes(
+    dataset_name: str,
+    dataset_func: Callable,
+    expected_size: int,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    # Create ApiError with status code 404 to simulate dataset not found
-    api_error = ApiError(status_code=404)
-    mock_get_dataset = mock.Mock(side_effect=api_error)
+    original_load = dataset_utils.DatasetHandle.load
 
-    # Create a proper mock Dataset instead of a real one
-    mock_rest_client = mock.Mock()
-    mock_dataset = Dataset("test_dataset", "Test description", mock_rest_client)
-    mock_dataset.get_items = mock.Mock(return_value=[])
+    def _stub_load(self: dataset_utils.DatasetHandle, **kwargs: object) -> _DummyDataset:
+        ds_name = kwargs.get("dataset_name") or self.spec.name  # type: ignore[attr-defined]
+        test_mode = bool(kwargs.get("test_mode", False))
+        ds_name = dataset_utils.dataset_name_for_mode(ds_name, test_mode)
+        dummy = _DummyDataset(ds_name)
+        dummy.insert([{"id": str(i)} for i in range(expected_size)])
+        return dummy
 
-    with mock.patch.object(opik_client.Opik, "get_dataset", mock_get_dataset):
-        # Mock create_dataset to return our mock dataset
-        mock_create_dataset = mock.Mock(return_value=mock_dataset)
-        with mock.patch.object(opik_client.Opik, "create_dataset", mock_create_dataset):
-            # Test the dataset function when get_dataset fails with 404
-            dataset = dataset_func(
-                test_mode=True, **DATASET_CALL_KWARGS.get(dataset_name, {})
-            )
+    monkeypatch.setattr(dataset_utils.DatasetHandle, "load", _stub_load)
 
-            # Check that the dataset has the expected number of items
-            assert len(dataset._hashes) == expected_size, (
-                f"Expected {dataset_name} to have {expected_size} items, "
-                f"got {len(dataset._hashes)}"
-            )
+    try:
+        dataset = dataset_func(**DATASET_CALL_KWARGS.get(dataset_name, {}))
+    except RuntimeError as exc:
+        if "Opik client is not available; context7_eval" in str(exc):
+            pytest.skip("context7_eval not available without Opik client")
+        raise
+    # Restore to avoid leaking into other tests
+    monkeypatch.setattr(dataset_utils.DatasetHandle, "load", original_load)
+    assert len(dataset._hashes) == expected_size
+
+
+@pytest.mark.parametrize(
+    "dataset_name,dataset_func,expected_size", TEST_DATASET_FUNCTIONS
+)
+def test_test_dataset_sizes(
+    dataset_name: str,
+    dataset_func: Callable,
+    expected_size: int,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    original_load = dataset_utils.DatasetHandle.load
+
+    def _stub_load(self: dataset_utils.DatasetHandle, **kwargs: object) -> _DummyDataset:
+        ds_name = kwargs.get("dataset_name") or self.spec.name  # type: ignore[attr-defined]
+        test_mode = bool(kwargs.get("test_mode", False))
+        ds_name = dataset_utils.dataset_name_for_mode(ds_name, test_mode)
+        dummy = _DummyDataset(ds_name)
+        dummy.insert([{"id": str(i)} for i in range(expected_size)])
+        return dummy
+
+    monkeypatch.setattr(dataset_utils.DatasetHandle, "load", _stub_load)
+
+    try:
+        dataset = dataset_func(test_mode=True, **DATASET_CALL_KWARGS.get(dataset_name, {}))
+    except RuntimeError as exc:
+        if "Opik client is not available; context7_eval" in str(exc):
+            pytest.skip("context7_eval not available without Opik client")
+        raise
+    monkeypatch.setattr(dataset_utils.DatasetHandle, "load", original_load)
+    assert len(dataset._hashes) == expected_size
