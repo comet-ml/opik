@@ -814,9 +814,10 @@ class GepaOptimizer(BaseOptimizer):
                 prompt_obj, agent_class=self.agent_class, **instantiate_kwargs
             )
         except TypeError:
-            return self._instantiate_agent(
-                prompt_obj, agent_class=self.agent_class
-            )
+            return self._instantiate_agent(prompt_obj, agent_class=self.agent_class)
+
+    def _build_optimization_config(self) -> dict[str, Any]:
+        return self._build_optimization_metadata()
 
     @overload
     def _evaluate_prompt_logged(
