@@ -70,6 +70,40 @@ opik_callback_handler = global_handler
 
 Now that the integration is set up, all the LlamaIndex runs will be traced and logged to Opik.
 
+Alternatively, you can configure the callback handler directly for more control:
+
+```python
+from llama_index.core import Settings
+from llama_index.core.callbacks import CallbackManager
+from opik.integrations.llama_index import LlamaIndexCallbackHandler
+
+opik_callback = LlamaIndexCallbackHandler()
+Settings.callback_manager = CallbackManager([opik_callback])
+```
+You can set the project name for the callback directly, or disable tracking of the index_construction phase.
+### Disabling Index Construction Tracking
+
+By default, LlamaIndex will track all operations including index construction (document loading, embedding generation, etc.). If you want to track only your query operations and not the index construction phase, use the `skip_index_construction_trace` parameter:
+
+```python
+from llama_index.core import Settings, VectorStoreIndex, SimpleDirectoryReader
+from llama_index.core.callbacks import CallbackManager
+from opik.integrations.llama_index import LlamaIndexCallbackHandler
+
+# Configure callback to skip index construction tracking
+opik_callback = LlamaIndexCallbackHandler(skip_index_construction_trace=True)
+Settings.callback_manager = CallbackManager([opik_callback])
+
+# Now create your index - construction won't be tracked
+documents = SimpleDirectoryReader("./data").load_data()
+index = VectorStoreIndex.from_documents(documents)
+```
+
+This is particularly useful when:
+- You're working with large document sets where index construction is time-consuming
+- You want to focus your traces on production query operations only
+- You're pre-building indexes offline and only want to track runtime queries
+
 ## Example
 
 To showcase the integration, we will create a new a query engine that will use Paul Graham's essays as the data source.
@@ -197,6 +231,85 @@ with opik.start_as_current_trace(name="user_query_processing"):
 ```
 
 This approach is useful when you want more control over trace naming and want to group multiple LlamaIndex operations under a single trace.
+
+## Tracking LlamaIndex Workflows
+
+LlamaIndex workflows are multi-step processing pipelines for LLM applications. To track workflow executions in Opik, you can manually decorate your workflow steps and use `opik.start_as_current_span()` to wrap the workflow execution.
+
+### Basic Workflow Tracking
+
+You can use `@opik.track()` to decorate your workflow steps and `opik.start_as_current_span()` to track the workflow execution:
+
+```python
+import opik
+from llama_index.core.workflow import Workflow, StartEvent, StopEvent, step, Event
+from llama_index.core import Settings
+from llama_index.core.callbacks import CallbackManager
+from llama_index.core import global_handler, set_global_handler
+
+# Configure Opik integration for LLM calls within steps
+set_global_handler("opik")
+
+class QueryEvent(Event):
+    """Event for passing query through workflow."""
+    query: str
+
+class MyRAGWorkflow(Workflow):
+    """Simple RAG workflow with tracked steps."""
+    
+    @step
+    @opik.track()
+    async def retrieve_context(self, ev: StartEvent) -> QueryEvent:
+        """Retrieve relevant context for the query."""
+        query = ev.get("query", "")
+        # Your retrieval logic here
+        context = f"Context for: {query}"
+        return QueryEvent(query=f"{context} | {query}")
+    
+    @step
+    @opik.track()
+    async def generate_response(self, ev: QueryEvent) -> StopEvent:
+        """Generate final response using the context."""
+        # Your generation logic here
+        result = f"Response based on: {ev.query}"
+        return StopEvent(result=result)
+
+# Create workflow instance
+workflow = MyRAGWorkflow()
+
+# Use start_as_current_span to track workflow execution
+with opik.start_as_current_span(
+    name="rag_workflow_execution",
+    input={"query": "What are the key features?"},
+    project_name="llama-index-workflows"
+) as span:
+    result = await workflow.run(query="What are the key features?")
+    span.update(output={"result": result})
+    
+print(result)
+opik.flush_tracker()  # Ensure all traces are sent
+```
+
+In this example:
+- Each workflow step is decorated with `@opik.track()` to create spans
+- The `@step` decorator is placed before(above) `@opik.track()` to ensure LlamaIndex can properly discover the workflow steps
+- `opik.start_as_current_span()` tracks the overall workflow execution
+- LLM calls within steps are automatically tracked via the global Opik handler
+- All workflow steps appear as nested spans within the workflow trace
+
+<Tip>
+If you're certain the workflow is a top-level call and want to create only a trace without an additional span, you can use `opik.start_as_current_trace()` instead of `opik.start_as_current_span()`. However, `start_as_current_span()` is more flexible as it works in both standalone and nested contexts.
+</Tip>
+
+### Best Practices
+
+1. **Decorate all workflow steps** with `@opik.track()` to capture each step as a span
+2. **Decorator order matters**: Place `@step` before `@opik.track()` so LlamaIndex's workflow engine can properly discover and execute steps
+3. **Use `opik.start_as_current_span()`** to wrap workflow execution - it works in both standalone and nested contexts
+4. **Configure the global handler** to automatically track LLM calls within steps
+5. **Use descriptive names** for spans to make debugging easier
+6. **Always call `opik.flush_tracker()`** at the end to ensure all traces are sent
+7. **Include input/output** in span updates for better debugging
 
 ## Token Usage in Streaming Responses
 
