@@ -16,5 +16,6 @@ import * as OpikApi from "../../../../index";
 export interface CreatePromptVersionDetail {
     name: string;
     version: OpikApi.PromptVersionDetail;
+    /** Template structure for the prompt: 'text' or 'chat'. Note: This field is only used when creating a new prompt. If a prompt with the given name already exists, this field is ignored and the existing prompt's template structure is used. Template structure is immutable after prompt creation. */
     templateStructure?: OpikApi.CreatePromptVersionDetailTemplateStructure;
 }

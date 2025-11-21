@@ -81,6 +81,22 @@ class PromptPlaceholdersDontMatchFormatArguments(OpikException):
         )
 
 
+class PromptTemplateStructureMismatch(OpikException):
+    """Exception raised when attempting to create a prompt version with a different template structure than the existing prompt."""
+
+    def __init__(self, prompt_name: str, existing_structure: str, attempted_structure: str):
+        self.prompt_name = prompt_name
+        self.existing_structure = existing_structure
+        self.attempted_structure = attempted_structure
+
+    def __str__(self) -> str:
+        return (
+            f"Prompt with name '{self.prompt_name}' already exists and has immutable "
+            f"'{self.existing_structure}' template structure, not '{self.attempted_structure}'. "
+            f"Template structure type cannot be changed after prompt creation."
+        )
+
+
 class ExperimentNotFound(OpikException):
     pass
 

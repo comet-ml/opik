@@ -22,7 +22,6 @@ import io.dropwizard.jersey.errors.ErrorMessage;
 import jakarta.inject.Inject;
 import jakarta.inject.Provider;
 import jakarta.inject.Singleton;
-import jakarta.ws.rs.BadRequestException;
 import jakarta.ws.rs.NotFoundException;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
@@ -224,16 +223,11 @@ class PromptServiceImpl implements PromptService {
         Prompt prompt = findByName(workspaceId, name);
 
         if (prompt != null) {
-            // Validate that the template structure matches if the prompt already exists
-            if (!prompt.templateStructure().equals(templateStructure)) {
-                var errorMessage = String.format(
-                        "Template structure mismatch: prompt '%s' has template_structure '%s' but new version has '%s'. "
-                                +
-                                "Template structure is immutable and cannot be changed after prompt creation.",
-                        name, prompt.templateStructure().getValue(), templateStructure.getValue());
-                log.warn(errorMessage);
-                throw new BadRequestException(errorMessage);
-            }
+            // For existing prompts, ignore the templateStructure parameter and use the existing prompt's structure.
+            // Template structure is immutable after prompt creation.
+            log.debug(
+                    "Prompt '{}' already exists with template_structure '{}'. Ignoring requested template_structure '{}'.",
+                    name, prompt.templateStructure().getValue(), templateStructure.getValue());
             return prompt;
         }
 

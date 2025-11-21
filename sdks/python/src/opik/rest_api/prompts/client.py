@@ -160,6 +160,7 @@ class PromptsClient:
         version : PromptVersionDetail
 
         template_structure : typing.Optional[CreatePromptVersionDetailTemplateStructure]
+            Template structure for the prompt: 'text' or 'chat'. Note: This field is only used when creating a new prompt. If a prompt with the given name already exists, this field is ignored and the existing prompt's template structure is used. Template structure is immutable after prompt creation.
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -566,6 +567,7 @@ class AsyncPromptsClient:
         version : PromptVersionDetail
 
         template_structure : typing.Optional[CreatePromptVersionDetailTemplateStructure]
+            Template structure for the prompt: 'text' or 'chat'. Note: This field is only used when creating a new prompt. If a prompt with the given name already exists, this field is ignored and the existing prompt's template structure is used. Template structure is immutable after prompt creation.
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.

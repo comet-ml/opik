@@ -1,10 +1,11 @@
 from typing import Any, Dict, List, Optional, Tuple
 import json
 import dataclasses
+
+import opik.exceptions
 from opik.rest_api import client as rest_client
 from opik.rest_api import core as rest_api_core
 from opik.rest_api.types import prompt_version_detail
-
 from . import types as prompt_types
 
 
@@ -42,14 +43,19 @@ class PromptClient:
         Returns:
         - A Prompt object for the provided prompt name and template.
         """
-        prompt_version = self._get_latest_version(
-            name, template_structure=template_structure
-        )
+        prompt_version = self._get_latest_version(name)
 
         # For chat prompts, compare parsed JSON to avoid formatting differences
         templates_equal = False
 
         if prompt_version is not None:
+            if prompt_version.template_structure != template_structure:
+                raise opik.exceptions.PromptTemplateStructureMismatch(
+                    prompt_name=name,
+                    existing_structure=prompt_version.template_structure,
+                    attempted_structure=template_structure,
+                )
+
             if template_structure == "chat":
                 try:
                     existing_messages = json.loads(prompt_version.template)
@@ -65,7 +71,7 @@ class PromptClient:
         # - Template content has changed
         # - Metadata has changed
         # - Type has changed
-        # Note: template_structure is immutable and enforced by the backend
+        # Note: template_structure is immutable and used by the backend only if it is the first prompt version.
         if (
             prompt_version is None
             or not templates_equal
@@ -105,25 +111,14 @@ class PromptClient:
         return new_prompt_version_detail
 
     def _get_latest_version(
-        self, name: str, template_structure: Optional[str] = None
+        self, name: str
     ) -> Optional[prompt_version_detail.PromptVersionDetail]:
-        try:
-            prompt_latest_version = self._rest_client.prompts.retrieve_prompt_version(
-                name=name,
-                template_structure=template_structure,
-            )
-            return prompt_latest_version
-        except rest_api_core.ApiError as e:
-            if e.status_code == 400 or e.status_code == 404:
-                # 400: template_structure mismatch, 404: prompt not found
-                return None
-            raise e
+        return self.get_prompt(name=name, commit=None)
 
     def get_prompt(
         self,
         name: str,
         commit: Optional[str] = None,
-        template_structure: Optional[str] = None,
     ) -> Optional[prompt_version_detail.PromptVersionDetail]:
         """
         Retrieve the prompt detail for a given prompt name and commit version.
@@ -140,15 +135,13 @@ class PromptClient:
             prompt_version = self._rest_client.prompts.retrieve_prompt_version(
                 name=name,
                 commit=commit,
-                template_structure=template_structure,
             )
-            return prompt_version
 
+            return prompt_version
         except rest_api_core.ApiError as e:
             if e.status_code != 404:
                 raise e
             # 400, 404 - not found
-
         return None
 
     # TODO: Need to add support for prompt name in the BE so we don't
