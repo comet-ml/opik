@@ -519,6 +519,7 @@ const PlaygroundOutputActions = ({
                 </div>
               </div>
             }
+            showTooltip
           />
 
           {datasetId && (
