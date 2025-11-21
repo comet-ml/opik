@@ -21,6 +21,8 @@ def infer_output_style_from_dataset(
     model_parameters: dict[str, Any],
     n_examples: int = 5,
     verbose: int = 1,
+    *,
+    raise_on_failure: bool = False,
 ) -> str | None:
     """Analyzes dataset examples to infer the desired output style using the LLM."""
     with reporting.infer_output_style(verbose=verbose) as report_infer_output_style:
@@ -86,4 +88,6 @@ def infer_output_style_from_dataset(
             return None
         except Exception as e:
             report_infer_output_style.error(f"Error during output style inference: {e}")
+            if raise_on_failure:
+                raise
             return None
