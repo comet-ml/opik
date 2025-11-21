@@ -341,6 +341,18 @@ def test_prompt__template_structure_immutable__error(opik_client: opik.Opik):
                 {"role": "user", "content": "Hello!"},
             ],
         )
+    
+    # Verify the original text prompt remains unchanged
+    retrieved_prompt = opik_client.get_prompt(name=prompt_name)
+    assert retrieved_prompt is not None
+    verifiers.verify_prompt_version(
+        retrieved_prompt,
+        name=prompt_name,
+        template=text_prompt.prompt,
+        commit=text_prompt.commit,
+        prompt_id=text_prompt.__internal_api__prompt_id__,
+        version_id=text_prompt.__internal_api__version_id__,
+    )
 
 
 def test_get_prompt__string_prompt__returns_prompt(opik_client: opik.Opik):
@@ -369,7 +381,7 @@ def test_get_prompt__chat_prompt__returns_none(opik_client: opik.Opik):
     prompt_name = f"chat-prompt-{unique_id}"
 
     # Create a chat prompt
-    opik_client.create_chat_prompt(
+    chat_prompt = opik_client.create_chat_prompt(
         name=prompt_name,
         messages=[
             {"role": "system", "content": "You are helpful"},
@@ -380,6 +392,18 @@ def test_get_prompt__chat_prompt__returns_none(opik_client: opik.Opik):
     # Try to retrieve it with get_prompt() - should raise an error due to type mismatch
     with pytest.raises(opik.exceptions.PromptTemplateStructureMismatch):
         opik_client.get_prompt(name=prompt_name)
+    
+    # Verify the chat prompt remains unchanged
+    retrieved_chat_prompt = opik_client.get_chat_prompt(name=prompt_name)
+    assert retrieved_chat_prompt is not None
+    verifiers.verify_chat_prompt_version(
+        retrieved_chat_prompt,
+        name=prompt_name,
+        messages=chat_prompt.template,
+        commit=chat_prompt.commit,
+        prompt_id=chat_prompt.__internal_api__prompt_id__,
+        version_id=chat_prompt.__internal_api__version_id__,
+    )
 
 
 def test_get_prompt_history__string_prompt__returns_prompts(opik_client: opik.Opik):
@@ -412,7 +436,7 @@ def test_get_prompt_history__chat_prompt__returns_empty_list(opik_client: opik.O
     prompt_name = f"chat-prompt-history-{unique_id}"
 
     # Create a chat prompt
-    opik_client.create_chat_prompt(
+    chat_prompt = opik_client.create_chat_prompt(
         name=prompt_name,
         messages=[{"role": "user", "content": "Hello"}],
     )
@@ -420,6 +444,18 @@ def test_get_prompt_history__chat_prompt__returns_empty_list(opik_client: opik.O
     # Try to get history with get_prompt_history() - should raise an error due to type mismatch
     with pytest.raises(opik.exceptions.PromptTemplateStructureMismatch):
         opik_client.get_prompt_history(name=prompt_name)
+    
+    # Verify the chat prompt remains unchanged
+    retrieved_chat_prompt = opik_client.get_chat_prompt(name=prompt_name)
+    assert retrieved_chat_prompt is not None
+    verifiers.verify_chat_prompt_version(
+        retrieved_chat_prompt,
+        name=prompt_name,
+        messages=chat_prompt.template,
+        commit=chat_prompt.commit,
+        prompt_id=chat_prompt.__internal_api__prompt_id__,
+        version_id=chat_prompt.__internal_api__version_id__,
+    )
 
 
 def test_search_prompts__returns_both_types(opik_client: opik.Opik):
