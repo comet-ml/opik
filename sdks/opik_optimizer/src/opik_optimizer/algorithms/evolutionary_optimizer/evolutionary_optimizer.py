@@ -549,7 +549,6 @@ class EvolutionaryOptimizer(BaseOptimizer):
                 model=self.model,
                 model_parameters=self.model_parameters,
                 verbose=self.verbose,
-                raise_on_failure=True,
             )
             if inferred_style:
                 effective_output_style_guidance = inferred_style

@@ -192,7 +192,7 @@ def _parse_response(
             try:
                 cleaned = _utils.json_to_dict(content)
                 if cleaned is not None:
-                    return response_model.model_validate_json(json.dumps(cleaned))
+                    return response_model.model_validate(cleaned)
             except (
                 json.JSONDecodeError,
                 SyntaxError,
