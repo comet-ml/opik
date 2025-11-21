@@ -2,7 +2,6 @@ import types
 from typing import TypeVar, List, Any, Set
 from . import opik_tracer
 import logging
-from opik import _logging
 
 from google.adk.tools import agent_tool
 from google.adk import agents
@@ -120,11 +119,7 @@ def track_adk_agent_recursive(
     Returns:
         The modified root agent with tracking enabled
     """
-    _logging.log_once_at_level(
-        logging.INFO,
-        "`track_adk_agent_recursive` is experimental feature. Please let us know if something is not working as expected: https://github.com/comet-ml/opik/issues",
-        logger=LOGGER,
-    )
+
     recursive_callback_injector = RecursiveCallbackInjector(tracer)
     recursive_callback_injector.inject(root_agent)
 
