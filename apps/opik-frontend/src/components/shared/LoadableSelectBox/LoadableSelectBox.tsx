@@ -3,6 +3,7 @@ import isFunction from "lodash/isFunction";
 import toLower from "lodash/toLower";
 import isArray from "lodash/isArray";
 import { Check, ChevronDown, ExternalLink } from "lucide-react";
+import { Link } from "@tanstack/react-router";
 
 import {
   Popover,
@@ -323,15 +324,15 @@ export const LoadableSelectBox = ({
                         size="icon-xs"
                         asChild
                       >
-                        <a
-                          href={option.action.href}
+                        <Link
+                          to={option.action.href}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="inline-flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100"
                           onClick={(e) => e.stopPropagation()}
                         >
                           <ExternalLink className="size-3.5 shrink-0" />
-                        </a>
+                        </Link>
                       </Button>
                     </TooltipWrapper>
                   )}
