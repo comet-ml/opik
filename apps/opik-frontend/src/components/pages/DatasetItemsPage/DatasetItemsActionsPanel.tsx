@@ -12,6 +12,8 @@ import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import DatasetExpansionDialog from "./DatasetExpansionDialog";
 import GeneratedSamplesDialog from "./GeneratedSamplesDialog";
 import AddTagDialog from "./AddTagDialog";
+import { DATASET_ITEM_DATA_PREFIX } from "@/constants/datasets";
+import { stripColumnPrefix } from "@/lib/utils";
 
 type DatasetItemsActionsPanelProps = {
   getDataForExport: () => Promise<DatasetItem[]>;
@@ -62,7 +64,11 @@ const DatasetItemsActionsPanel: React.FunctionComponent<
         // Check if this column is a dynamic dataset column
         if (dynamicColumns.includes(column)) {
           // Dynamic columns are stored in the item.data object
-          acc[column] = get(item.data, column, "");
+          const columnName = stripColumnPrefix(
+            column,
+            DATASET_ITEM_DATA_PREFIX,
+          );
+          acc[column] = get(item.data, columnName, "");
         } else {
           // Handle direct properties like id, created_at, etc.
           acc[column] = get(item, column, "");
