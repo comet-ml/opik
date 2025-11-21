@@ -78,7 +78,7 @@ def manifest_to_task_specs(
                 raise ValueError(
                     "Dataset override objects must include a 'loader' key."
                 )
-            dataset_name: str = dataset_field.get("dataset_name", loader_name)
+            dataset_name: str = str(dataset_field.get("dataset_name", loader_name))
             if datasets_override is None:
                 datasets_override = {
                     "train": dict(dataset_field),
