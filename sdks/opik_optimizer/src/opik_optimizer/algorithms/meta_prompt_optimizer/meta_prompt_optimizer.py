@@ -873,6 +873,8 @@ class MetaPromptOptimizer(BaseOptimizer):
         if self.dataset is None:
             return ""
 
+        sample = None
+        context = ""
         try:
             # Try get_items() first as it's the preferred method
             items = self.dataset.get_items()
