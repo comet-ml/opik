@@ -136,7 +136,7 @@ const DatasetItemsPage = () => {
         page: page as number,
         size: size as number,
         search: search!,
-        truncate: truncationEnabled,
+        truncate: false,
       },
       {
         placeholderData: keepPreviousData,
