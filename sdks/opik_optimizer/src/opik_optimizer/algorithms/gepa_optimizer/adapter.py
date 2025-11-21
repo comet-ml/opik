@@ -80,7 +80,9 @@ class OpikGEPAAdapter(GEPAAdapter[OpikDataInst, dict[str, Any], dict[str, Any]])
         agent_class = create_litellm_agent_class(
             prompt_variant, optimizer_ref=self._optimizer
         )
-        agent = agent_class(prompt_variant)
+        agent = self._optimizer._instantiate_agent(  # type: ignore[attr-defined]
+            prompt_variant, agent_class=agent_class
+        )
 
         outputs: list[dict[str, Any]] = []
         scores: list[float] = []
