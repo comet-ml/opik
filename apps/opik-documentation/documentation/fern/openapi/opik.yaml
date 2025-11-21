@@ -7544,7 +7544,6 @@ components:
           $ref: "#/components/schemas/JsonNode_Public"
     DatasetItemBatchUpdate:
       required:
-      - ids
       - update
       type: object
       properties:
@@ -7553,18 +7552,49 @@ components:
           minItems: 1
           uniqueItems: true
           type: array
-          description: List of dataset item IDs to update (max 1000)
+          description: List of dataset item IDs to update (max 1000). Mutually exclusive
+            with 'filters'.
           items:
             type: string
-            description: List of dataset item IDs to update (max 1000)
+            description: List of dataset item IDs to update (max 1000). Mutually exclusive
+              with 'filters'.
             format: uuid
+        filters:
+          type: array
+          items:
+            $ref: "#/components/schemas/DatasetItemFilter"
         update:
           $ref: "#/components/schemas/DatasetItemUpdate"
         merge_tags:
           type: boolean
           description: "If true, merge tags with existing tags instead of replacing\
-            \ them. Default: false"
+            \ them. Default: false. When using 'filters', this is automatically set\
+            \ to true."
       description: Request to batch update multiple dataset items
+    DatasetItemFilter:
+      type: object
+      properties:
+        field:
+          type: string
+        operator:
+          type: string
+          enum:
+          - contains
+          - not_contains
+          - starts_with
+          - ends_with
+          - =
+          - '!='
+          - '>'
+          - '>='
+          - <
+          - <=
+          - is_empty
+          - is_not_empty
+        key:
+          type: string
+        value:
+          type: string
     DatasetItemUpdate:
       type: object
       properties:
@@ -11455,6 +11485,12 @@ components:
           items:
             type: string
             readOnly: true
+        template_structure:
+          type: string
+          readOnly: true
+          enum:
+          - text
+          - chat
         created_at:
           type: string
           format: date-time
@@ -11543,6 +11579,12 @@ components:
           items:
             type: string
             readOnly: true
+        template_structure:
+          type: string
+          readOnly: true
+          enum:
+          - text
+          - chat
         created_at:
           type: string
           format: date-time
@@ -11671,6 +11713,12 @@ components:
           - jinja2
         change_description:
           type: string
+        template_structure:
+          type: string
+          readOnly: true
+          enum:
+          - text
+          - chat
         created_at:
           type: string
           format: date-time
@@ -11755,11 +11803,6 @@ components:
           type: string
         commit:
           type: string
-        template_structure:
-          type: string
-          enum:
-          - text
-          - chat
     Prompt_Updatable:
       required:
       - name

@@ -11,7 +11,6 @@ from ..types.prompt_version_detail import PromptVersionDetail
 from ..types.prompt_version_page_public import PromptVersionPagePublic
 from .raw_client import AsyncRawPromptsClient, RawPromptsClient
 from .types.create_prompt_version_detail_template_structure import CreatePromptVersionDetailTemplateStructure
-from .types.prompt_version_retrieve_detail_template_structure import PromptVersionRetrieveDetailTemplateStructure
 from .types.prompt_write_template_structure import PromptWriteTemplateStructure
 from .types.prompt_write_type import PromptWriteType
 
@@ -390,12 +389,7 @@ class PromptsClient:
         return _response.data
 
     def retrieve_prompt_version(
-        self,
-        *,
-        name: str,
-        commit: typing.Optional[str] = OMIT,
-        template_structure: typing.Optional[PromptVersionRetrieveDetailTemplateStructure] = OMIT,
-        request_options: typing.Optional[RequestOptions] = None,
+        self, *, name: str, commit: typing.Optional[str] = OMIT, request_options: typing.Optional[RequestOptions] = None
     ) -> PromptVersionDetail:
         """
         Retrieve prompt version
@@ -405,8 +399,6 @@ class PromptsClient:
         name : str
 
         commit : typing.Optional[str]
-
-        template_structure : typing.Optional[PromptVersionRetrieveDetailTemplateStructure]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -422,9 +414,7 @@ class PromptsClient:
         client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
         client.prompts.retrieve_prompt_version(name='name', )
         """
-        _response = self._raw_client.retrieve_prompt_version(
-            name=name, commit=commit, template_structure=template_structure, request_options=request_options
-        )
+        _response = self._raw_client.retrieve_prompt_version(name=name, commit=commit, request_options=request_options)
         return _response.data
 
 
@@ -835,12 +825,7 @@ class AsyncPromptsClient:
         return _response.data
 
     async def retrieve_prompt_version(
-        self,
-        *,
-        name: str,
-        commit: typing.Optional[str] = OMIT,
-        template_structure: typing.Optional[PromptVersionRetrieveDetailTemplateStructure] = OMIT,
-        request_options: typing.Optional[RequestOptions] = None,
+        self, *, name: str, commit: typing.Optional[str] = OMIT, request_options: typing.Optional[RequestOptions] = None
     ) -> PromptVersionDetail:
         """
         Retrieve prompt version
@@ -850,8 +835,6 @@ class AsyncPromptsClient:
         name : str
 
         commit : typing.Optional[str]
-
-        template_structure : typing.Optional[PromptVersionRetrieveDetailTemplateStructure]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -871,6 +854,6 @@ class AsyncPromptsClient:
         asyncio.run(main())
         """
         _response = await self._raw_client.retrieve_prompt_version(
-            name=name, commit=commit, template_structure=template_structure, request_options=request_options
+            name=name, commit=commit, request_options=request_options
         )
         return _response.data

@@ -72,7 +72,7 @@ public interface PromptService {
 
     Mono<Map<UUID, PromptVersion>> findVersionByIds(Set<UUID> ids);
 
-    PromptVersion retrievePromptVersion(String name, String commit, TemplateStructure templateStructure);
+    PromptVersion retrievePromptVersion(String name, String commit);
 
     PromptVersion restorePromptVersion(UUID promptId, UUID versionId);
 
@@ -254,7 +254,7 @@ class PromptServiceImpl implements PromptService {
         return transactionTemplate.inTransaction(READ_ONLY, handle -> {
             PromptDAO promptDAO = handle.attach(PromptDAO.class);
 
-            return promptDAO.findByName(name, workspaceId, null);
+            return promptDAO.findByName(name, workspaceId);
         });
     }
 
@@ -560,15 +560,14 @@ class PromptServiceImpl implements PromptService {
     }
 
     @Override
-    public PromptVersion retrievePromptVersion(@NonNull String name, String commit,
-            TemplateStructure templateStructure) {
+    public PromptVersion retrievePromptVersion(@NonNull String name, String commit) {
         String workspaceId = requestContext.get().getWorkspaceId();
 
         return transactionTemplate.inTransaction(READ_ONLY, handle -> {
             PromptDAO promptDAO = handle.attach(PromptDAO.class);
             PromptVersionDAO promptVersionDAO = handle.attach(PromptVersionDAO.class);
 
-            Prompt prompt = promptDAO.findByName(name, workspaceId, templateStructure);
+            Prompt prompt = promptDAO.findByName(name, workspaceId);
 
             if (prompt == null) {
                 throw new NotFoundException(PROMPT_NOT_FOUND);

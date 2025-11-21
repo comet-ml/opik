@@ -20,7 +20,6 @@ from ..types.prompt_page_public import PromptPagePublic
 from ..types.prompt_version_detail import PromptVersionDetail
 from ..types.prompt_version_page_public import PromptVersionPagePublic
 from .types.create_prompt_version_detail_template_structure import CreatePromptVersionDetailTemplateStructure
-from .types.prompt_version_retrieve_detail_template_structure import PromptVersionRetrieveDetailTemplateStructure
 from .types.prompt_write_template_structure import PromptWriteTemplateStructure
 from .types.prompt_write_type import PromptWriteType
 
@@ -661,12 +660,7 @@ class RawPromptsClient:
         raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
 
     def retrieve_prompt_version(
-        self,
-        *,
-        name: str,
-        commit: typing.Optional[str] = OMIT,
-        template_structure: typing.Optional[PromptVersionRetrieveDetailTemplateStructure] = OMIT,
-        request_options: typing.Optional[RequestOptions] = None,
+        self, *, name: str, commit: typing.Optional[str] = OMIT, request_options: typing.Optional[RequestOptions] = None
     ) -> HttpResponse[PromptVersionDetail]:
         """
         Retrieve prompt version
@@ -676,8 +670,6 @@ class RawPromptsClient:
         name : str
 
         commit : typing.Optional[str]
-
-        template_structure : typing.Optional[PromptVersionRetrieveDetailTemplateStructure]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -693,7 +685,6 @@ class RawPromptsClient:
             json={
                 "name": name,
                 "commit": commit,
-                "template_structure": template_structure,
             },
             headers={
                 "content-type": "application/json",
@@ -1385,12 +1376,7 @@ class AsyncRawPromptsClient:
         raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
 
     async def retrieve_prompt_version(
-        self,
-        *,
-        name: str,
-        commit: typing.Optional[str] = OMIT,
-        template_structure: typing.Optional[PromptVersionRetrieveDetailTemplateStructure] = OMIT,
-        request_options: typing.Optional[RequestOptions] = None,
+        self, *, name: str, commit: typing.Optional[str] = OMIT, request_options: typing.Optional[RequestOptions] = None
     ) -> AsyncHttpResponse[PromptVersionDetail]:
         """
         Retrieve prompt version
@@ -1400,8 +1386,6 @@ class AsyncRawPromptsClient:
         name : str
 
         commit : typing.Optional[str]
-
-        template_structure : typing.Optional[PromptVersionRetrieveDetailTemplateStructure]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -1417,7 +1401,6 @@ class AsyncRawPromptsClient:
             json={
                 "name": name,
                 "commit": commit,
-                "template_structure": template_structure,
             },
             headers={
                 "content-type": "application/json",

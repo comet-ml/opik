@@ -165,6 +165,8 @@ from .dataset_item import DatasetItem
 from .dataset_item_batch import DatasetItemBatch
 from .dataset_item_compare import DatasetItemCompare
 from .dataset_item_compare_source import DatasetItemCompareSource
+from .dataset_item_filter import DatasetItemFilter
+from .dataset_item_filter_operator import DatasetItemFilterOperator
 from .dataset_item_page_compare import DatasetItemPageCompare
 from .dataset_item_page_public import DatasetItemPagePublic
 from .dataset_item_public import DatasetItemPublic
@@ -364,13 +366,16 @@ from .prompt_tokens_details import PromptTokensDetails
 from .prompt_type import PromptType
 from .prompt_version import PromptVersion
 from .prompt_version_detail import PromptVersionDetail
+from .prompt_version_detail_template_structure import PromptVersionDetailTemplateStructure
 from .prompt_version_detail_type import PromptVersionDetailType
 from .prompt_version_link import PromptVersionLink
 from .prompt_version_link_public import PromptVersionLinkPublic
 from .prompt_version_link_write import PromptVersionLinkWrite
 from .prompt_version_page_public import PromptVersionPagePublic
 from .prompt_version_public import PromptVersionPublic
+from .prompt_version_public_template_structure import PromptVersionPublicTemplateStructure
 from .prompt_version_public_type import PromptVersionPublicType
+from .prompt_version_template_structure import PromptVersionTemplateStructure
 from .prompt_version_type import PromptVersionType
 from .provider_api_key import ProviderApiKey
 from .provider_api_key_page_public import ProviderApiKeyPagePublic
@@ -602,6 +607,8 @@ __all__ = [
     "DatasetItemBatch",
     "DatasetItemCompare",
     "DatasetItemCompareSource",
+    "DatasetItemFilter",
+    "DatasetItemFilterOperator",
     "DatasetItemPageCompare",
     "DatasetItemPagePublic",
     "DatasetItemPublic",
@@ -792,13 +799,16 @@ __all__ = [
     "PromptType",
     "PromptVersion",
     "PromptVersionDetail",
+    "PromptVersionDetailTemplateStructure",
     "PromptVersionDetailType",
     "PromptVersionLink",
     "PromptVersionLinkPublic",
     "PromptVersionLinkWrite",
     "PromptVersionPagePublic",
     "PromptVersionPublic",
+    "PromptVersionPublicTemplateStructure",
     "PromptVersionPublicType",
+    "PromptVersionTemplateStructure",
     "PromptVersionType",
     "ProviderApiKey",
     "ProviderApiKeyPagePublic",

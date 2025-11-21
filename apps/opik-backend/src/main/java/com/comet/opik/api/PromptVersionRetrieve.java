@@ -11,6 +11,5 @@ import lombok.Builder;
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
 public record PromptVersionRetrieve(
         @NotBlank String name,
-        String commit,
-        TemplateStructure templateStructure) {
+        String commit) {
 }
