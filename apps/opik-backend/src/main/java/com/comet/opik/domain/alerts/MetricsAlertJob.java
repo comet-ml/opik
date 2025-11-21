@@ -170,6 +170,11 @@ public class MetricsAlertJob extends Job implements InterruptableJob {
         // Extract configuration from trigger
         TriggerConfig config = extractTriggerConfig(trigger);
 
+        log.info(
+                "Evaluating trigger for alert '{}' (id: '{}'), event type: '{}', name: '{}', operator: '{}', threshold: '{}', window: '{}'s",
+                alert.name(), alert.id(), trigger.eventType(), config.name(), config.operator(), config.threshold(),
+                config.windowSeconds());
+
         // Calculate time window for query
         Instant endTime = Instant.now();
         Instant startTime = endTime.minusSeconds(config.windowSeconds());
@@ -210,8 +215,17 @@ public class MetricsAlertJob extends Job implements InterruptableJob {
                 : config.threshold();
 
         return metricValueMono
-                .doOnNext(value -> log.info("Metric value retrieved: '{}'", value))
-                .doOnError(error -> log.error("Error retrieving metric value: '{}'", error.getMessage(), error))
+                .doOnNext(
+                        value -> log.info("Metric value retrieved: '{}', for workspace '{}', alert '{}', trigger: '{}'",
+                                value, alert.workspaceId(), alert.name(), trigger.eventType()))
+                .doOnError(error -> log.error(
+                        "Error retrieving metric value: '{}', for workspace '{}', alert '{}', trigger: '{}'",
+                        error.getMessage(), alert.workspaceId(), alert.name(), trigger.eventType(), error))
+                .switchIfEmpty(Mono.defer(() -> {
+                    log.info("No metric data found for alert '{}' (id: '{}'), trigger: '{}', name: '{}' in time window",
+                            alert.name(), alert.id(), trigger.eventType(), config.name());
+                    return Mono.empty();
+                }))
                 .flatMap(metricValue -> {
                     // Compare with threshold
                     if (compareMetric(metricValue, thresholdForComparison, config.operator())) {

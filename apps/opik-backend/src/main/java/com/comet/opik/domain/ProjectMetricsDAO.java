@@ -588,9 +588,9 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
             WHERE workspace_id = :workspace_id
                 AND entity_type = :entity_type
                 AND name = :feedback_score_name
-                <if(project_ids)> AND project_id IN :project_ids <endif>
-                <if(uuid_from_time)>AND entity_id >= :uuid_from_time<endif>
-                <if(uuid_to_time)>AND entity_id \\<= :uuid_to_time<endif>;
+                AND created_at >= parseDateTime64BestEffort(:start_time, 9)
+                AND created_at \\<= parseDateTime64BestEffort(:end_time, 9)
+                <if(project_ids)> AND project_id IN :project_ids <endif>;
             """;
 
     private static final String GET_THREAD_COUNT = """
@@ -758,8 +758,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                 startTime,
                 endTime,
                 "getTotalCost",
-                "total_cost",
-                null, null);
+                "total_cost");
     }
 
     @Override
@@ -770,8 +769,7 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                 startTime,
                 endTime,
                 "getAverageDuration",
-                "avg_duration",
-                null, null);
+                "avg_duration");
     }
 
     @Override
@@ -782,26 +780,46 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                 startTime,
                 endTime,
                 "getTotalTraceErrors",
-                "total_trace_errors",
-                null, null);
+                "total_trace_errors");
     }
 
     @Override
     public Mono<BigDecimal> getAverageFeedbackScore(List<UUID> projectIds, @NonNull Instant startTime, Instant endTime,
             EntityType entityType, String feedbackScoreName) {
-        return getAlertMetric(
-                GET_AVERAGE_FEEDBACK_SCORE,
-                projectIds,
-                startTime,
-                endTime,
-                "getAverageFeedbackScore",
-                "avg_feedback_score",
-                entityType, feedbackScoreName);
+        return template.nonTransaction(connection -> {
+            var stTemplate = TemplateUtils.newST(GET_AVERAGE_FEEDBACK_SCORE);
+
+            // Add project_ids flag to template if provided
+            if (projectIds != null && !projectIds.isEmpty()) {
+                stTemplate.add("project_ids", true);
+            }
+
+            // Create statement once with all flags set
+            var statement = connection.createStatement(stTemplate.render())
+                    .bind("start_time", startTime.toString())
+                    .bind("end_time", endTime.toString())
+                    .bind("entity_type", entityType.getType())
+                    .bind("feedback_score_name", feedbackScoreName);
+
+            // Bind project IDs if provided
+            if (projectIds != null && !projectIds.isEmpty()) {
+                statement.bind("project_ids", projectIds.toArray(new UUID[0]));
+            }
+
+            InstrumentAsyncUtils.Segment segment = startSegment("getAverageFeedbackScore", "Clickhouse", "get");
+
+            return makeMonoContextAware(bindWorkspaceIdToMono(statement))
+                    .flatMapMany(result -> result
+                            .map((row, metadata) -> Optional
+                                    .ofNullable(getOptionalValue(row, "avg_feedback_score", BigDecimal.class))))
+                    .next()
+                    .mapNotNull(opt -> opt.orElse(null))
+                    .doFinally(signalType -> endSegment(segment));
+        });
     }
 
     private Mono<BigDecimal> getAlertMetric(@NonNull String query, List<UUID> projectIds, @NonNull Instant startTime,
-            Instant endTime, @NonNull String segmentName, @NonNull String rowName, EntityType entityType,
-            String feedbackScoreName) {
+            Instant endTime, @NonNull String segmentName, @NonNull String rowName) {
         return template.nonTransaction(connection -> {
             var stTemplate = TemplateUtils.newST(query);
 
@@ -833,12 +851,6 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
             // Bind project IDs if provided
             if (projectIds != null && !projectIds.isEmpty()) {
                 statement.bind("project_ids", projectIds.toArray(new UUID[0]));
-            }
-
-            // Bind entity_type and feedback_score_name if provided
-            if (entityType != null && feedbackScoreName != null) {
-                statement.bind("entity_type", entityType.getType())
-                        .bind("feedback_score_name", feedbackScoreName);
             }
 
             InstrumentAsyncUtils.Segment segment = startSegment(segmentName, "Clickhouse", "get");
