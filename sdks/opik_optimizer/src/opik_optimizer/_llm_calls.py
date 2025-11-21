@@ -6,6 +6,7 @@ import sys
 from types import FrameType
 
 import litellm
+from litellm.exceptions import BadRequestError
 from opik.evaluation.models.litellm import opik_monitor as opik_litellm_monitor
 
 from . import _throttle
@@ -158,6 +159,28 @@ def _parse_response(
         Otherwise, returns the raw string response.
     """
     content = response.choices[0].message.content
+
+    finish_reason = getattr(response.choices[0], "finish_reason", None)
+    # When the model was truncated due to max_tokens we raise a BadRequest so downstream sees the OpenAI error.
+    if (
+        isinstance(content, str)
+        and finish_reason in {"length", "token limit", "max_tokens"}
+        and not content.strip()
+    ):
+        raise BadRequestError(
+            message=(
+                "OpenAIException - Could not finish the message because max_tokens or model output limit "
+                "was reached. Please try again with higher max_tokens."
+            ),
+            llm_provider="litellm",
+            model=getattr(response, "model", None),
+            response=response,
+            litellm_debug_info={
+                "finish_reason": finish_reason,
+                "content_excerpt": content[:200],
+            },
+            body=None,
+        )
 
     # When using structured outputs with Pydantic models, LiteLLM automatically
     # parses the response. Parse the JSON string into the Pydantic model
