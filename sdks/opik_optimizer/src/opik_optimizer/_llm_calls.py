@@ -3,6 +3,7 @@ from pydantic import BaseModel, ValidationError as PydanticValidationError
 import json
 import logging
 import sys
+import copy
 from types import FrameType
 
 import litellm
@@ -141,7 +142,7 @@ Here is the output schema (shown in a code block for readability only — do not
 ```"""
 
     # Make a copy of messages to avoid mutating the original
-    modified_messages = messages.copy()
+    modified_messages = copy.deepcopy(messages)
 
     # Find the last user message and append the instructions
     for i in range(len(modified_messages) - 1, -1, -1):
@@ -171,7 +172,7 @@ def _extract_tool_call_response(response: Any) -> str:
     try:
         message = response.choices[0].message
 
-        if not hasattr(message, "tool_calls") or not message.tool_calls:
+        if not hasattr(message, "tool_calls"):
             raise BadRequestError(
                 message=(
                     "Model did not return a tool call. The model may not support "
@@ -180,7 +181,21 @@ def _extract_tool_call_response(response: Any) -> str:
                 llm_provider="litellm",
                 model=getattr(response, "model", None),
                 response=response,
-                litellm_debug_info={"message": "No tool_calls in response"},
+                litellm_debug_info={
+                    "message": "tool_calls attribute missing from response"
+                },
+                body=None,
+            )
+        elif not message.tool_calls:
+            raise BadRequestError(
+                message=(
+                    "Model did not return a tool call. The model may not support "
+                    "function calling, or the request was malformed."
+                ),
+                llm_provider="litellm",
+                model=getattr(response, "model", None),
+                response=response,
+                litellm_debug_info={"message": "tool_calls list is empty"},
                 body=None,
             )
 
