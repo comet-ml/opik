@@ -7,6 +7,7 @@ import pytest
 from pydantic import BaseModel
 
 import opik_optimizer._llm_calls as _llm_calls
+from opik_optimizer._llm_calls import StructuredOutputParsingError
 
 
 class TestResponse(BaseModel):
@@ -180,3 +181,99 @@ def test_call_model_invalid_strategy(monkeypatch: pytest.MonkeyPatch) -> None:
 
     assert "Invalid response_format_type" in str(exc_info.value)
     assert "invalid_strategy" in str(exc_info.value)
+
+
+def test_native_strategy_error_logging(
+    monkeypatch: pytest.MonkeyPatch, capture_log: pytest.LogCaptureFixture
+) -> None:
+    """Test that native strategy logs appropriate error message on parsing failure."""
+    messages = [{"role": "user", "content": "Say 'invalid json'"}]
+
+    # Mock the litellm response to return malformed JSON
+    def mock_completion(**kwargs: Any) -> Mock:
+        mock_response = Mock()
+        mock_response.choices = [Mock()]
+        mock_response.choices[0].message = Mock()
+        mock_response.choices[0].message.content = "This is not valid JSON"
+        return mock_response
+
+    monkeypatch.setattr("litellm.completion", mock_completion)
+
+    with pytest.raises(StructuredOutputParsingError):
+        _llm_calls.call_model(
+            messages=messages,
+            model="gpt-4o-mini",
+            response_model=TestResponse,
+        )
+
+    # Verify the error message contains strategy-specific guidance
+    log_text = capture_log.text
+    assert "native JSON schema response formats" in log_text
+    assert "response_format_type': 'tool_call'" in log_text
+    assert "response_format_type': 'prompt_injection'" in log_text
+
+
+def test_tool_call_strategy_error_logging(
+    monkeypatch: pytest.MonkeyPatch, capture_log: pytest.LogCaptureFixture
+) -> None:
+    """Test that tool_call strategy logs appropriate error message on parsing failure."""
+    messages = [{"role": "user", "content": "Say 'invalid'"}]
+
+    # Mock the litellm response to return malformed tool call
+    def mock_completion(**kwargs: Any) -> Mock:
+        mock_response = Mock()
+        mock_response.choices = [Mock()]
+        mock_response.choices[0].message = Mock()
+        mock_response.choices[0].message.content = None
+        mock_response.choices[0].message.tool_calls = [Mock()]
+        mock_response.choices[0].message.tool_calls[0].function = Mock()
+        mock_response.choices[0].message.tool_calls[
+            0
+        ].function.arguments = '{"invalid": "schema"}'
+        return mock_response
+
+    monkeypatch.setattr("litellm.completion", mock_completion)
+
+    with pytest.raises(StructuredOutputParsingError):
+        _llm_calls.call_model(
+            messages=messages,
+            model="gpt-4o-mini",
+            model_parameters={"response_format_type": "tool_call"},
+            response_model=TestResponse,
+        )
+
+    # Verify the error message contains strategy-specific guidance
+    log_text = capture_log.text
+    assert "Tool call parsing failed" in log_text
+    assert "response_format_type': 'prompt_injection'" in log_text
+
+
+def test_prompt_injection_strategy_error_logging(
+    monkeypatch: pytest.MonkeyPatch, capture_log: pytest.LogCaptureFixture
+) -> None:
+    """Test that prompt_injection strategy logs appropriate error message on parsing failure."""
+    messages = [{"role": "user", "content": "Say 'invalid'"}]
+
+    # Mock the litellm response to return malformed JSON
+    def mock_completion(**kwargs: Any) -> Mock:
+        mock_response = Mock()
+        mock_response.choices = [Mock()]
+        mock_response.choices[0].message = Mock()
+        mock_response.choices[0].message.content = "Not following the format"
+        return mock_response
+
+    monkeypatch.setattr("litellm.completion", mock_completion)
+
+    with pytest.raises(StructuredOutputParsingError):
+        _llm_calls.call_model(
+            messages=messages,
+            model="gpt-4o-mini",
+            model_parameters={"response_format_type": "prompt_injection"},
+            response_model=TestResponse,
+        )
+
+    # Verify the error message contains strategy-specific guidance
+    log_text = capture_log.text
+    assert "Prompt injection parsing failed" in log_text
+    assert "not be following the format instructions" in log_text
+    assert "using a different model" in log_text

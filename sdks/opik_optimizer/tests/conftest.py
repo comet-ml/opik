@@ -3,6 +3,7 @@
 This file recreates the necessary fixtures from the Python SDK tests.
 """
 
+import logging
 import sys
 from pathlib import Path
 from typing import cast
@@ -40,6 +41,18 @@ def shutdown_cached_client_after_test():  # type: ignore[no-untyped-def]
     if opik_client.get_client_cached.cache_info().currsize > 0:
         opik_client.get_client_cached().end()
         opik_client.get_client_cached.cache_clear()
+
+
+@pytest.fixture
+def capture_log(caplog: pytest.LogCaptureFixture):  # type: ignore[no-untyped-def]
+    """Capture logs from opik_optimizer logger."""
+    logger = logging.getLogger("opik_optimizer")
+    logger.setLevel("INFO")
+    logger.propagate = True  # Propagate so pytest logging capture works
+
+    yield caplog
+
+    logger.propagate = False
 
 
 @pytest.fixture
