@@ -301,6 +301,12 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
         Returns:
             Tuple of (improved_prompt, improved_score, improved_experiment_result)
         """
+
+        # Logic on which datset to use for scoring
+        evaluation_dataset = (
+            validation_dataset if validation_dataset is not None else dataset
+        )
+
         # Generate improvement with progress indication
         with reporting.display_prompt_improvement(
             failure_mode_name=root_cause.name, verbose=self.verbose
@@ -334,7 +340,7 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
         ) as improved_reporter:
             improved_experiment_result = self._evaluate_prompt(
                 prompt=improved_chat_prompt,
-                dataset=validation_dataset | dataset,
+                dataset=evaluation_dataset, # use right dataset for scoring
                 metric=metric,
                 optimization_id=optimization_id,
                 n_samples=n_samples,
@@ -431,11 +437,15 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
             tools=getattr(prompt, "tools", None),
         )
 
+        evaluation_dataset = (
+            validation_dataset if validation_dataset is not None else dataset
+        )
+
         # First we will evaluate the prompt on the dataset
         with reporting.display_evaluation(verbose=self.verbose) as baseline_reporter:
             experiment_result = self._evaluate_prompt(
                 prompt=prompt,
-                dataset=validation_dataset | dataset,
+                dataset=evaluation_dataset, # use right dataset for scoring
                 metric=metric,
                 optimization_id=optimization.id,
                 n_samples=n_samples,

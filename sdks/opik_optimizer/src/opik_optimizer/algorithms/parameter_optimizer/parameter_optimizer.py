@@ -155,6 +155,11 @@ class ParameterOptimizer(BaseOptimizer):
             experiment_config["validation_dataset"] = validation_dataset.name
             experiment_config["validation_dataset_id"] = validation_dataset.id
 
+        # Logic on which datset to use for scoring
+        evaluation_dataset = (
+            validation_dataset if validation_dataset is not None else dataset
+        )
+
         # After validation, parameter_space is guaranteed to be ParameterSearchSpace
         assert isinstance(parameter_space, ParameterSearchSpace)  # for mypy
 
@@ -211,7 +216,7 @@ class ParameterOptimizer(BaseOptimizer):
         with reporting.display_evaluation(verbose=self.verbose) as baseline_reporter:
             baseline_score = self.evaluate_prompt(
                 prompt=base_prompt,
-                dataset=validation_dataset | dataset,
+                dataset=evaluation_dataset,
                 metric=metric,
                 n_threads=self.n_threads,
                 verbose=self.verbose,
@@ -286,7 +291,7 @@ class ParameterOptimizer(BaseOptimizer):
             ) as trial_reporter:
                 score = self.evaluate_prompt(
                     prompt=tuned_prompt,
-                    dataset=validation_dataset | dataset,
+                    dataset=evaluation_dataset,
                     metric=metric,
                     n_threads=self.n_threads,
                     verbose=self.verbose,

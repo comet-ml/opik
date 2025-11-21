@@ -443,7 +443,7 @@ class MetaPromptOptimizer(BaseOptimizer):
         self.project_name = project_name
 
         # Update experiment_config with validation_dataset if provided
-        if validation_dataset:
+        if validation_dataset is not None:
             experiment_config = experiment_config or {}
             experiment_config["validation_dataset"] = validation_dataset.name
             experiment_config["validation_dataset_id"] = validation_dataset.id
@@ -488,7 +488,7 @@ class MetaPromptOptimizer(BaseOptimizer):
                 "n_samples": n_samples,
                 "auto_continue": auto_continue,
                 "validation_dataset": validation_dataset.name
-                if validation_dataset
+                if validation_dataset is not None
                 else None,
             },
             verbose=self.verbose,
@@ -605,9 +605,14 @@ class MetaPromptOptimizer(BaseOptimizer):
         self._reset_counters()  # Reset counters for run
         initial_prompt = prompt
 
+        # Logic on which datset to use for scoring
+        evaluation_dataset = (
+            validation_dataset if validation_dataset is not None else dataset
+        )
+
         current_prompt = prompt
         with reporting.display_evaluation(verbose=self.verbose) as baseline_reporter:
-            if validation_dataset:
+            if validation_dataset is not None:
                 experiment_config = experiment_config or {}
                 experiment_config["validation_dataset"] = validation_dataset.name
                 experiment_config["validation_dataset_id"] = validation_dataset.id
@@ -615,7 +620,7 @@ class MetaPromptOptimizer(BaseOptimizer):
             initial_score = self._evaluate_prompt(
                 prompt,
                 optimization_id=optimization_id,
-                dataset=validation_dataset | dataset,
+                dataset=evaluation_dataset,
                 metric=metric,
                 n_samples=n_samples,
                 experiment_config=experiment_config,
@@ -686,7 +691,7 @@ class MetaPromptOptimizer(BaseOptimizer):
                             prompt_score = self._evaluate_prompt(
                                 prompt=candidate_prompt,
                                 optimization_id=optimization_id,
-                                dataset=validation_dataset | dataset,
+                                dataset=evaluation_dataset,
                                 metric=metric,
                                 n_samples=n_samples,
                                 use_full_dataset=False,

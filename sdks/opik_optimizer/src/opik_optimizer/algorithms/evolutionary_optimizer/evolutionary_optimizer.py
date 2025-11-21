@@ -406,11 +406,17 @@ class EvolutionaryOptimizer(BaseOptimizer):
             max_trials: Maximum number of prompt evaluations allowed.
             mcp_config: MCP tool-calling configuration (default: None).
         """
+
+        # Logic on which datset to use for scoring
         if validation_dataset is not None:
             logger.warning(
                 f"{self.__class__.__name__} currently does not support validation dataset. "
                 f"Using `dataset` (training) for now. Ignoring `validation_dataset` parameter."
             )
+        evaluation_dataset = (
+            validation_dataset if validation_dataset is not None else dataset
+        )
+
         # Use base class validation and setup methods
         self._validate_optimization_inputs(prompt, dataset, metric)
         self.agent_class = self._setup_agent_class(prompt, agent_class)
@@ -484,7 +490,7 @@ class EvolutionaryOptimizer(BaseOptimizer):
                     self,
                     prompt,
                     messages,  # type: ignore
-                    dataset=validation_dataset | dataset,
+                    dataset=evaluation_dataset, # use right dataset for scoring
                     metric=metric,
                     n_samples=n_samples,
                     experiment_config=(experiment_config or {}).copy(),
@@ -513,7 +519,7 @@ class EvolutionaryOptimizer(BaseOptimizer):
                     self,
                     prompt,
                     messages,
-                    dataset=validation_dataset | dataset,
+                    dataset=evaluation_dataset, # use right dataset for scoring
                     metric=metric,
                     n_samples=n_samples,
                     experiment_config=(experiment_config or {}).copy(),
