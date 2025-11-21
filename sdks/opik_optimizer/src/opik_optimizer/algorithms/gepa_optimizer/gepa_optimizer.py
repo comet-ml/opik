@@ -89,6 +89,14 @@ class GepaOptimizer(BaseOptimizer):
         self._gepa_live_metric_calls = 0
         self._adapter = None  # Will be set during optimization
 
+        # FIXME: When we have an Opik adapter, map this into GEPA's LLM calls directly
+        if model_parameters:
+            logger.warning(
+                "GEPAOptimizer does not surface LiteLLM `model_parameters` for every internal call "
+                "(e.g., output style inference, prompt generation). "
+                "Provide overrides on the prompt itself if you need precise control."
+            )
+
     def get_optimizer_metadata(self) -> dict[str, Any]:
         return {
             "model": self.model,

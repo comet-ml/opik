@@ -6,6 +6,8 @@ from typing import Any
 
 import opik_optimizer
 
+pytestmark = pytest.mark.integration
+
 
 def test_hierarchical_reflective_optimizer() -> None:
     """E2E test for HierarchicalReflectiveOptimizer."""
@@ -32,8 +34,12 @@ def test_hierarchical_reflective_optimizer() -> None:
     # Initialize optimizer with minimal parameters for faster testing
     optimizer = opik_optimizer.HierarchicalReflectiveOptimizer(
         model="openai/gpt-5-mini",
-        model_parameters={"temperature": 0.1, "max_tokens": 128000},
-        n_threads=1,
+        model_parameters={
+            "temperature": 1,
+            "max_tokens": 1000,
+            "reasoning_effort": "minimal",
+        },
+        n_threads=2,
         max_parallel_batches=2,
         batch_size=10,
         convergence_threshold=0.01,
@@ -46,8 +52,8 @@ def test_hierarchical_reflective_optimizer() -> None:
         prompt=prompt,
         dataset=dataset,
         metric=levenshtein_ratio,
-        max_trials=2,  # Very minimal for speed
-        n_samples=3,  # Small sample size
+        max_trials=2,
+        n_samples=1,
         max_retries=1,
     )
 
@@ -116,13 +122,13 @@ def test_hierarchical_reflective_optimizer() -> None:
 
     # Validate model configuration in details
     assert "model" in results.details, "Details should contain 'model'"
-    assert results.details["model"] == "openai/gpt-5-mini", (
-        f"Expected openai/gpt-5-mini, got {results.details['model']}"
+    assert results.details["model"] == optimizer.model, (
+        f"Expected {optimizer.model}, got {results.details['model']}"
     )
 
     # Validate hierarchical-specific details
     assert "n_threads" in results.details, "Details should contain 'n_threads'"
-    assert results.details["n_threads"] == 1
+    assert results.details["n_threads"] == optimizer.n_threads
 
     assert "max_parallel_batches" in results.details, (
         "Details should contain 'max_parallel_batches'"

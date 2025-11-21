@@ -14,6 +14,8 @@ if importlib.util.find_spec("gepa") is None:
 
 import opik_optimizer
 
+pytestmark = pytest.mark.integration
+
 
 def test_gepa_optimizer() -> None:
     # Ensure API key is available for e2e testing
@@ -35,7 +37,11 @@ def test_gepa_optimizer() -> None:
     # Initialize optimizer with reduced parameters for faster testing
     optimizer = opik_optimizer.GepaOptimizer(
         model="openai/gpt-5-mini",
-        model_parameters={"temperature": 0.1, "max_tokens": 128000},
+        model_parameters={
+            "temperature": 1,
+            "max_tokens": 1000,
+            "reasoning_effort": "minimal",
+        },
         n_threads=2,
         seed=42,
     )
@@ -45,8 +51,8 @@ def test_gepa_optimizer() -> None:
         dataset=dataset,
         metric=levenshtein_ratio,
         prompt=prompt,
-        n_samples=3,
-        max_trials=3,
+        n_samples=1,
+        max_trials=2,
     )
 
     # Enhanced OptimizationResult validation
@@ -60,6 +66,9 @@ def test_gepa_optimizer() -> None:
     )
     assert results.metric_name == "levenshtein_ratio", (
         f"Expected metric name 'levenshtein_ratio', got {results.metric_name}"
+    )
+    assert results.details.get("model") == optimizer.model, (
+        f"Expected model {optimizer.model}, got {results.details.get('model')}"
     )
 
     # Results structure validation

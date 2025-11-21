@@ -1,8 +1,8 @@
-from typing import Any
+from typing import Any, cast
 
 import logging
-
 import opik
+from pydantic import BaseModel
 
 from .. import prompts as evo_prompts
 from .. import reporting
@@ -11,12 +11,18 @@ from .... import _llm_calls
 logger = logging.getLogger(__name__)
 
 
+class StyleInferenceResponse(BaseModel):
+    style: str
+
+
 def infer_output_style_from_dataset(
     dataset: opik.Dataset,
     model: str,
     model_parameters: dict[str, Any],
     n_examples: int = 5,
     verbose: int = 1,
+    *,
+    raise_on_failure: bool = False,
 ) -> str | None:
     """Analyzes dataset examples to infer the desired output style using the LLM."""
     with reporting.infer_output_style(verbose=verbose) as report_infer_output_style:
@@ -56,27 +62,32 @@ def infer_output_style_from_dataset(
         )
 
         try:
-            inferred_style = _llm_calls.call_model(
-                messages=[
-                    {
-                        "role": "system",
-                        "content": evo_prompts.INFER_STYLE_SYSTEM_PROMPT,
-                    },
-                    {"role": "user", "content": user_prompt_for_style_inference},
-                ],
-                model=model,
-                model_parameters=model_parameters,
-                is_reasoning=True,
+            inferred_style_response = cast(
+                StyleInferenceResponse,
+                _llm_calls.call_model(
+                    messages=[
+                        {
+                            "role": "system",
+                            "content": evo_prompts.INFER_STYLE_SYSTEM_PROMPT,
+                        },
+                        {"role": "user", "content": user_prompt_for_style_inference},
+                    ],
+                    model=model,
+                    model_parameters=model_parameters,
+                    is_reasoning=True,
+                    response_model=StyleInferenceResponse,
+                ),
             )
-            inferred_style = inferred_style.strip()
+            inferred_style = inferred_style_response.style.strip()
             if inferred_style:
                 report_infer_output_style.success(inferred_style)
                 return inferred_style
-            else:
-                report_infer_output_style.error(
-                    "LLM returned empty string for inferred output style."
-                )
-                return None
+            report_infer_output_style.error(
+                "LLM returned empty string for inferred output style."
+            )
+            return None
         except Exception as e:
             report_infer_output_style.error(f"Error during output style inference: {e}")
+            if raise_on_failure:
+                raise
             return None

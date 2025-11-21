@@ -29,6 +29,10 @@ dependencies = [
 dev = [
     "pytest",
     "pytest-cov",
+    "pytest-xdist",
+    "pytest-asyncio",
+    "pytest-env",
+    "pytest-profiling",
     # "google-adk",
     "langgraph",
     "pre-commit",

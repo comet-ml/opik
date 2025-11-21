@@ -1,4 +1,6 @@
 pytest
+pytest-xdist
+pytest-profiling
 pytest-asyncio
 pytest-cov
 pytest-env
