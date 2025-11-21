@@ -138,7 +138,7 @@ jobs:
           platforms: linux/${{ matrix.platform }}
           cache-from: type=registry,ref=${{ env.DOCKER_REGISTRY }}/${{ steps.set_vars.outputs.image_name }}:main
           provenance: false
-          load: true
+          load: false
           outputs: type=image,name=${{ env.DOCKER_REGISTRY }}/${{ steps.set_vars.outputs.image_name }},push-by-digest=true,name-canonical=true,push=true
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
