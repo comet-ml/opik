@@ -81,6 +81,19 @@ opik_callback = LlamaIndexCallbackHandler()
 Settings.callback_manager = CallbackManager([opik_callback])
 ```
 You can set the project name for the callback directly, or disable tracking of the index_construction phase.
+
+### Setting the Project Name
+
+For example:
+
+```python
+from llama_index.core import Settings
+from llama_index.core.callbacks import CallbackManager
+from opik.integrations.llama_index import LlamaIndexCallbackHandler
+
+# Configure callback with a custom project name
+opik_callback = LlamaIndexCallbackHandler(project_name="my-llamaindex-project")
+Settings.callback_manager = CallbackManager([opik_callback])
 ### Disabling Index Construction Tracking
 
 By default, LlamaIndex will track all operations including index construction (document loading, embedding generation, etc.). If you want to track only your query operations and not the index construction phase, use the `skip_index_construction_trace` parameter:
