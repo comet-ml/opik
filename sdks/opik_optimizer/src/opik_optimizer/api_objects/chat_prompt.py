@@ -1,7 +1,7 @@
-from typing import Any
-from collections.abc import Callable
 import copy
-
+import json
+from collections.abc import Callable
+from typing import Any
 
 from opik import track
 
@@ -22,6 +22,8 @@ class ChatPrompt:
         messages: a list of dictionaries with role/content, with
             a content containing {input-dataset-field}
     """
+
+    DISPLAY_TRUNCATION_LENGTH = 500
 
     def __init__(
         self,
@@ -204,6 +206,26 @@ class ChatPrompt:
             standardize_messages.append({"role": "user", "content": self.user})
 
         return copy.deepcopy(standardize_messages)
+
+    def _format_messages_for_display(self) -> str:
+        """
+        Serialize messages for logging/printing while avoiding large payloads.
+        """
+        messages = self._standardize_prompts()
+        try:
+            serialized = json.dumps(messages, ensure_ascii=False)
+        except (TypeError, ValueError):
+            serialized = str(messages)
+
+        if len(serialized) > self.DISPLAY_TRUNCATION_LENGTH:
+            return serialized[: self.DISPLAY_TRUNCATION_LENGTH] + "..."
+        return serialized
+
+    def __str__(self) -> str:
+        return self._format_messages_for_display()
+
+    def __repr__(self) -> str:
+        return f"ChatPrompt(name={self.name!r}, messages={self._format_messages_for_display()!r})"
 
     def to_dict(self) -> dict[str, str | list[dict[str, str]]]:
         """Convert ChatPrompt to a dictionary for JSON serialization.
