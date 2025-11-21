@@ -94,12 +94,23 @@ def display_round_progress(max_rounds: int, verbose: int = 1) -> Any:
 
 @contextmanager
 def display_evaluation(
-    message: str = "First we will establish the baseline performance:", verbose: int = 1
+    message: str = "First we will establish the baseline performance:",
+    verbose: int = 1,
+    dataset_name: str | None = None,
+    is_validation: bool = False,
 ) -> Any:
     """Context manager to display messages during an evaluation phase."""
     # Entry point
     if verbose >= 1:
         console.print(Text(f"> {message}"))
+        if dataset_name:
+            dataset_type = "validation" if is_validation else "training"
+            console.print(
+                Text(
+                    f"  Using {dataset_type} dataset: {dataset_name}",
+                    style="dim",
+                )
+            )
 
     # Create a simple object with a method to set the score
     class Reporter:
@@ -118,9 +129,34 @@ def display_evaluation(
                 pass
 
 
-def display_optimization_start_message(verbose: int = 1) -> None:
+def display_optimization_start_message(
+    verbose: int = 1,
+    dataset_training_name: str | None = None,
+    validation_dataset_name: str | None = None,
+    is_using_validation: bool = False,
+) -> None:
     if verbose >= 1:
         console.print(Text("> Starting the optimization run"))
+        if dataset_training_name and validation_dataset_name and is_using_validation:
+            console.print(
+                Text(
+                    f"│  Training dataset (feedback): {dataset_training_name}",
+                    style="dim",
+                )
+            )
+            console.print(
+                Text(
+                    f"│  Validation dataset (ranking): {validation_dataset_name}",
+                    style="dim",
+                )
+            )
+        elif dataset_training_name:
+            console.print(
+                Text(
+                    f"│  Using training dataset: {dataset_training_name} (for both feedback and ranking)",
+                    style="dim",
+                )
+            )
         console.print(Text("│"))
 
 
@@ -166,7 +202,9 @@ def display_candidate_generation_report(
 
 
 @contextmanager
-def display_prompt_candidate_scoring_report(verbose: int = 1) -> Any:
+def display_prompt_candidate_scoring_report(
+    verbose: int = 1, dataset_name: str | None = None, is_validation: bool = False
+) -> Any:
     """Context manager to display messages during an evaluation phase."""
 
     # Create a simple object with a method to set the score
@@ -178,6 +216,14 @@ def display_prompt_candidate_scoring_report(verbose: int = 1) -> Any:
                 console.print(
                     Text(f"│    Evaluating candidate prompt {candidate_count + 1}:")
                 )
+                if dataset_name:
+                    dataset_type = "validation" if is_validation else "training"
+                    console.print(
+                        Text(
+                            f"│         (using {dataset_type} dataset: {dataset_name} for ranking)",
+                            style="dim",
+                        )
+                    )
                 display_messages(prompt.get_messages(), "│         ")
 
         def set_final_score(self, best_score: float, score: float) -> None:

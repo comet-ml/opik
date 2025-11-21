@@ -392,11 +392,18 @@ class BaseOptimizer(ABC):
         prompt: "chat_prompt.ChatPrompt",
         dataset: Dataset,
         metric: Callable,
+        validation_dataset: Dataset | None = None,
         experiment_config: dict[str, Any] | None = None,
         configuration_updates: dict[str, Any] | None = None,
         additional_metadata: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
-        dataset_id = getattr(dataset, "id", None)
+        """
+        Prepare experiment configuration with dataset tracking.
+
+        Args:
+            dataset_training: Training dataset (used for feedback/context)
+            validation_dataset: Optional validation dataset (used for ranking)
+        """
         project_name = (
             getattr(self.agent_class, "project_name", None)
             if hasattr(self, "agent_class")
@@ -419,8 +426,8 @@ class BaseOptimizer(ABC):
             ),
             "agent_config": self._build_agent_config(prompt),
             "metric": getattr(metric, "__name__", str(metric)),
-            "dataset": getattr(dataset, "name", None),
-            "dataset_id": dataset_id,
+            "dataset_training": dataset.name,
+            "dataset_training_id": dataset.id,
             "optimizer": self.__class__.__name__,
             "optimizer_metadata": self._build_optimizer_metadata(),
             "tool_signatures": self._summarize_tool_signatures(prompt),
@@ -443,6 +450,10 @@ class BaseOptimizer(ABC):
         if experiment_config:
             base_config = self._deep_merge_dicts(base_config, experiment_config)
 
+        if validation_dataset:
+            base_config["validation_dataset"] = validation_dataset.name
+            base_config["validation_dataset_id"] = validation_dataset.id
+
         return helpers.drop_none(base_config)
 
     @abstractmethod
@@ -457,6 +468,7 @@ class BaseOptimizer(ABC):
         agent_class: type[OptimizableAgent] | None = None,
         project_name: str = "Optimization",
         optimization_id: str | None = None,
+        validation_dataset: Dataset | None = None,
         *args: Any,
         **kwargs: Any,
     ) -> optimization_result.OptimizationResult:
@@ -464,7 +476,9 @@ class BaseOptimizer(ABC):
         Optimize a prompt.
 
         Args:
-           dataset: Opik dataset name, or Opik dataset
+           dataset: Opik dataset name, or Opik dataset (training set - used for feedback/context)
+               TODO/FIXME: This parameter will be deprecated in favor of dataset_training.
+               For now, it serves as the training dataset parameter.
            metric: A metric function, this function should have two arguments:
                dataset_item and llm_output
            prompt: the prompt to optimize
@@ -474,6 +488,11 @@ class BaseOptimizer(ABC):
            project_name: Opik project name for logging traces (default: "Optimization")
            optimization_id: Optional ID to use when creating the Opik optimization run;
                when provided it must be a valid UUIDv7 string.
+           validation_dataset: Optional validation dataset (validation set - used for ranking candidates).
+               When provided, the optimizer uses the training dataset for understanding failure modes
+               and generating improvements, then evaluates candidates on the validation dataset to select
+               the best one. This helps prevent overfitting to the training data. If not provided, uses
+               the same dataset for both training and validation, which may lead to overfitting.
            **kwargs: Additional arguments for optimization
         """
         pass
