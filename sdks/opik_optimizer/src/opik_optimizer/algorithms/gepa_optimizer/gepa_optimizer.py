@@ -28,6 +28,7 @@ from ... import task_evaluator, helpers
 from . import reporting as gepa_reporting
 from gepa.core.adapter import GEPAAdapter
 from .adapter import OpikGEPAAdapter, OpikDataInst
+from ..._llm_calls import _prepare_model_params
 
 logger = logging.getLogger(__name__)
 
@@ -89,13 +90,6 @@ class GepaOptimizer(BaseOptimizer):
         self._gepa_live_metric_calls = 0
         self._adapter = None  # Will be set during optimization
 
-        if model_parameters:
-            logger.warning(
-                "GEPAOptimizer does not surface LiteLLM `model_parameters` for every internal call "
-                "(e.g., output style inference, prompt generation). "
-                "Provide overrides on the prompt itself if you need precise control."
-            )
-
     def get_optimizer_metadata(self) -> dict[str, Any]:
         return {
             "model": self.model,
@@ -133,6 +127,23 @@ class GepaOptimizer(BaseOptimizer):
             )
         return data_insts
 
+    def _normalize_model_kwargs(
+        self, model_kwargs: dict[str, Any], optimization_id: str | None
+    ) -> dict[str, Any]:
+        """
+        Normalize model kwargs using the shared LiteLLM prep helper to ensure
+        consistent behavior (token limits, monitoring metadata) with other optimizers.
+        """
+        normalized = _prepare_model_params(
+            model_kwargs,
+            {},
+            response_model=None,
+            is_reasoning=False,
+            optimization_id=optimization_id,
+            project_name=self.project_name,
+        )
+        return normalized
+
     def _adapter_instantiate_agent(
         self, prompt_obj: chat_prompt.ChatPrompt, project_name: str | None
     ) -> OptimizableAgent:
@@ -147,8 +158,10 @@ class GepaOptimizer(BaseOptimizer):
         experiment_config: dict[str, Any] | None,
         system_fallback: str,
     ) -> GEPAAdapter[OpikDataInst, dict[str, Any], dict[str, Any]]:
-        if prompt_obj.model_kwargs is None:
-            prompt_obj.model_kwargs = self.model_parameters
+        prompt_obj.model_kwargs = self._normalize_model_kwargs(
+            self.model_parameters or {},
+            optimization_id=self.current_optimization_id,
+        )
         return OpikGEPAAdapter(
             base_prompt=prompt_obj,
             optimizer=self,
@@ -369,6 +382,8 @@ class GepaOptimizer(BaseOptimizer):
                     baseline.set_score(initial_score)
                 except Exception:
                     logger.exception("Baseline evaluation failed")
+                    if raise_on_exception:
+                        raise
 
             adapter_prompt = self._apply_system_text(base_prompt, seed_prompt_text)
             adapter_prompt.model = self.model
@@ -885,8 +900,9 @@ class GepaOptimizer(BaseOptimizer):
         """
         if prompt.model is None:
             prompt.model = self.model
-        if prompt.model_kwargs is None:
-            prompt.model_kwargs = self.model_parameters
+        prompt.model_kwargs = self._normalize_model_kwargs(
+            self.model_parameters or {}, optimization_id=optimization_id
+        )
 
         agent = self._create_agent_for_prompt(prompt)
 
