@@ -205,8 +205,19 @@ jobs:
             exit 1
           fi
           
-          echo "$HASH" > "/tmp/digests/${{ steps.set_vars.outputs.image_name }}/${{ matrix.platform }}.digest"
-          echo "✓ Saved digest hash: $HASH"
+          DIGEST_FILE="/tmp/digests/${{ steps.set_vars.outputs.image_name }}/${{ matrix.platform }}.digest"
+          echo "$HASH" > "$DIGEST_FILE"
+          
+          # Verify the file was written correctly
+          VERIFIED_HASH=$(cat "$DIGEST_FILE" | tr -d '\n\r ')
+          if [[ "$VERIFIED_HASH" != "$HASH" ]]; then
+            echo "ERROR: Digest mismatch! Written: $HASH, Read back: $VERIFIED_HASH"
+            exit 1
+          fi
+          
+          echo "✓ Saved and verified digest hash: $HASH"
+          echo "File path: $DIGEST_FILE"
+          echo "File contents: $(cat $DIGEST_FILE)"
 
       - name: Upload digest
         if: steps.check.outputs.should_run == 'true'
@@ -258,6 +269,18 @@ jobs:
           path: /tmp/digests/${{ steps.set_vars.outputs.image_name }}
           pattern: digests-${{ steps.set_vars.outputs.image_name }}-*
           merge-multiple: true
+          
+      - name: Verify downloaded digests
+        if: steps.check.outputs.should_run == 'true'
+        run: |
+          cd /tmp/digests/${{ steps.set_vars.outputs.image_name }}
+          echo "Verifying downloaded digest files..."
+          echo "Directory contents:"
+          find . -type f -name "*.digest" | while read file; do
+            echo "File: $file"
+            echo "Contents: $(cat "$file")"
+            echo "---"
+          done
 
       - name: Set up Docker Buildx
         if: steps.check.outputs.should_run == 'true'
@@ -287,38 +310,51 @@ jobs:
         run: |
           cd /tmp/digests/${{ steps.set_vars.outputs.image_name }}
           
-          # Debug: Show directory structure and file contents
-          echo "Directory structure:"
-          find . -type f | sort
+          # Debug: Show full directory structure
+          echo "Full directory structure:"
+          find . -type f -o -type d | sort
           echo ""
-          echo "Digest file contents:"
-          find . -name "*.digest" -type f -exec sh -c 'echo "File: $1"; cat "$1"; echo ""' _ {} \;
           
-          # Collect all digests from artifact files
+          # Collect all digests from artifact files (handle subdirectories from merge-multiple)
           DIGESTS=""
+          DIGEST_COUNT=0
+          
           while IFS= read -r digest_file; do
             if [ -f "$digest_file" ]; then
               DIGEST_VALUE=$(cat "$digest_file" | tr -d '\n\r ' | xargs)
-              PLATFORM=$(basename "$digest_file" .digest)
+              
+              # Extract platform from filename (could be in subdirectory or root)
+              # Format: either ./platform.digest or ./subdir/platform.digest
+              FILENAME=$(basename "$digest_file")
+              PLATFORM="${FILENAME%.digest}"
+              
+              echo "Processing digest file: $digest_file"
+              echo "  Platform: $PLATFORM"
+              echo "  Digest value: $DIGEST_VALUE"
+              
               if [ -n "$DIGEST_VALUE" ] && [ ${#DIGEST_VALUE} -eq 64 ]; then
                 DIGEST_REF="${{ env.DOCKER_REGISTRY }}/${{ steps.set_vars.outputs.image_name }}@sha256:$DIGEST_VALUE"
-                echo "Found digest: $digest_file (platform: $PLATFORM) -> $DIGEST_REF"
+                echo "  Digest reference: $DIGEST_REF"
                 
                 # Verify digest exists in registry before adding
                 if docker buildx imagetools inspect "$DIGEST_REF" >/dev/null 2>&1; then
                   echo "  ✓ Verified digest exists in registry"
                   DIGESTS="$DIGESTS $DIGEST_REF"
+                  DIGEST_COUNT=$((DIGEST_COUNT + 1))
                 else
                   echo "  ✗ ERROR: Digest not found in registry: $DIGEST_REF"
                   echo "  This digest was saved by the build job but doesn't exist in the registry"
                   exit 1
                 fi
               else
-                echo "ERROR: Invalid digest value in $digest_file: '$DIGEST_VALUE'"
+                echo "ERROR: Invalid digest value in $digest_file: '$DIGEST_VALUE' (length: ${#DIGEST_VALUE})"
                 exit 1
               fi
+              echo ""
             fi
           done < <(find . -name "*.digest" -type f | sort)
+          
+          echo "Found $DIGEST_COUNT digest(s)"
           
           if [ -z "$DIGESTS" ]; then
             echo "ERROR: No digests found!"
