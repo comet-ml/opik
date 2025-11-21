@@ -241,10 +241,25 @@ jobs:
           echo "All build image names: $BUILD_IMAGE_NAMES"
           echo "All build platforms: $BUILD_PLATFORMS"
           
+          # Check if any build jobs ran for this image type
+          if [[ -z "$BUILD_IMAGE_NAMES" ]] || [[ "$BUILD_IMAGE_NAMES" != *"$CURRENT_IMAGE_NAME"* ]]; then
+            # If this is a comet image and build_comet_image is false, that's expected - skip gracefully
+            if [[ "$CURRENT_IMAGE_NAME" == *"-comet" ]] && [[ "${{ inputs.build_comet_image }}" != "true" ]]; then
+              echo "Comet image not built (build_comet_image=false), skipping merge for $CURRENT_IMAGE_NAME"
+              echo "digests_platforms=$PLATFORMS" >> $GITHUB_OUTPUT
+              echo "build_digests=" >> $GITHUB_OUTPUT
+              echo "skip_merge=true" >> $GITHUB_OUTPUT
+              exit 0
+            fi
+            
+            echo "ERROR: No build jobs found for image: $CURRENT_IMAGE_NAME"
+            echo "This may indicate build jobs were skipped or failed"
+            echo "Available image names from build jobs: $BUILD_IMAGE_NAMES"
+            exit 1
+          fi
+          
           # Filter digests that match current image_name
           # Since matrix outputs are aggregated, we need to match digests to image names
-          # We'll verify each digest belongs to the correct image by checking the registry
-          
           FILTERED_DIGESTS=""
           BASE_IMAGE="${{ env.DOCKER_REGISTRY }}/$CURRENT_IMAGE_NAME"
           
@@ -309,12 +324,17 @@ jobs:
             type=raw,value=main,enable=${{ github.ref == 'refs/heads/main' }}
 
       - name: Create manifest list and push tags
-        if: steps.check.outputs.should_run == 'true'
+        if: steps.check.outputs.should_run == 'true' && steps.collect_digests.outputs.skip_merge != 'true' && steps.collect_digests.outputs.build_digests != ''
         run: |
           # Use digests collected from build job outputs
           PLATFORMS="${{ steps.collect_digests.outputs.digests_platforms }}"
           BUILD_DIGESTS="${{ steps.collect_digests.outputs.build_digests }}"
           BASE_IMAGE="${{ env.DOCKER_REGISTRY }}/${{ steps.set_vars.outputs.image_name }}"
+          
+          if [ -z "$BUILD_DIGESTS" ]; then
+            echo "No digests to process, skipping manifest creation"
+            exit 0
+          fi
           
           echo "Collecting digests for platforms: $PLATFORMS"
           echo "Build job digests: $BUILD_DIGESTS"
