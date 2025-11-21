@@ -1,8 +1,11 @@
 from typing import Any, TYPE_CHECKING
 import json
 import os
+import logging
 
 from opik.opik_context import get_current_span_data
+
+logger = logging.getLogger(__name__)
 
 import litellm
 from litellm.integrations.opik.opik import OpikLogger
@@ -78,6 +81,7 @@ class OptimizableAgent:
             self.model_kwargs = dict(prompt.model_kwargs or {})
         else:
             self.model_kwargs = {}
+        self._clamp_model_kwargs_to_limit()
 
     @_throttle.rate_limited(_limiter)
     def _llm_complete(
@@ -111,6 +115,40 @@ class OptimizableAgent:
             **model_kwargs,
         )
         return response
+
+    def _clamp_model_kwargs_to_limit(self) -> None:
+        """Clamp max_tokens fields to the provider context window when known."""
+        try:
+            token_counter = getattr(litellm, "token_counter", None)
+            if not token_counter or not hasattr(token_counter, "get_model_context_window"):
+                return
+            limit = token_counter.get_model_context_window(
+                model=self.model, messages=None, tokens=None
+            )
+            if not limit:
+                return
+            if "max_tokens" in self.model_kwargs:
+                mt = self.model_kwargs.get("max_tokens")
+                if isinstance(mt, (int, float)) and mt > limit:
+                    logger.warning(
+                        "Clamping max_tokens from %s to provider limit %s for model %s",
+                        mt,
+                        limit,
+                        self.model,
+                    )
+                    self.model_kwargs["max_tokens"] = limit
+            if "max_completion_tokens" in self.model_kwargs:
+                mct = self.model_kwargs.get("max_completion_tokens")
+                if isinstance(mct, (int, float)) and mct > limit:
+                    logger.warning(
+                        "Clamping max_completion_tokens from %s to provider limit %s for model %s",
+                        mct,
+                        limit,
+                        self.model,
+                    )
+                    self.model_kwargs["max_completion_tokens"] = limit
+        except Exception:
+            logger.debug("Unable to clamp model kwargs to token limits", exc_info=True)
 
     def llm_invoke(
         self,
