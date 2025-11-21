@@ -117,14 +117,7 @@ class OptimizableAgent:
     def _clamp_model_kwargs_to_limit(self) -> None:
         """Clamp max_tokens fields to the provider context window when known."""
         try:
-            token_counter = getattr(litellm, "token_counter", None)
-            if not token_counter or not hasattr(
-                token_counter, "get_model_context_window"
-            ):
-                return
-            limit = token_counter.get_model_context_window(
-                model=self.model, messages=None, tokens=None
-            )
+            limit = self._resolve_context_limit()
             if not limit:
                 return
             if "max_tokens" in self.model_kwargs:
@@ -149,6 +142,36 @@ class OptimizableAgent:
                     self.model_kwargs["max_completion_tokens"] = limit
         except Exception:
             logger.debug("Unable to clamp model kwargs to token limits", exc_info=True)
+
+    def _resolve_context_limit(self) -> int | None:
+        """Resolve provider context window using LiteLLM hints."""
+        candidates: list[str] = []
+        if self.model:
+            candidates.append(self.model)
+            if "/" in self.model:
+                candidates.append(self.model.split("/", 1)[-1])
+
+        try:
+            token_counter = getattr(litellm, "token_counter", None)
+            for name in candidates:
+                if token_counter and hasattr(token_counter, "get_model_context_window"):
+                    limit = token_counter.get_model_context_window(
+                        model=name, messages=None, tokens=None
+                    )
+                    if limit:
+                        return int(limit)
+
+            model_cost = getattr(litellm, "model_cost", None)
+            if model_cost:
+                for name in candidates:
+                    info = model_cost.get(name)
+                    if info:
+                        limit = info.get("max_output_tokens") or info.get("max_tokens")
+                        if limit:
+                            return int(limit)
+        except Exception:
+            logger.debug("Unable to resolve model context window", exc_info=True)
+        return None
 
     def llm_invoke(
         self,
