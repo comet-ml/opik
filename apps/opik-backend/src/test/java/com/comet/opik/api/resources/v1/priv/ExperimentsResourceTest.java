@@ -5387,51 +5387,51 @@ class ExperimentsResourceTest {
         @Test
         @DisplayName("when updating experiment multiple times with partial updates, then latest values are preserved")
         void updateExperiment_whenMultiplePartialUpdates_thenLatestValuesPreserved() {
-            // given - Create experiment with original values
-            var originalMetadata = JsonUtils.getJsonNodeFromString("{\"version\": \"1.0\", \"model\": \"gpt-3\"}");
+            var originalName = "original-" + RandomStringUtils.secure().nextAlphanumeric(32);
+            var originalMetadata = podamFactory.manufacturePojo(JsonNode.class);
             var initialExperiment = experimentResourceClient.createPartialExperiment()
-                    .name("Original Name")
+                    .name(originalName)
                     .metadata(originalMetadata)
-                    .type(ExperimentType.REGULAR)
-                    .status(ExperimentStatus.RUNNING)
                     .build();
             var experimentId = experimentResourceClient.create(initialExperiment, API_KEY, TEST_WORKSPACE);
 
-            // when - First update: Change both name and metadata
-            var firstUpdateMetadata = JsonUtils.getJsonNodeFromString("{\"version\": \"2.0\", \"model\": \"gpt-4\"}");
+            // First update: Change both name and metadata with random values
+            var firstUpdateName = "first-update-" + RandomStringUtils.secure().nextAlphanumeric(32);
+            var firstUpdateMetadata = podamFactory.manufacturePojo(JsonNode.class);
             var firstUpdate = ExperimentUpdate.builder()
-                    .name("First Update Name")
+                    .name(firstUpdateName)
                     .metadata(firstUpdateMetadata)
                     .build();
-            experimentResourceClient.updateExperiment(experimentId, firstUpdate, API_KEY, TEST_WORKSPACE,
-                    HttpStatus.SC_NO_CONTENT);
+            experimentResourceClient.updateExperiment(
+                    experimentId, firstUpdate, API_KEY, TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
 
-            // when - Second update: Change only the name
+            // Second update: Change only the name with random value
+            var secondUpdateName = "second-update-" + RandomStringUtils.secure().nextAlphanumeric(32);
             var secondUpdate = ExperimentUpdate.builder()
-                    .name("Second Update Name")
+                    .name(secondUpdateName)
                     .build();
-            experimentResourceClient.updateExperiment(experimentId, secondUpdate, API_KEY, TEST_WORKSPACE,
-                    HttpStatus.SC_NO_CONTENT);
+            experimentResourceClient.updateExperiment(
+                    experimentId, secondUpdate, API_KEY, TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
 
-            // then - Verify that metadata from first update is preserved (not from original)
+            // Verify that metadata from first update is preserved (not from original)
             var expectedExperiment = initialExperiment.toBuilder()
-                    .name("Second Update Name")
-                    .metadata(firstUpdateMetadata) // Should have metadata from first update
+                    .name(secondUpdateName)
+                    .metadata(firstUpdateMetadata)
                     .build();
             getAndAssert(experimentId, expectedExperiment, TEST_WORKSPACE, API_KEY);
 
-            // when - Third update: Change only the metadata
-            var thirdUpdateMetadata = JsonUtils.getJsonNodeFromString("{\"version\": \"3.0\", \"model\": \"gpt-4-turbo\"}");
+            // Third update: Change only the metadata with random value
+            var thirdUpdateMetadata = podamFactory.manufacturePojo(JsonNode.class);
             var thirdUpdate = ExperimentUpdate.builder()
                     .metadata(thirdUpdateMetadata)
                     .build();
-            experimentResourceClient.updateExperiment(experimentId, thirdUpdate, API_KEY, TEST_WORKSPACE,
-                    HttpStatus.SC_NO_CONTENT);
+            experimentResourceClient.updateExperiment(
+                    experimentId, thirdUpdate, API_KEY, TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
 
-            // then - Verify that name from second update is preserved (not from first or original)
+            // Verify that name from second update is preserved (not from first or original)
             var finalExpectedExperiment = initialExperiment.toBuilder()
-                    .name("Second Update Name") // Should have name from second update
-                    .metadata(thirdUpdateMetadata) // Should have metadata from third update
+                    .name(secondUpdateName)
+                    .metadata(thirdUpdateMetadata)
                     .build();
             getAndAssert(experimentId, finalExpectedExperiment, TEST_WORKSPACE, API_KEY);
         }
