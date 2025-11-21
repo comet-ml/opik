@@ -128,19 +128,20 @@ const DatasetItemsPage = () => {
     datasetId,
   });
 
-  const { data, isPending } = useDatasetItemsList(
-    {
-      datasetId,
-      filters,
-      page: page as number,
-      size: size as number,
-      search: search!,
-      truncate: truncationEnabled,
-    },
-    {
-      placeholderData: keepPreviousData,
-    },
-  );
+  const { data, isPending, isPlaceholderData, isFetching } =
+    useDatasetItemsList(
+      {
+        datasetId,
+        filters,
+        page: page as number,
+        size: size as number,
+        search: search!,
+        truncate: truncationEnabled,
+      },
+      {
+        placeholderData: keepPreviousData,
+      },
+    );
   const datasetColumns = useMemo(
     () =>
       (data?.columns ?? []).sort((c1, c2) => c1.name.localeCompare(c2.name)),
@@ -436,6 +437,7 @@ const DatasetItemsPage = () => {
         onRowClick={handleRowClick}
         activeRowId={activeRowId ?? ""}
         resizeConfig={resizeConfig}
+        showLoadingOverlay={isPlaceholderData && isFetching}
         selectionConfig={{
           rowSelection,
           setRowSelection,

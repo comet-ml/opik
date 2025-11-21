@@ -377,8 +377,13 @@ const PlaygroundOutputActions = ({
       ? "action-tooltip-open-tooltip"
       : "action-tooltip";
 
-    const runLabel =
-      promptCount > 1 || (datasetId && datasetItems.length > 1)
+    const hasActiveFilters = filters.length > 0;
+    const isPaginationActive = page > 1 || size < total;
+    const isSubsetSelected = hasActiveFilters || isPaginationActive;
+
+    const runLabel = isSubsetSelected
+      ? "Run selection"
+      : promptCount > 1 || (datasetId && datasetItems.length > 1)
         ? "Run all"
         : "Run";
 
@@ -485,7 +490,7 @@ const PlaygroundOutputActions = ({
             }
             isLoading={isLoadingDatasets}
             optionsCount={DEFAULT_LOADED_DATASETS}
-            buttonClassName={cn("w-[310px]", {
+            buttonClassName={cn("w-[220px]", {
               "rounded-r-none": !!datasetId,
             })}
             renderTitle={(option) => {
@@ -558,6 +563,7 @@ const PlaygroundOutputActions = ({
               total={total}
               variant="minimal"
               itemsPerPage={[10, 50, 100, 200, 500, 1000]}
+              disabled={isRunning}
             />
             <Separator orientation="vertical" className="mx-2 h-4" />
           </div>
