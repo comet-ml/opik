@@ -222,12 +222,11 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         )
 
         dataset_items = dataset.get_items()
-        all_dataset_item_ids = [item["id"] for item in dataset_items]
 
         eval_dataset_items = evaluation_dataset.get_items()
         eval_dataset_item_ids = [item["id"] for item in eval_dataset_items]
         if n_samples is not None and n_samples < len(dataset_items):
-            eval_dataset_item_ids = random.sample(all_dataset_item_ids, n_samples)
+            eval_dataset_item_ids = random.sample(eval_dataset_item_ids, n_samples)
 
         configuration_updates = helpers.drop_none(
             {
