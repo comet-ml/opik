@@ -1,10 +1,9 @@
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from typing import Any
 from collections.abc import Callable, Iterable
-
-import logging
 
 from gepa.core.adapter import EvaluationBatch, GEPAAdapter
 from opik import Dataset
@@ -19,11 +18,7 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class OpikDataInst:
-    """Data instance handed to GEPA.
-
-    We keep the original Opik dataset item so metrics and prompt formatting can use it
-    directly without duplicated bookkeeping.
-    """
+    """Data instance handed to GEPA."""
 
     input_text: str
     answer: str
@@ -90,8 +85,6 @@ class OpikGEPAAdapter(GEPAAdapter[OpikDataInst, dict[str, Any], dict[str, Any]])
         evaluation logic so GEPA continues to function.
         """
 
-        # Keep this adapter in place until GEPA exposes a native Opik bridge so tracing
-        # and evaluation stay consistent with our experiment tracking.
         system_text = _extract_system_text(candidate, self._system_fallback)
         prompt_variant = _apply_system_text(self._base_prompt, system_text)
 
@@ -104,7 +97,6 @@ class OpikGEPAAdapter(GEPAAdapter[OpikDataInst, dict[str, Any], dict[str, Any]])
                 break
             dataset_item_ids.append(str(dataset_item_id))
 
-        # Attach GEPA-specific metadata without disturbing the caller's experiment config.
         configuration_updates = helpers.drop_none(
             {
                 "gepa": helpers.drop_none(
@@ -151,7 +143,13 @@ class OpikGEPAAdapter(GEPAAdapter[OpikDataInst, dict[str, Any], dict[str, Any]])
             for inst in batch:
                 dataset_item = inst.opik_item
                 messages = prompt_variant.get_messages(dataset_item)
-                raw_output = agent.invoke(messages).strip()
+                try:
+                    raw_output = agent.invoke(messages).strip()
+                except Exception as exc:
+                    raise RuntimeError(
+                        f"GEPA Opik adapter LLM call failed (model={prompt_variant.model}, "
+                        f"kwargs={prompt_variant.model_kwargs})"
+                    ) from exc
 
                 metric_result = self._metric(dataset_item, raw_output)
                 if hasattr(metric_result, "value"):
@@ -191,7 +189,13 @@ class OpikGEPAAdapter(GEPAAdapter[OpikDataInst, dict[str, Any], dict[str, Any]])
 
         def llm_task(dataset_item: dict[str, Any]) -> dict[str, str]:
             messages = prompt_variant.get_messages(dataset_item)
-            raw_output = agent.invoke(messages).strip()
+            try:
+                raw_output = agent.invoke(messages).strip()
+            except Exception as exc:
+                raise RuntimeError(
+                    f"GEPA Opik adapter LLM call failed (model={prompt_variant.model}, "
+                    f"kwargs={prompt_variant.model_kwargs})"
+                ) from exc
             return {"llm_output": raw_output}
 
         try:
