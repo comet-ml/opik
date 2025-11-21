@@ -256,3 +256,10 @@ export const isMac =
   navigator.platform.toUpperCase().includes("MAC");
 
 export const modifierKey = isMac ? "meta" : "ctrl";
+
+export const stripColumnPrefix = (column: string, prefix: string): string => {
+  const prefixWithDot = `${prefix}.`;
+  return column.startsWith(prefixWithDot)
+    ? column.slice(prefixWithDot.length)
+    : column;
+};
