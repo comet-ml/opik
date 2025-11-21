@@ -490,7 +490,7 @@ class EvolutionaryOptimizer(BaseOptimizer):
                     self,
                     prompt,
                     messages,  # type: ignore
-                    dataset=evaluation_dataset, # use right dataset for scoring
+                    dataset=evaluation_dataset,  # use right dataset for scoring
                     metric=metric,
                     n_samples=n_samples,
                     experiment_config=(experiment_config or {}).copy(),
@@ -519,7 +519,7 @@ class EvolutionaryOptimizer(BaseOptimizer):
                     self,
                     prompt,
                     messages,
-                    dataset=evaluation_dataset, # use right dataset for scoring
+                    dataset=evaluation_dataset,  # use right dataset for scoring
                     metric=metric,
                     n_samples=n_samples,
                     experiment_config=(experiment_config or {}).copy(),

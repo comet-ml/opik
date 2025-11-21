@@ -315,7 +315,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             ) as trial_reporter:
                 trial_reporter.start_trial(messages_for_reporting)
                 score = task_evaluator.evaluate(
-                    dataset=evaluation_dataset, # use right dataset for scoring
+                    dataset=evaluation_dataset,  # use right dataset for scoring
                     dataset_item_ids=eval_dataset_item_ids,
                     metric=metric,
                     evaluated_task=llm_task,
@@ -544,7 +544,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         ) as eval_report:
             baseline_score = self._evaluate_prompt(
                 prompt=prompt,
-                dataset=evaluation_dataset, # use right dataset for scoring
+                dataset=evaluation_dataset,  # use right dataset for scoring
                 metric=metric,
                 n_samples=n_samples,
                 optimization_id=(optimization.id if optimization is not None else None),

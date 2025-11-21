@@ -340,7 +340,7 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
         ) as improved_reporter:
             improved_experiment_result = self._evaluate_prompt(
                 prompt=improved_chat_prompt,
-                dataset=evaluation_dataset, # use right dataset for scoring
+                dataset=evaluation_dataset,  # use right dataset for scoring
                 metric=metric,
                 optimization_id=optimization_id,
                 n_samples=n_samples,
@@ -445,7 +445,7 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
         with reporting.display_evaluation(verbose=self.verbose) as baseline_reporter:
             experiment_result = self._evaluate_prompt(
                 prompt=prompt,
-                dataset=evaluation_dataset, # use right dataset for scoring
+                dataset=evaluation_dataset,  # use right dataset for scoring
                 metric=metric,
                 optimization_id=optimization.id,
                 n_samples=n_samples,
