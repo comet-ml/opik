@@ -232,6 +232,7 @@ def submit_benchmark_tasks(
                 "optimizer_prompt_params": optimize_override,
                 "datasets": task.datasets,
                 "metrics": task.metrics,
+                "prompt_messages": task.prompt_messages,
             }
         )
 

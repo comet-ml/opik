@@ -66,6 +66,10 @@ def test_manifest_generators_expand(tmp_path: Path) -> None:
                 ],
                 "metrics": ["benchmarks.metrics.hotpot.hotpot_f1"],
                 "test_mode": True,
+                "prompt": [
+                    {"role": "system", "content": "Answer the question briefly and correctly."},
+                    {"role": "user", "content": "{text}"}
+                ],
             }
         ],
     }
@@ -84,3 +88,5 @@ def test_manifest_generators_expand(tmp_path: Path) -> None:
     # Ensure dataset override expansion
     tiny_tasks = [t for t in tasks if t.dataset_name == "tiny_test"]
     assert tiny_tasks and tiny_tasks[0].datasets is not None
+    # Prompt override propagated to all tasks
+    assert all(task.prompt_messages for task in tasks)

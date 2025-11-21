@@ -74,6 +74,7 @@ def run_optimization_modal(
     optimizer_prompt_params: dict | None = None,
     datasets: dict | None = None,
     metrics: list[str] | None = None,
+    prompt_messages: list[dict[str, Any]] | None = None,
 ) -> dict:
     """
     Run a single optimization task on Modal.
@@ -131,6 +132,7 @@ def run_optimization_modal(
         optimizer_prompt_params_override=optimizer_prompt_params,
         datasets=datasets,
         metrics=metrics,
+        prompt_messages=prompt_messages,
     )
 
     # Ensure the final result uses the same timestamp_start as the Running status

@@ -39,6 +39,19 @@
           "model_parameters": { "type": "object", "description": "Model parameters forwarded to the optimizer constructor." },
           "optimizer_params": { "type": "object", "description": "Constructor kwargs merged into the optimizer (per-task override)." },
           "optimizer_prompt_params": { "type": "object", "description": "optimize_prompt kwargs (per-task override), e.g., max_trials, n_samples." },
+          "prompt": {
+            "type": "array",
+            "description": "Optional inline prompt messages to override dataset defaults.",
+            "items": {
+              "type": "object",
+              "properties": {
+                "role": { "type": "string" },
+                "content": { "type": "string" }
+              },
+              "required": ["role", "content"],
+              "additionalProperties": false
+            }
+          },
           "metrics": {
             "type": "array",
             "description": "Optional metrics overriding dataset defaults. String => module.attr callable; object => {path, args?, kwargs?}.",
@@ -119,6 +132,19 @@
                 "optimizer_params": { "type": "object" },
                 "optimizer_prompt_params": { "type": "object" }
               },
+              "additionalProperties": false
+            }
+          },
+          "prompt": {
+            "type": "array",
+            "description": "Optional inline prompt messages to override dataset defaults for all generated tasks.",
+            "items": {
+              "type": "object",
+              "properties": {
+                "role": { "type": "string" },
+                "content": { "type": "string" }
+              },
+              "required": ["role", "content"],
               "additionalProperties": false
             }
           },

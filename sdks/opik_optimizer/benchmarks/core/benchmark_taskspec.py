@@ -15,6 +15,7 @@ class BenchmarkTaskSpec:
     optimizer_prompt_params: dict[str, Any] | None = field(default=None)
     datasets: dict[str, Any] | None = field(default=None)
     metrics: list[str] | None = field(default=None)
+    prompt_messages: list[dict[str, Any]] | None = field(default=None)
 
     @property
     def task_id(self) -> str:
@@ -31,6 +32,7 @@ class BenchmarkTaskSpec:
             "optimizer_prompt_params": self.optimizer_prompt_params,
             "datasets": self.datasets,
             "metrics": self.metrics,
+            "prompt_messages": self.prompt_messages,
         }
 
     @classmethod
@@ -45,4 +47,5 @@ class BenchmarkTaskSpec:
             optimizer_prompt_params=data.get("optimizer_prompt_params"),
             datasets=data.get("datasets"),
             metrics=data.get("metrics"),
+            prompt_messages=data.get("prompt_messages"),
         )

@@ -19,6 +19,7 @@ def run_optimization_task(
     optimizer_prompt_params_override: dict[str, Any] | None = None,
     datasets: dict[str, Any] | None = None,
     metrics: list[str] | None = None,
+    prompt_messages: list[dict[str, Any]] | None = None,
 ) -> TaskResult:
     """
     Run a single optimization task on Modal infrastructure.
@@ -59,6 +60,7 @@ def run_optimization_task(
             optimizer_prompt_params_override=optimizer_prompt_params_override,
             datasets=datasets,
             metrics=metrics,
+            prompt_messages=prompt_messages,
         )
         result.timestamp_start = timestamp_start
         print(
