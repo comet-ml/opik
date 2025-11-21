@@ -32,6 +32,7 @@ interface PlaygroundOutputTableProps {
   datasetColumns: DatasetItemColumn[];
   promptIds: string[];
   isLoadingDatasetItems: boolean;
+  isFetchingData: boolean;
 }
 
 const COLUMNS_WIDTH_KEY = "playground-output-table-width-keys";
@@ -41,6 +42,7 @@ const PlaygroundOutputTable = ({
   promptIds,
   datasetColumns,
   isLoadingDatasetItems,
+  isFetchingData,
 }: PlaygroundOutputTableProps) => {
   const [columnsWidth, setColumnsWidth] = useLocalStorageState<
     Record<string, number>
@@ -200,6 +202,7 @@ const PlaygroundOutputTable = ({
         rowHeight={ROW_HEIGHT.large}
         resizeConfig={resizeConfig}
         noData={<DataTableNoData title={noDataMessage} />}
+        showLoadingOverlay={isFetchingData}
       />
     </div>
   );

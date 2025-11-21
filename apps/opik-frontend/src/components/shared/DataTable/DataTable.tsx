@@ -142,6 +142,7 @@ interface DataTableProps<TData, TValue> {
     TableMeta<TData>,
     "columnsStatistic" | "rowHeight" | "rowHeightStyle"
   >;
+  showLoadingOverlay?: boolean;
 }
 
 const DataTable = <TData, TValue>({
@@ -169,6 +170,7 @@ const DataTable = <TData, TValue>({
   stickyHeader = false,
   meta,
   getSubRows,
+  showLoadingOverlay = false,
 }: DataTableProps<TData, TValue>) => {
   const isResizable = resizeConfig && resizeConfig.enabled;
   const isRowClickable = isFunction(onRowClick);
@@ -388,7 +390,7 @@ const DataTable = <TData, TValue>({
   };
 
   return (
-    <TableWrapper>
+    <TableWrapper showLoadingOverlay={showLoadingOverlay}>
       <DataTableTooltipContext>
         <Table
           ref={tableRef}
