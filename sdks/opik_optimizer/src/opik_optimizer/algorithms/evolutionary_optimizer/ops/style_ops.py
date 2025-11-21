@@ -77,7 +77,5 @@ def infer_output_style_from_dataset(
             report_infer_output_style.success(inferred_style)
             return inferred_style
         except Exception as e:
-            report_infer_output_style.error(
-                f"Error during output style inference: {e}"
-            )
+            report_infer_output_style.error(f"Error during output style inference: {e}")
             return None

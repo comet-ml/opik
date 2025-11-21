@@ -34,7 +34,7 @@ def test_metaprompt_optimizer() -> None:
             "reasoning_effort": "minimal",
         },
         n_threads=2,
-        prompts_per_round=1,  # Minimal to avoid long runs/hangs
+        prompts_per_round=1,
         seed=42,
     )
 

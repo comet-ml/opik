@@ -38,7 +38,7 @@ def test_few_shot_optimizer() -> None:
     prompt = opik_optimizer.ChatPrompt(
         messages=[
             {"role": "system", "content": "Provide an answer to the question."},
-            {"role": "user", "content": "{text}"},  # Changed from "{question}"
+            {"role": "user", "content": "{text}"},
         ]
     )
 
@@ -47,7 +47,7 @@ def test_few_shot_optimizer() -> None:
         dataset=dataset,
         metric=levenshtein_ratio,
         prompt=prompt,
-        max_trials=1,  # Reduced from 2
+        max_trials=1,
         n_samples=1,
     )
 

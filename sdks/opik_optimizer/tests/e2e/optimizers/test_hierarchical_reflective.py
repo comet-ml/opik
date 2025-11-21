@@ -52,7 +52,7 @@ def test_hierarchical_reflective_optimizer() -> None:
         prompt=prompt,
         dataset=dataset,
         metric=levenshtein_ratio,
-        max_trials=2,  # Very minimal for speed
+        max_trials=2,
         n_samples=1,
         max_retries=1,
     )
