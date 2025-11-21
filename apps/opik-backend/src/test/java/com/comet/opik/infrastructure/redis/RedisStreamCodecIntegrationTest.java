@@ -167,3 +167,4 @@ class RedisStreamCodecIntegrationTest {
         configuredBucket.delete().block();
     }
 }
+

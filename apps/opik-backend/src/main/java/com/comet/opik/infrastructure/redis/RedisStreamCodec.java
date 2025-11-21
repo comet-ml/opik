@@ -39,3 +39,4 @@ public enum RedisStreamCodec {
         public static final String JSON = "json";
     }
 }
+
