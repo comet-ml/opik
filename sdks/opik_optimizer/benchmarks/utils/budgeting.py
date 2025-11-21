@@ -30,13 +30,13 @@ def derive_budgeted_optimize_params(
     if not rollout_budget:
         return None
 
-    n_samples = optimizer_cfg.optimize_params.get("n_samples")
+    n_samples = optimizer_cfg.optimizer_prompt_params.get("n_samples")
     if n_samples and n_samples > 0:
         estimated_trials = rollout_budget // n_samples
     else:
         estimated_trials = rollout_budget
 
-    default_max = optimizer_cfg.optimize_params.get("max_trials")
+    default_max = optimizer_cfg.optimizer_prompt_params.get("max_trials")
     if default_max is not None:
         estimated_trials = min(default_max, estimated_trials)
 

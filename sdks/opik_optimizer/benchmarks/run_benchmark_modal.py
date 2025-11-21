@@ -194,6 +194,7 @@ def submit_benchmark_tasks(
                 optimizer_name=optimizer,
                 model_name=model,
                 test_mode=test_mode,
+                model_parameters=None,
             )
             for dataset in demo_datasets
             for optimizer in optimizers
@@ -214,7 +215,7 @@ def submit_benchmark_tasks(
             continue
 
         optimize_override = resolve_optimize_params(
-            task.dataset_name, task.optimizer_name, task.optimize_params
+            task.dataset_name, task.optimizer_name, task.optimizer_prompt_params
         )
         all_tasks.append(
             {
@@ -222,6 +223,7 @@ def submit_benchmark_tasks(
                 "dataset_name": task.dataset_name,
                 "optimizer_name": task.optimizer_name,
                 "model_name": task.model_name,
+                "model_parameters": task.model_parameters,
                 "test_mode": task.test_mode,
                 "run_id": run_id,
                 "optimizer_params": task.optimizer_params,

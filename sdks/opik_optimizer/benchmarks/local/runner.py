@@ -39,17 +39,21 @@ def run_optimization(
     optimizer_name: str,
     model_name: str,
     test_mode: bool,
+    model_parameters: dict[str, Any] | None = None,
     optimizer_params_override: dict[str, Any] | None = None,
     optimizer_prompt_params_override: dict[str, Any] | None = None,
+    dataset_overrides: dict[str, Any] | None = None,
 ) -> TaskResult:
     return execute_task(
         task_id=task_id,
         dataset_name=dataset_name,
         optimizer_name=optimizer_name,
         model_name=model_name,
+        model_parameters=model_parameters,
         test_mode=test_mode,
         optimizer_params_override=optimizer_params_override,
         optimizer_prompt_params_override=optimizer_prompt_params_override,
+        dataset_overrides=dataset_overrides,
     )
 
 
@@ -167,7 +171,9 @@ class BenchmarkRunner:
                         continue
 
                     optimize_override = resolve_optimize_params(
-                        task.dataset_name, task.optimizer_name, task.optimize_params
+                        task.dataset_name,
+                        task.optimizer_name,
+                        task.optimizer_prompt_params,
                     )
                     future = executor.submit(
                         run_optimization,
@@ -175,9 +181,11 @@ class BenchmarkRunner:
                         dataset_name=task.dataset_name,
                         optimizer_name=task.optimizer_name,
                         model_name=task.model_name,
+                        model_parameters=task.model_parameters,
                         test_mode=task.test_mode,
                         optimizer_params_override=task.optimizer_params,
                         optimizer_prompt_params_override=optimize_override,
+                        dataset_overrides=task.dataset_overrides,
                     )
 
                     future_to_info[future] = (

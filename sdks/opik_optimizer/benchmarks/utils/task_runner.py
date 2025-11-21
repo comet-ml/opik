@@ -68,8 +68,62 @@ def _load_dataset(dataset_name: str, split: str | None, test_mode: bool) -> Any:
     raise ValueError(f"Unknown dataset loader for '{dataset_name}'.")
 
 
-def resolve_dataset_bundle(dataset_name: str, test_mode: bool) -> DatasetBundle:
-    """Return train/validation/test dataset objects for a given benchmark dataset key."""
+def resolve_dataset_bundle(
+    dataset_name: str,
+    test_mode: bool,
+    dataset_overrides: dict[str, Any] | None = None,
+) -> DatasetBundle:
+    """Return train/validation/test dataset objects for a given benchmark dataset key.
+
+    When ``dataset_overrides`` is provided, the loader specs (train/validation/test)
+    are used instead of the registered preset slices. If only one override is
+    given, it is reused for all splits.
+    """
+    if dataset_overrides:
+        role_specs = (
+            dataset_overrides
+            if any(role in dataset_overrides for role in ("train", "validation", "test"))
+            else {
+                "train": dataset_overrides,
+                "validation": dataset_overrides,
+                "test": dataset_overrides,
+            }
+        )
+
+        def _load_override(role: str) -> tuple[str, Any] | tuple[None, None]:
+            spec = role_specs.get(role)
+            if spec is None:
+                return None, None
+            loader_name = spec.get("loader") or dataset_name
+            kwargs = {k: v for k, v in spec.items() if k != "loader"}
+            kwargs.setdefault("dataset_name", f"{loader_name}_{role}")
+            kwargs["test_mode"] = test_mode
+            loader = getattr(opik_optimizer.datasets, loader_name, None)
+            if callable(loader):
+                return kwargs["dataset_name"], loader(**kwargs)
+            raise ValueError(f"Unknown dataset loader '{loader_name}' for role '{role}'.")
+
+        train_name, train_ds = _load_override("train")
+        validation_name, validation_ds = _load_override("validation")
+        test_name, test_ds = _load_override("test")
+
+        evaluation_ds = validation_ds or train_ds
+        evaluation_name = validation_name or train_name or dataset_name
+        evaluation_role = "validation" if validation_ds is not None else "train"
+
+        return DatasetBundle(
+            train_name=train_name or dataset_name,
+            train=train_ds,
+            validation_name=validation_name,
+            validation=validation_ds,
+            test_name=test_name,
+            test=test_ds,
+            evaluation_name=evaluation_name,
+            evaluation_role=evaluation_role,
+            evaluation=evaluation_ds,
+            requested_split=None,
+        )
+
     base_name, requested_split = _parse_base_name(dataset_name)
 
     def _candidate(split: str) -> str | None:
@@ -187,9 +241,11 @@ def execute_task(
     dataset_name: str,
     optimizer_name: str,
     model_name: str,
+    model_parameters: dict[str, Any] | None,
     test_mode: bool,
     optimizer_params_override: dict[str, Any] | None,
     optimizer_prompt_params_override: dict[str, Any] | None,
+    dataset_overrides: dict[str, Any] | None = None,
 ) -> TaskResult:
     """Shared execution path used by local and Modal runners."""
     timestamp_start = time.time()
@@ -199,7 +255,9 @@ def execute_task(
     with reporting_utils.suppress_opik_logs():
         try:
             bundle = resolve_dataset_bundle(
-                dataset_name=dataset_name, test_mode=test_mode
+                dataset_name=dataset_name,
+                test_mode=test_mode,
+                dataset_overrides=dataset_overrides,
             )
             dataset_config = benchmark_config.DATASET_CONFIG.get(
                 bundle.evaluation_name, benchmark_config.DATASET_CONFIG[dataset_name]
@@ -211,7 +269,11 @@ def execute_task(
                 constructor_kwargs.update(optimizer_params_override)
             optimizer: BaseOptimizer = getattr(
                 opik_optimizer, optimizer_config.class_name
-            )(model=model_name, **constructor_kwargs)
+            )(
+                model=model_name,
+                model_parameters=model_parameters,
+                **constructor_kwargs,
+            )
 
             messages = benchmark_config.INITIAL_PROMPTS[bundle.train_name]
             initial_prompt = ChatPrompt(messages=messages)  # type: ignore[arg-type]
@@ -226,7 +288,7 @@ def execute_task(
                 n_threads=4,
             )
 
-            optimize_kwargs = dict(optimizer_config.optimize_params)
+            optimize_kwargs = dict(optimizer_config.optimizer_prompt_params)
             if optimizer_prompt_params_override:
                 optimize_kwargs.update(optimizer_prompt_params_override)
             optimization_results = optimizer.optimize_prompt(
@@ -282,7 +344,7 @@ def execute_task(
                 dataset_metadata=collect_dataset_metadata(bundle),
                 evaluation_split=bundle.evaluation_role,
                 requested_split=bundle.requested_split,
-                optimize_params_used=optimize_kwargs,
+                optimizer_prompt_params_used=optimize_kwargs,
                 optimizer_params_used=constructor_kwargs,
             )
         except Exception:

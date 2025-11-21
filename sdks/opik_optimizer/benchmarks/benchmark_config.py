@@ -52,7 +52,7 @@ class BenchmarkProjectConfig(BaseModel):
 class BenchmarkOptimizerConfig(BaseModel):
     class_name: str
     params: dict[str, Any]
-    optimize_params: dict[str, Any] = {}
+    optimizer_prompt_params: dict[str, Any] = {}
 
 
 class BenchmarkExperimentConfig(BaseModel):
@@ -285,7 +285,7 @@ OPTIMIZER_CONFIGS: dict[str, BenchmarkOptimizerConfig] = {
             "n_threads": 4,
             "seed": 42,
         },
-        optimize_params={
+        optimizer_prompt_params={
             "max_trials": 30,
             "n_samples": 100,
         },
@@ -302,7 +302,7 @@ OPTIMIZER_CONFIGS: dict[str, BenchmarkOptimizerConfig] = {
                 "max_completion_tokens": 9000,
             },
         },
-        optimize_params={
+        optimizer_prompt_params={
             "max_trials": 30,
         },
     ),
@@ -320,7 +320,7 @@ OPTIMIZER_CONFIGS: dict[str, BenchmarkOptimizerConfig] = {
             "seed": 42,
             "infer_output_style": True,
         },
-        optimize_params={
+        optimizer_prompt_params={
             "max_trials": 30,
             "population_size": 10,
             "num_generations": 4,
@@ -335,7 +335,7 @@ OPTIMIZER_CONFIGS: dict[str, BenchmarkOptimizerConfig] = {
             "convergence_threshold": 0.01,
             "seed": 42,
         },
-        optimize_params={
+        optimizer_prompt_params={
             "max_trials": 30,
         },
     ),

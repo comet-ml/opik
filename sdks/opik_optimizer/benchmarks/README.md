@@ -97,7 +97,7 @@ python run_benchmark.py --config manifest.json
       "dataset": "hotpot_300",
       "optimizer": "meta_prompt",
       "model": "openai/gpt-4o-mini",
-      "optimize_params": {
+      "optimizer_prompt_params": {
         "max_trials": 2,
         "seed": 123
       }
@@ -111,7 +111,7 @@ python run_benchmark.py --config manifest.json
         "population_size": 8,
         "max_generations": 4
       },
-      "optimize_params": {
+      "optimizer_prompt_params": {
         "max_trials": 20
       }
     }
@@ -127,8 +127,9 @@ python run_benchmark.py --config manifest.json
   - `optimizer` (required): Optimizer name from available optimizers
   - `model` (required): Model name from configured models
   - `test_mode` (optional): Override test mode for this specific task
+  - `model_parameters` (optional): Dict forwarded to the optimizer constructor (e.g., temperature, max_tokens)
   - `optimizer_params` (optional): Dict merged into the optimizer constructor (per-task overrides)
-  - `optimize_params` (optional): Dict merged into the optimizer's `optimize_prompt` call (per-task overrides)
+  - `optimizer_prompt_params` (optional): Dict merged into the optimizer's `optimize_prompt` call (per-task overrides)
 
 **When to use manifests:**
 - Reproducing exact benchmark configurations
@@ -137,12 +138,15 @@ python run_benchmark.py --config manifest.json
 - Sharing benchmark setups with team members
 - CI/CD pipelines
 
-Use the per-task `optimizer_params` and `optimize_params` fields to enforce rollout budgets (e.g., `max_trials`, iteration caps) or tweak optimizer seeds without modifying the global defaults.
+Use the per-task `optimizer_params` and `optimizer_prompt_params` fields to enforce rollout budgets (e.g., `max_trials`, iteration caps) or tweak optimizer seeds without modifying the global defaults.
 
 #### Override Cheat Sheet
 
-- `optimizer_params`: constructor overrides (e.g., change population size, tweak optimizer-specific random seeds, toggle tracing). These are applied once when we instantiate the optimizer class.
+- `model_parameters`: constructor overrides for model settings (temperature, max_tokens, reasoning_effort). Forwarded to the optimizer constructor as `model_parameters`.
+- `optimizer_params`: constructor overrides for the optimizer itself (e.g., change population size, tweak optimizer-specific random seeds, toggle tracing). These are applied once when we instantiate the optimizer class.
 - `optimizer_prompt_params`: prompt-iteration overrides (e.g., `max_trials`, `n_samples`, judge batching). These are merged into the subsequent `optimize_prompt` call. When manifests omit this field, the runners derive an `optimizer_prompt_params_override` from the dataset rollout caps so Modal and local runs stay consistent.
+
+The manifest JSON schema lives at `benchmarks/configs/manifest.schema.json`.
 
 ## Commands
 

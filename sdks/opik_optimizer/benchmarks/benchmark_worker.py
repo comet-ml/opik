@@ -65,6 +65,7 @@ def run_optimization_modal(
     dataset_name: str,
     optimizer_name: str,
     model_name: str,
+    model_parameters: dict | None,
     test_mode: bool,
     run_id: str,
     optimizer_params: dict | None = None,
@@ -105,6 +106,7 @@ def run_optimization_modal(
         dataset_name=dataset_name,
         optimizer_name=optimizer_name,
         model_name=model_name,
+        model_parameters=model_parameters,
         status=TASK_STATUS_RUNNING,
         timestamp_start=timestamp_start,
     )
@@ -119,6 +121,7 @@ def run_optimization_modal(
         dataset_name=dataset_name,
         optimizer_name=optimizer_name,
         model_name=model_name,
+        model_parameters=model_parameters,
         test_mode=test_mode,
         optimizer_params_override=optimizer_params,
         optimizer_prompt_params_override=optimizer_prompt_params,

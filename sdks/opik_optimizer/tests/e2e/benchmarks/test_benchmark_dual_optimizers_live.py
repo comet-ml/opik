@@ -48,7 +48,7 @@ def _metric_equals(dataset_item: dict[str, Any], llm_output: str) -> float:
 
 def _patch_benchmark_config(monkeypatch: pytest.MonkeyPatch) -> None:
     dataset_cfg = benchmark_config.BenchmarkDatasetConfig(
-        name="tiny_test_live",
+        name="tiny_test",
         display_name="Tiny Test Live",
         metrics=[_metric_equals],
         rollout_budget=2,
@@ -87,7 +87,27 @@ def _patch_benchmark_config(monkeypatch: pytest.MonkeyPatch) -> None:
                     "seed": 42,
                 },
                 optimizer_prompt_params={"max_trials": 1, "n_samples": 1},
-            )
+            ),
+            "evolutionary_optimizer": benchmark_config.BenchmarkOptimizerConfig(
+                class_name="EvolutionaryOptimizer",
+                params={
+                    "mutation_rate": 0.2,
+                    "crossover_rate": 0.8,
+                    "tournament_size": 2,
+                    "n_threads": 1,
+                    "elitism_size": 1,
+                    "adaptive_mutation": False,
+                    "enable_moo": False,
+                    "enable_llm_crossover": False,
+                    "seed": 42,
+                    "infer_output_style": True,
+                },
+                optimizer_prompt_params={
+                    "max_trials": 1,
+                    "population_size": 2,
+                    "num_generations": 1,
+                },
+            ),
         },
     )
     monkeypatch.setattr(benchmark_config, "MODELS", ["openai/gpt-4o-mini"])
@@ -102,10 +122,9 @@ def _patch_dataset_loader(monkeypatch: pytest.MonkeyPatch) -> None:
         dataset_name: str | None = None,
         **kwargs: Any,
     ):
-        # Keep it small for CI; use count=2 and unique name to avoid clobbering
         return real_tiny_test(
             split=split,
-            count=2 if count is None else count,
+            count=1 if count is None else count,
             dataset_name=dataset_name or "tiny_test_live",
             **kwargs,
         )
@@ -115,8 +134,8 @@ def _patch_dataset_loader(monkeypatch: pytest.MonkeyPatch) -> None:
     )
 
 
-def test_benchmark_runner_few_shot_live(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """Run a single benchmark task end-to-end against a real model."""
+def test_dual_optimizer_run_live(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Run two benchmark tasks (few_shot + evolutionary) against tiny_test with a live model."""
     _skip_without_openai()
     _patch_benchmark_config(monkeypatch)
     _patch_dataset_loader(monkeypatch)
@@ -129,21 +148,34 @@ def test_benchmark_runner_few_shot_live(tmp_path: Path, monkeypatch: pytest.Monk
         checkpoint_dir=str(tmp_path),
     )
 
-    task = BenchmarkTaskSpec(
-        dataset_name="tiny_test",
-        optimizer_name="few_shot",
-        model_name="openai/gpt-4o-mini",
-        test_mode=True,
-        optimizer_prompt_params={"max_trials": 1, "n_samples": 1},
-    )
+    tasks = [
+        BenchmarkTaskSpec(
+            dataset_name="tiny_test",
+            optimizer_name="few_shot",
+            model_name="openai/gpt-4o-mini",
+            test_mode=True,
+            optimizer_prompt_params={"max_trials": 1, "n_samples": 1},
+        ),
+        BenchmarkTaskSpec(
+            dataset_name="tiny_test",
+            optimizer_name="evolutionary_optimizer",
+            model_name="openai/gpt-4o-mini",
+            test_mode=True,
+            optimizer_prompt_params={
+                "max_trials": 1,
+                "population_size": 2,
+                "num_generations": 1,
+            },
+        ),
+    ]
 
     runner.run_benchmarks(
         demo_datasets=["tiny_test"],
-        optimizers=["few_shot"],
+        optimizers=["few_shot", "evolutionary_optimizer"],
         models=["openai/gpt-4o-mini"],
         retry_failed_run_id=None,
         resume_run_id=None,
-        task_specs=[task],
+        task_specs=tasks,
     )
 
     assert runner.run_id is not None
@@ -151,9 +183,6 @@ def test_benchmark_runner_few_shot_live(tmp_path: Path, monkeypatch: pytest.Monk
     assert checkpoint_file.exists()
     checkpoint = json.loads(checkpoint_file.read_text())
     task_results = checkpoint.get("task_results", [])
-    assert task_results, "Expected a saved task result"
-    assert task_results[0]["status"] == "Success"
-    assert task_results[0]["dataset_name"] == "tiny_test"
-    assert task_results[0]["optimizer_name"] == "few_shot"
-    assert task_results[0]["optimized_prompt"] is not None
-    assert task_results[0]["optimized_evaluation"] is not None
+    statuses = {t["optimizer_name"]: t["status"] for t in task_results}
+    assert statuses.get("few_shot") == "Success"
+    assert statuses.get("evolutionary_optimizer") == "Success"

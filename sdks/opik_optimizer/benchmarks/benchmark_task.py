@@ -30,6 +30,7 @@ class TaskResult(BaseModel):
     dataset_name: str
     optimizer_name: str
     model_name: str
+    model_parameters: dict[str, Any] | None = None
     timestamp_start: float
     status: TaskStatus
     initial_prompt: opik_optimizer.ChatPrompt | None = None
@@ -45,7 +46,7 @@ class TaskResult(BaseModel):
     dataset_metadata: dict[str, DatasetMetadata] = Field(default_factory=dict)
     evaluation_split: str | None = None
     requested_split: str | None = None
-    optimize_params_used: dict[str, Any] | None = None
+    optimizer_prompt_params_used: dict[str, Any] | None = None
     optimizer_params_used: dict[str, Any] | None = None
 
     @classmethod
@@ -75,9 +76,9 @@ class TaskResult(BaseModel):
         if obj.get("initial_evaluation") and isinstance(
             obj["initial_evaluation"], dict
         ):
-            obj["initial_evaluation"] = TaskEvaluationResult.model_validate(
-                obj["initial_evaluation"]
-            )
+                obj["initial_evaluation"] = TaskEvaluationResult.model_validate(
+                    obj["initial_evaluation"]
+                )
 
         if obj.get("optimized_evaluation") and isinstance(
             obj["optimized_evaluation"], dict
