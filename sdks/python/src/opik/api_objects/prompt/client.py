@@ -44,7 +44,7 @@ class PromptClient:
         - A Prompt object for the provided prompt name and template.
 
         Raises:
-        - PromptTemplateStructureMismatch: If a prompt with the same name already exists but has a different 
+        - PromptTemplateStructureMismatch: If a prompt with the same name already exists but has a different
           template_structure (e.g., trying to create a text prompt when a chat prompt exists, or vice versa).
           Template structure is immutable after prompt creation.
         """
@@ -144,7 +144,10 @@ class PromptClient:
             )
 
             # Client-side validation for template_structure if requested
-            if raise_if_not_template_structure is not None and prompt_version.template_structure != raise_if_not_template_structure:
+            if (
+                raise_if_not_template_structure is not None
+                and prompt_version.template_structure != raise_if_not_template_structure
+            ):
                 raise opik.exceptions.PromptTemplateStructureMismatch(
                     prompt_name=name,
                     existing_structure=prompt_version.template_structure,

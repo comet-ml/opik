@@ -5,6 +5,7 @@ from . import verifiers
 import opik.exceptions
 import pytest
 
+
 def test_chat_prompt__create__happyflow(opik_client: opik.Opik):
     """Test creating a chat prompt with multiple messages."""
     unique_identifier = str(uuid.uuid4())[-6:]
@@ -346,7 +347,9 @@ def test_get_chat_prompt__chat_prompt__returns_chat_prompt(opik_client: opik.Opi
     assert len(retrieved_prompt.template) == 2
 
 
-def test_get_chat_prompt__string_prompt__prompt_structure_mismatch_error(opik_client: opik.Opik):
+def test_get_chat_prompt__string_prompt__prompt_structure_mismatch_error(
+    opik_client: opik.Opik,
+):
     """Test that get_chat_prompt() raises an error for text prompts (type mismatch)."""
     unique_id = str(uuid.uuid4())[-6:]
     prompt_name = f"text-prompt-{unique_id}"
@@ -360,7 +363,7 @@ def test_get_chat_prompt__string_prompt__prompt_structure_mismatch_error(opik_cl
     # Try to retrieve it with get_chat_prompt() - should raise an error due to type mismatch
     with pytest.raises(opik.exceptions.PromptTemplateStructureMismatch):
         opik_client.get_chat_prompt(name=prompt_name)
-    
+
     # Verify the text prompt remains unchanged
     retrieved_prompt = opik_client.get_prompt(name=prompt_name)
     assert retrieved_prompt is not None
@@ -425,7 +428,7 @@ def test_get_chat_prompt_history__string_prompt__prompt_structure_mismatch_error
     # Try to get history with get_chat_prompt_history() - should raise an error due to type mismatch
     with pytest.raises(opik.exceptions.PromptTemplateStructureMismatch):
         opik_client.get_chat_prompt_history(name=prompt_name)
-    
+
     # Verify the text prompt remains unchanged
     retrieved_prompt = opik_client.get_prompt(name=prompt_name)
     assert retrieved_prompt is not None
@@ -534,12 +537,12 @@ def test_chat_prompt__template_structure_immutable__error(opik_client: opik.Opik
     )
 
     # Attempt to create a text prompt version with the same name should fail
-    with pytest.raises(opik.exceptions.PromptTemplateStructureMismatch) as exc_info:
+    with pytest.raises(opik.exceptions.PromptTemplateStructureMismatch):
         opik_client.create_prompt(
             name=prompt_name,
             prompt="This is a text prompt: {{variable}}",
         )
-    
+
     # Verify the original chat prompt remains unchanged
     retrieved_chat_prompt = opik_client.get_chat_prompt(name=prompt_name)
     assert retrieved_chat_prompt is not None

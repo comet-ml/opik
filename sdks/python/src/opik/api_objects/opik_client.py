@@ -2,7 +2,6 @@ import atexit
 import datetime
 import functools
 import logging
-import opik.exceptions
 from typing import Any, Dict, List, Optional, TypeVar, Union, Literal
 
 import httpx
@@ -1490,8 +1489,10 @@ class Opik:
 
         # First, validate that this is a text prompt by trying to get the latest version
         # Let PromptTemplateStructureMismatch exception propagate - this is a hard error
-        latest_version = prompt_client_.get_prompt(name=name, raise_if_not_template_structure="text")
-            
+        latest_version = prompt_client_.get_prompt(
+            name=name, raise_if_not_template_structure="text"
+        )
+
         if latest_version is None:
             return []
 
@@ -1521,8 +1522,10 @@ class Opik:
 
         # First, validate that this is a chat prompt by trying to get the latest version
         # Let PromptTemplateStructureMismatch exception propagate - this is a hard error
-        latest_version = prompt_client_.get_prompt(name=name, raise_if_not_template_structure="chat")
-            
+        latest_version = prompt_client_.get_prompt(
+            name=name, raise_if_not_template_structure="chat"
+        )
+
         if latest_version is None:
             return []
 

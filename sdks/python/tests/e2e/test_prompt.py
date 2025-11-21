@@ -3,9 +3,9 @@ import uuid
 import pytest
 import opik
 from opik.api_objects.prompt import PromptType
-from opik.rest_api import core as rest_api_core
 from . import verifiers
 import opik.exceptions
+
 
 def test_prompt__create__happyflow(opik_client: opik.Opik):
     unique_identifier = str(uuid.uuid4())[-6:]
@@ -341,7 +341,7 @@ def test_prompt__template_structure_immutable__error(opik_client: opik.Opik):
                 {"role": "user", "content": "Hello!"},
             ],
         )
-    
+
     # Verify the original text prompt remains unchanged
     retrieved_prompt = opik_client.get_prompt(name=prompt_name)
     assert retrieved_prompt is not None
@@ -392,7 +392,7 @@ def test_get_prompt__chat_prompt__returns_none(opik_client: opik.Opik):
     # Try to retrieve it with get_prompt() - should raise an error due to type mismatch
     with pytest.raises(opik.exceptions.PromptTemplateStructureMismatch):
         opik_client.get_prompt(name=prompt_name)
-    
+
     # Verify the chat prompt remains unchanged
     retrieved_chat_prompt = opik_client.get_chat_prompt(name=prompt_name)
     assert retrieved_chat_prompt is not None
@@ -444,7 +444,7 @@ def test_get_prompt_history__chat_prompt__returns_empty_list(opik_client: opik.O
     # Try to get history with get_prompt_history() - should raise an error due to type mismatch
     with pytest.raises(opik.exceptions.PromptTemplateStructureMismatch):
         opik_client.get_prompt_history(name=prompt_name)
-    
+
     # Verify the chat prompt remains unchanged
     retrieved_chat_prompt = opik_client.get_chat_prompt(name=prompt_name)
     assert retrieved_chat_prompt is not None
