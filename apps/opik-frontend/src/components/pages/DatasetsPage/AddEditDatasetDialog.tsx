@@ -28,7 +28,7 @@ import UploadField from "@/components/shared/UploadField/UploadField";
 import Loader from "@/components/shared/Loader/Loader";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 import { buildDocsUrl } from "@/lib/utils";
-import { validateCsvFile } from "@/lib/file";
+import { validateCsvFile, getCsvFilenameWithoutExtension } from "@/lib/file";
 import { Dataset, DATASET_ITEM_SOURCE } from "@/types/datasets";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
 import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
@@ -267,6 +267,11 @@ const AddEditDatasetDialog: React.FunctionComponent<
         }
 
         setCsvFile(file);
+
+        // Autofill dataset name from filename if name is empty
+        if (!name.trim()) {
+          setName(getCsvFilenameWithoutExtension(file.name));
+        }
       } else {
         // JSON mode: Validate and parse CSV with row limit
         const result = await validateCsvFile(
@@ -280,10 +285,15 @@ const AddEditDatasetDialog: React.FunctionComponent<
         } else if (result.data) {
           setCsvFile(file);
           setCsvData(result.data);
+
+          // Autofill dataset name from filename if name is empty
+          if (!name.trim()) {
+            setName(getCsvFilenameWithoutExtension(file.name));
+          }
         }
       }
     },
-    [isCsvUploadEnabled, fileSizeLimit],
+    [isCsvUploadEnabled, fileSizeLimit, name],
   );
 
   return (

@@ -8,6 +8,7 @@ import inspect
 import base64
 import json
 import logging
+import os
 import random
 import string
 import urllib.parse
@@ -28,6 +29,10 @@ if TYPE_CHECKING:
 
 ALLOWED_URL_CHARACTERS: Final[str] = ":/&?="
 logger = logging.getLogger(__name__)
+_DEFAULT_LOG_LEVEL = os.environ.get("OPIK_OPTIMIZER_LOG_LEVEL", "WARNING").upper()
+numeric_level = logging.getLevelName(_DEFAULT_LOG_LEVEL)
+if isinstance(numeric_level, int):
+    logger.setLevel(numeric_level)
 
 
 class OptimizationContextManager:
@@ -234,6 +239,10 @@ def json_to_dict(json_str: str) -> Any:
                     serialization_error,
                 )
                 raise json_error
+        except Exception as exc:
+            # As a last resort, return None so callers can fallback instead of crashing.
+            logger.debug("Returning None for unparsable JSON payload: %s", exc)
+            return None
 
 
 def _convert_literals_to_json_compatible(value: Any) -> Any:
@@ -453,27 +462,40 @@ def search_wikipedia(query: str, use_api: bool | None = False) -> list[str]:
         use_api: (Optional) If True, directly use Wikipedia API instead of ColBERTv2.
                 If False (default), try ColBERTv2 first with API fallback.
     """
+    logger.debug("search_wikipedia called with query='%s', use_api=%s", query, use_api)
+
     if use_api:
         # Directly use Wikipedia API when requested
         try:
+            logger.debug("Querying Wikipedia API directly for '%s'", query)
             return _search_wikipedia_api(query)
         except Exception as api_error:
-            print(f"Wikipedia API failed: {api_error}")
+            logger.warning(
+                "Wikipedia API request failed for '%s': %s", query, api_error
+            )
             return [f"Wikipedia search unavailable. Query was: {query}"]
 
     # Default behavior: Try ColBERTv2 first with API fallback
     # Try ColBERTv2 first with a short timeout
     try:
+        logger.debug("Querying ColBERTv2 endpoint for '%s'", query)
         colbert = ColBERTv2(url="http://20.102.90.50:2017/wiki17_abstracts")
         # Use a shorter timeout by modifying the max_retries parameter
         results = colbert(query, k=3, max_retries=1)
         return [str(item.text) for item in results if hasattr(item, "text")]
-    except Exception:
+    except Exception as colbert_error:
+        logger.info(
+            "ColBERTv2 lookup failed for '%s'; falling back to Wikipedia API (%s)",
+            query,
+            colbert_error,
+        )
         # Fallback to Wikipedia API
         try:
             return _search_wikipedia_api(query)
         except Exception as api_error:
-            print(f"Wikipedia API fallback also failed: {api_error}")
+            logger.error(
+                "Wikipedia API fallback also failed for '%s': %s", query, api_error
+            )
             return [f"Wikipedia search unavailable. Query was: {query}"]
 
 
@@ -495,6 +517,7 @@ def _search_wikipedia_api(query: str, max_results: int = 3) -> list[str]:
         headers = {
             "User-Agent": "OpikOptimizer/1.0 (https://github.com/opik-ai/opik-optimizer)"
         }
+        logger.debug("Issuing Wikipedia API search for '%s'", query)
         search_response = requests.get(
             "https://en.wikipedia.org/w/api.php",
             params=search_params,

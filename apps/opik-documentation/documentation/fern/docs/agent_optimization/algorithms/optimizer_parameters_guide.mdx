@@ -24,6 +24,18 @@ All optimizers inherit from `BaseOptimizer` and support these common parameters:
 - **`frequency_penalty`** (float, optional): Frequency penalty for repetition
 - **`presence_penalty`** (float, optional): Presence penalty for repetition
 
+### Common optimize_prompt Parameters
+
+All optimizers support these parameters in their `optimize_prompt()` method:
+
+- **`dataset`** (Dataset): Training dataset used for analysis and generating improvements
+- **`validation_dataset`** (Dataset, optional): Validation dataset for evaluating and ranking candidate prompts. When provided, the optimizer uses `dataset` for understanding failure modes and generating improvements, then evaluates candidates on `validation_dataset` to select the best one. This helps prevent overfitting. If not provided, the same dataset is used for both training and validation.
+- **`metric`** (Callable): Metric function to optimize
+- **`experiment_config`** (dict, optional): Optional configuration metadata
+- **`n_samples`** (int, optional): Number of dataset samples to use per evaluation
+- **`project_name`** (str, default: "Optimization"): Opik project name for logging
+- **`optimization_id`** (str, optional): Optional UUIDv7 string for the optimization run
+
 ## Optimizer-Specific Parameters
 
 ### EvolutionaryOptimizer
@@ -246,10 +258,11 @@ All optimizers inherit from `BaseOptimizer` and support these common parameters:
 
 ### Common Pitfalls
 
-1. **Over-optimization**: Too many iterations may lead to overfitting
+1. **Over-optimization**: Too many iterations may lead to overfitting. Use `validation_dataset` to detect when your prompt stops generalizing.
 2. **Under-exploration**: Too few iterations may miss optimal solutions
 3. **Model Mismatch**: Using inappropriate models for the task complexity
 4. **Parameter Conflicts**: Conflicting parameter values that work against each other
+5. **Same dataset for training and validation**: Without a separate validation dataset, you can't tell if improvements generalize. Split your data 70/30 or 80/20.
 
 ### Performance Optimization
 

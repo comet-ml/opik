@@ -325,9 +325,22 @@ optimizer = ParameterOptimizer(
    - Consider fixing low-impact parameters to reduce search space
 
 7. **Validation**
-   - Test final parameters on held-out validation set
-   - Verify improvements generalize beyond training data
-   - Consider parameter stability across different datasets
+   - **Note**: While ParameterOptimizer accepts a `validation_dataset` parameter, it doesn't improve performance due to the optimizer's internal implementation and we don't recommend using it
+   - Instead, use `evaluate_prompt()` on a held-out test dataset after optimization completes
+   - This confirms that optimized parameters generalize to unseen data
+   - Example:
+     ```python
+     # After optimization
+     from opik.evaluation import evaluate_prompt
+     
+     test_dataset = client.get_dataset(name="test-set")
+     test_results = evaluate_prompt(
+         prompt=result.prompt,
+         dataset=test_dataset,
+         scoring_metrics=[my_metric],
+     )
+     print(f"Test score: {test_results.mean_scores}")
+     ```
 
 ## Research and References
 
