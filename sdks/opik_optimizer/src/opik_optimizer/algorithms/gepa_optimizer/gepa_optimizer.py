@@ -1,4 +1,5 @@
 import logging
+import sys
 from typing import Any, Literal, overload
 from collections.abc import Callable
 
@@ -141,6 +142,7 @@ class GepaOptimizer(BaseOptimizer):
     def _adapter_instantiate_agent(
         self, prompt_obj: chat_prompt.ChatPrompt, project_name: str | None
     ) -> OptimizableAgent:
+        """Helper to produce an OptimizableAgent for adapter usage."""
         return self._create_agent_for_prompt(prompt_obj, project_name=project_name)
 
     def _build_gepa_adapter(
