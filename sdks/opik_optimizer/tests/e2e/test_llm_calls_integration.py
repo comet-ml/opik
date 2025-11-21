@@ -46,7 +46,7 @@ def wrap_litellm_with_tracking(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_e2e_native_strategy(
-    fake_backend: FakeBackend, test_model: str, skip_if_no_api_key: None
+    fake_backend: "FakeBackend", test_model: str, skip_if_no_api_key: None
 ) -> None:
     """Test call_model with native strategy and verify response_format is used."""
     messages = [
@@ -86,7 +86,7 @@ def test_e2e_native_strategy(
 
 
 def test_e2e_tool_call_strategy(
-    fake_backend: FakeBackend, test_model: str, skip_if_no_api_key: None
+    fake_backend: "FakeBackend", test_model: str, skip_if_no_api_key: None
 ) -> None:
     """Test call_model with tool_call strategy and verify tools are used."""
     messages = [
@@ -134,7 +134,7 @@ def test_e2e_tool_call_strategy(
 
 
 def test_e2e_prompt_injection_strategy(
-    fake_backend: FakeBackend, test_model: str, skip_if_no_api_key: None
+    fake_backend: "FakeBackend", test_model: str, skip_if_no_api_key: None
 ) -> None:
     """Test call_model with prompt_injection strategy and verify prompt modification."""
     messages = [
