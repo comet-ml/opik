@@ -5,7 +5,10 @@ import opik_optimizer.datasets
 import pytest
 
 from benchmarks.core import benchmark_config
-from benchmarks.core.benchmark_config import BenchmarkDatasetConfig, BenchmarkOptimizerConfig
+from benchmarks.core.benchmark_config import (
+    BenchmarkDatasetConfig,
+    BenchmarkOptimizerConfig,
+)
 from benchmarks.core.benchmark_taskspec import BenchmarkTaskSpec
 from benchmarks.utils.task_runner import (
     DatasetBundle,

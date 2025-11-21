@@ -67,8 +67,11 @@ def test_manifest_generators_expand(tmp_path: Path) -> None:
                 "metrics": ["benchmarks.metrics.hotpot.hotpot_f1"],
                 "test_mode": True,
                 "prompt": [
-                    {"role": "system", "content": "Answer the question briefly and correctly."},
-                    {"role": "user", "content": "{text}"}
+                    {
+                        "role": "system",
+                        "content": "Answer the question briefly and correctly.",
+                    },
+                    {"role": "user", "content": "{text}"},
                 ],
             }
         ],

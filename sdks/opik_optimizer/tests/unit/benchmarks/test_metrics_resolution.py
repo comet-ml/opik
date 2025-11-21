@@ -1,8 +1,5 @@
-from typing import Any
-
 from benchmarks.core import benchmark_config
 from benchmarks.utils.task_runner import _resolve_metrics
-from opik.evaluation.metrics import LevenshteinRatio
 
 
 def test_resolve_metrics_from_strings() -> None:
