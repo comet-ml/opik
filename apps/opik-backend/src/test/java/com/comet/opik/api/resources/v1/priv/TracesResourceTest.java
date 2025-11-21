@@ -4583,7 +4583,8 @@ class TracesResourceTest {
             List<String> allNames = new ArrayList<>(names);
             allNames.addAll(otherNames);
 
-            fetchAndAssertResponse(useProjectId ? names : allNames, useProjectId ? projectId : null, apiKey, workspaceName);
+            fetchAndAssertResponse(useProjectId ? names : allNames, useProjectId ? projectId : null, apiKey,
+                    workspaceName);
         }
     }
 

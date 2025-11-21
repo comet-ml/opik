@@ -115,9 +115,9 @@ import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABA
 import static com.comet.opik.api.resources.v1.events.webhooks.WebhookHttpClient.BEARER_PREFIX;
 import static com.comet.opik.api.resources.v1.events.webhooks.pagerduty.PagerDutyWebhookPayloadMapper.ROUTING_KEY_METADATA_KEY;
 import static com.comet.opik.api.resources.v1.events.webhooks.slack.SlackWebhookPayloadMapper.BASE_URL_METADATA_KEY;
-import static com.comet.opik.domain.alerts.MetricsAlertJob.formatDecimal;
 import static com.comet.opik.infrastructure.EncryptionUtils.decrypt;
 import static com.comet.opik.infrastructure.EncryptionUtils.maskApiKey;
+import static com.comet.opik.utils.NumberUtils.formatDecimal;
 import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
 import static com.github.tomakehurst.wiremock.client.WireMock.equalTo;
 import static com.github.tomakehurst.wiremock.client.WireMock.get;

@@ -17,6 +17,7 @@ import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.lock.LockService;
 import com.comet.opik.utils.AsyncUtils;
 import com.comet.opik.utils.JsonUtils;
+import com.comet.opik.utils.NumberUtils;
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonValue;
 import io.dropwizard.jobs.Job;
@@ -244,8 +245,8 @@ public class MetricsAlertJob extends Job implements InterruptableJob {
                             var metricsPayload = MetricsAlertPayload.builder()
                                     .eventType(trigger.eventType().name())
                                     .metricName(trigger.eventType().getValue())
-                                    .metricValue(formatDecimal(metricValueFinal))
-                                    .threshold(formatDecimal(config.threshold()))
+                                    .metricValue(NumberUtils.formatDecimal(metricValueFinal))
+                                    .threshold(NumberUtils.formatDecimal(config.threshold()))
                                     .windowSeconds(config.windowSeconds())
                                     .projectIds(config.projectIds() != null
                                             ? config.projectIds().stream().map(UUID::toString)
@@ -345,17 +346,6 @@ public class MetricsAlertJob extends Job implements InterruptableJob {
                 .orElseThrow(() -> new IllegalArgumentException(
                         "Missing config value for key '%s' in trigger of type '%s'"
                                 .formatted(key, configType)));
-    }
-
-    /**
-     * Formats decimal number to 4 decimal places.
-     */
-    public static String formatDecimal(BigDecimal value) {
-        if (value.stripTrailingZeros().scale() <= 0) {
-            // It's an integer
-            return value.toBigInteger().toString();
-        }
-        return value.setScale(4, RoundingMode.HALF_UP).toPlainString();
     }
 
     private record TriggerConfig(List<UUID> projectIds, BigDecimal threshold, long windowSeconds, String name,
