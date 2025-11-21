@@ -55,7 +55,7 @@ console: Console | None = None
 def list_available_runs() -> list[dict]:
     """List all available benchmark runs in the Volume."""
     sys.path.insert(0, "/root/benchmarks")
-    from modal_utils.storage import list_available_runs_from_volume
+    from benchmarks.modal_utils.storage import list_available_runs_from_volume
 
     return list_available_runs_from_volume()
 
@@ -72,7 +72,7 @@ def load_run_results(run_id: str) -> dict:
         - call_ids: List of function call IDs
     """
     sys.path.insert(0, "/root/benchmarks")
-    from modal_utils.storage import load_run_results_from_volume
+    from benchmarks.modal_utils.storage import load_run_results_from_volume
 
     return load_run_results_from_volume(run_id)
 
@@ -121,7 +121,7 @@ def main(
 
 def _list_runs() -> None:
     """Display list of all available runs."""
-    from modal_utils.display import display_runs_table
+    from benchmarks.modal_utils.display import display_runs_table
 
     assert console is not None
     console.print("\n[bold]📋 Available Benchmark Runs[/bold]\n")
@@ -287,7 +287,7 @@ def _show_errors(run_id: str, task_filter: str | None = None) -> None:
 
 def _generate_results_display(run_id: str, detailed: bool, is_live: bool) -> Any:
     """Generate rich display of results."""
-    from modal_utils.display import generate_results_display
+    from benchmarks.modal_utils.display import generate_results_display
 
     results = load_run_results.remote(run_id)
 

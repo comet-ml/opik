@@ -3,8 +3,8 @@ import os
 import time
 from typing import Any
 
-from benchmark_task import TaskResult
-from benchmark_taskspec import BenchmarkTaskSpec
+from benchmarks.core.benchmark_task import TaskResult
+from benchmarks.core.benchmark_taskspec import BenchmarkTaskSpec
 from opik_optimizer import ChatPrompt
 
 

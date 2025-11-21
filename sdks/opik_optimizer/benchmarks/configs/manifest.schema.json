@@ -111,6 +111,9 @@
       }
     }
   },
-  "required": ["tasks"],
+  "anyOf": [
+    { "required": ["tasks"] },
+    { "required": ["generators"] }
+  ],
   "additionalProperties": false
 }
