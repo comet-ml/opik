@@ -5,6 +5,7 @@ import typing
 from ..core.client_wrapper import AsyncClientWrapper, SyncClientWrapper
 from ..core.request_options import RequestOptions
 from ..types.dataset_expansion_response import DatasetExpansionResponse
+from ..types.dataset_item_filter import DatasetItemFilter
 from ..types.dataset_item_page_compare import DatasetItemPageCompare
 from ..types.dataset_item_page_public import DatasetItemPagePublic
 from ..types.dataset_item_public import DatasetItemPublic
@@ -44,8 +45,9 @@ class DatasetsClient:
     def batch_update_dataset_items(
         self,
         *,
-        ids: typing.Sequence[str],
         update: DatasetItemUpdate,
+        ids: typing.Optional[typing.Sequence[str]] = OMIT,
+        filters: typing.Optional[typing.Sequence[DatasetItemFilter]] = OMIT,
         merge_tags: typing.Optional[bool] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
@@ -54,13 +56,15 @@ class DatasetsClient:
 
         Parameters
         ----------
-        ids : typing.Sequence[str]
-            List of dataset item IDs to update (max 1000)
-
         update : DatasetItemUpdate
 
+        ids : typing.Optional[typing.Sequence[str]]
+            List of dataset item IDs to update (max 1000). Mutually exclusive with 'filters'.
+
+        filters : typing.Optional[typing.Sequence[DatasetItemFilter]]
+
         merge_tags : typing.Optional[bool]
-            If true, merge tags with existing tags instead of replacing them. Default: false
+            If true, merge tags with existing tags instead of replacing them. Default: false. When using 'filters', this is automatically set to true.
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -74,10 +78,10 @@ class DatasetsClient:
         from Opik import OpikApi
         from Opik import DatasetItemUpdate
         client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
-        client.datasets.batch_update_dataset_items(ids=['ids'], update=DatasetItemUpdate(), )
+        client.datasets.batch_update_dataset_items(update=DatasetItemUpdate(), )
         """
         _response = self._raw_client.batch_update_dataset_items(
-            ids=ids, update=update, merge_tags=merge_tags, request_options=request_options
+            update=update, ids=ids, filters=filters, merge_tags=merge_tags, request_options=request_options
         )
         return _response.data
 
@@ -912,8 +916,9 @@ class AsyncDatasetsClient:
     async def batch_update_dataset_items(
         self,
         *,
-        ids: typing.Sequence[str],
         update: DatasetItemUpdate,
+        ids: typing.Optional[typing.Sequence[str]] = OMIT,
+        filters: typing.Optional[typing.Sequence[DatasetItemFilter]] = OMIT,
         merge_tags: typing.Optional[bool] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
@@ -922,13 +927,15 @@ class AsyncDatasetsClient:
 
         Parameters
         ----------
-        ids : typing.Sequence[str]
-            List of dataset item IDs to update (max 1000)
-
         update : DatasetItemUpdate
 
+        ids : typing.Optional[typing.Sequence[str]]
+            List of dataset item IDs to update (max 1000). Mutually exclusive with 'filters'.
+
+        filters : typing.Optional[typing.Sequence[DatasetItemFilter]]
+
         merge_tags : typing.Optional[bool]
-            If true, merge tags with existing tags instead of replacing them. Default: false
+            If true, merge tags with existing tags instead of replacing them. Default: false. When using 'filters', this is automatically set to true.
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -944,11 +951,11 @@ class AsyncDatasetsClient:
         import asyncio
         client = AsyncOpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
         async def main() -> None:
-            await client.datasets.batch_update_dataset_items(ids=['ids'], update=DatasetItemUpdate(), )
+            await client.datasets.batch_update_dataset_items(update=DatasetItemUpdate(), )
         asyncio.run(main())
         """
         _response = await self._raw_client.batch_update_dataset_items(
-            ids=ids, update=update, merge_tags=merge_tags, request_options=request_options
+            update=update, ids=ids, filters=filters, merge_tags=merge_tags, request_options=request_options
         )
         return _response.data
 

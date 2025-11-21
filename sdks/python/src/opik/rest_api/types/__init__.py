@@ -165,6 +165,8 @@ from .dataset_item import DatasetItem
 from .dataset_item_batch import DatasetItemBatch
 from .dataset_item_compare import DatasetItemCompare
 from .dataset_item_compare_source import DatasetItemCompareSource
+from .dataset_item_filter import DatasetItemFilter
+from .dataset_item_filter_operator import DatasetItemFilterOperator
 from .dataset_item_page_compare import DatasetItemPageCompare
 from .dataset_item_page_public import DatasetItemPagePublic
 from .dataset_item_public import DatasetItemPublic
@@ -599,6 +601,8 @@ __all__ = [
     "DatasetItemBatch",
     "DatasetItemCompare",
     "DatasetItemCompareSource",
+    "DatasetItemFilter",
+    "DatasetItemFilterOperator",
     "DatasetItemPageCompare",
     "DatasetItemPagePublic",
     "DatasetItemPublic",

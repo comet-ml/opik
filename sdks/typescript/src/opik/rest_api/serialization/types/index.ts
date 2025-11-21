@@ -144,6 +144,8 @@ export * from "./StreamOptions";
 export * from "./Tool";
 export * from "./DashboardPublic";
 export * from "./DashboardPagePublic";
+export * from "./DatasetItemFilterOperator";
+export * from "./DatasetItemFilter";
 export * from "./DatasetItemUpdate";
 export * from "./DatasetVisibility";
 export * from "./Dataset";
