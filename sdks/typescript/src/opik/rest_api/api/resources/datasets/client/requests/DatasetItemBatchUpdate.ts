@@ -7,14 +7,14 @@ import * as OpikApi from "../../../../index";
 /**
  * @example
  *     {
- *         ids: ["ids"],
  *         update: {}
  *     }
  */
 export interface DatasetItemBatchUpdate {
-    /** List of dataset item IDs to update (max 1000) */
-    ids: string[];
+    /** List of dataset item IDs to update (max 1000). Mutually exclusive with 'filters'. */
+    ids?: string[];
+    filters?: OpikApi.DatasetItemFilter[];
     update: OpikApi.DatasetItemUpdate;
-    /** If true, merge tags with existing tags instead of replacing them. Default: false */
+    /** If true, merge tags with existing tags instead of replacing them. Default: false. When using 'filters', this is automatically set to true. */
     mergeTags?: boolean;
 }

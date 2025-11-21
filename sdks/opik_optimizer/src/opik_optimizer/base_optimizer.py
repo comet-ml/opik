@@ -409,6 +409,9 @@ class BaseOptimizer(ABC):
             if hasattr(self, "agent_class")
             else None
         )
+        # Ensure experiment traces follow the project name supplied to optimize_prompt.
+        if not project_name:
+            project_name = getattr(self, "project_name", None)
         if not project_name:
             project_name = getattr(prompt, "project_name", None)
         if not project_name:

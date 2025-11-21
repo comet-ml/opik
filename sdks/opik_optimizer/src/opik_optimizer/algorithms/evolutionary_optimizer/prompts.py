@@ -12,8 +12,9 @@ Focus on characteristics like:
 - **Keywords/Phrasing**: Any recurring keywords or phrasing patterns in the outputs.
 
 Provide a single string that summarizes this style. This summary should be directly usable as an instruction for another LLM.
-For example: 'Outputs should be a single, concise proper noun.' OR 'Outputs should be a short paragraph explaining the reasoning, followed by a direct answer, avoiding conversational pleasantries.' OR 'Outputs are typically 1-2 sentences, providing a direct factual answer.'
-Return ONLY this descriptive string, with no preamble or extra formatting.
+Return the result as a JSON object of the form: {"style": "your description here"} and dont provide any other text.
+For example: {"style": "Outputs should be a single, concise proper noun."} OR {"style": "Outputs should be a short paragraph explaining the reasoning, followed by a direct answer, avoiding conversational pleasantries."} OR {"style": "Outputs are typically 1-2 sentences, providing a direct factual answer."}
+Return ONLY this JSON object string, with no preamble or extra formatting.
 """
 
 
@@ -25,7 +26,7 @@ def style_inference_user_prompt(examples_str: str) -> str:
 Based on these examples, what is the desired output style description?
 Remember to focus on aspects like length, tone, structure, content details, and any recurring keywords or phrasing patterns in the outputs.
 The description should be a single string that can be directly used as an instruction for another LLM.
-Return ONLY this descriptive string.
+Return ONLY this JSON object string, with no preamble or extra formatting.
 """
 
 

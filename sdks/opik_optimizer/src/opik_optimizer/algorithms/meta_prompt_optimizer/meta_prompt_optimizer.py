@@ -19,6 +19,8 @@ from ...optimizable_agent import OptimizableAgent
 from . import reporting
 import re
 from ... import _llm_calls
+from ..._llm_calls import StructuredOutputParsingError
+from litellm.exceptions import BadRequestError
 from ...mcp_utils.mcp import PROMPT_TOOL_FOOTER, PROMPT_TOOL_HEADER
 from ...mcp_utils.mcp_workflow import (
     MCPExecutionConfig,
@@ -673,9 +675,12 @@ class MetaPromptOptimizer(BaseOptimizer):
                     # Limit to prompts_this_round
                     candidate_prompts = candidate_prompts[:prompts_this_round]
                 except Exception as e:
+                    if isinstance(e, (BadRequestError, StructuredOutputParsingError)):
+                        raise
                     round_reporter.failed_to_generate(prompts_this_round, e)
-                    round_num += 1
-                    continue
+                    # Prevent infinite loop when generation fails repeatedly.
+                    trials_used += prompts_this_round
+                    break
 
                 # Step 2. Score each candidate prompt
                 prompt_scores: list[tuple[chat_prompt.ChatPrompt, float]] = []
@@ -1065,6 +1070,8 @@ class MetaPromptOptimizer(BaseOptimizer):
                 # --- End Robust Parsing ---
 
             except Exception as e:
+                if isinstance(e, (BadRequestError, StructuredOutputParsingError)):
+                    raise
                 raise ValueError(
                     f"Unexpected error during candidate prompt generation: {e}"
                 )
