@@ -650,8 +650,10 @@ class MetaPromptOptimizer(BaseOptimizer):
                     candidate_prompts = candidate_prompts[:prompts_this_round]
                 except Exception as e:
                     round_reporter.failed_to_generate(prompts_this_round, e)
+                    # Prevent infinite loop when generation fails repeatedly.
+                    trials_used += prompts_this_round
                     round_num += 1
-                    continue
+                    break
 
                 # Step 2. Score each candidate prompt
                 prompt_scores: list[tuple[chat_prompt.ChatPrompt, float]] = []
