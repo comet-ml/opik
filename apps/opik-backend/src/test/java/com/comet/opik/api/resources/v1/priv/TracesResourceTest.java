@@ -4547,9 +4547,10 @@ class TracesResourceTest {
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
     class GetFeedbackScoreNames {
 
-        @Test
+        @ParameterizedTest
+        @ValueSource(booleans = {true, false})
         @DisplayName("when get feedback score names, then return feedback score names")
-        void getFeedbackScoreNames__whenGetFeedbackScoreNames__thenReturnFeedbackScoreNames() {
+        void getFeedbackScoreNames__whenGetFeedbackScoreNames__thenReturnFeedbackScoreNames(boolean useProjectId) {
 
             // given
             var apiKey = UUID.randomUUID().toString();
@@ -4579,7 +4580,10 @@ class TracesResourceTest {
 
             traceResourceClient.createMultiValueScores(otherNames, unexpectedProject, apiKey, workspaceName);
 
-            fetchAndAssertResponse(names, projectId, apiKey, workspaceName);
+            List<String> allNames = new ArrayList<>(names);
+            allNames.addAll(otherNames);
+
+            fetchAndAssertResponse(useProjectId ? names : allNames, useProjectId ? projectId : null, apiKey, workspaceName);
         }
     }
 
@@ -4588,9 +4592,11 @@ class TracesResourceTest {
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
     class GetTraceThreadsFeedbackScoreNames {
 
-        @Test
+        @ParameterizedTest
+        @ValueSource(booleans = {true, false})
         @DisplayName("when get trace threads feedback score names, then return feedback score names")
-        void getTraceThreadsFeedbackScoreNames__whenGetTraceThreadsFeedbackScoreNames__thenReturnFeedbackScoreNames() {
+        void getTraceThreadsFeedbackScoreNames__whenGetTraceThreadsFeedbackScoreNames__thenReturnFeedbackScoreNames(
+                boolean useProjectId) {
 
             // given
             var apiKey = UUID.randomUUID().toString();
@@ -4623,11 +4629,15 @@ class TracesResourceTest {
             createMultiValueTraceThreadScores(otherNames, unexpectedProject, apiKey, workspaceName);
 
             // when
-            FeedbackScoreNames actualNames = traceResourceClient.getTraceThreadsFeedbackScoreNames(projectId, apiKey,
+            FeedbackScoreNames actualNames = traceResourceClient.getTraceThreadsFeedbackScoreNames(
+                    useProjectId ? projectId : null, apiKey,
                     workspaceName);
 
+            List<String> allNames = new ArrayList<>(names);
+            allNames.addAll(otherNames);
+
             // then
-            assertFeedbackScoreNames(actualNames, names);
+            assertFeedbackScoreNames(actualNames, useProjectId ? names : allNames);
         }
     }
 

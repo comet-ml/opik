@@ -497,12 +497,12 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
 
     @Override
     @WithSpan
-    public Mono<List<String>> getTraceFeedbackScoreNames(@NonNull UUID projectId) {
+    public Mono<List<String>> getTraceFeedbackScoreNames(UUID projectId) {
         return asyncTemplate.nonTransaction(connection -> {
 
             var template = TemplateUtils.newST(SELECT_TRACE_FEEDBACK_SCORE_NAMES);
 
-            List<UUID> projectIds = List.of(projectId);
+            List<UUID> projectIds = projectId == null ? List.of() : List.of(projectId);
 
             bindTemplateParam(projectIds, false, null, template);
 
@@ -559,7 +559,6 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
 
     @Override
     public Mono<List<String>> getProjectsTraceThreadsFeedbackScoreNames(@NonNull List<UUID> projectIds) {
-        Preconditions.checkArgument(CollectionUtils.isNotEmpty(projectIds), "Argument 'projectId' must not be empty");
 
         return asyncTemplate.nonTransaction(connection -> {
 
