@@ -239,9 +239,9 @@ def json_to_dict(json_str: str) -> Any:
                     serialization_error,
                 )
                 raise json_error
-        except Exception:
+        except Exception as exc:
             # As a last resort, return None so callers can fallback instead of crashing.
-            logger.debug("Returning None for unparsable JSON payload.")
+            logger.debug("Returning None for unparsable JSON payload: %s", exc)
             return None
 
 
