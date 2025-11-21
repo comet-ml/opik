@@ -41,10 +41,12 @@ jobs:
             - name: Generate Opik Optimizer Fern docs
               env:
                 BASE_SHA: ${{ github.event.pull_request.base.sha }}
-                HEAD_SHA: ${{ github.sha }}
+                HEAD_SHA: ${{ github.event.pull_request.head.sha }}
               run: |
                 # Only regenerate optimizer docs when optimizer files change to avoid slowing unrelated PRs
-                if git diff --name-only "$BASE_SHA"..."$HEAD_SHA" | grep -E '^sdks/opik_optimizer/(.*\\.py|pyproject\\.toml|setup\\.py)$'; then
+                changed_files=$(git diff --name-only "$BASE_SHA"..."$HEAD_SHA" -- sdks/opik_optimizer || true)
+                echo "Changed optimizer files: $changed_files"
+                if [ -n "$changed_files" ]; then
                   python sdks/opik_optimizer/scripts/generate_fern_docs.py --write
                 else
                   echo "No optimizer SDK changes detected; skipping optimizer doc generation."
