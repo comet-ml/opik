@@ -292,7 +292,7 @@ opik.flush_tracker()  # Ensure all traces are sent
 
 In this example:
 - Each workflow step is decorated with `@opik.track()` to create spans
-- The `@step` decorator is placed before(above) `@opik.track()` to ensure LlamaIndex can properly discover the workflow steps
+- The `@step` decorator is placed before `@opik.track()` to ensure LlamaIndex can properly discover the workflow steps
 - `opik.start_as_current_span()` tracks the overall workflow execution
 - LLM calls within steps are automatically tracked via the global Opik handler
 - All workflow steps appear as nested spans within the workflow trace
