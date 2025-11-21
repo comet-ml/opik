@@ -23,6 +23,12 @@ def test_manifest_tasks_and_datasets(tmp_path: Path) -> None:
                     "validation": {"loader": "tiny_test", "count": 2},
                 },
             },
+            {
+                # Single override object without explicit splits should map to train-only.
+                "dataset": {"loader": "tiny_test", "count": 3},
+                "optimizer": "few_shot",
+                "model": "model-c",
+            },
         ],
     }
     manifest_path = tmp_path / "manifest.json"
@@ -31,13 +37,17 @@ def test_manifest_tasks_and_datasets(tmp_path: Path) -> None:
     manifest = load_manifest(str(manifest_path))
     tasks = manifest_to_task_specs(manifest)
 
-    assert len(tasks) == 2
+    assert len(tasks) == 3
     assert tasks[0].dataset_name == "hotpot"
     assert tasks[0].datasets is None
     assert tasks[1].dataset_name == "tiny_test"
     assert tasks[1].datasets is not None
     assert "train" in tasks[1].datasets
     assert "validation" in tasks[1].datasets
+    # Third task uses the loader override applied to train only.
+    assert tasks[2].dataset_name == "tiny_test"
+    assert tasks[2].datasets is not None
+    assert set(tasks[2].datasets.keys()) == {"train"}
 
 
 def test_manifest_generators_expand(tmp_path: Path) -> None:

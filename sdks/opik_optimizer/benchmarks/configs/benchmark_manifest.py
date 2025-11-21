@@ -19,6 +19,7 @@ class ManifestTask(BaseModel):
     optimizer_prompt_params: dict[str, Any] | None = None
     datasets: dict[str, Any] | None = None
     metrics: list[str] | None = None
+    prompt: list[dict[str, Any]] | None = None
 
 
 class GeneratorDataset(BaseModel):
@@ -43,6 +44,7 @@ class GeneratorSpec(BaseModel):
     optimizers: list[GeneratorOptimizer]
     metrics: list[str] | None = None
     test_mode: bool | None = None
+    prompt: list[dict[str, Any]] | None = None
 
 
 class BenchmarkManifest(BaseModel):
@@ -80,11 +82,9 @@ def manifest_to_task_specs(
                 )
             dataset_name: str = str(dataset_field.get("dataset_name", loader_name))
             if datasets_override is None:
-                datasets_override = {
-                    "train": dict(dataset_field),
-                    "validation": dict(dataset_field),
-                    "test": dict(dataset_field),
-                }
+                # If the user provided a single dataset override without explicit splits,
+                # apply it to train only. Validation/test must be requested explicitly.
+                datasets_override = {"train": dict(dataset_field)}
         else:
             dataset_name = dataset_field
 
@@ -101,6 +101,7 @@ def manifest_to_task_specs(
         optimizer_params: dict[str, Any] | None,
         optimizer_prompt_params: dict[str, Any] | None,
         metrics: list[str] | None,
+        prompt: list[dict[str, Any]] | None,
     ) -> None:
         dataset_name, datasets_override = _normalize_dataset_entry(dataset, datasets)
         specs.append(
@@ -114,6 +115,7 @@ def manifest_to_task_specs(
                 optimizer_prompt_params=optimizer_prompt_params,
                 datasets=datasets_override,
                 metrics=metrics,
+                prompt_messages=prompt,
             )
         )
 
@@ -132,6 +134,7 @@ def manifest_to_task_specs(
             optimizer_params=task.optimizer_params,
             optimizer_prompt_params=task.optimizer_prompt_params,
             metrics=task.metrics,
+            prompt=task.prompt,
         )
 
     for generator in manifest.generators:
@@ -153,6 +156,7 @@ def manifest_to_task_specs(
                         optimizer_params=opt_entry.optimizer_params,
                         optimizer_prompt_params=opt_entry.optimizer_prompt_params,
                         metrics=generator.metrics,
+                        prompt=generator.prompt,
                     )
 
     return specs

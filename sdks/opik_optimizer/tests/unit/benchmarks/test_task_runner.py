@@ -4,11 +4,15 @@ from opik_optimizer import BaseOptimizer, ChatPrompt
 import opik_optimizer.datasets
 import pytest
 
+from benchmarks.core import benchmark_config
+from benchmarks.core.benchmark_config import BenchmarkDatasetConfig, BenchmarkOptimizerConfig
+from benchmarks.core.benchmark_taskspec import BenchmarkTaskSpec
 from benchmarks.utils.task_runner import (
     DatasetBundle,
     collect_dataset_metadata,
     evaluate_prompt_on_dataset,
     resolve_dataset_bundle,
+    preflight_tasks,
 )
 
 
@@ -151,3 +155,62 @@ def test_resolve_dataset_bundle_with_overrides(monkeypatch: pytest.MonkeyPatch) 
     assert bundle.test is None
     assert bundle.evaluation_role == "validation"
     assert calls and calls[0][1]["count"] == 1
+
+
+def test_preflight_tasks_validates_and_creates(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        opik_optimizer.datasets,
+        "dummy_ds",
+        lambda **kwargs: DummyDataset(kwargs.get("dataset_name", "dummy_ds")),
+        raising=False,
+    )
+    monkeypatch.setattr(
+        benchmark_config,
+        "DATASET_CONFIG",
+        {
+            "dummy_ds": BenchmarkDatasetConfig(
+                name="dummy_ds",
+                display_name="Dummy",
+                metrics=[lambda *_args, **_kwargs: 1.0],
+            )
+        },
+    )
+    monkeypatch.setattr(
+        benchmark_config,
+        "OPTIMIZER_CONFIGS",
+        {"few_shot": BenchmarkOptimizerConfig(class_name="FewShot", params={})},
+    )
+
+    task = BenchmarkTaskSpec(
+        dataset_name="dummy_ds",
+        optimizer_name="few_shot",
+        model_name="openai/gpt-4o-mini",
+        test_mode=True,
+    )
+
+    preflight_tasks([task])
+
+
+def test_preflight_tasks_raises_on_unknown_optimizer() -> None:
+    task = BenchmarkTaskSpec(
+        dataset_name="unknown",
+        optimizer_name="missing",
+        model_name="openai/gpt-4o-mini",
+        test_mode=True,
+    )
+
+    with pytest.raises(ValueError, match="Unknown optimizer"):
+        preflight_tasks([task])
+
+
+def test_preflight_tasks_requires_train_when_validation_present() -> None:
+    task = BenchmarkTaskSpec(
+        dataset_name="tiny_test",
+        optimizer_name="few_shot",
+        model_name="openai/gpt-4o-mini",
+        test_mode=True,
+        datasets={"validation": {"loader": "tiny_test"}},
+    )
+
+    with pytest.raises(ValueError, match="datasets config must include a train split"):
+        preflight_tasks([task])

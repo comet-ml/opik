@@ -34,6 +34,7 @@ import modal
 from benchmarks.core import benchmark_config
 from benchmarks.core.benchmark_taskspec import BenchmarkTaskSpec
 from benchmarks.utils.budgeting import resolve_optimize_params
+from benchmarks.utils.task_runner import preflight_tasks
 
 # Define Modal app (just for local entrypoint - worker is deployed separately)
 app = modal.App("opik-optimizer-benchmarks-coordinator")
@@ -200,6 +201,9 @@ def submit_benchmark_tasks(
         ]
     else:
         tasks_iter = task_specs
+
+    # Preflight before submitting remotely to avoid mid-run failures.
+    preflight_tasks(tasks_iter)
 
     for task in tasks_iter:
         task_id = task.task_id

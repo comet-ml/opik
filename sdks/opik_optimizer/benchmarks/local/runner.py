@@ -29,7 +29,7 @@ from benchmarks.core.benchmark_task import (
 from benchmarks.core.benchmark_taskspec import BenchmarkTaskSpec
 
 from benchmarks.utils.budgeting import resolve_optimize_params
-from benchmarks.utils.task_runner import execute_task
+from benchmarks.utils.task_runner import execute_task, preflight_tasks
 
 
 @benchmark_logging.log_console_output_to_file()
@@ -43,6 +43,7 @@ def run_optimization(
     optimizer_params_override: dict[str, Any] | None = None,
     optimizer_prompt_params_override: dict[str, Any] | None = None,
     datasets: dict[str, Any] | None = None,
+    prompt_messages: list[dict[str, Any]] | None = None,
 ) -> TaskResult:
     return execute_task(
         task_id=task_id,
@@ -54,6 +55,7 @@ def run_optimization(
         optimizer_params_override=optimizer_params_override,
         optimizer_prompt_params_override=optimizer_prompt_params_override,
         datasets=datasets,
+        prompt_messages=prompt_messages,
     )
 
 
@@ -104,6 +106,9 @@ class BenchmarkRunner:
             ]
         else:
             tasks = task_specs
+
+        # Fail fast before launching workers
+        preflight_tasks(tasks)
 
         datasets_for_log = sorted({task.dataset_name for task in tasks})
         optimizers_for_log = sorted({task.optimizer_name for task in tasks})
@@ -186,6 +191,7 @@ class BenchmarkRunner:
                         optimizer_params_override=task.optimizer_params,
                         optimizer_prompt_params_override=optimize_override,
                         datasets=task.datasets,
+                        prompt_messages=task.prompt_messages,
                     )
 
                     future_to_info[future] = (
