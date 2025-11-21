@@ -65,7 +65,7 @@ Be precise and actionable in your hazard descriptions. Focus on safety-critical 
         model_parameters={"temperature": 1, "max_tokens": 256},
         n_threads=2,
         max_parallel_batches=2,
-        batch_size=5,
+        batch_size=2,
         convergence_threshold=0.01,
         verbose=1,
         seed=42,
@@ -191,13 +191,13 @@ Be precise and actionable in your hazard descriptions. Focus on safety-critical 
 
     # Validate model configuration
     assert "model" in results.details, "Details should contain 'model'"
-    assert results.details["model"] == "openai/gpt-5-nano", (
-        f"Expected openai/gpt-5-nano, got {results.details['model']}"
+    assert results.details["model"] == optimizer.model, (
+        f"Expected {optimizer.model}, got {results.details['model']}"
     )
 
     # Validate hierarchical-specific details
     assert "n_threads" in results.details, "Details should contain 'n_threads'"
-    assert results.details["n_threads"] == 1
+    assert results.details["n_threads"] == optimizer.n_threads
 
     assert "max_parallel_batches" in results.details, (
         "Details should contain 'max_parallel_batches'"
