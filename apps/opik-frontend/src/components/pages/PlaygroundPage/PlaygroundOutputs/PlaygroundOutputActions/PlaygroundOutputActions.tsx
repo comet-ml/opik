@@ -100,7 +100,7 @@ const PlaygroundOutputActions = ({
         id: "tags",
         label: "Tags",
         type: COLUMN_TYPE.list,
-        iconType: "tags",
+        iconType: "tags" as const,
       },
     ];
   }, []);
