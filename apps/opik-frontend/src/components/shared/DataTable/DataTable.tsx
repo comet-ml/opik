@@ -133,6 +133,7 @@ interface DataTableProps<TData, TValue> {
   getRowHeightStyle?: (height: ROW_HEIGHT) => React.CSSProperties;
   rowHeight?: ROW_HEIGHT;
   columnPinning?: ColumnPinningState;
+  columnPinningState?: ColumnPinningState;
   noData?: ReactNode;
   autoWidth?: boolean;
   stickyHeader?: boolean;
@@ -163,6 +164,7 @@ const DataTable = <TData, TValue>({
   getRowHeightStyle = calculateHeightStyle,
   rowHeight = ROW_HEIGHT.small,
   columnPinning,
+  columnPinningState,
   noData,
   autoWidth = false,
   TableWrapper = DataTableWrapper,
@@ -213,6 +215,7 @@ const DataTable = <TData, TValue>({
       ...(resizeConfig?.columnSizing && {
         columnSizing: resizeConfig.columnSizing,
       }),
+      ...(columnPinningState && { columnPinning: columnPinningState }),
     },
     initialState: {
       ...(columnPinning && { columnPinning }),

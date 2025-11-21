@@ -232,7 +232,7 @@ const PlaygroundOutputTable = ({
         data={rows}
         rowHeight={ROW_HEIGHT.large}
         resizeConfig={resizeConfig}
-        columnPinning={columnPinning}
+        columnPinningState={columnPinning}
         noData={<DataTableNoData title={noDataMessage} />}
         showLoadingOverlay={isFetchingData}
       />
