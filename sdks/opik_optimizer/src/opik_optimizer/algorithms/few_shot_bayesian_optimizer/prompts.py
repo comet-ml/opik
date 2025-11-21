@@ -10,8 +10,9 @@ import textwrap
 FEW_SHOT_EXAMPLE_PLACEHOLDER = "FEW_SHOT_EXAMPLE_PLACEHOLDER"
 
 # System prompt for generating few-shot prompt templates
-SYSTEM_PROMPT_TEMPLATE = textwrap.dedent(
-    """
+SYSTEM_PROMPT_TEMPLATE = (
+    textwrap.dedent(
+        """
     You are a prompt editor that modifies a message list to support few-shot learning. Your job is to insert a placeholder where few-shot examples can be inserted and generate a reusable string template for formatting those examples.
 
     You will receive a JSON object with the following fields:
@@ -38,4 +39,7 @@ SYSTEM_PROMPT_TEMPLATE = textwrap.dedent(
 
     Respond only with the JSON object. Do not include any explanation or extra text.
     """
-).strip().format(FEW_SHOT_EXAMPLE_PLACEHOLDER=FEW_SHOT_EXAMPLE_PLACEHOLDER)
+    )
+    .strip()
+    .format(FEW_SHOT_EXAMPLE_PLACEHOLDER=FEW_SHOT_EXAMPLE_PLACEHOLDER)
+)
