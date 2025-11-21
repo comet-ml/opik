@@ -239,7 +239,8 @@ const TraceDetailsActionsPanel: React.FunctionComponent<
 
       const mappedData = await mapRowDataForExport(dataToExport, exportColumns);
       const csv = json2csv(mappedData);
-      const fileSuffix = entityType === TRACE_DATA_TYPE.spans ? "span" : "trace";
+      const fileSuffix =
+        entityType === TRACE_DATA_TYPE.spans ? "span" : "trace";
       const fileName = `${entityId}-${fileSuffix}.csv`;
       const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
       FileSaver.saveAs(blob, fileName);
@@ -264,7 +265,8 @@ const TraceDetailsActionsPanel: React.FunctionComponent<
       const { dataToExport, entityType, entityId } = getDataToExport(treeData);
 
       const mappedData = await mapRowDataForExport(dataToExport, exportColumns);
-      const fileSuffix = entityType === TRACE_DATA_TYPE.spans ? "span" : "trace";
+      const fileSuffix =
+        entityType === TRACE_DATA_TYPE.spans ? "span" : "trace";
       const fileName = `${entityId}-${fileSuffix}.json`;
       const blob = new Blob([JSON.stringify(mappedData, null, 2)], {
         type: "application/json;charset=utf-8",
