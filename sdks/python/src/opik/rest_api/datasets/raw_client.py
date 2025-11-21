@@ -14,6 +14,7 @@ from ..core.serialization import convert_and_respect_annotation_metadata
 from ..errors.bad_request_error import BadRequestError
 from ..errors.not_found_error import NotFoundError
 from ..types.dataset_expansion_response import DatasetExpansionResponse
+from ..types.dataset_item_filter import DatasetItemFilter
 from ..types.dataset_item_page_compare import DatasetItemPageCompare
 from ..types.dataset_item_page_public import DatasetItemPagePublic
 from ..types.dataset_item_public import DatasetItemPublic
@@ -41,8 +42,9 @@ class RawDatasetsClient:
     def batch_update_dataset_items(
         self,
         *,
-        ids: typing.Sequence[str],
         update: DatasetItemUpdate,
+        ids: typing.Optional[typing.Sequence[str]] = OMIT,
+        filters: typing.Optional[typing.Sequence[DatasetItemFilter]] = OMIT,
         merge_tags: typing.Optional[bool] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> HttpResponse[None]:
@@ -51,13 +53,15 @@ class RawDatasetsClient:
 
         Parameters
         ----------
-        ids : typing.Sequence[str]
-            List of dataset item IDs to update (max 1000)
-
         update : DatasetItemUpdate
 
+        ids : typing.Optional[typing.Sequence[str]]
+            List of dataset item IDs to update (max 1000). Mutually exclusive with 'filters'.
+
+        filters : typing.Optional[typing.Sequence[DatasetItemFilter]]
+
         merge_tags : typing.Optional[bool]
-            If true, merge tags with existing tags instead of replacing them. Default: false
+            If true, merge tags with existing tags instead of replacing them. Default: false. When using 'filters', this is automatically set to true.
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -71,6 +75,9 @@ class RawDatasetsClient:
             method="PATCH",
             json={
                 "ids": ids,
+                "filters": convert_and_respect_annotation_metadata(
+                    object_=filters, annotation=typing.Sequence[DatasetItemFilter], direction="write"
+                ),
                 "update": convert_and_respect_annotation_metadata(
                     object_=update, annotation=DatasetItemUpdate, direction="write"
                 ),
@@ -1202,8 +1209,9 @@ class AsyncRawDatasetsClient:
     async def batch_update_dataset_items(
         self,
         *,
-        ids: typing.Sequence[str],
         update: DatasetItemUpdate,
+        ids: typing.Optional[typing.Sequence[str]] = OMIT,
+        filters: typing.Optional[typing.Sequence[DatasetItemFilter]] = OMIT,
         merge_tags: typing.Optional[bool] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> AsyncHttpResponse[None]:
@@ -1212,13 +1220,15 @@ class AsyncRawDatasetsClient:
 
         Parameters
         ----------
-        ids : typing.Sequence[str]
-            List of dataset item IDs to update (max 1000)
-
         update : DatasetItemUpdate
 
+        ids : typing.Optional[typing.Sequence[str]]
+            List of dataset item IDs to update (max 1000). Mutually exclusive with 'filters'.
+
+        filters : typing.Optional[typing.Sequence[DatasetItemFilter]]
+
         merge_tags : typing.Optional[bool]
-            If true, merge tags with existing tags instead of replacing them. Default: false
+            If true, merge tags with existing tags instead of replacing them. Default: false. When using 'filters', this is automatically set to true.
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -1232,6 +1242,9 @@ class AsyncRawDatasetsClient:
             method="PATCH",
             json={
                 "ids": ids,
+                "filters": convert_and_respect_annotation_metadata(
+                    object_=filters, annotation=typing.Sequence[DatasetItemFilter], direction="write"
+                ),
                 "update": convert_and_respect_annotation_metadata(
                     object_=update, annotation=DatasetItemUpdate, direction="write"
                 ),

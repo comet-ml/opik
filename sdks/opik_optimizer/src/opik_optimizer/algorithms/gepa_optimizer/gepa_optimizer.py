@@ -1,5 +1,6 @@
 import logging
-from typing import Any
+import sys
+from typing import Any, Literal, overload
 from collections.abc import Callable
 
 import opik
@@ -88,6 +89,14 @@ class GepaOptimizer(BaseOptimizer):
         self._gepa_live_metric_calls = 0
         self._adapter = None  # Will be set during optimization
 
+        # FIXME: When we have an Opik adapter, map this into GEPA's LLM calls directly
+        if model_parameters:
+            logger.warning(
+                "GEPAOptimizer does not surface LiteLLM `model_parameters` for every internal call "
+                "(e.g., output style inference, prompt generation). "
+                "Provide overrides on the prompt itself if you need precise control."
+            )
+
     def get_optimizer_metadata(self) -> dict[str, Any]:
         return {
             "model": self.model,
@@ -166,6 +175,7 @@ class GepaOptimizer(BaseOptimizer):
         agent_class: type[OptimizableAgent] | None = None,
         project_name: str = "Optimization",
         optimization_id: str | None = None,
+        validation_dataset: Dataset | None = None,
         max_trials: int = 10,
         reflection_minibatch_size: int = 3,
         candidate_selection_strategy: str = "pareto",
@@ -206,12 +216,19 @@ class GepaOptimizer(BaseOptimizer):
             raise_on_exception: Raise exceptions instead of continuing (default: True)
             optimization_id: Optional ID for the Opik optimization run; when provided it
                 must be a valid UUIDv7 string.
+            validation_dataset: Optional validation dataset used for Pareto tracking. When provided,
+                helps prevent overfitting by evaluating candidates on unseen data. Falls back to
+                the training dataset when not provided.
 
         Returns:
             OptimizationResult: Result of the optimization
         """
         # Use base class validation and setup methods
         self._validate_optimization_inputs(prompt, dataset, metric)
+        # Keep a single agent class for the entire optimization (baseline +
+        # GEPA adapter + final evaluation) so we never downgrade to the default
+        # when we use GEPAs own internal evaluator.
+        self.agent_class = self._setup_agent_class(prompt, agent_class)
 
         prompt = prompt.copy()
         if prompt.model is None:
@@ -222,12 +239,17 @@ class GepaOptimizer(BaseOptimizer):
         seed_prompt_text = self._extract_system_text(prompt)
         input_key, output_key = self._infer_dataset_keys(dataset)
 
-        items = dataset.get_items()
-        if n_samples and 0 < n_samples < len(items):
-            items = items[:n_samples]
+        train_items = dataset.get_items()
+        if n_samples and 0 < n_samples < len(train_items):
+            train_items = train_items[:n_samples]
+
+        val_source = validation_dataset or dataset
+        val_items = val_source.get_items()
+        if n_samples and 0 < n_samples < len(val_items):
+            val_items = val_items[:n_samples]
 
         # Calculate max_metric_calls from max_trials and effective samples
-        effective_n_samples = len(items)
+        effective_n_samples = len(train_items)
         max_metric_calls = max_trials * effective_n_samples
         budget_limited_trials = (
             max_metric_calls // effective_n_samples if effective_n_samples else 0
@@ -249,7 +271,8 @@ class GepaOptimizer(BaseOptimizer):
                 budget_limited_trials,
             )
 
-        data_insts = self._build_data_insts(items, input_key, output_key)
+        train_insts = self._build_data_insts(train_items, input_key, output_key)
+        val_insts = self._build_data_insts(val_items, input_key, output_key)
 
         self._gepa_live_metric_calls = 0
 
@@ -265,21 +288,28 @@ class GepaOptimizer(BaseOptimizer):
 
         disable_experiment_reporting()
 
+        # Hold the optimization context open for the entire run (other optimizers already
+        # behave like this). The original `with ...` block exited immediately, which
+        # marked GEPA optimizations as completed before any work happened.
+        optimization_cm = optimization_context(
+            client=opik_client,
+            dataset_name=dataset.name,
+            objective_name=metric.__name__,
+            name=self.name,
+            metadata=self._build_optimization_config(),
+            optimization_id=optimization_id,
+        )
+        optimization_cm_entered = False
+
         try:
-            with optimization_context(
-                client=opik_client,
-                dataset_name=dataset.name,
-                objective_name=metric.__name__,
-                name=self.name,
-                metadata=self._build_optimization_config(),
-                optimization_id=optimization_id,
-            ) as optimization:
-                try:
-                    opt_id = optimization.id if optimization is not None else None
-                    self.current_optimization_id = opt_id
-                except Exception:
-                    opt_id = None
-                    self.current_optimization_id = None
+            optimization = optimization_cm.__enter__()
+            optimization_cm_entered = True
+            try:
+                opt_id = optimization.id if optimization is not None else None
+                self.current_optimization_id = opt_id
+            except Exception:
+                opt_id = None
+                self.current_optimization_id = None
 
             gepa_reporting.display_header(
                 algorithm=self.__class__.__name__,
@@ -298,10 +328,12 @@ class GepaOptimizer(BaseOptimizer):
                     "max_metric_calls": max_metric_calls,
                     "reflection_minibatch_size": reflection_minibatch_size,
                     "candidate_selection_strategy": candidate_selection_strategy,
+                    "validation_dataset": getattr(val_source, "name", None),
                 },
                 verbose=self.verbose,
             )
 
+            baseline_eval_result: Any | None = None
             # Baseline evaluation
             initial_prompt_messages = prompt.get_messages()
             initial_score = 0.0
@@ -315,9 +347,10 @@ class GepaOptimizer(BaseOptimizer):
                         optimization_id=opt_id,
                         extra_metadata={"phase": "baseline"},
                         verbose=0,
+                        return_result=True,
                     )
                     with suppress_opik_logs():
-                        initial_score = float(
+                        initial_score, baseline_eval_result = (
                             self._evaluate_prompt_logged(**eval_kwargs)
                         )
                     baseline.set_score(initial_score)
@@ -339,6 +372,8 @@ class GepaOptimizer(BaseOptimizer):
                 optimizer=self,
                 metric=metric,
                 system_fallback=seed_prompt_text,
+                dataset=dataset,
+                experiment_config=experiment_config,
             )
 
             try:
@@ -364,8 +399,8 @@ class GepaOptimizer(BaseOptimizer):
 
                 kwargs_gepa: dict[str, Any] = {
                     "seed_candidate": {"system_prompt": seed_prompt_text},
-                    "trainset": data_insts,
-                    "valset": data_insts,
+                    "trainset": train_insts,
+                    "valset": val_insts,
                     "adapter": adapter,
                     "task_lm": None,
                     "reflection_lm": self.model,
@@ -401,6 +436,15 @@ class GepaOptimizer(BaseOptimizer):
                     opt_id = None
 
         finally:
+            exc_type, exc_val, exc_tb = sys.exc_info()
+            if optimization_cm_entered:
+                # Manually closing the optimization context ensures its status is updated
+                # exactly once (completed/cancelled) after the entire GEPA run finishes.
+                # We capture the exception tuple so the context manager can surface failures
+                # just like a regular `with` block. This is admittedly a temporary workaround
+                # until we put GEPA behind a native Opik adapter that can manage its lifecycle
+                # without manual enter/exit plumbing.
+                optimization_cm.__exit__(exc_type, exc_val, exc_tb)
             enable_experiment_reporting()
 
         # ------------------------------------------------------------------
@@ -460,6 +504,9 @@ class GepaOptimizer(BaseOptimizer):
                         verbose=0,
                     )
                     try:
+                        # TODO(opik-gepa): This rescoring round-trips through Opik's evaluator for every GEPA
+                        # candidate. Once the GEPA→Opik adapter can stream scores back natively, remove this
+                        # redundant evaluation loop and reuse GEPA's own scoring trace instead.
                         score = float(self._evaluate_prompt_logged(**eval_kwargs))
                     except Exception:
                         logger.debug(
@@ -536,6 +583,7 @@ class GepaOptimizer(BaseOptimizer):
         best_prompt_text = self._extract_system_text_from_candidate(
             best_candidate, seed_prompt_text
         )
+        best_matches_seed = best_prompt_text.strip() == seed_prompt_text.strip()
 
         final_prompt = self._apply_system_text(prompt, best_prompt_text)
         final_prompt.model = self.model
@@ -548,70 +596,81 @@ class GepaOptimizer(BaseOptimizer):
         final_prompt.model_kwargs = filtered_model_kwargs
 
         final_eval_result: Any | None = None
+        final_experiment_config: dict[str, Any] | None = None
+        analysis_project_name: str | None = self.project_name
 
-        with suppress_opik_logs():
-            try:
-                final_agent_cls = create_litellm_agent_class(
-                    final_prompt, optimizer_ref=self
-                )
-                final_agent = final_agent_cls(final_prompt)
+        reuse_baseline_eval = best_matches_seed and baseline_eval_result is not None
 
-                def final_llm_task(dataset_item: dict[str, Any]) -> dict[str, str]:
-                    messages = final_prompt.get_messages(dataset_item)
-                    raw = final_agent.invoke(messages)
-                    if self.current_optimization_id:
-                        opik_context.update_current_trace(
-                            tags=[self.current_optimization_id, "Evaluation"]
+        if not reuse_baseline_eval:
+            with suppress_opik_logs():
+                try:
+                    configuration_updates = helpers.drop_none(
+                        {"gepa": {"phase": "final", "selected": True}}
+                    )
+                    final_experiment_config = self._prepare_experiment_config(
+                        prompt=final_prompt,
+                        dataset=dataset,
+                        metric=metric,
+                        experiment_config=experiment_config,
+                        configuration_updates=configuration_updates,
+                    )
+                    analysis_project_name = (
+                        final_experiment_config.get("project_name")
+                        if final_experiment_config
+                        else self.project_name
+                    )
+                    final_llm_agent = self._create_agent_for_prompt(
+                        final_prompt, project_name=analysis_project_name
+                    )
+
+                    def final_llm_task(dataset_item: dict[str, Any]) -> dict[str, str]:
+                        messages = final_prompt.get_messages(dataset_item)
+                        raw = final_llm_agent.invoke(messages)
+                        if self.current_optimization_id:
+                            opik_context.update_current_trace(
+                                tags=[self.current_optimization_id, "Evaluation"]
+                            )
+                        return {"llm_output": raw.strip()}
+
+                    metric_class = _create_metric_class(metric)
+
+                    if opt_id:
+                        final_eval_result = opik_evaluator.evaluate_optimization_trial(
+                            optimization_id=opt_id,
+                            dataset=dataset,
+                            task=final_llm_task,
+                            project_name=final_experiment_config.get("project_name"),
+                            dataset_item_ids=None,
+                            scoring_metrics=[metric_class],
+                            task_threads=self.n_threads,
+                            nb_samples=n_samples,
+                            experiment_config=final_experiment_config,
+                            verbose=0,
                         )
-                    return {"llm_output": raw.strip()}
-
-                configuration_updates = helpers.drop_none(
-                    {"gepa": {"phase": "final", "selected": True}}
-                )
-                final_experiment_config = self._prepare_experiment_config(
-                    prompt=final_prompt,
-                    dataset=dataset,
-                    metric=metric,
-                    experiment_config=experiment_config,
-                    configuration_updates=configuration_updates,
-                )
-
-                metric_class = _create_metric_class(metric)
-
-                if opt_id:
-                    final_eval_result = opik_evaluator.evaluate_optimization_trial(
-                        optimization_id=opt_id,
-                        dataset=dataset,
-                        task=final_llm_task,
-                        project_name=final_experiment_config.get("project_name"),
-                        dataset_item_ids=None,
-                        scoring_metrics=[metric_class],
-                        task_threads=self.n_threads,
-                        nb_samples=n_samples,
-                        experiment_config=final_experiment_config,
-                        verbose=0,
-                    )
-                else:
-                    final_eval_result = opik_evaluator.evaluate(
-                        dataset=dataset,
-                        task=final_llm_task,
-                        project_name=final_experiment_config.get("project_name"),
-                        dataset_item_ids=None,
-                        scoring_metrics=[metric_class],
-                        task_threads=self.n_threads,
-                        nb_samples=n_samples,
-                        experiment_config=final_experiment_config,
-                        verbose=0,
-                    )
-            except Exception:
-                logger.debug("Final evaluation failed", exc_info=True)
+                    else:
+                        final_eval_result = opik_evaluator.evaluate(
+                            dataset=dataset,
+                            task=final_llm_task,
+                            project_name=final_experiment_config.get("project_name"),
+                            dataset_item_ids=None,
+                            scoring_metrics=[metric_class],
+                            task_threads=self.n_threads,
+                            nb_samples=n_samples,
+                            experiment_config=final_experiment_config,
+                            verbose=0,
+                        )
+                except Exception:
+                    logger.debug("Final evaluation failed", exc_info=True)
+        else:
+            final_eval_result = baseline_eval_result
 
         per_item_scores: list[dict[str, Any]] = []
         try:
             analysis_prompt = final_prompt.copy()
-            agent_cls = create_litellm_agent_class(analysis_prompt, optimizer_ref=self)
-            agent = agent_cls(analysis_prompt)
-            for item in items:
+            agent = self._create_agent_for_prompt(
+                analysis_prompt, project_name=analysis_project_name
+            )
+            for item in train_items:
                 messages = analysis_prompt.get_messages(item)
                 output_text = agent.invoke(messages).strip()
                 metric_result = metric(item, output_text)
@@ -679,9 +738,11 @@ class GepaOptimizer(BaseOptimizer):
             "gepa_live_metric_used": True,
             "gepa_live_metric_call_count": self._gepa_live_metric_calls,
             "selected_candidate_item_scores": per_item_scores,
-            "dataset_item_ids": [item.get("id") for item in items],
+            "dataset_item_ids": [item.get("id") for item in train_items],
             "selected_candidate_trial_info": trial_info,
         }
+        if reuse_baseline_eval:
+            details["final_evaluation_reused_baseline"] = True
         if experiment_config:
             details["experiment"] = experiment_config
 
@@ -751,6 +812,33 @@ class GepaOptimizer(BaseOptimizer):
                 return value
         return fallback
 
+    def _create_agent_for_prompt(
+        self,
+        prompt_obj: chat_prompt.ChatPrompt,
+        project_name: str | None = None,
+    ) -> OptimizableAgent:
+        # Late initialization only happens if GEPA is being used stand-alone.
+        # NOTE: OptimizableAgent defaults to LiteLLM. We cache whichever agent class the
+        # user provided so GEPA never downgrades to LiteLLM (which breaks tracing).
+        if not hasattr(self, "agent_class") or self.agent_class is None:
+            self.agent_class = create_litellm_agent_class(
+                prompt_obj, optimizer_ref=self
+            )
+        instantiate_kwargs: dict[str, Any] = {}
+        if project_name is not None:
+            instantiate_kwargs["project_name"] = project_name
+
+        try:
+            return self._instantiate_agent(
+                prompt_obj, agent_class=self.agent_class, **instantiate_kwargs
+            )
+        except TypeError:
+            return self._instantiate_agent(prompt_obj, agent_class=self.agent_class)
+
+    def _build_optimization_config(self) -> dict[str, Any]:
+        return self._build_optimization_metadata()
+
+    @overload
     def _evaluate_prompt_logged(
         self,
         prompt: chat_prompt.ChatPrompt,
@@ -762,15 +850,49 @@ class GepaOptimizer(BaseOptimizer):
         optimization_id: str | None = None,
         extra_metadata: dict[str, Any] | None = None,
         verbose: int = 1,
-    ) -> float:
+        return_result: Literal[True] = True,
+    ) -> tuple[float, Any | None]: ...
+
+    @overload
+    def _evaluate_prompt_logged(
+        self,
+        prompt: chat_prompt.ChatPrompt,
+        dataset: Dataset,
+        metric: Callable[[dict[str, Any], str], ScoreResult],
+        n_samples: int | None = None,
+        dataset_item_ids: list[str] | None = None,
+        experiment_config: dict[str, Any] | None = None,
+        optimization_id: str | None = None,
+        extra_metadata: dict[str, Any] | None = None,
+        verbose: int = 1,
+        return_result: Literal[False] = False,
+    ) -> float: ...
+
+    def _evaluate_prompt_logged(
+        self,
+        prompt: chat_prompt.ChatPrompt,
+        dataset: Dataset,
+        metric: Callable[[dict[str, Any], str], ScoreResult],
+        n_samples: int | None = None,
+        dataset_item_ids: list[str] | None = None,
+        experiment_config: dict[str, Any] | None = None,
+        optimization_id: str | None = None,
+        extra_metadata: dict[str, Any] | None = None,
+        verbose: int = 1,
+        return_result: bool = False,
+    ) -> float | tuple[float, Any | None]:
+        """
+        Run an evaluation (baseline/rescoring/final) and optionally capture the full
+        Opik EvaluationResult when callers need trace/test metadata (GEPA baseline).
+        FIXME(opik-gepa): Once GEPA exposes a clean scoring API, this helper should be
+        replaced with a dedicated adapter rather than invoking task_evaluator directly.
+        """
         if prompt.model is None:
             prompt.model = self.model
         if prompt.model_kwargs is None:
             prompt.model_kwargs = self.model_parameters
 
-        agent_class = create_litellm_agent_class(prompt, optimizer_ref=self)
-        self.agent_class = agent_class
-        agent = agent_class(prompt)
+        agent = self._create_agent_for_prompt(prompt)
 
         def llm_task(dataset_item: dict[str, Any]) -> dict[str, str]:
             messages = prompt.get_messages(dataset_item)
@@ -792,6 +914,21 @@ class GepaOptimizer(BaseOptimizer):
             experiment_config=experiment_config,
             configuration_updates=configuration_updates,
         )
+
+        if return_result:
+            score, eval_result = task_evaluator.evaluate_with_result(
+                dataset=dataset,
+                dataset_item_ids=dataset_item_ids,
+                metric=metric,
+                evaluated_task=llm_task,
+                num_threads=self.n_threads,
+                project_name=experiment_config.get("project_name"),
+                experiment_config=experiment_config,
+                optimization_id=optimization_id,
+                n_samples=n_samples,
+                verbose=verbose,
+            )
+            return score, eval_result
 
         score = task_evaluator.evaluate(
             dataset=dataset,

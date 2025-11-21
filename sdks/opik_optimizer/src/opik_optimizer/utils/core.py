@@ -1,11 +1,6 @@
 """Utility functions and constants for the optimizer package."""
 
-from typing import (
-    Any,
-    Final,
-    Literal,
-    TYPE_CHECKING,
-)
+from typing import Any, Final, Literal, TYPE_CHECKING
 from collections.abc import Callable
 
 import ast
@@ -13,10 +8,12 @@ import inspect
 import base64
 import json
 import logging
+import os
 import random
 import string
 import urllib.parse
 from types import TracebackType
+import re
 
 import requests
 
@@ -32,6 +29,10 @@ if TYPE_CHECKING:
 
 ALLOWED_URL_CHARACTERS: Final[str] = ":/&?="
 logger = logging.getLogger(__name__)
+_DEFAULT_LOG_LEVEL = os.environ.get("OPIK_OPTIMIZER_LOG_LEVEL", "WARNING").upper()
+numeric_level = logging.getLevelName(_DEFAULT_LOG_LEVEL)
+if isinstance(numeric_level, int):
+    logger.setLevel(numeric_level)
 
 
 class OptimizationContextManager:
@@ -238,6 +239,10 @@ def json_to_dict(json_str: str) -> Any:
                     serialization_error,
                 )
                 raise json_error
+        except Exception as exc:
+            # As a last resort, return None so callers can fallback instead of crashing.
+            logger.debug("Returning None for unparsable JSON payload: %s", exc)
+            return None
 
 
 def _convert_literals_to_json_compatible(value: Any) -> Any:
@@ -338,51 +343,62 @@ def create_litellm_agent_class(
     prompt: "chat_prompt.ChatPrompt", optimizer_ref: Any = None
 ) -> type["OptimizableAgent"]:
     """
-    Create a LiteLLMAgent from a chat prompt.
+    Create an `OptimizableAgent` subclass scoped to the provided chat prompt.
 
     Args:
-        prompt: The chat prompt to use
-        optimizer_ref: Optional optimizer instance to attach to the agent
+        prompt: The chat prompt to use when instantiating the agent.
+        optimizer_ref: Optional optimizer instance attached to the generated class.
+
+    Returns:
+        A concrete subclass with a sanitized class name, bound optimizer reference,
+        and an invoke method that prefers the prompt's custom `invoke` callable while
+        still routing default calls through `OptimizableAgent`.
     """
     from opik_optimizer.optimizable_agent import OptimizableAgent
 
-    if prompt.invoke is not None:
+    def _derive_class_name(name: str) -> str:
+        # Split on non-word characters to preserve original capitalization boundaries.
+        segments = [segment for segment in re.split(r"\W+", name) if segment]
+        if not segments:
+            return "LiteLLMAgent"
 
-        class LiteLLMAgent(OptimizableAgent):
-            model = prompt.model
-            model_kwargs = prompt.model_kwargs
-            optimizer = optimizer_ref
+        camel = "".join(segment[0].upper() + segment[1:] for segment in segments)
 
-            def __init__(
-                self, prompt: "chat_prompt.ChatPrompt", project_name: str | None = None
-            ) -> None:
-                # Get project_name from optimizer if available
-                if project_name is None and hasattr(self.optimizer, "project_name"):
-                    project_name = self.optimizer.project_name
-                super().__init__(prompt, project_name=project_name)
+        # Remove any leading digits so the identifier remains valid.
+        camel = camel.lstrip(string.digits)
+        return f"{camel}LiteLLMAgent" if camel else "LiteLLMAgent"
 
-            def invoke(
-                self, messages: list[dict[str, str]], seed: int | None = None
-            ) -> str:
-                return prompt.invoke(
-                    self.model, messages, prompt.tools, **self.model_kwargs
-                )  # type: ignore[misc]
+    class LiteLLMAgent(OptimizableAgent):
+        optimizer = optimizer_ref
 
-    else:
+        def __init__(
+            self, prompt: "chat_prompt.ChatPrompt", project_name: str | None = None
+        ) -> None:
+            # Get project_name from optimizer if available
+            resolved_project = project_name
+            if resolved_project is None and hasattr(self.optimizer, "project_name"):
+                resolved_project = self.optimizer.project_name
+            super().__init__(prompt, project_name=resolved_project)
 
-        class LiteLLMAgent(OptimizableAgent):  # type: ignore[no-redef]
-            model = prompt.model
-            model_kwargs = prompt.model_kwargs
-            optimizer = optimizer_ref
+        def invoke(
+            self, messages: list[dict[str, str]], seed: int | None = None
+        ) -> str:
+            prompt_invoke = getattr(self.prompt, "invoke", None)
+            if callable(prompt_invoke):
+                optimizer_obj = getattr(self, "optimizer", None)
+                if optimizer_obj is not None and hasattr(
+                    optimizer_obj, "_increment_llm_counter"
+                ):
+                    optimizer_obj._increment_llm_counter()
+                return prompt_invoke(
+                    self.model,
+                    messages,
+                    getattr(self.prompt, "tools", None),
+                    **self.model_kwargs,
+                )  # type: ignore[arg-type]
+            return super().invoke(messages=messages, seed=seed)
 
-            def __init__(
-                self, prompt: "chat_prompt.ChatPrompt", project_name: str | None = None
-            ) -> None:
-                # Get project_name from optimizer if available
-                if project_name is None and hasattr(self.optimizer, "project_name"):
-                    project_name = self.optimizer.project_name
-                super().__init__(prompt, project_name=project_name)
-
+    LiteLLMAgent.__name__ = _derive_class_name(prompt.name)
     return LiteLLMAgent
 
 
@@ -446,27 +462,40 @@ def search_wikipedia(query: str, use_api: bool | None = False) -> list[str]:
         use_api: (Optional) If True, directly use Wikipedia API instead of ColBERTv2.
                 If False (default), try ColBERTv2 first with API fallback.
     """
+    logger.debug("search_wikipedia called with query='%s', use_api=%s", query, use_api)
+
     if use_api:
         # Directly use Wikipedia API when requested
         try:
+            logger.debug("Querying Wikipedia API directly for '%s'", query)
             return _search_wikipedia_api(query)
         except Exception as api_error:
-            print(f"Wikipedia API failed: {api_error}")
+            logger.warning(
+                "Wikipedia API request failed for '%s': %s", query, api_error
+            )
             return [f"Wikipedia search unavailable. Query was: {query}"]
 
     # Default behavior: Try ColBERTv2 first with API fallback
     # Try ColBERTv2 first with a short timeout
     try:
+        logger.debug("Querying ColBERTv2 endpoint for '%s'", query)
         colbert = ColBERTv2(url="http://20.102.90.50:2017/wiki17_abstracts")
         # Use a shorter timeout by modifying the max_retries parameter
         results = colbert(query, k=3, max_retries=1)
         return [str(item.text) for item in results if hasattr(item, "text")]
-    except Exception:
+    except Exception as colbert_error:
+        logger.info(
+            "ColBERTv2 lookup failed for '%s'; falling back to Wikipedia API (%s)",
+            query,
+            colbert_error,
+        )
         # Fallback to Wikipedia API
         try:
             return _search_wikipedia_api(query)
         except Exception as api_error:
-            print(f"Wikipedia API fallback also failed: {api_error}")
+            logger.error(
+                "Wikipedia API fallback also failed for '%s': %s", query, api_error
+            )
             return [f"Wikipedia search unavailable. Query was: {query}"]
 
 
@@ -488,6 +517,7 @@ def _search_wikipedia_api(query: str, max_results: int = 3) -> list[str]:
         headers = {
             "User-Agent": "OpikOptimizer/1.0 (https://github.com/opik-ai/opik-optimizer)"
         }
+        logger.debug("Issuing Wikipedia API search for '%s'", query)
         search_response = requests.get(
             "https://en.wikipedia.org/w/api.php",
             params=search_params,

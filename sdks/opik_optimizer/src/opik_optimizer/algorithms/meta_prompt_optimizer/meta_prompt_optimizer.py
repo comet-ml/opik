@@ -19,6 +19,8 @@ from ...optimizable_agent import OptimizableAgent
 from . import reporting
 import re
 from ... import _llm_calls
+from ..._llm_calls import StructuredOutputParsingError
+from litellm.exceptions import BadRequestError
 from ...mcp_utils.mcp import PROMPT_TOOL_FOOTER, PROMPT_TOOL_HEADER
 from ...mcp_utils.mcp_workflow import (
     MCPExecutionConfig,
@@ -249,7 +251,7 @@ class MetaPromptOptimizer(BaseOptimizer):
             new_prompt = prompt.copy()
             messages = new_prompt.get_messages(dataset_item)
             new_prompt.set_messages(messages)
-            agent = self.agent_class(new_prompt)
+            agent = self._instantiate_agent(new_prompt)
 
             if mcp_config is not None:
                 coordinator = mcp_config.coordinator
@@ -361,6 +363,7 @@ class MetaPromptOptimizer(BaseOptimizer):
         agent_class: type[OptimizableAgent] | None = None,
         project_name: str = "Optimization",
         optimization_id: str | None = None,
+        validation_dataset: Dataset | None = None,
         max_trials: int = 10,
         mcp_config: MCPExecutionConfig | None = None,
         candidate_generator: Callable[..., list[chat_prompt.ChatPrompt]] | None = None,
@@ -382,6 +385,9 @@ class MetaPromptOptimizer(BaseOptimizer):
                 prompt during evaluation.
             metric: Evaluation function that takes (dataset_item, llm_output) and returns a
                 score (float). Higher scores indicate better performance.
+            validation_dataset: Optional validation dataset for evaluating candidates. When provided,
+                the optimizer uses the training dataset for understanding failure modes and generating
+                improvements, then evaluates candidates on the validation dataset to prevent overfitting.
             experiment_config: Optional metadata dictionary to log with Opik experiments.
                 Useful for tracking experiment parameters and context.
             n_samples: Number of dataset items to use per evaluation. If None, uses full dataset.
@@ -440,6 +446,12 @@ class MetaPromptOptimizer(BaseOptimizer):
         # Set project name from parameter
         self.project_name = project_name
 
+        # Update experiment_config with validation_dataset if provided
+        if validation_dataset is not None:
+            experiment_config = experiment_config or {}
+            experiment_config["validation_dataset"] = validation_dataset.name
+            experiment_config["validation_dataset_id"] = validation_dataset.id
+
         total_items = len(dataset.get_items())
         if n_samples is not None and n_samples > total_items:
             logger.warning(
@@ -452,8 +464,8 @@ class MetaPromptOptimizer(BaseOptimizer):
             optimization = self.opik_client.create_optimization(
                 dataset_name=dataset.name,
                 objective_name=getattr(metric, "__name__", str(metric)),
+                metadata=self._build_optimization_metadata(),
                 name=self.name,
-                metadata=self._build_optimization_config(),
                 optimization_id=optimization_id,
             )
             self.current_optimization_id = optimization.id
@@ -479,6 +491,9 @@ class MetaPromptOptimizer(BaseOptimizer):
                 "prompts_per_round": self.prompts_per_round,
                 "n_samples": n_samples,
                 "auto_continue": auto_continue,
+                "validation_dataset": validation_dataset.name
+                if validation_dataset is not None
+                else None,
             },
             verbose=self.verbose,
             tools=getattr(prompt, "tools", None),
@@ -491,6 +506,7 @@ class MetaPromptOptimizer(BaseOptimizer):
                 prompt=prompt,
                 dataset=dataset,
                 metric=metric,
+                validation_dataset=validation_dataset,
                 experiment_config=experiment_config,
                 max_trials=max_trials,
                 n_samples=n_samples,
@@ -555,6 +571,7 @@ class MetaPromptOptimizer(BaseOptimizer):
             optimization_id=None,
             prompt=prompt,
             dataset=dataset,
+            validation_dataset=None,
             metric=metric,
             experiment_config=experiment_config,
             max_trials=10,
@@ -575,6 +592,7 @@ class MetaPromptOptimizer(BaseOptimizer):
         optimization_id: str | None,
         prompt: chat_prompt.ChatPrompt,
         dataset: Dataset,
+        validation_dataset: Dataset | None,
         metric: Callable,
         experiment_config: dict | None,
         max_trials: int,
@@ -591,12 +609,22 @@ class MetaPromptOptimizer(BaseOptimizer):
         self._reset_counters()  # Reset counters for run
         initial_prompt = prompt
 
+        # Logic on which datset to use for scoring
+        evaluation_dataset = (
+            validation_dataset if validation_dataset is not None else dataset
+        )
+
         current_prompt = prompt
         with reporting.display_evaluation(verbose=self.verbose) as baseline_reporter:
+            if validation_dataset is not None:
+                experiment_config = experiment_config or {}
+                experiment_config["validation_dataset"] = validation_dataset.name
+                experiment_config["validation_dataset_id"] = validation_dataset.id
+
             initial_score = self._evaluate_prompt(
                 prompt,
                 optimization_id=optimization_id,
-                dataset=dataset,
+                dataset=evaluation_dataset,
                 metric=metric,
                 n_samples=n_samples,
                 experiment_config=experiment_config,
@@ -649,9 +677,12 @@ class MetaPromptOptimizer(BaseOptimizer):
                     # Limit to prompts_this_round
                     candidate_prompts = candidate_prompts[:prompts_this_round]
                 except Exception as e:
+                    if isinstance(e, (BadRequestError, StructuredOutputParsingError)):
+                        raise
                     round_reporter.failed_to_generate(prompts_this_round, e)
-                    round_num += 1
-                    continue
+                    # Prevent infinite loop when generation fails repeatedly.
+                    trials_used += prompts_this_round
+                    break
 
                 # Step 2. Score each candidate prompt
                 prompt_scores: list[tuple[chat_prompt.ChatPrompt, float]] = []
@@ -667,7 +698,7 @@ class MetaPromptOptimizer(BaseOptimizer):
                             prompt_score = self._evaluate_prompt(
                                 prompt=candidate_prompt,
                                 optimization_id=optimization_id,
-                                dataset=dataset,
+                                dataset=evaluation_dataset,
                                 metric=metric,
                                 n_samples=n_samples,
                                 use_full_dataset=False,
@@ -849,6 +880,8 @@ class MetaPromptOptimizer(BaseOptimizer):
         if self.dataset is None:
             return ""
 
+        sample = None
+        context = ""
         try:
             # Try get_items() first as it's the preferred method
             items = self.dataset.get_items()
@@ -1039,6 +1072,8 @@ class MetaPromptOptimizer(BaseOptimizer):
                 # --- End Robust Parsing ---
 
             except Exception as e:
+                if isinstance(e, (BadRequestError, StructuredOutputParsingError)):
+                    raise
                 raise ValueError(
                     f"Unexpected error during candidate prompt generation: {e}"
                 )

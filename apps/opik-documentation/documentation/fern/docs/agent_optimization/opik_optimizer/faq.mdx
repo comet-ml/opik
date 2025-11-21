@@ -204,6 +204,21 @@ description: "Find answers to common questions about Opik Agent Optimizer, inclu
   <Accordion title="Do optimized prompts generalize across tasks?">
     Optimizers tune prompts for the dataset you provide. Prompts may overfit if the dataset lacks coverage. Use diverse datasets, consider chaining optimizers (e.g., Evolutionary → Few-Shot Bayesian) to encourage generalization, and re-evaluate on unseen samples before shipping.
   </Accordion>
+  <Accordion title="How can I avoid overfitting during optimization?">
+    To prevent overfitting, use the `validation_dataset` parameter when calling `optimize_prompt()`. This separates your data into training (for generating prompt improvements) and validation (for evaluating candidate prompts). The optimizer will use the training dataset to understand failure modes and generate improvements, then rank candidates using the validation dataset. This mirrors standard ML practices and helps ensure your optimized prompt generalizes to unseen data.
+
+    ```python
+    result = optimizer.optimize_prompt(
+        prompt=my_prompt,
+        dataset=training_dataset,  # Used for analysis and improvements
+        validation_dataset=validation_dataset,  # Used for ranking candidates
+        metric=my_metric,
+        max_trials=5,
+    )
+    ```
+
+    If you don't provide a validation dataset, the optimizer will use the same dataset for both training and validation, which may lead to overfitting on that specific dataset. For best results, split your data 70/30 or 80/20 between training and validation sets.
+  </Accordion>
   <Accordion title="Can I optimize for more than one objective (accuracy, cost, safety, etc.)?">
     Yes—compose metrics using `MultiMetricObjective` or custom heuristics so optimizers weigh multiple goals. For complex trade-offs, capture human preferences in the metric reasons, or explore Pareto-aware optimizers like GEPA that surface trade-offs between accuracy and cost.
   </Accordion>

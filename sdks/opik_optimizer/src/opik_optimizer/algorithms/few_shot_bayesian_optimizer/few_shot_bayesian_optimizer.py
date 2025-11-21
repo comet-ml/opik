@@ -204,6 +204,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         prompt: chat_prompt.ChatPrompt,
         fewshot_prompt_template: FewShotPromptTemplate,
         dataset: Dataset,
+        validation_dataset: Dataset | None,
         metric: Callable,
         baseline_score: float,
         n_trials: int = 10,
@@ -221,6 +222,9 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         eval_dataset_item_ids = all_dataset_item_ids
         if n_samples is not None and n_samples < len(dataset_items):
             eval_dataset_item_ids = random.sample(all_dataset_item_ids, n_samples)
+        evaluation_dataset = (
+            validation_dataset if validation_dataset is not None else dataset
+        )
 
         configuration_updates = helpers.drop_none(
             {
@@ -232,6 +236,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         base_experiment_config = self._prepare_experiment_config(
             prompt=prompt,
             dataset=dataset,
+            validation_dataset=validation_dataset,
             metric=metric,
             experiment_config=experiment_config,
             configuration_updates=configuration_updates,
@@ -310,7 +315,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             ) as trial_reporter:
                 trial_reporter.start_trial(messages_for_reporting)
                 score = task_evaluator.evaluate(
-                    dataset=dataset,
+                    dataset=evaluation_dataset,  # use right dataset for scoring
                     dataset_item_ids=eval_dataset_item_ids,
                     metric=metric,
                     evaluated_task=llm_task,
@@ -449,7 +454,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             optimization_id=optimization_id,
         )
 
-    def optimize_prompt(  # type: ignore
+    def optimize_prompt(
         self,
         prompt: chat_prompt.ChatPrompt,
         dataset: Dataset,
@@ -459,8 +464,9 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         auto_continue: bool = False,
         agent_class: type[OptimizableAgent] | None = None,
         project_name: str = "Optimization",
-        max_trials: int = 10,
         optimization_id: str | None = None,
+        validation_dataset: Dataset | None = None,
+        max_trials: int = 10,
         *args: Any,
         **kwargs: Any,
     ) -> optimization_result.OptimizationResult:
@@ -477,6 +483,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             max_trials: Number of trials for Bayesian Optimization (default: 10)
             optimization_id: Optional ID for the Opik optimization run; when provided it
                 must be a valid UUIDv7 string.
+            validation_dataset: Optional validation dataset (not yet supported by this optimizer).
 
         Returns:
             OptimizationResult: Result of the optimization
@@ -493,8 +500,8 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             optimization = self.opik_client.create_optimization(
                 dataset_name=dataset.name,
                 objective_name=metric.__name__,
+                metadata=self._build_optimization_metadata(),
                 name=self.name,
-                metadata=self._build_optimization_config(),
                 optimization_id=optimization_id,
             )
             self.current_optimization_id = optimization.id
@@ -524,6 +531,10 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             tools=getattr(prompt, "tools", None),
         )
 
+        evaluation_dataset = (
+            validation_dataset if validation_dataset is not None else dataset
+        )
+
         utils.disable_experiment_reporting()
 
         # Step 1. Compute the baseline evaluation
@@ -532,8 +543,8 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             verbose=self.verbose,
         ) as eval_report:
             baseline_score = self._evaluate_prompt(
-                prompt,
-                dataset=dataset,
+                prompt=prompt,
+                dataset=evaluation_dataset,  # use right dataset for scoring
                 metric=metric,
                 n_samples=n_samples,
                 optimization_id=(optimization.id if optimization is not None else None),
@@ -561,6 +572,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             prompt=prompt,
             fewshot_prompt_template=fewshot_template,
             dataset=dataset,
+            validation_dataset=validation_dataset,
             metric=metric,
             baseline_score=baseline_score,
             optimization_id=optimization.id if optimization is not None else None,
@@ -648,7 +660,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
     ) -> Callable[[dict[str, Any]], dict[str, Any]]:
         new_prompt = prompt.copy()
         new_prompt.set_messages(messages)
-        agent = self.agent_class(new_prompt)
+        agent = self._instantiate_agent(new_prompt)
 
         def llm_task(dataset_item: dict[str, Any]) -> dict[str, Any]:
             """

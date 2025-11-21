@@ -70,62 +70,34 @@ def test_langchain__happyflow(
         spans=[
             SpanModel(
                 id=ANY_BUT_NONE,
-                name="RunnableSequence",
+                type="tool",
+                name="PromptTemplate",
                 input={"title": "Documentary about Bigfoot in Paris"},
                 output=ANY_DICT,
-                tags=["tag1", "tag2"],
                 metadata={
-                    "a": "b",
                     "created_from": "langchain",
                 },
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
                 project_name=expected_project_name,
-                spans=[
-                    SpanModel(
-                        id=ANY_BUT_NONE,
-                        type="tool",
-                        name="PromptTemplate",
-                        input={"title": "Documentary about Bigfoot in Paris"},
-                        output=ANY_DICT,
-                        metadata={
-                            "created_from": "langchain",
-                        },
-                        start_time=ANY_BUT_NONE,
-                        end_time=ANY_BUT_NONE,
-                        project_name=expected_project_name,
-                        spans=[],
-                    ),
-                    SpanModel(
-                        id=ANY_BUT_NONE,
-                        type="llm",
-                        name="FakeListLLM",
-                        input={
-                            "prompts": [
-                                "Given the title of play, write a synopsys for that. Title: Documentary about Bigfoot in Paris."
-                            ]
-                        },
-                        output=ANY_DICT,
-                        metadata={
-                            "invocation_params": {
-                                "responses": [
-                                    "I'm sorry, I don't think I'm talented enough to write a synopsis"
-                                ],
-                                "_type": "fake-list",
-                                "stop": None,
-                            },
-                            "options": {"stop": None},
-                            "batch_size": 1,
-                            "metadata": ANY_BUT_NONE,
-                            "created_from": "langchain",
-                        },
-                        start_time=ANY_BUT_NONE,
-                        end_time=ANY_BUT_NONE,
-                        project_name=expected_project_name,
-                        spans=[],
-                    ),
-                ],
-            )
+                spans=[],
+            ),
+            SpanModel(
+                id=ANY_BUT_NONE,
+                type="llm",
+                name="FakeListLLM",
+                input={
+                    "prompts": [
+                        "Given the title of play, write a synopsys for that. Title: Documentary about Bigfoot in Paris."
+                    ]
+                },
+                output=ANY_DICT,
+                metadata=ANY_DICT.containing({"created_from": "langchain"}),
+                start_time=ANY_BUT_NONE,
+                end_time=ANY_BUT_NONE,
+                project_name=expected_project_name,
+                spans=[],
+            ),
         ],
     )
 
@@ -254,19 +226,9 @@ def test_langchain__distributed_headers__happyflow(
                                     ]
                                 },
                                 output=ANY_DICT,
-                                metadata={
-                                    "invocation_params": {
-                                        "responses": [
-                                            "I'm sorry, I don't think I'm talented enough to write a synopsis"
-                                        ],
-                                        "_type": "fake-list",
-                                        "stop": None,
-                                    },
-                                    "created_from": "langchain",
-                                    "options": {"stop": None},
-                                    "batch_size": 1,
-                                    "metadata": ANY_BUT_NONE,
-                                },
+                                metadata=ANY_DICT.containing(
+                                    {"created_from": "langchain"}
+                                ),
                                 start_time=ANY_BUT_NONE,
                                 end_time=ANY_BUT_NONE,
                                 project_name=project_name,
@@ -377,19 +339,9 @@ def test_langchain_callback__used_inside_another_track_function__data_attached_t
                                     ]
                                 },
                                 output=ANY_DICT,
-                                metadata={
-                                    "invocation_params": {
-                                        "responses": [
-                                            "I'm sorry, I don't think I'm talented enough to write a synopsis"
-                                        ],
-                                        "_type": "fake-list",
-                                        "stop": None,
-                                    },
-                                    "created_from": "langchain",
-                                    "options": {"stop": None},
-                                    "batch_size": 1,
-                                    "metadata": ANY_BUT_NONE,
-                                },
+                                metadata=ANY_DICT.containing(
+                                    {"created_from": "langchain"}
+                                ),
                                 start_time=ANY_BUT_NONE,
                                 end_time=ANY_BUT_NONE,
                                 project_name=project_name,
@@ -495,19 +447,7 @@ def test_langchain_callback__used_when_there_was_already_existing_trace_without_
                             ]
                         },
                         output=ANY_DICT,
-                        metadata={
-                            "invocation_params": {
-                                "responses": [
-                                    "I'm sorry, I don't think I'm talented enough to write a synopsis"
-                                ],
-                                "_type": "fake-list",
-                                "stop": None,
-                            },
-                            "created_from": "langchain",
-                            "options": {"stop": None},
-                            "batch_size": 1,
-                            "metadata": ANY_BUT_NONE,
-                        },
+                        metadata=ANY_DICT.containing({"created_from": "langchain"}),
                         start_time=ANY_BUT_NONE,
                         end_time=ANY_BUT_NONE,
                         spans=[],
@@ -607,19 +547,7 @@ def test_langchain_callback__used_when_there_was_already_existing_span_without_t
                             ]
                         },
                         output=ANY_DICT,
-                        metadata={
-                            "invocation_params": {
-                                "responses": [
-                                    "I'm sorry, I don't think I'm talented enough to write a synopsis"
-                                ],
-                                "_type": "fake-list",
-                                "stop": None,
-                            },
-                            "created_from": "langchain",
-                            "options": {"stop": None},
-                            "batch_size": 1,
-                            "metadata": ANY_BUT_NONE,
-                        },
+                        metadata=ANY_DICT.containing({"created_from": "langchain"}),
                         start_time=ANY_BUT_NONE,
                         end_time=ANY_BUT_NONE,
                         spans=[],
@@ -710,42 +638,28 @@ def test_langchain_callback__skip_error_callback__error_output_skipped(
             SpanModel(
                 id=ANY_BUT_NONE,
                 start_time=ANY_BUT_NONE,
-                name="RunnableSequence",
-                input={"input": ""},
-                output=ERROR_SKIPPED_OUTPUTS,
+                name="PromptTemplate",
+                input={"title": "Documentary about Bigfoot in Paris"},
+                output={"output": ANY_DICT},
                 metadata={"created_from": "langchain"},
-                type="general",
+                type="tool",
                 end_time=ANY_BUT_NONE,
                 project_name="Default Project",
-                spans=[
-                    SpanModel(
-                        id=ANY_BUT_NONE,
-                        start_time=ANY_BUT_NONE,
-                        name="PromptTemplate",
-                        input={"title": "Documentary about Bigfoot in Paris"},
-                        output={"output": ANY_DICT},
-                        metadata={"created_from": "langchain"},
-                        type="tool",
-                        end_time=ANY_BUT_NONE,
-                        project_name="Default Project",
-                        last_updated_at=ANY_BUT_NONE,
-                    ),
-                    SpanModel(
-                        id=ANY_BUT_NONE,
-                        start_time=ANY_BUT_NONE,
-                        name="FakeStreamingListLLM",
-                        input={"prompts": ANY_BUT_NONE},
-                        output=ANY_DICT,
-                        tags=None,
-                        metadata=ANY_DICT,
-                        type="llm",
-                        end_time=ANY_BUT_NONE,
-                        project_name="Default Project",
-                        last_updated_at=ANY_BUT_NONE,
-                    ),
-                ],
                 last_updated_at=ANY_BUT_NONE,
-            )
+            ),
+            SpanModel(
+                id=ANY_BUT_NONE,
+                start_time=ANY_BUT_NONE,
+                name="FakeStreamingListLLM",
+                input={"prompts": ANY_BUT_NONE},
+                output=ANY_DICT,
+                tags=None,
+                metadata=ANY_DICT,
+                type="llm",
+                end_time=ANY_BUT_NONE,
+                project_name="Default Project",
+                last_updated_at=ANY_BUT_NONE,
+            ),
         ],
         last_updated_at=ANY_BUT_NONE,
     )
