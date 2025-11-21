@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from typing import Any
+from collections.abc import Callable
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -68,6 +69,17 @@ class DummyOptimizer:
         return {"project_name": "TestProject"}
 
 
+def _create_metric(
+    score_when_match: float,
+) -> Callable[[dict[str, Any], str], DummyMetricResult]:
+    def metric(dataset_item: dict[str, Any], llm_output: str) -> DummyMetricResult:
+        expected = str(dataset_item.get("answer", ""))
+        score = score_when_match if expected and expected in llm_output else 0.0
+        return DummyMetricResult(score)
+
+    return metric
+
+
 def test_adapter_evaluate_uses_metric(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
@@ -85,10 +97,7 @@ def test_adapter_evaluate_uses_metric(
         lambda _prompt, optimizer_ref=None: lambda prompt: DummyAgent(prompt),
     )
 
-    def metric(dataset_item: dict[str, Any], llm_output: str) -> DummyMetricResult:
-        expected = str(dataset_item.get("answer", ""))
-        score = 1.0 if expected and expected in llm_output else 0.0
-        return DummyMetricResult(score)
+    metric = _create_metric(1.0)
 
     inst = OpikDataInst(
         input_text="Which?",
@@ -158,9 +167,7 @@ def test_adapter_falls_back_without_ids(
         lambda _prompt, optimizer_ref=None: lambda prompt: DummyAgent(prompt),
     )
 
-    def metric(dataset_item: dict[str, Any], llm_output: str) -> DummyMetricResult:
-        expected = str(dataset_item.get("answer", ""))
-        return DummyMetricResult(0.3 if expected and expected in llm_output else 0)
+    metric = _create_metric(0.3)
 
     inst = OpikDataInst(
         input_text="Which?",
