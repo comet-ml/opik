@@ -33,8 +33,12 @@ def test_hierarchical_reflective_optimizer() -> None:
 
     # Initialize optimizer with minimal parameters for faster testing
     optimizer = opik_optimizer.HierarchicalReflectiveOptimizer(
-        model="openai/gpt-4.1-nano",
-        model_parameters={"temperature": 0.1, "max_tokens": 256},
+        model="openai/gpt-5-mini",
+        model_parameters={
+            "temperature": 1,
+            "max_tokens": 1000,
+            "reasoning_effort": "minimal",
+        },
         n_threads=2,
         max_parallel_batches=2,
         batch_size=10,
