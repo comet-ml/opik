@@ -6,7 +6,6 @@ import time
 import traceback
 from dataclasses import dataclass
 from typing import Any
-import json
 from collections.abc import Callable
 import warnings
 import importlib
@@ -15,6 +14,7 @@ import os
 import logging
 from datetime import datetime
 import importlib.metadata
+import hashlib
 
 from benchmarks.core import benchmark_config
 from benchmarks.core.benchmark_config import BenchmarkDatasetConfig
@@ -32,6 +32,8 @@ from benchmarks.local.logging import console
 from rich.table import Table
 from rich.panel import Panel
 from rich.console import Group
+from rich import box
+from rich.text import Text
 from benchmarks.core.benchmark_results import (
     PreflightContext,
     PreflightEntry,
@@ -223,6 +225,7 @@ def preflight_tasks(
 ) -> PreflightReport:
     """Validate datasets/metrics/optimizers before scheduling to fail fast."""
     errors: list[str] = []
+    had_error = False
     datasets_seen: set[str] = set()
     optimizers_seen: set[str] = set()
     models_seen: set[str] = set()
@@ -251,11 +254,61 @@ def preflight_tasks(
     info_table.add_row(
         "opik_optimizer", _safe_version("opik-optimizer") or "[dim]unknown[/dim]"
     )
+
+    def _role_token(role: str, spec: dict[str, Any] | None, present: bool) -> str:
+        if spec is not None:
+            count = spec.get("count") if isinstance(spec, dict) else None
+            if count is not None:
+                return f"{role}={count}"
+            return f"{role}=present"
+        return f"{role}={'present' if present else 'None'}"
+
+    def _format_splits(bundle: DatasetBundle, task: BenchmarkTaskSpec) -> str:
+        """Human-friendly split summary with counts/presence."""
+        tokens: list[str] = []
+        if task.datasets:
+            tokens.append(
+                _role_token(
+                    "train", task.datasets.get("train"), "train" in task.datasets
+                )
+            )
+            tokens.append(
+                _role_token(
+                    "val",
+                    task.datasets.get("validation"),
+                    "validation" in task.datasets,
+                )
+            )
+            tokens.append(
+                _role_token("test", task.datasets.get("test"), "test" in task.datasets)
+            )
+        else:
+            tokens.append(_role_token("train", None, True))
+            tokens.append(_role_token("val", None, bundle.validation is not None))
+            tokens.append(_role_token("test", None, bundle.test is not None))
+        return ", ".join(tokens)
+
     for task in task_specs:
         if task.optimizer_name not in benchmark_config.OPTIMIZER_CONFIGS:
             msg = f"Unknown optimizer '{task.optimizer_name}'"
             logger.error(msg)
             errors.append(msg)
+            had_error = True
+            entries.append(
+                PreflightEntry(
+                    task_id=task.task_id,
+                    short_id=hashlib.sha1(
+                        f"{run_id or 'run'}:{task.task_id}".encode()
+                    ).hexdigest()[:5],
+                    dataset_name=task.dataset_name,
+                    evaluation_name=None,
+                    optimizer_name=task.optimizer_name,
+                    model_name=task.model_name,
+                    status="error",
+                    splits=None,
+                    error=msg,
+                )
+            )
             continue
 
         try:
@@ -264,6 +317,7 @@ def preflight_tasks(
                 test_mode=task.test_mode,
                 datasets=task.datasets,
             )
+            split_summary = _format_splits(bundle, task)
             dataset_config = benchmark_config.DATASET_CONFIG.get(
                 bundle.evaluation_name,
                 benchmark_config.DATASET_CONFIG.get(task.dataset_name),
@@ -279,13 +333,19 @@ def preflight_tasks(
             datasets_seen.add(bundle.evaluation_name or task.dataset_name)
             optimizers_seen.add(task.optimizer_name)
             models_seen.add(task.model_name)
+            short_id = hashlib.sha1(
+                f"{run_id or 'run'}:{task.task_id}".encode()
+            ).hexdigest()[:5]
             entries.append(
                 PreflightEntry(
+                    task_id=task.task_id,
+                    short_id=short_id,
                     dataset_name=task.dataset_name,
                     evaluation_name=bundle.evaluation_name,
                     optimizer_name=task.optimizer_name,
                     model_name=task.model_name,
                     status="ok",
+                    splits=split_summary,
                     error=None,
                 )
             )
@@ -300,16 +360,23 @@ def preflight_tasks(
             err = f"Preflight failed for dataset '{task.dataset_name}': {exc}"
             logger.error(err)
             errors.append(err)
+            had_error = True
+            short_id = hashlib.sha1(
+                f"{run_id or 'run'}:{task.task_id}".encode()
+            ).hexdigest()[:5]
             entries.append(
                 PreflightEntry(
+                    task_id=task.task_id,
+                    short_id=short_id,
                     dataset_name=task.dataset_name,
                     evaluation_name=None,
                     optimizer_name=task.optimizer_name,
                     model_name=task.model_name,
                     status="error",
+                    splits=None,
                     error=str(exc),
                 )
-    )
+            )
 
     summary = PreflightSummary(
         total_tasks=len(task_specs),
@@ -332,43 +399,54 @@ def preflight_tasks(
         entries=entries,
     )
 
-    # Render tables inside a single panel for visibility
-    checks_table = Table(
+    # Render lines (two-line per entry)
+    task_lines: list[Text] = []
+    for idx, entry in enumerate(entries, 1):
+        icon = "[green]✓[/green]" if entry.status == "ok" else "[red]✗[/red]"
+        line1 = Text.from_markup(
+            f"{icon} (#[bold]{idx}[/bold] {entry.short_id}) {entry.dataset_name} | {entry.optimizer_name} | {entry.model_name}"
+        )
+        splits_text = entry.splits or "train=None, val=None, test=None"
+        line2 = Text.from_markup(f"    {splits_text}")
+        if entry.error:
+            line2.append(f" • {entry.error}", style="red")
+        task_lines.append(line1)
+        task_lines.append(line2)
+
+    summary_table = Table(
         show_header=False,
         padding=(0, 1),
-        box=None,
+        box=box.SIMPLE,
+        expand=True,
     )
-    checks_table.add_column("", width=2)  # status
-    checks_table.add_column("Dataset")
-    checks_table.add_column("Eval")
-    checks_table.add_column("Optimizer")
-    checks_table.add_column("Model")
-    checks_table.add_column("Error", overflow="fold")
-
-    for entry in entries:
-        status_text = "[green]✓[/green]" if entry.status == "ok" else "[red]✗[/red]"
-        checks_table.add_row(
-            status_text,
-            entry.dataset_name,
-            entry.evaluation_name or "[dim]-[/dim]",
-            entry.optimizer_name,
-            entry.model_name,
-            entry.error or "",
-        )
+    summary_table.add_row(
+        "Status",
+        "[green]Preflight passed[/green]"
+        if not had_error
+        else "[red]Preflight failed[/red]",
+    )
+    summary_table.add_row("Tasks", str(summary.total_tasks))
+    summary_table.add_row(
+        "Datasets",
+        ", ".join(summary.datasets) if summary.datasets else "[dim]-[/dim]",
+    )
+    summary_table.add_row(
+        "Optimizers",
+        ", ".join(summary.optimizers) if summary.optimizers else "[dim]-[/dim]",
+    )
+    summary_table.add_row(
+        "Models", ", ".join(summary.models) if summary.models else "[dim]-[/dim]"
+    )
     console.print(
         Panel(
-            Group(info_table, checks_table),
+            Group(info_table, *task_lines, summary_table),
             title="Preflight",
-            border_style="green" if not errors else "red",
+            border_style="green" if not had_error else "red",
         )
     )
 
-    if errors:
+    if had_error:
         raise ValueError("Benchmark preflight checks failed:\n- " + "\n- ".join(errors))
-    console.print(
-        f"[bold green]Preflight passed: tasks={len(task_specs)}, "
-        f"datasets={summary.datasets}, optimizers={summary.optimizers}, models={summary.models}[/bold green]"
-    )
     return report
 
 
