@@ -64,8 +64,8 @@ const DatasetItemEditorLayout: React.FC<DatasetItemEditorLayoutProps> = ({
           <div className="sticky top-0 z-10 border-b bg-background p-6 pb-4">
             <div className="flex items-center justify-between gap-2">
               <TooltipWrapper content={datasetItemId}>
-                <div className="comet-title-xs">
-                  Dataset item{" "}
+                <div className="comet-body-accented">
+                  {isEditing ? "Edit dataset item" : "Dataset item"}{" "}
                   <span className="comet-body-s text-muted-slate">
                     {truncateId(datasetItemId)}
                   </span>
