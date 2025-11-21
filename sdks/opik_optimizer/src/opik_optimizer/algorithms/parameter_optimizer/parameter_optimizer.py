@@ -5,7 +5,7 @@ from typing import Any
 
 import copy
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 
 import optuna
 from optuna import importance as optuna_importance
@@ -150,8 +150,12 @@ class ParameterOptimizer(BaseOptimizer):
 
         self._validate_optimization_inputs(prompt, dataset, metric)
 
-        base_model_kwargs = copy.deepcopy(prompt.model_kwargs or {})
+        base_model_kwargs = {
+            **copy.deepcopy(self.model_parameters or {}),
+            **copy.deepcopy(prompt.model_kwargs or {}),
+        }
         base_prompt = prompt.copy()
+        base_prompt.model = self.model
         base_prompt.model_kwargs = copy.deepcopy(base_model_kwargs)
 
         metric_name = getattr(metric, "__name__", str(metric))
@@ -211,7 +215,7 @@ class ParameterOptimizer(BaseOptimizer):
         history: list[dict[str, Any]] = [
             {
                 "iteration": 0,
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
                 "parameters": {},
                 "score": baseline_score,
                 "model_kwargs": copy.deepcopy(base_prompt.model_kwargs or {}),
