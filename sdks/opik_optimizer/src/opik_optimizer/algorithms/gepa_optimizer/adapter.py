@@ -90,8 +90,8 @@ class OpikGEPAAdapter(GEPAAdapter[OpikDataInst, dict[str, Any], dict[str, Any]])
         evaluation logic so GEPA continues to function.
         """
 
-        # TODO(opik-gepa): replace this adapter patch with a native GEPA <-> Opik bridge
-        # once GEPA exposes a public opik adapter for tracing + evaluation.
+        # Keep this adapter in place until GEPA exposes a native Opik bridge so tracing
+        # and evaluation stay consistent with our experiment tracking.
         system_text = _extract_system_text(candidate, self._system_fallback)
         prompt_variant = _apply_system_text(self._base_prompt, system_text)
 
