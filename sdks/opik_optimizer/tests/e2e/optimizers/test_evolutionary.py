@@ -130,7 +130,9 @@ def test_evolutionary_optimizer() -> None:
     )
 
     assert "temperature" in results.details, "Details should contain 'temperature'"
-    assert results.details["temperature"] == optimizer.model_parameters["temperature"], (
+    assert (
+        results.details["temperature"] == optimizer.model_parameters["temperature"]
+    ), (
         f"Expected temperature {optimizer.model_parameters['temperature']}, got {results.details['temperature']}"
     )
 
