@@ -656,7 +656,6 @@ class MetaPromptOptimizer(BaseOptimizer):
                     round_reporter.failed_to_generate(prompts_this_round, e)
                     # Prevent infinite loop when generation fails repeatedly.
                     trials_used += prompts_this_round
-                    round_num += 1
                     break
 
                 # Step 2. Score each candidate prompt
