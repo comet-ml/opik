@@ -25,7 +25,7 @@ from .algorithms.parameter_optimizer import (
     ParameterType,
 )
 
-# FIXME: Remove once LiteLLM issue is resolve
+# FIXME: Remove once LiteLLM issue is resolved
 # https://github.com/BerriAI/litellm/issues/16813
 os.environ.setdefault("LITELLM_LOCAL_MODEL_COST_MAP", "True")
 
