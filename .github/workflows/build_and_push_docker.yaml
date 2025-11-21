@@ -223,7 +223,7 @@ jobs:
         if: steps.check.outputs.should_run == 'true'
         uses: actions/upload-artifact@v4
         with:
-          name: digests-${{ github.run_id }}-${{ steps.set_vars.outputs.image_name }}-${{ matrix.platform }}
+          name: ${{ github.run_id }}-${{ steps.set_vars.outputs.image_name }}-digest-${{ matrix.platform }}
           path: /tmp/digests/${{ steps.set_vars.outputs.image_name }}/${{ matrix.platform }}.digest
           if-no-files-found: error
           retention-days: 1
@@ -267,8 +267,8 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           path: /tmp/digests/${{ steps.set_vars.outputs.image_name }}
-          pattern: digests-${{ github.run_id }}-${{ steps.set_vars.outputs.image_name }}-*
-          merge-multiple: true
+          pattern: ${{ github.run_id }}-${{ steps.set_vars.outputs.image_name }}-digest-*
+          merge-multiple: false
           
       - name: Verify downloaded digests
         if: steps.check.outputs.should_run == 'true'
@@ -325,44 +325,82 @@ jobs:
           find . -type f -o -type d | sort
           echo ""
           
-          # Collect all digests from artifact files (handle subdirectories from merge-multiple)
+          # When merge-multiple: false, artifacts are in subdirectories named after the artifact
+          # Find digest files in subdirectories that match our image name
+          # Format: digests-{run_id}-{image_name}-{platform}/{platform}.digest
           DIGESTS=""
           DIGEST_COUNT=0
           
-          while IFS= read -r digest_file; do
-            if [ -f "$digest_file" ]; then
-              DIGEST_VALUE=$(cat "$digest_file" | tr -d '\n\r ' | xargs)
+          # Look for digest files in subdirectories matching our image name pattern
+          # Format: {run_id}-{image_name}-digest-{platform}/{platform}.digest
+          ARTIFACT_PATTERN="${{ github.run_id }}-${{ steps.set_vars.outputs.image_name }}-digest-*"
+          
+          for artifact_dir in $ARTIFACT_PATTERN; do
+            if [ -d "$artifact_dir" ]; then
+              # Extract platform from directory name: {run_id}-{image_name}-digest-{platform}
+              PLATFORM="${artifact_dir##*-}"
+              DIGEST_FILE="$artifact_dir/$PLATFORM.digest"
               
-              # Extract platform from filename (could be in subdirectory or root)
-              # Format: either ./platform.digest or ./subdir/platform.digest
-              FILENAME=$(basename "$digest_file")
-              PLATFORM="${FILENAME%.digest}"
-              
-              echo "Processing digest file: $digest_file"
-              echo "  Platform: $PLATFORM"
-              echo "  Digest value: $DIGEST_VALUE"
-              
-              if [ -n "$DIGEST_VALUE" ] && [ ${#DIGEST_VALUE} -eq 64 ]; then
-                DIGEST_REF="${{ env.DOCKER_REGISTRY }}/${{ steps.set_vars.outputs.image_name }}@sha256:$DIGEST_VALUE"
-                echo "  Digest reference: $DIGEST_REF"
+              if [ -f "$DIGEST_FILE" ]; then
+                DIGEST_VALUE=$(cat "$DIGEST_FILE" | tr -d '\n\r ' | xargs)
                 
-                # Verify digest exists in registry before adding
-                if docker buildx imagetools inspect "$DIGEST_REF" >/dev/null 2>&1; then
-                  echo "  ✓ Verified digest exists in registry"
-                  DIGESTS="$DIGESTS $DIGEST_REF"
-                  DIGEST_COUNT=$((DIGEST_COUNT + 1))
+                echo "Processing digest file: $DIGEST_FILE"
+                echo "  Platform: $PLATFORM"
+                echo "  Digest value: $DIGEST_VALUE"
+                
+                if [ -n "$DIGEST_VALUE" ] && [ ${#DIGEST_VALUE} -eq 64 ]; then
+                  DIGEST_REF="${{ env.DOCKER_REGISTRY }}/${{ steps.set_vars.outputs.image_name }}@sha256:$DIGEST_VALUE"
+                  echo "  Digest reference: $DIGEST_REF"
+                  
+                  # Verify digest exists in registry before adding
+                  if docker buildx imagetools inspect "$DIGEST_REF" >/dev/null 2>&1; then
+                    echo "  ✓ Verified digest exists in registry"
+                    DIGESTS="$DIGESTS $DIGEST_REF"
+                    DIGEST_COUNT=$((DIGEST_COUNT + 1))
+                  else
+                    echo "  ✗ ERROR: Digest not found in registry: $DIGEST_REF"
+                    echo "  This digest was saved by the build job but doesn't exist in the registry"
+                    exit 1
+                  fi
                 else
-                  echo "  ✗ ERROR: Digest not found in registry: $DIGEST_REF"
-                  echo "  This digest was saved by the build job but doesn't exist in the registry"
+                  echo "ERROR: Invalid digest value in $DIGEST_FILE: '$DIGEST_VALUE' (length: ${#DIGEST_VALUE})"
                   exit 1
                 fi
-              else
-                echo "ERROR: Invalid digest value in $digest_file: '$DIGEST_VALUE' (length: ${#DIGEST_VALUE})"
-                exit 1
+                echo ""
               fi
-              echo ""
             fi
-          done < <(find . -name "*.digest" -type f | sort)
+          done
+          
+          # Fallback: also check root directory in case merge-multiple was used
+          if [ $DIGEST_COUNT -eq 0 ]; then
+            echo "No digests found in subdirectories, checking root directory..."
+            while IFS= read -r digest_file; do
+              if [ -f "$digest_file" ]; then
+                DIGEST_VALUE=$(cat "$digest_file" | tr -d '\n\r ' | xargs)
+                FILENAME=$(basename "$digest_file")
+                PLATFORM="${FILENAME%.digest}"
+                
+                echo "Processing digest file: $digest_file"
+                echo "  Platform: $PLATFORM"
+                echo "  Digest value: $DIGEST_VALUE"
+                
+                if [ -n "$DIGEST_VALUE" ] && [ ${#DIGEST_VALUE} -eq 64 ]; then
+                  DIGEST_REF="${{ env.DOCKER_REGISTRY }}/${{ steps.set_vars.outputs.image_name }}@sha256:$DIGEST_VALUE"
+                  echo "  Digest reference: $DIGEST_REF"
+                  
+                  if docker buildx imagetools inspect "$DIGEST_REF" >/dev/null 2>&1; then
+                    echo "  ✓ Verified digest exists in registry"
+                    DIGESTS="$DIGESTS $DIGEST_REF"
+                    DIGEST_COUNT=$((DIGEST_COUNT + 1))
+                  else
+                    echo "  ✗ ERROR: Digest not found in registry: $DIGEST_REF"
+                    exit 1
+                  fi
+                fi
+                echo ""
+              fi
+            done < <(find . -maxdepth 1 -name "*.digest" -type f | sort)
+          fi
           
           echo "Found $DIGEST_COUNT digest(s)"
           
