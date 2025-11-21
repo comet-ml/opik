@@ -25,7 +25,11 @@ import isFunction from "lodash/isFunction";
 import isUndefined from "lodash/isUndefined";
 import uniq from "lodash/uniq";
 
-import { COLUMN_FEEDBACK_SCORES_ID, COLUMN_TYPE, OnChangeFn } from "@/types/shared";
+import {
+  COLUMN_FEEDBACK_SCORES_ID,
+  COLUMN_TYPE,
+  OnChangeFn,
+} from "@/types/shared";
 import { mapRowDataForExport } from "@/lib/traces/exportUtils";
 import { Trace } from "@/types/traces";
 import { formatDate, formatDuration } from "@/lib/date";
