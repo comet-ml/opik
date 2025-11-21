@@ -443,7 +443,7 @@ class BenchmarkLogger:
                 width=120,
             )
         else:
-            error_panel = Text("No error occured.", style="dim")
+            error_panel = Text("No error occurred.", style="dim")
 
         main_content_group = Group(
             table, Text("\n"), final_prompt_panel, Text("\n"), error_panel

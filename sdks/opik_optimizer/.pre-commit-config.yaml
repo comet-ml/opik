@@ -42,3 +42,24 @@ repos:
         exclude: '(sdks/opik_optimizer/scripts/)|(sdks/opik_optimizer/benchmarks/benchmark_results/)'
         args: [--config-file, sdks/opik_optimizer/pyproject.toml, --install-types, --non-interactive]
         additional_dependencies: [types-requests, pytest, pyrate_limiter, modal]
+
+  - repo: https://github.com/kynan/nbstripout
+    rev: 0.6.1
+    hooks:
+      - id: nbstripout
+        files: ^sdks/opik_optimizer/.*\.ipynb$
+
+  - repo: https://github.com/igorshubovych/markdownlint-cli
+    rev: v0.38.0
+    hooks:
+      - id: markdownlint
+        files: ^sdks/opik_optimizer/.*\.md$
+        args: ['--disable=MD013', '--disable=MD033']
+
+  - repo: https://github.com/codespell-project/codespell
+    rev: v2.2.6
+    hooks:
+      - id: codespell
+        files: ^sdks/opik_optimizer
+        exclude: '(\.ipynb$)|(\.json$)|(\.jsonl$)|(benchmark_results/)'
+        args: ['--skip=*.ipynb,*.json,*.jsonl']

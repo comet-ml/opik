@@ -110,6 +110,7 @@ python runners/run_benchmark.py --config manifest.json
 ```
 
 **Manifest Schema:**
+
 - `seed` (optional): Random seed for reproducibility
 - `test_mode` (optional): Default test mode for all tasks
 - `tasks` (required): Array of task configurations
@@ -124,6 +125,7 @@ python runners/run_benchmark.py --config manifest.json
   - `metrics` (optional): List of metric callables (module.attr) to override the dataset defaults
 
 **When to use manifests:**
+
 - Reproducing exact benchmark configurations
 - Running complex multi-task benchmarks
 - Version-controlling benchmark configurations
@@ -220,6 +222,7 @@ python run_benchmark.py --modal --config manifest.json --max-concurrent 10
 ### Local Results
 
 Local results are saved to `./benchmark_results/<run_id>/`:
+
 - `checkpoint.json` - Task status and results
 - Logs in `optimization_*.log` files
 
@@ -285,6 +288,7 @@ This updates the deployed worker with your latest code changes.
 The benchmark system is organized into several modules:
 
 ### Entry Points
+
 - **`run_benchmark.py`** - Main unified entry point (routes to local or Modal execution based on `--modal` flag)
   - Calls `run_benchmark_local.py` for local execution
   - Calls `run_benchmark_modal.py` for Modal execution
@@ -301,16 +305,19 @@ The benchmark system is organized into several modules:
   - Imports `modal_utils.display` for formatting
 
 ### Configuration & Core Logic
+
 - **`benchmark_config.py`** - Dataset and optimizer configurations
 - **`benchmark_task.py`** - Core task execution logic
 
 ### Local Execution (`local/`)
+
 - **`local/runner.py`** - Local benchmark runner implementation
   - Imports `local.checkpoint` and `local.logging`
 - **`local/checkpoint.py`** - Checkpoint management for local runs
 - **`local/logging.py`** - Local logging utilities
 
 ### Modal Execution (`modal_utils/`)
+
 - **`modal_utils/coordinator.py`** - Task coordination utilities (helper functions for task generation)
 - **`modal_utils/worker_core.py`** - Core worker execution logic (called by `benchmark_worker.py`)
 - **`modal_utils/storage.py`** - Modal Volume storage operations
@@ -319,6 +326,7 @@ The benchmark system is organized into several modules:
 - **`modal_utils/display.py`** - Results display and formatting (used by `check_results.py`)
 
 ### Shared Utilities (`utils/`)
+
 - **`utils/validation.py`** - Input validation and confirmation (used by `run_benchmark_local.py`)
 - **`utils/serialization.py`** - Serialization helpers for results (used by `modal_utils/storage.py`)
 
