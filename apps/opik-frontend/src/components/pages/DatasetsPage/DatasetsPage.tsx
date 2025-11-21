@@ -77,6 +77,7 @@ export const DEFAULT_COLUMNS: ColumnData<Dataset>[] = [
     id: "tags",
     label: "Tags",
     type: COLUMN_TYPE.list,
+    iconType: "tags",
     cell: ListCell as never,
   },
   {
@@ -130,6 +131,7 @@ export const FILTERS_COLUMNS: ColumnData<Dataset>[] = [
     id: "tags",
     label: "Tags",
     type: COLUMN_TYPE.list,
+    iconType: "tags",
   },
   {
     id: "last_updated_at",
