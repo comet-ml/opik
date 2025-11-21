@@ -225,9 +225,12 @@ class ChatPrompt:
 
         # TODO(opik-mcp): once we introduce a dedicated MCP prompt subclass,
         # migrate callers away from generic copies so optimizer metadata stays typed.
-        model_parameters = (
-            copy.deepcopy(self.model_kwargs) if self.model_kwargs else None
-        )
+        model_parameters = None
+        if self.model_kwargs:
+            try:
+                model_parameters = copy.deepcopy(self.model_kwargs)
+            except Exception:
+                model_parameters = dict(self.model_kwargs)
         return ChatPrompt(
             name=self.name,
             system=self.system,
