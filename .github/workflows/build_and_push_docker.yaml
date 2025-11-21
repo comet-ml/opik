@@ -179,6 +179,44 @@ jobs:
             ${{ matrix.image_type == 'comet' && format('OPIK_FE_SENTRY_DSN={0}', secrets.OPIK_FE_SENTRY_DSN) || '' }}
             GITHUB_TOKEN=${{ secrets.GITHUB_TOKEN }}
 
+      - name: Export digest
+        if: steps.check.outputs.should_run == 'true'
+        run: |
+          mkdir -p /tmp/digests/${{ steps.set_vars.outputs.image_name }}
+          digest="${{ steps.build.outputs.digest }}"
+          if [ -z "$digest" ]; then
+            echo "ERROR: Digest is empty!"
+            exit 1
+          fi
+          echo "Digest from build: $digest"
+          
+          # Remove sha256: prefix if present, otherwise use as-is
+          if [[ "$digest" == sha256:* ]]; then
+            HASH="${digest#sha256:}"
+          else
+            HASH="$digest"
+          fi
+          
+          # Verify digest format is valid
+          if [ ${#HASH} -eq 64 ] && [[ "$HASH" =~ ^[a-f0-9]+$ ]]; then
+            echo "✓ Digest hash format is valid: $HASH"
+          else
+            echo "ERROR: Invalid digest hash format: $HASH"
+            exit 1
+          fi
+          
+          echo "$HASH" > "/tmp/digests/${{ steps.set_vars.outputs.image_name }}/${{ matrix.platform }}.digest"
+          echo "✓ Saved digest hash: $HASH"
+
+      - name: Upload digest
+        if: steps.check.outputs.should_run == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: digests-${{ steps.set_vars.outputs.image_name }}-${{ matrix.platform }}
+          path: /tmp/digests/${{ steps.set_vars.outputs.image_name }}/${{ matrix.platform }}.digest
+          if-no-files-found: error
+          retention-days: 1
+
   merge:
     needs: build
     runs-on: ubuntu-latest
@@ -213,92 +251,13 @@ jobs:
           fi
           echo "image_name=$IMAGE_NAME" >> $GITHUB_OUTPUT
 
-      - name: Collect digests from build jobs
+      - name: Download digests
         if: steps.check.outputs.should_run == 'true'
-        id: collect_digests
-        run: |
-          # Collect digests from build job outputs
-          # Filter to only include digests for the current image type (regular or comet)
-          # Build jobs output: digest, platform, image_name
-          # We need to match image_name to filter correct digests
-          
-          PLATFORMS="amd64"
-          if [[ "${{ inputs.image }}" != "opik-guardrails-backend" ]]; then
-            PLATFORMS="$PLATFORMS arm64"
-          fi
-          
-          # Get all outputs from build jobs
-          BUILD_DIGESTS="${{ needs.build.outputs.digest }}"
-          BUILD_IMAGE_NAMES="${{ needs.build.outputs.image_name }}"
-          BUILD_PLATFORMS="${{ needs.build.outputs.platform }}"
-          
-          # Current image name for this merge job (regular or comet)
-          CURRENT_IMAGE_NAME="${{ steps.set_vars.outputs.image_name }}"
-          
-          echo "Current image name: $CURRENT_IMAGE_NAME"
-          echo "Expected platforms: $PLATFORMS"
-          echo "All build digests: $BUILD_DIGESTS"
-          echo "All build image names: $BUILD_IMAGE_NAMES"
-          echo "All build platforms: $BUILD_PLATFORMS"
-          
-          # Check if any build jobs ran for this image type
-          if [[ -z "$BUILD_IMAGE_NAMES" ]] || [[ "$BUILD_IMAGE_NAMES" != *"$CURRENT_IMAGE_NAME"* ]]; then
-            # If this is a comet image and build_comet_image is false, that's expected - skip gracefully
-            if [[ "$CURRENT_IMAGE_NAME" == *"-comet" ]] && [[ "${{ inputs.build_comet_image }}" != "true" ]]; then
-              echo "Comet image not built (build_comet_image=false), skipping merge for $CURRENT_IMAGE_NAME"
-              echo "digests_platforms=$PLATFORMS" >> $GITHUB_OUTPUT
-              echo "build_digests=" >> $GITHUB_OUTPUT
-              echo "skip_merge=true" >> $GITHUB_OUTPUT
-              exit 0
-            fi
-            
-            echo "ERROR: No build jobs found for image: $CURRENT_IMAGE_NAME"
-            echo "This may indicate build jobs were skipped or failed"
-            echo "Available image names from build jobs: $BUILD_IMAGE_NAMES"
-            exit 1
-          fi
-          
-          # Filter digests that match current image_name
-          # Since matrix outputs are aggregated, we need to match digests to image names
-          FILTERED_DIGESTS=""
-          BASE_IMAGE="${{ env.DOCKER_REGISTRY }}/$CURRENT_IMAGE_NAME"
-          
-          # Convert space-separated strings to arrays
-          read -ra DIGEST_ARRAY <<< "$BUILD_DIGESTS"
-          read -ra IMAGE_NAME_ARRAY <<< "$BUILD_IMAGE_NAMES"
-          read -ra PLATFORM_ARRAY <<< "$BUILD_PLATFORMS"
-          
-          echo "Filtering digests for image: $CURRENT_IMAGE_NAME"
-          
-          for i in "${!DIGEST_ARRAY[@]}"; do
-            DIGEST="${DIGEST_ARRAY[$i]}"
-            IMAGE_NAME="${IMAGE_NAME_ARRAY[$i]}"
-            PLATFORM="${PLATFORM_ARRAY[$i]}"
-            
-            # Match by image_name first (faster than registry check)
-            if [[ "$IMAGE_NAME" == "$CURRENT_IMAGE_NAME" ]]; then
-              # Verify digest exists and belongs to correct image
-              DIGEST_REF="$BASE_IMAGE@$DIGEST"
-              if docker buildx imagetools inspect "$DIGEST_REF" >/dev/null 2>&1; then
-                echo "  ✓ Matched digest for $IMAGE_NAME ($PLATFORM): $DIGEST"
-                FILTERED_DIGESTS="$FILTERED_DIGESTS $DIGEST"
-              else
-                echo "  ⚠ Digest not found in registry: $DIGEST_REF (skipping)"
-              fi
-            fi
-          done
-          
-          FILTERED_DIGESTS=$(echo "$FILTERED_DIGESTS" | xargs)  # Trim whitespace
-          
-          if [ -z "$FILTERED_DIGESTS" ]; then
-            echo "ERROR: No digests found for image: $CURRENT_IMAGE_NAME"
-            echo "Available image names: $BUILD_IMAGE_NAMES"
-            exit 1
-          fi
-          
-          echo "Filtered digests for $CURRENT_IMAGE_NAME: $FILTERED_DIGESTS"
-          echo "digests_platforms=$PLATFORMS" >> $GITHUB_OUTPUT
-          echo "build_digests=$FILTERED_DIGESTS" >> $GITHUB_OUTPUT
+        uses: actions/download-artifact@v4
+        with:
+          path: /tmp/digests/${{ steps.set_vars.outputs.image_name }}
+          pattern: digests-${{ steps.set_vars.outputs.image_name }}-*
+          merge-multiple: true
 
       - name: Set up Docker Buildx
         if: steps.check.outputs.should_run == 'true'
@@ -324,56 +283,52 @@ jobs:
             type=raw,value=main,enable=${{ github.ref == 'refs/heads/main' }}
 
       - name: Create manifest list and push tags
-        if: steps.check.outputs.should_run == 'true' && steps.collect_digests.outputs.skip_merge != 'true' && steps.collect_digests.outputs.build_digests != ''
+        if: steps.check.outputs.should_run == 'true'
         run: |
-          # Use digests collected from build job outputs
-          PLATFORMS="${{ steps.collect_digests.outputs.digests_platforms }}"
-          BUILD_DIGESTS="${{ steps.collect_digests.outputs.build_digests }}"
-          BASE_IMAGE="${{ env.DOCKER_REGISTRY }}/${{ steps.set_vars.outputs.image_name }}"
+          cd /tmp/digests/${{ steps.set_vars.outputs.image_name }}
           
-          if [ -z "$BUILD_DIGESTS" ]; then
-            echo "No digests to process, skipping manifest creation"
-            exit 0
-          fi
+          # Debug: Show directory structure and file contents
+          echo "Directory structure:"
+          find . -type f | sort
+          echo ""
+          echo "Digest file contents:"
+          find . -name "*.digest" -type f -exec sh -c 'echo "File: $1"; cat "$1"; echo ""' _ {} \;
           
-          echo "Collecting digests for platforms: $PLATFORMS"
-          echo "Build job digests: $BUILD_DIGESTS"
-          
+          # Collect all digests from artifact files
           DIGESTS=""
-          
-          # For each platform, find matching digest by checking manifest architecture
-          for platform in $PLATFORMS; do
-            echo "Looking for digest for platform: $platform"
-            
-            # Try each digest from build outputs
-            for digest in $BUILD_DIGESTS; do
-              if [ -n "$digest" ]; then
-                DIGEST_REF="$BASE_IMAGE@$digest"
+          while IFS= read -r digest_file; do
+            if [ -f "$digest_file" ]; then
+              DIGEST_VALUE=$(cat "$digest_file" | tr -d '\n\r ' | xargs)
+              PLATFORM=$(basename "$digest_file" .digest)
+              if [ -n "$DIGEST_VALUE" ] && [ ${#DIGEST_VALUE} -eq 64 ]; then
+                DIGEST_REF="${{ env.DOCKER_REGISTRY }}/${{ steps.set_vars.outputs.image_name }}@sha256:$DIGEST_VALUE"
+                echo "Found digest: $digest_file (platform: $PLATFORM) -> $DIGEST_REF"
                 
-                # Verify digest exists and check its platform
+                # Verify digest exists in registry before adding
                 if docker buildx imagetools inspect "$DIGEST_REF" >/dev/null 2>&1; then
-                  # Check manifest architecture
-                  MANIFEST_INFO=$(docker buildx imagetools inspect "$DIGEST_REF" --raw 2>/dev/null || echo "{}")
-                  MANIFEST_ARCH=$(echo "$MANIFEST_INFO" | jq -r '.architecture // empty' 2>/dev/null || echo "")
-                  
-                  if [[ "$MANIFEST_ARCH" == "$platform" ]] || [[ -z "$MANIFEST_ARCH" ]]; then
-                    echo "  ✓ Found digest for $platform: $DIGEST_REF"
-                    DIGESTS="$DIGESTS $DIGEST_REF"
-                    break
-                  fi
+                  echo "  ✓ Verified digest exists in registry"
+                  DIGESTS="$DIGESTS $DIGEST_REF"
+                else
+                  echo "  ✗ ERROR: Digest not found in registry: $DIGEST_REF"
+                  echo "  This digest was saved by the build job but doesn't exist in the registry"
+                  exit 1
                 fi
+              else
+                echo "ERROR: Invalid digest value in $digest_file: '$DIGEST_VALUE'"
+                exit 1
               fi
-            done
-          done
+            fi
+          done < <(find . -name "*.digest" -type f | sort)
           
           if [ -z "$DIGESTS" ]; then
-            echo "ERROR: Could not find any valid digests in registry"
-            echo "Build job outputs: digest=$BUILD_DIGESTS"
+            echo "ERROR: No digests found!"
+            echo "Searched for *.digest files in: $(pwd)"
+            find . -type f -name "*.digest" || echo "No .digest files found"
             exit 1
           fi
           
           echo ""
-          echo "Collected digests: $DIGESTS"
+          echo "Collected verified digests: $DIGESTS"
           echo "Tags from metadata:"
           echo "${{ steps.meta.outputs.tags }}"
           echo "Labels from metadata:"
