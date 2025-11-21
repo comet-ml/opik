@@ -6,6 +6,8 @@ This module contains all the prompt templates used by the optimizer for:
 - MCP tool description optimization
 """
 
+import textwrap
+
 # System prompt for the meta-reasoning LLM that generates improved prompts
 REASONING_SYSTEM_PROMPT = """You are an expert prompt engineer. Your task is to improve prompts for any type of task.
 
@@ -65,7 +67,9 @@ def build_candidate_generation_user_prompt(
     Returns:
         Formatted user prompt string
     """
-    return f"""Current prompt: {current_prompt_messages}
+    return textwrap.dedent(
+        f"""
+            Current prompt: {current_prompt_messages}
             Current score: {best_score}
             {history_context}
             {task_context_str}
@@ -81,6 +85,7 @@ def build_candidate_generation_user_prompt(
             5. Maintain conciseness while being complete.
 
             Return a valid JSON array as specified."""
+    ).strip()
 
 
 def build_mcp_tool_description_user_prompt(
@@ -104,8 +109,6 @@ def build_mcp_tool_description_user_prompt(
     Returns:
         Formatted user prompt string
     """
-    import textwrap
-
     return textwrap.dedent(
         f"""
             Current tool name: {tool_name}
