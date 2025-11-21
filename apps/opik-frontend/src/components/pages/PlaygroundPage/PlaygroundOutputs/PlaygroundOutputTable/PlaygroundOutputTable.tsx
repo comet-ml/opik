@@ -22,7 +22,7 @@ import PlaygroundVariableCell from "@/components/pages/PlaygroundPage/Playground
 import DataTableNoData from "@/components/shared/DataTableNoData/DataTableNoData";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 import { useHydrateDatasetItemData } from "@/components/pages/PlaygroundPage/useHydrateDatasetItemData";
-import ListCell from "@/components/shared/DataTableCells/ListCell";
+import PlaygroundTagsCell from "@/components/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundOutputTable/PlaygroundTagsCell";
 
 type PlaygroundOutputTableData = {
   variables: { [key: string]: string };
@@ -140,7 +140,7 @@ const PlaygroundOutputTable = ({
       label: "Tags",
       type: COLUMN_TYPE.list,
       accessorFn: (row) => row.tags || [],
-      cell: ListCell as never,
+      cell: PlaygroundTagsCell as never,
     } as ColumnData<PlaygroundOutputTableData>);
 
     retVal.push(
