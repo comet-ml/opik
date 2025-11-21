@@ -70,6 +70,7 @@ def run_benchmark(
         preflight_info={
             "manifest_path": manifest_path,
             "checkpoint_dir": checkpoint_dir,
+            "test_mode": test_mode,
         },
     )
 
