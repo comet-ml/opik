@@ -77,45 +77,19 @@ from llama_index.core import Settings
 from llama_index.core.callbacks import CallbackManager
 from opik.integrations.llama_index import LlamaIndexCallbackHandler
 
+# Basic setup
 opik_callback = LlamaIndexCallbackHandler()
+
+# Or with optional parameters
+opik_callback = LlamaIndexCallbackHandler(
+    project_name="my-llamaindex-project",  # Set custom project name
+    skip_index_construction_trace=True     # Skip tracking index construction
+)
+
 Settings.callback_manager = CallbackManager([opik_callback])
 ```
-You can set the project name for the callback directly, or disable tracking of the index_construction phase.
 
-### Setting the Project Name
-
-For example:
-
-```python
-from llama_index.core import Settings
-from llama_index.core.callbacks import CallbackManager
-from opik.integrations.llama_index import LlamaIndexCallbackHandler
-
-# Configure callback with a custom project name
-opik_callback = LlamaIndexCallbackHandler(project_name="my-llamaindex-project")
-Settings.callback_manager = CallbackManager([opik_callback])
-### Disabling Index Construction Tracking
-
-By default, LlamaIndex will track all operations including index construction (document loading, embedding generation, etc.). If you want to track only your query operations and not the index construction phase, use the `skip_index_construction_trace` parameter:
-
-```python
-from llama_index.core import Settings, VectorStoreIndex, SimpleDirectoryReader
-from llama_index.core.callbacks import CallbackManager
-from opik.integrations.llama_index import LlamaIndexCallbackHandler
-
-# Configure callback to skip index construction tracking
-opik_callback = LlamaIndexCallbackHandler(skip_index_construction_trace=True)
-Settings.callback_manager = CallbackManager([opik_callback])
-
-# Now create your index - construction won't be tracked
-documents = SimpleDirectoryReader("./data").load_data()
-index = VectorStoreIndex.from_documents(documents)
-```
-
-This is particularly useful when:
-- You're working with large document sets where index construction is time-consuming
-- You want to focus your traces on production query operations only
-- You're pre-building indexes offline and only want to track runtime queries
+The `skip_index_construction_trace` parameter is useful when you want to track only query operations and not the index construction phase (particularly for large document sets or pre-built indexes)
 
 ## Example
 
