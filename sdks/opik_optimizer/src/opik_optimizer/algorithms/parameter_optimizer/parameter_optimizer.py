@@ -150,6 +150,9 @@ class ParameterOptimizer(BaseOptimizer):
 
         self._validate_optimization_inputs(prompt, dataset, metric)
 
+        # Ensure prompt uses optimizer model defaults
+        prompt.model = self.model
+
         base_model_kwargs = {
             **copy.deepcopy(self.model_parameters or {}),
             **copy.deepcopy(prompt.model_kwargs or {}),
