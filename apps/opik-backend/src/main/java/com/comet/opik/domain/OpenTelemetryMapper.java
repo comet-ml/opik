@@ -1,6 +1,8 @@
 package com.comet.opik.domain;
 
 import com.comet.opik.api.Span.SpanBuilder;
+import com.comet.opik.domain.mapping.OpenTelemetryMappingRule;
+import com.comet.opik.domain.mapping.OpenTelemetryMappingRuleFactory;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
@@ -27,7 +29,7 @@ import java.util.UUID;
 @Slf4j
 public class OpenTelemetryMapper {
 
-    private static Map<String, String> USAGE_KEYS_MAPPING = Map.of(
+    private static final Map<String, String> USAGE_KEYS_MAPPING = Map.of(
             "input_tokens", "prompt_tokens",
             "output_tokens", "completion_tokens");
 
@@ -95,10 +97,10 @@ public class OpenTelemetryMapper {
             var key = attribute.getKey();
             var value = attribute.getValue();
 
-            OpenTelemetryMappingRule.findRule(key).ifPresentOrElse(rule -> {
-                Optional.ofNullable(rule.getSpanType()).ifPresent(spanBuilder::type);
+            OpenTelemetryMappingRuleFactory.findRule(key).ifPresentOrElse(rule -> {
+                Optional.ofNullable(rule.spanType()).ifPresent(spanBuilder::type);
 
-                switch (rule.getOutcome()) {
+                switch (rule.outcome()) {
                     case MODEL :
                         spanBuilder.model(value.getStringValue());
                         break;
@@ -115,13 +117,17 @@ public class OpenTelemetryMapper {
                     case OUTPUT :
                     case METADATA :
                         ObjectNode node;
-                        node = switch (rule.getOutcome()) {
+                        node = switch (rule.outcome()) {
                             case INPUT -> input;
                             case OUTPUT -> output;
                             default -> metadata;
                         };
 
                         extractToJsonColumn(node, key, value);
+                        break;
+                    case DROP :
+                        // Explicitly drop this attribute
+                        break;
                 }
             }, () -> {
                 // if it's not explicitly request to drop, we keep it in input
@@ -189,7 +195,7 @@ public class OpenTelemetryMapper {
             AnyValue value) {
         // usage might appear as single int values or an json object
         if (value.hasIntValue()) {
-            var actualKey = key.substring(rule.getRule().length());
+            var actualKey = key.substring(rule.rule().length());
             usage.put(USAGE_KEYS_MAPPING.getOrDefault(actualKey, actualKey), (int) value.getIntValue());
         } else {
             try {
