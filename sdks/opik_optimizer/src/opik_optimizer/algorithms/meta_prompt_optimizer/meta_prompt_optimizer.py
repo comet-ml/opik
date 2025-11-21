@@ -651,6 +651,8 @@ class MetaPromptOptimizer(BaseOptimizer):
                     # Limit to prompts_this_round
                     candidate_prompts = candidate_prompts[:prompts_this_round]
                 except Exception as e:
+                    if isinstance(e, (BadRequestError, StructuredOutputParsingError)):
+                        raise
                     round_reporter.failed_to_generate(prompts_this_round, e)
                     # Prevent infinite loop when generation fails repeatedly.
                     trials_used += prompts_this_round
