@@ -1,9 +1,8 @@
 import json
 from pathlib import Path
 
-import pytest
 
-from benchmarks.benchmark_manifest import load_manifest, manifest_to_task_specs
+from benchmarks.configs.benchmark_manifest import load_manifest, manifest_to_task_specs
 
 
 def test_manifest_tasks_and_datasets(tmp_path: Path) -> None:
@@ -69,7 +68,9 @@ def test_manifest_generators_expand(tmp_path: Path) -> None:
     # 2 datasets * 2 models * 2 optimizers = 8 tasks
     assert len(tasks) == 8
     # Ensure metrics propagated
-    assert all(task.metrics == ["benchmarks.metrics.hotpot.hotpot_f1"] for task in tasks)
+    assert all(
+        task.metrics == ["benchmarks.metrics.hotpot.hotpot_f1"] for task in tasks
+    )
     # Ensure dataset override expansion
     tiny_tasks = [t for t in tasks if t.dataset_name == "tiny_test"]
     assert tiny_tasks and tiny_tasks[0].datasets is not None

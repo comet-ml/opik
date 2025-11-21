@@ -1,6 +1,6 @@
-import types
-from typing import Any
+from typing import Any, cast
 
+from opik_optimizer import BaseOptimizer, ChatPrompt
 import opik_optimizer.datasets
 import pytest
 
@@ -25,13 +25,21 @@ class DummyOptimizer:
     def __init__(self) -> None:
         self.calls: list[tuple[str, str]] = []
 
-    def evaluate_prompt(self, prompt, dataset, metric, n_threads):  # type: ignore[no-untyped-def]
+    def evaluate_prompt(  # type: ignore[no-untyped-def]
+        self,
+        prompt: ChatPrompt,
+        dataset: Any,
+        metric: Any,
+        n_threads: int,
+    ) -> float:
         metric_name = getattr(metric, "__name__", metric.__class__.__name__)
         self.calls.append((getattr(dataset, "name", "unknown"), metric_name))
         return 0.5
 
 
-def test_resolve_dataset_bundle_prefers_validation(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_resolve_dataset_bundle_prefers_validation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     dummy_train = DummyDataset("hotpot_train")
     dummy_validation = DummyDataset("hotpot_validation")
     dummy_test = DummyDataset("hotpot_test")
@@ -56,7 +64,9 @@ def test_resolve_dataset_bundle_prefers_validation(monkeypatch: pytest.MonkeyPat
 
 def test_resolve_dataset_bundle_without_splits(monkeypatch: pytest.MonkeyPatch) -> None:
     dummy_dataset = DummyDataset("gsm8k")
-    monkeypatch.setattr(opik_optimizer.datasets, "gsm8k", lambda test_mode=False: dummy_dataset)
+    monkeypatch.setattr(
+        opik_optimizer.datasets, "gsm8k", lambda test_mode=False: dummy_dataset
+    )
 
     bundle = resolve_dataset_bundle("gsm8k", test_mode=True)
 
@@ -68,7 +78,7 @@ def test_resolve_dataset_bundle_without_splits(monkeypatch: pytest.MonkeyPatch) 
 
 
 def test_evaluate_prompt_on_dataset_records_metadata() -> None:
-    optimizer = DummyOptimizer()
+    optimizer = cast(BaseOptimizer, DummyOptimizer())
     dataset = DummyDataset("hover_validation")
 
     def sample_metric(_dataset_item: dict, _llm_output: str) -> float:
@@ -76,7 +86,7 @@ def test_evaluate_prompt_on_dataset_records_metadata() -> None:
 
     result = evaluate_prompt_on_dataset(
         optimizer=optimizer,
-        prompt=object(),
+        prompt=ChatPrompt(messages=[{"role": "user", "content": "{text}"}]),
         dataset=dataset,
         dataset_name="hover_validation",
         dataset_role="validation",
@@ -91,7 +101,9 @@ def test_evaluate_prompt_on_dataset_records_metadata() -> None:
     assert optimizer.calls == [("hover_validation", "sample_metric")]
 
 
-def test_collect_dataset_metadata_includes_available_splits(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_collect_dataset_metadata_includes_available_splits(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     train = DummyDataset("hotpot_train")
     validation = DummyDataset("hotpot_validation")
     bundle = DatasetBundle(
@@ -118,7 +130,8 @@ def test_resolve_dataset_bundle_with_overrides(monkeypatch: pytest.MonkeyPatch) 
     calls: list[tuple[str, dict[str, Any]]] = []
 
     def fake_loader(**kwargs: Any) -> DummyDataset:
-        calls.append((kwargs.get("split"), kwargs))
+        split_key = kwargs.get("split") or "train"
+        calls.append((split_key, kwargs))
         name = kwargs.get("dataset_name", "override")
         return DummyDataset(name)
 

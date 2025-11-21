@@ -2,12 +2,15 @@ import json
 from concurrent.futures import Future
 from pathlib import Path
 from typing import Any
+from collections.abc import Callable
 
+from opik_optimizer import ChatPrompt
 import opik_optimizer
+
 import pytest
 
-import benchmark_config
-from benchmark_taskspec import BenchmarkTaskSpec
+from benchmarks.core import benchmark_config
+from benchmarks.core.benchmark_taskspec import BenchmarkTaskSpec
 from benchmarks.local import runner as local_runner
 
 
@@ -20,10 +23,10 @@ class InlineExecutor:
     def __enter__(self) -> "InlineExecutor":
         return self
 
-    def __exit__(self, exc_type, exc, tb) -> None:  # type: ignore[override]
+    def __exit__(self, exc_type: Any, exc: Any, tb: Any) -> None:  # type: ignore[override]
         return None
 
-    def submit(self, fn, *args, **kwargs):  # type: ignore[no-untyped-def]
+    def submit(self, fn: Callable[..., Any], *args: Any, **kwargs: Any) -> Future[Any]:
         result = fn(*args, **kwargs)
         self.submissions.append((fn, args, kwargs, result))
         fut: Future[Any] = Future()
@@ -44,7 +47,8 @@ class DummyDataset:
 
 
 class DummyOptimizationResult(dict):
-    def __init__(self, prompt_messages: list[dict[str, Any]]) -> None:
+    def __init__(self, prompt_messages: list[dict[str, Any]] | None) -> None:
+        prompt_messages = prompt_messages or []
         super().__init__(prompt=prompt_messages, llm_calls=1)
         self.prompt = prompt_messages
         self.llm_calls = 1
@@ -56,17 +60,17 @@ class DummyOptimizer:
         self.kwargs = kwargs
 
     def evaluate_prompt(  # type: ignore[no-untyped-def]
-        self, prompt, dataset, metric, n_threads
+        self, prompt: ChatPrompt, dataset: Any, metric: Any, n_threads: int
     ):
         return metric({}, "")
 
     def optimize_prompt(  # type: ignore[no-untyped-def]
         self,
         *,
-        prompt,
-        dataset,
-        metric,
-        validation_dataset=None,
+        prompt: ChatPrompt,
+        dataset: Any,
+        metric: Any,
+        validation_dataset: Any | None = None,
         **kwargs: Any,
     ):
         return DummyOptimizationResult(prompt.messages)
@@ -107,8 +111,8 @@ def _patch_benchmark_config(monkeypatch: pytest.MonkeyPatch) -> None:
             "dummy": benchmark_config.BenchmarkOptimizerConfig(
                 class_name="DummyOptimizer",
                 params={},
-        optimizer_prompt_params={"max_trials": 5, "n_samples": 2},
-    )
+                optimizer_prompt_params={"max_trials": 5, "n_samples": 2},
+            )
         },
     )
     monkeypatch.setattr(benchmark_config, "MODELS", ["dummy-model"])

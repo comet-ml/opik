@@ -1,11 +1,10 @@
-import types
 from typing import Any
 
 import opik_optimizer
 from opik_optimizer import ChatPrompt
 import pytest
 
-import benchmark_config
+from benchmarks.core import benchmark_config
 from benchmarks.utils.task_runner import execute_task, resolve_dataset_bundle
 
 
@@ -115,7 +114,9 @@ def _patch_datasets(monkeypatch: pytest.MonkeyPatch) -> DummyOptimizer:
     return dummy_opt
 
 
-def test_execute_task_uses_validation_and_test_splits(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_execute_task_uses_validation_and_test_splits(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     _patch_benchmark_config(monkeypatch)
     _patch_datasets(monkeypatch)
 
@@ -134,7 +135,10 @@ def test_execute_task_uses_validation_and_test_splits(monkeypatch: pytest.Monkey
     assert result.initial_evaluation and result.initial_evaluation.dataset
     assert result.initial_evaluation.dataset.split == "validation"
     assert result.test_evaluation is not None
-    assert result.test_evaluation.dataset and result.test_evaluation.dataset.split == "test"
+    assert (
+        result.test_evaluation.dataset
+        and result.test_evaluation.dataset.split == "test"
+    )
     assert set(result.dataset_metadata.keys()) == {"train", "validation", "test"}
     assert result.optimized_prompt and isinstance(result.optimized_prompt, ChatPrompt)
 
@@ -156,10 +160,15 @@ def test_execute_task_without_validation(monkeypatch: pytest.MonkeyPatch) -> Non
 
     assert result.evaluation_split == "train"
     assert result.test_evaluation is None
-    assert "train" in result.dataset_metadata and "validation" not in result.dataset_metadata
+    assert (
+        "train" in result.dataset_metadata
+        and "validation" not in result.dataset_metadata
+    )
 
 
-def test_resolve_dataset_bundle_raises_for_unknown(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_resolve_dataset_bundle_raises_for_unknown(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     _patch_benchmark_config(monkeypatch)
     with pytest.raises(ValueError):
         resolve_dataset_bundle("unknown_dataset", test_mode=False)

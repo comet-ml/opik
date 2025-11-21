@@ -4,12 +4,12 @@ from concurrent.futures import Future
 from pathlib import Path
 from typing import Any
 
-import benchmark_config
 import opik_optimizer
 import pytest
 from opik.evaluation.metrics.heuristics.equals import Equals
 
-from benchmark_taskspec import BenchmarkTaskSpec
+from benchmarks.core import benchmark_config
+from benchmarks.core.benchmark_taskspec import BenchmarkTaskSpec
 from benchmarks.local import runner as local_runner
 
 pytestmark = pytest.mark.integration
@@ -33,7 +33,9 @@ class InlineExecutor:
         fut.set_result(result)
         return fut
 
-    def shutdown(self, wait: bool = True, cancel_futures: bool = False) -> None:  # pragma: no cover - trivial
+    def shutdown(
+        self, wait: bool = True, cancel_futures: bool = False
+    ) -> None:  # pragma: no cover - trivial
         return None
 
 
@@ -115,7 +117,9 @@ def _patch_dataset_loader(monkeypatch: pytest.MonkeyPatch) -> None:
     )
 
 
-def test_benchmark_runner_few_shot_live(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_benchmark_runner_few_shot_live(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """Run a single benchmark task end-to-end against a real model."""
     _skip_without_openai()
     _patch_benchmark_config(monkeypatch)
