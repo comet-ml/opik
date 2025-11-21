@@ -162,6 +162,7 @@ def _parse_response(
 
     finish_reason = getattr(response.choices[0], "finish_reason", None)
     # When the model was truncated due to max_tokens we raise a BadRequest so downstream sees the OpenAI error.
+    # Empty string responses with a truncation finish reason mean the model hit max_tokens.
     if (
         isinstance(content, str)
         and finish_reason in {"length", "token limit", "max_tokens"}
@@ -192,8 +193,17 @@ def _parse_response(
                 cleaned = _utils.json_to_dict(content)
                 if cleaned is not None:
                     return response_model.model_validate_json(json.dumps(cleaned))
-            except Exception:
-                pass
+            except (
+                json.JSONDecodeError,
+                SyntaxError,
+                TypeError,
+                ValueError,
+            ) as parse_exc:
+                logger.debug(
+                    "Structured output fallback parsing failed for %s: %s",
+                    getattr(response_model, "__name__", "unknown"),
+                    parse_exc,
+                )
             logger.error(
                 "Structured output parsing failed for %s: %s | response_snippet=%s",
                 getattr(response_model, "__name__", "unknown"),
