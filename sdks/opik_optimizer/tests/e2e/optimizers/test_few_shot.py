@@ -19,7 +19,7 @@ def test_few_shot_optimizer() -> None:
         model_parameters={
             "temperature": 1,
             "max_tokens": 1000,
-            "reasoning_effort": "none",
+            "reasoning_effort": "minimal",
         },
         min_examples=1,
         max_examples=2,
