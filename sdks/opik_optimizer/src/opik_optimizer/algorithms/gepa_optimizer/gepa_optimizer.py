@@ -1,5 +1,4 @@
 import logging
-import sys
 from typing import Any, Literal, overload
 from collections.abc import Callable
 
@@ -26,16 +25,8 @@ from ...utils import (
 from ...task_evaluator import _create_metric_class
 from ... import task_evaluator, helpers
 from . import reporting as gepa_reporting
-from .adapter import OpikDataInst as LegacyOpikDataInst, OpikGEPAAdapter
 from gepa.core.adapter import GEPAAdapter
-
-try:
-    from gepa.adapters.opik_adapter import OpikAdapter as NativeOpikAdapter, OpikDataInst as NativeOpikDataInst
-except Exception:
-    NativeOpikAdapter = None
-    NativeOpikDataInst = None
-
-OpikDataInst = NativeOpikDataInst or LegacyOpikDataInst
+from .adapter import OpikGEPAAdapter, OpikDataInst
 
 logger = logging.getLogger(__name__)
 
