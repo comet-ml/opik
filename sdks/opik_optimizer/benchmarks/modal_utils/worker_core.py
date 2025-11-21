@@ -17,6 +17,8 @@ def run_optimization_task(
     test_mode: bool,
     optimizer_params_override: dict[str, Any] | None = None,
     optimizer_prompt_params_override: dict[str, Any] | None = None,
+    datasets: dict[str, Any] | None = None,
+    metrics: list[str] | None = None,
 ) -> TaskResult:
     """
     Run a single optimization task on Modal infrastructure.
@@ -55,6 +57,8 @@ def run_optimization_task(
             test_mode=test_mode,
             optimizer_params_override=optimizer_params_override,
             optimizer_prompt_params_override=optimizer_prompt_params_override,
+            datasets=datasets,
+            metrics=metrics,
         )
         result.timestamp_start = timestamp_start
         print(

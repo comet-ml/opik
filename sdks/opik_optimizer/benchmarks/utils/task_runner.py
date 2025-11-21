@@ -7,6 +7,7 @@ import traceback
 from dataclasses import dataclass
 from typing import Any
 from collections.abc import Callable
+import warnings
 
 import benchmark_config
 import opik_optimizer.datasets
@@ -71,32 +72,40 @@ def _load_dataset(dataset_name: str, split: str | None, test_mode: bool) -> Any:
 def resolve_dataset_bundle(
     dataset_name: str,
     test_mode: bool,
-    dataset_overrides: dict[str, Any] | None = None,
+    datasets: dict[str, Any] | None = None,
 ) -> DatasetBundle:
     """Return train/validation/test dataset objects for a given benchmark dataset key.
 
-    When ``dataset_overrides`` is provided, the loader specs (train/validation/test)
+    When ``datasets`` is provided, the loader kwargs (train/validation/test)
     are used instead of the registered preset slices. If only one override is
-    given, it is reused for all splits.
+    given, it is reused for all splits (with a warning).
     """
-    if dataset_overrides:
+    if datasets:
+        if "train" not in datasets and any(k in datasets for k in ("validation", "test")):
+            raise ValueError("datasets config must include a train split when validation/test are provided.")
+
+        explicit_roles = any(role in datasets for role in ("train", "validation", "test"))
         role_specs = (
-            dataset_overrides
-            if any(role in dataset_overrides for role in ("train", "validation", "test"))
-            else {
-                "train": dataset_overrides,
-                "validation": dataset_overrides,
-                "test": dataset_overrides,
-            }
+            datasets
+            if explicit_roles
+            else {"train": datasets, "validation": datasets, "test": datasets}
         )
+        if not explicit_roles:
+            warnings.warn(
+                "Dataset overrides provided without explicit splits; applying the same kwargs to train/validation/test.",
+                stacklevel=2,
+            )
 
         def _load_override(role: str) -> tuple[str, Any] | tuple[None, None]:
             spec = role_specs.get(role)
             if spec is None:
                 return None, None
-            loader_name = spec.get("loader") or dataset_name
-            kwargs = {k: v for k, v in spec.items() if k != "loader"}
+            loader_name = spec.get("loader") if isinstance(spec, dict) else None
+            kwargs = dict(spec) if isinstance(spec, dict) else {}
+            loader_name = loader_name or dataset_name
             kwargs.setdefault("dataset_name", f"{loader_name}_{role}")
+            if role in ("train", "validation", "test"):
+                kwargs.setdefault("split", role)
             kwargs["test_mode"] = test_mode
             loader = getattr(opik_optimizer.datasets, loader_name, None)
             if callable(loader):
@@ -179,6 +188,25 @@ def _dataset_metadata(dataset: Any, dataset_name: str, role: str) -> DatasetMeta
     )
 
 
+def _resolve_metrics(
+    dataset_config: BenchmarkDatasetConfig, custom_metric_paths: list[str] | None
+) -> list[Callable]:
+    if not custom_metric_paths:
+        return dataset_config.metrics
+
+    resolved: list[Callable] = []
+    for path in custom_metric_paths:
+        module_path, _, attr = path.rpartition(".")
+        if not module_path or not attr:
+            raise ValueError(f"Invalid metric path '{path}'. Expected module.attr format.")
+        module = __import__(module_path, fromlist=[attr])
+        metric_fn = getattr(module, attr, None)
+        if not callable(metric_fn):
+            raise ValueError(f"Metric '{path}' is not callable or not found.")
+        resolved.append(metric_fn)
+    return resolved
+
+
 def collect_dataset_metadata(bundle: DatasetBundle) -> dict[str, DatasetMetadata]:
     """Build a metadata map keyed by split name."""
     metadata = {"train": _dataset_metadata(bundle.train, bundle.train_name, "train")}
@@ -245,7 +273,8 @@ def execute_task(
     test_mode: bool,
     optimizer_params_override: dict[str, Any] | None,
     optimizer_prompt_params_override: dict[str, Any] | None,
-    dataset_overrides: dict[str, Any] | None = None,
+    datasets: dict[str, Any] | None = None,
+    metrics: list[str] | None = None,
 ) -> TaskResult:
     """Shared execution path used by local and Modal runners."""
     timestamp_start = time.time()
@@ -257,11 +286,12 @@ def execute_task(
             bundle = resolve_dataset_bundle(
                 dataset_name=dataset_name,
                 test_mode=test_mode,
-                dataset_overrides=dataset_overrides,
+                datasets=datasets,
             )
             dataset_config = benchmark_config.DATASET_CONFIG.get(
                 bundle.evaluation_name, benchmark_config.DATASET_CONFIG[dataset_name]
             )
+            metrics_resolved = _resolve_metrics(dataset_config, metrics)
             optimizer_config = benchmark_config.OPTIMIZER_CONFIGS[optimizer_name]
 
             constructor_kwargs = dict(optimizer_config.params)
@@ -284,7 +314,7 @@ def execute_task(
                 dataset=bundle.evaluation,
                 dataset_name=bundle.evaluation_name,
                 dataset_role=bundle.evaluation_role,
-                metrics=dataset_config.metrics,
+                metrics=metrics_resolved,
                 n_threads=4,
             )
 
@@ -306,7 +336,7 @@ def execute_task(
                 dataset=bundle.evaluation,
                 dataset_name=bundle.evaluation_name,
                 dataset_role=bundle.evaluation_role,
-                metrics=dataset_config.metrics,
+                metrics=metrics_resolved,
                 n_threads=4,
             )
 
@@ -318,7 +348,7 @@ def execute_task(
                     dataset=bundle.test,
                     dataset_name=bundle.test_name,
                     dataset_role="test",
-                    metrics=dataset_config.metrics,
+                    metrics=metrics_resolved,
                     n_threads=4,
                 )
 

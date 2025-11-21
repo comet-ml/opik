@@ -91,7 +91,7 @@ def _patch_benchmark_config(monkeypatch: pytest.MonkeyPatch) -> None:
             "dummy": benchmark_config.BenchmarkOptimizerConfig(
                 class_name="DummyOptimizer",
                 params={},
-                optimize_params={"max_trials": 5, "n_samples": 2},
+                optimizer_prompt_params={"max_trials": 5, "n_samples": 2},
             )
         },
     )

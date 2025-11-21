@@ -1,4 +1,5 @@
 import types
+from typing import Any
 
 import opik_optimizer.datasets
 import pytest
@@ -111,3 +112,29 @@ def test_collect_dataset_metadata_includes_available_splits(monkeypatch: pytest.
     assert set(metadata.keys()) == {"train", "validation"}
     assert metadata["train"].name == "hotpot_train"
     assert metadata["validation"].name == "hotpot_validation"
+
+
+def test_resolve_dataset_bundle_with_overrides(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[tuple[str, dict[str, Any]]] = []
+
+    def fake_loader(**kwargs: Any) -> DummyDataset:
+        calls.append((kwargs.get("split"), kwargs))
+        name = kwargs.get("dataset_name", "override")
+        return DummyDataset(name)
+
+    monkeypatch.setattr(opik_optimizer.datasets, "hotpot", fake_loader)
+
+    bundle = resolve_dataset_bundle(
+        "hotpot",
+        test_mode=False,
+        datasets={
+            "train": {"loader": "hotpot", "count": 1},
+            "validation": {"loader": "hotpot", "count": 2},
+        },
+    )
+
+    assert bundle.train.name == "hotpot_train"
+    assert bundle.validation and bundle.validation.name == "hotpot_validation"
+    assert bundle.test is None
+    assert bundle.evaluation_role == "validation"
+    assert calls and calls[0][1]["count"] == 1

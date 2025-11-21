@@ -33,6 +33,7 @@ import modal
 
 from benchmark_taskspec import BenchmarkTaskSpec
 from utils.budgeting import resolve_optimize_params
+from utils.budgeting import resolve_optimize_params
 
 # Define Modal app (just for local entrypoint - worker is deployed separately)
 app = modal.App("opik-optimizer-benchmarks-coordinator")
@@ -228,6 +229,8 @@ def submit_benchmark_tasks(
                 "run_id": run_id,
                 "optimizer_params": task.optimizer_params,
                 "optimizer_prompt_params": optimize_override,
+                "datasets": task.datasets,
+                "metrics": task.metrics,
             }
         )
 

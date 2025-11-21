@@ -42,7 +42,7 @@ def run_optimization(
     model_parameters: dict[str, Any] | None = None,
     optimizer_params_override: dict[str, Any] | None = None,
     optimizer_prompt_params_override: dict[str, Any] | None = None,
-    dataset_overrides: dict[str, Any] | None = None,
+    datasets: dict[str, Any] | None = None,
 ) -> TaskResult:
     return execute_task(
         task_id=task_id,
@@ -53,7 +53,7 @@ def run_optimization(
         test_mode=test_mode,
         optimizer_params_override=optimizer_params_override,
         optimizer_prompt_params_override=optimizer_prompt_params_override,
-        dataset_overrides=dataset_overrides,
+        datasets=datasets,
     )
 
 
@@ -185,7 +185,7 @@ class BenchmarkRunner:
                         test_mode=task.test_mode,
                         optimizer_params_override=task.optimizer_params,
                         optimizer_prompt_params_override=optimize_override,
-                        dataset_overrides=task.dataset_overrides,
+                        datasets=task.datasets,
                     )
 
                     future_to_info[future] = (

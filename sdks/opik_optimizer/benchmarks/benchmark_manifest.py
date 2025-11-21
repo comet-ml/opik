@@ -10,20 +10,46 @@ from benchmark_taskspec import BenchmarkTaskSpec
 
 
 class ManifestTask(BaseModel):
-    dataset: str
+    dataset: str | dict[str, Any]
     optimizer: str
     model: str
     test_mode: bool | None = None
     model_parameters: dict[str, Any] | None = None
     optimizer_params: dict[str, Any] | None = None
     optimizer_prompt_params: dict[str, Any] | None = None
-    dataset_overrides: dict[str, Any] | None = None
+    datasets: dict[str, Any] | None = None
+    metrics: list[str] | None = None
+
+
+class GeneratorDataset(BaseModel):
+    dataset: str | dict[str, Any]
+    datasets: dict[str, Any] | None = None
+
+
+class GeneratorModel(BaseModel):
+    name: str
+    model_parameters: dict[str, Any] | None = None
+
+
+class GeneratorOptimizer(BaseModel):
+    name: str
+    optimizer_params: dict[str, Any] | None = None
+    optimizer_prompt_params: dict[str, Any] | None = None
+
+
+class GeneratorSpec(BaseModel):
+    datasets: list[GeneratorDataset]
+    models: list[GeneratorModel]
+    optimizers: list[GeneratorOptimizer]
+    metrics: list[str] | None = None
+    test_mode: bool | None = None
 
 
 class BenchmarkManifest(BaseModel):
     seed: int | None = None
     test_mode: bool | None = None
     tasks: list[ManifestTask] = Field(default_factory=list)
+    generators: list[GeneratorSpec] = Field(default_factory=list)
 
 
 def load_manifest(path: str) -> BenchmarkManifest:
@@ -41,23 +67,90 @@ def load_manifest(path: str) -> BenchmarkManifest:
 def manifest_to_task_specs(
     manifest: BenchmarkManifest, fallback_test_mode: bool = False
 ) -> list[BenchmarkTaskSpec]:
+    def _normalize_dataset_entry(
+        dataset_field: str | dict[str, Any], datasets_field: dict[str, Any] | None
+    ) -> tuple[str, dict[str, Any] | None]:
+        datasets_override = datasets_field.copy() if datasets_field else None
+
+        if isinstance(dataset_field, dict):
+            loader_name = dataset_field.get("loader")
+            if not loader_name:
+                raise ValueError("Dataset override objects must include a 'loader' key.")
+            dataset_name = dataset_field.get("dataset_name", loader_name)
+            if datasets_override is None:
+                datasets_override = {
+                    "train": dict(dataset_field),
+                    "validation": dict(dataset_field),
+                    "test": dict(dataset_field),
+                }
+        else:
+            dataset_name = dataset_field
+
+        return dataset_name, datasets_override
+
+    def _add_task(
+        *,
+        dataset: str | dict[str, Any],
+        datasets: dict[str, Any] | None,
+        optimizer: str,
+        model: str,
+        test_mode: bool | None,
+        model_parameters: dict[str, Any] | None,
+        optimizer_params: dict[str, Any] | None,
+        optimizer_prompt_params: dict[str, Any] | None,
+        metrics: list[str] | None,
+    ) -> None:
+        dataset_name, datasets_override = _normalize_dataset_entry(dataset, datasets)
+        specs.append(
+            BenchmarkTaskSpec(
+                dataset_name=dataset_name,
+                optimizer_name=optimizer,
+                model_name=model,
+                test_mode=test_mode
+                if test_mode is not None
+                else default_test_mode,
+                model_parameters=model_parameters,
+                optimizer_params=optimizer_params,
+                optimizer_prompt_params=optimizer_prompt_params,
+                datasets=datasets_override,
+                metrics=metrics,
+            )
+        )
+
     specs: list[BenchmarkTaskSpec] = []
     default_test_mode = (
         manifest.test_mode if manifest.test_mode is not None else fallback_test_mode
     )
     for task in manifest.tasks:
-        specs.append(
-            BenchmarkTaskSpec(
-                dataset_name=task.dataset,
-                optimizer_name=task.optimizer,
-                model_name=task.model,
-                test_mode=(
-                    task.test_mode if task.test_mode is not None else default_test_mode
-                ),
-                model_parameters=task.model_parameters,
-                optimizer_params=task.optimizer_params,
-                optimizer_prompt_params=task.optimizer_prompt_params,
-                dataset_overrides=task.dataset_overrides,
-            )
+        _add_task(
+            dataset=task.dataset,
+            datasets=task.datasets,
+            optimizer=task.optimizer,
+            model=task.model,
+            test_mode=task.test_mode,
+            model_parameters=task.model_parameters,
+            optimizer_params=task.optimizer_params,
+            optimizer_prompt_params=task.optimizer_prompt_params,
+            metrics=task.metrics,
         )
+
+    for generator in manifest.generators:
+        gen_test_mode = (
+            generator.test_mode if generator.test_mode is not None else default_test_mode
+        )
+        for dataset_entry in generator.datasets:
+            for model_entry in generator.models:
+                for opt_entry in generator.optimizers:
+                    _add_task(
+                        dataset=dataset_entry.dataset,
+                        datasets=dataset_entry.datasets,
+                        optimizer=opt_entry.name,
+                        model=model_entry.name,
+                        test_mode=gen_test_mode,
+                        model_parameters=model_entry.model_parameters,
+                        optimizer_params=opt_entry.optimizer_params,
+                        optimizer_prompt_params=opt_entry.optimizer_prompt_params,
+                        metrics=generator.metrics,
+                    )
+
     return specs

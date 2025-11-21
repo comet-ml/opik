@@ -13,7 +13,8 @@ class BenchmarkTaskSpec:
     model_parameters: dict[str, Any] | None = field(default=None)
     optimizer_params: dict[str, Any] | None = field(default=None)
     optimizer_prompt_params: dict[str, Any] | None = field(default=None)
-    dataset_overrides: dict[str, Any] | None = field(default=None)
+    datasets: dict[str, Any] | None = field(default=None)
+    metrics: list[str] | None = field(default=None)
 
     @property
     def task_id(self) -> str:
@@ -28,7 +29,8 @@ class BenchmarkTaskSpec:
             "model_parameters": self.model_parameters,
             "optimizer_params": self.optimizer_params,
             "optimizer_prompt_params": self.optimizer_prompt_params,
-            "dataset_overrides": self.dataset_overrides,
+            "datasets": self.datasets,
+            "metrics": self.metrics,
         }
 
     @classmethod
@@ -41,5 +43,6 @@ class BenchmarkTaskSpec:
             model_parameters=data.get("model_parameters"),
             optimizer_params=data.get("optimizer_params"),
             optimizer_prompt_params=data.get("optimizer_prompt_params"),
-            dataset_overrides=data.get("dataset_overrides"),
+            datasets=data.get("datasets"),
+            metrics=data.get("metrics"),
         )
