@@ -14,7 +14,7 @@ dependencies = [
     #"gepa>=0.0.7",
     #
     # GEPA now depends on the Opik adapter branch published from vincentkoc/gepa
-    # THIS iS FOR TESTING PURPOSES
+    # THIS IS FOR TESTING PURPOSES
     "gepa @ git+https://github.com/vincentkoc/gepa.git@vk/gepa-opik-adapter",
     "hf_xet",
     "litellm<=1.75.6",
