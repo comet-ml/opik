@@ -223,7 +223,7 @@ jobs:
         if: steps.check.outputs.should_run == 'true'
         uses: actions/upload-artifact@v4
         with:
-          name: digests-${{ steps.set_vars.outputs.image_name }}-${{ matrix.platform }}
+          name: digests-${{ github.run_id }}-${{ steps.set_vars.outputs.image_name }}-${{ matrix.platform }}
           path: /tmp/digests/${{ steps.set_vars.outputs.image_name }}/${{ matrix.platform }}.digest
           if-no-files-found: error
           retention-days: 1
@@ -267,7 +267,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           path: /tmp/digests/${{ steps.set_vars.outputs.image_name }}
-          pattern: digests-${{ steps.set_vars.outputs.image_name }}-*
+          pattern: digests-${{ github.run_id }}-${{ steps.set_vars.outputs.image_name }}-*
           merge-multiple: true
           
       - name: Verify downloaded digests
@@ -275,12 +275,22 @@ jobs:
         run: |
           cd /tmp/digests/${{ steps.set_vars.outputs.image_name }}
           echo "Verifying downloaded digest files..."
-          echo "Directory contents:"
-          find . -type f -name "*.digest" | while read file; do
+          echo "Current directory: $(pwd)"
+          echo ""
+          echo "Full directory tree:"
+          find . -type f -o -type d | sort
+          echo ""
+          echo "Digest files found:"
+          find . -type f -name "*.digest" | sort | while read file; do
             echo "File: $file"
-            echo "Contents: $(cat "$file")"
+            echo "Full path: $(realpath "$file" 2>/dev/null || echo "$file")"
+            echo "Contents: $(cat "$file" | tr -d '\n\r ')"
+            echo "Size: $(wc -c < "$file" | tr -d ' ') bytes"
             echo "---"
           done
+          echo ""
+          echo "Expected image name: ${{ steps.set_vars.outputs.image_name }}"
+          echo "Expected run ID: ${{ github.run_id }}"
 
       - name: Set up Docker Buildx
         if: steps.check.outputs.should_run == 'true'
