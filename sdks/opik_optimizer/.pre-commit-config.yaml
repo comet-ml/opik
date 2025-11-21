@@ -6,6 +6,17 @@ repos:
         files: ^sdks/opik_optimizer
       - id: end-of-file-fixer
         files: ^sdks/opik_optimizer
+      - id: check-yaml
+        files: ^sdks/opik_optimizer
+      - id: check-json
+        files: ^sdks/opik_optimizer
+      - id: check-toml
+        files: ^sdks/opik_optimizer
+      - id: check-added-large-files
+        args: ['--maxkb=1000']
+      - id: detect-private-key
+      - id: check-merge-conflict
+      - id: check-case-conflict
 
   - repo: https://github.com/asottile/pyupgrade
     rev: v3.21.1
@@ -28,6 +39,6 @@ repos:
     hooks:
       - id: mypy
         files: ^sdks/opik_optimizer
-        exclude: '(sdks/opik_optimizer/scripts/)'
+        exclude: '(sdks/opik_optimizer/scripts/)|(sdks/opik_optimizer/benchmarks/benchmark_results/)'
         args: [--config-file, sdks/opik_optimizer/pyproject.toml, --install-types, --non-interactive]
         additional_dependencies: [types-requests, pytest, pyrate_limiter, modal]
