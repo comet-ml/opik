@@ -160,19 +160,8 @@ class GepaOptimizer(BaseOptimizer):
         experiment_config: dict[str, Any] | None,
         system_fallback: str,
     ) -> GEPAAdapter[OpikDataInst, dict[str, Any], dict[str, Any]]:
-        if NativeOpikAdapter is not None:
-            return NativeOpikAdapter(
-                base_prompt=prompt_obj,
-                dataset=dataset,
-                metric=metric,
-                instantiate_agent=self._adapter_instantiate_agent,
-                prepare_experiment_config=self._prepare_experiment_config,
-                experiment_config=experiment_config,
-                system_fallback=system_fallback,
-                project_name=self.project_name,
-                num_threads=self.n_threads,
-                optimizer_metric_tracker=self._track_gepa_metric_call,
-            )
+        if prompt_obj.model_kwargs is None:
+            prompt_obj.model_kwargs = self.model_parameters
         return OpikGEPAAdapter(
             base_prompt=prompt_obj,
             optimizer=self,
