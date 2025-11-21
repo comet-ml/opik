@@ -171,8 +171,8 @@ def test_parameter_optimizer() -> None:
 
     # Validate model configuration in details
     assert "model" in results.details, "Details should contain 'model'"
-    assert isinstance(results.details["model"], str), (
-        f"Model should be a string, got {type(results.details['model'])}"
+    assert results.details["model"] == optimizer.model, (
+        f"Expected model {optimizer.model}, got {results.details['model']}"
     )
 
     # History validation

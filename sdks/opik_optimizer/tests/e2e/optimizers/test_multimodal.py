@@ -191,8 +191,8 @@ Be precise and actionable in your hazard descriptions. Focus on safety-critical 
 
     # Validate model configuration
     assert "model" in results.details, "Details should contain 'model'"
-    assert results.details["model"] == "openai/gpt-4o", (
-        f"Expected openai/gpt-4o, got {results.details['model']}"
+    assert results.details["model"] == "openai/gpt-5-nano", (
+        f"Expected openai/gpt-5-nano, got {results.details['model']}"
     )
 
     # Validate hierarchical-specific details

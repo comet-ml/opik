@@ -125,8 +125,8 @@ def test_evolutionary_optimizer() -> None:
 
     # Validate model configuration in details
     assert "model" in results.details, "Details should contain 'model'"
-    assert results.details["model"] == "openai/gpt-5-mini", (
-        f"Expected openai/gpt-5-mini, got {results.details['model']}"
+    assert results.details["model"] == "openai/gpt-5-nano", (
+        f"Expected openai/gpt-5-nano, got {results.details['model']}"
     )
 
     assert "temperature" in results.details, "Details should contain 'temperature'"

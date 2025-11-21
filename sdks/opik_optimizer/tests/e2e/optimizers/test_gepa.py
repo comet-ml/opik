@@ -63,6 +63,9 @@ def test_gepa_optimizer() -> None:
     assert results.metric_name == "levenshtein_ratio", (
         f"Expected metric name 'levenshtein_ratio', got {results.metric_name}"
     )
+    assert results.details.get("model") == optimizer.model, (
+        f"Expected model {optimizer.model}, got {results.details.get('model')}"
+    )
 
     # Results structure validation
     assert hasattr(results, "prompt"), "Results should have prompt attribute"
