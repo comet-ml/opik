@@ -22,6 +22,7 @@ jobs:
               with:
                 node-version: '20'
                 cache: 'npm'
+                cache-dependency-path: apps/opik-documentation/documentation/package-lock.json
             - name: Cache and install Fern CLI
               run: |
                 npm install -g fern-api@0.64.26
