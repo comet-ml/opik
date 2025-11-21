@@ -184,7 +184,6 @@ class MetaPromptOptimizer(BaseOptimizer):
         metric: Callable,
         n_samples: int | None = None,
         dataset_item_ids: list[str] | None = None,
-        experiment_config: dict | None = None,
         use_full_dataset: bool = True,
         optimization_id: str | None = None,
         mcp_config: MCPExecutionConfig | None = None,
