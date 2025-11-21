@@ -9,6 +9,7 @@ from opik_optimizer import (
     EvolutionaryOptimizer,
 )
 from opik_optimizer.datasets import hotpot
+from opik_optimizer.utils import search_wikipedia
 from pydantic_ai_agent import PydanticAIAgent
 
 
@@ -19,14 +20,34 @@ def levenshtein_ratio(dataset_item: dict[str, Any], llm_output: str) -> ScoreRes
 
 dataset = hotpot(count=300)
 
-system_prompt = """Use the `search_wikipedia` function to find details
-on a topic. Respond with a short, concise answer without
-explanation."""
+system_prompt = """You are a helpful assistant with access to a search_wikipedia tool.
+When answering questions, use the search_wikipedia tool to find accurate information.
+Always call the tool before providing your answer. Respond with a short, concise answer."""
 
 
 prompt = ChatPrompt(
     system=system_prompt,
     user="{question}",
+    tools=[
+        {
+            "type": "function",
+            "function": {
+                "name": "search_wikipedia",
+                "description": "Search Wikipedia for information about a topic. Returns relevant article abstracts.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "query": {
+                            "type": "string",
+                            "description": "The search query - a topic, person, place, or concept to look up.",
+                        },
+                    },
+                    "required": ["query"],
+                },
+            },
+        },
+    ],
+    function_map={"search_wikipedia": search_wikipedia},
 )
 
 # Optimize it:
