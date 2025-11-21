@@ -1,6 +1,7 @@
 from typing import Any
 from pydantic import BaseModel, ValidationError as PydanticValidationError
 import json
+import logging
 import sys
 from types import FrameType
 
@@ -9,6 +10,8 @@ from opik.evaluation.models.litellm import opik_monitor as opik_litellm_monitor
 
 from . import _throttle
 from . import utils as _utils
+
+logger = logging.getLogger(__name__)
 
 _limiter = _throttle.get_rate_limiter_for_current_opik_installation()
 
@@ -168,7 +171,12 @@ def _parse_response(
                     return response_model.model_validate_json(json.dumps(cleaned))
             except Exception:
                 pass
-
+            logger.error(
+                "Structured output parsing failed for %s: %s | response_snippet=%s",
+                getattr(response_model, "__name__", "unknown"),
+                exc,
+                (content or "")[:400],
+            )
             raise StructuredOutputParsingError(content=content, error=exc) from exc
 
     return content
