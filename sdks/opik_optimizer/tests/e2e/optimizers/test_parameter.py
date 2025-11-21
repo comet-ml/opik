@@ -30,7 +30,7 @@ def test_parameter_optimizer() -> None:
     # Initialize optimizer with reduced parameters for faster testing
     optimizer = opik_optimizer.ParameterOptimizer(
         model="openai/gpt-4.1-nano",
-        default_n_trials=2,
+        default_n_trials=1,
         model_parameters={"temperature": 0.1, "max_tokens": 256},
         n_threads=2,
         seed=42,
