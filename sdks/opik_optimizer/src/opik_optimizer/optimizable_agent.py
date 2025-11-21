@@ -3,14 +3,12 @@ import json
 import os
 import logging
 
-from opik.opik_context import get_current_span_data
-
-logger = logging.getLogger(__name__)
-
 import litellm
 from litellm.integrations.opik.opik import OpikLogger
-
+from opik.opik_context import get_current_span_data
 from . import _throttle
+
+logger = logging.getLogger(__name__)
 
 _limiter = _throttle.get_rate_limiter_for_current_opik_installation()
 
