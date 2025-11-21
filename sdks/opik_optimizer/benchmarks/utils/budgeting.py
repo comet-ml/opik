@@ -24,9 +24,8 @@ def derive_budgeted_optimize_params(
     if not dataset_cfg or not optimizer_cfg:
         return None
 
-    rollout_budget = (
-        getattr(dataset_cfg, "train_rollout_budget", None)
-        or getattr(dataset_cfg, "rollout_budget", None)
+    rollout_budget = getattr(dataset_cfg, "train_rollout_budget", None) or getattr(
+        dataset_cfg, "rollout_budget", None
     )
     if not rollout_budget:
         return None

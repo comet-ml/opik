@@ -5,11 +5,18 @@ from __future__ import annotations
 import time
 import traceback
 from dataclasses import dataclass
-from typing import Any, Callable
+from typing import Any
+from collections.abc import Callable
 
 import benchmark_config
 import opik_optimizer.datasets
-from benchmark_task import DatasetMetadata, TaskEvaluationResult, TaskResult, TASK_STATUS_FAILED, TASK_STATUS_SUCCESS
+from benchmark_task import (
+    DatasetMetadata,
+    TaskEvaluationResult,
+    TaskResult,
+    TASK_STATUS_FAILED,
+    TASK_STATUS_SUCCESS,
+)
 from opik_optimizer import BaseOptimizer, ChatPrompt, reporting_utils
 
 
@@ -191,7 +198,9 @@ def execute_task(
 
     with reporting_utils.suppress_opik_logs():
         try:
-            bundle = resolve_dataset_bundle(dataset_name=dataset_name, test_mode=test_mode)
+            bundle = resolve_dataset_bundle(
+                dataset_name=dataset_name, test_mode=test_mode
+            )
             dataset_config = benchmark_config.DATASET_CONFIG.get(
                 bundle.evaluation_name, benchmark_config.DATASET_CONFIG[dataset_name]
             )

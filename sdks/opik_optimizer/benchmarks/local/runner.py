@@ -20,8 +20,12 @@ from typing import Any
 
 from local import checkpoint as benchmark_checkpoint
 from local import logging as benchmark_logging
-import benchmark_config
-from benchmark_task import TaskResult, TASK_STATUS_FAILED, TASK_STATUS_PENDING, TASK_STATUS_RUNNING, TASK_STATUS_SUCCESS
+from benchmark_task import (
+    TaskResult,
+    TASK_STATUS_FAILED,
+    TASK_STATUS_PENDING,
+    TASK_STATUS_RUNNING,
+)
 from benchmark_taskspec import BenchmarkTaskSpec
 
 from utils.budgeting import resolve_optimize_params

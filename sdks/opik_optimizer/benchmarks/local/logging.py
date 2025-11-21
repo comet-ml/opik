@@ -264,13 +264,17 @@ class BenchmarkLogger:
         if evaluation_split:
             eval_meta = dataset_metadata.get(evaluation_split)
             eval_label = (
-                eval_meta.name if eval_meta and getattr(eval_meta, "name", None) else evaluation_split
+                eval_meta.name
+                if eval_meta and getattr(eval_meta, "name", None)
+                else evaluation_split
             )
             table.add_row("Eval split:", eval_label)
         if task_detail_data.test_evaluation:
             test_meta = dataset_metadata.get("test")
             test_label = (
-                test_meta.name if test_meta and getattr(test_meta, "name", None) else "test"
+                test_meta.name
+                if test_meta and getattr(test_meta, "name", None)
+                else "test"
             )
             table.add_row("Test split:", test_label)
         table.add_row("Optimizer:", f"[bold]{optimizer_name}[/bold]")

@@ -4,7 +4,7 @@ import time
 import traceback
 from typing import Any
 
-from benchmark_task import TaskResult, TASK_STATUS_FAILED, TASK_STATUS_SUCCESS
+from benchmark_task import TaskResult, TASK_STATUS_FAILED
 from utils.task_runner import execute_task
 
 
