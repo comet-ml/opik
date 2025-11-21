@@ -179,6 +179,11 @@ DATASET_CONFIG = {
         display_name="CNN/Daily Mail",
         metrics=[create_levenshtein_ratio_metric("highlights")],
     ),
+    "tiny_test": BenchmarkDatasetConfig(
+        name="tiny_test",
+        display_name="Tiny Test",
+        metrics=[create_levenshtein_ratio_metric("label")],
+    ),
     "hotpot_train": BenchmarkDatasetConfig(
         name="hotpot_train",
         display_name="HotpotQA Train",
@@ -448,5 +453,13 @@ INITIAL_PROMPTS.update(
         "pupa_train": _PUPA_PROMPT,
         "pupa_validation": _PUPA_PROMPT,
         "pupa_test": _PUPA_PROMPT,
+        "tiny_test": [
+            {"role": "system", "content": "Answer the question briefly and correctly."},
+            {"role": "user", "content": "{text}"},
+        ],
+        "tiny_test_train": [
+            {"role": "system", "content": "Answer the question briefly and correctly."},
+            {"role": "user", "content": "{text}"},
+        ],
     }
 )
