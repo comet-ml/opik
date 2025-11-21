@@ -87,13 +87,16 @@ def test_full_dataset_sizes(
 
     monkeypatch.setattr(dataset_utils.DatasetHandle, "load", _stub_load)
 
+    dataset: _DummyDataset | None = None
     try:
         dataset = dataset_func(**DATASET_CALL_KWARGS.get(dataset_name, {}))
     except RuntimeError as exc:
         if "Opik client is not available; context7_eval" in str(exc):
             pytest.skip("context7_eval not available without Opik client")
         raise
-    # Restore to avoid leaking into other tests
+    finally:
+        monkeypatch.setattr(dataset_utils.DatasetHandle, "load", original_load)
+    assert dataset is not None
     assert len(dataset._hashes) == expected_size
 
 
@@ -121,6 +124,7 @@ def test_test_dataset_sizes(
 
     monkeypatch.setattr(dataset_utils.DatasetHandle, "load", _stub_load)
 
+    dataset: _DummyDataset | None = None
     try:
         dataset = dataset_func(
             test_mode=True, **DATASET_CALL_KWARGS.get(dataset_name, {})
@@ -129,5 +133,7 @@ def test_test_dataset_sizes(
         if "Opik client is not available; context7_eval" in str(exc):
             pytest.skip("context7_eval not available without Opik client")
         raise
-    monkeypatch.setattr(dataset_utils.DatasetHandle, "load", original_load)
+    finally:
+        monkeypatch.setattr(dataset_utils.DatasetHandle, "load", original_load)
+    assert dataset is not None
     assert len(dataset._hashes) == expected_size
