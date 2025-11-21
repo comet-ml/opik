@@ -6,8 +6,15 @@ import time
 import traceback
 from dataclasses import dataclass
 from typing import Any
+import json
 from collections.abc import Callable
 import warnings
+import importlib
+from typing import cast
+import os
+import logging
+from datetime import datetime
+import importlib.metadata
 
 from benchmarks.core import benchmark_config
 from benchmarks.core.benchmark_config import BenchmarkDatasetConfig
@@ -19,7 +26,18 @@ from benchmarks.core.benchmark_task import (
     TASK_STATUS_FAILED,
     TASK_STATUS_SUCCESS,
 )
+from benchmarks.core.benchmark_taskspec import BenchmarkTaskSpec
 from opik_optimizer import BaseOptimizer, ChatPrompt, reporting_utils
+from benchmarks.local.logging import console
+from rich.table import Table
+from rich.panel import Panel
+from rich.console import Group
+from benchmarks.core.benchmark_results import (
+    PreflightContext,
+    PreflightEntry,
+    PreflightReport,
+    PreflightSummary,
+)
 
 
 _SPLIT_SUFFIXES = {
@@ -27,6 +45,8 @@ _SPLIT_SUFFIXES = {
     "validation": "_validation",
     "test": "_test",
 }
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -92,14 +112,15 @@ def resolve_dataset_bundle(
         explicit_roles = any(
             role in datasets for role in ("train", "validation", "test")
         )
-        role_specs = (
-            datasets
-            if explicit_roles
-            else {"train": datasets, "validation": datasets, "test": datasets}
-        )
-        if not explicit_roles:
+        if explicit_roles:
+            role_specs = datasets
+        else:
+            # If the user provided a single override object, apply it to train only.
+            # Callers should explicitly specify validation/test if they need them.
+            role_specs = {"train": datasets}
             warnings.warn(
-                "Dataset overrides provided without explicit splits; applying the same kwargs to train/validation/test.",
+                "Dataset overrides provided without explicit splits; applying overrides to train only "
+                "and skipping validation/test.",
                 stacklevel=2,
             )
 
@@ -110,6 +131,7 @@ def resolve_dataset_bundle(
             loader_name = spec.get("loader") if isinstance(spec, dict) else None
             kwargs = dict(spec) if isinstance(spec, dict) else {}
             loader_name = loader_name or dataset_name
+            kwargs.pop("loader", None)
             kwargs.setdefault("dataset_name", f"{loader_name}_{role}")
             if role in ("train", "validation", "test"):
                 kwargs.setdefault("split", role)
@@ -189,6 +211,167 @@ def resolve_dataset_bundle(
     )
 
 
+def _safe_version(pkg: str) -> str | None:
+    try:
+        return importlib.metadata.version(pkg)
+    except Exception:
+        return None
+
+
+def preflight_tasks(
+    task_specs: list[BenchmarkTaskSpec], info: dict[str, Any] | None = None
+) -> PreflightReport:
+    """Validate datasets/metrics/optimizers before scheduling to fail fast."""
+    errors: list[str] = []
+    datasets_seen: set[str] = set()
+    optimizers_seen: set[str] = set()
+    models_seen: set[str] = set()
+    entries: list[PreflightEntry] = []
+
+    logger.info("🔎 Preflight: validating %d tasks", len(task_specs))
+    console.print(
+        f"[bold blue]Preflight:[/bold blue] validating {len(task_specs)} tasks"
+    )
+
+    info_table = Table(show_header=False, padding=(0, 1))
+    now_iso = datetime.now().isoformat(timespec="seconds")
+    info_table.add_row("System time", now_iso)
+    info_table.add_row("CWD", os.getcwd())
+    manifest_path = None
+    checkpoint_dir = None
+    run_id = None
+    if info:
+        manifest_path = info.get("manifest_path")
+        checkpoint_dir = info.get("checkpoint_dir")
+        run_id = info.get("run_id")
+    info_table.add_row("Manifest", manifest_path or "[dim]N/A[/dim]")
+    info_table.add_row("Checkpoint", checkpoint_dir or "[dim]N/A[/dim]")
+    info_table.add_row("Run ID", run_id or "[dim]N/A[/dim]")
+    info_table.add_row("opik", _safe_version("opik") or "[dim]unknown[/dim]")
+    info_table.add_row(
+        "opik_optimizer", _safe_version("opik-optimizer") or "[dim]unknown[/dim]"
+    )
+    for task in task_specs:
+        if task.optimizer_name not in benchmark_config.OPTIMIZER_CONFIGS:
+            msg = f"Unknown optimizer '{task.optimizer_name}'"
+            logger.error(msg)
+            errors.append(msg)
+            continue
+
+        try:
+            bundle = resolve_dataset_bundle(
+                dataset_name=task.dataset_name,
+                test_mode=task.test_mode,
+                datasets=task.datasets,
+            )
+            dataset_config = benchmark_config.DATASET_CONFIG.get(
+                bundle.evaluation_name,
+                benchmark_config.DATASET_CONFIG.get(task.dataset_name),
+            )
+            if dataset_config is None:
+                raise ValueError(
+                    f"Dataset '{task.dataset_name}' is not registered in benchmark_config.DATASET_CONFIG."
+                )
+            _resolve_metrics(
+                dataset_config,
+                cast(list[str | dict[str, Any]] | None, task.metrics),
+            )
+            datasets_seen.add(bundle.evaluation_name or task.dataset_name)
+            optimizers_seen.add(task.optimizer_name)
+            models_seen.add(task.model_name)
+            entries.append(
+                PreflightEntry(
+                    dataset_name=task.dataset_name,
+                    evaluation_name=bundle.evaluation_name,
+                    optimizer_name=task.optimizer_name,
+                    model_name=task.model_name,
+                    status="ok",
+                    error=None,
+                )
+            )
+            logger.info(
+                "✅ Preflight ok: dataset=%s (eval=%s) optimizer=%s model=%s",
+                task.dataset_name,
+                bundle.evaluation_name,
+                task.optimizer_name,
+                task.model_name,
+            )
+        except Exception as exc:
+            err = f"Preflight failed for dataset '{task.dataset_name}': {exc}"
+            logger.error(err)
+            errors.append(err)
+            entries.append(
+                PreflightEntry(
+                    dataset_name=task.dataset_name,
+                    evaluation_name=None,
+                    optimizer_name=task.optimizer_name,
+                    model_name=task.model_name,
+                    status="error",
+                    error=str(exc),
+                )
+    )
+
+    summary = PreflightSummary(
+        total_tasks=len(task_specs),
+        datasets=sorted(datasets_seen),
+        optimizers=sorted(optimizers_seen),
+        models=sorted(models_seen),
+        errors=errors,
+    )
+    report = PreflightReport(
+        context=PreflightContext(
+            system_time=now_iso,
+            cwd=os.getcwd(),
+            manifest_path=manifest_path,
+            checkpoint_dir=checkpoint_dir,
+            run_id=run_id,
+            opik_version=_safe_version("opik"),
+            opik_optimizer_version=_safe_version("opik-optimizer"),
+        ),
+        summary=summary,
+        entries=entries,
+    )
+
+    # Render tables inside a single panel for visibility
+    checks_table = Table(
+        show_header=False,
+        padding=(0, 1),
+        box=None,
+    )
+    checks_table.add_column("", width=2)  # status
+    checks_table.add_column("Dataset")
+    checks_table.add_column("Eval")
+    checks_table.add_column("Optimizer")
+    checks_table.add_column("Model")
+    checks_table.add_column("Error", overflow="fold")
+
+    for entry in entries:
+        status_text = "[green]✓[/green]" if entry.status == "ok" else "[red]✗[/red]"
+        checks_table.add_row(
+            status_text,
+            entry.dataset_name,
+            entry.evaluation_name or "[dim]-[/dim]",
+            entry.optimizer_name,
+            entry.model_name,
+            entry.error or "",
+        )
+    console.print(
+        Panel(
+            Group(info_table, checks_table),
+            title="Preflight",
+            border_style="green" if not errors else "red",
+        )
+    )
+
+    if errors:
+        raise ValueError("Benchmark preflight checks failed:\n- " + "\n- ".join(errors))
+    console.print(
+        f"[bold green]Preflight passed: tasks={len(task_specs)}, "
+        f"datasets={summary.datasets}, optimizers={summary.optimizers}, models={summary.models}[/bold green]"
+    )
+    return report
+
+
 def _dataset_metadata(dataset: Any, dataset_name: str, role: str) -> DatasetMetadata:
     return DatasetMetadata(
         name=getattr(dataset, "name", dataset_name),
@@ -198,22 +381,47 @@ def _dataset_metadata(dataset: Any, dataset_name: str, role: str) -> DatasetMeta
 
 
 def _resolve_metrics(
-    dataset_config: BenchmarkDatasetConfig, custom_metric_paths: list[str] | None
+    dataset_config: BenchmarkDatasetConfig,
+    custom_metrics: list[str | dict[str, Any]] | None,
 ) -> list[Callable]:
-    if not custom_metric_paths:
+    if not custom_metrics:
         return dataset_config.metrics
 
     resolved: list[Callable] = []
-    for path in custom_metric_paths:
+    for entry in custom_metrics:
+        path: str
+        args: list[Any] = []
+        kwargs: dict[str, Any] = {}
+        if isinstance(entry, str):
+            path = entry
+        elif isinstance(entry, dict):
+            path = str(entry.get("path"))
+            args = entry.get("args", []) or []
+            kwargs = entry.get("kwargs", {}) or {}
+        else:
+            raise ValueError(
+                "Metrics entries must be strings or objects with a 'path' key."
+            )
+
         module_path, _, attr = path.rpartition(".")
         if not module_path or not attr:
             raise ValueError(
                 f"Invalid metric path '{path}'. Expected module.attr format."
             )
-        module = __import__(module_path, fromlist=[attr])
-        metric_fn = getattr(module, attr, None)
+        module = importlib.import_module(module_path)
+        metric_obj = getattr(module, attr, None)
+        if metric_obj is None:
+            raise ValueError(f"Metric '{path}' not found.")
+
+        metric_fn = (
+            metric_obj(*args, **kwargs)
+            if (args or kwargs) and callable(metric_obj)
+            else metric_obj
+        )
         if not callable(metric_fn):
-            raise ValueError(f"Metric '{path}' is not callable or not found.")
+            raise ValueError(
+                f"Metric '{path}' is not callable after applying args/kwargs."
+            )
         resolved.append(metric_fn)
     return resolved
 
@@ -286,6 +494,7 @@ def execute_task(
     optimizer_prompt_params_override: dict[str, Any] | None,
     datasets: dict[str, Any] | None = None,
     metrics: list[str] | None = None,
+    prompt_messages: list[dict[str, Any]] | None = None,
 ) -> TaskResult:
     """Shared execution path used by local and Modal runners."""
     timestamp_start = time.time()
@@ -294,6 +503,10 @@ def execute_task(
 
     with reporting_utils.suppress_opik_logs():
         try:
+            if test_mode and os.getenv("OPIK_DATASET_SKIP_EXISTING") is None:
+                # Avoid brittle failures in smoke runs when datasets already exist with different sizes.
+                os.environ["OPIK_DATASET_SKIP_EXISTING"] = "true"
+
             bundle = resolve_dataset_bundle(
                 dataset_name=dataset_name,
                 test_mode=test_mode,
@@ -302,7 +515,9 @@ def execute_task(
             dataset_config = benchmark_config.DATASET_CONFIG.get(
                 bundle.evaluation_name, benchmark_config.DATASET_CONFIG[dataset_name]
             )
-            metrics_resolved = _resolve_metrics(dataset_config, metrics)
+            metrics_resolved = _resolve_metrics(
+                dataset_config, cast(list[str | dict[str, Any]] | None, metrics)
+            )
             optimizer_config = benchmark_config.OPTIMIZER_CONFIGS[optimizer_name]
 
             constructor_kwargs = dict(optimizer_config.params)
@@ -316,7 +531,9 @@ def execute_task(
                 **constructor_kwargs,
             )
 
-            messages = benchmark_config.INITIAL_PROMPTS[bundle.train_name]
+            messages = (
+                prompt_messages or benchmark_config.INITIAL_PROMPTS[bundle.train_name]
+            )
             initial_prompt = ChatPrompt(messages=messages)  # type: ignore[arg-type]
 
             initial_evaluation = evaluate_prompt_on_dataset(

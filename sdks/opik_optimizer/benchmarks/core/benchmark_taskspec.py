@@ -14,7 +14,7 @@ class BenchmarkTaskSpec:
     optimizer_params: dict[str, Any] | None = field(default=None)
     optimizer_prompt_params: dict[str, Any] | None = field(default=None)
     datasets: dict[str, Any] | None = field(default=None)
-    metrics: list[str] | None = field(default=None)
+    metrics: list[str | dict[str, Any]] | None = field(default=None)
     prompt_messages: list[dict[str, Any]] | None = field(default=None)
 
     @property

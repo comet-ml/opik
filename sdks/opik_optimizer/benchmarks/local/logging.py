@@ -620,7 +620,14 @@ class BenchmarkLogger:
                             if isinstance(final_val, (int, float))
                             else "[dim]-[/dim]"
                         )
-                        percent_change_text = ""  # calculate_percentage_change(initial_val, final_val, metric_name_to_display)
+
+                        percent_change_text = self._calculate_percentage_change(
+                            initial_val
+                            if isinstance(initial_val, (int, float))
+                            else None,
+                            final_val if isinstance(final_val, (int, float)) else None,
+                            metric_name_to_display,
+                        )
 
                         dataset_text = Text(dataset, overflow="ellipsis")
                         dataset_text.truncate(25)

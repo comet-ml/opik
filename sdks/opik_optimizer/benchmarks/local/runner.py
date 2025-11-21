@@ -17,6 +17,7 @@ import traceback
 from concurrent.futures import Future, ProcessPoolExecutor, wait, FIRST_COMPLETED
 from datetime import datetime
 from typing import Any
+import json
 
 from benchmarks.local import checkpoint as benchmark_checkpoint
 from benchmarks.local import logging as benchmark_logging
@@ -27,6 +28,8 @@ from benchmarks.core.benchmark_task import (
     TASK_STATUS_RUNNING,
 )
 from benchmarks.core.benchmark_taskspec import BenchmarkTaskSpec
+from benchmarks.core.benchmark_results import BenchmarkRunResult
+from benchmarks.utils.serialization import make_serializable
 
 from benchmarks.utils.budgeting import resolve_optimize_params
 from benchmarks.utils.task_runner import execute_task, preflight_tasks
@@ -71,6 +74,27 @@ class BenchmarkRunner:
         self.benchmark_logger = benchmark_logging.BenchmarkLogger()
         self.checkpoint_dir = checkpoint_dir
 
+    def _write_run_results(
+        self,
+        checkpoint_folder: str,
+        task_specs: list[BenchmarkTaskSpec],
+        task_results: list[TaskResult],
+        preflight_report: Any | None,
+    ) -> str:
+        results_path = os.path.join(checkpoint_folder, "results.json")
+        run_result = BenchmarkRunResult(
+            run_id=self.run_id or "",
+            test_mode=self.test_mode,
+            preflight=preflight_report,
+            tasks=task_specs,
+            task_results=task_results,
+            checkpoint_path=checkpoint_folder,
+            results_path=results_path,
+        )
+        with open(results_path, "w") as f:
+            json.dump(make_serializable(run_result), f, indent=2)
+        return results_path
+
     def run_benchmarks(
         self,
         demo_datasets: list[str],
@@ -79,6 +103,7 @@ class BenchmarkRunner:
         retry_failed_run_id: str | None,
         resume_run_id: str | None,
         task_specs: list[BenchmarkTaskSpec] | None = None,
+        preflight_info: dict[str, Any] | None = None,
     ) -> None:
         # Create unique id
         if resume_run_id and retry_failed_run_id:
@@ -91,6 +116,11 @@ class BenchmarkRunner:
             self.run_id = (
                 f"run_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{os.urandom(4).hex()}"
             )
+
+        if preflight_info is None:
+            preflight_info = {}
+        preflight_info.setdefault("run_id", self.run_id)
+        preflight_info.setdefault("checkpoint_dir", self.checkpoint_dir)
 
         if task_specs is None:
             tasks: list[BenchmarkTaskSpec] = [
@@ -108,7 +138,7 @@ class BenchmarkRunner:
             tasks = task_specs
 
         # Fail fast before launching workers
-        preflight_tasks(tasks)
+        preflight_report = preflight_tasks(tasks, info=preflight_info)
 
         datasets_for_log = sorted({task.dataset_name for task in tasks})
         optimizers_for_log = sorted({task.optimizer_name for task in tasks})
@@ -143,6 +173,10 @@ class BenchmarkRunner:
             models_for_log = checkpoint_manager.models
         else:
             checkpoint_manager.save()
+        if preflight_report:
+            checkpoint_manager.set_preflight_report(
+                preflight_report.model_dump()  # type: ignore[call-arg]
+            )
 
         # Start scheduling the tasks
         start_time = time.time()
@@ -342,3 +376,11 @@ class BenchmarkRunner:
             results=task_results,
             total_duration=total_duration,
         )
+
+        results_path = self._write_run_results(
+            checkpoint_folder=checkpoint_folder,
+            task_specs=tasks,
+            task_results=checkpoint_manager.task_results,
+            preflight_report=preflight_report,
+        )
+        benchmark_logging.console.print(f"[dim]Saved results to {results_path}[/dim]")

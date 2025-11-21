@@ -10,6 +10,7 @@ your local machine to stay running.
 
 import os
 import sys
+from typing import Any
 
 import modal
 

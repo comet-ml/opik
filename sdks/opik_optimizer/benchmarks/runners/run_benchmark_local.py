@@ -22,6 +22,7 @@ def run_benchmark(
     resume_run_id: str | None = None,
     task_specs: list[BenchmarkTaskSpec] | None = None,
     skip_confirmation: bool = False,
+    manifest_path: str | None = None,
 ) -> None:
     if demo_datasets is not None and not isinstance(demo_datasets, list):
         raise ValueError("demo_datasets must be a list of strings")
@@ -66,6 +67,10 @@ def run_benchmark(
         retry_failed_run_id=retry_failed_run_id,
         resume_run_id=resume_run_id,
         task_specs=task_specs,
+        preflight_info={
+            "manifest_path": manifest_path,
+            "checkpoint_dir": checkpoint_dir,
+        },
     )
 
 

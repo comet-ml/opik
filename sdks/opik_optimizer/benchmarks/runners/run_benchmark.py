@@ -190,6 +190,7 @@ Examples:
             resume_run_id=args.resume_run_id,
             task_specs=manifest_tasks,
             skip_confirmation=manifest_tasks is not None,
+            manifest_path=args.config,
         )
 
 

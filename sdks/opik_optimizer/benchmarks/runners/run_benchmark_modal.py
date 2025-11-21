@@ -203,7 +203,14 @@ def submit_benchmark_tasks(
         tasks_iter = task_specs
 
     # Preflight before submitting remotely to avoid mid-run failures.
-    preflight_tasks(tasks_iter)
+    preflight_report = preflight_tasks(
+        tasks_iter,
+        info={
+            "manifest_path": None,
+            "checkpoint_dir": "/results",
+            "run_id": run_id,
+        },
+    )
 
     for task in tasks_iter:
         task_id = task.task_id
@@ -257,6 +264,7 @@ def submit_benchmark_tasks(
         workspace=workspace,
         seed=seed,
         tasks=[task.to_dict() for task in tasks_iter] if task_specs else None,
+        preflight=preflight_report.model_dump(),
     )
 
     # Submit all tasks asynchronously
@@ -349,6 +357,7 @@ def _save_run_metadata(
     workspace: str | None = None,
     seed: int | None = None,
     tasks: list[dict[str, str | bool]] | None = None,
+    preflight: dict | None = None,
 ) -> None:
     """Save run metadata to Modal Volume."""
     # We need to save this from within a Modal function context
@@ -367,6 +376,7 @@ def _save_run_metadata(
             "workspace": workspace,
             "seed": seed,
             "tasks": tasks,
+            "preflight": preflight,
         },
     )
 

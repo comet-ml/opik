@@ -18,7 +18,7 @@ class ManifestTask(BaseModel):
     optimizer_params: dict[str, Any] | None = None
     optimizer_prompt_params: dict[str, Any] | None = None
     datasets: dict[str, Any] | None = None
-    metrics: list[str] | None = None
+    metrics: list[str | dict[str, Any]] | None = None
     prompt: list[dict[str, Any]] | None = None
 
 
@@ -42,7 +42,7 @@ class GeneratorSpec(BaseModel):
     datasets: list[GeneratorDataset]
     models: list[GeneratorModel]
     optimizers: list[GeneratorOptimizer]
-    metrics: list[str] | None = None
+    metrics: list[str | dict[str, Any]] | None = None
     test_mode: bool | None = None
     prompt: list[dict[str, Any]] | None = None
 
@@ -100,7 +100,7 @@ def manifest_to_task_specs(
         model_parameters: dict[str, Any] | None,
         optimizer_params: dict[str, Any] | None,
         optimizer_prompt_params: dict[str, Any] | None,
-        metrics: list[str] | None,
+        metrics: list[str | dict[str, Any]] | None,
         prompt: list[dict[str, Any]] | None,
     ) -> None:
         dataset_name, datasets_override = _normalize_dataset_entry(dataset, datasets)

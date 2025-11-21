@@ -39,6 +39,7 @@ class BenchmarkCheckpointManager:
         self.optimizers = optimizers
         self.models = models
         self.task_specs = task_specs
+        self.preflight_report: dict | None = None
 
         self.task_results: list[TaskResult] = []
 
@@ -52,6 +53,7 @@ class BenchmarkCheckpointManager:
                 "models": self.models,
                 "tasks": [spec.to_dict() for spec in self.task_specs],
                 "task_results": [x.model_dump() for x in self.task_results],
+                "preflight": self.preflight_report,
             }
             json.dump(checkpoint_dict, f, cls=ChatPromptEncoder, indent=3)
 
@@ -81,6 +83,7 @@ class BenchmarkCheckpointManager:
             self.task_results = [
                 TaskResult.model_validate(x) for x in checkpoint_data["task_results"]
             ]
+            self.preflight_report = checkpoint_data.get("preflight")
 
     def update_task_result(self, task_result: TaskResult) -> None:
         # Append or replace the task result
@@ -89,4 +92,8 @@ class BenchmarkCheckpointManager:
         self.task_results.append(task_result)
 
         # Save the benchmark checkpoint
+        self.save()
+
+    def set_preflight_report(self, report: dict | None) -> None:
+        self.preflight_report = report
         self.save()
