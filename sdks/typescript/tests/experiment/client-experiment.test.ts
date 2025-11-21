@@ -543,6 +543,57 @@ describe("Opik experiment operations", () => {
       });
     });
 
+    it<ExperimentTestContext>("should update only the name when experimentConfig is not provided", async ({
+      client,
+      spies,
+      expect,
+    }) => {
+      const experimentId = "experiment-to-update-name-only";
+
+      await client.updateExperiment(experimentId, "new-name-only");
+
+      const callArgs = spies.updateExperiment.mock.calls[0];
+      expect(callArgs[0]).toBe(experimentId);
+      expect(callArgs[1]).toEqual({ name: "new-name-only" });
+      expect(callArgs[1]).not.toHaveProperty("metadata");
+    });
+
+    it<ExperimentTestContext>("should update only the configuration when name is not provided", async ({
+      client,
+      spies,
+      expect,
+    }) => {
+      const experimentId = "experiment-to-update-config-only";
+      const newConfig = { model: "gpt-4", temperature: 0.7 };
+
+      await client.updateExperiment(experimentId, undefined, newConfig);
+
+      const callArgs = spies.updateExperiment.mock.calls[0];
+      expect(callArgs[0]).toBe(experimentId);
+      expect(callArgs[1]).toEqual({ metadata: newConfig });
+      expect(callArgs[1]).not.toHaveProperty("name");
+    });
+
+    it<ExperimentTestContext>("should throw error when id is empty string", async ({
+      client,
+      expect,
+    }) => {
+      await expect(
+        client.updateExperiment("", "new-name")
+      ).rejects.toThrow("id is required to update an experiment");
+    });
+
+    it<ExperimentTestContext>("should throw error when no parameters are provided", async ({
+      client,
+      expect,
+    }) => {
+      const experimentId = "experiment-to-update-no-params";
+
+      await expect(
+        client.updateExperiment(experimentId)
+      ).rejects.toThrow("At least one of 'name' or 'experimentConfig' must be provided to update an experiment");
+    });
+
     it<ExperimentTestContext>("should handle errors during the update operation", async ({
       client,
       spies,
@@ -562,17 +613,6 @@ describe("Opik experiment operations", () => {
         name: "bad-name",
         metadata: {},
       });
-    });
-
-    it<ExperimentTestContext>("should throw error when no parameters are provided", async ({
-      client,
-      expect,
-    }) => {
-      const experimentId = "experiment-to-update-no-params";
-
-      await expect(
-        client.updateExperiment(experimentId)
-      ).rejects.toThrow("At least one of 'name' or 'experimentConfig' must be provided to update an experiment");
     });
   });
 });

@@ -349,21 +349,34 @@ export class OpikClient {
      * @param name Optional new name for the experiment
      * @param experimentConfig Optional new configuration for the experiment
      * @returns Promise that resolves when the experiment is updated
-     * @throws {Error} If neither name nor experimentConfig is provided
+     * @throws {Error} If id is not provided or if neither name nor experimentConfig is provided
      */
     public updateExperiment = async (
         id: string,
         name?: string,
         experimentConfig?: Record<string, unknown>
     ): Promise<void> => {
+        if (!id) {
+            throw new Error("id is required to update an experiment");
+        }
+
         if (!name && !experimentConfig) {
             throw new Error("At least one of 'name' or 'experimentConfig' must be provided to update an experiment");
         }
 
         logger.debug(`Updating experiment with ID "${id}"`);
 
+        // Only include parameters that are provided to avoid clearing fields
+        const request: OpikApi.ExperimentUpdate = {};
+        if (name !== undefined) {
+            request.name = name;
+        }
+        if (experimentConfig !== undefined) {
+            request.metadata = experimentConfig;
+        }
+
         try {
-            await this.api.experiments.updateExperiment(id, { name, metadata: experimentConfig });
+            await this.api.experiments.updateExperiment(id, request);
         } catch (error) {
             logger.error(`Failed to update experiment with ID "${id}"`, { error });
             throw error;
