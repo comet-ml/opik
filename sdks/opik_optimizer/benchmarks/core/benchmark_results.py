@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Literal
+from typing import Literal
 
 from pydantic import BaseModel
 
@@ -19,11 +19,14 @@ class PreflightContext(BaseModel):
 
 
 class PreflightEntry(BaseModel):
+    task_id: str
+    short_id: str
     dataset_name: str
     evaluation_name: str | None
     optimizer_name: str
     model_name: str
     status: Literal["ok", "error"]
+    splits: str | None = None
     error: str | None = None
 
 
