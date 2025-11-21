@@ -15,8 +15,12 @@ def test_few_shot_optimizer() -> None:
         pytest.fail("OPENAI_API_KEY environment variable must be set for e2e tests")
     # Initialize optimizer
     optimizer = opik_optimizer.FewShotBayesianOptimizer(
-        model="openai/gpt-4.1-nano",
-        model_parameters={"temperature": 0.1, "max_tokens": 256},
+        model="openai/gpt-5-mini",
+        model_parameters={
+            "temperature": 1,
+            "max_tokens": 1000,
+            "reasoning_effort": "none",
+        },
         min_examples=1,
         max_examples=2,
     )
