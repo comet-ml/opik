@@ -9,8 +9,14 @@ from opik import track
 from opik.integrations.langchain import OpikTracer
 from opik_optimizer import ChatPrompt, OptimizableAgent
 from opik_optimizer.utils import search_wikipedia
+from opik_optimizer.utils.llm_logger import LLMLogger
 
 from langgraph.graph import StateGraph
+
+# Setup logger
+logger = LLMLogger("langgraph", agent_name="LangGraph")
+
+logger.info("[bold green]═══ LangGraph loaded ═══[/bold green]")
 
 
 PROMPT_TEMPLATE = """You are a fact-finding assistant. Use the provided context when answering.
@@ -33,7 +39,10 @@ class AgentState(TypedDict):
 
 def search_wikipedia_tool(query: str) -> list[str]:
     """Wrapper for the shared Wikipedia search helper."""
-    return search_wikipedia(query, use_api=False)
+    logger.tool_call("search_wikipedia", query)
+    result = search_wikipedia(query, use_api=False)
+    logger.tool_result(result_count=len(result))
+    return result
 
 
 search_wikipedia_tool = track(type="tool")(search_wikipedia_tool)
@@ -82,14 +91,27 @@ def create_graph(
 class LangGraphAgent(OptimizableAgent):
     project_name = "langgraph-agent"
 
+    def _resolve_system_text(self, prompt: ChatPrompt) -> str:
+        """Extract system message from prompt."""
+        messages = prompt.get_messages()
+        if messages and messages[0].get("role") == "system":
+            return messages[0].get("content", "")
+        return "You are a helpful assistant."
+
+    def _extract_latest_user_message(self, messages: list[dict[str, str]]) -> str:
+        """Extract the latest user message from the messages list."""
+        for message in reversed(messages):
+            if message.get("role") == "user":
+                return message.get("content", "")
+        return ""
+
     def init_agent(self, prompt: ChatPrompt) -> None:
         self.prompt = prompt
-        system_prompt = (
-            prompt.get_messages()[0]["content"]
-            if prompt.get_messages()
-            else "You are a helpful assistant."
-        )
+        system_prompt = self._resolve_system_text(prompt)
         model_name = prompt.model or "gpt-4o-mini"
+
+        logger.agent_init(model=model_name, tools=["search_wikipedia"])
+
         self.graph, self._tracer = create_graph(
             self.project_name, system_prompt, model_name
         )
@@ -97,12 +119,21 @@ class LangGraphAgent(OptimizableAgent):
         self._model_name = model_name
 
     def invoke(self, messages: list[dict[str, str]], seed: int | None = None) -> str:
-        question = messages[-1]["content"] if messages else ""
+        question = self._extract_latest_user_message(messages)
+        logger.agent_invoke(question)
+
         state: AgentState = {
             "system_prompt": self._system_prompt,
             "question": question,
             "context": "",
             "answer": "",
         }
-        result = self.graph.invoke(state)
-        return result.get("answer", "No result from agent")
+
+        try:
+            result = self.graph.invoke(state)
+            answer = result.get("answer", "No result from agent")
+            logger.agent_response(answer)
+            return answer
+        except Exception as exc:
+            logger.agent_error(exc, include_traceback=True)
+            raise  # Re-raise to stop execution
