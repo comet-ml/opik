@@ -68,7 +68,7 @@ const DatasetItemsActionsPanel: React.FunctionComponent<
             column,
             DATASET_ITEM_DATA_PREFIX,
           );
-          acc[column] = get(item.data, columnName, "");
+          acc[columnName] = get(item.data, columnName, "");
         } else {
           // Handle direct properties like id, created_at, etc.
           acc[column] = get(item, column, "");
