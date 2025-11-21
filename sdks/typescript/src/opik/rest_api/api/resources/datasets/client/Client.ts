@@ -54,7 +54,6 @@ export class Datasets {
      *
      * @example
      *     await client.datasets.batchUpdateDatasetItems({
-     *         ids: ["ids"],
      *         update: {}
      *     })
      */
