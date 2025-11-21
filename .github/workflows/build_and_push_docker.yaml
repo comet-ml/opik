@@ -184,40 +184,9 @@ jobs:
         run: |
           mkdir -p /tmp/digests/${{ steps.set_vars.outputs.image_name }}
           digest="${{ steps.build.outputs.digest }}"
-          if [ -z "$digest" ]; then
-            echo "ERROR: Digest is empty!"
-            exit 1
-          fi
-          echo "Digest from build: $digest"
-          
-          # Remove sha256: prefix if present, otherwise use as-is
-          if [[ "$digest" == sha256:* ]]; then
-            HASH="${digest#sha256:}"
-          else
-            HASH="$digest"
-          fi
-          
-          # Verify digest format is valid
-          if [ ${#HASH} -eq 64 ] && [[ "$HASH" =~ ^[a-f0-9]+$ ]]; then
-            echo "✓ Digest hash format is valid: $HASH"
-          else
-            echo "ERROR: Invalid digest hash format: $HASH"
-            exit 1
-          fi
-          
-          DIGEST_FILE="/tmp/digests/${{ steps.set_vars.outputs.image_name }}/${{ matrix.platform }}.digest"
-          echo "$HASH" > "$DIGEST_FILE"
-          
-          # Verify the file was written correctly
-          VERIFIED_HASH=$(cat "$DIGEST_FILE" | tr -d '\n\r ')
-          if [[ "$VERIFIED_HASH" != "$HASH" ]]; then
-            echo "ERROR: Digest mismatch! Written: $HASH, Read back: $VERIFIED_HASH"
-            exit 1
-          fi
-          
-          echo "✓ Saved and verified digest hash: $HASH"
-          echo "File path: $DIGEST_FILE"
-          echo "File contents: $(cat $DIGEST_FILE)"
+          # Remove sha256: prefix if present
+          HASH="${digest#sha256:}"
+          echo "$HASH" > "/tmp/digests/${{ steps.set_vars.outputs.image_name }}/${{ matrix.platform }}.digest"
 
       - name: Upload digest
         if: steps.check.outputs.should_run == 'true'
@@ -270,28 +239,6 @@ jobs:
           pattern: ${{ github.run_id }}-${{ steps.set_vars.outputs.image_name }}-digest-*
           merge-multiple: false
           
-      - name: Verify downloaded digests
-        if: steps.check.outputs.should_run == 'true'
-        run: |
-          cd /tmp/digests/${{ steps.set_vars.outputs.image_name }}
-          echo "Verifying downloaded digest files..."
-          echo "Current directory: $(pwd)"
-          echo ""
-          echo "Full directory tree:"
-          find . -type f -o -type d | sort
-          echo ""
-          echo "Digest files found:"
-          find . -type f -name "*.digest" | sort | while read file; do
-            echo "File: $file"
-            echo "Full path: $(realpath "$file" 2>/dev/null || echo "$file")"
-            echo "Contents: $(cat "$file" | tr -d '\n\r ')"
-            echo "Size: $(wc -c < "$file" | tr -d ' ') bytes"
-            echo "---"
-          done
-          echo ""
-          echo "Expected image name: ${{ steps.set_vars.outputs.image_name }}"
-          echo "Expected run ID: ${{ github.run_id }}"
-
       - name: Set up Docker Buildx
         if: steps.check.outputs.should_run == 'true'
         uses: docker/setup-buildx-action@v3
@@ -320,103 +267,26 @@ jobs:
         run: |
           cd /tmp/digests/${{ steps.set_vars.outputs.image_name }}
           
-          # Debug: Show full directory structure
-          echo "Full directory structure:"
-          find . -type f -o -type d | sort
-          echo ""
-          
-          # When merge-multiple: false, artifacts are in subdirectories named after the artifact
-          # Find digest files in subdirectories that match our image name
-          # Format: digests-{run_id}-{image_name}-{platform}/{platform}.digest
           DIGESTS=""
-          DIGEST_COUNT=0
-          
-          # Look for digest files in subdirectories matching our image name pattern
-          # Format: {run_id}-{image_name}-digest-{platform}/{platform}.digest
           ARTIFACT_PATTERN="${{ github.run_id }}-${{ steps.set_vars.outputs.image_name }}-digest-*"
           
           for artifact_dir in $ARTIFACT_PATTERN; do
             if [ -d "$artifact_dir" ]; then
-              # Extract platform from directory name: {run_id}-{image_name}-digest-{platform}
               PLATFORM="${artifact_dir##*-}"
               DIGEST_FILE="$artifact_dir/$PLATFORM.digest"
               
               if [ -f "$DIGEST_FILE" ]; then
-                DIGEST_VALUE=$(cat "$DIGEST_FILE" | tr -d '\n\r ' | xargs)
-                
-                echo "Processing digest file: $DIGEST_FILE"
-                echo "  Platform: $PLATFORM"
-                echo "  Digest value: $DIGEST_VALUE"
-                
-                if [ -n "$DIGEST_VALUE" ] && [ ${#DIGEST_VALUE} -eq 64 ]; then
-                  DIGEST_REF="${{ env.DOCKER_REGISTRY }}/${{ steps.set_vars.outputs.image_name }}@sha256:$DIGEST_VALUE"
-                  echo "  Digest reference: $DIGEST_REF"
-                  
-                  # Verify digest exists in registry before adding
-                  if docker buildx imagetools inspect "$DIGEST_REF" >/dev/null 2>&1; then
-                    echo "  ✓ Verified digest exists in registry"
-                    DIGESTS="$DIGESTS $DIGEST_REF"
-                    DIGEST_COUNT=$((DIGEST_COUNT + 1))
-                  else
-                    echo "  ✗ ERROR: Digest not found in registry: $DIGEST_REF"
-                    echo "  This digest was saved by the build job but doesn't exist in the registry"
-                    exit 1
-                  fi
-                else
-                  echo "ERROR: Invalid digest value in $DIGEST_FILE: '$DIGEST_VALUE' (length: ${#DIGEST_VALUE})"
-                  exit 1
-                fi
-                echo ""
+                DIGEST_VALUE=$(cat "$DIGEST_FILE" | tr -d '\n\r ')
+                DIGEST_REF="${{ env.DOCKER_REGISTRY }}/${{ steps.set_vars.outputs.image_name }}@sha256:$DIGEST_VALUE"
+                DIGESTS="$DIGESTS $DIGEST_REF"
               fi
             fi
           done
           
-          # Fallback: also check root directory in case merge-multiple was used
-          if [ $DIGEST_COUNT -eq 0 ]; then
-            echo "No digests found in subdirectories, checking root directory..."
-            while IFS= read -r digest_file; do
-              if [ -f "$digest_file" ]; then
-                DIGEST_VALUE=$(cat "$digest_file" | tr -d '\n\r ' | xargs)
-                FILENAME=$(basename "$digest_file")
-                PLATFORM="${FILENAME%.digest}"
-                
-                echo "Processing digest file: $digest_file"
-                echo "  Platform: $PLATFORM"
-                echo "  Digest value: $DIGEST_VALUE"
-                
-                if [ -n "$DIGEST_VALUE" ] && [ ${#DIGEST_VALUE} -eq 64 ]; then
-                  DIGEST_REF="${{ env.DOCKER_REGISTRY }}/${{ steps.set_vars.outputs.image_name }}@sha256:$DIGEST_VALUE"
-                  echo "  Digest reference: $DIGEST_REF"
-                  
-                  if docker buildx imagetools inspect "$DIGEST_REF" >/dev/null 2>&1; then
-                    echo "  ✓ Verified digest exists in registry"
-                    DIGESTS="$DIGESTS $DIGEST_REF"
-                    DIGEST_COUNT=$((DIGEST_COUNT + 1))
-                  else
-                    echo "  ✗ ERROR: Digest not found in registry: $DIGEST_REF"
-                    exit 1
-                  fi
-                fi
-                echo ""
-              fi
-            done < <(find . -maxdepth 1 -name "*.digest" -type f | sort)
-          fi
-          
-          echo "Found $DIGEST_COUNT digest(s)"
-          
           if [ -z "$DIGESTS" ]; then
-            echo "ERROR: No digests found!"
-            echo "Searched for *.digest files in: $(pwd)"
-            find . -type f -name "*.digest" || echo "No .digest files found"
+            echo "ERROR: No digests found for ${{ steps.set_vars.outputs.image_name }}"
             exit 1
           fi
-          
-          echo ""
-          echo "Collected verified digests: $DIGESTS"
-          echo "Tags from metadata:"
-          echo "${{ steps.meta.outputs.tags }}"
-          echo "Labels from metadata:"
-          echo "${{ steps.meta.outputs.labels }}"
           
           # Create and push manifest using metadata tags
           # Metadata outputs tags as newline-separated string, convert to -t flags
@@ -432,8 +302,6 @@ jobs:
             exit 1
           fi
           
-          echo "Creating manifest with tags: $TAG_ARGS"
-          echo "Using digests: $DIGESTS"
           docker buildx imagetools create $TAG_ARGS $DIGESTS
 
       - name: Write Build Summary
