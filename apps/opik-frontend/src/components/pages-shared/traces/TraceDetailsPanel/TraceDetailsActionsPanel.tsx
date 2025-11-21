@@ -82,6 +82,7 @@ type TraceDetailsActionsPanelProps = {
   setGraph: OnChangeFn<boolean | null | undefined>;
   hasAgentGraph: boolean;
   setActiveSection: (v: DetailsActionSectionValue) => void;
+  columnsToExport: string[];
 };
 
 const TraceDetailsActionsPanel: React.FunctionComponent<
@@ -103,6 +104,7 @@ const TraceDetailsActionsPanel: React.FunctionComponent<
   hasAgentGraph,
   treeData,
   setActiveSection,
+  columnsToExport,
 }) => {
   const [popupOpen, setPopupOpen] = useState<boolean>(false);
   const [isSmall, setIsSmall] = useState<boolean>(false);
@@ -200,24 +202,6 @@ const TraceDetailsActionsPanel: React.FunctionComponent<
   );
 
   const exportColumns = useMemo(() => {
-    const baseColumns = [
-      "id",
-      "type",
-      "name",
-      "start_time",
-      "end_time",
-      "duration",
-      "input",
-      "output",
-      "tags",
-      "usage.total_tokens",
-      "usage.prompt_tokens",
-      "usage.completion_tokens",
-      "total_estimated_cost",
-      "error_info",
-      "metadata",
-    ];
-
     const feedbackScoreNames = uniq(
       treeData.reduce<string[]>((acc, d) => {
         return acc.concat(
@@ -230,8 +214,8 @@ const TraceDetailsActionsPanel: React.FunctionComponent<
       }, []),
     );
 
-    return [...baseColumns, ...feedbackScoreNames];
-  }, [treeData]);
+    return [...columnsToExport, ...feedbackScoreNames];
+  }, [treeData, columnsToExport]);
 
   const handleExportCSV = useCallback(async () => {
     try {
