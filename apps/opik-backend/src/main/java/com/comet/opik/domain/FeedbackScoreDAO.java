@@ -1,16 +1,12 @@
 package com.comet.opik.domain;
 
-import com.comet.opik.api.AlertEventType;
 import com.comet.opik.api.DeleteFeedbackScore;
 import com.comet.opik.api.FeedbackScore;
 import com.comet.opik.api.FeedbackScoreItem;
 import com.comet.opik.api.ScoreSource;
-import com.comet.opik.api.events.webhooks.AlertEvent;
-import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.utils.template.TemplateUtils;
 import com.google.common.base.Preconditions;
-import com.google.common.eventbus.EventBus;
 import com.google.inject.ImplementedBy;
 import io.opentelemetry.instrumentation.annotations.WithSpan;
 import io.r2dbc.spi.Connection;
@@ -33,8 +29,6 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
-import static com.comet.opik.api.AlertEventType.TRACE_FEEDBACK_SCORE;
-import static com.comet.opik.api.AlertEventType.TRACE_THREAD_FEEDBACK_SCORE;
 import static com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItemThread;
 import static com.comet.opik.domain.AsyncContextUtils.bindUserNameAndWorkspaceContextToStream;
 import static com.comet.opik.domain.AsyncContextUtils.bindWorkspaceIdToMono;
@@ -306,7 +300,6 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
             """;
 
     private final @NonNull TransactionTemplateAsync asyncTemplate;
-    private final @NonNull EventBus eventBus;
 
     @Override
     @WithSpan
@@ -335,64 +328,19 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
 
         Preconditions.checkArgument(CollectionUtils.isNotEmpty(scores), "Argument 'scores' must not be empty");
 
-        return Mono.deferContextual(ctx -> {
-            String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
-            String workspaceName = ctx.getOrDefault(RequestContext.WORKSPACE_NAME, "");
-            String userName = ctx.get(RequestContext.USER_NAME);
+        return asyncTemplate.nonTransaction(connection -> {
 
-            return asyncTemplate.nonTransaction(connection -> {
+            var template = TemplateUtils.getBatchSql(BULK_INSERT_FEEDBACK_SCORE, scores.size());
+            template.add("author", author);
 
-                var template = TemplateUtils.getBatchSql(BULK_INSERT_FEEDBACK_SCORE, scores.size());
-                template.add("author", author);
+            var statement = connection.createStatement(template.render());
 
-                var statement = connection.createStatement(template.render());
+            bindParameters(entityType, scores, statement, author);
 
-                bindParameters(entityType, scores, statement, author);
-
-                return makeFluxContextAware(bindUserNameAndWorkspaceContextToStream(statement))
-                        .flatMap(Result::getRowsUpdated)
-                        .reduce(Long::sum);
-            })
-                    .doOnSuccess(cnt -> {
-                        switch (entityType) {
-                            case TRACE ->
-                                publishAlertEvent(scores, author, TRACE_FEEDBACK_SCORE, workspaceId, workspaceName,
-                                        userName);
-                            case THREAD ->
-                                publishAlertEvent(scores, author, TRACE_THREAD_FEEDBACK_SCORE, workspaceId,
-                                        workspaceName, userName);
-                            default -> {
-                                // no-op
-                            }
-                        }
-                    });
+            return makeFluxContextAware(bindUserNameAndWorkspaceContextToStream(statement))
+                    .flatMap(Result::getRowsUpdated)
+                    .reduce(Long::sum);
         });
-    }
-
-    private void publishAlertEvent(List<? extends FeedbackScoreItem> scores, String author, AlertEventType eventType,
-            String workspaceId, String workspaceName, String userName) {
-        if (CollectionUtils.isEmpty(scores)) {
-            return;
-        }
-
-        var scoresWithAuthor = scores.stream()
-                .map(item -> switch (item) {
-                    case FeedbackScoreItem.FeedbackScoreBatchItem tracingItem -> tracingItem.toBuilder()
-                            .author(author)
-                            .build();
-                    case FeedbackScoreBatchItemThread threadItem -> threadItem.toBuilder()
-                            .author(author)
-                            .build();
-                }).toList();
-
-        eventBus.post(AlertEvent.builder()
-                .eventType(eventType)
-                .workspaceId(workspaceId)
-                .workspaceName(workspaceName)
-                .userName(userName)
-                .projectId(scores.getFirst().projectId())
-                .payload(scoresWithAuthor)
-                .build());
     }
 
     @Override
