@@ -342,7 +342,7 @@ class ParameterOptimizer(BaseOptimizer):
             if trial.state != TrialState.COMPLETE or trial.value is None:
                 continue
             timestamp = (
-                trial.datetime_complete or trial.datetime_start or datetime.utcnow()
+                trial.datetime_complete or trial.datetime_start or datetime.now(timezone.utc)
             )
             history.append(
                 {
@@ -455,7 +455,7 @@ class ParameterOptimizer(BaseOptimizer):
             if trial.state != TrialState.COMPLETE or trial.value is None:
                 continue
             timestamp = (
-                trial.datetime_complete or trial.datetime_start or datetime.utcnow()
+                trial.datetime_complete or trial.datetime_start or datetime.now(timezone.utc)
             )
             if not any(entry["iteration"] == trial.number + 1 for entry in history):
                 history.append(
