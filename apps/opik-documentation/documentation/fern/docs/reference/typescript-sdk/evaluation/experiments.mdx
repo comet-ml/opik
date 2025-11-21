@@ -34,31 +34,27 @@ const datasetExperiments = await opik.getDatasetExperiments("my-dataset", 100); 
 
 ```typescript
 // Update experiment name
-await opik.updateExperiment(
-  "experiment-id",
-  "Updated Experiment Name"
-);
+await opik.updateExperiment("experiment-id", {
+  name: "Updated Experiment Name"
+});
 
 // Update experiment configuration
-await opik.updateExperiment(
-  "experiment-id",
-  undefined,
-  {
+await opik.updateExperiment("experiment-id", {
+  experimentConfig: {
     model: "gpt-4",
     temperature: 0.7,
     promptTemplate: "Answer the following question: {question}"
   }
-);
+});
 
 // Update both name and configuration
-await opik.updateExperiment(
-  "experiment-id",
-  "Updated Experiment Name",
-  {
+await opik.updateExperiment("experiment-id", {
+  name: "Updated Experiment Name",
+  experimentConfig: {
     model: "gpt-4",
     temperature: 0.7
   }
-);
+});
 ```
 
 ### Deleting an Experiment

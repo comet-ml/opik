@@ -535,7 +535,10 @@ describe("Opik experiment operations", () => {
     }) => {
       const experimentId = "experiment-to-update-id";
 
-      await client.updateExperiment(experimentId, "updated-name", { k: "v" });
+      await client.updateExperiment(experimentId, {
+        name: "updated-name",
+        experimentConfig: { k: "v" },
+      });
 
       expect(spies.updateExperiment).toHaveBeenCalledWith(experimentId, {
         name: "updated-name",
@@ -550,7 +553,7 @@ describe("Opik experiment operations", () => {
     }) => {
       const experimentId = "experiment-to-update-name-only";
 
-      await client.updateExperiment(experimentId, "new-name-only");
+      await client.updateExperiment(experimentId, { name: "new-name-only" });
 
       const callArgs = spies.updateExperiment.mock.calls[0];
       expect(callArgs[0]).toBe(experimentId);
@@ -566,7 +569,9 @@ describe("Opik experiment operations", () => {
       const experimentId = "experiment-to-update-config-only";
       const newConfig = { model: "gpt-4", temperature: 0.7 };
 
-      await client.updateExperiment(experimentId, undefined, newConfig);
+      await client.updateExperiment(experimentId, {
+        experimentConfig: newConfig,
+      });
 
       const callArgs = spies.updateExperiment.mock.calls[0];
       expect(callArgs[0]).toBe(experimentId);
@@ -579,7 +584,7 @@ describe("Opik experiment operations", () => {
       expect,
     }) => {
       await expect(
-        client.updateExperiment("", "new-name")
+        client.updateExperiment("", { name: "new-name" })
       ).rejects.toThrow("id is required to update an experiment");
     });
 
@@ -590,7 +595,7 @@ describe("Opik experiment operations", () => {
       const experimentId = "experiment-to-update-no-params";
 
       await expect(
-        client.updateExperiment(experimentId)
+        client.updateExperiment(experimentId, {})
       ).rejects.toThrow("At least one of 'name' or 'experimentConfig' must be provided to update an experiment");
     });
 
@@ -606,7 +611,10 @@ describe("Opik experiment operations", () => {
       });
 
       await expect(
-        client.updateExperiment(experimentId, "bad-name", {})
+        client.updateExperiment(experimentId, {
+          name: "bad-name",
+          experimentConfig: {},
+        })
       ).rejects.toThrow("Failed to update experiment");
 
       expect(spies.updateExperiment).toHaveBeenCalledWith(experimentId, {

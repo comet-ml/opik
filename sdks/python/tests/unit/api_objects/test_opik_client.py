@@ -28,7 +28,7 @@ def test_opik_client__update_experiment__both_name_and_config__both_sent_to_api(
     opik_client_ = opik_client.Opik()
 
     with patch.object(
-            opik_client_._rest_client.experiments, "update_experiment"
+        opik_client_._rest_client.experiments, "update_experiment"
     ) as mock_update:
         new_config = {"model": "gpt-4", "temperature": 0.7}
         opik_client_.update_experiment(
@@ -45,7 +45,7 @@ def test_opik_client__update_experiment__name_only__only_name_sent_to_api():
     opik_client_ = opik_client.Opik()
 
     with patch.object(
-            opik_client_._rest_client.experiments, "update_experiment"
+        opik_client_._rest_client.experiments, "update_experiment"
     ) as mock_update:
         opik_client_.update_experiment(id="some-experiment-id", name="new-name")
 
@@ -59,7 +59,7 @@ def test_opik_client__update_experiment__config_only__only_metadata_sent_to_api(
     opik_client_ = opik_client.Opik()
 
     with patch.object(
-            opik_client_._rest_client.experiments, "update_experiment"
+        opik_client_._rest_client.experiments, "update_experiment"
     ) as mock_update:
         new_config = {"model": "gpt-4", "temperature": 0.7}
         opik_client_.update_experiment(
@@ -80,7 +80,7 @@ def test_opik_client__update_experiment__config_only__only_metadata_sent_to_api(
     ],
 )
 def test_opik_client__update_experiment__missing_mandatory_parameters__error_raised(
-        experiment_id,
+    experiment_id,
 ):
     opik_client_ = opik_client.Opik()
 
