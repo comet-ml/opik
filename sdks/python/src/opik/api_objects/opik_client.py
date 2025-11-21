@@ -2,6 +2,7 @@ import atexit
 import datetime
 import functools
 import logging
+import opik.exceptions
 from typing import Any, Dict, List, Optional, TypeVar, Union, Literal
 
 import httpx
@@ -1360,19 +1361,21 @@ class Opik:
         type: prompt_module.PromptType = prompt_module.PromptType.MUSTACHE,
     ) -> prompt_module.Prompt:
         """
-        Creates a new prompt with the given name and template.
-        If a prompt with the same name already exists, it will create a new version of the existing prompt if the templates differ.
+        Creates a new text prompt with the given name and template.
+        If a text prompt with the same name already exists, it will create a new version of the existing prompt if the templates differ.
 
         Parameters:
             name: The name of the prompt.
             prompt: The template content of the prompt.
             metadata: Optional metadata to be included in the prompt.
+            type: The template type (MUSTACHE or JINJA2).
 
         Returns:
             A Prompt object containing details of the created or retrieved prompt.
 
         Raises:
-            ApiError: If there is an error during the creation of the prompt and the status code is not 409.
+            PromptTemplateStructureMismatch: If a chat prompt with the same name already exists (template structure is immutable).
+            ApiError: If there is an error during the creation of the prompt.
         """
         prompt_client_ = prompt_client.PromptClient(self._rest_client)
         prompt_version = prompt_client_.create_prompt(
@@ -1401,6 +1404,7 @@ class Opik:
             A ChatPrompt object containing details of the created or retrieved chat prompt.
 
         Raises:
+            PromptTemplateStructureMismatch: If a text prompt with the same name already exists (template structure is immutable).
             ApiError: If there is an error during the creation of the prompt.
         """
         return prompt_module.ChatPrompt(
@@ -1415,20 +1419,23 @@ class Opik:
         """
         Retrieve a text prompt by name and optional commit version.
 
-        This method only returns text prompts. If the prompt is a chat prompt,
-        None will be returned (the backend validates the template_structure).
+        This method only returns text prompts.
 
         Parameters:
             name: The name of the prompt.
             commit: An optional commit version of the prompt. If not provided, the latest version is retrieved.
 
         Returns:
-            Prompt: The details of the specified text prompt, or None if not found or if it's a chat prompt.
+            Prompt: The details of the specified text prompt, or None if not found.
+
+        Raises:
+            PromptTemplateStructureMismatch: If the prompt exists but is a chat prompt (template structure mismatch).
         """
         prompt_client_ = prompt_client.PromptClient(self._rest_client)
         fern_prompt_version = prompt_client_.get_prompt(
-            name=name, commit=commit, template_structure="text"
+            name=name, commit=commit, raise_if_not_template_structure="text"
         )
+
         if fern_prompt_version is None:
             return None
 
@@ -1442,20 +1449,23 @@ class Opik:
         """
         Retrieve a chat prompt by name and optional commit version.
 
-        This method only returns chat prompts. If the prompt is a text prompt,
-        None will be returned (the backend validates the template_structure).
+        This method only returns chat prompts.
 
         Parameters:
             name: The name of the prompt.
             commit: An optional commit version of the prompt. If not provided, the latest version is retrieved.
 
         Returns:
-            ChatPrompt: The details of the specified chat prompt, or None if not found or if it's a text prompt.
+            ChatPrompt: The details of the specified chat prompt, or None if not found.
+
+        Raises:
+            PromptTemplateStructureMismatch: If the prompt exists but is a text prompt (template structure mismatch).
         """
         prompt_client_ = prompt_client.PromptClient(self._rest_client)
         fern_prompt_version = prompt_client_.get_prompt(
-            name=name, commit=commit, template_structure="chat"
+            name=name, commit=commit, raise_if_not_template_structure="chat"
         )
+
         if fern_prompt_version is None:
             return None
 
@@ -1471,13 +1481,17 @@ class Opik:
             name: The name of the prompt.
 
         Returns:
-            List[Prompt]: A list of text Prompt instances for the given name.
+            List[Prompt]: A list of text Prompt instances for the given name, or an empty list if not found.
+
+        Raises:
+            PromptTemplateStructureMismatch: If the prompt exists but is a chat prompt (template structure mismatch).
         """
         prompt_client_ = prompt_client.PromptClient(self._rest_client)
 
         # First, validate that this is a text prompt by trying to get the latest version
-        # This will return None if it's a chat prompt (backend validates template_structure)
-        latest_version = prompt_client_.get_prompt(name=name, template_structure="text")
+        # Let PromptTemplateStructureMismatch exception propagate - this is a hard error
+        latest_version = prompt_client_.get_prompt(name=name, raise_if_not_template_structure="text")
+            
         if latest_version is None:
             return []
 
@@ -1498,13 +1512,17 @@ class Opik:
             name: The name of the prompt.
 
         Returns:
-            List[ChatPrompt]: A list of ChatPrompt instances for the given name.
+            List[ChatPrompt]: A list of ChatPrompt instances for the given name, or an empty list if not found.
+
+        Raises:
+            PromptTemplateStructureMismatch: If the prompt exists but is a text prompt (template structure mismatch).
         """
         prompt_client_ = prompt_client.PromptClient(self._rest_client)
 
         # First, validate that this is a chat prompt by trying to get the latest version
-        # This will return None if it's a text prompt (backend validates template_structure)
-        latest_version = prompt_client_.get_prompt(name=name, template_structure="chat")
+        # Let PromptTemplateStructureMismatch exception propagate - this is a hard error
+        latest_version = prompt_client_.get_prompt(name=name, raise_if_not_template_structure="chat")
+            
         if latest_version is None:
             return []
 

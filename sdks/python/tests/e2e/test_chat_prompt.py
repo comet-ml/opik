@@ -2,7 +2,8 @@ import uuid
 import opik
 from opik.api_objects.prompt import PromptType, ChatPrompt
 from . import verifiers
-
+import opik.exceptions
+import pytest
 
 def test_chat_prompt__create__happyflow(opik_client: opik.Opik):
     """Test creating a chat prompt with multiple messages."""
@@ -345,8 +346,8 @@ def test_get_chat_prompt__chat_prompt__returns_chat_prompt(opik_client: opik.Opi
     assert len(retrieved_prompt.template) == 2
 
 
-def test_get_chat_prompt__string_prompt__returns_none(opik_client: opik.Opik):
-    """Test that get_chat_prompt() returns None for text prompts (type mismatch)."""
+def test_get_chat_prompt__string_prompt__prompt_structure_mismatch_error(opik_client: opik.Opik):
+    """Test that get_chat_prompt() raises an error for text prompts (type mismatch)."""
     unique_id = str(uuid.uuid4())[-6:]
     prompt_name = f"text-prompt-{unique_id}"
 
@@ -356,9 +357,9 @@ def test_get_chat_prompt__string_prompt__returns_none(opik_client: opik.Opik):
         prompt="Hello {{name}}",
     )
 
-    # Try to retrieve it with get_chat_prompt() - should return None due to type mismatch
-    retrieved_prompt = opik_client.get_chat_prompt(name=prompt_name)
-    assert retrieved_prompt is None
+    # Try to retrieve it with get_chat_prompt() - should raise an error due to type mismatch
+    with pytest.raises(opik.exceptions.PromptTemplateStructureMismatch):
+        opik_client.get_chat_prompt(name=prompt_name)
 
 
 def test_get_chat_prompt_history__chat_prompt__returns_chat_prompts(
@@ -399,19 +400,19 @@ def test_get_chat_prompt_history__chat_prompt__returns_chat_prompts(
     assert v3.commit in commits
 
 
-def test_get_chat_prompt_history__string_prompt__returns_empty_list(
+def test_get_chat_prompt_history__string_prompt__prompt_structure_mismatch_error(
     opik_client: opik.Opik,
 ):
-    """Test that get_chat_prompt_history() returns empty list for text prompts (type mismatch)."""
+    """Test that get_chat_prompt_history() raises an error for text prompts (type mismatch)."""
     unique_id = str(uuid.uuid4())[-6:]
     prompt_name = f"text-prompt-history-{unique_id}"
 
     # Create a text prompt
     opik_client.create_prompt(name=prompt_name, prompt="Hello")
 
-    # Try to get history with get_chat_prompt_history() - should return empty list
-    history = opik_client.get_chat_prompt_history(name=prompt_name)
-    assert len(history) == 0
+    # Try to get history with get_chat_prompt_history() - should raise an error due to type mismatch
+    with pytest.raises(opik.exceptions.PromptTemplateStructureMismatch):
+        opik_client.get_chat_prompt_history(name=prompt_name)
 
 
 def test_search_prompts__filter_chat_prompts_only(opik_client: opik.Opik):
@@ -482,3 +483,35 @@ def test_get_chat_prompt__nonexistent__returns_none(opik_client: opik.Opik):
     """Test that get_chat_prompt() returns None for non-existent prompts."""
     result = opik_client.get_chat_prompt(name="nonexistent-chat-prompt-12345")
     assert result is None
+
+
+def test_chat_prompt__template_structure_immutable__error(opik_client: opik.Opik):
+    """Test that template_structure is immutable for chat prompts."""
+    unique_identifier = str(uuid.uuid4())[-6:]
+    prompt_name = f"test-immutable-chat-structure-{unique_identifier}"
+
+    # Create initial chat prompt
+    chat_prompt = opik_client.create_chat_prompt(
+        name=prompt_name,
+        messages=[
+            {"role": "system", "content": "You are a helpful assistant."},
+            {"role": "user", "content": "Hello!"},
+        ],
+    )
+
+    # Verify chat prompt was created
+    verifiers.verify_chat_prompt_version(
+        chat_prompt,
+        name=prompt_name,
+        messages=[
+            {"role": "system", "content": "You are a helpful assistant."},
+            {"role": "user", "content": "Hello!"},
+        ],
+    )
+
+    # Attempt to create a text prompt version with the same name should fail
+    with pytest.raises(opik.exceptions.PromptTemplateStructureMismatch) as exc_info:
+        opik_client.create_prompt(
+            name=prompt_name,
+            prompt="This is a text prompt: {{variable}}",
+        )

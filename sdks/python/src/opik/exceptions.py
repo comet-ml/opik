@@ -93,7 +93,6 @@ class PromptTemplateStructureMismatch(OpikException):
         return (
             f"Prompt with name '{self.prompt_name}' already exists and has immutable "
             f"'{self.existing_structure}' template structure, not '{self.attempted_structure}'. "
-            f"Template structure type cannot be changed after prompt creation."
         )
 
 

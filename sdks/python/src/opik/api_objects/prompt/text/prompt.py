@@ -27,11 +27,17 @@ class Prompt(base_prompt.BasePrompt):
     ) -> None:
         """
         Initializes a new instance of the class with the given parameters.
-        Creates a new prompt using the opik client and sets the initial state of the instance attributes based on the created prompt.
+        Creates a new text prompt using the opik client and sets the initial state of the instance attributes based on the created prompt.
 
         Parameters:
             name: The name for the prompt.
             prompt: The template for the prompt.
+            metadata: Optional metadata for the prompt.
+            type: The template type (MUSTACHE or JINJA2).
+            validate_placeholders: Whether to validate template placeholders.
+
+        Raises:
+            PromptTemplateStructureMismatch: If a chat prompt with the same name already exists (template structure is immutable).
         """
 
         self._template = prompt_template.PromptTemplate(

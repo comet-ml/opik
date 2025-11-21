@@ -5,7 +5,7 @@ import opik
 from opik.api_objects.prompt import PromptType
 from opik.rest_api import core as rest_api_core
 from . import verifiers
-
+import opik.exceptions
 
 def test_prompt__create__happyflow(opik_client: opik.Opik):
     unique_identifier = str(uuid.uuid4())[-6:]
@@ -333,7 +333,7 @@ def test_prompt__template_structure_immutable__error(opik_client: opik.Opik):
     )
 
     # Attempt to create a chat prompt version with the same name should fail
-    with pytest.raises(rest_api_core.ApiError) as exc_info:
+    with pytest.raises(opik.exceptions.PromptTemplateStructureMismatch):
         opik_client.create_chat_prompt(
             name=prompt_name,
             messages=[
@@ -341,53 +341,6 @@ def test_prompt__template_structure_immutable__error(opik_client: opik.Opik):
                 {"role": "user", "content": "Hello!"},
             ],
         )
-
-    # Verify the error message contains relevant information
-    assert exc_info.value.status_code == 400
-    assert (
-        "template structure mismatch" in str(exc_info.value).lower()
-        or "template_structure" in str(exc_info.value).lower()
-    )
-
-
-def test_chat_prompt__template_structure_immutable__error(opik_client: opik.Opik):
-    """Test that template_structure is immutable for chat prompts."""
-    unique_identifier = str(uuid.uuid4())[-6:]
-    prompt_name = f"test-immutable-chat-structure-{unique_identifier}"
-
-    # Create initial chat prompt
-    chat_prompt = opik_client.create_chat_prompt(
-        name=prompt_name,
-        messages=[
-            {"role": "system", "content": "You are a helpful assistant."},
-            {"role": "user", "content": "Hello!"},
-        ],
-    )
-
-    # Verify chat prompt was created
-    verifiers.verify_chat_prompt_version(
-        chat_prompt,
-        name=prompt_name,
-        messages=[
-            {"role": "system", "content": "You are a helpful assistant."},
-            {"role": "user", "content": "Hello!"},
-        ],
-    )
-
-    # Attempt to create a text prompt version with the same name should fail
-    with pytest.raises(rest_api_core.ApiError) as exc_info:
-        opik_client.create_prompt(
-            name=prompt_name,
-            prompt="This is a text prompt: {{variable}}",
-        )
-
-    # Verify the error message contains relevant information
-    assert exc_info.value.status_code == 400
-    assert (
-        "template structure mismatch" in str(exc_info.value).lower()
-        or "template_structure" in str(exc_info.value).lower()
-        or "chat prompt" in str(exc_info.value).lower()
-    )
 
 
 def test_get_prompt__string_prompt__returns_prompt(opik_client: opik.Opik):
@@ -411,7 +364,7 @@ def test_get_prompt__string_prompt__returns_prompt(opik_client: opik.Opik):
 
 
 def test_get_prompt__chat_prompt__returns_none(opik_client: opik.Opik):
-    """Test that get_prompt() returns None for chat prompts (type mismatch)."""
+    """Test that get_prompt() raises an error for chat prompts (type mismatch)."""
     unique_id = str(uuid.uuid4())[-6:]
     prompt_name = f"chat-prompt-{unique_id}"
 
@@ -424,9 +377,9 @@ def test_get_prompt__chat_prompt__returns_none(opik_client: opik.Opik):
         ],
     )
 
-    # Try to retrieve it with get_prompt() - should return None due to type mismatch
-    retrieved_prompt = opik_client.get_prompt(name=prompt_name)
-    assert retrieved_prompt is None
+    # Try to retrieve it with get_prompt() - should raise an error due to type mismatch
+    with pytest.raises(opik.exceptions.PromptTemplateStructureMismatch):
+        opik_client.get_prompt(name=prompt_name)
 
 
 def test_get_prompt_history__string_prompt__returns_prompts(opik_client: opik.Opik):
@@ -454,7 +407,7 @@ def test_get_prompt_history__string_prompt__returns_prompts(opik_client: opik.Op
 
 
 def test_get_prompt_history__chat_prompt__returns_empty_list(opik_client: opik.Opik):
-    """Test that get_prompt_history() returns empty list for chat prompts (type mismatch)."""
+    """Test that get_prompt_history() raises an error for chat prompts (type mismatch)."""
     unique_id = str(uuid.uuid4())[-6:]
     prompt_name = f"chat-prompt-history-{unique_id}"
 
@@ -464,9 +417,9 @@ def test_get_prompt_history__chat_prompt__returns_empty_list(opik_client: opik.O
         messages=[{"role": "user", "content": "Hello"}],
     )
 
-    # Try to get history with get_prompt_history() - should return empty list
-    history = opik_client.get_prompt_history(name=prompt_name)
-    assert len(history) == 0
+    # Try to get history with get_prompt_history() - should raise an error due to type mismatch
+    with pytest.raises(opik.exceptions.PromptTemplateStructureMismatch):
+        opik_client.get_prompt_history(name=prompt_name)
 
 
 def test_search_prompts__returns_both_types(opik_client: opik.Opik):

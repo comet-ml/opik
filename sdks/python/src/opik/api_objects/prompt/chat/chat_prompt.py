@@ -33,6 +33,10 @@ class ChatPrompt(base_prompt.BasePrompt):
             messages: List of message dictionaries with 'role' and 'content' fields.
             metadata: Optional metadata to be included in the prompt.
             type: The template type (MUSTACHE or JINJA2).
+            validate_placeholders: Whether to validate template placeholders.
+
+        Raises:
+            PromptTemplateStructureMismatch: If a text prompt with the same name already exists (template structure is immutable).
         """
 
         self._chat_template = chat_prompt_template.ChatPromptTemplate(

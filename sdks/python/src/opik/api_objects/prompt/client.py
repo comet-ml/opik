@@ -42,6 +42,11 @@ class PromptClient:
 
         Returns:
         - A Prompt object for the provided prompt name and template.
+
+        Raises:
+        - PromptTemplateStructureMismatch: If a prompt with the same name already exists but has a different 
+          template_structure (e.g., trying to create a text prompt when a chat prompt exists, or vice versa).
+          Template structure is immutable after prompt creation.
         """
         prompt_version = self._get_latest_version(name)
 
@@ -119,6 +124,7 @@ class PromptClient:
         self,
         name: str,
         commit: Optional[str] = None,
+        raise_if_not_template_structure: Optional[str] = None,
     ) -> Optional[prompt_version_detail.PromptVersionDetail]:
         """
         Retrieve the prompt detail for a given prompt name and commit version.
@@ -126,7 +132,7 @@ class PromptClient:
         Parameters:
             name: The name of the prompt.
             commit: An optional commit version of the prompt. If not provided, the latest version is retrieved.
-            template_structure: Optional template structure filter ("text" or "chat"). Defaults to "text" if not specified.
+            raise_if_not_template_structure: Optional template structure validation. If provided and doesn't match, raises PromptTemplateStructureMismatch.
 
         Returns:
             Prompt: The details of the specified prompt.
@@ -136,6 +142,14 @@ class PromptClient:
                 name=name,
                 commit=commit,
             )
+
+            # Client-side validation for template_structure if requested
+            if raise_if_not_template_structure is not None and prompt_version.template_structure != raise_if_not_template_structure:
+                raise opik.exceptions.PromptTemplateStructureMismatch(
+                    prompt_name=name,
+                    existing_structure=prompt_version.template_structure,
+                    attempted_structure=raise_if_not_template_structure,
+                )
 
             return prompt_version
         except rest_api_core.ApiError as e:
