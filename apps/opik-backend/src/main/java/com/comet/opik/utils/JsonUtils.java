@@ -46,7 +46,7 @@ public class JsonUtils {
     static {
         // Initialize with default (20MB - Jackson default) until OpikApplication configures it
         MAPPER = createConfiguredMapper(StreamReadConstraints.DEFAULT_MAX_STRING_LEN);
-        log.info("JsonUtils initialized with default maxStringLength: {}",
+        log.info("JsonUtils initialized with default maxStringLength: '{}'",
                 StreamReadConstraints.DEFAULT_MAX_STRING_LEN);
     }
 

@@ -1,6 +1,7 @@
 package com.comet.opik.infrastructure.redis;
 
 import com.comet.opik.utils.JsonUtils;
+import com.google.common.base.Suppliers;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.experimental.UtilityClass;
@@ -16,8 +17,8 @@ import java.util.function.Supplier;
 @AllArgsConstructor
 @Getter
 public enum RedisStreamCodec {
-    JAVA(Constants.JAVA, () -> new CompositeCodec(new LZ4CodecV2(),
-            new JsonJacksonCodec(JsonUtils.getMapper()))),
+    JAVA(Constants.JAVA, Suppliers.memoize(() -> new CompositeCodec(new LZ4CodecV2(),
+            new JsonJacksonCodec(JsonUtils.getMapper())))),
     JSON(Constants.JSON, () -> StringCodec.INSTANCE);
 
     private final String name;
@@ -39,4 +40,3 @@ public enum RedisStreamCodec {
         public static final String JSON = "json";
     }
 }
-
