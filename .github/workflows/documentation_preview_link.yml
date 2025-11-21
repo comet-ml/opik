@@ -4,6 +4,7 @@ on:
   pull_request:
     paths:
         - 'apps/opik-documentation/documentation/**'
+        - 'sdks/opik_optimizer/**'
 
 jobs:
     run:
@@ -13,9 +14,37 @@ jobs:
         steps:
             - name: Checkout repository
               uses: actions/checkout@v4
-                
+              with:
+                fetch-depth: 0
+
             - name: Install Fern
-              run: npm install -g fern-api@0.64.26
+              uses: actions/setup-node@v4
+              with:
+                node-version: '20'
+                cache: 'npm'
+            - name: Cache and install Fern CLI
+              run: |
+                npm install -g fern-api@0.64.26
+
+            - name: Set up Python
+              uses: actions/setup-python@v5
+              with:
+                python-version: '3.11'
+                cache: 'pip'
+
+            - name: Install Opik Optimizer SDK (for Fern docs)
+              run: |
+                python -m pip install --upgrade pip
+                pip install -e sdks/opik_optimizer
+
+            - name: Generate Opik Optimizer Fern docs
+              run: |
+                # Only regenerate optimizer docs when optimizer files change to avoid slowing unrelated PRs
+                if git diff --name-only origin/${{ github.base_ref }}... | grep -E '^sdks/opik_optimizer/(.*\\.py|pyproject\\.toml|setup\\.py)$'; then
+                  python sdks/opik_optimizer/scripts/generate_fern_docs.py --write
+                else
+                  echo "No optimizer SDK changes detected; skipping optimizer doc generation."
+                fi
 
             - name: Generate preview URL
               id: generate-docs
@@ -29,6 +58,22 @@ jobs:
                   echo "Preview URL: $URL"
                   echo "URL=$URL" >> $GITHUB_OUTPUT
                   echo "🌿 Preview your docs: $URL" > preview_url.txt
+
+            - name: Summarize optimizer doc changes
+              env:
+                REF_FILE: apps/opik-documentation/documentation/fern/docs/agent_optimization/opik_optimizer/reference.mdx
+                PREVIEW_FILE: apps/opik-documentation/documentation/preview_url.txt
+                BASE_SHA: ${{ github.event.pull_request.base.sha }}
+              run: |
+                # Ensure preview file exists before appending
+                touch "$PREVIEW_FILE"
+                if git diff --quiet "$BASE_SHA"... -- "$REF_FILE"; then
+                  # No optimizer doc changes; keep summary quiet
+                  echo "" >> "$PREVIEW_FILE"
+                else
+                  stats=$(git diff --numstat "$BASE_SHA"... -- "$REF_FILE" | awk '{printf "+%s / -%s", $1, $2}')
+                  echo "Optimizer docs updated ($stats lines) relative to base." >> "$PREVIEW_FILE"
+                fi
 
             - name: Check for broken links
               id: check-broken-links
@@ -58,7 +103,7 @@ jobs:
                           print "**The following broken links where found:**\n\n" >> "preview_url.txt"
                           found_broken = 1
                         }
-                        
+
                         printf "Page: %s\n❌ Broken link: %s (%s)\n\n", $4, $1, $2 >> "preview_url.txt"
                       }
                     }
