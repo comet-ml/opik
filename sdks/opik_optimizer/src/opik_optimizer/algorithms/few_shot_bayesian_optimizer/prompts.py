@@ -39,4 +39,3 @@ SYSTEM_PROMPT_TEMPLATE = textwrap.dedent(
     Respond only with the JSON object. Do not include any explanation or extra text.
     """
 ).strip()
-

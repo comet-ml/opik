@@ -140,4 +140,3 @@ def build_mcp_tool_description_user_prompt(
             }}
             """
     ).strip()
-
