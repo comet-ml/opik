@@ -120,7 +120,9 @@ class OptimizableAgent:
         """Clamp max_tokens fields to the provider context window when known."""
         try:
             token_counter = getattr(litellm, "token_counter", None)
-            if not token_counter or not hasattr(token_counter, "get_model_context_window"):
+            if not token_counter or not hasattr(
+                token_counter, "get_model_context_window"
+            ):
                 return
             limit = token_counter.get_model_context_window(
                 model=self.model, messages=None, tokens=None
