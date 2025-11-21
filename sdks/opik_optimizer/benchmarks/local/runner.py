@@ -18,18 +18,18 @@ from concurrent.futures import Future, ProcessPoolExecutor, wait, FIRST_COMPLETE
 from datetime import datetime
 from typing import Any
 
-from local import checkpoint as benchmark_checkpoint
-from local import logging as benchmark_logging
-from benchmark_task import (
+from benchmarks.local import checkpoint as benchmark_checkpoint
+from benchmarks.local import logging as benchmark_logging
+from benchmarks.core.benchmark_task import (
     TaskResult,
     TASK_STATUS_FAILED,
     TASK_STATUS_PENDING,
     TASK_STATUS_RUNNING,
 )
-from benchmark_taskspec import BenchmarkTaskSpec
+from benchmarks.core.benchmark_taskspec import BenchmarkTaskSpec
 
-from utils.budgeting import resolve_optimize_params
-from utils.task_runner import execute_task
+from benchmarks.utils.budgeting import resolve_optimize_params
+from benchmarks.utils.task_runner import execute_task
 
 
 @benchmark_logging.log_console_output_to_file()

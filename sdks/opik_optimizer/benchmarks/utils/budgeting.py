@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-import benchmark_config
+from benchmarks.core import benchmark_config
 
 
 def derive_budgeted_optimize_params(

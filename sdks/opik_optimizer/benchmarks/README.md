@@ -9,16 +9,16 @@ Unified benchmark runner for testing prompt optimizers locally or on Modal cloud
 Run benchmarks on your local machine:
 
 ```bash
-# Single dataset, single optimizer (test mode)
-python run_benchmark.py \
+ # Single dataset, single optimizer (test mode)
+ python runners/run_benchmark.py \
   --demo-datasets gsm8k \
   --optimizers few_shot \
   --models openai/gpt-4o-mini \
   --test-mode \
   --max-concurrent 1
 
-# Multiple datasets and optimizers
-python run_benchmark.py \
+ # Multiple datasets and optimizers
+ python runners/run_benchmark.py \
   --demo-datasets gsm8k hotpot_300 \
   --optimizers few_shot meta_prompt \
   --max-concurrent 4
@@ -43,10 +43,10 @@ modal secret create llm-api-keys \
   ANTHROPIC_API_KEY=<your-anthropic-key>
 
 # 1. Deploy the worker (one time, or when code changes)
-modal deploy benchmark_worker.py
+modal deploy runners/benchmark_worker.py
 
 # 2. Submit benchmark tasks (note the --modal flag)
-python run_benchmark.py --modal \
+python runners/run_benchmark.py --modal \
   --demo-datasets gsm8k \
   --optimizers few_shot \
   --models openai/gpt-4o-mini \
@@ -66,7 +66,7 @@ modal run check_results.py --run-id <RUN_ID> --watch --detailed
 Use CLI arguments for quick, interactive benchmarking:
 
 ```bash
-python run_benchmark.py \
+python runners/run_benchmark.py \
   --demo-datasets gsm8k hotpot_300 \
   --optimizers few_shot meta_prompt \
   --models openai/gpt-4o-mini \
@@ -78,7 +78,7 @@ python run_benchmark.py \
 Use JSON manifest files for reproducible, complex benchmark configurations:
 
 ```bash
-python run_benchmark.py --config manifest.json
+python runners/run_benchmark.py --config manifest.json
 ```
 
 **Example Manifest** (`manifest.example.json`):

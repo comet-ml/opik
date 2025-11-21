@@ -4,8 +4,8 @@ import time
 import traceback
 from typing import Any
 
-from benchmark_task import TaskResult, TASK_STATUS_FAILED
-from utils.task_runner import execute_task
+from benchmarks.core.benchmark_task import TaskResult, TASK_STATUS_FAILED
+from benchmarks.utils.task_runner import execute_task
 
 
 def run_optimization_task(

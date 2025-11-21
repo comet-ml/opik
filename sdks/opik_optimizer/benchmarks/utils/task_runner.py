@@ -9,9 +9,10 @@ from typing import Any
 from collections.abc import Callable
 import warnings
 
-import benchmark_config
+from benchmarks.core import benchmark_config
+from benchmarks.core.benchmark_config import BenchmarkDatasetConfig
 import opik_optimizer.datasets
-from benchmark_task import (
+from benchmarks.core.benchmark_task import (
     DatasetMetadata,
     TaskEvaluationResult,
     TaskResult,
@@ -81,10 +82,16 @@ def resolve_dataset_bundle(
     given, it is reused for all splits (with a warning).
     """
     if datasets:
-        if "train" not in datasets and any(k in datasets for k in ("validation", "test")):
-            raise ValueError("datasets config must include a train split when validation/test are provided.")
+        if "train" not in datasets and any(
+            k in datasets for k in ("validation", "test")
+        ):
+            raise ValueError(
+                "datasets config must include a train split when validation/test are provided."
+            )
 
-        explicit_roles = any(role in datasets for role in ("train", "validation", "test"))
+        explicit_roles = any(
+            role in datasets for role in ("train", "validation", "test")
+        )
         role_specs = (
             datasets
             if explicit_roles
@@ -110,7 +117,9 @@ def resolve_dataset_bundle(
             loader = getattr(opik_optimizer.datasets, loader_name, None)
             if callable(loader):
                 return kwargs["dataset_name"], loader(**kwargs)
-            raise ValueError(f"Unknown dataset loader '{loader_name}' for role '{role}'.")
+            raise ValueError(
+                f"Unknown dataset loader '{loader_name}' for role '{role}'."
+            )
 
         train_name, train_ds = _load_override("train")
         validation_name, validation_ds = _load_override("validation")
@@ -198,7 +207,9 @@ def _resolve_metrics(
     for path in custom_metric_paths:
         module_path, _, attr = path.rpartition(".")
         if not module_path or not attr:
-            raise ValueError(f"Invalid metric path '{path}'. Expected module.attr format.")
+            raise ValueError(
+                f"Invalid metric path '{path}'. Expected module.attr format."
+            )
         module = __import__(module_path, fromlist=[attr])
         metric_fn = getattr(module, attr, None)
         if not callable(metric_fn):

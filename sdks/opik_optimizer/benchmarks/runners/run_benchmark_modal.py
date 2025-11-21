@@ -31,9 +31,9 @@ from datetime import datetime
 from pathlib import Path
 import modal
 
-from benchmark_taskspec import BenchmarkTaskSpec
-from utils.budgeting import resolve_optimize_params
-from utils.budgeting import resolve_optimize_params
+from benchmarks.core import benchmark_config
+from benchmarks.core.benchmark_taskspec import BenchmarkTaskSpec
+from benchmarks.utils.budgeting import resolve_optimize_params
 
 # Define Modal app (just for local entrypoint - worker is deployed separately)
 app = modal.App("opik-optimizer-benchmarks-coordinator")
@@ -75,9 +75,6 @@ def submit_benchmark_tasks(
         retry_failed_run_id: Run ID to retry failed tasks from
         resume_run_id: Run ID to resume incomplete run from
     """
-    # Import benchmark_config locally (only runs on local machine)
-    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-    import benchmark_config
 
     print("=" * 80)
     print("OPIK OPTIMIZER BENCHMARKS - MODAL SUBMISSION")

@@ -1,9 +1,9 @@
 import argparse
 
-import benchmark_config
-from benchmark_taskspec import BenchmarkTaskSpec
-from local.runner import BenchmarkRunner
-from utils.validation import ask_for_input_confirmation
+from benchmarks.core import benchmark_config
+from benchmarks.core.benchmark_taskspec import BenchmarkTaskSpec
+from benchmarks.local.runner import BenchmarkRunner
+from benchmarks.utils.validation import ask_for_input_confirmation
 
 DEFAULT_MAX_WORKERS: int = 3
 DEFAULT_SEED: int = 42

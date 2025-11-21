@@ -1,1 +1,1 @@
-"""Modal cloud execution modules."""
+'"""Modal worker utilities for benchmark runs."""'

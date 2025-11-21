@@ -15,9 +15,9 @@ Usage:
 
 import argparse
 
-import benchmark_config
-from benchmark_manifest import load_manifest, manifest_to_task_specs
-from benchmark_taskspec import BenchmarkTaskSpec
+from benchmarks.configs.benchmark_manifest import load_manifest, manifest_to_task_specs
+from benchmarks.core import benchmark_config
+from benchmarks.core.benchmark_taskspec import BenchmarkTaskSpec
 
 
 def main() -> None:
