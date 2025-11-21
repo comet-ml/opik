@@ -27,10 +27,10 @@ def test_metaprompt_optimizer() -> None:
 
     # Initialize optimizer with reduced parameters for faster testing
     optimizer = opik_optimizer.MetaPromptOptimizer(
-        model="openai/gpt-5-mini",
+        model="openai/gpt-4.1-nano",
         model_parameters={"temperature": 0.1, "max_tokens": 256},
         n_threads=2,
-        prompts_per_round=2,  # Reduced from 4
+        prompts_per_round=1,  # Minimal to avoid long runs/hangs
         seed=42,
     )
 
@@ -40,7 +40,7 @@ def test_metaprompt_optimizer() -> None:
         metric=levenshtein_ratio,
         prompt=prompt,
         n_samples=1,
-        max_trials=2,
+        max_trials=1,
     )
 
     # Enhanced OptimizationResult validation

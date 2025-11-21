@@ -15,8 +15,8 @@ def test_few_shot_optimizer() -> None:
         pytest.fail("OPENAI_API_KEY environment variable must be set for e2e tests")
     # Initialize optimizer
     optimizer = opik_optimizer.FewShotBayesianOptimizer(
-        model="openai/gpt-5-nano",
-        model_parameters={"temperature": 1, "max_tokens": 256},
+        model="openai/gpt-4.1-nano",
+        model_parameters={"temperature": 0.1, "max_tokens": 256},
         min_examples=1,
         max_examples=2,
     )
@@ -124,13 +124,13 @@ def test_few_shot_optimizer() -> None:
 
     # Validate model configuration in details
     assert "model" in results.details, "Details should contain 'model'"
-    assert results.details["model"] == "openai/gpt-5-mini", (
-        f"Expected openai/gpt-5-mini, got {results.details['model']}"
+    assert results.details["model"] == optimizer.model, (
+        f"Expected {optimizer.model}, got {results.details['model']}"
     )
 
     assert "temperature" in results.details, "Details should contain 'temperature'"
-    assert results.details["temperature"] == 0.1, (
-        f"Expected temperature 0.1, got {results.details['temperature']}"
+    assert results.details["temperature"] == optimizer.model_parameters["temperature"], (
+        f"Expected temperature {optimizer.model_parameters['temperature']}, got {results.details['temperature']}"
     )
 
     # Optional fields that might not be in actual results structure
