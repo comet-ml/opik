@@ -94,7 +94,6 @@ def test_full_dataset_sizes(
             pytest.skip("context7_eval not available without Opik client")
         raise
     # Restore to avoid leaking into other tests
-    monkeypatch.setattr(dataset_utils.DatasetHandle, "load", original_load)
     assert len(dataset._hashes) == expected_size
 
 
