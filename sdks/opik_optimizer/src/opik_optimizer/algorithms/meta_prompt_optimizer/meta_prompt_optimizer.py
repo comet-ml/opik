@@ -19,6 +19,8 @@ from ...optimizable_agent import OptimizableAgent
 from . import reporting
 import re
 from ... import _llm_calls
+from ..._llm_calls import StructuredOutputParsingError
+from litellm.exceptions import BadRequestError
 from ...mcp_utils.mcp import PROMPT_TOOL_FOOTER, PROMPT_TOOL_HEADER
 from ...mcp_utils.mcp_workflow import (
     MCPExecutionConfig,
@@ -1041,6 +1043,8 @@ class MetaPromptOptimizer(BaseOptimizer):
                 # --- End Robust Parsing ---
 
             except Exception as e:
+                if isinstance(e, (BadRequestError, StructuredOutputParsingError)):
+                    raise
                 raise ValueError(
                     f"Unexpected error during candidate prompt generation: {e}"
                 )
