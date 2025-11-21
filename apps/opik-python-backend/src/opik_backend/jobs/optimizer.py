@@ -104,10 +104,26 @@ def process_optimizer_job(*args, **kwargs):
             client = opik.Opik(**opik_kwargs)
             logger.info(f"Opik SDK initialized for workspace: {workspace_name}")
             
+            # Update status to RUNNING when worker picks up the job
+            logger.info(f"Updating optimization {optimization_id} status to 'running'")
+            client._rest_client.optimizations.update_optimizations_by_id(optimization_id, status="running")
+            logger.info(f"Optimization {optimization_id} status updated to 'running'")
+            
             # Load dataset
             dataset_name = config["dataset_name"]
-            dataset = client.get_dataset(dataset_name)
-            logger.info(f"Loaded dataset: {dataset_name}")
+            try:
+                dataset = client.get_dataset(dataset_name)
+                logger.info(f"Loaded dataset: {dataset_name}")
+            except Exception as e:
+                logger.error(f"Failed to load dataset '{dataset_name}': {e}")
+                raise ValueError(f"Dataset '{dataset_name}' not found or inaccessible. Please create the dataset before running optimization.") from e
+            
+            # Validate dataset has items
+            dataset_items = list(dataset.get_items())
+            if not dataset_items:
+                raise ValueError(f"Dataset '{dataset_name}' is empty. Please add items to the dataset before running optimization.")
+            
+            logger.info(f"Dataset has {len(dataset_items)} items")
             
             # Build LLM config first (needed for prompt)
             llm_config = config["llm_model"]
@@ -243,6 +259,11 @@ def process_optimizer_job(*args, **kwargs):
                 improvement = ((result.score - result.initial_score) / result.initial_score * 100) if result.initial_score != 0 else 0
                 logger.info(f"Improvement: {improvement:.2f}%")
             
+            # Update status to COMPLETED on success
+            logger.info(f"Updating optimization {optimization_id} status to 'completed'")
+            client._rest_client.optimizations.update_optimizations_by_id(optimization_id, status="completed")
+            logger.info(f"Optimization {optimization_id} status updated to 'completed'")
+            
             return {
                 "status": "success",
                 "optimization_id": str(optimization_id),
@@ -254,5 +275,28 @@ def process_optimizer_job(*args, **kwargs):
             
         except Exception as e:
             logger.error(f"Error processing optimizer job: {e}", exc_info=True)
+            
+            # Update status to ERROR on failure
+            try:
+                # Re-parse job message to get optimization_id if it failed early
+                job_message = _parse_job_message(args, kwargs)
+                optimization_id = job_message["optimization_id"]
+                workspace_name = job_message["workspace_name"]
+                
+                # Re-initialize client if needed
+                opik_url = os.getenv("OPIK_URL_OVERRIDE")
+                opik_kwargs = {"workspace": workspace_name}
+                if opik_url:
+                    opik_kwargs["host"] = opik_url
+                if job_message.get("opik_api_key"):
+                    opik_kwargs["api_key"] = job_message["opik_api_key"]
+                
+                error_client = opik.Opik(**opik_kwargs)
+                logger.info(f"Updating optimization {optimization_id} status to 'error'")
+                error_client._rest_client.optimizations.update_optimizations_by_id(optimization_id, status="error")
+                logger.info(f"Optimization {optimization_id} status updated to 'error'")
+            except Exception as update_error:
+                logger.error(f"Failed to update optimization status to 'error': {update_error}", exc_info=True)
+            
             raise
 

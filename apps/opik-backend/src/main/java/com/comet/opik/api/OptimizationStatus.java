@@ -12,7 +12,9 @@ import java.util.Arrays;
 public enum OptimizationStatus {
     RUNNING("running"),
     COMPLETED("completed"),
-    CANCELLED("cancelled");
+    CANCELLED("cancelled"),
+    INITIALIZED("initialized"),
+    ERROR("error");
 
     @JsonValue
     private final String value;

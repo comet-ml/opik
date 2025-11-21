@@ -188,7 +188,8 @@ services:
 
   python-backend:
     image: ghcr.io/comet-ml/opik/opik-python-backend:${OPIK_VERSION:-latest}
-    pull_policy: always
+    # change to 'build' when developing python-backend
+    pull_policy: ${PYTHON_BACKEND_PULL_POLICY:-always}
     profiles:
       - backend
       - opik
