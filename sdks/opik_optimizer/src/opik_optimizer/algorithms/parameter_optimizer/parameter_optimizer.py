@@ -126,6 +126,9 @@ class ParameterOptimizer(BaseOptimizer):
             dataset: Dataset providing evaluation examples
             metric: Objective function to maximize
             parameter_space: Definition of the search space for tunable parameters
+            validation_dataset: Optional validation dataset. Note: Due to the internal implementation
+                of ParameterOptimizer, this parameter is currently not fully utilized and we recommend
+                not using it for this optimizer.
             experiment_config: Optional experiment metadata
             max_trials: Total number of trials (if None, uses default_n_trials)
             n_samples: Number of dataset samples to evaluate per trial (None for all)

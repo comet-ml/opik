@@ -325,9 +325,10 @@ optimizer = ParameterOptimizer(
    - Consider fixing low-impact parameters to reduce search space
 
 7. **Validation**
-   - Test final parameters on held-out validation set
+   - Use the `validation_dataset` parameter to test final parameters on a held-out validation set
    - Verify improvements generalize beyond training data
    - Consider parameter stability across different datasets
+   - Split your data 70/30 or 80/20 between training and validation sets
 
 ## Research and References
 

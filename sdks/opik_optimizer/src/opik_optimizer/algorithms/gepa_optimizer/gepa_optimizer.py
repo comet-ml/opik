@@ -216,7 +216,8 @@ class GepaOptimizer(BaseOptimizer):
             raise_on_exception: Raise exceptions instead of continuing (default: True)
             optimization_id: Optional ID for the Opik optimization run; when provided it
                 must be a valid UUIDv7 string.
-            validation_dataset: Optional validation dataset used for Pareto tracking; falls back to
+            validation_dataset: Optional validation dataset used for Pareto tracking. When provided,
+                helps prevent overfitting by evaluating candidates on unseen data. Falls back to
                 the training dataset when not provided.
 
         Returns:

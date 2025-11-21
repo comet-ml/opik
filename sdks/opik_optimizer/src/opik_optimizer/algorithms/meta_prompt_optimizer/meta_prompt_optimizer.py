@@ -385,7 +385,9 @@ class MetaPromptOptimizer(BaseOptimizer):
                 prompt during evaluation.
             metric: Evaluation function that takes (dataset_item, llm_output) and returns a
                 score (float). Higher scores indicate better performance.
-            validation_dataset: Optional validation dataset (not yet supported by this optimizer).
+            validation_dataset: Optional validation dataset for evaluating candidates. When provided,
+                the optimizer uses the training dataset for understanding failure modes and generating
+                improvements, then evaluates candidates on the validation dataset to prevent overfitting.
             experiment_config: Optional metadata dictionary to log with Opik experiments.
                 Useful for tracking experiment parameters and context.
             n_samples: Number of dataset items to use per evaluation. If None, uses full dataset.

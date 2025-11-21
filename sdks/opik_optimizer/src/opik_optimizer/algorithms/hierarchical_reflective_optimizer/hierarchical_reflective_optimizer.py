@@ -391,7 +391,9 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
                 be a valid UUIDv7 string.
             max_trials: Maximum number of optimization iterations to run.
             max_retries: Maximum retries allowed for addressing a failure mode.
-            validation_dataset: Optional validation dataset (not yet supported by this optimizer).
+            validation_dataset: Optional validation dataset for evaluating candidates. When provided,
+                the optimizer uses the training dataset for understanding failure modes and generating
+                improvements, then evaluates candidates on the validation dataset to prevent overfitting.
         """
         # Reset counters at the start of optimization
         self._validate_optimization_inputs(

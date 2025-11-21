@@ -489,7 +489,10 @@ class BaseOptimizer(ABC):
            optimization_id: Optional ID to use when creating the Opik optimization run;
                when provided it must be a valid UUIDv7 string.
            validation_dataset: Optional validation dataset (validation set - used for ranking candidates).
-               If not provided, uses dataset by default with a warning.
+               When provided, the optimizer uses the training dataset for understanding failure modes
+               and generating improvements, then evaluates candidates on the validation dataset to select
+               the best one. This helps prevent overfitting to the training data. If not provided, uses
+               the same dataset for both training and validation, which may lead to overfitting.
            **kwargs: Additional arguments for optimization
         """
         pass

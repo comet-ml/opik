@@ -50,6 +50,7 @@ final_result = parameter.optimize_parameter(
 ## Checklist
 
 - **Freeze datasets and metrics** between stages to keep comparisons fair.
+- **Use validation datasets consistently** – if you provide a `validation_dataset` in the first stage, use the same split in subsequent stages to ensure fair comparison and avoid overfitting.
 - **Log pipeline metadata** (e.g., `experiment_config={"pipeline": "hierarchical_then_param"}`) so dashboards show lineage.
 - **Budget tokens** – chained runs multiply costs; start with smaller `n_samples` and increase once results look promising.
 - **Reuse OptimizationResult** – every optimizer returns an `OptimizationResult`, so you can pass `result.prompt` (and `result.details`, `result.history`) directly into the next stage without rebuilding state.
