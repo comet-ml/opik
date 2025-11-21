@@ -186,18 +186,21 @@ class BenchmarkLogger:
             model_name = status_info.get("model_name", "?")
             short_id = status_info.get("short_id")
 
-            if short_id:
-                display_text = (
-                    f" • [[dim]{short_id}[/dim]] {dataset_name} + {model_name}"
-                )
-            else:
-                display_text = f" • {dataset_name} + {model_name}"
             if status_info["status"] == "Running":
-                active_list.append(
-                    Text.assemble(
-                        (display_text, "yellow"), (f" [{optimizer_name}]", "dim")
+                if short_id:
+                    line = Text.assemble(
+                        (" • ", None),
+                        (f"#{short_id} ", "dim"),
+                        (f"{dataset_name} + {model_name}", "yellow"),
+                        (f" [{optimizer_name}]", "dim"),
                     )
-                )
+                else:
+                    line = Text.assemble(
+                        (" • ", None),
+                        (f"{dataset_name} + {model_name}", "yellow"),
+                        (f" [{optimizer_name}]", "dim"),
+                    )
+                active_list.append(line)
 
         if not active_list:
             active_tasks_content = Group(Text("Waiting for tasks...", style="dim"))
