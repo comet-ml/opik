@@ -94,6 +94,7 @@ type ThreadDetailsPanelProps = {
   open: boolean;
   onClose: () => void;
   onRowChange?: (shift: number) => void;
+  columnsToExport: string[];
 };
 
 const DEFAULT_TAB = "messages";
@@ -109,6 +110,7 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
   open,
   onClose,
   onRowChange,
+  columnsToExport,
 }) => {
   const navigate = useNavigate();
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
@@ -242,31 +244,14 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
   };
 
   const exportColumns = useMemo(() => {
-    const baseColumns = [
-      "id",
-      "thread_model_id",
-      "first_message",
-      "last_message",
-      "number_of_messages",
-      "start_time",
-      "end_time",
-      "duration",
-      "status",
-      "total_estimated_cost",
-      "created_at",
-      "last_updated_at",
-      "created_by",
-      "tags",
-    ];
-
     const feedbackScoreNames = uniq(
       (thread?.feedback_scores ?? []).map(
         (score) => `${COLUMN_FEEDBACK_SCORES_ID}.${score.name}`,
       ),
     );
 
-    return [...baseColumns, ...feedbackScoreNames];
-  }, [thread]);
+    return [...columnsToExport, ...feedbackScoreNames];
+  }, [thread, columnsToExport]);
 
   const handleExportCSV = useCallback(async () => {
     try {
