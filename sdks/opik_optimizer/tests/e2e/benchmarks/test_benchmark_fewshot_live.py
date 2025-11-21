@@ -3,6 +3,7 @@ import os
 from concurrent.futures import Future
 from pathlib import Path
 from typing import Any
+from collections.abc import Callable
 
 import opik_optimizer
 import pytest
@@ -24,10 +25,12 @@ class InlineExecutor:
     def __enter__(self) -> "InlineExecutor":  # pragma: no cover - trivial
         return self
 
-    def __exit__(self, exc_type, exc, tb) -> None:  # pragma: no cover - trivial
+    def __exit__(
+        self, exc_type: Any, exc: Any, tb: Any
+    ) -> None:  # pragma: no cover - trivial
         return None
 
-    def submit(self, fn, *args, **kwargs):  # type: ignore[no-untyped-def]
+    def submit(self, fn: Callable[..., Any], *args: Any, **kwargs: Any) -> Future[Any]:
         result = fn(*args, **kwargs)
         fut: Future[Any] = Future()
         fut.set_result(result)
@@ -103,7 +106,7 @@ def _patch_dataset_loader(monkeypatch: pytest.MonkeyPatch) -> None:
         count: int | None = None,
         dataset_name: str | None = None,
         **kwargs: Any,
-    ):
+    ) -> Any:
         # Keep it small for CI; use count=2 and unique name to avoid clobbering
         return real_tiny_test(
             split=split,

@@ -97,7 +97,9 @@ def _patch_benchmark_config(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def _patch_datasets(monkeypatch: pytest.MonkeyPatch) -> DummyOptimizer:
-    def toy_loader(split: str | None = None, dataset_name: str | None = None, **_: Any):
+    def toy_loader(
+        split: str | None = None, dataset_name: str | None = None, **_: Any
+    ) -> DummyDataset:
         if split == "validation" or dataset_name == "toy_validation":
             return DummyDataset("toy_validation")
         if split == "test" or dataset_name == "toy_test":

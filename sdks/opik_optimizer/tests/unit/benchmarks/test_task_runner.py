@@ -25,7 +25,7 @@ class DummyOptimizer:
     def __init__(self) -> None:
         self.calls: list[tuple[str, str]] = []
 
-    def evaluate_prompt(  # type: ignore[no-untyped-def]
+    def evaluate_prompt(
         self,
         prompt: ChatPrompt,
         dataset: Any,
@@ -78,14 +78,14 @@ def test_resolve_dataset_bundle_without_splits(monkeypatch: pytest.MonkeyPatch) 
 
 
 def test_evaluate_prompt_on_dataset_records_metadata() -> None:
-    optimizer = cast(BaseOptimizer, DummyOptimizer())
+    optimizer = DummyOptimizer()
     dataset = DummyDataset("hover_validation")
 
     def sample_metric(_dataset_item: dict, _llm_output: str) -> float:
         return 1.0
 
     result = evaluate_prompt_on_dataset(
-        optimizer=optimizer,
+        optimizer=cast(BaseOptimizer, optimizer),
         prompt=ChatPrompt(messages=[{"role": "user", "content": "{text}"}]),
         dataset=dataset,
         dataset_name="hover_validation",
