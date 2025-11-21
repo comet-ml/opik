@@ -1,5 +1,6 @@
 from typing import Any
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError as PydanticValidationError
+import json
 import sys
 from types import FrameType
 
@@ -7,6 +8,7 @@ import litellm
 from opik.evaluation.models.litellm import opik_monitor as opik_litellm_monitor
 
 from . import _throttle
+from . import utils as _utils
 
 _limiter = _throttle.get_rate_limiter_for_current_opik_installation()
 
@@ -128,6 +130,15 @@ def _prepare_model_params(
     return final_params
 
 
+class StructuredOutputParsingError(Exception):
+    """Raised when a structured output Pydantic model cannot be parsed."""
+
+    def __init__(self, content: str, error: Exception) -> None:
+        super().__init__(f"{error} (content={content!r})")
+        self.content = content
+        self.error = error
+
+
 def _parse_response(
     response: Any,
     response_model: type[BaseModel] | None = None,
@@ -148,7 +159,17 @@ def _parse_response(
     # When using structured outputs with Pydantic models, LiteLLM automatically
     # parses the response. Parse the JSON string into the Pydantic model
     if response_model is not None:
-        return response_model.model_validate_json(content)
+        try:
+            return response_model.model_validate_json(content)
+        except PydanticValidationError as exc:
+            try:
+                cleaned = _utils.json_to_dict(content)
+                if cleaned is not None:
+                    return response_model.model_validate_json(json.dumps(cleaned))
+            except Exception:
+                pass
+
+            raise StructuredOutputParsingError(content=content, error=exc) from exc
 
     return content
 
