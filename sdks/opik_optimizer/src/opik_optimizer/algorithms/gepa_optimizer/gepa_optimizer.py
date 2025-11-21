@@ -207,16 +207,12 @@ class GepaOptimizer(BaseOptimizer):
             raise_on_exception: Raise exceptions instead of continuing (default: True)
             optimization_id: Optional ID for the Opik optimization run; when provided it
                 must be a valid UUIDv7 string.
-            validation_dataset: Optional validation dataset (not yet supported by this optimizer).
+            validation_dataset: Optional validation dataset used for Pareto tracking; falls back to
+                the training dataset when not provided.
 
         Returns:
             OptimizationResult: Result of the optimization
         """
-        if validation_dataset is not None:
-            logger.warning(
-                f"{self.__class__.__name__} currently does not support validation dataset. "
-                f"Using `dataset` (training) for now. Ignoring `validation_dataset` parameter."
-            )
         # Use base class validation and setup methods
         self._validate_optimization_inputs(prompt, dataset, metric)
 
@@ -229,12 +225,17 @@ class GepaOptimizer(BaseOptimizer):
         seed_prompt_text = self._extract_system_text(prompt)
         input_key, output_key = self._infer_dataset_keys(dataset)
 
-        items = dataset.get_items()
-        if n_samples and 0 < n_samples < len(items):
-            items = items[:n_samples]
+        train_items = dataset.get_items()
+        if n_samples and 0 < n_samples < len(train_items):
+            train_items = train_items[:n_samples]
+
+        val_source = validation_dataset or dataset
+        val_items = val_source.get_items()
+        if n_samples and 0 < n_samples < len(val_items):
+            val_items = val_items[:n_samples]
 
         # Calculate max_metric_calls from max_trials and effective samples
-        effective_n_samples = len(items)
+        effective_n_samples = len(train_items)
         max_metric_calls = max_trials * effective_n_samples
         budget_limited_trials = (
             max_metric_calls // effective_n_samples if effective_n_samples else 0
@@ -256,7 +257,8 @@ class GepaOptimizer(BaseOptimizer):
                 budget_limited_trials,
             )
 
-        data_insts = self._build_data_insts(items, input_key, output_key)
+        train_insts = self._build_data_insts(train_items, input_key, output_key)
+        val_insts = self._build_data_insts(val_items, input_key, output_key)
 
         self._gepa_live_metric_calls = 0
 
@@ -305,6 +307,7 @@ class GepaOptimizer(BaseOptimizer):
                     "max_metric_calls": max_metric_calls,
                     "reflection_minibatch_size": reflection_minibatch_size,
                     "candidate_selection_strategy": candidate_selection_strategy,
+                    "validation_dataset": getattr(val_source, "name", None),
                 },
                 verbose=self.verbose,
             )
@@ -371,8 +374,8 @@ class GepaOptimizer(BaseOptimizer):
 
                 kwargs_gepa: dict[str, Any] = {
                     "seed_candidate": {"system_prompt": seed_prompt_text},
-                    "trainset": data_insts,
-                    "valset": data_insts,
+                    "trainset": train_insts,
+                    "valset": val_insts,
                     "adapter": adapter,
                     "task_lm": None,
                     "reflection_lm": self.model,
@@ -621,7 +624,7 @@ class GepaOptimizer(BaseOptimizer):
             analysis_prompt = final_prompt.copy()
             agent_cls = create_litellm_agent_class(analysis_prompt, optimizer_ref=self)
             agent = self._instantiate_agent(analysis_prompt, agent_class=agent_cls)
-            for item in items:
+            for item in train_items:
                 messages = analysis_prompt.get_messages(item)
                 output_text = agent.invoke(messages).strip()
                 metric_result = metric(item, output_text)
@@ -689,7 +692,7 @@ class GepaOptimizer(BaseOptimizer):
             "gepa_live_metric_used": True,
             "gepa_live_metric_call_count": self._gepa_live_metric_calls,
             "selected_candidate_item_scores": per_item_scores,
-            "dataset_item_ids": [item.get("id") for item in items],
+            "dataset_item_ids": [item.get("id") for item in train_items],
             "selected_candidate_trial_info": trial_info,
         }
         if experiment_config:
