@@ -1,14 +1,18 @@
 from typing import Any
 
 import logging
-
 import opik
+from pydantic import BaseModel
 
 from .. import prompts as evo_prompts
 from .. import reporting
 from .... import _llm_calls
 
 logger = logging.getLogger(__name__)
+
+
+class StyleInferenceResponse(BaseModel):
+    style: str
 
 
 def infer_output_style_from_dataset(
@@ -56,7 +60,7 @@ def infer_output_style_from_dataset(
         )
 
         try:
-            inferred_style = _llm_calls.call_model(
+            inferred_style_response = _llm_calls.call_model(
                 messages=[
                     {
                         "role": "system",
@@ -67,16 +71,13 @@ def infer_output_style_from_dataset(
                 model=model,
                 model_parameters=model_parameters,
                 is_reasoning=True,
+                response_model=StyleInferenceResponse,
             )
-            inferred_style = inferred_style.strip()
-            if inferred_style:
-                report_infer_output_style.success(inferred_style)
-                return inferred_style
-            else:
-                report_infer_output_style.error(
-                    "LLM returned empty string for inferred output style."
-                )
-                return None
+            inferred_style = inferred_style_response.style.strip()
+            report_infer_output_style.success(inferred_style)
+            return inferred_style
         except Exception as e:
-            report_infer_output_style.error(f"Error during output style inference: {e}")
+            report_infer_output_style.error(
+                f"Error during output style inference: {e}"
+            )
             return None
