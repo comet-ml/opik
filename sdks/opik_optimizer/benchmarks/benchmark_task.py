@@ -1,6 +1,6 @@
 from typing import Any, Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 import opik_optimizer
 
@@ -11,9 +11,16 @@ TASK_STATUS_SUCCESS: TaskStatus = "Success"
 TASK_STATUS_FAILED: TaskStatus = "Failed"
 
 
+class DatasetMetadata(BaseModel):
+    name: str
+    id: str | None = None
+    split: str | None = None
+
+
 class TaskEvaluationResult(BaseModel):
     metrics: list[dict[Literal["metric_name", "score", "timestamp"], Any]]
     duration_seconds: float
+    dataset: DatasetMetadata | None = None
 
 
 class TaskResult(BaseModel):
@@ -29,10 +36,17 @@ class TaskResult(BaseModel):
     initial_evaluation: TaskEvaluationResult | None = None
     optimized_prompt: opik_optimizer.ChatPrompt | None = None
     optimized_evaluation: TaskEvaluationResult | None = None
+    test_evaluation: TaskEvaluationResult | None = None
     error_message: str | None = None
     timestamp_end: float | None = None
     llm_calls_total_optimization: int | None = None
     optimization_raw_result: Any | None = None
+    optimization_summary: Any | None = None
+    dataset_metadata: dict[str, DatasetMetadata] = Field(default_factory=dict)
+    evaluation_split: str | None = None
+    requested_split: str | None = None
+    optimize_params_used: dict[str, Any] | None = None
+    optimizer_params_used: dict[str, Any] | None = None
 
     @classmethod
     def model_validate(
@@ -71,6 +85,17 @@ class TaskResult(BaseModel):
             obj["optimized_evaluation"] = TaskEvaluationResult.model_validate(
                 obj["optimized_evaluation"]
             )
+
+        if obj.get("test_evaluation") and isinstance(obj["test_evaluation"], dict):
+            obj["test_evaluation"] = TaskEvaluationResult.model_validate(
+                obj["test_evaluation"]
+            )
+
+        if obj.get("dataset_metadata"):
+            obj["dataset_metadata"] = {
+                key: DatasetMetadata.model_validate(value)
+                for key, value in obj["dataset_metadata"].items()
+            }
 
         # Use the parent class's model_validate method to create the instance
         return super().model_validate(
