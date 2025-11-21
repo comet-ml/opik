@@ -12,18 +12,22 @@ def derive_budgeted_optimize_params(
 ) -> dict[str, Any] | None:
     """Return a dict containing an inferred `max_trials` for the task.
 
-    The calculation uses the total rollout budget defined on the dataset and
-    divides it by the optimizer's default `n_samples` (if present).  The result
-    is then clamped to the optimizer's default `max_trials` so we never exceed
-    the baked-in defaults.  When no budget is defined the function returns
-    ``None`` so callers can fall back to optimizer defaults.
+    The calculation uses the train rollout budget when available (falling back
+    to the total rollout budget) and divides it by the optimizer's default
+    `n_samples` (if present). The result is clamped to the optimizer's default
+    `max_trials` so we never exceed the baked-in defaults. When no budget is
+    defined the function returns ``None`` so callers can fall back to optimizer
+    defaults.
     """
     dataset_cfg = benchmark_config.DATASET_CONFIG.get(dataset_name)
     optimizer_cfg = benchmark_config.OPTIMIZER_CONFIGS.get(optimizer_name)
     if not dataset_cfg or not optimizer_cfg:
         return None
 
-    rollout_budget = getattr(dataset_cfg, "rollout_budget", None)
+    rollout_budget = (
+        getattr(dataset_cfg, "train_rollout_budget", None)
+        or getattr(dataset_cfg, "rollout_budget", None)
+    )
     if not rollout_budget:
         return None
 
