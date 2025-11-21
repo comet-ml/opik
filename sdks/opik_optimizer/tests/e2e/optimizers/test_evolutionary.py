@@ -29,7 +29,11 @@ def test_evolutionary_optimizer() -> None:
     # Initialize optimizer with reduced parameters for faster testing
     optimizer = opik_optimizer.EvolutionaryOptimizer(
         model="openai/gpt-5-mini",
-        model_parameters={"temperature": 0.1, "max_tokens": 256},
+        model_parameters={
+            "temperature": 1,
+            "max_tokens": 1000,
+            "reasoning_effort": "minimal",
+        },
         infer_output_style=True,
         population_size=2,
         num_generations=2,
