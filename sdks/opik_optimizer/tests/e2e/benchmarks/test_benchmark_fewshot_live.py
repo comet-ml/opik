@@ -94,12 +94,19 @@ def _patch_benchmark_config(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def _patch_dataset_loader(monkeypatch: pytest.MonkeyPatch) -> None:
-    def tiny_test_loader(split: str | None = None, count: int | None = None, dataset_name: str | None = None, **kwargs: Any):
+    real_tiny_test = opik_optimizer.datasets.tiny_test
+
+    def tiny_test_loader(
+        split: str | None = None,
+        count: int | None = None,
+        dataset_name: str | None = None,
+        **kwargs: Any,
+    ):
         # Keep it small for CI; use count=2 and unique name to avoid clobbering
-        return opik_optimizer.datasets.tiny_test(
+        return real_tiny_test(
             split=split,
             count=2 if count is None else count,
-            dataset_name="tiny_test_live",
+            dataset_name=dataset_name or "tiny_test_live",
             **kwargs,
         )
 
