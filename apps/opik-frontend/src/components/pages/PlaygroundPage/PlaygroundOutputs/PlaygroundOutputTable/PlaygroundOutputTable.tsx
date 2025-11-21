@@ -139,6 +139,7 @@ const PlaygroundOutputTable = ({
       id: "tags",
       label: "Tags",
       type: COLUMN_TYPE.list,
+      iconType: "tags",
       accessorFn: (row) => row.tags || [],
       cell: PlaygroundTagsCell as never,
     } as ColumnData<PlaygroundOutputTableData>);

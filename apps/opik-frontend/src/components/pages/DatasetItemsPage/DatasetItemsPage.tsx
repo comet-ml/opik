@@ -251,6 +251,7 @@ const DatasetItemsPage = () => {
       id: "tags",
       label: "Tags",
       type: COLUMN_TYPE.list,
+      iconType: "tags",
       accessorFn: (row) => row.tags || [],
       cell: ListCell as never,
     });
@@ -284,6 +285,7 @@ const DatasetItemsPage = () => {
         id: "tags",
         label: "Tags",
         type: COLUMN_TYPE.list,
+        iconType: "tags" as const,
       },
     ];
   }, []);
