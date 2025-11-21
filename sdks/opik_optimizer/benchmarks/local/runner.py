@@ -114,7 +114,7 @@ class BenchmarkRunner:
             self.run_id = retry_failed_run_id
         else:
             self.run_id = (
-                f"run_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{os.urandom(4).hex()}"
+                f"opt_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{os.urandom(4).hex()}"
             )
 
         if preflight_info is None:
