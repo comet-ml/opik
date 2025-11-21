@@ -224,6 +224,7 @@ jobs:
               
               if [ -f "$DIGEST_FILE" ]; then
                 DIGEST_VALUE=$(tr -d '\n\r ' < "$DIGEST_FILE")
+                DIGEST_REF="${{ env.DOCKER_REGISTRY }}/${{ steps.set_vars.outputs.image_name }}@sha256:$DIGEST_VALUE"
                 DIGESTS="$DIGESTS $DIGEST_REF"
               fi
             fi
