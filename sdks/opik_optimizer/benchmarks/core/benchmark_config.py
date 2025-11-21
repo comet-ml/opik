@@ -19,18 +19,7 @@ from opik.evaluation.metrics import (
 from opik.evaluation.metrics.score_result import ScoreResult
 from pydantic import BaseModel
 
-# Allow running both as package (python -m bench...) and as a script, and keep
-# static type checkers happy by falling back gracefully.
-try:
-    from .metrics import hotpot, hover, ifbench, pupa  # type: ignore[import]
-except ImportError:  # pragma: no cover - script execution path
-    import os
-    import sys
-
-    _THIS_DIR = os.path.dirname(__file__)
-    if _THIS_DIR not in sys.path:
-        sys.path.append(_THIS_DIR)
-    from metrics import hotpot, hover, ifbench, pupa
+from benchmarks.metrics import hotpot, hover, ifbench, pupa
 
 
 class BenchmarkDatasetConfig(BaseModel):
