@@ -75,7 +75,9 @@ def manifest_to_task_specs(
         if isinstance(dataset_field, dict):
             loader_name = dataset_field.get("loader")
             if not loader_name:
-                raise ValueError("Dataset override objects must include a 'loader' key.")
+                raise ValueError(
+                    "Dataset override objects must include a 'loader' key."
+                )
             dataset_name: str = dataset_field.get("dataset_name", loader_name)
             if datasets_override is None:
                 datasets_override = {
@@ -106,9 +108,7 @@ def manifest_to_task_specs(
                 dataset_name=dataset_name,
                 optimizer_name=optimizer,
                 model_name=model,
-                test_mode=test_mode
-                if test_mode is not None
-                else default_test_mode,
+                test_mode=test_mode if test_mode is not None else default_test_mode,
                 model_parameters=model_parameters,
                 optimizer_params=optimizer_params,
                 optimizer_prompt_params=optimizer_prompt_params,
@@ -136,7 +136,9 @@ def manifest_to_task_specs(
 
     for generator in manifest.generators:
         gen_test_mode = (
-            generator.test_mode if generator.test_mode is not None else default_test_mode
+            generator.test_mode
+            if generator.test_mode is not None
+            else default_test_mode
         )
         for dataset_entry in generator.datasets:
             for model_entry in generator.models:

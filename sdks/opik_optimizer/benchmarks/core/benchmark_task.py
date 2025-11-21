@@ -76,9 +76,9 @@ class TaskResult(BaseModel):
         if obj.get("initial_evaluation") and isinstance(
             obj["initial_evaluation"], dict
         ):
-                obj["initial_evaluation"] = TaskEvaluationResult.model_validate(
-                    obj["initial_evaluation"]
-                )
+            obj["initial_evaluation"] = TaskEvaluationResult.model_validate(
+                obj["initial_evaluation"]
+            )
 
         if obj.get("optimized_evaluation") and isinstance(
             obj["optimized_evaluation"], dict

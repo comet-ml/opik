@@ -24,7 +24,9 @@ image = (
     .pip_install("opik_optimizer>=2.1.3")
     # Add local benchmarks directory so Modal can access config files
     .add_local_dir(
-        local_path=os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), os.pardir)),
+        local_path=os.path.abspath(
+            os.path.join(os.path.dirname(os.path.abspath(__file__)), os.pardir)
+        ),
         remote_path="/root/benchmarks",
         ignore=["__pycache__", ".venv", "benchmark_results"],
     )
