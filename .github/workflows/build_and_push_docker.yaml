@@ -36,36 +36,6 @@ on:
     secrets:
       OPIK_FE_SENTRY_DSN:
         required: false
-  workflow_dispatch:
-    inputs:
-      image:
-        type: string
-        required: true
-        description: Docker Image
-      version:
-        type: string
-        required: true
-        description: Version
-      build_from:
-        type: string
-        required: true
-        description: Original version to build from 
-        default: ""
-      build_comet_image:
-        type: boolean
-        required: true
-        description: If to build a Comet integration image
-        default: false
-      comet_build_args:
-        type: string
-        required: false
-        default: ""
-        description: Arguments for cloud docker build
-      is_release:
-        type: boolean
-        required: true
-        description: If this is a release build (will build multi-arch and push latest tag)
-        default: false
 
 env:
   DOCKER_REGISTRY: "ghcr.io/comet-ml/opik"
