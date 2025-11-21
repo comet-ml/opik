@@ -259,6 +259,20 @@ class BenchmarkLogger:
         table.add_column()
 
         table.add_row("Dataset:", f"[bold]{dataset_name}[/bold]")
+        evaluation_split = getattr(task_detail_data, "evaluation_split", None)
+        dataset_metadata = getattr(task_detail_data, "dataset_metadata", {}) or {}
+        if evaluation_split:
+            eval_meta = dataset_metadata.get(evaluation_split)
+            eval_label = (
+                eval_meta.name if eval_meta and getattr(eval_meta, "name", None) else evaluation_split
+            )
+            table.add_row("Eval split:", eval_label)
+        if task_detail_data.test_evaluation:
+            test_meta = dataset_metadata.get("test")
+            test_label = (
+                test_meta.name if test_meta and getattr(test_meta, "name", None) else "test"
+            )
+            table.add_row("Test split:", test_label)
         table.add_row("Optimizer:", f"[bold]{optimizer_name}[/bold]")
         if task_detail_data.timestamp_end:
             table.add_row(
@@ -275,6 +289,13 @@ class BenchmarkLogger:
             else "[dim]N/A[/dim]"
         )
         table.add_row("LLM Calls (Opt):", llm_calls_str)
+        if task_detail_data.test_evaluation:
+            test_metrics = task_detail_data.test_evaluation.metrics or []
+            test_summary = "; ".join(
+                f"{metric.get('metric_name', 'metric')}: {metric.get('score')}"
+                for metric in test_metrics
+            )
+            table.add_row("Test metrics:", test_summary or "[dim]N/A[/dim]")
 
         # Process scores
         initial_evaluation_metrics = (
