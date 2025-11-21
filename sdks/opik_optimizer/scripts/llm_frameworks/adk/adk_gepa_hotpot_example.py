@@ -2,7 +2,7 @@ from typing import Any
 
 from opik_optimizer import (
     ChatPrompt,
-    EvolutionaryOptimizer,
+    GepaOptimizer,
 )
 from opik_optimizer.datasets import hotpot
 
@@ -33,16 +33,12 @@ prompt = ChatPrompt(
 )
 
 # Optimize it:
-optimizer = EvolutionaryOptimizer(
-    name="ADK Agent",
+optimizer = GepaOptimizer(
     model="openai/gpt-4o-mini",
-    enable_moo=False,
-    enable_llm_crossover=True,
-    infer_output_style=True,
-    verbose=1,
-    n_threads=1,
-    population_size=10,
-    num_generations=3,
+    model_parameters={
+        "temperature": 0.0,
+        "max_tokens": 400,
+    },
 )
 optimization_result = optimizer.optimize_prompt(
     prompt=prompt,
@@ -50,6 +46,11 @@ optimization_result = optimizer.optimize_prompt(
     dataset=dataset,
     metric=levenshtein_ratio,
     n_samples=10,
+    max_trials=8,
+    reflection_minibatch_size=3,
+    candidate_selection_strategy="pareto",
+    skip_perfect_score=False,
+    display_progress_bar=True,
 )
 
 optimization_result.display()

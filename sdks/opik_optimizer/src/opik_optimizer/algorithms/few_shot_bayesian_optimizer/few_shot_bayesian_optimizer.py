@@ -497,8 +497,8 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             optimization = self.opik_client.create_optimization(
                 dataset_name=dataset.name,
                 objective_name=metric.__name__,
+                metadata=self._build_optimization_metadata(),
                 name=self.name,
-                metadata=self._build_optimization_config(),
                 optimization_id=optimization_id,
             )
             self.current_optimization_id = optimization.id
@@ -653,7 +653,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
     ) -> Callable[[dict[str, Any]], dict[str, Any]]:
         new_prompt = prompt.copy()
         new_prompt.set_messages(messages)
-        agent = self.agent_class(new_prompt)
+        agent = self._instantiate_agent(new_prompt)
 
         def llm_task(dataset_item: dict[str, Any]) -> dict[str, Any]:
             """

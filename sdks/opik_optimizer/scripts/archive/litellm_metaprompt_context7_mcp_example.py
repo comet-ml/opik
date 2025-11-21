@@ -6,7 +6,7 @@ import textwrap
 from pathlib import Path
 from typing import Any
 from opik_optimizer import ChatPrompt, MetaPromptOptimizer
-from opik_optimizer.datasets.context7_eval import load_context7_dataset
+from opik_optimizer.datasets import context7_eval
 from opik_optimizer.mcp_utils.mcp import system_prompt_from_tool, MCPManifest
 from opik_optimizer.mcp_utils import mcp_workflow as mcp_flow
 
@@ -39,7 +39,7 @@ MCP_SERVER_CONFIG: dict[str, Any] = {
 }
 
 # Context7-specific dataset
-dataset = load_context7_dataset()
+dataset = context7_eval()
 
 # Context7-specific tool name
 TOOL_NAME = "get-library-docs"

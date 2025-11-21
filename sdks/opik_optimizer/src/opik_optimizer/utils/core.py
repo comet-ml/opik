@@ -1,11 +1,6 @@
 """Utility functions and constants for the optimizer package."""
 
-from typing import (
-    Any,
-    Final,
-    Literal,
-    TYPE_CHECKING,
-)
+from typing import Any, Final, Literal, TYPE_CHECKING
 from collections.abc import Callable
 
 import ast
@@ -17,6 +12,7 @@ import random
 import string
 import urllib.parse
 from types import TracebackType
+import re
 
 import requests
 
@@ -338,51 +334,62 @@ def create_litellm_agent_class(
     prompt: "chat_prompt.ChatPrompt", optimizer_ref: Any = None
 ) -> type["OptimizableAgent"]:
     """
-    Create a LiteLLMAgent from a chat prompt.
+    Create an `OptimizableAgent` subclass scoped to the provided chat prompt.
 
     Args:
-        prompt: The chat prompt to use
-        optimizer_ref: Optional optimizer instance to attach to the agent
+        prompt: The chat prompt to use when instantiating the agent.
+        optimizer_ref: Optional optimizer instance attached to the generated class.
+
+    Returns:
+        A concrete subclass with a sanitized class name, bound optimizer reference,
+        and an invoke method that prefers the prompt's custom `invoke` callable while
+        still routing default calls through `OptimizableAgent`.
     """
     from opik_optimizer.optimizable_agent import OptimizableAgent
 
-    if prompt.invoke is not None:
+    def _derive_class_name(name: str) -> str:
+        # Split on non-word characters to preserve original capitalization boundaries.
+        segments = [segment for segment in re.split(r"\W+", name) if segment]
+        if not segments:
+            return "LiteLLMAgent"
 
-        class LiteLLMAgent(OptimizableAgent):
-            model = prompt.model
-            model_kwargs = prompt.model_kwargs
-            optimizer = optimizer_ref
+        camel = "".join(segment[0].upper() + segment[1:] for segment in segments)
 
-            def __init__(
-                self, prompt: "chat_prompt.ChatPrompt", project_name: str | None = None
-            ) -> None:
-                # Get project_name from optimizer if available
-                if project_name is None and hasattr(self.optimizer, "project_name"):
-                    project_name = self.optimizer.project_name
-                super().__init__(prompt, project_name=project_name)
+        # Remove any leading digits so the identifier remains valid.
+        camel = camel.lstrip(string.digits)
+        return f"{camel}LiteLLMAgent" if camel else "LiteLLMAgent"
 
-            def invoke(
-                self, messages: list[dict[str, str]], seed: int | None = None
-            ) -> str:
-                return prompt.invoke(
-                    self.model, messages, prompt.tools, **self.model_kwargs
-                )  # type: ignore[misc]
+    class LiteLLMAgent(OptimizableAgent):
+        optimizer = optimizer_ref
 
-    else:
+        def __init__(
+            self, prompt: "chat_prompt.ChatPrompt", project_name: str | None = None
+        ) -> None:
+            # Get project_name from optimizer if available
+            resolved_project = project_name
+            if resolved_project is None and hasattr(self.optimizer, "project_name"):
+                resolved_project = self.optimizer.project_name
+            super().__init__(prompt, project_name=resolved_project)
 
-        class LiteLLMAgent(OptimizableAgent):  # type: ignore[no-redef]
-            model = prompt.model
-            model_kwargs = prompt.model_kwargs
-            optimizer = optimizer_ref
+        def invoke(
+            self, messages: list[dict[str, str]], seed: int | None = None
+        ) -> str:
+            prompt_invoke = getattr(self.prompt, "invoke", None)
+            if callable(prompt_invoke):
+                optimizer_obj = getattr(self, "optimizer", None)
+                if optimizer_obj is not None and hasattr(
+                    optimizer_obj, "_increment_llm_counter"
+                ):
+                    optimizer_obj._increment_llm_counter()
+                return prompt_invoke(
+                    self.model,
+                    messages,
+                    getattr(self.prompt, "tools", None),
+                    **self.model_kwargs,
+                )  # type: ignore[arg-type]
+            return super().invoke(messages=messages, seed=seed)
 
-            def __init__(
-                self, prompt: "chat_prompt.ChatPrompt", project_name: str | None = None
-            ) -> None:
-                # Get project_name from optimizer if available
-                if project_name is None and hasattr(self.optimizer, "project_name"):
-                    project_name = self.optimizer.project_name
-                super().__init__(prompt, project_name=project_name)
-
+    LiteLLMAgent.__name__ = _derive_class_name(prompt.name)
     return LiteLLMAgent
 
 
