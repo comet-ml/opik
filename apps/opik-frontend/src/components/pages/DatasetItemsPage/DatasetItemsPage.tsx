@@ -53,7 +53,6 @@ import {
   generateActionsColumDef,
   generateSelectColumDef,
 } from "@/components/shared/DataTable/utils";
-import { useTruncationEnabled } from "@/components/server-sync-provider";
 import UseDatasetDropdown from "@/components/pages/DatasetItemsPage/UseDatasetDropdown";
 import { RESOURCE_TYPE } from "@/components/shared/ResourceLink/ResourceLink";
 import { DATASET_ITEM_DATA_PREFIX } from "@/constants/datasets";
@@ -76,7 +75,7 @@ const ROW_HEIGHT_KEY = "dataset-items-row-height";
 
 const DatasetItemsPage = () => {
   const datasetId = useDatasetIdFromURL();
-  const truncationEnabled = useTruncationEnabled();
+  const truncationEnabled = false;
 
   const [activeRowId = "", setActiveRowId] = useQueryParam("row", StringParam, {
     updateType: "replaceIn",
@@ -136,7 +135,7 @@ const DatasetItemsPage = () => {
         page: page as number,
         size: size as number,
         search: search!,
-        truncate: false,
+        truncate: truncationEnabled,
       },
       {
         placeholderData: keepPreviousData,
