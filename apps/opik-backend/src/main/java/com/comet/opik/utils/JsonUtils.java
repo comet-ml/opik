@@ -44,9 +44,10 @@ public class JsonUtils {
     private static volatile ObjectMapper MAPPER;
 
     static {
-        // Initialize with minimal default (20MB - Jackson default) until OpikApplication configures it
-        MAPPER = createConfiguredMapper(20_000_000);
-        log.info("JsonUtils initialized with default maxStringLength: '20'MB");
+        // Initialize with default (20MB - Jackson default) until OpikApplication configures it
+        MAPPER = createConfiguredMapper(StreamReadConstraints.DEFAULT_MAX_STRING_LEN);
+        log.info("JsonUtils initialized with default maxStringLength: '{}'",
+                StreamReadConstraints.DEFAULT_MAX_STRING_LEN);
     }
 
     /**

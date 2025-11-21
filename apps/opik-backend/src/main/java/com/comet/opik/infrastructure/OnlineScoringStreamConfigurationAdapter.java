@@ -1,7 +1,7 @@
 package com.comet.opik.infrastructure;
 
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorType;
-import com.comet.opik.api.resources.v1.events.OnlineScoringCodecs;
+import com.comet.opik.infrastructure.redis.RedisStreamCodec;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import io.dropwizard.util.Duration;
 import lombok.NonNull;
@@ -35,7 +35,7 @@ public class OnlineScoringStreamConfigurationAdapter implements StreamConfigurat
     @Override
     @JsonIgnore
     public Codec getCodec() {
-        var scoringCodecs = OnlineScoringCodecs.fromString(streamConfig.getCodec());
+        var scoringCodecs = RedisStreamCodec.fromString(streamConfig.getCodec());
         return scoringCodecs.getCodec();
     }
 

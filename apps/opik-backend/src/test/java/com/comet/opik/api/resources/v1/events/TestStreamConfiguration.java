@@ -1,6 +1,7 @@
 package com.comet.opik.api.resources.v1.events;
 
 import com.comet.opik.infrastructure.StreamConfiguration;
+import com.comet.opik.infrastructure.redis.RedisStreamCodec;
 import io.dropwizard.util.Duration;
 import lombok.Builder;
 import lombok.Data;
@@ -44,7 +45,7 @@ public class TestStreamConfiguration implements StreamConfiguration {
     private int maxRetries = 3;
 
     @Builder.Default
-    private Codec codec = OnlineScoringCodecs.JAVA.getCodec();
+    private Codec codec = RedisStreamCodec.JAVA.getCodec();
 
     public static TestStreamConfiguration create() {
         return TestStreamConfiguration.builder()
