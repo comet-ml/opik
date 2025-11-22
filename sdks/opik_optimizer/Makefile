@@ -22,7 +22,7 @@ endef
 
 .DEFAULT_GOAL := help
 
-.PHONY: help setup-venv install install-dev test precommit build clean
+.PHONY: help setup-venv install install-dev test precommit build clean modal-worker modal-coord modal-deploy modal-logs
 
 help:
 	@echo "Available targets:"
@@ -35,6 +35,10 @@ help:
 	@echo "  precommit    Run pre-commit hooks on all files"
 	@echo "  build        Build sdist and wheel"
 	@echo "  clean        Remove build artifacts and virtualenv"
+	@echo "  modal-worker Deploy Modal worker (benchmarks/runners/benchmark_worker.py)"
+	@echo "  modal-coord  Deploy Modal coordinator (benchmarks/runners/run_benchmark_modal.py)"
+	@echo "  modal-deploy Deploy worker + coordinator"
+	@echo "  modal-logs   Tail worker app logs (env=main by default)"
 
 setup-venv:
 	python3 -m venv $(VENV)
@@ -93,3 +97,17 @@ clean:
 	@rm -rf htmlcov coverage.xml
 	@rm -rf $(VENV)
 	@echo "Clean complete."
+
+modal-worker:
+	@echo "Deploying Modal worker..."
+	modal deploy benchmarks/runners/benchmark_worker.py
+
+modal-coord:
+	@echo "Deploying Modal coordinator..."
+	modal deploy benchmarks/runners/run_benchmark_modal.py
+
+modal-deploy: modal-worker modal-coord
+
+modal-logs:
+	@echo "Tailing Modal worker logs (env=main)..."
+	modal app logs opik-optimizer-benchmarks --env main
