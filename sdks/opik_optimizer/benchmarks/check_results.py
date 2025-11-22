@@ -110,6 +110,17 @@ def main(
         return
 
     if run_id is None:
+        # In non-interactive environments (e.g., modal run), refuse to prompt.
+        if not sys.stdin.isatty():
+            assert console is not None
+            console.print(
+                "\n[red]No run-id provided and interactive input is unavailable.[/red]\n"
+                "Pass a run id explicitly, e.g.:\n"
+                "  modal run benchmarks/check_results.py --run-id <run_id>\n"
+                "or list runs first:\n"
+                "  modal run benchmarks/check_results.py --list-runs\n"
+            )
+            sys.exit(1)
         run_id = _select_run()
         if run_id is None:
             sys.exit(1)

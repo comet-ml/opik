@@ -74,6 +74,33 @@ def _parse_base_name(dataset_name: str) -> tuple[str, str | None]:
     return dataset_name, None
 
 
+def _resolve_initial_prompt(dataset_name: str) -> list[dict[str, Any]]:
+    """
+    Return an initial prompt for a dataset, tolerating sample-suffixed names.
+
+    Tries, in order:
+      1) Exact dataset_name
+      2) Base name (stripping _train/_validation/_test)
+      3) Base name + '_train'
+    """
+    # Exact match
+    if dataset_name in benchmark_config.INITIAL_PROMPTS:
+        return benchmark_config.INITIAL_PROMPTS[dataset_name]
+
+    base, _ = _parse_base_name(dataset_name)
+
+    # Base name
+    if base in benchmark_config.INITIAL_PROMPTS:
+        return benchmark_config.INITIAL_PROMPTS[base]
+
+    # Base train fallback
+    candidate = f"{base}_train"
+    if candidate in benchmark_config.INITIAL_PROMPTS:
+        return benchmark_config.INITIAL_PROMPTS[candidate]
+
+    raise KeyError(f"No initial prompt configured for dataset '{dataset_name}'")
+
+
 def _load_dataset(dataset_name: str, split: str | None, test_mode: bool) -> Any:
     """Load a dataset by name, falling back to base loader when split-specific helpers are absent."""
     loader = getattr(opik_optimizer.datasets, dataset_name, None)
@@ -623,9 +650,7 @@ def execute_task(
                 **constructor_kwargs,
             )
 
-            messages = (
-                prompt_messages or benchmark_config.INITIAL_PROMPTS[bundle.train_name]
-            )
+            messages = prompt_messages or _resolve_initial_prompt(bundle.train_name)
             initial_prompt = ChatPrompt(messages=messages)  # type: ignore[arg-type]
 
             initial_evaluation = evaluate_prompt_on_dataset(

@@ -443,7 +443,9 @@ def submit_benchmark_tasks(
     print("   Tasks will continue running in Modal's cloud.")
     print("\n📈 Monitor progress:")
     print("   • Modal dashboard: https://modal.com/apps")
-    print(f"   • Check results: modal run check_results.py --run-id {run_id}")
+    print(
+        f"   • Check results: modal run benchmarks/check_results.py --run-id {run_id} --show-errors"
+    )
     print("\n⏰ Results will be available once all tasks complete.")
     print("=" * 80 + "\n")
 
