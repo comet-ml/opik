@@ -22,14 +22,21 @@ app = modal.App("opik-optimizer-benchmarks")
 # (opik, datasets, litellm, etc.) as declared in pyproject.toml
 image = (
     modal.Image.debian_slim(python_version="3.12")
-    .pip_install("opik_optimizer>=2.1.3")
-    # Add local benchmarks directory so Modal can access config files
     .add_local_dir(
         local_path=os.path.abspath(
-            os.path.join(os.path.dirname(os.path.abspath(__file__)), os.pardir)
+            os.path.join(os.path.dirname(__file__), os.pardir, os.pardir)
         ),
+        remote_path="/root/opik_optimizer_repo",
+        ignore=[".venv", ".git", "__pycache__", "benchmark_results", "build", "dist", "node_modules"],
+        copy=True,
+    )
+    .pip_install("/root/opik_optimizer_repo")
+    # Add benchmarks directory for configs
+    .add_local_dir(
+        local_path=os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir)),
         remote_path="/root/benchmarks",
         ignore=["__pycache__", ".venv", "benchmark_results"],
+        copy=True,
     )
 )
 
