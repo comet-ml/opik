@@ -139,7 +139,7 @@ Scores:
             formatted_batch=formatted_batch,
         )
 
-        # TODO: Check which project this data get's logged to
+        # TODO: Check which project this data gets logged to
         root_cause_response = await _llm_calls.call_model_async(
             model=self.reasoning_model,
             messages=[{"role": "user", "content": batch_analysis_prompt}],
