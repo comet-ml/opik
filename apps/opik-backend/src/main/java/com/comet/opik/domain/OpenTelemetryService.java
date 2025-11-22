@@ -3,6 +3,7 @@ package com.comet.opik.domain;
 import com.comet.opik.api.Project;
 import com.comet.opik.api.SpanBatch;
 import com.comet.opik.api.Trace;
+import com.comet.opik.domain.mapping.OpenTelemetryMappingRuleFactory;
 import com.comet.opik.infrastructure.OpenTelemetryConfig;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.google.inject.ImplementedBy;
@@ -78,7 +79,7 @@ class OpenTelemetryServiceImpl implements OpenTelemetryService {
                             .flatMap(resourceSpans -> resourceSpans.getScopeSpansList().stream())
                             .map(scopeSpans -> scopeSpans.getScope().getName())
                             .distinct()
-                            .filter(OpenTelemetryMappingRule::isValidInstrumentation)
+                            .filter(OpenTelemetryMappingRuleFactory::isValidInstrumentation)
                             .findFirst()
                             .orElse(null);
 
