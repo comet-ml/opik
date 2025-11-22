@@ -542,6 +542,10 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
       );
   }, [columns, selectedColumns]);
 
+  const allColumnsToExport = useMemo(() => {
+    return DEFAULT_COLUMNS.map((c) => c.id);
+  }, []);
+
   const activeRowId = threadId;
   const rowIndex = findIndex(rows, (row) => activeRowId === row.id);
 
@@ -710,6 +714,7 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
         setThreadId={setThreadId}
         open={Boolean(traceId) && !threadId}
         onClose={handleClose}
+        columnsToExport={allColumnsToExport}
       />
       <ThreadDetailsPanel
         projectId={projectId}
@@ -722,6 +727,7 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
         hasPreviousRow={hasPrevious}
         hasNextRow={hasNext}
         onRowChange={handleRowChange}
+        columnsToExport={allColumnsToExport}
       />
     </>
   );

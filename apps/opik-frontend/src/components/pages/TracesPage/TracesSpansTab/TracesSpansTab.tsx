@@ -831,6 +831,10 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
       );
   }, [columns, selectedColumns]);
 
+  const allColumnsToExport = useMemo(() => {
+    return columnData.map((c) => c.id);
+  }, [columnData]);
+
   const activeRowId = type === TRACE_DATA_TYPE.traces ? traceId : spanId;
   const rowIndex = findIndex(rows, (row) => activeRowId === row.id);
 
@@ -1011,6 +1015,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
         open={Boolean(traceId) && !threadId}
         onClose={handleClose}
         onRowChange={handleRowChange}
+        columnsToExport={allColumnsToExport}
       />
       <ThreadDetailsPanel
         projectId={projectId}
@@ -1020,6 +1025,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
         threadId={threadId!}
         open={Boolean(threadId)}
         onClose={handleClose}
+        columnsToExport={allColumnsToExport}
       />
     </>
   );
