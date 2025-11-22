@@ -221,6 +221,9 @@ def _evaluate_internal(
     if not objective_score_results:
         return 0.0, evaluation_result
 
+    # FIXME: Possible misconfiguration when we are comparing 0 to 0 and get inf+
+    # We should avoid these from running in the first place by checking results
+    # futher up, but this is a simple fix to avoid ending up in a dead loop.
     finite_values = [
         score_result_.value
         for score_result_ in objective_score_results
