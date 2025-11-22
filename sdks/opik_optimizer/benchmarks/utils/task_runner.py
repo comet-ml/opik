@@ -619,6 +619,8 @@ def execute_task(
     timestamp_start = time.time()
     initial_prompt = None
     optimized_prompt = None
+    optimize_kwargs: dict[str, Any] | None = None
+    constructor_kwargs: dict[str, Any] | None = None
 
     with reporting_utils.suppress_opik_logs():
         try:
@@ -637,6 +639,11 @@ def execute_task(
             metrics_resolved = _resolve_metrics(
                 dataset_config, cast(list[str | dict[str, Any]] | None, metrics)
             )
+            if not metrics_resolved:
+                raise ValueError(
+                    f"No metrics configured for dataset '{dataset_config.name}'. "
+                    "Provide at least one metric via dataset config or manifest overrides."
+                )
             optimizer_config = benchmark_config.OPTIMIZER_CONFIGS[optimizer_name]
 
             constructor_kwargs = dict(optimizer_config.params)
@@ -672,7 +679,7 @@ def execute_task(
                 prompt=initial_prompt,
                 dataset=bundle.train,
                 validation_dataset=bundle.validation,
-                metric=dataset_config.metrics[0],
+                metric=metrics_resolved[0],
                 **optimize_kwargs,
             )
             optimized_prompt = ChatPrompt(messages=optimization_results.prompt)
@@ -739,6 +746,6 @@ def execute_task(
                 dataset_metadata={},
                 evaluation_split=None,
                 requested_split=None,
-                optimize_params_used=None,
-                optimizer_params_used=None,
+                optimizer_prompt_params_used=optimize_kwargs,
+                optimizer_params_used=constructor_kwargs,
             )
