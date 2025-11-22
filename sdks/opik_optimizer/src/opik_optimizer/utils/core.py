@@ -462,40 +462,31 @@ def search_wikipedia(query: str, use_api: bool | None = False) -> list[str]:
         use_api: (Optional) If True, directly use Wikipedia API instead of ColBERTv2.
                 If False (default), try ColBERTv2 first with API fallback.
     """
-    logger.debug("search_wikipedia called with query='%s', use_api=%s", query, use_api)
-
     if use_api:
         # Directly use Wikipedia API when requested
+        logger.info("Wikipedia API: %s", query)
         try:
-            logger.debug("Querying Wikipedia API directly for '%s'", query)
-            return _search_wikipedia_api(query)
+            results = _search_wikipedia_api(query)
+            return results
         except Exception as api_error:
-            logger.warning(
-                "Wikipedia API request failed for '%s': %s", query, api_error
-            )
+            logger.warning("Wikipedia API failed for '%s': %s", query, api_error)
             return [f"Wikipedia search unavailable. Query was: {query}"]
 
     # Default behavior: Try ColBERTv2 first with API fallback
     # Try ColBERTv2 first with a short timeout
+    logger.info("ColBERTv2: %s", query)
     try:
-        logger.debug("Querying ColBERTv2 endpoint for '%s'", query)
         colbert = ColBERTv2(url="http://20.102.90.50:2017/wiki17_abstracts")
         # Use a shorter timeout by modifying the max_retries parameter
-        results = colbert(query, k=3, max_retries=1)
-        return [str(item.text) for item in results if hasattr(item, "text")]
-    except Exception as colbert_error:
-        logger.info(
-            "ColBERTv2 lookup failed for '%s'; falling back to Wikipedia API (%s)",
-            query,
-            colbert_error,
-        )
+        colbert_results: Any = colbert(query, k=3, max_retries=1)
+        return [str(item.text) for item in colbert_results if hasattr(item, "text")]
+    except Exception:
+        logger.info("ColBERTv2 failed, fallback to Wikipedia API")
         # Fallback to Wikipedia API
         try:
             return _search_wikipedia_api(query)
         except Exception as api_error:
-            logger.error(
-                "Wikipedia API fallback also failed for '%s': %s", query, api_error
-            )
+            logger.warning("Wikipedia API failed for '%s': %s", query, api_error)
             return [f"Wikipedia search unavailable. Query was: {query}"]
 
 
@@ -517,7 +508,6 @@ def _search_wikipedia_api(query: str, max_results: int = 3) -> list[str]:
         headers = {
             "User-Agent": "OpikOptimizer/1.0 (https://github.com/opik-ai/opik-optimizer)"
         }
-        logger.debug("Issuing Wikipedia API search for '%s'", query)
         search_response = requests.get(
             "https://en.wikipedia.org/w/api.php",
             params=search_params,
