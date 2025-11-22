@@ -154,7 +154,7 @@ class LLMLogger:
         self._logger.info(message)
 
     @contextmanager
-    def log_invoke(self, input_text: str) -> Generator[dict[str, Any], None, None]:
+    def log_invoke(self, input_text: str) -> Generator[dict[str, Any]]:
         """Context manager for agent invoke lifecycle logging.
 
         Automatically logs:
@@ -190,7 +190,7 @@ class LLMLogger:
             raise
 
     @contextmanager
-    def log_tool(self, tool_name: str, query: str | None = None) -> Generator[None, None, None]:
+    def log_tool(self, tool_name: str, query: str | None = None) -> Generator[None]:
         """Context manager for tool call lifecycle logging.
 
         Automatically logs:
