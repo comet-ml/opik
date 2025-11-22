@@ -33,30 +33,35 @@ Run benchmarks on Modal's cloud infrastructure:
 pip install modal
 modal token new  # Authenticate with Modal
 
-# Configure secrets using Modal CLI:
-modal secret create opik-credentials \
-  OPIK_API_KEY=<your-opik-api-key> \
-  OPIK_WORKSPACE=<your-workspace-name>
+# 1. Create/update the unified secret (include whatever keys you have)
+modal secret create opik-benchmarks \
+  OPIK_API_KEY="$OPIK_API_KEY" \
+  OPIK_BASE_URL="$OPIK_BASE_URL" \
+  OPIK_WORKSPACE="$OPIK_WORKSPACE" \
+  OPENAI_API_KEY="$OPENAI_API_KEY" \
+  ANTHROPIC_API_KEY="$ANTHROPIC_API_KEY" \
+  GOOGLE_API_KEY="$GOOGLE_API_KEY" \
+  GEMINI_API_KEY="$GEMINI_API_KEY" \
+  OPENROUTER_API_KEY="$OPENROUTER_API_KEY" \
+  --force
 
-modal secret create llm-api-keys \
-  OPENAI_API_KEY=<your-openai-key> \
-  ANTHROPIC_API_KEY=<your-anthropic-key>
+# 2. Deploy worker + coordinator (redo after code changes)
+modal deploy benchmarks/runners/benchmark_worker.py
+modal deploy benchmarks/runners/run_benchmark_modal.py
 
-# 1. Deploy the worker (one time, or when code changes)
-modal deploy runners/benchmark_worker.py
-
-# 2. Submit benchmark tasks (note the --modal flag)
-python runners/run_benchmark.py --modal \
+# 3. Submit benchmark tasks (note the --modal flag)
+python benchmarks/runners/run_benchmark.py --modal \
   --demo-datasets gsm8k \
   --optimizers few_shot \
   --models openai/gpt-4o-mini \
   --test-mode \
   --max-concurrent 1
 
-# 3. Check results (with clickable logs links)
-modal run check_results.py --list-runs
-modal run check_results.py --run-id <RUN_ID>
-modal run check_results.py --run-id <RUN_ID> --watch --detailed
+# 4. Check results (summary or raw)
+modal run benchmarks/check_results.py --list-runs
+modal run benchmarks/check_results.py --run-id <RUN_ID>            # summary
+modal run benchmarks/check_results.py --run-id <RUN_ID> --detailed # metrics
+modal run benchmarks/check_results.py --run-id <RUN_ID> --raw       # full JSON
 ```
 
 ## Configuration Methods
@@ -159,7 +164,7 @@ All parameters work for both local and Modal execution:
 | `--test-mode` | Use only 5 examples per dataset (fast) | `false` |
 | `--seed` | Random seed for reproducibility | `42` |
 | `--max-concurrent` | Max concurrent workers/containers | `5` |
-| `--checkpoint-dir` | [Local only] Results directory | `./benchmark_results` |
+| `--checkpoint-dir` | [Local only] Results directory | `~/.opik_optimizer/benchmark_results` |
 | `--resume-run-id` | Resume incomplete run | - |
 | `--retry-failed-run-id` | Retry failed tasks from run | - |
 
@@ -221,7 +226,7 @@ python run_benchmark.py --modal --config manifest.json --max-concurrent 10
 
 ### Local Results
 
-Local results are saved to `./benchmark_results/<run_id>/`:
+Local results are saved to `~/.opik_optimizer/benchmark_results/<run_id>/`:
 
 - `checkpoint.json` - Task status and results
 - Logs in `optimization_*.log` files
@@ -246,42 +251,31 @@ modal run check_results.py --run-id <RUN_ID> --detailed
 
 ## Modal Setup
 
-### Required Secrets
+### Secret (single)
 
-Modal requires two secrets to be configured. You can create them using the Modal CLI:
+Use one secret for Opik + providers:
 
 ```bash
-# 1. Opik credentials
-modal secret create opik-credentials \
-  OPIK_API_KEY=<your-opik-api-key> \
-  OPIK_WORKSPACE=<your-workspace-name>
-
-# 2. LLM provider API keys
-modal secret create llm-api-keys \
-  OPENAI_API_KEY=<your-openai-key> \
-  ANTHROPIC_API_KEY=<your-anthropic-key>
+modal secret create opik-benchmarks \
+  OPIK_API_KEY="$OPIK_API_KEY" \
+  OPIK_BASE_URL="$OPIK_BASE_URL" \
+  OPIK_WORKSPACE="$OPIK_WORKSPACE" \
+  OPENAI_API_KEY="$OPENAI_API_KEY" \
+  ANTHROPIC_API_KEY="$ANTHROPIC_API_KEY" \
+  GOOGLE_API_KEY="$GOOGLE_API_KEY" \
+  GEMINI_API_KEY="$GEMINI_API_KEY" \
+  OPENROUTER_API_KEY="$OPENROUTER_API_KEY" \
+  --force
 ```
-
-Alternatively, configure them in the [Modal dashboard](https://modal.com/secrets):
-
-1. **`opik-credentials`** - Opik API credentials
-   - `OPIK_API_KEY` - Your Opik API key
-   - `OPIK_WORKSPACE` - Your Opik workspace name
-
-2. **`llm-api-keys`** - LLM provider API keys
-   - `OPENAI_API_KEY` - OpenAI API key (required for GPT models)
-   - `ANTHROPIC_API_KEY` - Anthropic API key (if using Claude models)
-   - Other LLM provider keys as needed
 
 ### Redeploying After Code Changes
 
-If you modify the benchmark code, you must redeploy the worker:
+If you modify the benchmark code, redeploy both worker and coordinator:
 
 ```bash
-modal deploy benchmark_worker.py
+modal deploy benchmarks/runners/benchmark_worker.py
+modal deploy benchmarks/runners/run_benchmark_modal.py
 ```
-
-This updates the deployed worker with your latest code changes.
 
 ## File Structure
 
