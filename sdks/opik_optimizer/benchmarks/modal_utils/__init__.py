@@ -1,1 +1,1 @@
-'"""Modal worker utilities for benchmark runs."""'
+"""Modal worker utilities for benchmark runs."""
