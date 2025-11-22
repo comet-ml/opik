@@ -1,5 +1,6 @@
 package com.comet.opik.api.resources.utils.resources;
 
+import com.comet.opik.api.CommentsBatchCreate;
 import com.comet.opik.api.DeleteFeedbackScore;
 import com.comet.opik.api.FeedbackScore;
 import com.comet.opik.api.FeedbackScoreBatchContainer;
@@ -35,7 +36,9 @@ import uk.co.jemos.podam.api.PodamUtils;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
+import java.util.Set;
 
 import static com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItem;
 import static com.comet.opik.api.resources.utils.TestUtils.getIdFromLocation;
@@ -229,6 +232,16 @@ public class SpanResourceClient extends BaseCommentResourceClient {
             assertThat(response.hasEntity()).isTrue();
             return response.readEntity(Span.class);
         }
+    }
+
+    public Response callSpanCommentsBatchCreate(Set<UUID> ids, String text, String apiKey, String workspaceName) {
+        return client.target(RESOURCE_PATH.formatted(baseURI))
+                .path("comments")
+                .path("batch")
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .post(Entity.json(CommentsBatchCreate.builder().ids(ids).text(text).build()));
     }
 
     public Response callGetSpanIdApi(UUID id, String workspaceName, String apiKey) {

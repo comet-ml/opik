@@ -98,6 +98,10 @@ interface TraceDAO {
 
     Mono<List<WorkspaceAndResourceId>> getTraceWorkspace(Set<UUID> traceIds, Connection connection);
 
+    Mono<Map<UUID, UUID>> getProjectIdsByTraceIds(Set<UUID> traceIds, Connection connection);
+
+    Mono<Map<UUID, UUID>> getProjectIdsByTraceIds(Set<UUID> traceIds);
+
     Mono<Long> batchInsert(List<Trace> traces, Connection connection);
 
     Flux<WorkspaceTraceCount> countTracesPerWorkspace(Map<UUID, Instant> excludedProjectIds);
@@ -1064,6 +1068,16 @@ class TraceDAOImpl implements TraceDAO {
                 DISTINCT id, workspace_id
             FROM traces
             WHERE id IN :traceIds
+            ;
+            """;
+
+    private static final String SELECT_TRACE_ID_AND_PROJECT = """
+            SELECT
+                id,
+                project_id
+            FROM traces
+            WHERE id IN :traceIds
+            AND workspace_id = :workspace_id
             ;
             """;
 
@@ -2979,6 +2993,33 @@ class TraceDAOImpl implements TraceDAO {
                 row.get("workspace_id", String.class),
                 row.get("id", UUID.class))))
                 .collectList();
+    }
+
+    @Override
+    @WithSpan
+    public Mono<Map<UUID, UUID>> getProjectIdsByTraceIds(@NonNull Set<UUID> traceIds, @NonNull Connection connection) {
+
+        if (traceIds.isEmpty()) {
+            return Mono.just(Map.of());
+        }
+
+        var statement = connection.createStatement(SELECT_TRACE_ID_AND_PROJECT)
+                .bind("traceIds", traceIds.toArray(UUID[]::new));
+
+        return makeMonoContextAware(bindWorkspaceIdToMono(statement))
+                .flatMapMany(result -> result.map(
+                        (row, rowMetadata) -> Map.entry(row.get("id", UUID.class), row.get("project_id", UUID.class))))
+                .collectMap(Map.Entry::getKey, Map.Entry::getValue);
+    }
+
+    @Override
+    @WithSpan
+    public Mono<Map<UUID, UUID>> getProjectIdsByTraceIds(@NonNull Set<UUID> traceIds) {
+        if (traceIds.isEmpty()) {
+            return Mono.just(Map.of());
+        }
+
+        return asyncTemplate.nonTransaction(connection -> getProjectIdsByTraceIds(traceIds, connection));
     }
 
     @Override
