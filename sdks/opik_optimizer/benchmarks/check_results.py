@@ -27,6 +27,8 @@ from typing import Any
 import modal
 from rich.console import Console
 from rich.live import Live
+from rich.table import Table
+from rich.panel import Panel
 
 # Define Modal app
 app = modal.App("opik-optimizer-benchmarks-results")
@@ -108,9 +110,9 @@ def main(
         return
 
     if run_id is None:
-        console.print("[red]❌ Error: --run-id is required[/red]")
-        console.print("Use --list-runs to see available runs")
-        sys.exit(1)
+        run_id = _select_run()
+        if run_id is None:
+            sys.exit(1)
 
     if show_errors or task:
         _show_errors(run_id, task)
@@ -130,6 +132,46 @@ def _list_runs() -> None:
     runs = list_available_runs.remote()
 
     display_runs_table(runs, console)
+
+
+def _select_run() -> str | None:
+    """Interactively select a run from the most recent runs."""
+    from benchmarks.modal_utils.display import display_runs_table
+
+    assert console is not None
+    runs = list_available_runs.remote()
+    if not runs:
+        console.print("[red]No runs found in the volume.[/red]")
+        return None
+
+    console.print("\n[bold]📋 Select a run[/bold]\n")
+    # Show top 15
+    recent = runs[:15]
+    table = Table(show_header=True, header_style="bold", box=None, padding=(0, 1))
+    table.add_column("#", style="dim", width=3)
+    table.add_column("Run ID", no_wrap=True)
+    table.add_column("Timestamp", no_wrap=True)
+    table.add_column("Datasets")
+    for idx, meta in enumerate(recent, 1):
+        table.add_row(
+            str(idx),
+            meta.get("run_id", "?"),
+            meta.get("timestamp", "?"),
+            ", ".join(meta.get("demo_datasets", [])) or "-",
+        )
+    console.print(table)
+
+    choice = console.input("\nSelect run number (or 'q' to quit): ").strip()
+    if choice.lower() == "q":
+        return None
+    try:
+        choice_idx = int(choice)
+        if 1 <= choice_idx <= len(recent):
+            return recent[choice_idx - 1].get("run_id")
+    except ValueError:
+        pass
+    console.print("[red]Invalid selection[/red]")
+    return None
 
 
 def _watch_results(run_id: str, interval: int, detailed: bool) -> None:

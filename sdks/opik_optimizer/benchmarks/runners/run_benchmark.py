@@ -15,10 +15,65 @@ Usage:
 
 import argparse
 import os
+from rich.console import Console
+from rich.table import Table
+from rich.panel import Panel
 
 from benchmarks.configs.benchmark_manifest import load_manifest, manifest_to_task_specs
 from benchmarks.core import benchmark_config
 from benchmarks.core.benchmark_taskspec import BenchmarkTaskSpec
+
+
+def _print_manifest_summary(
+    tasks: list[BenchmarkTaskSpec], console: Console
+) -> None:
+    table = Table(title="Manifest Summary", box=None, padding=(0, 1))
+    table.add_column("Dataset", no_wrap=True)
+    table.add_column("Splits", no_wrap=False)
+    table.add_column("Optimizer", no_wrap=True)
+    table.add_column("Model", no_wrap=True)
+    table.add_column("max_trials", no_wrap=True)
+    table.add_column("n_samples", no_wrap=True)
+
+    warnings: list[str] = []
+
+    for task in tasks:
+        splits: list[str] = []
+        ds_conf = task.datasets or {}
+        for role in ("train", "validation", "test"):
+            role_conf = ds_conf.get(role)
+            if role_conf:
+                count = role_conf.get("count")
+                name = role_conf.get("dataset_name") or role_conf.get("loader") or role
+                splits.append(f"{role}={name}({count if count is not None else '-'})")
+            else:
+                splits.append(f"{role}=None")
+        splits_text = ", ".join(splits)
+
+        max_trials = "-"
+        n_samples = "-"
+        if task.optimizer_prompt_params:
+            if task.optimizer_prompt_params.get("max_trials") is not None:
+                max_trials = str(task.optimizer_prompt_params.get("max_trials"))
+            else:
+                warnings.append(
+                    f"{task.dataset_name}/{task.optimizer_name}: missing max_trials"
+                )
+            if task.optimizer_prompt_params.get("n_samples") is not None:
+                n_samples = str(task.optimizer_prompt_params.get("n_samples"))
+
+        table.add_row(
+            task.dataset_name,
+            splits_text,
+            task.optimizer_name,
+            task.model_name,
+            max_trials,
+            n_samples,
+        )
+
+    console.print(table)
+    if warnings:
+        console.print(Panel("\n".join(warnings), title="Warnings", border_style="yellow"))
 
 
 def main() -> None:
@@ -138,6 +193,7 @@ Examples:
     manifest_tasks: list[BenchmarkTaskSpec] | None = None
     manifest_seed = args.seed
     manifest_test_mode = args.test_mode
+    console = Console()
 
     if args.config:
         manifest = load_manifest(args.config)
@@ -150,6 +206,7 @@ Examples:
             manifest_seed = manifest.seed
         if manifest.test_mode is not None:
             manifest_test_mode = manifest.test_mode
+        _print_manifest_summary(manifest_tasks, console)
 
     if args.modal:
         # Modal execution
