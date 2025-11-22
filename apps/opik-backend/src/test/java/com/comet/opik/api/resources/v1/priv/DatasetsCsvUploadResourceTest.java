@@ -3,6 +3,7 @@ package com.comet.opik.api.resources.v1.priv;
 import com.comet.opik.api.Dataset;
 import com.comet.opik.api.DatasetItem;
 import com.comet.opik.api.DatasetItemSource;
+import com.comet.opik.api.DatasetProcessingStatus;
 import com.comet.opik.api.Visibility;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
@@ -166,6 +167,10 @@ class DatasetsCsvUploadResourceTest {
             assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_ACCEPTED);
         }
 
+        // Verify dataset status is set to PROCESSING immediately after upload
+        Dataset datasetAfterUpload = datasetResourceClient.getDatasetById(createdDatasetId, API_KEY, TEST_WORKSPACE);
+        assertThat(datasetAfterUpload.processingStatus()).isEqualTo(DatasetProcessingStatus.PROCESSING);
+
         // Wait for async processing to complete
         Awaitility.await()
                 .atMost(Duration.ofSeconds(10))
@@ -198,6 +203,11 @@ class DatasetsCsvUploadResourceTest {
                             .orElseThrow();
                     assertThat(item3.data().get("output").asText()).isEqualTo("Jupiter");
                     assertThat(item3.source()).isEqualTo(DatasetItemSource.MANUAL);
+
+                    // Verify dataset status is set to COMPLETED after processing
+                    Dataset datasetAfterProcessing = datasetResourceClient.getDatasetById(createdDatasetId, API_KEY,
+                            TEST_WORKSPACE);
+                    assertThat(datasetAfterProcessing.processingStatus()).isEqualTo(DatasetProcessingStatus.COMPLETED);
                 });
     }
 
@@ -225,6 +235,10 @@ class DatasetsCsvUploadResourceTest {
             assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_ACCEPTED);
         }
 
+        // Verify dataset status is set to PROCESSING immediately after upload
+        Dataset datasetAfterUpload = datasetResourceClient.getDatasetById(createdDatasetId, API_KEY, TEST_WORKSPACE);
+        assertThat(datasetAfterUpload.processingStatus()).isEqualTo(DatasetProcessingStatus.PROCESSING);
+
         // Wait for async processing to complete
         Awaitility.await()
                 .atMost(Duration.ofSeconds(30))
@@ -232,6 +246,11 @@ class DatasetsCsvUploadResourceTest {
                 .untilAsserted(() -> {
                     var items = getDatasetItems(createdDatasetId);
                     assertThat(items).hasSize(2500);
+
+                    // Verify dataset status is set to COMPLETED after processing
+                    Dataset datasetAfterProcessing = datasetResourceClient.getDatasetById(createdDatasetId, API_KEY,
+                            TEST_WORKSPACE);
+                    assertThat(datasetAfterProcessing.processingStatus()).isEqualTo(DatasetProcessingStatus.COMPLETED);
                 });
     }
 
@@ -259,6 +278,10 @@ class DatasetsCsvUploadResourceTest {
             assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_ACCEPTED);
         }
 
+        // Verify dataset status is set to PROCESSING immediately after upload
+        Dataset datasetAfterUpload = datasetResourceClient.getDatasetById(createdDatasetId, API_KEY, TEST_WORKSPACE);
+        assertThat(datasetAfterUpload.processingStatus()).isEqualTo(DatasetProcessingStatus.PROCESSING);
+
         // Wait for async processing to complete
         Awaitility.await()
                 .atMost(Duration.ofSeconds(10))
@@ -279,6 +302,11 @@ class DatasetsCsvUploadResourceTest {
                             .findFirst()
                             .orElseThrow();
                     assertThat(item2.data().get("output").asText()).isEqualTo("Response: \"Hi\"");
+
+                    // Verify dataset status is set to COMPLETED after processing
+                    Dataset datasetAfterProcessing = datasetResourceClient.getDatasetById(createdDatasetId, API_KEY,
+                            TEST_WORKSPACE);
+                    assertThat(datasetAfterProcessing.processingStatus()).isEqualTo(DatasetProcessingStatus.COMPLETED);
                 });
     }
 
