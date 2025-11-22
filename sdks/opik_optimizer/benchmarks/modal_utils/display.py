@@ -2,6 +2,7 @@
 
 from collections import defaultdict
 from datetime import datetime
+import json
 from typing import Any
 
 from rich import box
@@ -81,7 +82,7 @@ def compute_summary(metadata: dict, tasks: list[dict], call_ids: list[dict]) -> 
 
 
 def generate_results_display(
-    run_id: str, detailed: bool, is_live: bool, results: dict
+    run_id: str, detailed: bool, is_live: bool, results: dict, raw: bool = False
 ) -> Panel:
     """
     Generate rich display of benchmark results.
@@ -104,7 +105,12 @@ def generate_results_display(
 
     metadata = results["metadata"]
     tasks = results["tasks"]
-    print(results)
+    if raw:
+        return Panel(
+            json.dumps(results, indent=2),
+            title=f"Run: {run_id} (raw)",
+            border_style="cyan",
+        )
     # Compute summary
     summary = compute_summary(metadata, tasks, results.get("call_ids", []))
 
@@ -149,6 +155,18 @@ def generate_results_display(
 
     # Get workspace and worker_app_id for URL construction
     workspace = metadata.get("workspace")
+    # Try to prefer the shared workspace if available
+    try:
+        from modal.config import config_profiles
+
+        profiles = list(config_profiles())  # type: ignore[no-untyped-call]
+        # Prefer "opik" if present, else take the first profile
+        if "opik" in profiles:
+            workspace = "opik"
+        elif profiles:
+            workspace = profiles[0]
+    except Exception:
+        pass
 
     # Create a map of task_id to call_id
     call_ids = results.get("call_ids", [])

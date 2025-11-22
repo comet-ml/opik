@@ -14,6 +14,7 @@ Usage:
 """
 
 import argparse
+import os
 
 from benchmarks.configs.benchmark_manifest import load_manifest, manifest_to_task_specs
 from benchmarks.core import benchmark_config
@@ -104,7 +105,9 @@ Examples:
     parser.add_argument(
         "--checkpoint-dir",
         type=str,
-        default="./benchmark_results",
+        default=os.path.join(
+            os.path.expanduser("~"), ".opik_optimizer", "benchmark_results"
+        ),
         help="[Local only] Directory to save benchmark results",
     )
 
@@ -130,7 +133,6 @@ Examples:
         default=None,
         help="Path to benchmark manifest JSON (overrides dataset/model/optimizer options)",
     )
-
     args = parser.parse_args()
 
     manifest_tasks: list[BenchmarkTaskSpec] | None = None
@@ -177,6 +179,7 @@ Examples:
                 retry_failed_run_id=args.retry_failed_run_id,
                 resume_run_id=args.resume_run_id,
                 task_specs=manifest_tasks,
+                manifest_path=args.config,
             )
     else:
         # Local execution

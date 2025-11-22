@@ -189,14 +189,14 @@ class BenchmarkLogger:
             if status_info["status"] == "Running":
                 if short_id:
                     line = Text.assemble(
-                        (" • ", None),
+                        " • ",
                         (f"#{short_id} ", "dim"),
                         (f"{dataset_name} + {model_name}", "yellow"),
                         (f" [{optimizer_name}]", "dim"),
                     )
                 else:
                     line = Text.assemble(
-                        (" • ", None),
+                        " • ",
                         (f"{dataset_name} + {model_name}", "yellow"),
                         (f" [{optimizer_name}]", "dim"),
                     )
@@ -751,7 +751,13 @@ def log_console_output_to_file() -> Callable:
                 checkpoint_folder = kwargs["checkpoint_folder"]
                 kwargs.pop("checkpoint_folder")
             else:
-                checkpoint_folder = os.path.abspath("./benchmark_results")
+                checkpoint_folder = os.path.abspath(
+                    os.path.join(
+                        os.path.expanduser("~"),
+                        ".opik_optimizer",
+                        "benchmark_results",
+                    )
+                )
             # Extract function arguments for the log filename
             dataset_name = kwargs.get(
                 "dataset_name", args[0] if len(args) > 0 else "unknown"

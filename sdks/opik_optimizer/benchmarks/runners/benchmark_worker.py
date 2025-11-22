@@ -40,11 +40,11 @@ results_volume = modal.Volume.from_name(
 )
 
 # Environment secrets - configure these in Modal dashboard
-# Required: OPIK_API_KEY, OPIK_WORKSPACE
-# Optional: OPENAI_API_KEY, ANTHROPIC_API_KEY, etc. depending on models used
+# Required: OPIK_API_KEY (and model API keys you plan to use)
+# Create with e.g.:
+#   modal secret create opik-benchmarks OPIK_API_KEY="$OPIK_API_KEY" OPENAI_API_KEY="$OPENAI_API_KEY"
 modal_secrets = [
-    modal.Secret.from_name("opik-credentials"),
-    modal.Secret.from_name("llm-api-keys"),
+    modal.Secret.from_name("opik-benchmarks"),
 ]
 
 

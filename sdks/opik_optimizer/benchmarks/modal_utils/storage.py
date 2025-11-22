@@ -1,5 +1,6 @@
 """Modal Volume storage operations (pure functions)."""
 
+import hashlib
 import json
 from pathlib import Path
 from typing import Any
@@ -34,9 +35,10 @@ def save_result_to_volume(result: TaskResult, run_id: str, volume: Any) -> dict:
     # Convert non-serializable objects to strings
     result_dict = make_serializable(result_dict)
 
-    # Save to JSON file (sanitize filename to avoid issues with slashes in model names)
+    # Save to JSON file (sanitize filename and add short hash to avoid collisions)
     safe_task_id = result.id.replace("/", "_")
-    result_file = results_dir / f"{safe_task_id}.json"
+    short_hash = hashlib.sha1(result.id.encode()).hexdigest()[:6]
+    result_file = results_dir / f"{safe_task_id}_{short_hash}.json"
     with open(result_file, "w") as f:
         json.dump(result_dict, f, indent=2)
 

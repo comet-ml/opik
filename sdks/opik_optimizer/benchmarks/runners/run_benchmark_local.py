@@ -4,10 +4,13 @@ from benchmarks.core import benchmark_config
 from benchmarks.core.benchmark_taskspec import BenchmarkTaskSpec
 from benchmarks.local.runner import BenchmarkRunner
 from benchmarks.utils.validation import ask_for_input_confirmation
+import os
 
 DEFAULT_MAX_WORKERS: int = 3
 DEFAULT_SEED: int = 42
-DEFAULT_CHECKPOINT_DIR: str = "./benchmark_results"
+DEFAULT_CHECKPOINT_DIR: str = os.path.join(
+    os.path.expanduser("~"), ".opik_optimizer", "benchmark_results"
+)
 
 
 def run_benchmark(
@@ -52,6 +55,9 @@ def run_benchmark(
 
     if models is None:
         models = benchmark_config.MODELS
+
+    # Ensure checkpoint dir exists
+    os.makedirs(checkpoint_dir, exist_ok=True)
 
     runner = BenchmarkRunner(
         max_workers=max_workers,

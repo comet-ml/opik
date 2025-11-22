@@ -29,29 +29,10 @@ import os
 import sys
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+import modal
 
-try:
-    import modal
-except ModuleNotFoundError:
-    print(
-        "❌ Modal is not installed. Install it with `pip install modal` "
-        "or rerun without --modal."
-    )
-    sys.exit(1)
-
-from benchmarks.core import benchmark_config
-from benchmarks.core.benchmark_taskspec import BenchmarkTaskSpec
-from benchmarks.utils.budgeting import resolve_optimize_params
-from benchmarks.utils.task_runner import preflight_tasks
-from benchmarks.utils import modal_helper
-
-from rich import box
-from rich.console import Console
-from rich.panel import Panel
-from rich.table import Table
-
-console = Console()
+from benchmark_taskspec import BenchmarkTaskSpec
+from utils.budgeting import resolve_optimize_params
 
 # Define Modal app (just for local entrypoint - worker is deployed separately)
 app = modal.App("opik-optimizer-benchmarks-coordinator")
@@ -59,10 +40,6 @@ app = modal.App("opik-optimizer-benchmarks-coordinator")
 # Access the results volume
 results_volume = modal.Volume.from_name(
     "opik-benchmark-results", create_if_missing=True
-)
-# Coordinator image (needs opik_optimizer deps for imports)
-coordinator_image = modal.Image.debian_slim(python_version="3.12").pip_install(
-    "opik_optimizer>=2.3.1"
 )
 
 
@@ -76,7 +53,6 @@ def submit_benchmark_tasks(
     retry_failed_run_id: str | None = None,
     resume_run_id: str | None = None,
     task_specs: list[BenchmarkTaskSpec] | None = None,
-    manifest_path: str | None = None,
 ) -> None:
     """
     Submit all benchmark tasks to Modal workers.
@@ -98,6 +74,9 @@ def submit_benchmark_tasks(
         retry_failed_run_id: Run ID to retry failed tasks from
         resume_run_id: Run ID to resume incomplete run from
     """
+    # Import benchmark_config locally (only runs on local machine)
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    import benchmark_config
 
     # Convert single strings to Lists (Modal CLI may pass single values as strings)
     if demo_datasets is not None and isinstance(demo_datasets, str):
@@ -148,129 +127,42 @@ def submit_benchmark_tasks(
         print(f"\n🔄 Retrying failed tasks from run: {run_id}")
     else:
         run_id = f"run_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{os.urandom(4).hex()}"
-        console.print(f"[bold]🆕 Run ID:[/bold] [cyan]{run_id}[/cyan]")
 
-    # Confirm Modal workspace/profile is available
-    workspace = None
-    try:
-        from modal.config import config_profiles
-
-        profiles = list(config_profiles())  # type: ignore[no-untyped-call]
-        if profiles:
-            workspace = profiles[0]
-    except Exception:
-        workspace = None
-
-    if workspace is None:
-        print(
-            "\n❌ ERROR: No active Modal workspace/profile detected."
-            "\nPlease log in or set a profile first:"
-            "\n  modal token new"
-        )
-        sys.exit(1)
-
-    # Env key summary and suggested secret command
-    env_summary = modal_helper.summarize_env()
-    opik_cfg = modal_helper.read_opik_config()
-    missing_req = env_summary["missing_required"]
-    summary_table = Table(show_header=False, box=box.SIMPLE, padding=(0, 1))
-    summary_table.add_row("Run ID", run_id)
-    summary_table.add_row("Datasets", ", ".join(demo_datasets))
-    summary_table.add_row("Optimizers", ", ".join(optimizers))
-    summary_table.add_row("Models", ", ".join(models))
-    summary_table.add_row("Test mode", str(test_mode))
-    summary_table.add_row("Max concurrent", str(max_concurrent))
-    summary_table.add_row("Manifest", manifest_path or "N/A")
-    summary_table.add_row(
-        "Present required", ", ".join(env_summary["present_required"]) or "-"
-    )
-    if missing_req:
-        summary_table.add_row("Missing required", ", ".join(missing_req))
-        if opik_cfg.get("api_key"):
-            summary_table.add_row(
-                "opik config", "api_key found in ~/.opik.config (export it)"
-            )
-    summary_table.add_row(
-        "Present optional", ", ".join(env_summary["present_optional"]) or "-"
-    )
-    host_display = (
-        ", ".join(env_summary["present_host"])
-        if env_summary["present_host"]
-        else opik_cfg.get("url_override", "-")
-    )
-    summary_table.add_row("OPIK host override", host_display or "-")
-    # Volume check
-    volume_status = "[green]ok[/green]"
-    try:
-        modal.Volume.from_name("opik-benchmark-results")
-    except Exception as e:
-        volume_status = f"[red]{e}[/red]"
-    summary_table.add_row("Volume", f"opik-benchmark-results ({volume_status})")
-    secret_cmd = modal_helper.build_secret_command("opik-benchmarks", env_summary)
-    summary_table.add_row("Secret from env", f"[dim]{secret_cmd}[/dim]")
-    if env_summary["missing_optional"]:
-        template_cmd = modal_helper.build_placeholder_secret_command("opik-benchmarks")
-        summary_table.add_row(
-            "Template",
-            f"[dim]{template_cmd}[/dim]\nInclude optional keys by exporting them, then rerun secret.",
-        )
-    console.print(
-        Panel(
-            summary_table,
-            title="Modal Setup",
-            border_style="cyan",
-            padding=(0, 1),
-            width=100,
-        )
-    )
-    # Decide if we need OPIK_API_KEY: required for default Comet host, optional otherwise
-    needs_key = False
-    host_override = (
-        env_summary["present_host"][0]
-        if env_summary["present_host"]
-        else opik_cfg.get("url_override")
-    )
-    if host_override:
-        if "comet.com/opik" in host_override:
-            needs_key = True
-    else:
-        # No override; assume default Comet host
-        needs_key = True
-
-    if needs_key and ("OPIK_API_KEY" in missing_req):
-        print(
-            "\n❌ OPIK_API_KEY is required for the default Comet host. "
-            "Please export it and recreate the secret."
-        )
-        sys.exit(1)
+    print("\n📊 Configuration:")
+    print(f"  Datasets:  {', '.join(demo_datasets)}")
+    print(f"  Optimizers: {', '.join(optimizers)}")
+    print(f"  Models:     {', '.join(models)}")
+    print(f"  Test mode:  {test_mode}")
+    print(f"  Max concurrent: {max_concurrent}")
 
     # Look up deployed worker function
-    console.print("🔧 Looking up deployed worker function...")
+    print("\n🔍 Looking up deployed worker function...")
     try:
         worker = modal.Function.from_name(
             "opik-optimizer-benchmarks", "run_optimization_modal"
         )
     except modal.exception.NotFoundError:
-        print("\n❌ ERROR: Modal worker function not found!")
-        print(
-            "\nPlease deploy the worker and ensure it exists in your active workspace:"
-        )
-        print("  pip install modal")
+        print("\n❌ ERROR: Worker function not found!")
+        print("\nPlease deploy the worker first:")
         print("  modal deploy benchmarks/benchmark_worker.py")
         sys.exit(1)
 
+    # Get workspace from Modal config
+    workspace = None
+    try:
+        from modal.config import config_profiles
+
+        profiles: list[str] = config_profiles()  # type: ignore[no-untyped-call]
+        if profiles:
+            workspace = profiles[0]
+    except Exception:
+        pass
+
     # Update worker's max_containers to control concurrency
-    console.print(f"🔧 Configuring worker for {max_concurrent} concurrent tasks...")
+    print(f"⚙️  Configuring worker for {max_concurrent} concurrent tasks...")
     try:
         worker.update_autoscaler(max_containers=max_concurrent)
-        console.print(f"🔧 Worker configured: max {max_concurrent} containers")
-    except modal.exception.NotFoundError:
-        print(
-            "\n❌ ERROR: Worker function not found in your current Modal environment."
-            "\nDeploy (or redeploy) the worker then retry:"
-            "\n  modal deploy benchmarks/benchmark_worker.py\n"
-        )
-        sys.exit(1)
+        print(f"✅ Worker configured: max {max_concurrent} containers")
     except Exception as e:
         print(f"⚠️  Warning: Could not update autoscaler: {e}")
         print("   Worker will use default concurrency settings")
@@ -286,7 +178,7 @@ def submit_benchmark_tasks(
         )
 
     # Generate all task combinations
-    console.print("🔧 Generating task combinations...")
+    print("\n📝 Generating task combinations...")
     all_tasks = []
     skipped_count = 0
 
@@ -297,7 +189,6 @@ def submit_benchmark_tasks(
                 optimizer_name=optimizer,
                 model_name=model,
                 test_mode=test_mode,
-                model_parameters=None,
             )
             for dataset in demo_datasets
             for optimizer in optimizers
@@ -305,16 +196,6 @@ def submit_benchmark_tasks(
         ]
     else:
         tasks_iter = task_specs
-
-    # Preflight before submitting remotely to avoid mid-run failures.
-    preflight_report = preflight_tasks(
-        tasks_iter,
-        info={
-            "manifest_path": None,
-            "checkpoint_dir": "/results",
-            "run_id": run_id,
-        },
-    )
 
     for task in tasks_iter:
         task_id = task.task_id
@@ -328,7 +209,7 @@ def submit_benchmark_tasks(
             continue
 
         optimize_override = resolve_optimize_params(
-            task.dataset_name, task.optimizer_name, task.optimizer_prompt_params
+            task.dataset_name, task.optimizer_name, task.optimize_params
         )
         all_tasks.append(
             {
@@ -336,14 +217,10 @@ def submit_benchmark_tasks(
                 "dataset_name": task.dataset_name,
                 "optimizer_name": task.optimizer_name,
                 "model_name": task.model_name,
-                "model_parameters": task.model_parameters,
                 "test_mode": task.test_mode,
                 "run_id": run_id,
                 "optimizer_params": task.optimizer_params,
                 "optimizer_prompt_params": optimize_override,
-                "datasets": task.datasets,
-                "metrics": task.metrics,
-                "prompt_messages": task.prompt_messages,
             }
         )
 
@@ -356,36 +233,19 @@ def submit_benchmark_tasks(
         return
 
     # Save run metadata to Volume
-    console.print(
-        Panel(
-            "Saving run metadata to Modal Volume...\n"
-            "[dim]If this is the first run, Modal may build the coordinator image (can take ~1-2 minutes).[/dim]",
-            border_style="magenta",
-            width=100,
-        )
+    print("\n💾 Saving run metadata to Modal Volume...")
+    _save_run_metadata(
+        run_id=run_id,
+        demo_datasets=demo_datasets,
+        optimizers=optimizers,
+        models=models,
+        test_mode=test_mode,
+        max_concurrent=max_concurrent,
+        total_tasks=len(all_tasks),
+        workspace=workspace,
+        seed=seed,
+        tasks=[task.to_dict() for task in tasks_iter] if task_specs else None,
     )
-    try:
-        _save_run_metadata(
-            run_id=run_id,
-            demo_datasets=demo_datasets,
-            optimizers=optimizers,
-            models=models,
-            test_mode=test_mode,
-            max_concurrent=max_concurrent,
-            total_tasks=len(all_tasks),
-            workspace=workspace,
-            seed=seed,
-            tasks=[task.to_dict() for task in tasks_iter] if task_specs else None,
-            preflight=preflight_report.model_dump(),
-            manifest_path=manifest_path,
-        )
-    except Exception as e:
-        print(
-            f"❌ ERROR: Unable to save run metadata to Modal Volume: {e}\n"
-            "Confirm you are logged in to Modal (`modal token new`), the volume exists,\n"
-            "and the coordinator functions are deployed. Aborting submission."
-        )
-        sys.exit(1)
 
     # Submit all tasks asynchronously
     print(f"\n🚀 Submitting {len(all_tasks)} tasks to Modal...")
@@ -417,14 +277,7 @@ def submit_benchmark_tasks(
 
     # Save function call IDs to Volume
     print("\n💾 Saving function call IDs to Modal Volume...")
-    try:
-        _save_function_call_ids(run_id, function_call_ids)
-    except Exception as e:
-        print(
-            f"❌ ERROR: Unable to save function call IDs to Modal Volume: {e}\n"
-            "Aborting to avoid orphaned submissions. Please check your Modal setup."
-        )
-        sys.exit(1)
+    _save_function_call_ids(run_id, function_call_ids)
 
     print("\n" + "=" * 80)
     print("✅ ALL TASKS SUBMITTED SUCCESSFULLY!")
@@ -484,85 +337,36 @@ def _save_run_metadata(
     workspace: str | None = None,
     seed: int | None = None,
     tasks: list[dict[str, str | bool]] | None = None,
-    preflight: dict | None = None,
-    manifest_path: str | None = None,
 ) -> None:
     """Save run metadata to Modal Volume."""
     # We need to save this from within a Modal function context
     # Use a helper function
-    payload = {
-        "run_id": run_id,
-        "demo_datasets": demo_datasets,
-        "optimizers": optimizers,
-        "models": models,
-        "test_mode": test_mode,
-        "max_concurrent": max_concurrent,
-        "total_tasks": total_tasks,
-        "timestamp": datetime.now().isoformat(),
-        "workspace": workspace,
-        "seed": seed,
-        "tasks": tasks,
-        "preflight": preflight,
-        "manifest_path": manifest_path,
-    }
-    print("   -> Sending metadata to volume...")
-    try:
-        try:
-            fn = modal.Function.lookup(
-                "opik-optimizer-benchmarks-coordinator",
-                "_save_metadata_to_volume",
-            )
-            fn.call(run_id=run_id, metadata=payload)
-        except Exception:
-            f = _save_metadata_to_volume.remote(run_id=run_id, metadata=payload)
-            if f is None:
-                print(
-                    "   -> metadata helper returned None; skipping metadata write (deploy coordinator to enable)."
-                )
-                return
-            f.get(timeout=300)
-        print("   -> Metadata saved.")
-    except Exception as e:
-        print(
-            f"⚠️  Warning: Unable to save run metadata to Modal Volume: {e}\n"
-            "    Continuing without writing metadata (tasks will still submit if worker is reachable).\n"
-            "    If this persists, deploy the coordinator:\n"
-            "      modal deploy benchmarks/runners/run_benchmark_modal.py"
-        )
+    _save_metadata_to_volume.remote(
+        run_id=run_id,
+        metadata={
+            "run_id": run_id,
+            "demo_datasets": demo_datasets,
+            "optimizers": optimizers,
+            "models": models,
+            "test_mode": test_mode,
+            "max_concurrent": max_concurrent,
+            "total_tasks": total_tasks,
+            "timestamp": datetime.now().isoformat(),
+            "workspace": workspace,
+            "seed": seed,
+            "tasks": tasks,
+        },
+    )
 
 
 def _save_function_call_ids(run_id: str, function_call_ids: list[dict]) -> None:
     """Save function call IDs to Modal Volume."""
-    print("   -> Sending call IDs to volume...")
-    try:
-        try:
-            fn = modal.Function.lookup(
-                "opik-optimizer-benchmarks-coordinator",
-                "_save_call_ids_to_volume",
-            )
-            fn.call(run_id=run_id, call_ids=function_call_ids)
-        except Exception:
-            f = _save_call_ids_to_volume.remote(
-                run_id=run_id, call_ids=function_call_ids
-            )
-            if f is None:
-                print(
-                    "   -> call_ids helper returned None; skipping call id write (deploy coordinator to enable)."
-                )
-                return
-            f.get(timeout=300)
-        print("   -> Call IDs saved.")
-    except Exception as e:
-        print(
-            f"⚠️  Warning: Unable to save call IDs to Modal Volume: {e}\n"
-            "    Continuing without writing call IDs. To fix, deploy coordinator:\n"
-            "      modal deploy benchmarks/runners/run_benchmark_modal.py"
-        )
+    _save_call_ids_to_volume.remote(run_id=run_id, call_ids=function_call_ids)
 
 
 # Helper functions that run in Modal context to access Volume
-@app.function(image=coordinator_image, volumes={"/results": results_volume})
-def _save_metadata_to_volume(run_id: str, metadata: dict[str, Any]) -> None:
+@app.function(volumes={"/results": results_volume})
+def _save_metadata_to_volume(run_id: str, metadata: dict) -> None:
     """Save run metadata to Volume (runs in Modal context)."""
     run_dir = Path("/results") / run_id
     run_dir.mkdir(parents=True, exist_ok=True)
@@ -574,8 +378,8 @@ def _save_metadata_to_volume(run_id: str, metadata: dict[str, Any]) -> None:
     results_volume.commit()
 
 
-@app.function(image=coordinator_image, volumes={"/results": results_volume})
-def _save_call_ids_to_volume(run_id: str, call_ids: list[dict[str, Any]]) -> None:
+@app.function(volumes={"/results": results_volume})
+def _save_call_ids_to_volume(run_id: str, call_ids: list[dict]) -> None:
     """Save function call IDs to Volume (runs in Modal context)."""
     run_dir = Path("/results") / run_id
     run_dir.mkdir(parents=True, exist_ok=True)
