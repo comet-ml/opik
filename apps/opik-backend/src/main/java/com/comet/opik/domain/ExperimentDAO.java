@@ -707,6 +707,8 @@ class ExperimentDAO {
             FROM experiments
             WHERE id = :id
             AND workspace_id = :workspace_id
+            ORDER BY (workspace_id, dataset_id, id) DESC, last_updated_at DESC
+            LIMIT 1
             """;
 
     private final @NonNull ConnectionFactory connectionFactory;
