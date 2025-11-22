@@ -51,10 +51,8 @@ def search_wikipedia_tool(ctx: RunContext, query: str) -> list[str]:
     """
     Search Wikipedia for information about a topic. Returns relevant article abstracts.
     """
-    logger.tool_call("search_wikipedia", query)
-    result = search_wikipedia(query, use_api=True)
-    logger.tool_result(result_count=len(result))
-    return result
+    with logger.log_tool("search_wikipedia", query):
+        return search_wikipedia(query, use_api=True)
 
 
 class PydanticAIAgent(OptimizableAgent):
@@ -100,18 +98,17 @@ class PydanticAIAgent(OptimizableAgent):
         try:
             self.agent = Agent(
                 model_name,
-                output_type=str,  # Changed from result_type to output_type
+                output_type=str,
                 system_prompt=system_text,
             )
             # Register the tool - note: tool decorator must be applied BEFORE track decorator
             self.agent.tool(search_wikipedia_tool)
         except Exception as e:
             logger.agent_error(e, include_traceback=True)
-            raise  # Re-raise to stop execution
+            raise
 
     def invoke(self, messages: list[dict[str, str]], seed: int | None = None) -> str:
         user_prompt = self._extract_latest_user_message(messages)
-        logger.agent_invoke(user_prompt)
 
         message_history = []
         for message in messages[:-1]:
@@ -124,14 +121,11 @@ class PydanticAIAgent(OptimizableAgent):
                     ModelRequest(parts=[UserPromptPart(content=message["content"])])
                 )
 
-        try:
+        with logger.log_invoke(user_prompt) as ctx:
             result = self.agent.run_sync(
                 user_prompt=user_prompt,
                 message_history=message_history if message_history else None,
             )
-            response = result.output  # Changed from result.data to result.output
-            logger.agent_response(response)
+            response = result.output
+            ctx["response"] = response  # Log response
             return response
-        except Exception as exc:
-            logger.agent_error(exc, include_traceback=True)
-            raise  # Re-raise to stop execution instead of silently continuing

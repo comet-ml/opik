@@ -18,7 +18,7 @@ def levenshtein_ratio(dataset_item: dict[str, Any], llm_output: str) -> ScoreRes
     return metric.score(reference=dataset_item["answer"], output=llm_output)
 
 
-dataset = hotpot(count=300)
+dataset = hotpot(count=25)
 
 system_prompt = """You are a helpful assistant with access to a search_wikipedia tool.
 When answering questions, use the search_wikipedia tool to find accurate information.
@@ -50,16 +50,15 @@ prompt = ChatPrompt(
     function_map={"search_wikipedia": search_wikipedia},
 )
 
-# Optimize it:
 optimizer = EvolutionaryOptimizer(
-    model="openai/gpt-4o-mini",  # Using gpt-4o-mini for evaluation for speed
+    model="openai/gpt-4o-mini",
     enable_moo=False,
     enable_llm_crossover=True,
     infer_output_style=True,
     verbose=1,
-    n_threads=4,
-    population_size=10,
-    num_generations=3,
+    n_threads=2,
+    population_size=5,
+    num_generations=2,
 )
 
 optimization_result = optimizer.optimize_prompt(
@@ -67,6 +66,6 @@ optimization_result = optimizer.optimize_prompt(
     agent_class=PydanticAIAgent,
     dataset=dataset,
     metric=levenshtein_ratio,
-    n_samples=10,
+    n_samples=5,
 )
 optimization_result.display()
