@@ -32,7 +32,12 @@ export function activate(context: vscode.ExtensionContext) {
 
     // Listen for configuration changes
     const configChangeListener = vscode.workspace.onDidChangeConfiguration(async event => {
-      if (event.affectsConfiguration('opik.apiKey')) {
+      // Re-register MCP server if any relevant settings change
+      if (event.affectsConfiguration('opik.apiKey') ||
+          event.affectsConfiguration('opik.apiUrl') ||
+          event.affectsConfiguration('opik.workspace') ||
+          event.affectsConfiguration('opik.projectName') ||
+          event.affectsConfiguration('opik.mcp.enabled')) {
         updateStatusBar(context);
         await mcpService.registerServer();
       }

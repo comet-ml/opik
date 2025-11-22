@@ -28,11 +28,7 @@ export class CursorService {
     const startTime = Date.now();
     
     try {
-      // Check if we should skip historical conversations (useful for first-time setup)
-      const config = vscode.workspace.getConfiguration();
-      const skipHistorical = config.get<boolean>('opik.skipHistoricalConversations') ?? true;
-      
-      const cursorResult = await findAndReturnNewTraces(this.context, vsInstallationPath, sessionInfo, skipHistorical);
+      const cursorResult = await findAndReturnNewTraces(this.context, vsInstallationPath, sessionInfo);
       
       if (cursorResult && cursorResult.tracesData) {
         const { tracesData, updatedSessionInfo } = cursorResult;
