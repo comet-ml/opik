@@ -190,7 +190,7 @@ class LLMLogger:
             raise
 
     @contextmanager
-    def log_tool(self, tool_name: str, query: str | None = None) -> Generator[None]:
+    def log_tool(self, tool_name: str, query: str | None = None) -> Generator[None, None, None]:
         """Context manager for tool call lifecycle logging.
 
         Automatically logs:
