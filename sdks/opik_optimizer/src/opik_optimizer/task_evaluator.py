@@ -1,4 +1,5 @@
 import logging
+import math
 from typing import Any
 from collections.abc import Callable
 
@@ -199,8 +200,16 @@ def _evaluate_internal(
     if not objective_score_results:
         return 0.0, evaluation_result
 
-    avg_score = sum(
-        [score_result_.value for score_result_ in objective_score_results]
-    ) / len(objective_score_results)
+    finite_values = [
+        score_result_.value
+        for score_result_ in objective_score_results
+        if score_result_.value is not None and math.isfinite(score_result_.value)
+    ]
+    if not finite_values:
+        raise ValueError(
+            f"All metric scores were non-finite for metric '{objective_metric_name}'."
+        )
+
+    avg_score = sum(finite_values) / len(finite_values)
 
     return avg_score, evaluation_result

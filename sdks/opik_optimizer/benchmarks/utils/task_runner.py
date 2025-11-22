@@ -642,11 +642,13 @@ def execute_task(
             constructor_kwargs = dict(optimizer_config.params)
             if optimizer_params_override:
                 constructor_kwargs.update(optimizer_params_override)
+            # Ensure we only supply model/model_parameters once. If provided in the config/overrides,
+            # respect those; otherwise inject the runner-specified values.
+            constructor_kwargs.setdefault("model", model_name)
+            constructor_kwargs.setdefault("model_parameters", model_parameters)
             optimizer: BaseOptimizer = getattr(
                 opik_optimizer, optimizer_config.class_name
             )(
-                model=model_name,
-                model_parameters=model_parameters,
                 **constructor_kwargs,
             )
 
