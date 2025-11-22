@@ -23,9 +23,7 @@ logger = logging.getLogger(__name__)
 from opik.evaluation.metrics import LevenshteinRatio
 from opik.evaluation.metrics.score_result import ScoreResult
 from opik_optimizer import ChatPrompt, EvolutionaryOptimizer
-from opik_optimizer.datasets import hotpot_300
-from opik_optimizer.utils import search_wikipedia
-
+from opik_optimizer.datasets import hotpot
 from microsoft_agent_framework_agent import MicrosoftAgentFrameworkAgent
 
 
@@ -34,7 +32,7 @@ def levenshtein_ratio(dataset_item: dict[str, Any], llm_output: str) -> ScoreRes
     return metric.score(reference=dataset_item["answer"], output=llm_output)
 
 
-dataset = hotpot_300()
+dataset = hotpot(count=25)
 
 prompt = ChatPrompt(
     system=(
@@ -51,9 +49,9 @@ optimizer = EvolutionaryOptimizer(
     enable_llm_crossover=True,
     infer_output_style=True,
     verbose=1,
-    n_threads=4,
-    population_size=10,
-    num_generations=3,
+    n_threads=2,
+    population_size=5,
+    num_generations=2,
 )
 
 optimization_result = optimizer.optimize_prompt(
@@ -61,7 +59,7 @@ optimization_result = optimizer.optimize_prompt(
     agent_class=MicrosoftAgentFrameworkAgent,
     dataset=dataset,
     metric=levenshtein_ratio,
-    n_samples=10,
+    n_samples=5,
 )
 
 optimization_result.display()

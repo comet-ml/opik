@@ -21,10 +21,9 @@ logger.info("[bold green]═══ Microsoft Agent Framework loaded ═══[/b
 @track(type="tool")
 def search_wikipedia_tracked(query: str) -> list[str]:
     """Search Wikipedia for information about a topic."""
-    logger.tool_call("search_wikipedia", query)
-    result = search_wikipedia(query, use_api=True)
-    logger.tool_result(result_count=len(result))
-    return result
+    with logger.log_tool("search_wikipedia", query):
+        return search_wikipedia(query, use_api=True)
+
 
 def _ensure_agent_framework_on_path() -> None:
     script_dir = Path(__file__).resolve()
@@ -66,7 +65,9 @@ class MicrosoftAgentFrameworkAgent(OptimizableAgent):
     project_name = "microsoft-agent-framework"
     default_model_id = "gpt-4o-mini"
 
-    def __init__(self, prompt: ChatPrompt | None = None, project_name: str | None = None) -> None:
+    def __init__(
+        self, prompt: ChatPrompt | None = None, project_name: str | None = None
+    ) -> None:
         try:
             if prompt is not None:
                 super().__init__(prompt, project_name)
@@ -111,55 +112,15 @@ class MicrosoftAgentFrameworkAgent(OptimizableAgent):
             tools=[search_wikipedia_tracked],
         )
 
-    def invoke_dataset_item(self, dataset_item: dict[str, str]) -> str:
-        try:
-            result = super().invoke_dataset_item(dataset_item)
-            return result
-        except Exception as e:
-            logger.agent_error(e, include_traceback=True)
-            raise  # Re-raise to stop execution
-
     def invoke(self, messages: list[dict[str, str]], seed: int | None = None) -> str:
         question = self._extract_latest_user_message(messages)
-        logger.agent_invoke(question)
 
         async def _run_agent() -> Any:
             result = await self.agent.run(question)
             return result
 
-        try:
+        with logger.log_invoke(question) as ctx:
             result = asyncio.run(_run_agent())
-        except Exception as exc:
-            logger.agent_error(exc, include_traceback=True)
-            raise  # Re-raise to stop execution
-
-        final_str = str(result)
-        logger.agent_response(final_str)
-        return final_str
-
-    @staticmethod
-    def _build_tool_configs(prompt: ChatPrompt) -> list[dict[str, Any]]:
-        tools = []
-        if prompt.tools:
-            tools.extend(prompt.tools)
-        else:
-            tools.append(
-                {
-                    "type": "function",
-                    "function": {
-                        "name": "search_wikipedia",
-                        "description": "Search Wikipedia for information about a topic.",
-                        "parameters": {
-                            "type": "object",
-                            "properties": {
-                                "query": {
-                                    "type": "string",
-                                    "description": "The search query",
-                                },
-                            },
-                            "required": ["query"],
-                        },
-                    },
-                }
-            )
-        return tools
+            final_str = str(result)
+            ctx["response"] = final_str
+            return final_str
