@@ -30,9 +30,21 @@ HALU_EVAL_SPEC = DatasetSpec(
         "train": DatasetSplitPreset(
             source_split="data",
             start=0,
-            count=300,
+            count=150,
             dataset_name="halu_eval_300_train",
-        )
+        ),
+        "validation": DatasetSplitPreset(
+            source_split="data",
+            start=150,
+            count=150,
+            dataset_name="halu_eval_validation",
+        ),
+        "test": DatasetSplitPreset(
+            source_split="data",
+            start=300,
+            count=150,
+            dataset_name="halu_eval_test",
+        ),
     },
     records_transform=_halu_records_transform,  # de-dupe sensitive dataset, inject ids
 )
