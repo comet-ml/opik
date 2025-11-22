@@ -4,15 +4,14 @@ from opik_optimizer import OptimizableAgent, ChatPrompt
 from opik_optimizer.utils import search_wikipedia
 from opik_optimizer.utils.llm_logger import LLMLogger
 from opik import track
+from crewai import Agent, Crew, Task
+from crewai.tools import tool as crewai_tool
+from langchain_openai import ChatOpenAI
 
 # Setup logger
 logger = LLMLogger("crewai", agent_name="CrewAI", suppress=["crewai"])
 
 logger.info("[bold green]═══ CrewAI loaded ═══[/bold green]")
-
-from crewai import Agent, Crew, Task
-from crewai.tools import tool as crewai_tool
-from langchain_openai import ChatOpenAI
 
 
 # Define tool using CrewAI's @tool decorator

@@ -6,8 +6,8 @@ from typing import Any
 from opik import track
 from opik_optimizer import ChatPrompt, OptimizableAgent
 from opik_optimizer.utils import search_wikipedia
-
 from opik_optimizer.utils.llm_logger import LLMLogger
+from agent_framework.openai import OpenAIChatClient
 
 # Setup logger with suppressed framework logs
 logger = LLMLogger("microsoft_agent_framework", suppress=["agent_framework"])
@@ -21,9 +21,6 @@ def search_wikipedia_tracked(query: str) -> list[str]:
     """Search Wikipedia for information about a topic."""
     with logger.log_tool("search_wikipedia", query):
         return search_wikipedia(query, use_api=True)
-
-
-from agent_framework.openai import OpenAIChatClient
 
 
 class MicrosoftAgentFrameworkAgent(OptimizableAgent):

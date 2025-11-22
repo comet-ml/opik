@@ -7,15 +7,14 @@ from opik_optimizer import (
 from opik_optimizer.utils import search_wikipedia
 from opik_optimizer.utils.llm_logger import LLMLogger
 from opik import track
+from pydantic_ai import Agent
+from pydantic_ai.tools import RunContext
+from pydantic_ai.messages import ModelRequest, UserPromptPart, SystemPromptPart
 
 # Setup logger
 logger = LLMLogger("pydantic_ai", agent_name="Pydantic AI")
 
 logger.info("[bold green]═══ Pydantic AI loaded ═══[/bold green]")
-
-from pydantic_ai import Agent
-from pydantic_ai.tools import RunContext
-from pydantic_ai.messages import ModelRequest, UserPromptPart, SystemPromptPart
 
 
 @track(type="tool")

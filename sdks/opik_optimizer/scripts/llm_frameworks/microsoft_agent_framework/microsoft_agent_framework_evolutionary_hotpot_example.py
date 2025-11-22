@@ -16,15 +16,15 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-# Enable logging to see what's happening
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
-
 from opik.evaluation.metrics import LevenshteinRatio
 from opik.evaluation.metrics.score_result import ScoreResult
 from opik_optimizer import ChatPrompt, EvolutionaryOptimizer
 from opik_optimizer.datasets import hotpot
 from microsoft_agent_framework_agent import MicrosoftAgentFrameworkAgent
+
+# Enable logging to see what's happening
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 
 def levenshtein_ratio(dataset_item: dict[str, Any], llm_output: str) -> ScoreResult:
