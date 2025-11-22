@@ -1,8 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import sys
-from pathlib import Path
 from typing import Any
 
 from opik import track
@@ -25,38 +23,7 @@ def search_wikipedia_tracked(query: str) -> list[str]:
         return search_wikipedia(query, use_api=True)
 
 
-def _ensure_agent_framework_on_path() -> None:
-    script_dir = Path(__file__).resolve()
-    repo_root = script_dir.parents[3]
-    candidate_envs = [
-        repo_root / ".venv",
-        repo_root / "sdks" / "opik_optimizer" / ".venv",
-    ]
-
-    for env_path in candidate_envs:
-        site_dir = (
-            env_path
-            / "lib"
-            / f"python{sys.version_info.major}.{sys.version_info.minor}"
-            / "site-packages"
-        )
-        if site_dir.exists() and str(site_dir) not in sys.path:
-            sys.path.insert(0, str(site_dir))
-
-
-try:
-    from agent_framework.openai import OpenAIChatClient
-except ImportError:
-    _ensure_agent_framework_on_path()
-    try:
-        from agent_framework.openai import OpenAIChatClient
-    except ImportError as exc:  # pragma: no cover
-        raise ImportError(
-            "\nMicrosoft Agent Framework examples require the `agent-framework` packages.\n"
-            "Install them in the repo's optimizer venv:\n"
-            "    source sdks/opik_optimizer/.venv/bin/activate\n"
-            "    pip install --pre agent-framework\n"
-        ) from exc
+from agent_framework.openai import OpenAIChatClient
 
 
 class MicrosoftAgentFrameworkAgent(OptimizableAgent):

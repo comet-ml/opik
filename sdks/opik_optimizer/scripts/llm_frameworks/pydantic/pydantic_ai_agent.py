@@ -1,8 +1,5 @@
 from __future__ import annotations
 
-import sys
-from pathlib import Path
-
 from opik_optimizer import (
     OptimizableAgent,
     ChatPrompt,
@@ -16,34 +13,9 @@ logger = LLMLogger("pydantic_ai", agent_name="Pydantic AI")
 
 logger.info("[bold green]═══ Pydantic AI loaded ═══[/bold green]")
 
-
-def _ensure_local_pydantic_ai() -> None:
-    """Attempt to load the local optimizer venv when running outside it."""
-    script_dir = Path(__file__).resolve()
-    candidate_envs = [
-        script_dir.parents[3] / ".venv",  # sdks/opik_optimizer/.venv
-        script_dir.parents[5] / ".venv",  # repo-level .venv (if present)
-    ]
-    for env_path in candidate_envs:
-        site_dir = (
-            env_path
-            / "lib"
-            / f"python{sys.version_info.major}.{sys.version_info.minor}"
-            / "site-packages"
-        )
-        if site_dir.exists() and str(site_dir) not in sys.path:
-            sys.path.insert(0, str(site_dir))
-
-
-try:
-    from pydantic_ai import Agent
-    from pydantic_ai.tools import RunContext
-    from pydantic_ai.messages import ModelRequest, UserPromptPart, SystemPromptPart
-except ImportError:  # pragma: no cover - falls back when script run outside venv
-    _ensure_local_pydantic_ai()
-    from pydantic_ai import Agent
-    from pydantic_ai.tools import RunContext
-    from pydantic_ai.messages import ModelRequest, UserPromptPart, SystemPromptPart
+from pydantic_ai import Agent
+from pydantic_ai.tools import RunContext
+from pydantic_ai.messages import ModelRequest, UserPromptPart, SystemPromptPart
 
 
 @track(type="tool")
