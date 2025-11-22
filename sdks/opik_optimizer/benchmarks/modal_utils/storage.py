@@ -37,7 +37,7 @@ def save_result_to_volume(result: TaskResult, run_id: str, volume: Any) -> dict:
 
     # Save to JSON file (sanitize filename and add short hash to avoid collisions)
     safe_task_id = result.id.replace("/", "_")
-    short_hash = hashlib.sha1(result.id.encode()).hexdigest()[:6]
+    short_hash = hashlib.sha256(result.id.encode()).hexdigest()[:6]
     result_file = results_dir / f"{safe_task_id}_{short_hash}.json"
     with open(result_file, "w") as f:
         json.dump(result_dict, f, indent=2)
