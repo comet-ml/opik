@@ -8,7 +8,7 @@
         { "dataset": { "loader": "tiny_test", "count": 2 } }
       ],
       "models": [
-        { "name": "openai/gpt-4o-mini", "model_parameters": { "temperature": 0.2 } }
+        { "name": "openai/gpt-4.1-mini", "model_parameters": { "temperature": 0.2 } }
       ],
       "optimizers": [
         { "name": "few_shot", "optimizer_prompt_params": { "max_trials": 1, "n_samples": 1 } },
