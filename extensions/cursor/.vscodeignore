@@ -9,3 +9,14 @@ vsc-extension-quickstart.md
 **/*.map
 **/*.ts
 **/.vscode-test.*
+node_modules/**
+!node_modules/sql.js/dist/sql-wasm.wasm
+.editorconfig
+.eslintrc.json
+.prettierrc
+.github/**
+*.vsix
+test/**
+.npmignore
+package-lock.json
+yarn.lock
