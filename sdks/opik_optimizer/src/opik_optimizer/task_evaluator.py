@@ -155,7 +155,28 @@ def _evaluate_internal(
         return 0.0, None
 
     if dataset_item_ids:
-        items = [item for item in items if item.get("id") in dataset_item_ids]
+        # FIXME: In rare cases sometimes dataset ids are missing (cause unknown, skip those for now)
+        available_ids = {item.get("id") for item in items}
+        missing_ids = [
+            item_id for item_id in dataset_item_ids if item_id not in available_ids
+        ]
+        if missing_ids:
+            logger.warning(
+                "Dropping %s dataset_item_ids not present in dataset %s (showing first 5): %s",
+                len(missing_ids),
+                getattr(dataset, "name", None) or "<unknown>",
+                missing_ids[:5],
+            )
+        dataset_item_ids = [
+            item_id for item_id in dataset_item_ids if item_id in available_ids
+        ]
+        if not dataset_item_ids:
+            logger.warning(
+                "All provided dataset_item_ids were missing; evaluating on full dataset instead."
+            )
+            dataset_item_ids = None
+        else:
+            items = [item for item in items if item.get("id") in dataset_item_ids]
 
     eval_metrics = [_create_metric_class(metric)]
 
