@@ -27,12 +27,14 @@ import {
   ColumnData,
 } from "@/types/shared";
 
+export const SPAN_TYPE_FILTER_COLUMN: ColumnData<Span> = {
+  id: "type",
+  label: "Span type",
+  type: COLUMN_TYPE.category,
+};
+
 export const TREE_FILTER_COLUMNS: ColumnData<Span>[] = [
-  {
-    id: "type",
-    label: "Span type",
-    type: COLUMN_TYPE.category,
-  },
+  SPAN_TYPE_FILTER_COLUMN,
   {
     id: "name",
     label: "Name",
@@ -491,7 +493,11 @@ export const addAllParentIds = (
   };
 
   searchIds.forEach((id) => {
-    ensureParent(id);
+    const data = dataMap.get(id);
+    const parentId = get(data, "parent_span_id");
+    if (parentId) {
+      ensureParent(parentId);
+    }
   });
 
   return parentIds;

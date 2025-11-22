@@ -447,6 +447,7 @@ class TraceDAOImpl implements TraceDAO {
                 sum(s.total_estimated_cost) as total_estimated_cost,
                 COUNT(s.id) AS span_count,
                 toInt64(countIf(s.type = 'llm')) AS llm_span_count,
+                countIf(s.type = 'tool') > 0 AS has_tool_spans,
                 arraySort(groupUniqArrayIf(s.provider, s.provider != '')) as providers,
                 groupUniqArrayArray(c.comments_array) as comments,
                 any(fs.feedback_scores_list) as feedback_scores_list,
@@ -713,6 +714,7 @@ class TraceDAOImpl implements TraceDAO {
                     sum(total_estimated_cost) as total_estimated_cost,
                     COUNT(DISTINCT id) as span_count,
                     toInt64(countIf(type = 'llm')) as llm_span_count,
+                    countIf(type = 'tool') > 0 as has_tool_spans,
                     arraySort(groupUniqArrayIf(provider, provider != '')) as providers
                 FROM spans final
                 WHERE workspace_id = :workspace_id
@@ -844,6 +846,7 @@ class TraceDAOImpl implements TraceDAO {
                   <if(!exclude_guardrails_validations)>, gagg.guardrails_list as guardrails_validations<endif>
                   <if(!exclude_span_count)>, s.span_count AS span_count<endif>
                   <if(!exclude_llm_span_count)>, s.llm_span_count AS llm_span_count<endif>
+                  <if(!exclude_has_tool_spans)>, s.has_tool_spans AS has_tool_spans<endif>
                   , s.providers AS providers
              FROM traces_final t
              LEFT JOIN feedback_scores_agg fsagg ON fsagg.entity_id = t.id
@@ -2702,6 +2705,10 @@ class TraceDAOImpl implements TraceDAO {
                         .ofNullable(getValue(exclude, Trace.TraceField.LLM_SPAN_COUNT, row, "llm_span_count",
                                 Integer.class))
                         .orElse(0))
+                .hasToolSpans(Optional
+                        .ofNullable(getValue(exclude, Trace.TraceField.HAS_TOOL_SPANS, row, "has_tool_spans",
+                                Boolean.class))
+                        .orElse(false))
                 .providers(providers)
                 .usage(getValue(exclude, Trace.TraceField.USAGE, row, "usage", Map.class))
                 .totalEstimatedCost(Optional
@@ -2885,6 +2892,8 @@ class TraceDAOImpl implements TraceDAO {
                         template.add("exclude_span_count", fields.contains(Trace.TraceField.SPAN_COUNT.getValue()));
                         template.add("exclude_llm_span_count",
                                 fields.contains(Trace.TraceField.LLM_SPAN_COUNT.getValue()));
+                        template.add("exclude_has_tool_spans",
+                                fields.contains(Trace.TraceField.HAS_TOOL_SPANS.getValue()));
                     }
                 });
     }

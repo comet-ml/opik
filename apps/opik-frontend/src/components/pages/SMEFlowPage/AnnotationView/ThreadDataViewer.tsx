@@ -1,12 +1,16 @@
-import React, { useMemo } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import { keepPreviousData } from "@tanstack/react-query";
+import { JsonParam, useQueryParam } from "use-query-params";
 import { Loader2 } from "lucide-react";
 import last from "lodash/last";
-import { Thread } from "@/types/traces";
+import { SPAN_TYPE, Thread } from "@/types/traces";
 import { useSMEFlow } from "../SMEFlowContext";
 import useTracesList from "@/api/traces/useTracesList";
 import TraceMessages from "@/components/pages-shared/traces/TraceMessages/TraceMessages";
 import { COLUMN_TYPE } from "@/types/shared";
+import TraceDetailsPanel from "@/components/pages-shared/traces/TraceDetailsPanel/TraceDetailsPanel";
+import { createFilter } from "@/lib/filters";
+import { SPAN_TYPE_FILTER_COLUMN } from "@/components/pages-shared/traces/TraceDetailsPanel/TraceTreeViewer/helpers";
 
 const MAX_THREAD_TRACES = 1000;
 const STALE_TIME = 5 * 60 * 1000; // 5 minutes
@@ -16,6 +20,18 @@ const ThreadDataViewer: React.FunctionComponent = () => {
 
   const thread = currentItem as Thread;
   const nextThread = nextItem as Thread | undefined;
+
+  const [traceId, setTraceId] = useState<string>("");
+  const [spanId, setSpanId] = useState<string>("");
+
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const [_tracePanelFilters, setTracePanelFilters] = useQueryParam(
+    `trace_panel_filters`,
+    JsonParam,
+    {
+      updateType: "replaceIn",
+    },
+  );
 
   // Fetch current thread traces (not truncated)
   const { data: tracesData, isFetching } = useTracesList(
@@ -71,15 +87,82 @@ const ThreadDataViewer: React.FunctionComponent = () => {
     [tracesData],
   );
 
+  const handleOpenTrace = useCallback(
+    (id: string, shouldFilterToolCalls?: boolean) => {
+      // Set filters FIRST, before opening the panel
+      // This ensures the filters are in the URL before TraceDetailsPanel reads them
+      if (shouldFilterToolCalls) {
+        setTracePanelFilters([
+          createFilter({
+            id: SPAN_TYPE_FILTER_COLUMN.id,
+            field: SPAN_TYPE_FILTER_COLUMN.id,
+            type: SPAN_TYPE_FILTER_COLUMN.type,
+            operator: "=",
+            value: SPAN_TYPE.tool,
+          }),
+        ]);
+      } else {
+        setTracePanelFilters([]);
+      }
+
+      // Use setTimeout to ensure query param is updated before opening panel
+      setTimeout(() => {
+        setTraceId(id);
+        setSpanId("");
+      }, 0);
+    },
+    [setTracePanelFilters],
+  );
+
+  const handleClose = useCallback(() => {
+    setTraceId("");
+    setSpanId("");
+    setTracePanelFilters([]);
+  }, [setTracePanelFilters]);
+
+  const handleSetSpanId = useCallback(
+    (
+      updaterOrValue:
+        | string
+        | null
+        | undefined
+        | ((prev: string | null | undefined) => string | null | undefined),
+    ) => {
+      if (typeof updaterOrValue === "function") {
+        setSpanId((prev) => {
+          const newValue = updaterOrValue(prev);
+          return newValue ?? "";
+        });
+      } else {
+        setSpanId(updaterOrValue ?? "");
+      }
+    },
+    [],
+  );
+
   return (
-    <div className="relative pr-4">
-      {isFetching && (
-        <div className="absolute right-6 top-2 z-10">
-          <Loader2 className="size-4 animate-spin text-slate-400" />
-        </div>
-      )}
-      <TraceMessages traces={traces} traceId={last(traces)?.id} />
-    </div>
+    <>
+      <div className="relative pr-4">
+        {isFetching && (
+          <div className="absolute right-6 top-2 z-10">
+            <Loader2 className="size-4 animate-spin text-slate-400" />
+          </div>
+        )}
+        <TraceMessages
+          traces={traces}
+          traceId={last(traces)?.id}
+          handleOpenTrace={handleOpenTrace}
+        />
+      </div>
+      <TraceDetailsPanel
+        projectId={thread?.project_id || ""}
+        traceId={traceId}
+        spanId={spanId}
+        setSpanId={handleSetSpanId}
+        open={Boolean(traceId)}
+        onClose={handleClose}
+      />
+    </>
   );
 };
 

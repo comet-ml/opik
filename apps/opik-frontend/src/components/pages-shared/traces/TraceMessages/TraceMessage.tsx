@@ -13,10 +13,11 @@ import { prettifyMessage } from "@/lib/traces";
 import { cn, toString } from "@/lib/utils";
 import { useJsonViewTheme } from "@/hooks/useJsonViewTheme";
 import isFunction from "lodash/isFunction";
+import { Hammer, ListTree } from "lucide-react";
 
 type TraceMessageProps = {
   trace: Trace;
-  handleOpenTrace?: (id: string) => void;
+  handleOpenTrace?: (id: string, filterToolCalls?: boolean) => void;
 };
 
 const TraceMessage: React.FC<TraceMessageProps> = ({
@@ -94,10 +95,21 @@ const TraceMessage: React.FC<TraceMessageProps> = ({
           <Button
             variant="ghost"
             size="2xs"
-            onClick={() => handleOpenTrace(trace.id)}
+            onClick={() => handleOpenTrace(trace.id, false)}
           >
+            <ListTree className="mr-1 size-3" />
             View trace
           </Button>
+          {trace.has_tool_spans && (
+            <Button
+              variant="ghost"
+              size="2xs"
+              onClick={() => handleOpenTrace(trace.id, true)}
+            >
+              <Hammer className="mr-1 size-3" />
+              View tool calls
+            </Button>
+          )}
         </div>
       )}
     </div>
