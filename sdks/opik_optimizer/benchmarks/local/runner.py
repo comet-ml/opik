@@ -47,6 +47,7 @@ def run_optimization(
     optimizer_params_override: dict[str, Any] | None = None,
     optimizer_prompt_params_override: dict[str, Any] | None = None,
     datasets: dict[str, Any] | None = None,
+    metrics: list[str | dict[str, Any]] | None = None,
     prompt_messages: list[dict[str, Any]] | None = None,
 ) -> TaskResult:
     return execute_task(
@@ -59,6 +60,7 @@ def run_optimization(
         optimizer_params_override=optimizer_params_override,
         optimizer_prompt_params_override=optimizer_prompt_params_override,
         datasets=datasets,
+        metrics=metrics,  # propagate manifest/CLI metric overrides
         prompt_messages=prompt_messages,
     )
 
@@ -228,6 +230,7 @@ class BenchmarkRunner:
                         optimizer_params_override=task.optimizer_params,
                         optimizer_prompt_params_override=optimize_override,
                         datasets=task.datasets,
+                        metrics=task.metrics,
                         prompt_messages=task.prompt_messages,
                     )
 

@@ -621,6 +621,7 @@ def execute_task(
     optimized_prompt = None
     optimize_kwargs: dict[str, Any] | None = None
     constructor_kwargs: dict[str, Any] | None = None
+    test_initial_evaluation: TaskEvaluationResult | None = None
 
     with reporting_utils.suppress_opik_logs():
         try:
@@ -672,6 +673,17 @@ def execute_task(
                 n_threads=4,
             )
 
+            if bundle.test is not None and bundle.test_name is not None:
+                test_initial_evaluation = evaluate_prompt_on_dataset(
+                    optimizer=optimizer,
+                    prompt=initial_prompt,
+                    dataset=bundle.test,
+                    dataset_name=bundle.test_name,
+                    dataset_role="test",
+                    metrics=metrics_resolved,
+                    n_threads=4,
+                )
+
             optimize_kwargs = dict(optimizer_config.optimizer_prompt_params)
             if optimizer_prompt_params_override:
                 optimize_kwargs.update(optimizer_prompt_params_override)
@@ -718,6 +730,7 @@ def execute_task(
                 optimized_prompt=optimized_prompt,
                 optimized_evaluation=optimized_evaluation,
                 test_evaluation=test_evaluation,
+                initial_test_evaluation=test_initial_evaluation,
                 error_message=None,
                 llm_calls_total_optimization=optimization_results.llm_calls,
                 optimization_raw_result=optimization_results,
@@ -746,6 +759,7 @@ def execute_task(
                 dataset_metadata={},
                 evaluation_split=None,
                 requested_split=None,
+                initial_test_evaluation=test_initial_evaluation,
                 optimizer_prompt_params_used=optimize_kwargs,
                 optimizer_params_used=constructor_kwargs,
             )

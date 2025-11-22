@@ -38,6 +38,7 @@ class TaskResult(BaseModel):
     optimized_prompt: opik_optimizer.ChatPrompt | None = None
     optimized_evaluation: TaskEvaluationResult | None = None
     test_evaluation: TaskEvaluationResult | None = None
+    initial_test_evaluation: TaskEvaluationResult | None = None
     error_message: str | None = None
     timestamp_end: float | None = None
     llm_calls_total_optimization: int | None = None
