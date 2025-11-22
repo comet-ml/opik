@@ -87,6 +87,8 @@ def _load_dataset(dataset_name: str, split: str | None, test_mode: bool) -> Any:
         if split in ("train", "validation", "test"):
             kwargs["split"] = split
         kwargs["dataset_name"] = dataset_name
+        if "prefer_presets" in base_loader.__code__.co_varnames:
+            kwargs["prefer_presets"] = True
         return base_loader(**kwargs)
 
     raise ValueError(f"Unknown dataset loader for '{dataset_name}'.")

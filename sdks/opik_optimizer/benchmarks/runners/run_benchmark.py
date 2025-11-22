@@ -15,9 +15,11 @@ Usage:
 
 import argparse
 import os
+from typing import Any
 from rich.console import Console
 from rich.table import Table
 from rich.panel import Panel
+from rich import box
 
 from benchmarks.configs.benchmark_manifest import load_manifest, manifest_to_task_specs
 from benchmarks.core import benchmark_config
@@ -74,6 +76,60 @@ def _print_manifest_summary(
     console.print(table)
     if warnings:
         console.print(Panel("\n".join(warnings), title="Warnings", border_style="yellow"))
+
+
+def _print_registry(console: Console) -> None:
+    """Print available datasets and optimizers from the registry."""
+    split_suffixes = {"train": "_train", "validation": "_validation", "test": "_test"}
+    dataset_groups: dict[str, dict[str, Any]] = {}
+
+    for name, cfg in benchmark_config.DATASET_CONFIG.items():
+        base = name
+        split = None
+        for role, suffix in split_suffixes.items():
+            if name.endswith(suffix):
+                base = name[: -len(suffix)]
+                split = role
+                break
+        info = dataset_groups.setdefault(
+            base,
+            {
+                "display_name": cfg.display_name,
+                "metrics": {m.__name__ for m in cfg.metrics},
+                "splits": set(),
+            },
+        )
+        info["splits"].add(split or "default")
+        info["metrics"].update(m.__name__ for m in cfg.metrics)
+
+    ds_table = Table(title="Datasets", box=box.SIMPLE, expand=True)
+    ds_table.add_column("Name")
+    ds_table.add_column("Splits")
+    ds_table.add_column("Metrics")
+    ds_table.add_column("Display")
+    for base, info in sorted(dataset_groups.items()):
+        ds_table.add_row(
+            base,
+            ", ".join(sorted(info["splits"])),
+            ", ".join(sorted(info["metrics"])),
+            info["display_name"],
+        )
+
+    opt_table = Table(title="Optimizers", box=box.SIMPLE, expand=True)
+    opt_table.add_column("Name")
+    opt_table.add_column("Class")
+    opt_table.add_column("Params")
+    opt_table.add_column("Prompt Params")
+    for name, cfg in sorted(benchmark_config.OPTIMIZER_CONFIGS.items()):
+        opt_table.add_row(
+            name,
+            cfg.class_name,
+            ", ".join(sorted(cfg.params.keys())) or "[dim]-[/dim]",
+            ", ".join(sorted(cfg.optimizer_prompt_params.keys())) or "[dim]-[/dim]",
+        )
+
+    console.print(Panel(ds_table, title="Dataset Registry", border_style="cyan"))
+    console.print(Panel(opt_table, title="Optimizer Registry", border_style="cyan"))
 
 
 def main() -> None:
@@ -188,12 +244,21 @@ Examples:
         default=None,
         help="Path to benchmark manifest JSON (overrides dataset/model/optimizer options)",
     )
+    parser.add_argument(
+        "--list-registries",
+        action="store_true",
+        help="Show available datasets and optimizers, then exit",
+    )
     args = parser.parse_args()
 
     manifest_tasks: list[BenchmarkTaskSpec] | None = None
     manifest_seed = args.seed
     manifest_test_mode = args.test_mode
     console = Console()
+
+    if args.list_registries:
+        _print_registry(console)
+        return
 
     if args.config:
         manifest = load_manifest(args.config)

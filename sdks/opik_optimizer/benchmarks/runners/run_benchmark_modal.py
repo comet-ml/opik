@@ -61,8 +61,15 @@ results_volume = modal.Volume.from_name(
     "opik-benchmark-results", create_if_missing=True
 )
 # Coordinator image (needs opik_optimizer deps for imports)
-coordinator_image = modal.Image.debian_slim(python_version="3.12").pip_install(
-    "opik_optimizer>=2.3.1"
+coordinator_image = (
+    modal.Image.debian_slim(python_version="3.12")
+    .add_local_dir(
+        local_path=os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir, os.pardir)),
+        remote_path="/root/opik_optimizer_repo",
+        ignore=[".venv", ".git", "__pycache__", "benchmark_results", "build", "dist", "node_modules"],
+        copy=True,
+    )
+    .pip_install("/root/opik_optimizer_repo")
 )
 
 
