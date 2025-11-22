@@ -22,8 +22,8 @@
         { "name": "meta_prompt", "optimizer_prompt_params": { "max_trials": 6438 } }
       ],
       "models": [
-        { "name": "openai/gpt-4.1-mini" },
-        { "name": "openrouter/qwen/qwen-3-8b" }
+        { "name": "openai/gpt-4.1-mini", "model_parameters": { "temperature": 1.0 } },
+        { "name": "openrouter/qwen/qwen-3-8b", "model_parameters": { "temperature": 0.6, "top_p": 0.95, "top_k": 20 } }
       ],
       "metrics": [
         { "path": "benchmarks.metrics.hotpot.hotpot_f1" }
@@ -52,8 +52,8 @@
         { "name": "meta_prompt", "optimizer_prompt_params": { "max_trials": 6858 } }
       ],
       "models": [
-        { "name": "openai/gpt-4.1-mini" },
-        { "name": "openrouter/qwen/qwen-3-8b" }
+        { "name": "openai/gpt-4.1-mini", "model_parameters": { "temperature": 1.0 } },
+        { "name": "openrouter/qwen/qwen-3-8b", "model_parameters": { "temperature": 0.6, "top_p": 0.95, "top_k": 20 } }
       ],
       "metrics": [
         { "path": "benchmarks.metrics.hover.hover_label_accuracy" },
