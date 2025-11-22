@@ -83,6 +83,7 @@ def main(
     list_runs: bool = False,
     watch: bool = False,
     detailed: bool = False,
+    raw: bool = False,
     show_errors: bool = False,
     task: str | None = None,
     watch_interval: int = 30,
@@ -116,7 +117,7 @@ def main(
     elif watch:
         _watch_results(run_id, watch_interval, detailed)
     else:
-        _display_results(run_id, detailed)
+        _display_results(run_id, detailed, raw)
 
 
 def _list_runs() -> None:
@@ -140,17 +141,19 @@ def _watch_results(run_id: str, interval: int, detailed: bool) -> None:
     try:
         with Live(console=console, refresh_per_second=1) as live:
             while True:
-                display = _generate_results_display(run_id, detailed, is_live=True)
+                display = _generate_results_display(
+                    run_id, detailed, is_live=True, raw=False
+                )
                 live.update(display)
                 time.sleep(interval)
     except KeyboardInterrupt:
         console.print("\n[yellow]Stopped watching[/yellow]")
 
 
-def _display_results(run_id: str, detailed: bool) -> None:
+def _display_results(run_id: str, detailed: bool, raw: bool) -> None:
     """Display results once."""
     assert console is not None
-    display = _generate_results_display(run_id, detailed, is_live=False)
+    display = _generate_results_display(run_id, detailed, is_live=False, raw=raw)
     console.print(display)
 
 
@@ -285,13 +288,15 @@ def _show_errors(run_id: str, task_filter: str | None = None) -> None:
         console.print()  # Empty line between errors
 
 
-def _generate_results_display(run_id: str, detailed: bool, is_live: bool) -> Any:
+def _generate_results_display(
+    run_id: str, detailed: bool, is_live: bool, raw: bool
+) -> Any:
     """Generate rich display of results."""
     from benchmarks.modal_utils.display import generate_results_display
 
     results = load_run_results.remote(run_id)
 
-    return generate_results_display(run_id, detailed, is_live, results)
+    return generate_results_display(run_id, detailed, is_live, results, raw)
 
 
 if __name__ == "__main__":
@@ -344,6 +349,11 @@ Examples:
         "--show-errors",
         action="store_true",
         help="Show full error messages for all failed tasks",
+    )
+    parser.add_argument(
+        "--raw",
+        action="store_true",
+        help="Show raw JSON payload (otherwise a concise summary table is shown)",
     )
     parser.add_argument(
         "--task",
