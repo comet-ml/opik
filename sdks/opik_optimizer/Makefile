@@ -22,7 +22,8 @@ endef
 
 .DEFAULT_GOAL := help
 
-.PHONY: help setup-venv install install-dev test precommit build clean modal-worker modal-coord modal-deploy modal-logs
+.PHONY: help setup-venv install install-dev test precommit build clean modal-worker modal-coord modal-deploy modal-logs modal-list modal-check-results
+.PHONY: modal-list
 
 help:
 	@echo "Available targets:"
@@ -39,6 +40,8 @@ help:
 	@echo "  modal-coord  Deploy Modal coordinator (benchmarks/runners/run_benchmark_modal.py)"
 	@echo "  modal-deploy Deploy worker + coordinator"
 	@echo "  modal-logs   Tail worker app logs (env=main by default)"
+	@echo "  modal-list   Show dataset/optimizer registry (local)"
+	@echo "  modal-check-results   Show remote results from Modal volume (requires run-id, set RUN_ID=...)"
 
 setup-venv:
 	python3 -m venv $(VENV)
@@ -111,3 +114,11 @@ modal-deploy: modal-worker modal-coord
 modal-logs:
 	@echo "Tailing Modal worker logs (env=main)..."
 	modal app logs opik-optimizer-benchmarks --env main
+
+modal-list:
+	@echo "Listing dataset/optimizer registry (local)..."
+	PYTHONPATH=. python benchmarks/runners/run_benchmark.py --list-registries
+
+modal-check-results:
+	@echo "Checking Modal results for run $(RUN_ID)..."
+	modal run benchmarks/check_results.py --run-id $(RUN_ID)

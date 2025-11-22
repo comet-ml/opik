@@ -64,9 +64,19 @@ results_volume = modal.Volume.from_name(
 coordinator_image = (
     modal.Image.debian_slim(python_version="3.12")
     .add_local_dir(
-        local_path=os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir, os.pardir)),
+        local_path=os.path.abspath(
+            os.path.join(os.path.dirname(__file__), os.pardir, os.pardir)
+        ),
         remote_path="/root/opik_optimizer_repo",
-        ignore=[".venv", ".git", "__pycache__", "benchmark_results", "build", "dist", "node_modules"],
+        ignore=[
+            ".venv",
+            ".git",
+            "__pycache__",
+            "benchmark_results",
+            "build",
+            "dist",
+            "node_modules",
+        ],
         copy=True,
     )
     .pip_install("/root/opik_optimizer_repo")
@@ -517,7 +527,7 @@ def _save_run_metadata(
     print("   -> Sending metadata to volume...")
     try:
         try:
-            fn = modal.Function.lookup(
+            fn = modal.Function.lookup(  # type: ignore[attr-defined]
                 "opik-optimizer-benchmarks-coordinator",
                 "_save_metadata_to_volume",
             )
@@ -545,7 +555,7 @@ def _save_function_call_ids(run_id: str, function_call_ids: list[dict]) -> None:
     print("   -> Sending call IDs to volume...")
     try:
         try:
-            fn = modal.Function.lookup(
+            fn = modal.Function.lookup(  # type: ignore[attr-defined]
                 "opik-optimizer-benchmarks-coordinator",
                 "_save_call_ids_to_volume",
             )

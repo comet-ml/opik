@@ -27,7 +27,15 @@ image = (
             os.path.join(os.path.dirname(__file__), os.pardir, os.pardir)
         ),
         remote_path="/root/opik_optimizer_repo",
-        ignore=[".venv", ".git", "__pycache__", "benchmark_results", "build", "dist", "node_modules"],
+        ignore=[
+            ".venv",
+            ".git",
+            "__pycache__",
+            "benchmark_results",
+            "build",
+            "dist",
+            "node_modules",
+        ],
         copy=True,
     )
     .pip_install("/root/opik_optimizer_repo")

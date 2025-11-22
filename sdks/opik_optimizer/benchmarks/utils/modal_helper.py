@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import os
-from typing import Iterable, Tuple
+from collections.abc import Iterable
 import configparser
 from pathlib import Path
 
@@ -18,7 +18,7 @@ OPTIONAL_KEYS = [
 OPIK_HOST_KEYS = ["OPIK_HOST", "OPIK_BASE_URL"]
 
 
-def _collect(keys: Iterable[str]) -> Tuple[list[str], list[str]]:
+def _collect(keys: Iterable[str]) -> tuple[list[str], list[str]]:
     present: list[str] = []
     missing: list[str] = []
     for k in keys:
@@ -46,7 +46,7 @@ def build_secret_command(secret_name: str, env_summary: dict[str, list[str]]) ->
     if not keys:
         return (
             f"# Export your keys, then run: modal secret create {secret_name} "
-            "OPIK_API_KEY=\"$OPIK_API_KEY\" OPENAI_API_KEY=\"$OPENAI_API_KEY\" ..."
+            'OPIK_API_KEY="$OPIK_API_KEY" OPENAI_API_KEY="$OPENAI_API_KEY" ...'
         )
     parts = [f'{k}="${{{k}}}"' for k in keys]
     return f"modal secret create {secret_name} " + " ".join(parts)

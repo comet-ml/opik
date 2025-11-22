@@ -26,9 +26,7 @@ from benchmarks.core import benchmark_config
 from benchmarks.core.benchmark_taskspec import BenchmarkTaskSpec
 
 
-def _print_manifest_summary(
-    tasks: list[BenchmarkTaskSpec], console: Console
-) -> None:
+def _print_manifest_summary(tasks: list[BenchmarkTaskSpec], console: Console) -> None:
     table = Table(title="Manifest Summary", box=None, padding=(0, 1))
     table.add_column("Dataset", no_wrap=True)
     table.add_column("Splits", no_wrap=False)
@@ -75,7 +73,9 @@ def _print_manifest_summary(
 
     console.print(table)
     if warnings:
-        console.print(Panel("\n".join(warnings), title="Warnings", border_style="yellow"))
+        console.print(
+            Panel("\n".join(warnings), title="Warnings", border_style="yellow")
+        )
 
 
 def _print_registry(console: Console) -> None:

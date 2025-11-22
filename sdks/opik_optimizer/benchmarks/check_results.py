@@ -147,7 +147,6 @@ def _list_runs() -> None:
 
 def _select_run() -> str | None:
     """Interactively select a run from the most recent runs."""
-    from benchmarks.modal_utils.display import display_runs_table
 
     assert console is not None
     runs = list_available_runs.remote()
@@ -212,7 +211,6 @@ def _display_results(run_id: str, detailed: bool, raw: bool) -> None:
 
 def _show_errors(run_id: str, task_filter: str | None = None) -> None:
     """Display error messages and info for tasks."""
-    from rich.panel import Panel
     from rich.syntax import Syntax
 
     assert console is not None
