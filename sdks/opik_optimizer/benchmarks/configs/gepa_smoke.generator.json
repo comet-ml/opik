@@ -54,7 +54,7 @@
         { "name": "openai/gpt-4.1-mini" }
       ],
       "metrics": [
-        { "path": "benchmarks.metrics.hover.hover_accuracy" }
+        { "path": "benchmarks.metrics.hover.hover_label_accuracy" }
       ],
       "prompt": [
         { "role": "system", "content": "Classify the claim based on the given context and provide a concise answer." },

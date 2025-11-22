@@ -56,7 +56,7 @@
         { "name": "openrouter/qwen/qwen-3-8b" }
       ],
       "metrics": [
-        { "path": "benchmarks.metrics.hover.hover_accuracy" },
+        { "path": "benchmarks.metrics.hover.hover_label_accuracy" },
         { "path": "benchmarks.metrics.hover.hover_judge_feedback" }
       ],
       "prompt": [
