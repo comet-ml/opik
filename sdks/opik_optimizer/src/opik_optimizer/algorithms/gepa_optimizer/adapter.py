@@ -1,10 +1,9 @@
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from typing import Any
 from collections.abc import Callable, Iterable
-
-import logging
 
 from gepa.core.adapter import EvaluationBatch, GEPAAdapter
 from opik import Dataset
@@ -19,11 +18,7 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class OpikDataInst:
-    """Data instance handed to GEPA.
-
-    We keep the original Opik dataset item so metrics and prompt formatting can use it
-    directly without duplicated bookkeeping.
-    """
+    """Data instance handed to GEPA."""
 
     input_text: str
     answer: str
@@ -90,8 +85,6 @@ class OpikGEPAAdapter(GEPAAdapter[OpikDataInst, dict[str, Any], dict[str, Any]])
         evaluation logic so GEPA continues to function.
         """
 
-        # TODO(opik-gepa): replace this adapter patch with a native GEPA <-> Opik bridge
-        # once GEPA exposes a public opik adapter for tracing + evaluation.
         system_text = _extract_system_text(candidate, self._system_fallback)
         prompt_variant = _apply_system_text(self._base_prompt, system_text)
 
@@ -104,7 +97,6 @@ class OpikGEPAAdapter(GEPAAdapter[OpikDataInst, dict[str, Any], dict[str, Any]])
                 break
             dataset_item_ids.append(str(dataset_item_id))
 
-        # Attach GEPA-specific metadata without disturbing the caller's experiment config.
         configuration_updates = helpers.drop_none(
             {
                 "gepa": helpers.drop_none(

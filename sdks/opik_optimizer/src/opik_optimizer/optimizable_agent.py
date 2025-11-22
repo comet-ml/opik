@@ -1,14 +1,14 @@
 from typing import Any, TYPE_CHECKING
 import json
 import os
-import copy
-
-from opik.opik_context import get_current_span_data
+import logging
 
 import litellm
 from litellm.integrations.opik.opik import OpikLogger
-
+from opik.opik_context import get_current_span_data
 from . import _throttle
+
+logger = logging.getLogger(__name__)
 
 _limiter = _throttle.get_rate_limiter_for_current_opik_installation()
 
@@ -74,9 +74,12 @@ class OptimizableAgent:
         if getattr(prompt, "model", None) is not None:
             self.model = prompt.model
         if getattr(prompt, "model_kwargs", None) is not None:
-            self.model_kwargs = copy.deepcopy(prompt.model_kwargs or {})
+            # Use a shallow copy to avoid deepcopying unpicklable objects (e.g., locks
+            # added by monitoring/clients inside model kwargs).
+            self.model_kwargs = dict(prompt.model_kwargs or {})
         else:
             self.model_kwargs = {}
+        self._clamp_model_kwargs_to_limit()
 
     @_throttle.rate_limited(_limiter)
     def _llm_complete(
@@ -85,20 +88,90 @@ class OptimizableAgent:
         tools: list[dict[str, str]] | None,
         seed: int | None = None,
     ) -> Any:
+        # Merge any caller-provided metadata with Opik tracing keys to avoid duplicates.
+        model_kwargs = dict(self.model_kwargs)
+        if "metadata" in model_kwargs:
+            existing = model_kwargs["metadata"] or {}
+            opik_meta = existing.get("opik") or {}
+            opik_meta.setdefault("current_span_data", get_current_span_data())
+            opik_meta.setdefault("project_name", self.project_name)
+            existing["opik"] = opik_meta
+            model_kwargs["metadata"] = existing
+        else:
+            model_kwargs["metadata"] = {
+                "opik": {
+                    "current_span_data": get_current_span_data(),
+                    "project_name": self.project_name,
+                },
+            }
+
         response = litellm.completion(
             model=self.model,
             messages=messages,
             seed=seed,
             tools=tools,
-            metadata={
-                "opik": {
-                    "current_span_data": get_current_span_data(),
-                    "project_name": self.project_name,
-                },
-            },
-            **self.model_kwargs,
+            **model_kwargs,
         )
         return response
+
+    def _clamp_model_kwargs_to_limit(self) -> None:
+        """Clamp max_tokens fields to the provider context window when known."""
+        try:
+            limit = self._resolve_context_limit()
+            if not limit:
+                return
+            if "max_tokens" in self.model_kwargs:
+                mt = self.model_kwargs.get("max_tokens")
+                if isinstance(mt, (int, float)) and mt > limit:
+                    logger.warning(
+                        "Clamping max_tokens from %s to provider limit %s for model %s",
+                        mt,
+                        limit,
+                        self.model,
+                    )
+                    self.model_kwargs["max_tokens"] = limit
+            if "max_completion_tokens" in self.model_kwargs:
+                mct = self.model_kwargs.get("max_completion_tokens")
+                if isinstance(mct, (int, float)) and mct > limit:
+                    logger.warning(
+                        "Clamping max_completion_tokens from %s to provider limit %s for model %s",
+                        mct,
+                        limit,
+                        self.model,
+                    )
+                    self.model_kwargs["max_completion_tokens"] = limit
+        except Exception:
+            logger.debug("Unable to clamp model kwargs to token limits", exc_info=True)
+
+    def _resolve_context_limit(self) -> int | None:
+        """Resolve provider context window using LiteLLM hints."""
+        candidates: list[str] = []
+        if self.model:
+            candidates.append(self.model)
+            if "/" in self.model:
+                candidates.append(self.model.split("/", 1)[-1])
+
+        try:
+            token_counter = getattr(litellm, "token_counter", None)
+            for name in candidates:
+                if token_counter and hasattr(token_counter, "get_model_context_window"):
+                    limit = token_counter.get_model_context_window(
+                        model=name, messages=None, tokens=None
+                    )
+                    if limit:
+                        return int(limit)
+
+            model_cost = getattr(litellm, "model_cost", None)
+            if model_cost:
+                for name in candidates:
+                    info = model_cost.get(name)
+                    if info:
+                        limit = info.get("max_output_tokens") or info.get("max_tokens")
+                        if limit:
+                            return int(limit)
+        except Exception:
+            logger.debug("Unable to resolve model context window", exc_info=True)
+        return None
 
     def llm_invoke(
         self,

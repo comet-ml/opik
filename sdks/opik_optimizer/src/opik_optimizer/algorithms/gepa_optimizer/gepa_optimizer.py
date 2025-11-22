@@ -11,7 +11,6 @@ from opik.evaluation.metrics.score_result import ScoreResult
 from ...base_optimizer import BaseOptimizer
 from ...reporting_utils import (
     display_configuration,
-    convert_tqdm_to_rich,
     suppress_opik_logs,
 )
 from ...api_objects import chat_prompt
@@ -27,7 +26,9 @@ from ...utils import (
 from ...task_evaluator import _create_metric_class
 from ... import task_evaluator, helpers
 from . import reporting as gepa_reporting
-from .adapter import OpikDataInst, OpikGEPAAdapter
+from gepa.core.adapter import GEPAAdapter
+from .adapter import OpikGEPAAdapter, OpikDataInst
+from ..._llm_calls import _prepare_model_params
 
 logger = logging.getLogger(__name__)
 
@@ -133,6 +134,50 @@ class GepaOptimizer(BaseOptimizer):
                 )
             )
         return data_insts
+
+    def _normalize_model_kwargs(
+        self, model_kwargs: dict[str, Any], optimization_id: str | None
+    ) -> dict[str, Any]:
+        """
+        Normalize model kwargs using the shared LiteLLM prep helper to ensure
+        consistent behavior (token limits, monitoring metadata) with other optimizers.
+        """
+        normalized = _prepare_model_params(
+            model_kwargs,
+            {},
+            response_model=None,
+            is_reasoning=False,
+            optimization_id=optimization_id,
+            project_name=self.project_name,
+        )
+        return normalized
+
+    def _adapter_instantiate_agent(
+        self, prompt_obj: chat_prompt.ChatPrompt, project_name: str | None
+    ) -> OptimizableAgent:
+        """Helper to produce an OptimizableAgent for adapter usage."""
+        return self._create_agent_for_prompt(prompt_obj, project_name=project_name)
+
+    def _build_gepa_adapter(
+        self,
+        prompt_obj: chat_prompt.ChatPrompt,
+        dataset: Dataset,
+        metric: Callable[[dict[str, Any], str], Any],
+        experiment_config: dict[str, Any] | None,
+        system_fallback: str,
+    ) -> GEPAAdapter[OpikDataInst, dict[str, Any], dict[str, Any]]:
+        prompt_obj.model_kwargs = self._normalize_model_kwargs(
+            self.model_parameters or {},
+            optimization_id=self.current_optimization_id,
+        )
+        return OpikGEPAAdapter(
+            base_prompt=prompt_obj,
+            optimizer=self,
+            metric=metric,
+            system_fallback=system_fallback,
+            dataset=dataset,
+            experiment_config=experiment_config,
+        )
 
     def _apply_system_text(
         self, prompt_obj: chat_prompt.ChatPrompt, system_text: str
@@ -356,6 +401,8 @@ class GepaOptimizer(BaseOptimizer):
                     baseline.set_score(initial_score)
                 except Exception:
                     logger.exception("Baseline evaluation failed")
+                    if raise_on_exception:
+                        raise
 
             adapter_prompt = self._apply_system_text(base_prompt, seed_prompt_text)
             adapter_prompt.model = self.model
@@ -367,13 +414,12 @@ class GepaOptimizer(BaseOptimizer):
             }
             adapter_prompt.model_kwargs = filtered_model_kwargs
 
-            adapter = OpikGEPAAdapter(
-                base_prompt=adapter_prompt,
-                optimizer=self,
-                metric=metric,
-                system_fallback=seed_prompt_text,
+            adapter = self._build_gepa_adapter(
+                prompt_obj=adapter_prompt,
                 dataset=dataset,
+                metric=metric,
                 experiment_config=experiment_config,
+                system_fallback=seed_prompt_text,
             )
 
             try:
@@ -471,90 +517,69 @@ class GepaOptimizer(BaseOptimizer):
             for idx, _ in filtered_indexed_candidates
         ]
 
-        rescored: list[float] = []
         candidate_rows: list[dict[str, Any]] = []
         history: list[dict[str, Any]] = []
+        candidate_scores: list[float] = []
 
-        # Wrap rescoring to prevent OPIK messages and experiment link displays
-        with suppress_opik_logs():
-            with convert_tqdm_to_rich(verbose=0):
-                for idx, (original_idx, candidate) in enumerate(
-                    filtered_indexed_candidates
-                ):
-                    candidate_prompt = self._extract_system_text_from_candidate(
-                        candidate, seed_prompt_text
-                    )
-                    prompt_variant = self._apply_system_text(prompt, candidate_prompt)
-                    prompt_variant.model = self.model
-                    # Filter out GEPA-specific parameters that shouldn't be passed to LLM
-                    filtered_model_kwargs = {
-                        k: v
-                        for k, v in self.model_parameters.items()
-                        if k not in ["num_prompts_per_round", "rounds"]
-                    }
-                    prompt_variant.model_kwargs = filtered_model_kwargs
+        def _normalize_score(value: Any) -> float:
+            if value is None:
+                return float("-inf")
+            try:
+                return float(value)
+            except Exception:
+                return float("-inf")
 
-                    eval_kwargs = dict(
-                        prompt=prompt_variant,
-                        dataset=dataset,
-                        metric=metric,
-                        n_samples=n_samples,
-                        optimization_id=opt_id,
-                        extra_metadata={"phase": "rescoring", "candidate_index": idx},
-                        verbose=0,
-                    )
-                    try:
-                        # TODO(opik-gepa): This rescoring round-trips through Opik's evaluator for every GEPA
-                        # candidate. Once the GEPA→Opik adapter can stream scores back natively, remove this
-                        # redundant evaluation loop and reuse GEPA's own scoring trace instead.
-                        score = float(self._evaluate_prompt_logged(**eval_kwargs))
-                    except Exception:
-                        logger.debug(
-                            "Rescoring failed for candidate %s", idx, exc_info=True
-                        )
-                        score = 0.0
+        for idx, (_, candidate) in enumerate(filtered_indexed_candidates):
+            candidate_prompt = self._extract_system_text_from_candidate(
+                candidate, seed_prompt_text
+            )
+            raw_score = (
+                filtered_val_scores[idx] if idx < len(filtered_val_scores) else None
+            )
+            normalized_score = _normalize_score(raw_score)
+            candidate_scores.append(normalized_score)
 
-                    rescored.append(score)
-                    candidate_rows.append(
+            candidate_rows.append(
+                {
+                    "iteration": idx + 1,
+                    "system_prompt": candidate_prompt,
+                    "gepa_score": raw_score,
+                    "opik_score": raw_score,
+                    "source": self.__class__.__name__,
+                }
+            )
+            history.append(
+                {
+                    "iteration": idx + 1,
+                    "prompt_candidate": candidate_prompt,
+                    "scores": [
                         {
-                            "iteration": idx + 1,
-                            "system_prompt": candidate_prompt,
-                            "gepa_score": filtered_val_scores[idx],
-                            "opik_score": score,
-                            "source": self.__class__.__name__,
-                        }
-                    )
-                    history.append(
+                            "metric_name": f"GEPA-{metric.__name__}",
+                            "score": normalized_score
+                            if normalized_score != float("-inf")
+                            else 0.0,
+                        },
                         {
-                            "iteration": idx + 1,
-                            "prompt_candidate": candidate_prompt,
-                            "scores": [
-                                {
-                                    "metric_name": f"GEPA-{metric.__name__}",
-                                    "score": filtered_val_scores[idx],
-                                },
-                                {"metric_name": metric.__name__, "score": score},
-                            ],
-                            "metadata": {},
-                        }
-                    )
+                            "metric_name": metric.__name__,
+                            "score": normalized_score
+                            if normalized_score != float("-inf")
+                            else 0.0,
+                        },
+                    ],
+                    "metadata": {},
+                }
+            )
 
-        if rescored:
-
-            def _tie_break(idx: int) -> tuple[float, float, int]:
-                opik_score = rescored[idx]
-                gepa_score = filtered_val_scores[idx]
-                gepa_numeric = (
-                    float(gepa_score)
-                    if isinstance(gepa_score, (int, float))
-                    else float("-inf")
-                )
-                return opik_score, gepa_numeric, idx
-
-            best_idx = max(range(len(rescored)), key=_tie_break)
-            best_score = rescored[best_idx]
-        else:
-            if filtered_indexed_candidates:
+        if filtered_candidates:
+            valid_indices = [
+                idx
+                for idx, score in enumerate(candidate_scores)
+                if score != float("-inf")
+            ]
+            if valid_indices:
+                best_idx = max(valid_indices, key=lambda i: candidate_scores[i])
+                best_score = candidate_scores[best_idx]
+            else:
                 gepa_best_idx = getattr(gepa_result, "best_idx", 0) or 0
                 best_idx = next(
                     (
@@ -566,14 +591,18 @@ class GepaOptimizer(BaseOptimizer):
                     ),
                     0,
                 )
-                if filtered_val_scores and 0 <= best_idx < len(filtered_val_scores):
-                    score_value = filtered_val_scores[best_idx]
-                    best_score = float(score_value) if score_value is not None else 0.0
+                if 0 <= best_idx < len(candidate_scores):
+                    candidate_best_score = candidate_scores[best_idx]
+                    best_score = (
+                        candidate_best_score
+                        if candidate_best_score != float("-inf")
+                        else float(initial_score)
+                    )
                 else:
                     best_score = float(initial_score)
-            else:
-                best_idx = 0
-                best_score = float(initial_score)
+        else:
+            best_idx = 0
+            best_score = float(initial_score)
 
         best_candidate = (
             filtered_candidates[best_idx]
@@ -723,7 +752,8 @@ class GepaOptimizer(BaseOptimizer):
             "total_metric_calls": getattr(gepa_result, "total_metric_calls", None),
             "parents": getattr(gepa_result, "parents", None),
             "val_scores": filtered_val_scores,
-            "opik_rescored_scores": rescored,
+            "opik_rescored_scores": filtered_val_scores,
+            "gepa_candidate_scores": candidate_scores,
             "candidate_summary": candidate_rows,
             "best_candidate_iteration": (
                 candidate_rows[best_idx]["iteration"] if candidate_rows else 0
@@ -882,15 +912,16 @@ class GepaOptimizer(BaseOptimizer):
         return_result: bool = False,
     ) -> float | tuple[float, Any | None]:
         """
-        Run an evaluation (baseline/rescoring/final) and optionally capture the full
+        Run an evaluation (baseline/final) and optionally capture the full
         Opik EvaluationResult when callers need trace/test metadata (GEPA baseline).
-        FIXME(opik-gepa): Once GEPA exposes a clean scoring API, this helper should be
-        replaced with a dedicated adapter rather than invoking task_evaluator directly.
+        This helper keeps the evaluation inside Opik's task evaluator so we maintain
+        consistent tracing even when GEPA drives the optimization loop.
         """
         if prompt.model is None:
             prompt.model = self.model
-        if prompt.model_kwargs is None:
-            prompt.model_kwargs = self.model_parameters
+        prompt.model_kwargs = self._normalize_model_kwargs(
+            self.model_parameters or {}, optimization_id=optimization_id
+        )
 
         agent = self._create_agent_for_prompt(prompt)
 
