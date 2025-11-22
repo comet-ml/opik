@@ -161,11 +161,6 @@ DATASET_CONFIG = {
             create_context_precision("question", "answer", "context"),
         ],
     ),
-    "hotpot_300": BenchmarkDatasetConfig(
-        name="hotpot_300",
-        display_name="HotpotQA",
-        metrics=[create_answer_relevance_metric("question")],
-    ),
     "ai2_arc": BenchmarkDatasetConfig(
         name="ai2_arc", display_name="ARC", metrics=[equals]
     ),
@@ -284,6 +279,21 @@ OPTIMIZER_CONFIGS: dict[str, BenchmarkOptimizerConfig] = {
             "n_samples": 100,
         },
     ),
+    "gepa": BenchmarkOptimizerConfig(
+        class_name="GepaOptimizer",
+        params={
+            "n_threads": 4,
+            "verbose": 1,
+            "seed": 42,
+        },
+        optimizer_prompt_params={
+            "max_trials": 30,
+            "n_samples": 3,
+            "reflection_minibatch_size": 3,
+            "candidate_selection_strategy": "pareto",
+            "skip_perfect_score": True,
+        },
+    ),
     "meta_prompt": BenchmarkOptimizerConfig(
         class_name="MetaPromptOptimizer",
         params={
@@ -327,6 +337,16 @@ OPTIMIZER_CONFIGS: dict[str, BenchmarkOptimizerConfig] = {
             "max_parallel_batches": 5,
             "batch_size": 25,
             "convergence_threshold": 0.01,
+            "seed": 42,
+        },
+        optimizer_prompt_params={
+            "max_trials": 30,
+        },
+    ),
+    "parameter": BenchmarkOptimizerConfig(
+        class_name="ParameterOptimizer",
+        params={
+            "n_threads": 4,
             "seed": 42,
         },
         optimizer_prompt_params={
