@@ -39,10 +39,8 @@ class AgentState(TypedDict):
 
 def search_wikipedia_tool(query: str) -> list[str]:
     """Wrapper for the shared Wikipedia search helper."""
-    logger.tool_call("search_wikipedia", query)
-    result = search_wikipedia(query, use_api=False)
-    logger.tool_result(result_count=len(result))
-    return result
+    with logger.log_tool("search_wikipedia", query):
+        return search_wikipedia(query, use_api=True)
 
 
 search_wikipedia_tool = track(type="tool")(search_wikipedia_tool)
@@ -120,7 +118,6 @@ class LangGraphAgent(OptimizableAgent):
 
     def invoke(self, messages: list[dict[str, str]], seed: int | None = None) -> str:
         question = self._extract_latest_user_message(messages)
-        logger.agent_invoke(question)
 
         state: AgentState = {
             "system_prompt": self._system_prompt,
@@ -129,11 +126,8 @@ class LangGraphAgent(OptimizableAgent):
             "answer": "",
         }
 
-        try:
+        with logger.log_invoke(question) as ctx:
             result = self.graph.invoke(state)
             answer = result.get("answer", "No result from agent")
-            logger.agent_response(answer)
+            ctx["response"] = answer
             return answer
-        except Exception as exc:
-            logger.agent_error(exc, include_traceback=True)
-            raise  # Re-raise to stop execution
