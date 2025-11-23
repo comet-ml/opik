@@ -3,7 +3,7 @@ Unit tests for MetaPromptOptimizer token calculation and context fitting logic.
 """
 
 import pytest
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import Mock, patch
 from opik_optimizer.algorithms.meta_prompt_optimizer.meta_prompt_optimizer import (
     MetaPromptOptimizer,
 )
@@ -16,7 +16,7 @@ from opik_optimizer.algorithms.meta_prompt_optimizer.ops.context_ops import (
 class TestTokenCalculation:
     """Test token calculation logic using litellm."""
 
-    def test_calculate_max_context_tokens_with_known_model(self):
+    def test_calculate_max_context_tokens_with_known_model(self) -> None:
         """Test token calculation with a known model (gpt-4)."""
         with patch("litellm.get_max_tokens") as mock_get_max_tokens:
             mock_get_max_tokens.return_value = 128000  # gpt-4 context window
@@ -27,7 +27,7 @@ class TestTokenCalculation:
             assert optimizer.max_context_tokens == 10000
             mock_get_max_tokens.assert_called_once_with("gpt-4")
 
-    def test_calculate_max_context_tokens_with_smaller_model(self):
+    def test_calculate_max_context_tokens_with_smaller_model(self) -> None:
         """Test token calculation with a smaller model."""
         with patch("litellm.get_max_tokens") as mock_get_max_tokens:
             mock_get_max_tokens.return_value = 16000  # gpt-3.5-turbo context
@@ -38,7 +38,7 @@ class TestTokenCalculation:
             assert optimizer.max_context_tokens == 4000
             mock_get_max_tokens.assert_called_once_with("gpt-3.5-turbo")
 
-    def test_calculate_max_context_tokens_custom_model_fallback(self):
+    def test_calculate_max_context_tokens_custom_model_fallback(self) -> None:
         """Test fallback to absolute max for custom models."""
         with patch("litellm.get_max_tokens") as mock_get_max_tokens:
             mock_get_max_tokens.side_effect = Exception("Model not found")
@@ -48,7 +48,7 @@ class TestTokenCalculation:
             # Should fall back to DEFAULT_DATASET_CONTEXT_MAX_TOKENS
             assert optimizer.max_context_tokens == 10000
 
-    def test_calculate_max_context_tokens_applies_absolute_max(self):
+    def test_calculate_max_context_tokens_applies_absolute_max(self) -> None:
         """Test that absolute max is always applied as safety cap."""
         with patch("litellm.get_max_tokens") as mock_get_max_tokens:
             # Simulate a model with huge context (e.g., Claude 3.5 with 200k)
@@ -59,7 +59,7 @@ class TestTokenCalculation:
             # Should be capped at 10000 even though 25% of 200k = 50k
             assert optimizer.max_context_tokens == 10000
 
-    def test_constants_are_correctly_defined(self):
+    def test_constants_are_correctly_defined(self) -> None:
         """Test that all token-related constants are properly defined."""
         assert MetaPromptOptimizer.DEFAULT_DATASET_CONTEXT_MAX_TOKENS == 10000
         assert MetaPromptOptimizer.DEFAULT_DATASET_CONTEXT_RATIO == 0.25
@@ -68,9 +68,11 @@ class TestTokenCalculation:
 class TestContextOpsTokenCounting:
     """Test token counting functionality in context_ops."""
 
-    def test_count_tokens_with_litellm(self):
+    def test_count_tokens_with_litellm(self) -> None:
         """Test token counting using litellm."""
-        with patch("opik_optimizer.algorithms.meta_prompt_optimizer.ops.context_ops.token_counter") as mock_counter:
+        with patch(
+            "opik_optimizer.algorithms.meta_prompt_optimizer.ops.context_ops.token_counter"
+        ) as mock_counter:
             mock_counter.return_value = 100
 
             result = count_tokens("This is a test string", model="gpt-4")
@@ -83,9 +85,12 @@ class TestContextOpsTokenCounting:
             assert call_args[1]["messages"][0]["role"] == "user"
             assert call_args[1]["messages"][0]["content"] == "This is a test string"
 
-    def test_count_tokens_fallback_when_litellm_unavailable(self):
+    def test_count_tokens_fallback_when_litellm_unavailable(self) -> None:
         """Test fallback token counting when litellm fails."""
-        with patch("opik_optimizer.algorithms.meta_prompt_optimizer.ops.context_ops.LITELLM_TOKEN_COUNTER_AVAILABLE", False):
+        with patch(
+            "opik_optimizer.algorithms.meta_prompt_optimizer.ops.context_ops.LITELLM_TOKEN_COUNTER_AVAILABLE",
+            False,
+        ):
             test_string = "x" * 40  # Exactly 40 characters
             result = count_tokens(test_string, model="gpt-4")
 
@@ -96,27 +101,33 @@ class TestContextOpsTokenCounting:
 class TestAdaptiveContextFitting:
     """Test adaptive fitting logic for dataset context."""
 
-    def create_mock_dataset(self, num_items=5, long_values=False):
+    def create_mock_dataset(
+        self, num_items: int = 5, long_values: bool = False
+    ) -> Mock:
         """Helper to create a mock dataset."""
         mock_dataset = Mock()
         items = []
         for i in range(num_items):
             value_text = "x" * 500 if long_values else f"Sample text {i}"
-            items.append({
-                "id": f"item_{i}",
-                "question": f"Question {i}?",
-                "context": value_text,
-                "answer": f"Answer {i}",  # Should be excluded
-            })
+            items.append(
+                {
+                    "id": f"item_{i}",
+                    "question": f"Question {i}?",
+                    "context": value_text,
+                    "answer": f"Answer {i}",  # Should be excluded
+                }
+            )
         mock_dataset.get_items.return_value = items
         return mock_dataset
 
-    def test_adaptive_fitting_reduces_examples(self):
+    def test_adaptive_fitting_reduces_examples(self) -> None:
         """Test that adaptive fitting reduces number of examples when over budget."""
         mock_dataset = self.create_mock_dataset(num_items=5, long_values=True)
         mock_metric = Mock()
 
-        with patch("opik_optimizer.algorithms.meta_prompt_optimizer.ops.context_ops.count_tokens") as mock_count:
+        with patch(
+            "opik_optimizer.algorithms.meta_prompt_optimizer.ops.context_ops.count_tokens"
+        ) as mock_count:
             # First call: too many tokens, second call: fits
             mock_count.side_effect = [3000, 1500]
 
@@ -125,19 +136,21 @@ class TestAdaptiveContextFitting:
                 metric=mock_metric,
                 num_examples=5,
                 max_tokens=2000,
-                model="gpt-4"
+                model="gpt-4",
             )
 
             # Should have called count_tokens twice (reduced from 5 to 4 examples)
             assert mock_count.call_count == 2
             assert "Example" in context
 
-    def test_adaptive_fitting_reduces_truncation(self):
+    def test_adaptive_fitting_reduces_truncation(self) -> None:
         """Test that adaptive fitting reduces truncation length when needed."""
         mock_dataset = self.create_mock_dataset(num_items=1, long_values=True)
         mock_metric = Mock()
 
-        with patch("opik_optimizer.algorithms.meta_prompt_optimizer.ops.context_ops.count_tokens") as mock_count:
+        with patch(
+            "opik_optimizer.algorithms.meta_prompt_optimizer.ops.context_ops.count_tokens"
+        ) as mock_count:
             # First call: still too big, second call: fits with reduced truncation
             mock_count.side_effect = [2500, 1800]
 
@@ -146,29 +159,33 @@ class TestAdaptiveContextFitting:
                 metric=mock_metric,
                 num_examples=1,
                 max_tokens=2000,
-                model="gpt-4"
+                model="gpt-4",
             )
 
             # Should have reduced truncation limit
             assert mock_count.call_count == 2
             assert "..." in context  # Indicates truncation happened
 
-    def test_adaptive_fitting_returns_minimal_when_cannot_fit(self):
+    def test_adaptive_fitting_returns_minimal_when_cannot_fit(self) -> None:
         """Test that minimal context is returned when cannot fit within budget."""
         mock_dataset = self.create_mock_dataset(num_items=1, long_values=True)
         mock_metric = Mock()
 
-        with patch("opik_optimizer.algorithms.meta_prompt_optimizer.ops.context_ops.count_tokens") as mock_count:
+        with patch(
+            "opik_optimizer.algorithms.meta_prompt_optimizer.ops.context_ops.count_tokens"
+        ) as mock_count:
             # Always return too many tokens
             mock_count.return_value = 5000
 
-            with patch("opik_optimizer.algorithms.meta_prompt_optimizer.ops.context_ops.logger") as mock_logger:
+            with patch(
+                "opik_optimizer.algorithms.meta_prompt_optimizer.ops.context_ops.logger"
+            ) as mock_logger:
                 context = get_task_context(
                     dataset=mock_dataset,
                     metric=mock_metric,
                     num_examples=1,
                     max_tokens=2000,
-                    model="gpt-4"
+                    model="gpt-4",
                 )
 
                 # Should log warning about not fitting
@@ -181,7 +198,7 @@ class TestAdaptiveContextFitting:
 class TestColumnSelection:
     """Test column selection functionality."""
 
-    def test_column_selection_filters_correctly(self):
+    def test_column_selection_filters_correctly(self) -> None:
         """Test that column selection filters dataset fields."""
         mock_dataset = Mock()
         mock_dataset.get_items.return_value = [
@@ -195,7 +212,9 @@ class TestColumnSelection:
         ]
         mock_metric = Mock()
 
-        with patch("opik_optimizer.algorithms.meta_prompt_optimizer.ops.context_ops.count_tokens") as mock_count:
+        with patch(
+            "opik_optimizer.algorithms.meta_prompt_optimizer.ops.context_ops.count_tokens"
+        ) as mock_count:
             mock_count.return_value = 100  # Fits within budget
 
             context = get_task_context(
@@ -204,7 +223,7 @@ class TestColumnSelection:
                 num_examples=1,
                 columns=["question", "hint"],  # Only these columns
                 max_tokens=2000,
-                model="gpt-4"
+                model="gpt-4",
             )
 
             # Should include selected columns
@@ -215,7 +234,7 @@ class TestColumnSelection:
             # Should NOT include output column
             assert "{answer}" not in context
 
-    def test_column_selection_with_invalid_columns(self):
+    def test_column_selection_with_invalid_columns(self) -> None:
         """Test that invalid column names fall back to all input fields."""
         mock_dataset = Mock()
         mock_dataset.get_items.return_value = [
@@ -228,17 +247,21 @@ class TestColumnSelection:
         ]
         mock_metric = Mock()
 
-        with patch("opik_optimizer.algorithms.meta_prompt_optimizer.ops.context_ops.count_tokens") as mock_count:
+        with patch(
+            "opik_optimizer.algorithms.meta_prompt_optimizer.ops.context_ops.count_tokens"
+        ) as mock_count:
             mock_count.return_value = 100
 
-            with patch("opik_optimizer.algorithms.meta_prompt_optimizer.ops.context_ops.logger") as mock_logger:
+            with patch(
+                "opik_optimizer.algorithms.meta_prompt_optimizer.ops.context_ops.logger"
+            ) as mock_logger:
                 context = get_task_context(
                     dataset=mock_dataset,
                     metric=mock_metric,
                     num_examples=1,
                     columns=["nonexistent_col"],  # Invalid column
                     max_tokens=2000,
-                    model="gpt-4"
+                    model="gpt-4",
                 )
 
                 # Should log warning
@@ -251,7 +274,7 @@ class TestColumnSelection:
 class TestMetadataMapping:
     """Test that metadata is properly mapped."""
 
-    def test_optimizer_metadata_includes_token_budget(self):
+    def test_optimizer_metadata_includes_token_budget(self) -> None:
         """Test that optimizer metadata includes max_context_tokens."""
         with patch("litellm.get_max_tokens") as mock_get_max_tokens:
             mock_get_max_tokens.return_value = 16000
@@ -262,7 +285,7 @@ class TestMetadataMapping:
             assert "max_context_tokens" in metadata
             assert metadata["max_context_tokens"] == 4000  # 25% of 16000
 
-    def test_optimizer_metadata_includes_all_parameters(self):
+    def test_optimizer_metadata_includes_all_parameters(self) -> None:
         """Test that all optimizer parameters are in metadata."""
         optimizer = MetaPromptOptimizer(
             model="gpt-4",
