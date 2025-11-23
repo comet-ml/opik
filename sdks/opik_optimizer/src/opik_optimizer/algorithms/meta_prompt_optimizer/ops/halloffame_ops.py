@@ -12,6 +12,8 @@ from collections import Counter
 import re
 import logging
 
+from ..prompts import PATTERN_EXTRACTION_SYSTEM_PROMPT, build_pattern_extraction_user_prompt
+
 logger = logging.getLogger(__name__)
 
 
@@ -239,37 +241,10 @@ class PromptHallOfFame:
             prompt_scorecard += json.dumps(entry.prompt_messages, indent=2)
             prompt_scorecard += "\n"
 
-        return f"""
-Analyze these high-performing prompts and extract GENERALIZABLE patterns that made them successful.
-
-Metric being optimized: {metric_name}
-
-Top Performing Prompts:
-{prompt_scorecard}
-
-Your task:
-1. Identify specific instruction patterns that appear in high-scoring prompts
-2. Recognize structural approaches that seem effective (e.g., "step-by-step", "constraint listing", "explicit format requirements")
-3. Note phrasing styles that correlate with success
-4. Extract 3-5 concrete patterns that could be reused
-
-IMPORTANT:
-- Focus on STRUCTURE and APPROACH, not dataset-specific content
-- Patterns should be transferable to similar tasks
-- Be specific enough to be actionable (e.g., "Start with explicit constraint listing" not "be clear")
-- DO NOT mention specific dataset fields, metric names, or evaluation details
-
-Return patterns as a JSON array:
-{{
-  "patterns": [
-    {{
-      "pattern": "Brief description of pattern",
-      "example": "Example phrasing or structure",
-      "rationale": "Why this helps"
-    }}
-  ]
-}}
-"""
+        return build_pattern_extraction_user_prompt(
+            top_prompts_scorecard=prompt_scorecard,
+            metric_name=metric_name,
+        )
 
     def _parse_pattern_response(self, response: str) -> List[str]:
         """Parse LLM response into pattern list"""
@@ -314,15 +289,3 @@ Return patterns as a JSON array:
                 matched.append(pattern)
 
         return matched
-
-
-# System prompt for pattern extraction
-PATTERN_EXTRACTION_SYSTEM_PROMPT = """You are an expert at analyzing successful prompts and extracting reusable patterns.
-
-Your goal is to identify what makes prompts effective at achieving high scores on specific metrics.
-Focus on structural and stylistic elements that can be transferred to new prompts.
-
-Be specific and actionable in your pattern descriptions.
-
-CRITICAL: Do NOT mention specific dataset fields, metric names (like "F1 score", "HotpotQA"),
-or evaluation-specific terminology. Focus on GENERAL prompt engineering principles."""

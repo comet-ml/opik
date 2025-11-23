@@ -62,10 +62,10 @@ double-quoted:
 
 # Meta-prompt template sections
 META_PROMPT_SECTIONS = {
-    "baseline_prompt": "###### START prompt ######n{prompt}\n###### END prompt ######
-    "examples": "###### START example-data ######n{examples}\n###### END example-data ######
-    "history": "###### START history ######n{history}\n###### END history ######
-    "patterns": "###### START winning-patterns ######n{patterns}\n###### END winning-patterns ######
+    "baseline_prompt": "###### START prompt ######\n{prompt}\n###### END prompt ######\n",
+    "examples": "###### START example-data ######\n{examples}\n###### END example-data ######\n",
+    "history": "###### START history ######\n{history}\n###### END history ######\n",
+    "patterns": "###### START winning-patterns ######\n{patterns}\n###### END winning-patterns ######\n",
 }
 
 
@@ -119,7 +119,7 @@ def build_candidate_generation_user_prompt(
             {pattern_section}
 
             {analysis_instruction}
-            Generate {prompts_per_round} improved versions of this prompt.
+            Generate [{prompts_per_round}] improved versions of this prompt.
             {metric_focus_instruction}
 
             Each version should aim to:
@@ -172,7 +172,7 @@ def build_mcp_tool_description_user_prompt(
             Current best score: {best_score:.4f}
             {history_context}
 
-            Generate {prompts_per_round} improved descriptions for this tool.
+            Generate [{prompts_per_round}] improved descriptions for this tool.
             Each description should clarify expected input arguments and set explicit expectations
             for how the tool output must be used in the final response.
             Avoid changing unrelated parts of the prompt. Focus only on the description text for `{tool_name}`.
@@ -189,3 +189,61 @@ def build_mcp_tool_description_user_prompt(
             }}
             """
     ).strip()
+
+
+# System prompt for Hall of Fame pattern extraction
+PATTERN_EXTRACTION_SYSTEM_PROMPT = """You are an expert at analyzing successful prompts and extracting reusable patterns.
+
+Your goal is to identify what makes prompts effective at achieving high scores on specific metrics.
+Focus on structural and stylistic elements that can be transferred to new prompts.
+
+Be specific and actionable in your pattern descriptions.
+
+CRITICAL: Do NOT mention specific dataset fields, metric names (like "F1 score", "HotpotQA"),
+or evaluation-specific terminology. Focus on GENERAL prompt engineering principles."""
+
+
+def build_pattern_extraction_user_prompt(
+    top_prompts_scorecard: str,
+    metric_name: str,
+) -> str:
+    """Build the user prompt for extracting patterns from winning prompts.
+
+    Args:
+        top_prompts_scorecard: Formatted string with top-performing prompts
+        metric_name: Name of the metric being optimized
+
+    Returns:
+        Formatted user prompt string
+    """
+    return f"""
+Analyze these high-performing prompts and extract GENERALIZABLE patterns that made them successful.
+
+Metric being optimized: {metric_name}
+
+Top Performing Prompts:
+{top_prompts_scorecard}
+
+Your task:
+1. Identify specific instruction patterns that appear in high-scoring prompts
+2. Recognize structural approaches that seem effective (e.g., "step-by-step", "constraint listing", "explicit format requirements")
+3. Note phrasing styles that correlate with success
+4. Extract 3-5 concrete patterns that could be reused
+
+IMPORTANT:
+- Focus on STRUCTURE and APPROACH, not dataset-specific content
+- Patterns should be transferable to similar tasks
+- Be specific enough to be actionable (e.g., "Start with explicit constraint listing" not "be clear")
+- DO NOT mention specific dataset fields, metric names, or evaluation details
+
+Return patterns as a JSON array:
+{{
+  "patterns": [
+    {{
+      "pattern": "Brief description of pattern",
+      "example": "Example phrasing or structure",
+      "rationale": "Why this helps"
+    }}
+  ]
+}}
+"""
