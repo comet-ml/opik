@@ -36,7 +36,7 @@ modal token new  # Authenticate with Modal
 # 1. Create/update the unified secret (include whatever keys you have)
 modal secret create opik-benchmarks \
   OPIK_API_KEY="$OPIK_API_KEY" \
-  OPIK_BASE_URL="$OPIK_BASE_URL" \
+  OPIK_URL_OVERRIDE="$OPIK_URL_OVERRIDE" \
   OPIK_WORKSPACE="$OPIK_WORKSPACE" \
   OPENAI_API_KEY="$OPENAI_API_KEY" \
   ANTHROPIC_API_KEY="$ANTHROPIC_API_KEY" \
@@ -258,7 +258,7 @@ Use one secret for Opik + providers:
 ```bash
 modal secret create opik-benchmarks \
   OPIK_API_KEY="$OPIK_API_KEY" \
-  OPIK_BASE_URL="$OPIK_BASE_URL" \
+  OPIK_URL_OVERRIDE="$OPIK_URL_OVERRIDE" \
   OPIK_WORKSPACE="$OPIK_WORKSPACE" \
   OPENAI_API_KEY="$OPENAI_API_KEY" \
   ANTHROPIC_API_KEY="$ANTHROPIC_API_KEY" \

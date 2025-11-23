@@ -67,36 +67,6 @@
     {
       "datasets": [
         {
-          "dataset": "ifbench",
-          "datasets": {
-            "train": { "loader": "ifbench", "split": "train", "count": 150, "dataset_name": "ifbench_train" },
-            "validation": { "loader": "ifbench", "split": "validation", "count": 300, "dataset_name": "ifbench_validation" },
-            "test": { "loader": "ifbench", "split": "test", "count": 294, "dataset_name": "ifbench_test" }
-          }
-        }
-      ],
-      "optimizers": [
-        { "name": "few_shot", "optimizer_prompt_params": { "max_trials": 678, "n_samples": 4 } },
-        { "name": "evolutionary_optimizer", "optimizer_prompt_params": { "max_trials": 678, "population_size": 10, "num_generations": 4 } },
-        { "name": "gepa", "optimizer_prompt_params": { "max_trials": 678, "n_samples": 4 } },
-        { "name": "hierarchical_reflective", "optimizer_prompt_params": { "max_trials": 678 } },
-        { "name": "meta_prompt", "optimizer_prompt_params": { "max_trials": 678 } }
-      ],
-      "models": [
-        { "name": "openai/gpt-4.1-mini" },
-        { "name": "openrouter/qwen/qwen-3-8b" }
-      ],
-      "metrics": [
-        { "path": "benchmarks.metrics.ifbench.ifbench_compliance_judge" }
-      ],
-      "prompt": [
-        { "role": "system", "content": "Follow the instructions in the prompt exactly and return a fully compliant answer." },
-        { "role": "user", "content": "{prompt}" }
-      ]
-    },
-    {
-      "datasets": [
-        {
           "dataset": "pupa",
           "datasets": {
             "train": { "loader": "pupa", "split": "train", "count": 111, "dataset_name": "pupa_train" },

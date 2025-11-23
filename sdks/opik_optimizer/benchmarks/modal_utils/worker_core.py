@@ -10,12 +10,59 @@ from benchmarks.core.benchmark_task import TaskResult, TASK_STATUS_FAILED
 from benchmarks.utils.task_runner import execute_task
 
 
+def _dump_opik_configuration() -> None:
+    """Dump Opik configuration for debugging."""
+    print("=" * 80)
+    print("OPIK CONFIGURATION (Worker)")
+    print("=" * 80)
+
+    # Environment variables
+    print("\nEnvironment Variables:")
+    env_vars = {
+        "OPIK_API_KEY": os.getenv("OPIK_API_KEY"),
+        "OPIK_URL_OVERRIDE": os.getenv("OPIK_URL_OVERRIDE"),
+        "OPIK_WORKSPACE": os.getenv("OPIK_WORKSPACE"),
+        "OPIK_PROJECT_NAME": os.getenv("OPIK_PROJECT_NAME"),
+    }
+    for key, value in env_vars.items():
+        if value:
+            if key == "OPIK_API_KEY":
+                masked = value[:8] + "..." + value[-4:] if len(value) > 12 else "***"
+                print(f"  {key}: {masked}")
+            else:
+                print(f"  {key}: {value}")
+        else:
+            print(f"  {key}: NOT SET")
+
+    # Opik SDK config
+    print("\nOpik SDK Configuration:")
+    try:
+        from opik.config import OpikConfig
+
+        config = OpikConfig()
+        print(f"  API Key present: {'YES' if config.api_key else 'NO'}")
+        print(
+            f"  Base URL: {config.url_override or 'DEFAULT (https://www.comet.com/opik/api)'}"
+        )
+        print(f"  Workspace: {config.workspace or 'NOT SET'}")
+    except Exception as e:
+        print(f"  Failed to load config: {e}")
+
+    print("=" * 80)
+    print()
+
+
 def _ensure_opik_credentials() -> None:
     api_key = os.getenv("OPIK_API_KEY", "").strip()
-    host = os.getenv("OPIK_BASE_URL") or os.getenv("OPIK_HOST")
+    # Check URL override environment variable
+    host = os.getenv("OPIK_URL_OVERRIDE")
 
     # Determine if this is a self-hosted instance
     is_self_hosted = bool(host and host != "https://www.comet.com/opik/api")
+
+    print(f"Opik instance type: {'Self-hosted' if is_self_hosted else 'Comet Cloud'}")
+    print(f"API key required: {'NO' if is_self_hosted else 'YES'}")
+    print(f"API key present: {'YES' if api_key else 'NO'}")
 
     # API key is only required for Comet Cloud
     if not is_self_hosted and not api_key:
@@ -26,11 +73,13 @@ def _ensure_opik_credentials() -> None:
         )
 
     # Optional lightweight ping to fail fast on bad keys
+    print("Testing Opik client connection...")
     try:
         client = opik.Opik()
         # `get_current_workspace` is a cheap way to validate the key (if method exists)
         if hasattr(client, "get_current_workspace"):
             client.get_current_workspace()  # type: ignore[attr-defined]
+        print("✓ Opik client connection successful")
     except Exception as exc:
         # Only raise for Comet Cloud or if we have an API key
         if not is_self_hosted or api_key:
@@ -86,6 +135,11 @@ def run_optimization_task(
         opik.set_tracing_active(False)
     except Exception:
         pass
+
+    # Dump configuration for debugging
+    _dump_opik_configuration()
+
+    # Ensure credentials are valid
     _ensure_opik_credentials()
 
     timestamp_start = time.time()

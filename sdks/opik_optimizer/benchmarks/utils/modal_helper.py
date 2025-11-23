@@ -15,7 +15,7 @@ OPTIONAL_KEYS = [
     "GEMINI_API_KEY",
     "OPENROUTER_API_KEY",
 ]
-OPIK_HOST_KEYS = ["OPIK_HOST", "OPIK_BASE_URL"]
+OPIK_HOST_KEYS = ["OPIK_URL_OVERRIDE", "OPIK_HOST"]
 
 
 def _collect(keys: Iterable[str]) -> tuple[list[str], list[str]]:
