@@ -70,6 +70,7 @@ import CostCell from "@/components/shared/DataTableCells/CostCell";
 import ErrorCell from "@/components/shared/DataTableCells/ErrorCell";
 import DurationCell from "@/components/shared/DataTableCells/DurationCell";
 import FeedbackScoreCell from "@/components/shared/DataTableCells/FeedbackScoreCell";
+import FeedbackScoreReasonCell from "@/components/shared/DataTableCells/FeedbackScoreReasonCell";
 import PrettyCell from "@/components/shared/DataTableCells/PrettyCell";
 import CommentsCell from "@/components/shared/DataTableCells/CommentsCell";
 import FeedbackScoreHeader from "@/components/shared/DataTableHeaders/FeedbackScoreHeader";
@@ -547,10 +548,11 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
       }));
   }, [feedbackScoresData?.scores]);
 
-  const dynamicColumnsIds = useMemo(
-    () => dynamicScoresColumns.map((c) => c.id),
-    [dynamicScoresColumns],
-  );
+  const dynamicColumnsIds = useMemo(() => {
+    const scoreIds = dynamicScoresColumns.map((c) => c.id);
+    const reasonIds = dynamicScoresColumns.map((c) => `${c.id}_reason`);
+    return [...scoreIds, ...reasonIds];
+  }, [dynamicScoresColumns]);
 
   useDynamicColumnsCache({
     dynamicColumnsKey: DYNAMIC_COLUMNS_KEY,
@@ -571,7 +573,9 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
       (col) => col.id !== USER_FEEDBACK_COLUMN_ID,
     );
 
-    return [userFeedbackColumn, ...otherDynamicColumns].map(
+    const allScoreColumns = [userFeedbackColumn, ...otherDynamicColumns];
+
+    const scoreColumns = allScoreColumns.map(
       ({ label, id, columnType }) =>
         ({
           id,
@@ -584,6 +588,20 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
           statisticKey: `${COLUMN_FEEDBACK_SCORES_ID}.${label}`,
         }) as ColumnData<BaseTraceData>,
     );
+
+    const reasonColumns = allScoreColumns.map(
+      ({ label, id }) =>
+        ({
+          id: `${id}_reason`,
+          label: `${label} (reason)`,
+          type: COLUMN_TYPE.string,
+          cell: FeedbackScoreReasonCell as never,
+          accessorFn: (row) =>
+            row.feedback_scores?.find((f) => f.name === label),
+        }) as ColumnData<BaseTraceData>,
+    );
+
+    return [...scoreColumns, ...reasonColumns];
   }, [dynamicScoresColumns]);
 
   const selectedRows: Array<Trace | Span> = useMemo(() => {
