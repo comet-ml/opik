@@ -134,13 +134,12 @@ def test_execute_task_uses_validation_and_test_splits(
     )
 
     assert result.evaluation_split == "validation"
-    assert result.initial_evaluation and result.initial_evaluation.dataset
-    assert result.initial_evaluation.dataset.split == "validation"
-    assert result.test_evaluation is not None
-    assert (
-        result.test_evaluation.dataset
-        and result.test_evaluation.dataset.split == "test"
-    )
+    init_val = result.evaluations["initial"].validation
+    assert init_val is not None and init_val.result is not None
+    assert init_val.result.dataset and init_val.result.dataset.split == "validation"
+    init_test = result.evaluations["initial"].test
+    assert init_test is not None and init_test.result is not None
+    assert init_test.result.dataset and init_test.result.dataset.split == "test"
     assert set(result.dataset_metadata.keys()) == {"train", "validation", "test"}
     assert result.optimized_prompt and isinstance(result.optimized_prompt, ChatPrompt)
 
@@ -161,7 +160,9 @@ def test_execute_task_without_validation(monkeypatch: pytest.MonkeyPatch) -> Non
     )
 
     assert result.evaluation_split == "train"
-    assert result.test_evaluation is None
+    initial_set = result.evaluations.get("initial")
+    assert initial_set is not None
+    assert initial_set.test is None
     assert (
         "train" in result.dataset_metadata
         and "validation" not in result.dataset_metadata

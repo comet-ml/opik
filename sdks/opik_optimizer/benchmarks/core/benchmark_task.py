@@ -18,9 +18,45 @@ class DatasetMetadata(BaseModel):
 
 
 class TaskEvaluationResult(BaseModel):
-    metrics: list[dict[Literal["metric_name", "score", "timestamp"], Any]]
+    metrics: list[
+        dict[
+            Literal[
+                "metric_name",
+                "score",
+                "timestamp",
+                "dataset_item_ids",
+                "sample_size",
+            ],
+            Any,
+        ]
+    ]
     duration_seconds: float
     dataset: DatasetMetadata | None = None
+    eval_id: str | None = None
+    experiment_id: str | None = None
+
+
+class EvaluationSet(BaseModel):
+    """Grouped evaluations by split for a single stage (initial/final)."""
+
+    class EvaluationEntry(BaseModel):
+        step_id: str | None = None
+        result: TaskEvaluationResult | None = None
+
+    train: EvaluationEntry | None = None
+    validation: EvaluationEntry | None = None
+    test: EvaluationEntry | None = None
+
+
+class EvaluationStage(BaseModel):
+    """Stage-aware evaluation entry (e.g., initial baseline, post-optimization)."""
+
+    stage: str
+    split: str | None = None
+    evaluation: TaskEvaluationResult | None = None
+    prompt_snapshot: opik_optimizer.ChatPrompt | None = None
+    step_ref: str | None = None
+    notes: str | None = None
 
 
 class TaskResult(BaseModel):
@@ -34,11 +70,10 @@ class TaskResult(BaseModel):
     timestamp_start: float
     status: TaskStatus
     initial_prompt: opik_optimizer.ChatPrompt | None = None
-    initial_evaluation: TaskEvaluationResult | None = None
     optimized_prompt: opik_optimizer.ChatPrompt | None = None
-    optimized_evaluation: TaskEvaluationResult | None = None
-    test_evaluation: TaskEvaluationResult | None = None
-    initial_test_evaluation: TaskEvaluationResult | None = None
+    evaluations: dict[str, EvaluationSet] = Field(default_factory=dict)
+    stages: list[EvaluationStage] = Field(default_factory=list)
+    optimization_history: dict[str, Any] = Field(default_factory=dict)
     error_message: str | None = None
     timestamp_end: float | None = None
     llm_calls_total_optimization: int | None = None
@@ -73,25 +108,34 @@ class TaskResult(BaseModel):
                 obj["optimized_prompt"]
             )
 
-        # Handle TaskEvaluationResult objects
-        if obj.get("initial_evaluation") and isinstance(
-            obj["initial_evaluation"], dict
-        ):
-            obj["initial_evaluation"] = TaskEvaluationResult.model_validate(
-                obj["initial_evaluation"]
-            )
+        if obj.get("evaluations") and isinstance(obj["evaluations"], dict):
+            normalized: dict[str, EvaluationSet] = {}
+            for key, value in obj["evaluations"].items():
+                normalized[key] = EvaluationSet.model_validate(value)
+            obj["evaluations"] = normalized
 
-        if obj.get("optimized_evaluation") and isinstance(
-            obj["optimized_evaluation"], dict
-        ):
-            obj["optimized_evaluation"] = TaskEvaluationResult.model_validate(
-                obj["optimized_evaluation"]
-            )
-
-        if obj.get("test_evaluation") and isinstance(obj["test_evaluation"], dict):
-            obj["test_evaluation"] = TaskEvaluationResult.model_validate(
-                obj["test_evaluation"]
-            )
+        if obj.get("stages") and isinstance(obj["stages"], list):
+            normalized_stages: list[EvaluationStage] = []
+            for entry in obj["stages"]:
+                if isinstance(entry, dict):
+                    if entry.get("evaluation") and isinstance(
+                        entry["evaluation"], dict
+                    ):
+                        entry["evaluation"] = TaskEvaluationResult.model_validate(
+                            entry["evaluation"]
+                        )
+                    if entry.get("prompt_snapshot") and isinstance(
+                        entry["prompt_snapshot"], dict
+                    ):
+                        entry["prompt_snapshot"] = (
+                            opik_optimizer.ChatPrompt.model_validate(  # type: ignore[attr-defined]
+                                entry["prompt_snapshot"]
+                            )
+                        )
+                    normalized_stages.append(EvaluationStage.model_validate(entry))
+                else:
+                    normalized_stages.append(entry)
+            obj["stages"] = normalized_stages
 
         if obj.get("dataset_metadata"):
             obj["dataset_metadata"] = {

@@ -22,6 +22,8 @@ import opik_optimizer.datasets
 from benchmarks.core.benchmark_task import (
     DatasetMetadata,
     TaskEvaluationResult,
+    EvaluationSet,
+    EvaluationStage,
     TaskResult,
     TASK_STATUS_FAILED,
     TASK_STATUS_SUCCESS,
@@ -612,7 +614,7 @@ def execute_task(
     optimizer_params_override: dict[str, Any] | None,
     optimizer_prompt_params_override: dict[str, Any] | None,
     datasets: dict[str, Any] | None = None,
-    metrics: list[str] | None = None,
+    metrics: list[str | dict[str, Any]] | None = None,
     prompt_messages: list[dict[str, Any]] | None = None,
 ) -> TaskResult:
     """Shared execution path used by local and Modal runners."""
@@ -622,6 +624,7 @@ def execute_task(
     optimize_kwargs: dict[str, Any] | None = None
     constructor_kwargs: dict[str, Any] | None = None
     test_initial_evaluation: TaskEvaluationResult | None = None
+    steps: list[dict[str, Any]] = []
 
     with reporting_utils.suppress_opik_logs():
         try:
@@ -672,6 +675,18 @@ def execute_task(
                 metrics=metrics_resolved,
                 n_threads=4,
             )
+            steps.append(
+                {
+                    "step_id": "initial-eval",
+                    "kind": "baseline",
+                    "index": 0,
+                    "split": bundle.evaluation_role,
+                    "prompt_snapshot": initial_prompt,
+                    "metrics": {bundle.evaluation_role: initial_evaluation.metrics},
+                    "llm_calls": 0,
+                    "meta": {},
+                }
+            )
 
             if bundle.test is not None and bundle.test_name is not None:
                 test_initial_evaluation = evaluate_prompt_on_dataset(
@@ -682,6 +697,18 @@ def execute_task(
                     dataset_role="test",
                     metrics=metrics_resolved,
                     n_threads=4,
+                )
+                steps.append(
+                    {
+                        "step_id": "initial-test",
+                        "kind": "baseline",
+                        "index": 0,
+                        "split": "test",
+                        "prompt_snapshot": initial_prompt,
+                        "metrics": {"test": test_initial_evaluation.metrics},
+                        "llm_calls": 0,
+                        "meta": {},
+                    }
                 )
 
             optimize_kwargs = dict(optimizer_config.optimizer_prompt_params)
@@ -705,6 +732,18 @@ def execute_task(
                 metrics=metrics_resolved,
                 n_threads=4,
             )
+            steps.append(
+                {
+                    "step_id": "final-eval",
+                    "kind": "post_opt",
+                    "index": 1,
+                    "split": bundle.evaluation_role,
+                    "prompt_snapshot": optimized_prompt,
+                    "metrics": {bundle.evaluation_role: optimized_evaluation.metrics},
+                    "llm_calls": optimization_results.llm_calls,
+                    "meta": {},
+                }
+            )
 
             test_evaluation = None
             if bundle.test is not None and bundle.test_name is not None:
@@ -717,6 +756,85 @@ def execute_task(
                     metrics=metrics_resolved,
                     n_threads=4,
                 )
+                steps.append(
+                    {
+                        "step_id": "final-test",
+                        "kind": "post_opt",
+                        "index": 1,
+                        "split": "test",
+                        "prompt_snapshot": optimized_prompt,
+                        "metrics": {"test": test_evaluation.metrics},
+                        "llm_calls": 0,
+                        "meta": {},
+                    }
+                )
+
+            evaluations = {
+                "initial": EvaluationSet(
+                    **{
+                        bundle.evaluation_role: EvaluationSet.EvaluationEntry(
+                            step_id="initial-eval", result=initial_evaluation
+                        ),
+                        "test": EvaluationSet.EvaluationEntry(
+                            step_id="initial-test", result=test_initial_evaluation
+                        )
+                        if test_initial_evaluation
+                        else None,
+                    }
+                ),
+                "final": EvaluationSet(
+                    **{
+                        bundle.evaluation_role: EvaluationSet.EvaluationEntry(
+                            step_id="final-eval", result=optimized_evaluation
+                        ),
+                        "test": EvaluationSet.EvaluationEntry(
+                            step_id="final-test", result=test_evaluation
+                        )
+                        if test_evaluation
+                        else None,
+                    }
+                ),
+            }
+
+            stages: list[EvaluationStage] = []
+            stages.append(
+                EvaluationStage(
+                    stage="initial",
+                    split=bundle.evaluation_role,
+                    evaluation=initial_evaluation,
+                    prompt_snapshot=initial_prompt,
+                    step_ref="initial-eval",
+                )
+            )
+            if test_initial_evaluation:
+                stages.append(
+                    EvaluationStage(
+                        stage="initial",
+                        split="test",
+                        evaluation=test_initial_evaluation,
+                        prompt_snapshot=initial_prompt,
+                        step_ref="initial-test",
+                    )
+                )
+            stages.append(
+                EvaluationStage(
+                    stage="final",
+                    split=bundle.evaluation_role,
+                    evaluation=optimized_evaluation,
+                    prompt_snapshot=optimized_prompt,
+                    step_ref="final-eval",
+                )
+            )
+            if test_evaluation:
+                stages.append(
+                    EvaluationStage(
+                        stage="final",
+                        split="test",
+                        evaluation=test_evaluation,
+                        prompt_snapshot=optimized_prompt,
+                        step_ref="final-test",
+                    )
+                )
 
             return TaskResult(
                 id=task_id,
@@ -726,11 +844,10 @@ def execute_task(
                 status=TASK_STATUS_SUCCESS,
                 timestamp_start=timestamp_start,
                 initial_prompt=initial_prompt,
-                initial_evaluation=initial_evaluation,
                 optimized_prompt=optimized_prompt,
-                optimized_evaluation=optimized_evaluation,
-                test_evaluation=test_evaluation,
-                initial_test_evaluation=test_initial_evaluation,
+                evaluations=evaluations,
+                stages=stages,
+                optimization_history={"steps": steps},
                 error_message=None,
                 llm_calls_total_optimization=optimization_results.llm_calls,
                 optimization_raw_result=optimization_results,
@@ -759,7 +876,9 @@ def execute_task(
                 dataset_metadata={},
                 evaluation_split=None,
                 requested_split=None,
-                initial_test_evaluation=test_initial_evaluation,
+                evaluations={},
+                stages=[],
+                optimization_history={"steps": steps},
                 optimizer_prompt_params_used=optimize_kwargs,
                 optimizer_params_used=constructor_kwargs,
             )

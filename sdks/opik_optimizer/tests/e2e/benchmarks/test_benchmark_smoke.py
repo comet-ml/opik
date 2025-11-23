@@ -175,4 +175,4 @@ def test_run_benchmark_smoke(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) ->
     assert task_results[0]["dataset_name"] == "toy_train"
     # Ensure evaluation/test metadata are present
     assert "dataset_metadata" in task_results[0]
-    assert "test_evaluation" in task_results[0]
+    assert "evaluations" in task_results[0]

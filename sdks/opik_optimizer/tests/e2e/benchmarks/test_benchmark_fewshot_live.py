@@ -163,4 +163,4 @@ def test_benchmark_runner_few_shot_live(
     assert task_results[0]["dataset_name"] == "tiny_test"
     assert task_results[0]["optimizer_name"] == "few_shot"
     assert task_results[0]["optimized_prompt"] is not None
-    assert task_results[0]["optimized_evaluation"] is not None
+    assert task_results[0]["evaluations"]["final"]["validation"]["result"] is not None

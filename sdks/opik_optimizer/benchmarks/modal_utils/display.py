@@ -47,26 +47,29 @@ def compute_summary(metadata: dict, tasks: list[dict], call_ids: list[dict]) -> 
         if not dataset:
             continue
 
-        initial_eval = task.get("initial_evaluation", {})
-        optimized_eval = task.get("optimized_evaluation", {})
+        evals = task.get("evaluations", {}) or {}
+        initial_set = evals.get("initial", {})
+        final_set = evals.get("final", {})
 
-        if initial_eval and "metrics" in initial_eval:
-            for metric in initial_eval["metrics"]:
-                metrics_by_dataset[dataset]["initial"].append(
-                    {
-                        "metric": metric.get("metric_name"),
-                        "score": metric.get("score"),
-                    }
-                )
+        def _collect(eval_set: dict, bucket: str) -> None:
+            for split_entry in (
+                eval_set.get("train"),
+                eval_set.get("validation"),
+                eval_set.get("test"),
+            ):
+                if not split_entry:
+                    continue
+                result = split_entry.get("result") or {}
+                for metric in result.get("metrics", []):
+                    metrics_by_dataset[dataset][bucket].append(
+                        {
+                            "metric": metric.get("metric_name"),
+                            "score": metric.get("score"),
+                        }
+                    )
 
-        if optimized_eval and "metrics" in optimized_eval:
-            for metric in optimized_eval["metrics"]:
-                metrics_by_dataset[dataset]["optimized"].append(
-                    {
-                        "metric": metric.get("metric_name"),
-                        "score": metric.get("score"),
-                    }
-                )
+        _collect(initial_set, "initial")
+        _collect(final_set, "optimized")
 
     return {
         "total_tasks": total_tasks,
@@ -222,29 +225,41 @@ def generate_results_display(
                 optimizer = task["optimizer_name"]
                 model = task["model_name"]
 
-                initial_eval = task.get("initial_evaluation", {})
-                optimized_eval = task.get("optimized_evaluation", {})
+                evals = task.get("evaluations", {}) or {}
+                initial_set = evals.get("initial", {})
+                final_set = evals.get("final", {})
 
                 content_parts.append(f"    {optimizer} + {model}:")
 
-                if initial_eval and "metrics" in initial_eval:
-                    for metric in initial_eval["metrics"]:
+                def _metrics_for(
+                    eval_set: dict, split_label: str
+                ) -> list[dict[str, Any]]:
+                    entry = eval_set.get(split_label) or {}
+                    result = entry.get("result") or {}
+                    return result.get("metrics", [])
+
+                for split_label in ("train", "validation", "test"):
+                    initial_metrics = _metrics_for(initial_set, split_label)
+                    final_metrics = _metrics_for(final_set, split_label)
+                    if not initial_metrics and not final_metrics:
+                        continue
+                    content_parts.append(f"      [{split_label}]")
+                    for metric in initial_metrics:
                         metric_name = metric.get("metric_name", "unknown")
                         initial_score = metric.get("score", 0)
 
-                        # Find corresponding optimized score
                         optimized_score = None
-                        if optimized_eval and "metrics" in optimized_eval:
-                            for opt_metric in optimized_eval["metrics"]:
-                                if opt_metric.get("metric_name") == metric_name:
-                                    optimized_score = opt_metric.get("score", 0)
-                                    break
+                        for opt_metric in final_metrics:
+                            if opt_metric.get("metric_name") == metric_name:
+                                optimized_score = opt_metric.get("score", 0)
+                                break
 
                         if optimized_score is not None:
                             improvement = optimized_score - initial_score
                             improvement_pct = (
                                 (improvement / initial_score * 100)
-                                if initial_score != 0
+                                if isinstance(initial_score, (int, float))
+                                and initial_score != 0
                                 else 0
                             )
 
@@ -259,8 +274,12 @@ def generate_results_display(
                                 arrow = "→"
 
                             content_parts.append(
-                                f"      {metric_name}: {initial_score:.3f} → [{color}]{optimized_score:.3f}[/{color}] "
+                                f"        {metric_name}: {initial_score:.3f} → [{color}]{optimized_score:.3f}[/{color}] "
                                 f"([{color}]{arrow} {improvement:+.3f} / {improvement_pct:+.1f}%[/{color}])"
+                            )
+                        else:
+                            content_parts.append(
+                                f"        {metric_name}: {initial_score:.3f} (no optimized score)"
                             )
 
     # Failed tasks

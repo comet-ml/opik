@@ -18,7 +18,7 @@ def run_optimization_task(
     optimizer_params_override: dict[str, Any] | None = None,
     optimizer_prompt_params_override: dict[str, Any] | None = None,
     datasets: dict[str, Any] | None = None,
-    metrics: list[str] | None = None,
+    metrics: list[str | dict[str, Any]] | None = None,
     prompt_messages: list[dict[str, Any]] | None = None,
 ) -> TaskResult:
     """

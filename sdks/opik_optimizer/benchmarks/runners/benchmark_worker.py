@@ -89,7 +89,7 @@ def run_optimization_modal(
     optimizer_params: dict | None = None,
     optimizer_prompt_params: dict | None = None,
     datasets: dict | None = None,
-    metrics: list[str] | None = None,
+    metrics: list[str | dict[str, Any]] | None = None,
     prompt_messages: list[dict[str, Any]] | None = None,
 ) -> dict:
     """
