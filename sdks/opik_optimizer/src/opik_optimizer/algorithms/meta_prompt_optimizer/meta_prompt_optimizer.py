@@ -575,7 +575,7 @@ class MetaPromptOptimizer(BaseOptimizer):
         self._reset_counters()  # Reset counters for run
         initial_prompt = prompt
 
-        # Logic on which datset to use for scoring
+        # Logic on which dataset to use for scoring
         evaluation_dataset = (
             validation_dataset if validation_dataset is not None else dataset
         )

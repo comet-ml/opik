@@ -302,7 +302,7 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
             Tuple of (improved_prompt, improved_score, improved_experiment_result)
         """
 
-        # Logic on which datset to use for scoring
+        # Logic on which dataset to use for scoring
         evaluation_dataset = (
             validation_dataset if validation_dataset is not None else dataset
         )

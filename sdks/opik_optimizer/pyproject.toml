@@ -55,7 +55,7 @@ ignore_missing_imports = false
 disallow_untyped_defs = true
 disallow_untyped_calls = true
 check_untyped_defs = true
-mypy_path = "sdks/opik_optimizer/src"
+mypy_path = "sdks/opik_optimizer"
 
 [[tool.mypy.overrides]]
 module = [
