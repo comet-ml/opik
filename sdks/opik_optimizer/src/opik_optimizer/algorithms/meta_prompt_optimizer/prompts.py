@@ -135,18 +135,35 @@ def build_candidate_generation_user_prompt(
             Generate [{prompts_per_round}] improved versions of this prompt.
             {metric_focus_instruction}
 
-            Each version should aim to:
+            CRITICAL: Study the Hall of Fame entries above, what made those prompts successful? How can you BUILD ON those winning elements while still exploring bold new directions?
+
+            Generate [{prompts_per_round}] DISTINCTLY DIFFERENT prompt variations that:
+
+            DIVERSITY DIMENSIONS (explore all of these):
+            - Length: from ultra-minimal (1 sentence) to in-depthcomprehensive (multi-paragraph with reasoning steps)
+            - Structure: direct commands, numbered steps, narrative flow, question-based, example-driven
+            - Tone: formal instruction, conversational guidance, Socratic questioning, technical specification
+            - Approach: explicit constraints, implicit guidance, meta-cognitive prompting, role-playing
+
+            STRATEGIC GUIDANCE:
             {improvement_point_1}
-            2. Provide necessary context and constraints (without relying on dataset-specific knowledge).
-            3. Guide the model to produce the desired output format suitable for the task.
-            4. Remove ambiguity and unnecessary elements.
-            5. Maintain conciseness while being complete.
-            {"6. Consider incorporating winning patterns where they improve clarity and effectiveness." if pattern_guidance else ""}
+            - Build on patterns from top-performing prompts in the Hall of Fame
+            - Try counter-intuitive approaches - sometimes the opposite of conventional wisdom works
+            - Experiment with being MORE specific in some versions and MORE abstract in others
+            - Combine winning elements in unexpected ways
+            {"- Creatively integrate the winning patterns provided - adapt, don't just copy" if pattern_guidance else ""}
 
-            REMEMBER: Do not mention specific dataset fields, metric names, or evaluation terminology.
-            The prompt should be generalizable to similar tasks with different data.
+            Don't follow a template or recipe. Genuinely innovate by:
+            - Taking successful elements from history and amplifying or inverting them
+            - Testing hypotheses about what might work better (e.g., "what if we focus on X instead of Y?")
+            - Pushing to extremes (ultra-terse vs ultra-detailed)
+            - Trying something completely different if the current approach has plateaued
 
-            Return a valid JSON array as specified."""
+            IMPORTANT: Avoid mentioning specific dataset fields, metric names, or evaluation terminology.
+            Keep prompts generalizable to similar tasks.
+
+            Return a valid JSON array as specified.
+            """
     ).strip()
 
 
