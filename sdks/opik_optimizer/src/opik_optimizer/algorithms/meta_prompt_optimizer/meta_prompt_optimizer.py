@@ -71,7 +71,6 @@ class MetaPromptOptimizer(BaseOptimizer):
     """
 
     # --- Constants for Default Configuration ---
-    DEFAULT_ROUNDS = 3
     DEFAULT_PROMPTS_PER_ROUND = 4
 
     def __init__(
@@ -704,12 +703,6 @@ class MetaPromptOptimizer(BaseOptimizer):
     def _get_task_context(self, metric: Callable) -> str:
         """Get task-specific context from the dataset and metric (delegates to ops)."""
         return context_ops.get_task_context(self.dataset, metric)
-
-    def _sanitize_generated_prompts(
-        self, prompt_json: dict[str, Any], metric_name: str
-    ) -> dict[str, Any]:
-        """Remove any leaked dataset/metric references from generated prompts (delegates to ops)."""
-        return candidate_ops.sanitize_generated_prompts(prompt_json, metric_name)
 
     def _generate_candidate_prompts(
         self,

@@ -16,7 +16,6 @@ from ....mcp_utils.prompt_segments import (
     extract_prompt_segments,
     apply_segment_updates,
 )
-from .... import prompts as meta_prompts
 from ..prompts import (
     REASONING_SYSTEM_PROMPT,
     build_candidate_generation_user_prompt,

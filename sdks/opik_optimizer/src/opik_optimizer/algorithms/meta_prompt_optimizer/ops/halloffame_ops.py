@@ -217,18 +217,6 @@ class PromptHallOfFame:
 
         return selected
 
-    def get_top_prompts(self, n: int = 5) -> List[HallOfFameEntry]:
-        """
-        Get top N prompts from hall of fame.
-
-        Args:
-            n: Number of prompts to return
-
-        Returns:
-            List of top N entries
-        """
-        return self.entries[:min(n, len(self.entries))]
-
     def _build_pattern_extraction_prompt(
         self,
         top_entries: List[HallOfFameEntry],
