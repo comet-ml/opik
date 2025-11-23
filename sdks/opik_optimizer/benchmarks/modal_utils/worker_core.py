@@ -1,11 +1,44 @@
 """Core optimization logic for Modal workers (without Modal decorators)."""
 
+import os
 import time
 import traceback
 from typing import Any
 
+import opik
 from benchmarks.core.benchmark_task import TaskResult, TASK_STATUS_FAILED
 from benchmarks.utils.task_runner import execute_task
+
+
+def _ensure_opik_credentials() -> None:
+    api_key = os.getenv("OPIK_API_KEY", "").strip()
+    host = os.getenv("OPIK_BASE_URL") or os.getenv("OPIK_HOST")
+
+    # Determine if this is a self-hosted instance
+    is_self_hosted = bool(host and host != "https://www.comet.com/opik/api")
+
+    # API key is only required for Comet Cloud
+    if not is_self_hosted and not api_key:
+        raise RuntimeError(
+            "OPIK_API_KEY is missing or empty for Comet Cloud. "
+            "Ensure the `opik-benchmarks` secret includes OPIK_API_KEY. "
+            "For self-hosted instances, set OPIK_BASE_URL or OPIK_HOST and omit OPIK_API_KEY."
+        )
+
+    # Optional lightweight ping to fail fast on bad keys
+    try:
+        client = opik.Opik()
+        # `get_current_workspace` is a cheap way to validate the key (if method exists)
+        if hasattr(client, "get_current_workspace"):
+            client.get_current_workspace()  # type: ignore[attr-defined]
+    except Exception as exc:
+        # Only raise for Comet Cloud or if we have an API key
+        if not is_self_hosted or api_key:
+            raise RuntimeError(
+                f"Opik credential check failed (host={host or 'default'}): {exc}"
+            ) from exc
+        # For self-hosted without API key, just warn but continue
+        print(f"⚠ Opik connection check failed (self-hosted, no API key): {exc}")
 
 
 def run_optimization_task(
@@ -46,6 +79,15 @@ def run_optimization_task(
     Returns:
         TaskResult object containing the optimization results
     """
+    # Disable tracing for benchmark jobs to avoid Opik span volume by default
+    os.environ.setdefault("OPIK_TRACK_DISABLE", "true")
+    os.environ.setdefault("OPIK_DATASET_SKIP_EXISTING", "true")
+    try:
+        opik.set_tracing_active(False)
+    except Exception:
+        pass
+    _ensure_opik_credentials()
+
     timestamp_start = time.time()
     print(f"[{task_id}] Starting optimization...")
     try:
