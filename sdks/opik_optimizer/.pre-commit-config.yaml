@@ -62,4 +62,4 @@ repos:
       - id: codespell
         files: ^sdks/opik_optimizer
         exclude: '(\.ipynb$)|(\.json$)|(\.jsonl$)|(benchmark_results/)'
-        args: ['--skip=*.ipynb,*.json,*.jsonl']
+        args: ['--skip=*.ipynb,*.json,*.jsonl','--write-changes']
