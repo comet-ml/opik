@@ -93,11 +93,8 @@ const ThreadDataViewer: React.FunctionComponent = () => {
       }
       // For "View trace", don't change filters at all
 
-      // Use setTimeout to ensure query param is updated before opening panel
-      setTimeout(() => {
-        setTraceId(id);
-        setSpanId("");
-      }, 0);
+      setTraceId(id);
+      setSpanId("");
     },
     [tracePanelFilters, setTracePanelFilters],
   );
