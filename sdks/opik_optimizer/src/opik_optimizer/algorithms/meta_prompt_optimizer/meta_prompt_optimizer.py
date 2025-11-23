@@ -60,7 +60,7 @@ class MetaPromptOptimizer(BaseOptimizer):
             See: https://docs.litellm.ai/docs/completion/input
         prompts_per_round: Number of candidate prompts to generate per optimization round
         enable_context: Whether to include task-specific context when reasoning about improvements
-        num_task_examples: Number of dataset examples to show in task context (default: 3)
+        num_task_examples: Number of dataset examples to show in task context (default: 10)
         task_context_columns: Specific dataset columns to include in context (None = all input columns)
         n_threads: Number of parallel threads for prompt evaluation
         verbose: Controls internal logging/progress bars (0=off, 1=on)
@@ -72,10 +72,11 @@ class MetaPromptOptimizer(BaseOptimizer):
     DEFAULT_PROMPTS_PER_ROUND = 4  # Same as DEFAULT_NUM_GENERATIONS
     DEFAULT_NUM_THREADS = 12
     DEFAULT_SEED = 42
+    DEFAULT_NUM_TASK_EXAMPLES = 10
     DEFAULT_HALL_OF_FAME_SIZE = 10
     DEFAULT_PATTERN_EXTRACTION_INTERVAL = 5
     DEFAULT_PATTERN_INJECTION_RATE = 0.6
-    DEFAULT_DATASET_CONTEXT_MAX_TOKENS = 10000  # Safe for custom models
+    DEFAULT_DATASET_CONTEXT_MAX_TOKENS = 10000
     DEFAULT_DATASET_CONTEXT_RATIO = 0.25
 
     def __init__(
@@ -84,7 +85,7 @@ class MetaPromptOptimizer(BaseOptimizer):
         model_parameters: dict[str, Any] | None = None,
         prompts_per_round: int = DEFAULT_PROMPTS_PER_ROUND,
         enable_context: bool = True,
-        num_task_examples: int = 3,
+        num_task_examples: int = DEFAULT_NUM_TASK_EXAMPLES,
         task_context_columns: list[str] | None = None,
         n_threads: int = DEFAULT_NUM_THREADS,
         verbose: int = 1,
@@ -136,7 +137,7 @@ class MetaPromptOptimizer(BaseOptimizer):
         This limit is ONLY used in get_task_context() for adaptive fitting of dataset examples.
         It determines how many examples and how much truncation to use when building task context.
 
-        Uses ~25% of model's max tokens, capped at DEFAULT_MAX_DATASET_CONTEXT_TOKENS.
+        Uses ~25% of model's max tokens, capped at DEFAULT_MAX_DATASET_CONTEXT_MAX_TOKENS.
         Falls back to absolute max for custom models where litellm can't determine limits.
         """
         try:
@@ -149,12 +150,17 @@ class MetaPromptOptimizer(BaseOptimizer):
                 f"Model {self.model} max tokens: {model_max_tokens}, "
                 f"calculated dataset context budget: {calculated_max}"
             )
+            # Store for display
+            self._model_max_tokens = model_max_tokens
+            self._calculated_context_budget = calculated_max
         except Exception as e:
             logger.debug(
                 f"Could not get max tokens for model {self.model}: {e}. "
                 f"Using default max: {self.DEFAULT_DATASET_CONTEXT_MAX_TOKENS}"
             )
             calculated_max = self.DEFAULT_DATASET_CONTEXT_MAX_TOKENS
+            self._model_max_tokens = None
+            self._calculated_context_budget = calculated_max
 
         # Apply absolute safety limit (for custom models or huge context windows)
         max_tokens = min(calculated_max, self.DEFAULT_DATASET_CONTEXT_MAX_TOKENS)
@@ -814,8 +820,11 @@ class MetaPromptOptimizer(BaseOptimizer):
         )
 
     def _build_history_context(self, previous_rounds: list[OptimizationRound]) -> str:
-        """Build context from previous optimization rounds (delegates to ops)."""
-        return context_ops.build_history_context(previous_rounds)
+        """Build context from Hall of Fame and previous optimization rounds (delegates to ops)."""
+        return context_ops.build_history_context(
+            previous_rounds,
+            hall_of_fame=self.hall_of_fame if hasattr(self, "hall_of_fame") else None,
+        )
 
 
 __all__ = ["MetaPromptOptimizer", "_sync_tool_description_in_system"]

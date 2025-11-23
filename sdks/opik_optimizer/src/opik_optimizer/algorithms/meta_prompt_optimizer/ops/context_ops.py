@@ -6,6 +6,7 @@ This module contains functions for building task context and history context.
 
 from collections.abc import Callable
 import logging
+import random
 
 import opik
 from ....base_optimizer import OptimizationRound
@@ -69,7 +70,9 @@ def get_task_context(
     try:
         # Get multiple samples for better context
         items = dataset.get_items()
-        samples = items[: min(num_examples, len(items))]
+        # Randomly sample to show diverse examples across rounds
+        num_to_sample = min(num_examples, len(items))
+        samples = random.sample(items, num_to_sample) if len(items) > 0 else []
     except Exception as e:
         logger.warning(f"Could not get samples from dataset: {e}")
         return ""
@@ -176,34 +179,59 @@ def get_task_context(
     return ""
 
 
-def build_history_context(previous_rounds: list[OptimizationRound]) -> str:
+def build_history_context(
+    previous_rounds: list[OptimizationRound],
+    hall_of_fame: Any | None = None,
+) -> str:
     """
-    Build context from previous optimization rounds.
+    Build context from Hall of Fame (if available) or previous optimization rounds.
 
     Args:
         previous_rounds: List of previous optimization rounds
+        hall_of_fame: Optional Hall of Fame object with top-performing prompts
 
     Returns:
         History context string
     """
-    if not previous_rounds:
-        return ""
+    context = ""
 
-    context = "\nPrevious rounds (latest first):\n"
-    for round_data in reversed(previous_rounds[-3:]):
-        context += f"\nRound {round_data.round_number}:\n"
-        context += f"Best score this round: {round_data.best_score:.4f}\n"
-        context += "Generated prompts this round (best first):\n"
+    # Prioritize Hall of Fame entries - show the BEST prompts across ALL rounds
+    if hall_of_fame and hasattr(hall_of_fame, "entries") and hall_of_fame.entries:
+        context += "\n🏆 HALL OF FAME - Best Performing Prompts Across All Rounds:\n"
+        context += "=" * 80 + "\n"
+        context += "Study these top performers carefully - what patterns make them successful?\n\n"
 
-        sorted_generated = sorted(
-            round_data.generated_prompts,
-            key=lambda p: p.get("score", -float("inf")),
-            reverse=True,
-        )
+        # Show top 5 entries with FULL prompts (we have plenty of token budget)
+        for i, entry in enumerate(hall_of_fame.entries[:5], 1):
+            improvement_pct = entry.improvement_over_baseline * 100
+            context += f"\n#{i} WINNER | Trial {entry.trial_number} | Score: {entry.score:.4f} | Improvement: {improvement_pct:+.1f}%\n"
 
-        for p in sorted_generated[:3]:
-            prompt_text = p.get("prompt", "N/A")
-            score = p.get("score", float("nan"))
-            context += f"- Prompt: {prompt_text[:150]}...\n"
-            context += f"  Avg Score: {score:.4f}\n"
+            # Show FULL prompt - no truncation!
+            context += f"Full Prompt:\n{str(entry.prompt_messages)}\n"
+
+            # Show extracted patterns if available
+            if entry.extracted_patterns:
+                context += f"Why it worked: {', '.join(entry.extracted_patterns)}\n"
+
+        context += "\n" + "=" * 80 + "\n"
+
+    # Also show recent rounds for temporal context (last 3 rounds)
+    if previous_rounds:
+        context += "\nRecent Rounds (for context):\n"
+        for round_data in reversed(previous_rounds[-3:]):
+            context += f"\nRound {round_data.round_number}:\n"
+            context += f"Best score this round: {round_data.best_score:.4f}\n"
+            context += "Top prompts generated:\n"
+
+            sorted_generated = sorted(
+                round_data.generated_prompts,
+                key=lambda p: p.get("score", -float("inf")),
+                reverse=True,
+            )
+
+            for p in sorted_generated[:2]:  # Reduced from 3 to 2 to save tokens
+                prompt_text = p.get("prompt", "N/A")
+                score = p.get("score", float("nan"))
+                context += f"- Score {score:.4f}: {prompt_text[:120]}...\n"
+
     return context

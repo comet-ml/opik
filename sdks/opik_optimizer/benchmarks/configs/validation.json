@@ -1,0 +1,32 @@
+{
+  "seed": 42,
+  "test_mode": false,
+  "tasks": [],
+  "generators": [
+    {
+      "datasets": [
+        {
+          "dataset": "hotpot",
+          "datasets": {
+            "train": { "loader": "hotpot", "split": "train", "count": 150, "dataset_name": "hotpot_train" },
+            "validation": { "loader": "hotpot", "split": "validation", "count": 300, "dataset_name": "hotpot_validation" },
+            "test": { "loader": "hotpot", "split": "test", "count": 300, "dataset_name": "hotpot_test" }
+          }
+        }
+      ],
+      "optimizers": [
+        { "name": "meta_prompt", "optimizer_prompt_params": { "max_trials": 6438 } }
+      ],
+      "models": [
+        { "name": "openai/gpt-4.1-mini", "model_parameters": { "temperature": 1.0 } }
+      ],
+      "metrics": [
+        { "path": "benchmarks.metrics.hotpot.hotpot_f1" }
+      ],
+      "prompt": [
+        { "role": "system", "content": "Answer the question based on the given context." },
+        { "role": "user", "content": "{question}" }
+      ]
+    }
+  ]
+}
