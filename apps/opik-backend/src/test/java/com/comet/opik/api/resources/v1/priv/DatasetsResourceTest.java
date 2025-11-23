@@ -69,6 +69,7 @@ import com.comet.opik.api.sorting.Direction;
 import com.comet.opik.api.sorting.SortableFields;
 import com.comet.opik.api.sorting.SortingField;
 import com.comet.opik.domain.DatasetDAO;
+import com.comet.opik.domain.DatasetService;
 import com.comet.opik.domain.FeedbackScoreMapper;
 import com.comet.opik.domain.SpanType;
 import com.comet.opik.domain.stats.StatsMapper;
@@ -1421,7 +1422,7 @@ class DatasetsResourceTest {
 
             createAndAssert(dataset);
 
-            createAndAssertConflict(dataset, "Dataset already exists");
+            createAndAssertConflict(dataset, DatasetService.DATASET_ALREADY_EXISTS);
         }
 
         @Test
@@ -1435,7 +1436,7 @@ class DatasetsResourceTest {
 
             createAndAssert(dataset);
 
-            createAndAssertConflict(dataset2, "Dataset already exists");
+            createAndAssertConflict(dataset2, DatasetService.DATASET_ALREADY_EXISTS);
         }
 
         private void createAndAssertConflict(Dataset dataset, String conflictMessage) {
@@ -1447,7 +1448,8 @@ class DatasetsResourceTest {
 
                 assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(409);
                 assertThat(actualResponse.hasEntity()).isTrue();
-                assertThat(actualResponse.readEntity(ErrorMessage.class).errors()).contains(conflictMessage);
+                assertThat(actualResponse.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class).getMessage())
+                        .isEqualTo(conflictMessage);
             }
         }
     }
