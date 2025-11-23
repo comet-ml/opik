@@ -103,8 +103,12 @@ def _resolve_initial_prompt(dataset_name: str) -> list[dict[str, Any]]:
     raise KeyError(f"No initial prompt configured for dataset '{dataset_name}'")
 
 
-def _load_dataset(dataset_name: str, split: str | None, test_mode: bool) -> Any:
+def _load_dataset(
+    dataset_name: str, split: str | None, test_mode: bool, *, dry_run: bool = False
+) -> Any:
     """Load a dataset by name, falling back to base loader when split-specific helpers are absent."""
+    if dry_run:
+        return None
     loader = getattr(opik_optimizer.datasets, dataset_name, None)
     if callable(loader):
         return loader(test_mode=test_mode)
@@ -127,6 +131,8 @@ def resolve_dataset_bundle(
     dataset_name: str,
     test_mode: bool,
     datasets: dict[str, Any] | None = None,
+    *,
+    dry_run: bool = False,
 ) -> DatasetBundle:
     """Return train/validation/test dataset objects for a given benchmark dataset key.
 
@@ -171,7 +177,10 @@ def resolve_dataset_bundle(
             kwargs["test_mode"] = test_mode
             loader = getattr(opik_optimizer.datasets, loader_name, None)
             if callable(loader):
-                return kwargs["dataset_name"], loader(**kwargs)
+                return (
+                    kwargs["dataset_name"],
+                    None if dry_run else loader(**kwargs),
+                )
             raise ValueError(
                 f"Unknown dataset loader '{loader_name}' for role '{role}'."
             )
@@ -216,14 +225,20 @@ def resolve_dataset_bundle(
             f"Dataset '{dataset_name}' is not registered in benchmark_config.DATASET_CONFIG."
         )
 
-    train_dataset = _load_dataset(train_name, "train", test_mode=test_mode)
+    train_dataset = _load_dataset(
+        train_name, "train", test_mode=test_mode, dry_run=dry_run
+    )
     validation_dataset = (
-        _load_dataset(validation_name, "validation", test_mode=test_mode)
+        _load_dataset(
+            validation_name, "validation", test_mode=test_mode, dry_run=dry_run
+        )
         if validation_name
         else None
     )
     test_dataset = (
-        _load_dataset(test_name, "test", test_mode=test_mode) if test_name else None
+        _load_dataset(test_name, "test", test_mode=test_mode, dry_run=dry_run)
+        if test_name
+        else None
     )
 
     evaluation_dataset = validation_dataset or train_dataset
@@ -356,6 +371,7 @@ def preflight_tasks(
                 dataset_name=task.dataset_name,
                 test_mode=task.test_mode,
                 datasets=task.datasets,
+                dry_run=True,
             )
             split_summary = _format_splits(bundle, task)
             dataset_config = benchmark_config.DATASET_CONFIG.get(
@@ -637,9 +653,26 @@ def execute_task(
                 test_mode=test_mode,
                 datasets=datasets,
             )
-            dataset_config = benchmark_config.DATASET_CONFIG.get(
-                bundle.evaluation_name, benchmark_config.DATASET_CONFIG[dataset_name]
-            )
+            # Resolve dataset config defensively, tolerating base names and override names.
+            _dataset_config: BenchmarkDatasetConfig | None = None
+            for candidate in (
+                bundle.evaluation_name,
+                dataset_name,
+                bundle.train_name,
+                bundle.validation_name,
+                bundle.test_name,
+            ):
+                if candidate and candidate in benchmark_config.DATASET_CONFIG:
+                    _dataset_config = benchmark_config.DATASET_CONFIG[candidate]
+                    break
+            if _dataset_config is None:
+                raise KeyError(
+                    f"Dataset config not found for '{dataset_name}' "
+                    f"(evaluation={bundle.evaluation_name}, train={bundle.train_name}, "
+                    f"validation={bundle.validation_name}, test={bundle.test_name}). "
+                    "Ensure the dataset is registered in benchmark_config.DATASET_CONFIG."
+                )
+            dataset_config = _dataset_config
             metrics_resolved = _resolve_metrics(
                 dataset_config, cast(list[str | dict[str, Any]] | None, metrics)
             )
