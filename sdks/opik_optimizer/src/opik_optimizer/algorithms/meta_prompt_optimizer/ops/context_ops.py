@@ -86,3 +86,34 @@ def get_task_context(dataset: opik.Dataset | None, metric: Callable) -> str:
     return context
 
 
+def build_history_context(previous_rounds: list[OptimizationRound]) -> str:
+    """
+    Build context from previous optimization rounds.
+
+    Args:
+        previous_rounds: List of previous optimization rounds
+
+    Returns:
+        History context string
+    """
+    if not previous_rounds:
+        return ""
+
+    context = "\nPrevious rounds (latest first):\n"
+    for round_data in reversed(previous_rounds[-3:]):
+        context += f"\nRound {round_data.round_number}:\n"
+        context += f"Best score this round: {round_data.best_score:.4f}\n"
+        context += "Generated prompts this round (best first):\n"
+
+        sorted_generated = sorted(
+            round_data.generated_prompts,
+            key=lambda p: p.get("score", -float("inf")),
+            reverse=True,
+        )
+
+        for p in sorted_generated[:3]:
+            prompt_text = p.get("prompt", "N/A")
+            score = p.get("score", float("nan"))
+            context += f"- Prompt: {prompt_text[:150]}...\n"
+            context += f"  Avg Score: {score:.4f}\n"
+    return context

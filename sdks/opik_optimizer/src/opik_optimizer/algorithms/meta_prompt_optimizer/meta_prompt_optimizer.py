@@ -1308,28 +1308,8 @@ class MetaPromptOptimizer(BaseOptimizer):
                 raise ValueError(f"Error generating MCP prompt candidates: {exc}")
 
     def _build_history_context(self, previous_rounds: list[OptimizationRound]) -> str:
-        """Build context from previous optimization rounds."""
-        if not previous_rounds:
-            return ""
-
-        context = "\nPrevious rounds (latest first):\n"
-        for round_data in reversed(previous_rounds[-3:]):
-            context += f"\nRound {round_data.round_number}:\n"
-            context += f"Best score this round: {round_data.best_score:.4f}\n"
-            context += "Generated prompts this round (best first):\n"
-
-            sorted_generated = sorted(
-                round_data.generated_prompts,
-                key=lambda p: p.get("score", -float("inf")),
-                reverse=True,
-            )
-
-            for p in sorted_generated[:3]:
-                prompt_text = p.get("prompt", "N/A")
-                score = p.get("score", float("nan"))
-                context += f"- Prompt: {prompt_text[:150]}...\n"
-                context += f"  Avg Score: {score:.4f}\n"
-        return context
+        """Build context from previous optimization rounds (delegates to ops)."""
+        return context_ops.build_history_context(previous_rounds)
 
     def _get_evaluation_subset(
         self, dataset: opik.Dataset, min_size: int = 20, max_size: int = 100
