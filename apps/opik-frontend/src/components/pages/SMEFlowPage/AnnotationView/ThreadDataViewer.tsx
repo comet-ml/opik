@@ -24,8 +24,7 @@ const ThreadDataViewer: React.FunctionComponent = () => {
   const [traceId, setTraceId] = useState<string>("");
   const [spanId, setSpanId] = useState<string>("");
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const [_tracePanelFilters, setTracePanelFilters] = useQueryParam(
+  const [tracePanelFilters, setTracePanelFilters] = useQueryParam(
     `trace_panel_filters`,
     JsonParam,
     {
@@ -89,21 +88,32 @@ const ThreadDataViewer: React.FunctionComponent = () => {
 
   const handleOpenTrace = useCallback(
     (id: string, shouldFilterToolCalls?: boolean) => {
-      // Set filters FIRST, before opening the panel
-      // This ensures the filters are in the URL before TraceDetailsPanel reads them
+      // For "View tool calls", add the tool filter if it doesn't already exist
       if (shouldFilterToolCalls) {
-        setTracePanelFilters([
-          createFilter({
-            id: SPAN_TYPE_FILTER_COLUMN.id,
-            field: SPAN_TYPE_FILTER_COLUMN.id,
-            type: SPAN_TYPE_FILTER_COLUMN.type,
-            operator: "=",
-            value: SPAN_TYPE.tool,
-          }),
-        ]);
-      } else {
-        setTracePanelFilters([]);
+        const currentFilters = tracePanelFilters || [];
+
+        // Check if tool filter already exists
+        const hasToolFilter = currentFilters.some(
+          (filter: { field?: string; value?: string }) =>
+            filter.field === SPAN_TYPE_FILTER_COLUMN.id &&
+            filter.value === SPAN_TYPE.tool,
+        );
+
+        // Only add if it doesn't exist
+        if (!hasToolFilter) {
+          setTracePanelFilters([
+            ...currentFilters,
+            createFilter({
+              id: SPAN_TYPE_FILTER_COLUMN.id,
+              field: SPAN_TYPE_FILTER_COLUMN.id,
+              type: SPAN_TYPE_FILTER_COLUMN.type,
+              operator: "=",
+              value: SPAN_TYPE.tool,
+            }),
+          ]);
+        }
       }
+      // For "View trace", don't change filters at all
 
       // Use setTimeout to ensure query param is updated before opening panel
       setTimeout(() => {
@@ -111,14 +121,14 @@ const ThreadDataViewer: React.FunctionComponent = () => {
         setSpanId("");
       }, 0);
     },
-    [setTracePanelFilters],
+    [tracePanelFilters, setTracePanelFilters],
   );
 
   const handleClose = useCallback(() => {
     setTraceId("");
     setSpanId("");
-    setTracePanelFilters([]);
-  }, [setTracePanelFilters]);
+    // Don't reset filters on close - maintain filter state
+  }, []);
 
   const handleSetSpanId = useCallback(
     (
