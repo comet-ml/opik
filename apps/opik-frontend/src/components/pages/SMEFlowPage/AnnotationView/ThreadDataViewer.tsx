@@ -3,14 +3,13 @@ import { keepPreviousData } from "@tanstack/react-query";
 import { JsonParam, useQueryParam } from "use-query-params";
 import { Loader2 } from "lucide-react";
 import last from "lodash/last";
-import { SPAN_TYPE, Thread } from "@/types/traces";
+import { Thread } from "@/types/traces";
 import { useSMEFlow } from "../SMEFlowContext";
 import useTracesList from "@/api/traces/useTracesList";
 import TraceMessages from "@/components/pages-shared/traces/TraceMessages/TraceMessages";
 import { COLUMN_TYPE } from "@/types/shared";
 import TraceDetailsPanel from "@/components/pages-shared/traces/TraceDetailsPanel/TraceDetailsPanel";
-import { createFilter } from "@/lib/filters";
-import { SPAN_TYPE_FILTER_COLUMN } from "@/components/pages-shared/traces/TraceDetailsPanel/TraceTreeViewer/helpers";
+import { addToolFilterIfNeeded } from "@/lib/traces";
 
 const MAX_THREAD_TRACES = 1000;
 const STALE_TIME = 5 * 60 * 1000; // 5 minutes
@@ -90,28 +89,7 @@ const ThreadDataViewer: React.FunctionComponent = () => {
     (id: string, shouldFilterToolCalls?: boolean) => {
       // For "View tool calls", add the tool filter if it doesn't already exist
       if (shouldFilterToolCalls) {
-        const currentFilters = tracePanelFilters || [];
-
-        // Check if tool filter already exists
-        const hasToolFilter = currentFilters.some(
-          (filter: { field?: string; value?: string }) =>
-            filter.field === SPAN_TYPE_FILTER_COLUMN.id &&
-            filter.value === SPAN_TYPE.tool,
-        );
-
-        // Only add if it doesn't exist
-        if (!hasToolFilter) {
-          setTracePanelFilters([
-            ...currentFilters,
-            createFilter({
-              id: SPAN_TYPE_FILTER_COLUMN.id,
-              field: SPAN_TYPE_FILTER_COLUMN.id,
-              type: SPAN_TYPE_FILTER_COLUMN.type,
-              operator: "=",
-              value: SPAN_TYPE.tool,
-            }),
-          ]);
-        }
+        setTracePanelFilters(addToolFilterIfNeeded(tracePanelFilters));
       }
       // For "View trace", don't change filters at all
 
