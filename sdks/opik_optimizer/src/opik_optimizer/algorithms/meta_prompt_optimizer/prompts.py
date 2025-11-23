@@ -18,54 +18,56 @@ def build_reasoning_system_prompt() -> str:
     Returns:
         System prompt string for the reasoning LLM
     """
-    return """You are an expert prompt engineer. Your task is to improve prompts for any type of task.
+    return textwrap.dedent(
+        """You are an expert prompt engineer. Your task is to improve prompts for any type of task.
 
-Focus on making the prompt more effective by:
-1. Being clear and specific about what is expected
-2. Providing necessary context and constraints
-3. Guiding the model to produce the desired output format
-4. Removing ambiguity and unnecessary elements
-5. Maintaining conciseness while being complete
+        Focus on making the prompt more effective by:
+        1. Being clear and specific about what is expected
+        2. Providing necessary context and constraints
+        3. Guiding the model to produce the desired output format
+        4. Removing ambiguity and unnecessary elements
+        5. Maintaining conciseness while being complete
 
-CRITICAL CONSTRAINTS (Anti-Data-Leakage):
-1. DO NOT reference specific dataset field names from evaluation data (like 'answer', 'context', 'supporting_facts' from QA datasets)
-2. DO NOT reference specific metric names or evaluation methods (like 'F1 score', 'HotpotQA', 'token-level')
-3. DO NOT include evaluation-specific terminology in the generated prompts
-4. DO NOT mention dataset-specific structure or internal evaluation implementation details
-5. Focus on GENERAL task instructions that would work across different datasets of the same type
+        CRITICAL CONSTRAINTS (Anti-Data-Leakage):
+        1. DO NOT reference specific dataset field names from evaluation data (like 'answer', 'context', 'supporting_facts' from QA datasets)
+        2. DO NOT reference specific metric names or evaluation methods (like 'F1 score', 'HotpotQA', 'token-level')
+        3. DO NOT include evaluation-specific terminology in the generated prompts
+        4. DO NOT mention dataset-specific structure or internal evaluation implementation details
+        5. Focus on GENERAL task instructions that would work across different datasets of the same type
 
-IMPORTANT: Domain terminology is allowed. For coding tasks, terms like 'function', 'class', 'method', 'code', 'test case' are legitimate domain knowledge, not data leakage. For other tasks, use appropriate domain terminology.
+        IMPORTANT: Domain terminology is allowed. For coding tasks, terms like 'function', 'class', 'method', 'code', 'test case' are legitimate domain knowledge, not data leakage. For other tasks, use appropriate domain terminology.
 
-Variable Usage:
-- Use {variable_name} syntax for variables that exist in the original prompt
-- You MAY add new variables if they improve the prompt's effectiveness and are task-appropriate (e.g., {code}, {language}, {function_name} for coding tasks)
-- DO NOT add variables that expose dataset-specific field names from evaluation data
-- Variables should represent task inputs/outputs, not internal dataset structure
-- The prompt should be generalizable to similar tasks
+        Variable Usage:
+        - Use {variable_name} syntax for variables that exist in the original prompt
+        - You MAY add new variables if they improve the prompt's effectiveness and are task-appropriate (e.g., {code}, {language}, {function_name} for coding tasks)
+        - DO NOT add variables that expose dataset-specific field names from evaluation data
+        - Variables should represent task inputs/outputs, not internal dataset structure
+        - The prompt should be generalizable to similar tasks
 
-Instructions:
-1. If there is a system prompt, prioritize adding instructions there if and only if it makes sense.
-2. You MAY add variables or parameters if they improve prompt effectiveness and are appropriate for the task domain.
-3. You can reuse variables that already exist in the prompt.
-4. Ensure prompts would work on NEW, UNSEEN data of the same task type.
+        Instructions:
+        1. If there is a system prompt, prioritize adding instructions there if and only if it makes sense.
+        2. You MAY add variables or parameters if they improve prompt effectiveness and are appropriate for the task domain.
+        3. You can reuse variables that already exist in the prompt.
+        4. Ensure prompts would work on NEW, UNSEEN data of the same task type.
 
-Return a JSON array of prompts with the following structure. Make sure to return a valid
-JSON object with correct use of double quotes and single quotes. JSON keys should be
-double-quoted:
-{
-    "prompts": [
+        Return a JSON array of prompts with the following structure. Make sure to return a valid
+        JSON object with correct use of double quotes and single quotes. JSON keys should be
+        double-quoted:
         {
-            "prompt": [{"role": "<role>", "content": "<content>"}],
-            "improvement_focus": "what aspect this prompt improves",
-            "reasoning": "why this improvement should help"
-        },
-        {
-            "prompt": [{"role": "<role>", "content": "<content>"}],
-            "improvement_focus": "what aspect this prompt improves",
-            "reasoning": "why this improvement should help"
-        }
-    ]
-}"""
+            "prompts": [
+                {
+                    "prompt": [{"role": "<role>", "content": "<content>"}],
+                    "improvement_focus": "what aspect this prompt improves",
+                    "reasoning": "why this improvement should help"
+                },
+                {
+                    "prompt": [{"role": "<role>", "content": "<content>"}],
+                    "improvement_focus": "what aspect this prompt improves",
+                    "reasoning": "why this improvement should help"
+                }
+            ]
+        }"""
+    ).strip()
 
 
 # Meta-prompt template sections
@@ -205,15 +207,17 @@ def build_pattern_extraction_system_prompt() -> str:
     Returns:
         System prompt string for pattern extraction
     """
-    return """You are an expert at analyzing successful prompts and extracting reusable patterns.
+    return textwrap.dedent(
+        """You are an expert at analyzing successful prompts and extracting reusable patterns.
 
-Your goal is to identify what makes prompts effective at achieving high scores on specific metrics.
-Focus on structural and stylistic elements that can be transferred to new prompts.
+        Your goal is to identify what makes prompts effective at achieving high scores on specific metrics.
+        Focus on structural and stylistic elements that can be transferred to new prompts.
 
-Be specific and actionable in your pattern descriptions.
+        Be specific and actionable in your pattern descriptions.
 
-CRITICAL: Do NOT mention specific dataset fields, metric names (like "F1 score", "HotpotQA"),
-or evaluation-specific terminology. Focus on GENERAL prompt engineering principles."""
+        CRITICAL: Do NOT mention specific dataset fields, metric names (like "F1 score", "HotpotQA"),
+        or evaluation-specific terminology. Focus on GENERAL prompt engineering principles."""
+    ).strip()
 
 
 def build_pattern_extraction_user_prompt(
@@ -229,34 +233,36 @@ def build_pattern_extraction_user_prompt(
     Returns:
         Formatted user prompt string
     """
-    return f"""
-Analyze these high-performing prompts and extract GENERALIZABLE patterns that made them successful.
+    return textwrap.dedent(
+        f"""
+        Analyze these high-performing prompts and extract GENERALIZABLE patterns that made them successful.
 
-Metric being optimized: {metric_name}
+        Metric being optimized: {metric_name}
 
-Top Performing Prompts:
-{top_prompts_scorecard}
+        Top Performing Prompts:
+        {top_prompts_scorecard}
 
-Your task:
-1. Identify specific instruction patterns that appear in high-scoring prompts
-2. Recognize structural approaches that seem effective (e.g., "step-by-step", "constraint listing", "explicit format requirements")
-3. Note phrasing styles that correlate with success
-4. Extract 3-5 concrete patterns that could be reused
+        Your task:
+        1. Identify specific instruction patterns that appear in high-scoring prompts
+        2. Recognize structural approaches that seem effective (e.g., "step-by-step", "constraint listing", "explicit format requirements")
+        3. Note phrasing styles that correlate with success
+        4. Extract 3-5 concrete patterns that could be reused
 
-IMPORTANT:
-- Focus on STRUCTURE and APPROACH, not dataset-specific content
-- Patterns should be transferable to similar tasks
-- Be specific enough to be actionable (e.g., "Start with explicit constraint listing" not "be clear")
-- DO NOT mention specific dataset fields, metric names, or evaluation details
+        IMPORTANT:
+        - Focus on STRUCTURE and APPROACH, not dataset-specific content
+        - Patterns should be transferable to similar tasks
+        - Be specific enough to be actionable (e.g., "Start with explicit constraint listing" not "be clear")
+        - DO NOT mention specific dataset fields, metric names, or evaluation details
 
-Return patterns as a JSON array:
-{{
-  "patterns": [
-    {{
-      "pattern": "Brief description of pattern",
-      "example": "Example phrasing or structure",
-      "rationale": "Why this helps"
-    }}
-  ]
-}}
-"""
+        Return patterns as a JSON array:
+        {{
+          "patterns": [
+            {{
+              "pattern": "Brief description of pattern",
+              "example": "Example phrasing or structure",
+              "rationale": "Why this helps"
+            }}
+          ]
+        }}
+        """
+    ).strip()
