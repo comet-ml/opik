@@ -1016,187 +1016,20 @@ class MetaPromptOptimizer(BaseOptimizer):
         project_name: str | None = None,
         winning_patterns: list[str] | None = None,
     ) -> list[chat_prompt.ChatPrompt]:
-        """Generate candidate prompts using meta-prompting."""
-        with reporting.display_candidate_generation_report(
-            self.prompts_per_round, verbose=self.verbose
-        ) as candidate_generation_report:
-            logger.debug(f"\nGenerating candidate prompts for round {round_num + 1}")
-            logger.debug(f"Generating from prompt: {current_prompt.get_messages()}")
-            logger.debug(f"Current best score: {best_score:.4f}")
-
-            # Prepare pattern injection guidance
-            pattern_guidance = ""
-            if winning_patterns and random.random() < self.pattern_injection_rate:
-                pattern_guidance = "\n\nWINNING PATTERNS TO CONSIDER:\n"
-                pattern_guidance += "The following patterns have been successful in high-scoring prompts:\n"
-                for i, pattern in enumerate(winning_patterns, 1):
-                    pattern_guidance += f"{i}. {pattern}\n"
-                pattern_guidance += (
-                    "\nConsider incorporating these patterns where appropriate, "
-                )
-                pattern_guidance += (
-                    "but adapt them to fit the current prompt's needs.\n"
-                )
-                logger.info(
-                    f"Injecting {len(winning_patterns)} patterns into generation"
-                )
-
-            history_context = self._build_history_context(previous_rounds)
-            task_context_str = ""
-            analysis_instruction = ""
-            metric_focus_instruction = ""
-            improvement_point_1 = ""
-
-            if self.enable_context:
-                task_context_str = self._get_task_context(metric=metric)
-                analysis_instruction = "Analyze the example provided (if any), the metric description (if any), and the history of scores."
-                metric_focus_instruction = (
-                    "Focus on improving the score for the evaluation metric."
-                )
-                improvement_point_1 = "1. Be more specific and clear about expectations based on the task."
-                logger.debug(
-                    "Task context and metric-specific instructions enabled for reasoning prompt."
-                )
-            else:
-                analysis_instruction = "Analyze the history of scores and the current prompt's performance."
-                metric_focus_instruction = "Focus on generating diverse and effective prompt variations based on the history."
-                improvement_point_1 = "1. Be more specific and clear about expectations based on the task."
-                logger.debug(
-                    "Task context and metric-specific instructions disabled for reasoning prompt."
-                )
-
-            user_prompt = prompts.build_candidate_generation_user_prompt(
-                current_prompt_messages=str(current_prompt.get_messages()),
-                best_score=best_score,
-                history_context=history_context,
-                task_context_str=task_context_str,
-                analysis_instruction=analysis_instruction,
-                metric_focus_instruction=metric_focus_instruction,
-                improvement_point_1=improvement_point_1,
-                prompts_per_round=self.prompts_per_round,
-                pattern_guidance=pattern_guidance,
-            )
-
-            try:
-                # Prepare metadata for optimization algorithm call
-                metadata_for_call: dict[str, Any] = {}
-                if project_name:
-                    metadata_for_call["project_name"] = project_name
-                    metadata_for_call["opik"] = {"project_name": project_name}
-                if optimization_id and "opik" in metadata_for_call:
-                    metadata_for_call["opik"]["optimization_id"] = optimization_id
-                metadata_for_call["optimizer_name"] = self.__class__.__name__
-                metadata_for_call["opik_call_type"] = "optimization_algorithm"
-
-                content = _llm_calls.call_model(
-                    messages=[
-                        {"role": "system", "content": prompts.REASONING_SYSTEM_PROMPT},
-                        {"role": "user", "content": user_prompt},
-                    ],
-                    model=self.model,
-                    model_parameters=self.model_parameters,
-                    metadata=metadata_for_call,
-                    optimization_id=optimization_id,
-                )
-                logger.debug(f"Raw response from reasoning model: {content}")
-
-                # Robust JSON Parsing and Validation
-                json_result = None
-                try:
-                    # Try direct JSON parsing
-                    json_result = json.loads(content)
-                except json.JSONDecodeError:
-                    import re
-
-                    json_match = re.search(r"\{.*\}", content, re.DOTALL)
-                    if json_match:
-                        try:
-                            json_result = json.loads(json_match.group())
-                        except json.JSONDecodeError as e:
-                            raise ValueError(
-                                f"Could not parse JSON extracted via regex: {e} - received: {json_match.group()}"
-                            )
-                    else:
-                        raise ValueError(
-                            f"No JSON object found in response via regex. - received: {content}"
-                        )
-
-                # Validate the parsed JSON structure
-                if isinstance(json_result, list) and len(json_result) == 1:
-                    json_result = json_result[0]
-
-                if not isinstance(json_result, dict) or "prompts" not in json_result:
-                    logger.debug(f"Parsed JSON content: {json_result}")
-                    raise ValueError(
-                        f"Parsed JSON is not a dictionary or missing 'prompts' key. - received: {json_result}"
-                    )
-
-                if not isinstance(json_result["prompts"], list):
-                    logger.debug(f"Content of 'prompts': {json_result.get('prompts')}")
-                    raise ValueError(
-                        f"'prompts' key does not contain a list. - received: {json_result.get('prompts')}"
-                    )
-
-                # Sanitize generated prompts to remove data leakage
-                json_result = self._sanitize_generated_prompts(
-                    json_result, metric.__name__
-                )
-
-                # Extract and log valid prompts
-                valid_prompts: list[chat_prompt.ChatPrompt] = []
-                for item in json_result["prompts"]:
-                    if (
-                        isinstance(item, dict)
-                        and "prompt" in item
-                        and isinstance(item["prompt"], list)
-                    ):
-                        # NOTE: might be brittle
-                        if current_prompt.user:
-                            user_text = current_prompt.user
-                        else:
-                            if current_prompt.messages is not None:
-                                user_text = current_prompt.messages[-1]["content"]
-                            else:
-                                raise Exception(
-                                    "User content not found in chat-prompt!"
-                                )
-
-                        valid_prompts.append(
-                            chat_prompt.ChatPrompt(
-                                system=item["prompt"][0]["content"],
-                                user=user_text,
-                                tools=current_prompt.tools,
-                                function_map=current_prompt.function_map,
-                            )
-                        )
-
-                        # Log details
-                        focus = item.get("improvement_focus", "N/A")
-                        reasoning = item.get("reasoning", "N/A")
-                        logger.debug(f"Generated prompt: {item['prompt']}")
-                        logger.debug(f"  Improvement focus: {focus}")
-                        logger.debug(f"  Reasoning: {reasoning}")
-                    else:
-                        logger.warning(
-                            f"Skipping invalid prompt item structure in JSON response: {item}"
-                        )
-
-                if not valid_prompts:
-                    raise ValueError(
-                        "No valid prompts found in the parsed JSON response after validation."
-                    )
-
-                candidate_generation_report.set_generated_prompts()
-
-                return valid_prompts
-                # --- End Robust Parsing ---
-
-            except Exception as e:
-                if isinstance(e, (BadRequestError, StructuredOutputParsingError)):
-                    raise
-                raise ValueError(
-                    f"Unexpected error during candidate prompt generation: {e}"
-                )
+        """Generate candidate prompts using meta-prompting (delegates to ops)."""
+        return candidate_ops.generate_candidate_prompts(
+            optimizer=self,
+            current_prompt=current_prompt,
+            best_score=best_score,
+            round_num=round_num,
+            previous_rounds=previous_rounds,
+            metric=metric,
+            build_history_context_fn=self._build_history_context,
+            get_task_context_fn=self._get_task_context,
+            optimization_id=optimization_id,
+            project_name=project_name,
+            winning_patterns=winning_patterns,
+        )
 
     def _generate_mcp_candidate_prompts(
         self,
