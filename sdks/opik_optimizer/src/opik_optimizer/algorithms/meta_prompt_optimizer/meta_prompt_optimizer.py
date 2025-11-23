@@ -1,6 +1,7 @@
 import copy
 import json
 import logging
+import random
 from typing import Any, cast
 from collections.abc import Callable
 
@@ -122,6 +123,10 @@ class MetaPromptOptimizer(BaseOptimizer):
         verbose: int = 1,
         seed: int = 42,
         name: str | None = None,
+        use_hall_of_fame: bool = True,
+        hof_size: int = 10,
+        pattern_extraction_interval: int = 5,
+        pattern_injection_rate: float = 0.6,
     ) -> None:
         super().__init__(
             model=model,
@@ -134,14 +139,40 @@ class MetaPromptOptimizer(BaseOptimizer):
         self.n_threads = n_threads
         self.dataset: Dataset | None = None
         self.enable_context = enable_context
+
+        # Hall of Fame for pattern mining
+        self.use_hall_of_fame = use_hall_of_fame
+        self.pattern_injection_rate = pattern_injection_rate
+        if self.use_hall_of_fame:
+            from .hall_of_fame import PromptHallOfFame
+
+            self.hall_of_fame = PromptHallOfFame(
+                max_size=hof_size,
+                pattern_extraction_interval=pattern_extraction_interval,
+            )
+            logger.debug(
+                f"Hall of Fame enabled: size={hof_size}, "
+                f"extraction_interval={pattern_extraction_interval}"
+            )
+        else:
+            self.hall_of_fame = None
+
         logger.debug(f"Initialized MetaPromptOptimizer with model={model}")
         logger.debug(f"Prompts/round: {prompts_per_round}")
 
     def get_optimizer_metadata(self) -> dict[str, Any]:
-        return {
+        metadata = {
             "prompts_per_round": self.prompts_per_round,
             "enable_context": self.enable_context,
+            "use_hall_of_fame": self.use_hall_of_fame,
         }
+        if self.use_hall_of_fame and self.hall_of_fame:
+            metadata["pattern_injection_rate"] = self.pattern_injection_rate
+            metadata["hof_size"] = self.hall_of_fame.max_size
+            metadata["pattern_extraction_interval"] = (
+                self.hall_of_fame.pattern_extraction_interval
+            )
+        return metadata
 
     def _evaluate_prompt(
         self,
@@ -620,6 +651,23 @@ class MetaPromptOptimizer(BaseOptimizer):
                 round_reporter.round_start(round_num)
                 previous_best_score = best_score
 
+                # Check if we should extract patterns from hall of fame
+                if self.hall_of_fame and self.hall_of_fame.should_extract_patterns(
+                    trials_used
+                ):
+                    logger.info(
+                        f"Extracting patterns from hall of fame at trial {trials_used}"
+                    )
+                    new_patterns = self.hall_of_fame.extract_patterns(
+                        model=self.model,
+                        model_parameters=self.model_parameters,
+                        metric_name=metric.__name__,
+                    )
+                    if new_patterns:
+                        logger.info(f"Extracted {len(new_patterns)} new patterns")
+                        for i, pattern in enumerate(new_patterns[:3], 1):
+                            logger.debug(f"  Pattern {i}: {pattern[:100]}...")
+
                 # Calculate how many prompts to generate this round
                 prompts_this_round = min(
                     self.prompts_per_round, max_trials - trials_used
@@ -628,6 +676,17 @@ class MetaPromptOptimizer(BaseOptimizer):
                 # Step 1. Create a set of candidate prompts
                 generator = candidate_generator or self._generate_candidate_prompts
                 generator_kwargs = dict(candidate_generator_kwargs or {})
+
+                # Add patterns to generator kwargs for injection
+                if self.hall_of_fame:
+                    patterns_to_inject = self.hall_of_fame.get_patterns_for_injection(
+                        n=3
+                    )
+                    if patterns_to_inject:
+                        generator_kwargs["winning_patterns"] = patterns_to_inject
+                        logger.debug(
+                            f"Injecting {len(patterns_to_inject)} patterns into generation"
+                        )
 
                 try:
                     candidate_prompts = generator(
@@ -694,6 +753,27 @@ class MetaPromptOptimizer(BaseOptimizer):
                     best_cand_score_avg, best_score
                 )
                 round_reporter.round_end(round_num, best_cand_score_avg, best_score)
+
+                # Add best candidate to hall of fame if qualified
+                if self.hall_of_fame and best_cand_score_avg > 0:
+                    from .hall_of_fame import HallOfFameEntry
+
+                    entry = HallOfFameEntry(
+                        prompt_messages=best_candidate_this_round.get_messages(),
+                        score=best_cand_score_avg,
+                        trial_number=trials_used,
+                        improvement_over_baseline=(
+                            (best_cand_score_avg - initial_score) / initial_score
+                            if initial_score > 0
+                            else 0
+                        ),
+                        metric_name=metric.__name__,
+                    )
+                    if self.hall_of_fame.add(entry):
+                        logger.debug(
+                            f"Added to hall of fame: score={best_cand_score_avg:.3f}, "
+                            f"trial={trials_used}"
+                        )
 
                 round_data = self._create_round_data(
                     round_num=round_num,
@@ -842,32 +922,159 @@ class MetaPromptOptimizer(BaseOptimizer):
         )
 
     def _get_task_context(self, metric: Callable) -> str:
-        """Get task-specific context from the dataset and metric configuration."""
+        """
+        Get task-specific context from the dataset and metric configuration.
+        Always sanitizes to prevent data leakage.
+
+        Args:
+            metric: The evaluation metric
+
+        Returns:
+            Sanitized task context string
+        """
         if self.dataset is None:
             return ""
 
         sample = None
-        context = ""
         try:
             # Try get_items() first as it's the preferred method
             items = self.dataset.get_items()
             sample = items[0]  # Get first sample
         except Exception as e:
             logger.warning(f"Could not get sample from dataset: {e}")
+            return ""
 
-        # Describe Single Metric
-        if sample is not None:
-            metric_name = metric.__name__
-            description = metric.__doc__ or "No description available."
+        if sample is None:
+            return ""
 
-            metrics_str = f"- {metric_name}: {description}"
+        # Exclude output fields that would give away dataset structure
+        excluded_keys = {
+            "id",
+            "answer",
+            "label",
+            "output",
+            "expected_output",
+            "ground_truth",
+            "target",
+            "metadata",
+            "response",
+        }
 
-            context = "\nTask Context:\n"
-            context += f"Dataset fields (includes both input and optionally the expected output): {', '.join([x for x in sample.keys() if x != 'id'])}\n"
-            context += f"Evaluation Metric:\n{metrics_str}\n"
-            context += f"\nExample:\n{json.dumps(sample)}\n"
+        # Only show INPUT fields with {var} delimiter syntax (Arize pattern)
+        input_fields = [k for k in sample.keys() if k not in excluded_keys]
+
+        context = "\nTask Context:\n"
+        context += "Available input variables (use {variable_name} syntax): "
+        context += ", ".join([f"{{{field}}}" for field in input_fields])
+        context += "\n\n"
+
+        # Generic metric description (NO specific names or formulas)
+        context += (
+            "Evaluation: Your output will be evaluated for accuracy and quality.\n"
+        )
+        context += (
+            "Focus on producing clear, correct responses based on the input.\n\n"
+        )
+
+        # Sanitized example (inputs only, with variable syntax)
+        sanitized_example = {k: v for k, v in sample.items() if k in input_fields}
+        if sanitized_example:
+            context += "Example input structure:\n"
+            for key in input_fields[:2]:  # Show max 2 fields
+                value = sample.get(key, "")
+                # Truncate long values
+                value_str = (
+                    str(value)[:100] + "..."
+                    if len(str(value)) > 100
+                    else str(value)
+                )
+                context += f"  {{{key}}}: {value_str}\n"
 
         return context
+
+    def _sanitize_generated_prompts(
+        self, prompt_json: dict[str, Any], metric_name: str
+    ) -> dict[str, Any]:
+        """
+        Remove any leaked dataset/metric references from generated prompts.
+
+        Args:
+            prompt_json: JSON dict containing generated prompts
+            metric_name: Name of the metric being optimized
+
+        Returns:
+            Sanitized prompt_json with rejected prompts removed
+        """
+        # Common patterns that indicate data leakage
+        FORBIDDEN_PATTERNS = [
+            # Metric-specific terms
+            metric_name.lower(),
+            "f1 score",
+            "f1-score",
+            "token-level",
+            "exact match",
+            "rogue",
+            "bleu",
+            "meteor",
+            # Dataset-specific terms
+            "supporting_facts",
+            "supporting facts",
+            "answer field",
+            "context field",
+            "question field",
+            "hotpotqa",
+            "squad",
+            "naturalquestions",
+            "dataset",
+            "training data",
+            # Evaluation-specific terms
+            "ground truth",
+            "gold standard",
+            "evaluation metric",
+            "scoring function",
+        ]
+
+        rejected_count = 0
+        for prompt_item in prompt_json.get("prompts", []):
+            if "prompt" in prompt_item and isinstance(prompt_item["prompt"], list):
+                has_leakage = False
+
+                # Check each message in the prompt
+                for message in prompt_item["prompt"]:
+                    content = message.get("content", "")
+                    content_lower = content.lower()
+
+                    # Check for forbidden patterns
+                    for pattern in FORBIDDEN_PATTERNS:
+                        if pattern in content_lower:
+                            logger.warning(
+                                f"Detected data leakage in generated prompt: '{pattern}' "
+                                f"found in content: '{content[:100]}...'"
+                            )
+                            has_leakage = True
+                            break
+
+                    if has_leakage:
+                        break
+
+                # Mark prompt as rejected if leakage detected
+                if has_leakage:
+                    prompt_item["_rejected"] = True
+                    rejected_count += 1
+
+        # Filter out rejected prompts
+        original_count = len(prompt_json.get("prompts", []))
+        prompt_json["prompts"] = [
+            p for p in prompt_json["prompts"] if not p.get("_rejected", False)
+        ]
+
+        if rejected_count > 0:
+            logger.info(
+                f"Sanitization: Rejected {rejected_count}/{original_count} prompts "
+                f"due to data leakage"
+            )
+
+        return prompt_json
 
     def _generate_candidate_prompts(
         self,
@@ -878,6 +1085,7 @@ class MetaPromptOptimizer(BaseOptimizer):
         metric: Callable,
         optimization_id: str | None = None,
         project_name: str | None = None,
+        winning_patterns: list[str] | None = None,
     ) -> list[chat_prompt.ChatPrompt]:
         """Generate candidate prompts using meta-prompting."""
         with reporting.display_candidate_generation_report(
@@ -886,6 +1094,23 @@ class MetaPromptOptimizer(BaseOptimizer):
             logger.debug(f"\nGenerating candidate prompts for round {round_num + 1}")
             logger.debug(f"Generating from prompt: {current_prompt.get_messages()}")
             logger.debug(f"Current best score: {best_score:.4f}")
+
+            # Prepare pattern injection guidance
+            pattern_guidance = ""
+            if winning_patterns and random.random() < self.pattern_injection_rate:
+                pattern_guidance = "\n\nWINNING PATTERNS TO CONSIDER:\n"
+                pattern_guidance += "The following patterns have been successful in high-scoring prompts:\n"
+                for i, pattern in enumerate(winning_patterns, 1):
+                    pattern_guidance += f"{i}. {pattern}\n"
+                pattern_guidance += (
+                    "\nConsider incorporating these patterns where appropriate, "
+                )
+                pattern_guidance += (
+                    "but adapt them to fit the current prompt's needs.\n"
+                )
+                logger.info(
+                    f"Injecting {len(winning_patterns)} patterns into generation"
+                )
 
             history_context = self._build_history_context(previous_rounds)
             task_context_str = ""
@@ -897,9 +1122,9 @@ class MetaPromptOptimizer(BaseOptimizer):
                 task_context_str = self._get_task_context(metric=metric)
                 analysis_instruction = "Analyze the example provided (if any), the metric description (if any), and the history of scores."
                 metric_focus_instruction = (
-                    f"Focus on improving the score for the metric: {metric.__name__}."
+                    "Focus on improving the score for the evaluation metric."
                 )
-                improvement_point_1 = "1. Be more specific and clear about expectations based on the metric and task."
+                improvement_point_1 = "1. Be more specific and clear about expectations based on the task."
                 logger.debug(
                     "Task context and metric-specific instructions enabled for reasoning prompt."
                 )
@@ -920,6 +1145,7 @@ class MetaPromptOptimizer(BaseOptimizer):
                 metric_focus_instruction=metric_focus_instruction,
                 improvement_point_1=improvement_point_1,
                 prompts_per_round=self.prompts_per_round,
+                pattern_guidance=pattern_guidance,
             )
 
             try:
@@ -945,7 +1171,7 @@ class MetaPromptOptimizer(BaseOptimizer):
                 )
                 logger.debug(f"Raw response from reasoning model: {content}")
 
-                # --- Robust JSON Parsing and Validation ---
+                # Robust JSON Parsing and Validation
                 json_result = None
                 try:
                     # Try direct JSON parsing
@@ -981,6 +1207,11 @@ class MetaPromptOptimizer(BaseOptimizer):
                     raise ValueError(
                         f"'prompts' key does not contain a list. - received: {json_result.get('prompts')}"
                     )
+
+                # Sanitize generated prompts to remove data leakage
+                json_result = self._sanitize_generated_prompts(
+                    json_result, metric.__name__
+                )
 
                 # Extract and log valid prompts
                 valid_prompts: list[chat_prompt.ChatPrompt] = []
