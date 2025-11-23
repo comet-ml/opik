@@ -4,7 +4,7 @@ import com.comet.opik.api.BiInformationResponse;
 import com.comet.opik.api.Dataset;
 import com.comet.opik.api.DatasetLastExperimentCreated;
 import com.comet.opik.api.DatasetLastOptimizationCreated;
-import com.comet.opik.api.DatasetProcessingStatus;
+import com.comet.opik.api.DatasetStatus;
 import com.comet.opik.api.DatasetUpdate;
 import com.comet.opik.api.Visibility;
 import com.comet.opik.infrastructure.db.SetFlatArgumentFactory;
@@ -214,8 +214,8 @@ public interface DatasetDAO {
     @SqlQuery("SELECT id FROM datasets WHERE id IN (SELECT id FROM experiment_dataset_ids_<table_name>) and workspace_id = :workspace_id")
     Set<UUID> existsByTempTable(@Bind("workspace_id") String workspaceId, @Define("table_name") String tableName);
 
-    @SqlUpdate("UPDATE datasets SET processing_status = :status WHERE id = :id AND workspace_id = :workspace_id")
-    int updateProcessingStatus(@Bind("workspace_id") String workspaceId,
+    @SqlUpdate("UPDATE datasets SET status = :status WHERE id = :id AND workspace_id = :workspace_id")
+    int updateStatus(@Bind("workspace_id") String workspaceId,
             @Bind("id") UUID id,
-            @Bind("status") DatasetProcessingStatus status);
+            @Bind("status") DatasetStatus status);
 }

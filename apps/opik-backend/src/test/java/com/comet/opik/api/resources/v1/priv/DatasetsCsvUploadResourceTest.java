@@ -3,7 +3,7 @@ package com.comet.opik.api.resources.v1.priv;
 import com.comet.opik.api.Dataset;
 import com.comet.opik.api.DatasetItem;
 import com.comet.opik.api.DatasetItemSource;
-import com.comet.opik.api.DatasetProcessingStatus;
+import com.comet.opik.api.DatasetStatus;
 import com.comet.opik.api.Visibility;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
@@ -169,7 +169,7 @@ class DatasetsCsvUploadResourceTest {
 
         // Verify dataset status is set to PROCESSING immediately after upload
         Dataset datasetAfterUpload = datasetResourceClient.getDatasetById(createdDatasetId, API_KEY, TEST_WORKSPACE);
-        assertThat(datasetAfterUpload.processingStatus()).isEqualTo(DatasetProcessingStatus.PROCESSING);
+        assertThat(datasetAfterUpload.status()).isEqualTo(DatasetStatus.PROCESSING);
 
         // Wait for async processing to complete
         Awaitility.await()
@@ -207,7 +207,7 @@ class DatasetsCsvUploadResourceTest {
                     // Verify dataset status is set to COMPLETED after processing
                     Dataset datasetAfterProcessing = datasetResourceClient.getDatasetById(createdDatasetId, API_KEY,
                             TEST_WORKSPACE);
-                    assertThat(datasetAfterProcessing.processingStatus()).isEqualTo(DatasetProcessingStatus.COMPLETED);
+                    assertThat(datasetAfterProcessing.status()).isEqualTo(DatasetStatus.COMPLETED);
                 });
     }
 
@@ -237,7 +237,7 @@ class DatasetsCsvUploadResourceTest {
 
         // Verify dataset status is set to PROCESSING immediately after upload
         Dataset datasetAfterUpload = datasetResourceClient.getDatasetById(createdDatasetId, API_KEY, TEST_WORKSPACE);
-        assertThat(datasetAfterUpload.processingStatus()).isEqualTo(DatasetProcessingStatus.PROCESSING);
+        assertThat(datasetAfterUpload.status()).isEqualTo(DatasetStatus.PROCESSING);
 
         // Wait for async processing to complete
         Awaitility.await()
@@ -250,7 +250,7 @@ class DatasetsCsvUploadResourceTest {
                     // Verify dataset status is set to COMPLETED after processing
                     Dataset datasetAfterProcessing = datasetResourceClient.getDatasetById(createdDatasetId, API_KEY,
                             TEST_WORKSPACE);
-                    assertThat(datasetAfterProcessing.processingStatus()).isEqualTo(DatasetProcessingStatus.COMPLETED);
+                    assertThat(datasetAfterProcessing.status()).isEqualTo(DatasetStatus.COMPLETED);
                 });
     }
 
@@ -280,7 +280,7 @@ class DatasetsCsvUploadResourceTest {
 
         // Verify dataset status is set to PROCESSING immediately after upload
         Dataset datasetAfterUpload = datasetResourceClient.getDatasetById(createdDatasetId, API_KEY, TEST_WORKSPACE);
-        assertThat(datasetAfterUpload.processingStatus()).isEqualTo(DatasetProcessingStatus.PROCESSING);
+        assertThat(datasetAfterUpload.status()).isEqualTo(DatasetStatus.PROCESSING);
 
         // Wait for async processing to complete
         Awaitility.await()
@@ -306,7 +306,7 @@ class DatasetsCsvUploadResourceTest {
                     // Verify dataset status is set to COMPLETED after processing
                     Dataset datasetAfterProcessing = datasetResourceClient.getDatasetById(createdDatasetId, API_KEY,
                             TEST_WORKSPACE);
-                    assertThat(datasetAfterProcessing.processingStatus()).isEqualTo(DatasetProcessingStatus.COMPLETED);
+                    assertThat(datasetAfterProcessing.status()).isEqualTo(DatasetStatus.COMPLETED);
                 });
     }
 

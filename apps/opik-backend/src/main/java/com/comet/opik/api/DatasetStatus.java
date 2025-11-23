@@ -9,8 +9,7 @@ import java.util.Arrays;
 
 @Getter
 @RequiredArgsConstructor
-public enum DatasetProcessingStatus {
-    IDLE("idle"),
+public enum DatasetStatus {
     PROCESSING("processing"),
     COMPLETED("completed"),
     FAILED("failed");
@@ -19,11 +18,10 @@ public enum DatasetProcessingStatus {
     private final String value;
 
     @JsonCreator
-    public static DatasetProcessingStatus fromString(String value) {
+    public static DatasetStatus fromString(String value) {
         return Arrays.stream(values())
-                .filter(status -> status.value.equals(value))
+                .filter(status -> status.value.equalsIgnoreCase(value))
                 .findFirst()
-                .orElseThrow(() -> new IllegalArgumentException(
-                        "Unknown DatasetProcessingStatus value: '%s'".formatted(value)));
+                .orElse(COMPLETED);
     }
 }
