@@ -9,6 +9,7 @@ import logging
 
 import opik
 from ....api_objects.optimization_result import OptimizationRound
+from ..prompts import START_DELIM, END_DELIM
 
 logger = logging.getLogger(__name__)
 
@@ -57,8 +58,8 @@ def get_task_context(dataset: opik.Dataset | None, metric: Callable) -> str:
     input_fields = [k for k in sample.keys() if k not in excluded_keys]
 
     context = "\nTask Context:\n"
-    context += "Available input variables (use {variable_name} syntax): "
-    context += ", ".join([f"{{{field}}}" for field in input_fields])
+    context += f"Available input variables (use {START_DELIM}variable_name{END_DELIM} syntax): "
+    context += ", ".join([f"{START_DELIM}{field}{END_DELIM}" for field in input_fields])
     context += "\n\n"
 
     # Generic metric description (NO specific names or formulas)
@@ -81,7 +82,7 @@ def get_task_context(dataset: opik.Dataset | None, metric: Callable) -> str:
                 if len(str(value)) > 100
                 else str(value)
             )
-            context += f"  {{{key}}}: {value_str}\n"
+            context += f"  {START_DELIM}{key}{END_DELIM}: {value_str}\n"
 
     return context
 
