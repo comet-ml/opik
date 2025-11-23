@@ -40,48 +40,6 @@ logger = logging.getLogger(__name__)  # Gets logger configured by setup_logging
 _rate_limiter = _throttle.get_rate_limiter_for_current_opik_installation()
 
 
-def _sync_tool_description_in_system(prompt: chat_prompt.ChatPrompt) -> None:
-    if not prompt.system or not getattr(prompt, "tools", None):
-        return
-
-    description = (
-        prompt.tools[0].get("function", {}).get("description") if prompt.tools else None
-    )
-    if not description:
-        return
-
-    tool_name = (
-        prompt.tools[0].get("function", {}).get("name") if prompt.tools else None
-    )
-
-    system_text = cast(str, prompt.system)
-    if PROMPT_TOOL_HEADER not in system_text or PROMPT_TOOL_FOOTER not in system_text:
-        return
-
-    start = system_text.index(PROMPT_TOOL_HEADER) + len(PROMPT_TOOL_HEADER)
-    end = system_text.index(PROMPT_TOOL_FOOTER)
-    description_text = description.strip()
-    system_text = (
-        system_text[:start] + "\n" + description_text + "\n" + system_text[end:]
-    )
-    prompt.system = system_text
-
-    if tool_name:
-        pattern = rf"(-\s*{re.escape(tool_name)}:\s)(.*)"
-
-        def _tool_section_replacer(match: re.Match[str]) -> str:
-            return f"{match.group(1)}{description_text}"
-
-        system_text = re.sub(
-            pattern,
-            _tool_section_replacer,
-            system_text,
-            count=1,
-            flags=re.MULTILINE,
-        )
-        prompt.system = system_text
-
-
 class MetaPromptOptimizer(BaseOptimizer):
     """
     Meta-Prompt Optimizer that uses LLM-based meta-reasoning to iteratively improve prompts.
@@ -812,8 +770,3 @@ class MetaPromptOptimizer(BaseOptimizer):
         """Build context from previous optimization rounds (delegates to ops)."""
         return context_ops.build_history_context(previous_rounds)
 
-    def _get_evaluation_subset(
-        self, dataset: opik.Dataset, min_size: int = 20, max_size: int = 100
-    ) -> list[dict[str, Any]]:
-        """Get a random subset of the dataset for evaluation (delegates to ops)."""
-        return evaluation_ops.get_evaluation_subset(dataset, min_size, max_size)
