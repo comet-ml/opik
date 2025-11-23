@@ -170,10 +170,8 @@ def evaluate_prompt(
 
         # Add tags to trace for optimization tracking
         if optimizer.current_optimization_id:
-            optimizer_short_name = optimizer._get_optimizer_short_name()
             opik_context.update_current_trace(
                 tags=[
-                    optimizer_short_name,
                     optimizer.current_optimization_id,
                     "Evaluation",
                 ]
