@@ -56,7 +56,7 @@ def get_task_context(
         metric: The evaluation metric
         num_examples: Number of dataset examples to show (default: 3)
         columns: Specific columns to include (None = all input columns)
-        max_tokens: Maximum tokens allowed (will adapt samples/truncation to fit)
+        max_tokens: Token budget for dataset examples ONLY (adaptive fitting limit)
         model: Model name for token counting (default: gpt-4)
 
     Returns:

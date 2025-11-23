@@ -62,18 +62,21 @@ class MetaPromptOptimizer(BaseOptimizer):
         enable_context: Whether to include task-specific context when reasoning about improvements
         num_task_examples: Number of dataset examples to show in task context (default: 3)
         task_context_columns: Specific dataset columns to include in context (None = all input columns)
-        max_context_tokens: Maximum tokens for task context (will reduce samples/truncate to fit)
         n_threads: Number of parallel threads for prompt evaluation
         verbose: Controls internal logging/progress bars (0=off, 1=on)
         seed: Random seed for reproducibility
         use_hall_of_fame: Enable Hall of Fame pattern extraction and re-injection
-        hof_size: Maximum number of prompts to keep in Hall of Fame
-        pattern_extraction_interval: Extract patterns every N trials
-        pattern_injection_rate: Probability of injecting patterns into new candidates
     """
 
     # --- Constants for Default Configuration ---
-    DEFAULT_PROMPTS_PER_ROUND = 4
+    DEFAULT_PROMPTS_PER_ROUND = 4  # Same as DEFAULT_NUM_GENERATIONS
+    DEFAULT_NUM_THREADS = 12
+    DEFAULT_SEED = 42
+    DEFAULT_HALL_OF_FAME_SIZE = 10
+    DEFAULT_PATTERN_EXTRACTION_INTERVAL = 5
+    DEFAULT_PATTERN_INJECTION_RATE = 0.6
+    DEFAULT_DATASET_CONTEXT_MAX_TOKENS = 10000  # Safe for custom models
+    DEFAULT_DATASET_CONTEXT_RATIO = 0.25
 
     def __init__(
         self,
@@ -83,15 +86,11 @@ class MetaPromptOptimizer(BaseOptimizer):
         enable_context: bool = True,
         num_task_examples: int = 3,
         task_context_columns: list[str] | None = None,
-        max_context_tokens: int = 2000,
-        n_threads: int = 12,
+        n_threads: int = DEFAULT_NUM_THREADS,
         verbose: int = 1,
-        seed: int = 42,
+        seed: int = DEFAULT_SEED,
         name: str | None = None,
         use_hall_of_fame: bool = True,
-        hof_size: int = 10,
-        pattern_extraction_interval: int = 5,
-        pattern_injection_rate: float = 0.6,
     ) -> None:
         super().__init__(
             model=model,
@@ -106,38 +105,79 @@ class MetaPromptOptimizer(BaseOptimizer):
         self.enable_context = enable_context
         self.num_task_examples = num_task_examples
         self.task_context_columns = task_context_columns
-        self.max_context_tokens = max_context_tokens
+
+        # Calculate token budget for task context data stuffing (dataset examples only)
+        # This is ONLY used for adaptive fitting logic in get_task_context()
+        self.max_context_tokens = self._calculate_max_context_tokens()
 
         # Hall of Fame for pattern mining
         self.use_hall_of_fame = use_hall_of_fame
-        self.pattern_injection_rate = pattern_injection_rate
+        self.hall_of_fame_size = self.DEFAULT_HALL_OF_FAME_SIZE
+        self.pattern_extraction_interval = self.DEFAULT_PATTERN_EXTRACTION_INTERVAL
+        self.pattern_injection_rate = self.DEFAULT_PATTERN_INJECTION_RATE
         self.hall_of_fame: PromptHallOfFame | None = None
         if self.use_hall_of_fame:
             self.hall_of_fame = PromptHallOfFame(
-                max_size=hof_size,
-                pattern_extraction_interval=pattern_extraction_interval,
+                max_size=self.hall_of_fame_size,
+                pattern_extraction_interval=self.pattern_extraction_interval,
             )
             logger.debug(
-                f"Hall of Fame enabled: size={hof_size}, "
-                f"extraction_interval={pattern_extraction_interval}"
+                f"Hall of Fame enabled: size={self.hall_of_fame_size}, "
+                f"extraction_interval={self.pattern_extraction_interval}"
             )
 
         logger.debug(f"Initialized MetaPromptOptimizer with model={model}")
         logger.debug(f"Prompts/round: {prompts_per_round}")
+
+    def _calculate_max_context_tokens(self) -> int:
+        """
+        Calculate token budget for task context data stuffing (dataset examples ONLY).
+
+        This limit is ONLY used in get_task_context() for adaptive fitting of dataset examples.
+        It determines how many examples and how much truncation to use when building task context.
+
+        Uses ~25% of model's max tokens, capped at DEFAULT_MAX_DATASET_CONTEXT_TOKENS.
+        Falls back to absolute max for custom models where litellm can't determine limits.
+        """
+        try:
+            from litellm import get_max_tokens
+
+            model_max_tokens = get_max_tokens(self.model)
+            # Use ~25% of model's context for dataset examples
+            calculated_max = int(model_max_tokens * self.DEFAULT_DATASET_CONTEXT_RATIO)
+            logger.debug(
+                f"Model {self.model} max tokens: {model_max_tokens}, "
+                f"calculated dataset context budget: {calculated_max}"
+            )
+        except Exception as e:
+            logger.debug(
+                f"Could not get max tokens for model {self.model}: {e}. "
+                f"Using default max: {self.DEFAULT_DATASET_CONTEXT_MAX_TOKENS}"
+            )
+            calculated_max = self.DEFAULT_DATASET_CONTEXT_MAX_TOKENS
+
+        # Apply absolute safety limit (for custom models or huge context windows)
+        max_tokens = min(calculated_max, self.DEFAULT_DATASET_CONTEXT_MAX_TOKENS)
+        logger.debug(f"Final dataset context token budget: {max_tokens}")
+        return max_tokens
 
     def get_optimizer_metadata(self) -> dict[str, Any]:
         metadata: dict[str, Any] = {
             "prompts_per_round": self.prompts_per_round,
             "enable_context": self.enable_context,
             "num_task_examples": self.num_task_examples,
+            "task_context_columns": self.task_context_columns,
+            "max_context_tokens": self.max_context_tokens,
+            "n_threads": self.n_threads,
             "use_hall_of_fame": self.use_hall_of_fame,
+            "hall_of_fame_size": self.hall_of_fame.max_size
+            if self.hall_of_fame
+            else self.DEFAULT_HALL_OF_FAME_SIZE,
+            "pattern_extraction_interval": self.hall_of_fame.pattern_extraction_interval
+            if self.hall_of_fame
+            else self.DEFAULT_PATTERN_EXTRACTION_INTERVAL,
+            "pattern_injection_rate": self.pattern_injection_rate,
         }
-        if self.use_hall_of_fame and self.hall_of_fame:
-            metadata["pattern_injection_rate"] = self.pattern_injection_rate
-            metadata["hof_size"] = self.hall_of_fame.max_size
-            metadata["pattern_extraction_interval"] = (
-                self.hall_of_fame.pattern_extraction_interval
-            )
         return metadata
 
     def _evaluate_prompt(
@@ -342,6 +382,7 @@ class MetaPromptOptimizer(BaseOptimizer):
                 logger.debug("Optimization marked as cancelled")
             raise e
 
+    # FIXME: To be removed once MCP is fully supported
     def optimize_mcp(
         self,
         prompt: chat_prompt.ChatPrompt,
