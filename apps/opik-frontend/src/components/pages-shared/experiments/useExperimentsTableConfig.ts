@@ -28,6 +28,7 @@ import {
 } from "@/lib/groups";
 import FeedbackScoreHeader from "@/components/shared/DataTableHeaders/FeedbackScoreHeader";
 import FeedbackScoreCell from "@/components/shared/DataTableCells/FeedbackScoreCell";
+import FeedbackScoreReasonCell from "@/components/shared/DataTableCells/FeedbackScoreReasonCell";
 import ResourceCell from "@/components/shared/DataTableCells/ResourceCell";
 import TextCell from "@/components/shared/DataTableCells/TextCell";
 import { RESOURCE_TYPE } from "@/components/shared/ResourceLink/ResourceLink";
@@ -99,10 +100,11 @@ export const useExperimentsTableConfig = <
     defaultValue: {},
   });
 
-  const dynamicColumnsIds = useMemo(
-    () => dynamicScoresColumns.map((c) => c.id),
-    [dynamicScoresColumns],
-  );
+  const dynamicColumnsIds = useMemo(() => {
+    const scoreIds = dynamicScoresColumns.map((c) => c.id);
+    const reasonIds = dynamicScoresColumns.map((c) => `${c.id}_reason`);
+    return [...scoreIds, ...reasonIds];
+  }, [dynamicScoresColumns]);
 
   useDynamicColumnsCache({
     dynamicColumnsKey: `${storageKeyPrefix}-dynamic-columns`,
@@ -117,31 +119,45 @@ export const useExperimentsTableConfig = <
   }, []);
 
   const scoresColumnsData = useMemo(() => {
-    return [
-      ...dynamicScoresColumns.map(
-        ({ label, id, columnType }) =>
-          ({
-            id,
-            label,
-            type: columnType,
-            header: FeedbackScoreHeader as never,
-            cell: FeedbackScoreCell as never,
-            aggregatedCell: FeedbackScoreCell.Aggregation as never,
-            accessorFn: (row: T) =>
+    const scoreColumns = dynamicScoresColumns.map(
+      ({ label, id, columnType }) =>
+        ({
+          id,
+          label,
+          type: columnType,
+          header: FeedbackScoreHeader as never,
+          cell: FeedbackScoreCell as never,
+          aggregatedCell: FeedbackScoreCell.Aggregation as never,
+          accessorFn: (row: T) =>
+            (
+              row as T & { feedback_scores?: Array<{ name: string }> }
+            ).feedback_scores?.find((f) => f.name === label),
+          customMeta: {
+            accessorFn: (aggregation: ExperimentsAggregations) =>
               (
-                row as T & { feedback_scores?: Array<{ name: string }> }
-              ).feedback_scores?.find((f) => f.name === label),
-            customMeta: {
-              accessorFn: (aggregation: ExperimentsAggregations) =>
-                (
-                  aggregation as ExperimentsAggregations & {
-                    feedback_scores?: Array<{ name: string }>;
-                  }
-                ).feedback_scores?.find((f) => f.name === label)?.value,
-            },
-          }) as ColumnData<T>,
-      ),
-    ];
+                aggregation as ExperimentsAggregations & {
+                  feedback_scores?: Array<{ name: string }>;
+                }
+              ).feedback_scores?.find((f) => f.name === label)?.value,
+          },
+        }) as ColumnData<T>,
+    );
+
+    const reasonColumns = dynamicScoresColumns.map(
+      ({ label, id }) =>
+        ({
+          id: `${id}_reason`,
+          label: `${label} (reason)`,
+          type: COLUMN_TYPE.string,
+          cell: FeedbackScoreReasonCell as never,
+          accessorFn: (row: T) =>
+            (
+              row as T & { feedback_scores?: Array<{ name: string }> }
+            ).feedback_scores?.find((f) => f.name === label),
+        }) as ColumnData<T>,
+    );
+
+    return [...scoreColumns, ...reasonColumns];
   }, [dynamicScoresColumns]);
 
   const selectedRows = useMemo(() => {
