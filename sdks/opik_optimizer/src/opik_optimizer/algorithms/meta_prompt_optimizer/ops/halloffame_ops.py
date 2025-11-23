@@ -6,13 +6,16 @@ and re-injecting those patterns into future candidate generation.
 """
 
 from dataclasses import dataclass, field
-from typing import List, Dict, Any, Optional
+from typing import Any
 import json
 from collections import Counter
 import re
 import logging
 
-from ..prompts import build_pattern_extraction_system_prompt, build_pattern_extraction_user_prompt
+from ..prompts import (
+    build_pattern_extraction_system_prompt,
+    build_pattern_extraction_user_prompt,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -20,13 +23,14 @@ logger = logging.getLogger(__name__)
 @dataclass
 class HallOfFameEntry:
     """Represents a high-performing prompt in the hall of fame"""
-    prompt_messages: List[Dict[str, str]]
+
+    prompt_messages: list[dict[str, str]]
     score: float
     trial_number: int
     improvement_over_baseline: float
     metric_name: str
-    extracted_patterns: Optional[List[str]] = None  # Filled during pattern extraction
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    extracted_patterns: list[str] | None = None  # Filled during pattern extraction
+    metadata: dict[str, Any] = field(default_factory=dict)
 
 
 class PromptHallOfFame:
@@ -50,8 +54,8 @@ class PromptHallOfFame:
         """
         self.max_size = max_size
         self.pattern_extraction_interval = pattern_extraction_interval
-        self.entries: List[HallOfFameEntry] = []
-        self.extracted_patterns: List[str] = []
+        self.entries: list[HallOfFameEntry] = []
+        self.extracted_patterns: list[str] = []
         self.pattern_usage_count: Counter = Counter()
         self._last_extraction_trial: int = 0
 
@@ -69,7 +73,9 @@ class PromptHallOfFame:
         if len(self.entries) < self.max_size:
             self.entries.append(entry)
             self.entries.sort(key=lambda e: e.score, reverse=True)
-            logger.debug(f"Added to hall of fame: score={entry.score:.3f}, trial={entry.trial_number}")
+            logger.debug(
+                f"Added to hall of fame: score={entry.score:.3f}, trial={entry.trial_number}"
+            )
             return True
         elif entry.score > self.entries[-1].score:
             removed = self.entries[-1]
@@ -94,16 +100,13 @@ class PromptHallOfFame:
         """
         trials_since_last = current_trial - self._last_extraction_trial
         return (
-            len(self.entries) >= 3 and
-            trials_since_last >= self.pattern_extraction_interval
+            len(self.entries) >= 3
+            and trials_since_last >= self.pattern_extraction_interval
         )
 
     def extract_patterns(
-        self,
-        model: str,
-        model_parameters: Dict[str, Any],
-        metric_name: str
-    ) -> List[str]:
+        self, model: str, model_parameters: dict[str, Any], metric_name: str
+    ) -> list[str]:
         """
         Extract winning patterns from hall of fame using LLM.
         This is the key innovation: meta-learning what makes prompts successful.
@@ -121,26 +124,23 @@ class PromptHallOfFame:
             return []
 
         # Get top 5 prompts
-        top_prompts = self.entries[:min(5, len(self.entries))]
+        top_prompts = self.entries[: min(5, len(self.entries))]
 
         # Build analysis prompt
         prompt_analysis = self._build_pattern_extraction_prompt(
             top_prompts, metric_name
         )
 
-        from ... import _llm_calls
+        from .... import _llm_calls
 
         try:
             response = _llm_calls.call_model(
                 messages=[
                     {
                         "role": "system",
-                        "content": build_pattern_extraction_system_prompt()
+                        "content": build_pattern_extraction_system_prompt(),
                     },
-                    {
-                        "role": "user",
-                        "content": prompt_analysis
-                    }
+                    {"role": "user", "content": prompt_analysis},
                 ],
                 model=model,
                 model_parameters=model_parameters,
@@ -172,7 +172,7 @@ class PromptHallOfFame:
             logger.warning(f"Pattern extraction failed: {e}", exc_info=True)
             return []
 
-    def get_patterns_for_injection(self, n: int = 3) -> List[str]:
+    def get_patterns_for_injection(self, n: int = 3) -> list[str]:
         """
         Get top patterns to inject into new prompt generation.
         Balances pattern effectiveness with usage diversity.
@@ -191,7 +191,8 @@ class PromptHallOfFame:
         for pattern in set(self.extracted_patterns):
             # Find prompts using this pattern
             using_entries = [
-                e for e in self.entries
+                e
+                for e in self.entries
                 if e.extracted_patterns and pattern in e.extracted_patterns
             ]
 
@@ -203,9 +204,7 @@ class PromptHallOfFame:
 
         # Return top N patterns
         sorted_patterns = sorted(
-            pattern_scores.items(),
-            key=lambda x: x[1],
-            reverse=True
+            pattern_scores.items(), key=lambda x: x[1], reverse=True
         )
         selected = [p for p, _ in sorted_patterns[:n]]
 
@@ -218,14 +217,12 @@ class PromptHallOfFame:
         return selected
 
     def _build_pattern_extraction_prompt(
-        self,
-        top_entries: List[HallOfFameEntry],
-        metric_name: str
+        self, top_entries: list[HallOfFameEntry], metric_name: str
     ) -> str:
         """Build prompt for LLM to extract patterns"""
         prompt_scorecard = ""
         for i, entry in enumerate(top_entries):
-            prompt_scorecard += f"\n--- Prompt #{i+1} (Score: {entry.score:.3f}, Improvement: {entry.improvement_over_baseline:+.1%}) ---\n"
+            prompt_scorecard += f"\n--- Prompt #{i + 1} (Score: {entry.score:.3f}, Improvement: {entry.improvement_over_baseline:+.1%}) ---\n"
             prompt_scorecard += json.dumps(entry.prompt_messages, indent=2)
             prompt_scorecard += "\n"
 
@@ -234,17 +231,18 @@ class PromptHallOfFame:
             metric_name=metric_name,
         )
 
-    def _parse_pattern_response(self, response: str) -> List[str]:
+    def _parse_pattern_response(self, response: str) -> list[str]:
         """Parse LLM response into pattern list"""
         try:
-            from ... import utils
-            parsed = utils.json_to_dict(response)
+            from ....utils.core import json_to_dict
+
+            parsed = json_to_dict(response)
             patterns = []
             for item in parsed.get("patterns", []):
                 if isinstance(item, dict):
                     # Combine pattern description and example
-                    pattern_desc = item.get('pattern', '')
-                    example = item.get('example', '')
+                    pattern_desc = item.get("pattern", "")
+                    example = item.get("example", "")
                     if pattern_desc:
                         if example:
                             pattern_desc = f"{pattern_desc} | Example: {example}"
@@ -255,14 +253,12 @@ class PromptHallOfFame:
         except Exception as e:
             logger.debug(f"JSON parsing failed, using fallback: {e}")
             # Fallback: extract bullet points or numbered items
-            patterns = re.findall(r'(?:[-•\d]+\.?)\s*(.+?)(?:\n|$)', response)
+            patterns = re.findall(r"(?:[-•\d]+\.?)\s*(.+?)(?:\n|$)", response)
             return [p.strip() for p in patterns[:5] if len(p.strip()) > 10]
 
     def _identify_patterns_in_prompt(
-        self,
-        prompt_messages: List[Dict[str, str]],
-        patterns: List[str]
-    ) -> List[str]:
+        self, prompt_messages: list[dict[str, str]], patterns: list[str]
+    ) -> list[str]:
         """Check which patterns appear in a prompt"""
         prompt_text = " ".join([m.get("content", "") for m in prompt_messages]).lower()
 

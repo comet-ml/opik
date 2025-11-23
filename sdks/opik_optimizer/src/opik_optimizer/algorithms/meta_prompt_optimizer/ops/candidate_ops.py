@@ -4,15 +4,16 @@ Candidate generation operations for the Meta-Prompt Optimizer.
 This module contains functions for generating and sanitizing candidate prompts.
 """
 
-from typing import Any, Callable
+from typing import Any
+from collections.abc import Callable
 import logging
 import json
 import random
 
 from ....api_objects import chat_prompt
-from .... import _llm_calls, reporting
-from ....api_objects.optimization_result import OptimizationRound
-from ....mcp_utils.prompt_segments import (
+from .... import _llm_calls
+from ....base_optimizer import OptimizationRound
+from ....utils.prompt_segments import (
     extract_prompt_segments,
     apply_segment_updates,
 )
@@ -21,7 +22,9 @@ from ..prompts import (
     build_candidate_generation_user_prompt,
     build_mcp_tool_description_user_prompt,
 )
-from llm_studio.exceptions import BadRequestError, StructuredOutputParsingError
+from .. import reporting
+from litellm.exceptions import BadRequestError
+from ...._llm_calls import StructuredOutputParsingError
 
 logger = logging.getLogger(__name__)
 
@@ -193,18 +196,16 @@ def generate_candidate_prompts(
         pattern_guidance = ""
         if winning_patterns and random.random() < optimizer.pattern_injection_rate:
             pattern_guidance = "WINNING PATTERNS TO CONSIDER:\n"
-            pattern_guidance += "The following patterns have been successful in high-scoring prompts:\n"
+            pattern_guidance += (
+                "The following patterns have been successful in high-scoring prompts:\n"
+            )
             for i, pattern in enumerate(winning_patterns, 1):
                 pattern_guidance += f"{i}. {pattern}\n"
             pattern_guidance += (
                 "\nConsider incorporating these patterns where appropriate, "
             )
-            pattern_guidance += (
-                "but adapt them to fit the current prompt's needs."
-            )
-            logger.info(
-                f"Injecting {len(winning_patterns)} patterns into generation"
-            )
+            pattern_guidance += "but adapt them to fit the current prompt's needs."
+            logger.info(f"Injecting {len(winning_patterns)} patterns into generation")
 
         history_context = build_history_context_fn(previous_rounds)
         task_context_str = ""
@@ -218,14 +219,20 @@ def generate_candidate_prompts(
             metric_focus_instruction = (
                 "Focus on improving the score for the evaluation metric."
             )
-            improvement_point_1 = "1. Be more specific and clear about expectations based on the task."
+            improvement_point_1 = (
+                "1. Be more specific and clear about expectations based on the task."
+            )
             logger.debug(
                 "Task context and metric-specific instructions enabled for reasoning prompt."
             )
         else:
-            analysis_instruction = "Analyze the history of scores and the current prompt's performance."
+            analysis_instruction = (
+                "Analyze the history of scores and the current prompt's performance."
+            )
             metric_focus_instruction = "Focus on generating diverse and effective prompt variations based on the history."
-            improvement_point_1 = "1. Be more specific and clear about expectations based on the task."
+            improvement_point_1 = (
+                "1. Be more specific and clear about expectations based on the task."
+            )
             logger.debug(
                 "Task context and metric-specific instructions disabled for reasoning prompt."
             )
@@ -303,9 +310,7 @@ def generate_candidate_prompts(
                 )
 
             # Sanitize generated prompts to remove data leakage
-            json_result = sanitize_generated_prompts(
-                json_result, metric.__name__
-            )
+            json_result = sanitize_generated_prompts(json_result, metric.__name__)
 
             # Extract and log valid prompts
             valid_prompts: list[chat_prompt.ChatPrompt] = []
@@ -322,9 +327,7 @@ def generate_candidate_prompts(
                         if current_prompt.messages is not None:
                             user_text = current_prompt.messages[-1]["content"]
                         else:
-                            raise Exception(
-                                "User content not found in chat-prompt!"
-                            )
+                            raise Exception("User content not found in chat-prompt!")
 
                     valid_prompts.append(
                         chat_prompt.ChatPrompt(

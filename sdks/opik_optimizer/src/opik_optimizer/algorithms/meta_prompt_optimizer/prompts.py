@@ -12,6 +12,7 @@ import textwrap
 START_DELIM = "{"
 END_DELIM = "}"
 
+
 def build_reasoning_system_prompt() -> str:
     """Build the system prompt for the meta-reasoning LLM that generates improved prompts.
 
@@ -114,7 +115,9 @@ def build_candidate_generation_user_prompt(
     # Add pattern section if patterns are provided
     pattern_section = ""
     if pattern_guidance:
-        pattern_section = f"\n{META_PROMPT_SECTIONS['patterns'].format(patterns=pattern_guidance)}\n"
+        pattern_section = (
+            f"\n{META_PROMPT_SECTIONS['patterns'].format(patterns=pattern_guidance)}\n"
+        )
 
     return textwrap.dedent(
         f"""

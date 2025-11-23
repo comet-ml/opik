@@ -41,7 +41,7 @@ from opik_optimizer.mcp_utils.mcp_workflow import (
     make_similarity_metric,
     preview_dataset_tool_invocation,
 )
-from opik_optimizer.algorithms.meta_prompt_optimizer.meta_prompt_optimizer import (
+from opik_optimizer.algorithms.meta_prompt_optimizer.ops.candidate_ops import (
     _sync_tool_description_in_system,
 )
 from opik_optimizer.optimization_result import OptimizationResult

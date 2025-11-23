@@ -1,36 +1,31 @@
-import copy
-import json
 import logging
-import random
-from typing import Any, cast
+from typing import Any
 from collections.abc import Callable
 
 import opik
-from opik import Dataset, opik_context
+from opik import Dataset
 from opik.environment import get_tqdm_for_current_environment
 
-from opik_optimizer import task_evaluator
 
-from ... import _throttle, helpers
 from ...base_optimizer import BaseOptimizer, OptimizationRound
 from ...api_objects import chat_prompt
 from ...optimization_result import OptimizationResult
 from ...optimizable_agent import OptimizableAgent
-from . import reporting, prompts
-import re
-from ... import _llm_calls
+from ... import _throttle
+from . import reporting
+from .ops.halloffame_ops import PromptHallOfFame
+from .ops.candidate_ops import _sync_tool_description_in_system
 from ..._llm_calls import StructuredOutputParsingError
 from litellm.exceptions import BadRequestError
-from ...mcp_utils.mcp import PROMPT_TOOL_FOOTER, PROMPT_TOOL_HEADER
 from ...mcp_utils.mcp_workflow import (
     MCPExecutionConfig,
     MCPSecondPassCoordinator,
     extract_tool_arguments,
 )
-from ...utils.prompt_segments import apply_segment_updates, extract_prompt_segments
+from ...utils.prompt_segments import extract_prompt_segments
 
 # Import ops modules
-from .ops import halloffame_ops, evaluation_ops, candidate_ops, context_ops, result_ops
+from .ops import evaluation_ops, candidate_ops, context_ops, result_ops
 
 tqdm = get_tqdm_for_current_environment()
 
@@ -65,9 +60,16 @@ class MetaPromptOptimizer(BaseOptimizer):
             See: https://docs.litellm.ai/docs/completion/input
         prompts_per_round: Number of candidate prompts to generate per optimization round
         enable_context: Whether to include task-specific context when reasoning about improvements
+        num_task_examples: Number of dataset examples to show in task context (default: 3)
+        task_context_columns: Specific dataset columns to include in context (None = all input columns)
+        max_context_tokens: Maximum tokens for task context (will reduce samples/truncate to fit)
         n_threads: Number of parallel threads for prompt evaluation
         verbose: Controls internal logging/progress bars (0=off, 1=on)
         seed: Random seed for reproducibility
+        use_hall_of_fame: Enable Hall of Fame pattern extraction and re-injection
+        hof_size: Maximum number of prompts to keep in Hall of Fame
+        pattern_extraction_interval: Extract patterns every N trials
+        pattern_injection_rate: Probability of injecting patterns into new candidates
     """
 
     # --- Constants for Default Configuration ---
@@ -79,6 +81,9 @@ class MetaPromptOptimizer(BaseOptimizer):
         model_parameters: dict[str, Any] | None = None,
         prompts_per_round: int = DEFAULT_PROMPTS_PER_ROUND,
         enable_context: bool = True,
+        num_task_examples: int = 3,
+        task_context_columns: list[str] | None = None,
+        max_context_tokens: int = 2000,
         n_threads: int = 12,
         verbose: int = 1,
         seed: int = 42,
@@ -99,13 +104,15 @@ class MetaPromptOptimizer(BaseOptimizer):
         self.n_threads = n_threads
         self.dataset: Dataset | None = None
         self.enable_context = enable_context
+        self.num_task_examples = num_task_examples
+        self.task_context_columns = task_context_columns
+        self.max_context_tokens = max_context_tokens
 
         # Hall of Fame for pattern mining
         self.use_hall_of_fame = use_hall_of_fame
         self.pattern_injection_rate = pattern_injection_rate
+        self.hall_of_fame: PromptHallOfFame | None = None
         if self.use_hall_of_fame:
-            from .ops.halloffame_ops import PromptHallOfFame
-
             self.hall_of_fame = PromptHallOfFame(
                 max_size=hof_size,
                 pattern_extraction_interval=pattern_extraction_interval,
@@ -114,16 +121,15 @@ class MetaPromptOptimizer(BaseOptimizer):
                 f"Hall of Fame enabled: size={hof_size}, "
                 f"extraction_interval={pattern_extraction_interval}"
             )
-        else:
-            self.hall_of_fame = None
 
         logger.debug(f"Initialized MetaPromptOptimizer with model={model}")
         logger.debug(f"Prompts/round: {prompts_per_round}")
 
     def get_optimizer_metadata(self) -> dict[str, Any]:
-        metadata = {
+        metadata: dict[str, Any] = {
             "prompts_per_round": self.prompts_per_round,
             "enable_context": self.enable_context,
+            "num_task_examples": self.num_task_examples,
             "use_hall_of_fame": self.use_hall_of_fame,
         }
         if self.use_hall_of_fame and self.hall_of_fame:
@@ -702,7 +708,14 @@ class MetaPromptOptimizer(BaseOptimizer):
 
     def _get_task_context(self, metric: Callable) -> str:
         """Get task-specific context from the dataset and metric (delegates to ops)."""
-        return context_ops.get_task_context(self.dataset, metric)
+        return context_ops.get_task_context(
+            dataset=self.dataset,
+            metric=metric,
+            num_examples=self.num_task_examples,
+            columns=self.task_context_columns,
+            max_tokens=self.max_context_tokens,
+            model=self.model,
+        )
 
     def _generate_candidate_prompts(
         self,
@@ -763,3 +776,5 @@ class MetaPromptOptimizer(BaseOptimizer):
         """Build context from previous optimization rounds (delegates to ops)."""
         return context_ops.build_history_context(previous_rounds)
 
+
+__all__ = ["MetaPromptOptimizer", "_sync_tool_description_in_system"]

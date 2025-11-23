@@ -4,7 +4,8 @@ Evaluation operations for the Meta-Prompt Optimizer.
 This module contains functions for evaluating prompts and managing dataset subsets.
 """
 
-from typing import Any, Callable
+from typing import Any
+from collections.abc import Callable
 import logging
 import random
 
@@ -13,7 +14,7 @@ from opik import opik_context
 
 from ....api_objects import chat_prompt
 from .... import task_evaluator, helpers
-from ....mcp_utils.config import MCPExecutionConfig
+from ....mcp_utils.mcp_workflow import MCPExecutionConfig
 
 logger = logging.getLogger(__name__)
 
@@ -89,9 +90,7 @@ def evaluate_prompt(
         metric=metric,
         experiment_config=experiment_config,
         configuration_updates=configuration_updates,
-        additional_metadata={"meta_prompt": meta_metadata}
-        if meta_metadata
-        else None,
+        additional_metadata={"meta_prompt": meta_metadata} if meta_metadata else None,
     )
 
     def llm_task(dataset_item: dict[str, Any]) -> dict[str, str]:
