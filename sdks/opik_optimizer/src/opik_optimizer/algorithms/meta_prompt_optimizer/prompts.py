@@ -8,38 +8,65 @@ This module contains all the prompt templates used by the optimizer for:
 
 import textwrap
 
+# Constants for variable delimiters
+START_DELIM = "{"
+END_DELIM = "}"
+
 # System prompt for the meta-reasoning LLM that generates improved prompts
 REASONING_SYSTEM_PROMPT = """You are an expert prompt engineer. Your task is to improve prompts for any type of task.
 
-        Focus on making the prompt more effective by:
-        1. Being clear and specific about what is expected
-        2. Providing necessary context and constraints
-        3. Guiding the model to produce the desired output format
-        4. Removing ambiguity and unnecessary elements
-        5. Maintaining conciseness while being complete
+Focus on making the prompt more effective by:
+1. Being clear and specific about what is expected
+2. Providing necessary context and constraints
+3. Guiding the model to produce the desired output format
+4. Removing ambiguity and unnecessary elements
+5. Maintaining conciseness while being complete
 
-        Instructions:
-        1. If there is a system prompt, prioritize adding instructions there if and only if it makes sense.
-        2. DO NOT add any variables or parameters to the prompt you are editing.
-        3. You can reuse variables that already exist in the prompt.
+CRITICAL CONSTRAINTS (Anti-Data-Leakage):
+1. DO NOT reference specific dataset field names (like 'answer', 'context', 'supporting_facts')
+2. DO NOT reference specific metric names or evaluation methods (like 'F1 score', 'HotpotQA', 'token-level')
+3. DO NOT include evaluation-specific terminology in the generated prompts
+4. DO NOT mention dataset structure or internal implementation details
+5. Focus on GENERAL task instructions that would work across different datasets of the same type
 
-        Return a JSON array of prompts with the following structure. Make sure to return a valid
-        JSON object with correct use of double quotes and single quotes. JSON keys should be
-        double-quoted:
+Variable Usage:
+- Use {variable_name} syntax for variables that exist in the original prompt
+- DO NOT add new variables that weren't in the original prompt
+- DO NOT expose internal dataset structure through variable names
+- The prompt should be generalizable to similar tasks
+
+Instructions:
+1. If there is a system prompt, prioritize adding instructions there if and only if it makes sense.
+2. DO NOT add any variables or parameters to the prompt you are editing.
+3. You can reuse variables that already exist in the prompt.
+4. Ensure prompts would work on NEW, UNSEEN data of the same task type.
+
+Return a JSON array of prompts with the following structure. Make sure to return a valid
+JSON object with correct use of double quotes and single quotes. JSON keys should be
+double-quoted:
+{
+    "prompts": [
         {
-            "prompts": [
-                {
-                    "prompt": [{"role": "<role>", "content": "<content>"}],
-                    "improvement_focus": "what aspect this prompt improves",
-                    "reasoning": "why this improvement should help"
-                },
-                {
-                    "prompt": [{"role": "<role>", "content": "<content>"}],
-                    "improvement_focus": "what aspect this prompt improves",
-                    "reasoning": "why this improvement should help"
-                }
-            ]
-        }"""
+            "prompt": [{"role": "<role>", "content": "<content>"}],
+            "improvement_focus": "what aspect this prompt improves",
+            "reasoning": "why this improvement should help"
+        },
+        {
+            "prompt": [{"role": "<role>", "content": "<content>"}],
+            "improvement_focus": "what aspect this prompt improves",
+            "reasoning": "why this improvement should help"
+        }
+    ]
+}"""
+
+
+# Meta-prompt template sections
+META_PROMPT_SECTIONS = {
+    "baseline_prompt": "###### START prompt ######n{prompt}\n###### END prompt ######
+    "examples": "###### START example-data ######n{examples}\n###### END example-data ######
+    "history": "###### START history ######n{history}\n###### END history ######
+    "patterns": "###### START winning-patterns ######n{patterns}\n###### END winning-patterns ######
+}
 
 
 def build_candidate_generation_user_prompt(
@@ -51,6 +78,7 @@ def build_candidate_generation_user_prompt(
     metric_focus_instruction: str,
     improvement_point_1: str,
     prompts_per_round: int,
+    pattern_guidance: str = "",  # NEW: Pattern injection support
 ) -> str:
     """Build the user prompt for generating candidate prompt variations.
 
@@ -63,26 +91,47 @@ def build_candidate_generation_user_prompt(
         metric_focus_instruction: Instruction focusing on metric improvement
         improvement_point_1: First improvement guideline
         prompts_per_round: Number of prompts to generate
+        pattern_guidance: Optional winning patterns to inject
 
     Returns:
         Formatted user prompt string
     """
+    # Use structured sections for clarity
+    prompt_section = META_PROMPT_SECTIONS["baseline_prompt"].format(
+        prompt=current_prompt_messages
+    )
+
+    # Add pattern section if patterns are provided
+    pattern_section = ""
+    if pattern_guidance:
+        pattern_section = f"\n{pattern_guidance}\n"
+
     return textwrap.dedent(
         f"""
-            Current prompt: {current_prompt_messages}
+            {prompt_section}
+
             Current score: {best_score}
-            {history_context}
+
+            {META_PROMPT_SECTIONS["history"].format(history=history_context) if history_context else ""}
+
             {task_context_str}
+
+            {pattern_section}
 
             {analysis_instruction}
             Generate {prompts_per_round} improved versions of this prompt.
             {metric_focus_instruction}
+
             Each version should aim to:
             {improvement_point_1}
-            2. Provide necessary context and constraints (if applicable, without relying on disabled external context).
+            2. Provide necessary context and constraints (without relying on dataset-specific knowledge).
             3. Guide the model to produce the desired output format suitable for the task.
             4. Remove ambiguity and unnecessary elements.
             5. Maintain conciseness while being complete.
+            {"6. Consider incorporating winning patterns where they improve clarity and effectiveness." if pattern_guidance else ""}
+
+            REMEMBER: Do not mention specific dataset fields, metric names, or evaluation terminology.
+            The prompt should be generalizable to similar tasks with different data.
 
             Return a valid JSON array as specified."""
     ).strip()
