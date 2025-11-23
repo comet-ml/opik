@@ -89,7 +89,7 @@ def submit_benchmark_tasks(
     models: list[str] | None = None,
     seed: int = 42,
     test_mode: bool = False,
-    max_concurrent: int = 5,
+    max_concurrent: int = 3,
     retry_failed_run_id: str | None = None,
     resume_run_id: str | None = None,
     task_specs: list[BenchmarkTaskSpec] | None = None,
@@ -112,6 +112,7 @@ def submit_benchmark_tasks(
         seed: Random seed for reproducibility
         test_mode: Run in test mode with 5 examples per dataset
         max_concurrent: Maximum number of concurrent tasks
+        max_concurrent: Maximum number of concurrent tasks (also used for Modal max_containers)
         retry_failed_run_id: Run ID to retry failed tasks from
         resume_run_id: Run ID to resume incomplete run from
     """
@@ -277,10 +278,11 @@ def submit_benchmark_tasks(
         sys.exit(1)
 
     # Update worker's max_containers to control concurrency
-    console.print(f"🔧 Configuring worker for {max_concurrent} concurrent tasks...")
+    max_containers = max_concurrent
+    console.print(f"🔧 Configuring worker for {max_containers} concurrent tasks...")
     try:
-        worker.update_autoscaler(max_containers=max_concurrent)
-        console.print(f"🔧 Worker configured: max {max_concurrent} containers")
+        worker.update_autoscaler(max_containers=max_containers)
+        console.print(f"🔧 Worker configured: max {max_containers} containers")
     except modal.exception.NotFoundError:
         print(
             "\n❌ ERROR: Worker function not found in your current Modal environment."
@@ -666,7 +668,7 @@ Examples:
     parser.add_argument(
         "--max-concurrent",
         type=int,
-        default=5,
+        default=3,
         help="Maximum number of concurrent tasks (default: 5)",
     )
     parser.add_argument(
