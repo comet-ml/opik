@@ -1,5 +1,6 @@
 import React, { useMemo, useState, useCallback, useEffect } from "react";
 import { ChevronDown, ExternalLink, Plus } from "lucide-react";
+import { Link } from "@tanstack/react-router";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -160,7 +161,7 @@ const MetricSelector: React.FC<MetricSelectorProps> = ({
 
   const buttonElement = (
     <Button
-      className="group w-[280px] justify-between"
+      className="group w-[200px] justify-between"
       size="sm"
       variant="outline"
       type="button"
@@ -182,7 +183,7 @@ const MetricSelector: React.FC<MetricSelectorProps> = ({
         <TooltipWrapper content={tooltipContent}>
           <PopoverTrigger asChild={!isDisabled} disabled={isDisabled}>
             {isDisabled ? (
-              <span className="inline-block w-[280px]">{buttonElement}</span>
+              <span className="inline-block w-[200px]">{buttonElement}</span>
             ) : (
               buttonElement
             )}
@@ -195,7 +196,7 @@ const MetricSelector: React.FC<MetricSelectorProps> = ({
       )}
       <PopoverContent
         align="end"
-        style={{ width: "280px" }}
+        style={{ width: "200px" }}
         className="relative p-1 pt-12"
         hideWhenDetached
         onCloseAutoFocus={(e) => e.preventDefault()}
@@ -243,15 +244,15 @@ const MetricSelector: React.FC<MetricSelectorProps> = ({
                         size="icon-xs"
                         asChild
                       >
-                        <a
-                          href={`/${workspaceName}/online-evaluation?editRule=${rule.id}&search=${rule.id}&filters=[]`}
+                        <Link
+                          to={`/${workspaceName}/online-evaluation?editRule=${rule.id}&search=${rule.id}&filters=[]`}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="inline-flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100"
                           onClick={(e) => e.stopPropagation()}
                         >
                           <ExternalLink className="size-3.5 shrink-0" />
-                        </a>
+                        </Link>
                       </Button>
                     </TooltipWrapper>
                   </div>

@@ -159,7 +159,7 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
             new_prompt = prompt.copy()
             messages = new_prompt.get_messages(dataset_item)
             new_prompt.set_messages(messages)
-            agent = self.agent_class(prompt=new_prompt)
+            agent = self._instantiate_agent(prompt=new_prompt)
 
             try:
                 logger.debug(
@@ -276,6 +276,7 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
         best_score: float,
         prompt: chat_prompt.ChatPrompt,
         dataset: opik.Dataset,
+        validation_dataset: opik.Dataset | None,
         metric: Callable,
         optimization_id: str,
         n_samples: int | None,
@@ -300,6 +301,12 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
         Returns:
             Tuple of (improved_prompt, improved_score, improved_experiment_result)
         """
+
+        # Logic on which dataset to use for scoring
+        evaluation_dataset = (
+            validation_dataset if validation_dataset is not None else dataset
+        )
+
         # Generate improvement with progress indication
         with reporting.display_prompt_improvement(
             failure_mode_name=root_cause.name, verbose=self.verbose
@@ -333,7 +340,7 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
         ) as improved_reporter:
             improved_experiment_result = self._evaluate_prompt(
                 prompt=improved_chat_prompt,
-                dataset=dataset,
+                dataset=evaluation_dataset,  # use right dataset for scoring
                 metric=metric,
                 optimization_id=optimization_id,
                 n_samples=n_samples,
@@ -360,6 +367,7 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
         agent_class: type[OptimizableAgent] | None = None,
         project_name: str = "Optimization",
         optimization_id: str | None = None,
+        validation_dataset: opik.Dataset | None = None,
         max_trials: int = DEFAULT_MAX_ITERATIONS,
         max_retries: int = 2,
         *args: Any,
@@ -383,6 +391,9 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
                 be a valid UUIDv7 string.
             max_trials: Maximum number of optimization iterations to run.
             max_retries: Maximum retries allowed for addressing a failure mode.
+            validation_dataset: Optional validation dataset for evaluating candidates. When provided,
+                the optimizer uses the training dataset for understanding failure modes and generating
+                improvements, then evaluates candidates on the validation dataset to prevent overfitting.
         """
         # Reset counters at the start of optimization
         self._validate_optimization_inputs(
@@ -401,8 +412,8 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
         optimization = self.opik_client.create_optimization(
             dataset_name=dataset.name,
             objective_name=getattr(metric, "__name__", str(metric)),
+            metadata=self._build_optimization_metadata(),
             name=self.name,
-            metadata=self._build_optimization_config(),
             optimization_id=optimization_id,
         )
         self.current_optimization_id = optimization.id
@@ -428,11 +439,15 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
             tools=getattr(prompt, "tools", None),
         )
 
+        evaluation_dataset = (
+            validation_dataset if validation_dataset is not None else dataset
+        )
+
         # First we will evaluate the prompt on the dataset
         with reporting.display_evaluation(verbose=self.verbose) as baseline_reporter:
             experiment_result = self._evaluate_prompt(
                 prompt=prompt,
-                dataset=dataset,
+                dataset=evaluation_dataset,  # use right dataset for scoring
                 metric=metric,
                 optimization_id=optimization.id,
                 n_samples=n_samples,
@@ -477,8 +492,15 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
                 with reporting.display_root_cause_analysis(
                     verbose=self.verbose
                 ) as analysis_reporter:
+                    train_dataset_experiment_result = self._evaluate_prompt(
+                        prompt=prompt,
+                        dataset=dataset,
+                        metric=metric,
+                        optimization_id="",  # TODO: Hack so that it doesn't appear in the UI
+                        n_samples=n_samples,
+                    )
                     hierarchical_analysis = self._hierarchical_root_cause_analysis(
-                        experiment_result
+                        train_dataset_experiment_result
                     )
                     analysis_reporter.set_completed(
                         total_test_cases=hierarchical_analysis.total_test_cases,
@@ -533,6 +555,7 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
                             best_score=best_score,
                             prompt=prompt,
                             dataset=dataset,
+                            validation_dataset=validation_dataset,
                             metric=metric,
                             optimization_id=optimization.id,
                             n_samples=n_samples,

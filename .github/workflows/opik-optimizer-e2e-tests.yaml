@@ -1,5 +1,8 @@
 name: "Opik Optimizer - E2E Tests"
 run-name: "Opik Optimizer E2E Tests ${{ github.ref_name }} by @${{ github.actor }}"
+concurrency:
+    group: opik-optimizer-e2e-${{ github.ref }}
+    cancel-in-progress: true
 on:
     workflow_dispatch:
     pull_request:
@@ -12,6 +15,8 @@ permissions:
 env:
   OPIK_ENABLE_LITELLM_MODELS_MONITORING: False
   OPIK_SENTRY_ENABLE: False
+  HF_HUB_ENABLE_PROGRESS_BARS: "0"
+  HF_HUB_DISABLE_TELEMETRY: "1"
 
 jobs:
     run-e2e-tests:
@@ -41,6 +46,11 @@ jobs:
           uses: actions/setup-python@v5
           with:
             python-version: ${{matrix.python_version}}
+            cache: 'pip'
+            cache-dependency-path: |
+              sdks/opik_optimizer/pyproject.toml
+              sdks/opik_optimizer/setup.py
+              sdks/opik_optimizer/tests/test_requirements.txt
 
         - name: Cache HuggingFace datasets
           uses: actions/cache@v4
@@ -77,7 +87,7 @@ jobs:
 
             # Test Configuration
             OPIK_CONSOLE_LOGGING_LEVEL: DEBUG
-          run: pytest tests/e2e -vv --junitxml=${{ github.workspace }}/test_results_${{matrix.python_version}}.xml
+          run: pytest -n auto --dist loadfile tests/e2e -vv --junitxml=${{ github.workspace }}/test_results_${{matrix.python_version}}.xml
 
         - name: Upload test artifacts on failure
           if: failure()
@@ -88,3 +98,48 @@ jobs:
                 *.log
                 tests/**/*.log
               retention-days: 7 
+
+    dataset-source-check:
+        name: Opik Optimizer Integration Smoke Tests
+        runs-on: ubuntu-latest
+        timeout-minutes: 30
+        needs: run-e2e-tests
+        env:
+            OPIK_USE_HF_STREAMING: "true"
+
+        defaults:
+          run:
+            working-directory: sdks/opik_optimizer/
+
+        steps:
+        - name: Check out code
+          uses: actions/checkout@v4
+
+        - name: Setup Python 3.12
+          uses: actions/setup-python@v5
+          with:
+            python-version: "3.12"
+            cache: 'pip'
+            cache-dependency-path: |
+              sdks/opik_optimizer/pyproject.toml
+              sdks/opik_optimizer/setup.py
+              sdks/opik_optimizer/tests/test_requirements.txt
+
+        - name: Cache HuggingFace datasets
+          uses: actions/cache@v4
+          with:
+            path: ~/.cache/huggingface
+            key: hf-datasets-${{ hashFiles('**/datasets/*.py') }}
+            restore-keys: |
+              hf-datasets-
+
+        - name: Install opik_optimizer
+          run: pip install .
+
+        - name: Install test requirements
+          run: |
+            cd ./tests
+            pip install --no-cache-dir --disable-pip-version-check -r test_requirements.txt
+
+        - name: Run dataset integration check
+          run: pytest -n auto --dist loadfile tests/integration/datasets/test_dataset_sources.py -vv

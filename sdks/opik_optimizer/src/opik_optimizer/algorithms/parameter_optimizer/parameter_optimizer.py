@@ -5,7 +5,7 @@ from typing import Any
 
 import copy
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 
 import optuna
 from optuna import importance as optuna_importance
@@ -88,6 +88,8 @@ class ParameterOptimizer(BaseOptimizer):
         auto_continue: bool = False,
         agent_class: type[OptimizableAgent] | None = None,
         project_name: str = "Optimization",
+        optimization_id: str | None = None,
+        validation_dataset: Dataset | None = None,
         *args: Any,
         **kwargs: Any,
     ) -> OptimizationResult:
@@ -103,6 +105,7 @@ class ParameterOptimizer(BaseOptimizer):
         dataset: Dataset,
         metric: Callable[[Any, Any], float],
         parameter_space: ParameterSearchSpace | Mapping[str, Any],
+        validation_dataset: Dataset | None = None,
         experiment_config: dict | None = None,
         max_trials: int | None = None,
         n_samples: int | None = None,
@@ -123,6 +126,9 @@ class ParameterOptimizer(BaseOptimizer):
             dataset: Dataset providing evaluation examples
             metric: Objective function to maximize
             parameter_space: Definition of the search space for tunable parameters
+            validation_dataset: Optional validation dataset. Note: Due to the internal implementation
+                of ParameterOptimizer, this parameter is currently not fully utilized and we recommend
+                not using it for this optimizer.
             experiment_config: Optional experiment metadata
             max_trials: Total number of trials (if None, uses default_n_trials)
             n_samples: Number of dataset samples to evaluate per trial (None for all)
@@ -141,6 +147,22 @@ class ParameterOptimizer(BaseOptimizer):
         if not isinstance(parameter_space, ParameterSearchSpace):
             parameter_space = ParameterSearchSpace.model_validate(parameter_space)
 
+        if validation_dataset is not None:
+            logger.warning(
+                f"Due to the internal implementation of {self.__class__.__name__}, it currently"
+                "fully ignores the `dataset` if `validation_dataset` is provided. We recommend not"
+                "using the `validation_dataset` parameter."
+            )
+
+            experiment_config = experiment_config or {}
+            experiment_config["validation_dataset"] = validation_dataset.name
+            experiment_config["validation_dataset_id"] = validation_dataset.id
+
+        # Logic on which dataset to use for scoring
+        evaluation_dataset = (
+            validation_dataset if validation_dataset is not None else dataset
+        )
+
         # After validation, parameter_space is guaranteed to be ParameterSearchSpace
         assert isinstance(parameter_space, ParameterSearchSpace)  # for mypy
 
@@ -149,8 +171,15 @@ class ParameterOptimizer(BaseOptimizer):
 
         self._validate_optimization_inputs(prompt, dataset, metric)
 
-        base_model_kwargs = copy.deepcopy(prompt.model_kwargs or {})
+        # Ensure prompt uses optimizer model defaults
+        prompt.model = self.model
+
+        base_model_kwargs = {
+            **copy.deepcopy(self.model_parameters or {}),
+            **copy.deepcopy(prompt.model_kwargs or {}),
+        }
         base_prompt = prompt.copy()
+        base_prompt.model = self.model
         base_prompt.model_kwargs = copy.deepcopy(base_model_kwargs)
 
         metric_name = getattr(metric, "__name__", str(metric))
@@ -159,8 +188,8 @@ class ParameterOptimizer(BaseOptimizer):
         optimization = self.opik_client.create_optimization(
             dataset_name=dataset.name,
             objective_name=metric_name,
+            metadata=self._build_optimization_metadata(agent_class=agent_class),
             name=self.name,
-            metadata=self._build_optimization_config(),
             optimization_id=optimization_id,
         )
         self.current_optimization_id = optimization.id
@@ -197,7 +226,7 @@ class ParameterOptimizer(BaseOptimizer):
         with reporting.display_evaluation(verbose=self.verbose) as baseline_reporter:
             baseline_score = self.evaluate_prompt(
                 prompt=base_prompt,
-                dataset=dataset,
+                dataset=evaluation_dataset,
                 metric=metric,
                 n_threads=self.n_threads,
                 verbose=self.verbose,
@@ -210,7 +239,7 @@ class ParameterOptimizer(BaseOptimizer):
         history: list[dict[str, Any]] = [
             {
                 "iteration": 0,
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
                 "parameters": {},
                 "score": baseline_score,
                 "model_kwargs": copy.deepcopy(base_prompt.model_kwargs or {}),
@@ -272,7 +301,7 @@ class ParameterOptimizer(BaseOptimizer):
             ) as trial_reporter:
                 score = self.evaluate_prompt(
                     prompt=tuned_prompt,
-                    dataset=dataset,
+                    dataset=evaluation_dataset,
                     metric=metric,
                     n_threads=self.n_threads,
                     verbose=self.verbose,
@@ -334,7 +363,9 @@ class ParameterOptimizer(BaseOptimizer):
             if trial.state != TrialState.COMPLETE or trial.value is None:
                 continue
             timestamp = (
-                trial.datetime_complete or trial.datetime_start or datetime.utcnow()
+                trial.datetime_complete
+                or trial.datetime_start
+                or datetime.now(timezone.utc)
             )
             history.append(
                 {
@@ -447,7 +478,9 @@ class ParameterOptimizer(BaseOptimizer):
             if trial.state != TrialState.COMPLETE or trial.value is None:
                 continue
             timestamp = (
-                trial.datetime_complete or trial.datetime_start or datetime.utcnow()
+                trial.datetime_complete
+                or trial.datetime_start
+                or datetime.now(timezone.utc)
             )
             if not any(entry["iteration"] == trial.number + 1 for entry in history):
                 history.append(

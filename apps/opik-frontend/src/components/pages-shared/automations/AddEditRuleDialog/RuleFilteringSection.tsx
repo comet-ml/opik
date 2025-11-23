@@ -70,6 +70,7 @@ export const TRACE_FILTER_COLUMNS: ColumnData<TRACE_DATA_TYPE>[] = [
     id: "tags",
     label: "Tags",
     type: COLUMN_TYPE.list,
+    iconType: "tags",
   },
   {
     id: "thread_id",
@@ -129,6 +130,7 @@ export const THREAD_FILTER_COLUMNS: ColumnData<TRACE_DATA_TYPE>[] = [
     id: "tags",
     label: "Tags",
     type: COLUMN_TYPE.list,
+    iconType: "tags",
   },
   {
     id: COLUMN_FEEDBACK_SCORES_ID,

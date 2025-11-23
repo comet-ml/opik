@@ -9,7 +9,13 @@ on:
 env:
   OPIK_ENABLE_LITELLM_MODELS_MONITORING: False
   OPIK_SENTRY_ENABLE: False
+  HF_HUB_OFFLINE: true
+  HF_DATASETS_OFFLINE: true
+  HF_HUB_ENABLE_PROGRESS_BARS: "0"
+  HF_HUB_DISABLE_TELEMETRY: "1"
 
+permissions:
+  contents: read
 jobs:
     run-unit-tests:
         name: Opik Optimizer Unit Tests Python ${{matrix.python_version}}
@@ -38,6 +44,11 @@ jobs:
           uses: actions/setup-python@v5
           with:
             python-version: ${{matrix.python_version}}
+            cache: 'pip'
+            cache-dependency-path: |
+              sdks/opik_optimizer/pyproject.toml
+              sdks/opik_optimizer/setup.py
+              sdks/opik_optimizer/tests/test_requirements.txt
 
         - name: Cache HuggingFace datasets
           uses: actions/cache@v4
@@ -64,6 +75,4 @@ jobs:
             pip install --no-cache-dir --disable-pip-version-check -r test_requirements.txt
   
         - name: Run unit tests
-          run: pytest tests/unit -vv --junitxml=${{ github.workspace }}/test_results_${{matrix.python_version}}.xml
-
-
+          run: pytest -n auto --dist loadfile tests/unit -vv --junitxml=${{ github.workspace }}/test_results_${{matrix.python_version}}.xml

@@ -14,12 +14,6 @@ import { TraceData } from "../interface";
  * Each composer session maintains its own progress tracking to avoid duplicate uploads.
  * 
  * Strategy:
- * If skipHistorical=true:
- *   - Old never-synced conversations: Skip entirely (ignore historical data)
- *   - Recent never-synced conversations (< 1 hour): Upload entire conversation
- *   - Already synced, no new messages: Skip 
- *   - Already synced, has new messages: Upload new messages only
- * If skipHistorical=false:
  *   - Never synced conversations: Upload entire conversation
  *   - Already synced, no new messages: Skip (avoid duplicates)
  *   - Already synced, has new messages: Upload new messages only
@@ -27,10 +21,9 @@ import { TraceData } from "../interface";
  * @param conversations Array of conversation objects from cursor database
  * @param opikProjectName Project name for Opik
  * @param sessionInfo Existing session info with per-composer tracking
- * @param skipHistorical Whether to skip conversations without new messages
  * @returns Object containing traces and updated session info
  */
-async function convertConversationsToTraces(conversations: any[], opikProjectName: string, sessionInfo: Record<string, SessionInfo>, skipHistorical: boolean = false) {
+async function convertConversationsToTraces(conversations: any[], opikProjectName: string, sessionInfo: Record<string, SessionInfo>) {
     const tracesData: TraceData[] = [];
     const updatedSessionInfo: Record<string, { lastMessageId?: string; lastMessageTime?: number }> = {};
 
@@ -51,25 +44,9 @@ async function convertConversationsToTraces(conversations: any[], opikProjectNam
         const neverSynced = !lastUploadId;
         const hasNewMessagesSinceSync = lastUploadId && latestMessage && latestMessage.id !== lastUploadId;
         
-        // Determine if this is a recent/active conversation (within last hour)
-        const ONE_HOUR_MS = 60 * 60 * 1000;
-        const latestMessageTime = latestMessage?.createdAt || latestMessage?.timestamp || conversation.createdAt || 0;
-        const isRecentActivity = (Date.now() - latestMessageTime) < ONE_HOUR_MS;
-        
-        // Apply skipHistorical logic:
-        if (skipHistorical) {
-            // If skipHistorical=true: process conversations with new messages OR recent activity
-            if (neverSynced && !isRecentActivity) {
-                continue; // Skip - old historical conversation and skipHistorical=true
-            }
-            if (!neverSynced && !hasNewMessagesSinceSync) {
-                continue; // Skip - no new messages since last sync
-            }
-        } else {
-            // If skipHistorical=false: process all conversations with new messages or never synced
-            if (!neverSynced && !hasNewMessagesSinceSync) {
-                continue; // Skip - no new messages and already synced
-            }
+        // Skip if already synced and no new messages
+        if (!neverSynced && !hasNewMessagesSinceSync) {
+            continue; // Skip - no new messages and already synced
         }
 
         // Determine processing strategy:
@@ -78,10 +55,7 @@ async function convertConversationsToTraces(conversations: any[], opikProjectNam
         const uploadEntireConversation = lastUploadId === undefined;
         
         if (uploadEntireConversation) {
-            const reason = neverSynced ? 
-                (isRecentActivity ? "recent activity" : "never synced") : 
-                "has new messages";
-            console.log(`📤 Processing entire conversation for composer ${composerId} (${reason})`);
+            console.log(`📤 Processing entire conversation for composer ${composerId} (never synced)`);
         } else {
             console.log(`📤 Processing new messages for composer ${composerId} after message ${lastUploadId}`);
         }
@@ -102,13 +76,6 @@ async function convertConversationsToTraces(conversations: any[], opikProjectNam
                 lastMessageId: conversationTraces.lastMessageId,
                 lastMessageTime: conversationTraces.lastMessageTime
             };
-        }
-    }
-
-    if (skipHistorical) {
-        const skippedSessions = Object.keys(updatedSessionInfo).length - tracesData.length;
-        if (skippedSessions > 0) {
-            console.log(`⏭️ Skipped ${skippedSessions} historical conversations (skipHistorical=true)`);
         }
     }
     
@@ -334,7 +301,7 @@ async function readCursorChatDataAsync(stateDbPath: string): Promise<any> {
  * Find all state.vscdb files in the given globalStorage directories
  */
 
-export async function findAndReturnNewTraces(context: vscode.ExtensionContext, VSInstallationPath: string, sessionInfo: Record<string, SessionInfo>, skipHistorical: boolean = false) {
+export async function findAndReturnNewTraces(context: vscode.ExtensionContext, VSInstallationPath: string, sessionInfo: Record<string, SessionInfo>) {
     const opikProjectName: string = vscode.workspace.getConfiguration().get('opik.projectName') || 'default';
     
     const globalStoragePaths = findFolder(VSInstallationPath, 'globalStorage');
@@ -367,7 +334,7 @@ export async function findAndReturnNewTraces(context: vscode.ExtensionContext, V
             
             if (conversations && Array.isArray(conversations) && conversations.length > 0) {
                 // Convert conversations to Opik traces with per-session tracking
-                const result = await convertConversationsToTraces(conversations, opikProjectName, sessionInfo, skipHistorical);
+                const result = await convertConversationsToTraces(conversations, opikProjectName, sessionInfo);
                 
                 return {
                     tracesData: result.tracesData,

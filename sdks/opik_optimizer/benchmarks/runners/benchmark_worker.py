@@ -10,6 +10,7 @@ your local machine to stay running.
 
 import os
 import sys
+from typing import Any
 
 import modal
 
@@ -21,12 +22,29 @@ app = modal.App("opik-optimizer-benchmarks")
 # (opik, datasets, litellm, etc.) as declared in pyproject.toml
 image = (
     modal.Image.debian_slim(python_version="3.12")
-    .pip_install("opik_optimizer>=2.1.3")
-    # Add local benchmarks directory so Modal can access config files
     .add_local_dir(
-        local_path=os.path.dirname(os.path.abspath(__file__)),
+        local_path=os.path.abspath(
+            os.path.join(os.path.dirname(__file__), os.pardir, os.pardir)
+        ),
+        remote_path="/root/opik_optimizer_repo",
+        ignore=[
+            ".venv",
+            ".git",
+            "__pycache__",
+            "benchmark_results",
+            "build",
+            "dist",
+            "node_modules",
+        ],
+        copy=True,
+    )
+    .pip_install("/root/opik_optimizer_repo")
+    # Add benchmarks directory for configs
+    .add_local_dir(
+        local_path=os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir)),
         remote_path="/root/benchmarks",
         ignore=["__pycache__", ".venv", "benchmark_results"],
+        copy=True,
     )
 )
 
@@ -37,11 +55,11 @@ results_volume = modal.Volume.from_name(
 )
 
 # Environment secrets - configure these in Modal dashboard
-# Required: OPIK_API_KEY, OPIK_WORKSPACE
-# Optional: OPENAI_API_KEY, ANTHROPIC_API_KEY, etc. depending on models used
+# Required: OPIK_API_KEY (and model API keys you plan to use)
+# Create with e.g.:
+#   modal secret create opik-benchmarks OPIK_API_KEY="$OPIK_API_KEY" OPENAI_API_KEY="$OPENAI_API_KEY"
 modal_secrets = [
-    modal.Secret.from_name("opik-credentials"),
-    modal.Secret.from_name("llm-api-keys"),
+    modal.Secret.from_name("opik-benchmarks"),
 ]
 
 
@@ -65,10 +83,14 @@ def run_optimization_modal(
     dataset_name: str,
     optimizer_name: str,
     model_name: str,
+    model_parameters: dict | None,
     test_mode: bool,
     run_id: str,
     optimizer_params: dict | None = None,
     optimizer_prompt_params: dict | None = None,
+    datasets: dict | None = None,
+    metrics: list[str | dict[str, Any]] | None = None,
+    prompt_messages: list[dict[str, Any]] | None = None,
 ) -> dict:
     """
     Run a single optimization task on Modal.
@@ -94,9 +116,9 @@ def run_optimization_modal(
 
     # Import core logic modules
     import time
-    from benchmark_task import TaskResult, TASK_STATUS_RUNNING
-    from modal_utils.worker_core import run_optimization_task
-    from modal_utils.storage import save_result_to_volume
+    from benchmarks.core.benchmark_task import TaskResult, TASK_STATUS_RUNNING
+    from benchmarks.modal_utils.worker_core import run_optimization_task
+    from benchmarks.modal_utils.storage import save_result_to_volume
 
     # Save "Running" status at the start (before any long-running work)
     timestamp_start = time.time()
@@ -105,6 +127,7 @@ def run_optimization_modal(
         dataset_name=dataset_name,
         optimizer_name=optimizer_name,
         model_name=model_name,
+        model_parameters=model_parameters,
         status=TASK_STATUS_RUNNING,
         timestamp_start=timestamp_start,
     )
@@ -119,9 +142,13 @@ def run_optimization_modal(
         dataset_name=dataset_name,
         optimizer_name=optimizer_name,
         model_name=model_name,
+        model_parameters=model_parameters,
         test_mode=test_mode,
         optimizer_params_override=optimizer_params,
         optimizer_prompt_params_override=optimizer_prompt_params,
+        datasets=datasets,
+        metrics=metrics,
+        prompt_messages=prompt_messages,
     )
 
     # Ensure the final result uses the same timestamp_start as the Running status

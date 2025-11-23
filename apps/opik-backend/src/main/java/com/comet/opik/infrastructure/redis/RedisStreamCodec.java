@@ -1,6 +1,7 @@
-package com.comet.opik.api.resources.v1.events;
+package com.comet.opik.infrastructure.redis;
 
 import com.comet.opik.utils.JsonUtils;
+import com.google.common.base.Suppliers;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.experimental.UtilityClass;
@@ -11,18 +12,23 @@ import org.redisson.codec.JsonJacksonCodec;
 import org.redisson.codec.LZ4CodecV2;
 
 import java.util.Arrays;
+import java.util.function.Supplier;
 
 @AllArgsConstructor
 @Getter
-public enum OnlineScoringCodecs {
-
-    JAVA(Constants.JAVA, new CompositeCodec(new LZ4CodecV2(), new JsonJacksonCodec(JsonUtils.getMapper()))),
-    JSON(Constants.JSON, StringCodec.INSTANCE);
+public enum RedisStreamCodec {
+    JAVA(Constants.JAVA, Suppliers.memoize(() -> new CompositeCodec(new LZ4CodecV2(),
+            new JsonJacksonCodec(JsonUtils.getMapper())))),
+    JSON(Constants.JSON, () -> StringCodec.INSTANCE);
 
     private final String name;
-    private final Codec codec;
+    private final Supplier<Codec> codecSupplier;
 
-    public static OnlineScoringCodecs fromString(String configValue) {
+    public Codec getCodec() {
+        return codecSupplier.get();
+    }
+
+    public static RedisStreamCodec fromString(String configValue) {
         return Arrays.stream(values())
                 .filter(v -> v.name.equalsIgnoreCase(configValue)).findFirst()
                 .orElseThrow(() -> new IllegalArgumentException("Unknown codec name: " + configValue));

@@ -64,6 +64,7 @@ export const TREE_FILTER_COLUMNS: ColumnData<Span>[] = [
     id: "tags",
     label: "Tags",
     type: COLUMN_TYPE.list,
+    iconType: "tags",
   },
   {
     id: "usage.total_tokens",

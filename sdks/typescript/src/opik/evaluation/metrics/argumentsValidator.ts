@@ -35,8 +35,8 @@ export function validateRequiredArguments(
 
   if (!parsedData.success) {
     const missedKeys = parsedData.error.issues
-      .map((issue) => issue.path[0])
-      .filter(Boolean);
+      .map((issue: z.ZodIssue) => issue.path[0])
+      .filter(Boolean) as Array<string | number>;
     const uniqueMissedKeys = [...new Set(missedKeys)];
 
     throw new Error(getMissingArgumentsMessage(metric, args, uniqueMissedKeys));

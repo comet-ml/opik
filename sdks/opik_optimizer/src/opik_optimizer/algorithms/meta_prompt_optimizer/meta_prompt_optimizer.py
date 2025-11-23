@@ -1,7 +1,6 @@
 import copy
 import json
 import logging
-import textwrap
 from typing import Any, cast
 from collections.abc import Callable
 
@@ -16,9 +15,11 @@ from ...base_optimizer import BaseOptimizer, OptimizationRound
 from ...api_objects import chat_prompt
 from ...optimization_result import OptimizationResult
 from ...optimizable_agent import OptimizableAgent
-from . import reporting
+from . import reporting, prompts
 import re
 from ... import _llm_calls
+from ..._llm_calls import StructuredOutputParsingError
+from litellm.exceptions import BadRequestError
 from ...mcp_utils.mcp import PROMPT_TOOL_FOOTER, PROMPT_TOOL_HEADER
 from ...mcp_utils.mcp_workflow import (
     MCPExecutionConfig,
@@ -110,39 +111,6 @@ class MetaPromptOptimizer(BaseOptimizer):
     # --- Constants for Default Configuration ---
     DEFAULT_ROUNDS = 3
     DEFAULT_PROMPTS_PER_ROUND = 4
-
-    # --- Reasoning System Prompt ---
-    _REASONING_SYSTEM_PROMPT = """You are an expert prompt engineer. Your task is to improve prompts for any type of task.
-
-        Focus on making the prompt more effective by:
-        1. Being clear and specific about what is expected
-        2. Providing necessary context and constraints
-        3. Guiding the model to produce the desired output format
-        4. Removing ambiguity and unnecessary elements
-        5. Maintaining conciseness while being complete
-
-        Instructions:
-        1. If there is a system prompt, prioritize adding instructions there if and only if it makes sense.
-        2. DO NOT add any variables or parameters to the prompt you are editing.
-        3. You can reuse variables that already exist in the prompt.
-
-        Return a JSON array of prompts with the following structure. Make sure to return a valid
-        JSON object with correct use of double quotes and single quotes. JSON keys should be
-        double-quoted:
-        {
-            "prompts": [
-                {
-                    "prompt": [{"role": "<role>", "content": "<content>"}],
-                    "improvement_focus": "what aspect this prompt improves",
-                    "reasoning": "why this improvement should help"
-                },
-                {
-                    "prompt": [{"role": "<role>", "content": "<content>"}],
-                    "improvement_focus": "what aspect this prompt improves",
-                    "reasoning": "why this improvement should help"
-                }
-            ]
-        }"""
 
     def __init__(
         self,
@@ -249,7 +217,7 @@ class MetaPromptOptimizer(BaseOptimizer):
             new_prompt = prompt.copy()
             messages = new_prompt.get_messages(dataset_item)
             new_prompt.set_messages(messages)
-            agent = self.agent_class(new_prompt)
+            agent = self._instantiate_agent(new_prompt)
 
             if mcp_config is not None:
                 coordinator = mcp_config.coordinator
@@ -361,6 +329,7 @@ class MetaPromptOptimizer(BaseOptimizer):
         agent_class: type[OptimizableAgent] | None = None,
         project_name: str = "Optimization",
         optimization_id: str | None = None,
+        validation_dataset: Dataset | None = None,
         max_trials: int = 10,
         mcp_config: MCPExecutionConfig | None = None,
         candidate_generator: Callable[..., list[chat_prompt.ChatPrompt]] | None = None,
@@ -382,6 +351,9 @@ class MetaPromptOptimizer(BaseOptimizer):
                 prompt during evaluation.
             metric: Evaluation function that takes (dataset_item, llm_output) and returns a
                 score (float). Higher scores indicate better performance.
+            validation_dataset: Optional validation dataset for evaluating candidates. When provided,
+                the optimizer uses the training dataset for understanding failure modes and generating
+                improvements, then evaluates candidates on the validation dataset to prevent overfitting.
             experiment_config: Optional metadata dictionary to log with Opik experiments.
                 Useful for tracking experiment parameters and context.
             n_samples: Number of dataset items to use per evaluation. If None, uses full dataset.
@@ -440,6 +412,12 @@ class MetaPromptOptimizer(BaseOptimizer):
         # Set project name from parameter
         self.project_name = project_name
 
+        # Update experiment_config with validation_dataset if provided
+        if validation_dataset is not None:
+            experiment_config = experiment_config or {}
+            experiment_config["validation_dataset"] = validation_dataset.name
+            experiment_config["validation_dataset_id"] = validation_dataset.id
+
         total_items = len(dataset.get_items())
         if n_samples is not None and n_samples > total_items:
             logger.warning(
@@ -452,8 +430,8 @@ class MetaPromptOptimizer(BaseOptimizer):
             optimization = self.opik_client.create_optimization(
                 dataset_name=dataset.name,
                 objective_name=getattr(metric, "__name__", str(metric)),
+                metadata=self._build_optimization_metadata(),
                 name=self.name,
-                metadata=self._build_optimization_config(),
                 optimization_id=optimization_id,
             )
             self.current_optimization_id = optimization.id
@@ -479,6 +457,9 @@ class MetaPromptOptimizer(BaseOptimizer):
                 "prompts_per_round": self.prompts_per_round,
                 "n_samples": n_samples,
                 "auto_continue": auto_continue,
+                "validation_dataset": validation_dataset.name
+                if validation_dataset is not None
+                else None,
             },
             verbose=self.verbose,
             tools=getattr(prompt, "tools", None),
@@ -491,6 +472,7 @@ class MetaPromptOptimizer(BaseOptimizer):
                 prompt=prompt,
                 dataset=dataset,
                 metric=metric,
+                validation_dataset=validation_dataset,
                 experiment_config=experiment_config,
                 max_trials=max_trials,
                 n_samples=n_samples,
@@ -555,6 +537,7 @@ class MetaPromptOptimizer(BaseOptimizer):
             optimization_id=None,
             prompt=prompt,
             dataset=dataset,
+            validation_dataset=None,
             metric=metric,
             experiment_config=experiment_config,
             max_trials=10,
@@ -575,6 +558,7 @@ class MetaPromptOptimizer(BaseOptimizer):
         optimization_id: str | None,
         prompt: chat_prompt.ChatPrompt,
         dataset: Dataset,
+        validation_dataset: Dataset | None,
         metric: Callable,
         experiment_config: dict | None,
         max_trials: int,
@@ -591,12 +575,22 @@ class MetaPromptOptimizer(BaseOptimizer):
         self._reset_counters()  # Reset counters for run
         initial_prompt = prompt
 
+        # Logic on which dataset to use for scoring
+        evaluation_dataset = (
+            validation_dataset if validation_dataset is not None else dataset
+        )
+
         current_prompt = prompt
         with reporting.display_evaluation(verbose=self.verbose) as baseline_reporter:
+            if validation_dataset is not None:
+                experiment_config = experiment_config or {}
+                experiment_config["validation_dataset"] = validation_dataset.name
+                experiment_config["validation_dataset_id"] = validation_dataset.id
+
             initial_score = self._evaluate_prompt(
                 prompt,
                 optimization_id=optimization_id,
-                dataset=dataset,
+                dataset=evaluation_dataset,
                 metric=metric,
                 n_samples=n_samples,
                 experiment_config=experiment_config,
@@ -649,9 +643,12 @@ class MetaPromptOptimizer(BaseOptimizer):
                     # Limit to prompts_this_round
                     candidate_prompts = candidate_prompts[:prompts_this_round]
                 except Exception as e:
+                    if isinstance(e, (BadRequestError, StructuredOutputParsingError)):
+                        raise
                     round_reporter.failed_to_generate(prompts_this_round, e)
-                    round_num += 1
-                    continue
+                    # Prevent infinite loop when generation fails repeatedly.
+                    trials_used += prompts_this_round
+                    break
 
                 # Step 2. Score each candidate prompt
                 prompt_scores: list[tuple[chat_prompt.ChatPrompt, float]] = []
@@ -667,7 +664,7 @@ class MetaPromptOptimizer(BaseOptimizer):
                             prompt_score = self._evaluate_prompt(
                                 prompt=candidate_prompt,
                                 optimization_id=optimization_id,
-                                dataset=dataset,
+                                dataset=evaluation_dataset,
                                 metric=metric,
                                 n_samples=n_samples,
                                 use_full_dataset=False,
@@ -849,6 +846,8 @@ class MetaPromptOptimizer(BaseOptimizer):
         if self.dataset is None:
             return ""
 
+        sample = None
+        context = ""
         try:
             # Try get_items() first as it's the preferred method
             items = self.dataset.get_items()
@@ -912,22 +911,16 @@ class MetaPromptOptimizer(BaseOptimizer):
                     "Task context and metric-specific instructions disabled for reasoning prompt."
                 )
 
-            user_prompt = f"""Current prompt: {current_prompt.get_messages()}
-            Current score: {best_score}
-            {history_context}
-            {task_context_str}
-
-            {analysis_instruction}
-            Generate {self.prompts_per_round} improved versions of this prompt.
-            {metric_focus_instruction}
-            Each version should aim to:
-            {improvement_point_1}
-            2. Provide necessary context and constraints (if applicable, without relying on disabled external context).
-            3. Guide the model to produce the desired output format suitable for the task.
-            4. Remove ambiguity and unnecessary elements.
-            5. Maintain conciseness while being complete.
-
-            Return a valid JSON array as specified."""
+            user_prompt = prompts.build_candidate_generation_user_prompt(
+                current_prompt_messages=str(current_prompt.get_messages()),
+                best_score=best_score,
+                history_context=history_context,
+                task_context_str=task_context_str,
+                analysis_instruction=analysis_instruction,
+                metric_focus_instruction=metric_focus_instruction,
+                improvement_point_1=improvement_point_1,
+                prompts_per_round=self.prompts_per_round,
+            )
 
             try:
                 # Prepare metadata for optimization algorithm call
@@ -942,7 +935,7 @@ class MetaPromptOptimizer(BaseOptimizer):
 
                 content = _llm_calls.call_model(
                     messages=[
-                        {"role": "system", "content": self._REASONING_SYSTEM_PROMPT},
+                        {"role": "system", "content": prompts.REASONING_SYSTEM_PROMPT},
                         {"role": "user", "content": user_prompt},
                     ],
                     model=self.model,
@@ -1039,6 +1032,8 @@ class MetaPromptOptimizer(BaseOptimizer):
                 # --- End Robust Parsing ---
 
             except Exception as e:
+                if isinstance(e, (BadRequestError, StructuredOutputParsingError)):
+                    raise
                 raise ValueError(
                     f"Unexpected error during candidate prompt generation: {e}"
                 )
@@ -1069,37 +1064,14 @@ class MetaPromptOptimizer(BaseOptimizer):
 
         history_context = self._build_history_context(previous_rounds)
 
-        instruction = textwrap.dedent(
-            f"""
-            Current tool name: {tool_name}
-            Current tool description:
-            ---
-            {current_description}
-            ---
-
-            Tool metadata (JSON):
-            {json.dumps(tool_metadata, indent=2)}
-
-            Current best score: {best_score:.4f}
-            {history_context}
-
-            Generate {self.prompts_per_round} improved descriptions for this tool.
-            Each description should clarify expected input arguments and set explicit expectations
-            for how the tool output must be used in the final response.
-            Avoid changing unrelated parts of the prompt. Focus only on the description text for `{tool_name}`.
-
-            Return a JSON object of the form:
-            {{
-              "prompts": [
-                {{
-                  "tool_description": "...",
-                  "improvement_focus": "...",
-                  "reasoning": "..."
-                }}
-              ]
-            }}
-            """
-        ).strip()
+        instruction = prompts.build_mcp_tool_description_user_prompt(
+            tool_name=tool_name,
+            current_description=current_description,
+            tool_metadata_json=json.dumps(tool_metadata, indent=2),
+            best_score=best_score,
+            history_context=history_context,
+            prompts_per_round=self.prompts_per_round,
+        )
 
         with reporting.display_candidate_generation_report(
             self.prompts_per_round, verbose=self.verbose
@@ -1117,7 +1089,7 @@ class MetaPromptOptimizer(BaseOptimizer):
 
                 content = _llm_calls.call_model(
                     messages=[
-                        {"role": "system", "content": self._REASONING_SYSTEM_PROMPT},
+                        {"role": "system", "content": prompts.REASONING_SYSTEM_PROMPT},
                         {"role": "user", "content": instruction},
                     ],
                     model=self.model,
