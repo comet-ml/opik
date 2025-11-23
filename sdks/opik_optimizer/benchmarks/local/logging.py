@@ -281,7 +281,19 @@ class BenchmarkLogger:
                 else evaluation_split
             )
             table.add_row("Eval split:", eval_label)
-        if task_detail_data.test_evaluation:
+        evals_for_split = getattr(task_detail_data, "evaluations", {}) or {}
+        has_test = False
+        initial_set = evals_for_split.get("initial")
+        final_set = evals_for_split.get("final")
+        test_entry = (
+            (initial_set.test if initial_set else None)
+            or (final_set.test if final_set else None)
+            if hasattr(initial_set, "test") or hasattr(final_set, "test")
+            else None
+        )
+        if test_entry and getattr(test_entry, "result", None):
+            has_test = True
+        if has_test:
             test_meta = dataset_metadata.get("test")
             test_label = (
                 test_meta.name
@@ -306,72 +318,47 @@ class BenchmarkLogger:
         )
         table.add_row("LLM Calls (Opt):", llm_calls_str)
         # Process scores per split
-        splits_to_render: list[tuple[str, list[dict[str, Any]], list[dict[str, Any]]]] = []
-        eval_split_label = evaluation_split or "evaluation"
-        splits_to_render.append(
-            (
-                eval_split_label,
-                task_detail_data.initial_evaluation.metrics
-                if task_detail_data.initial_evaluation
-                else [],
-                task_detail_data.optimized_evaluation.metrics
-                if task_detail_data.optimized_evaluation
-                else [],
-            )
-        )
-        if getattr(task_detail_data, "initial_test_evaluation", None) or task_detail_data.test_evaluation:
-            splits_to_render.append(
-                (
-                    "test",
-                    getattr(task_detail_data, "initial_test_evaluation", None).metrics
-                    if getattr(task_detail_data, "initial_test_evaluation", None)
-                    else [],
-                    task_detail_data.test_evaluation.metrics
-                    if task_detail_data.test_evaluation
-                    else [],
-                )
-            )
+        evals = getattr(task_detail_data, "evaluations", {}) or {}
+        initial_set = evals.get("initial")
+        final_set = evals.get("final")
+
+        def _metrics_for(eval_set: Any, split_label: str) -> list[dict[str, Any]]:
+            entry = getattr(eval_set, split_label, None) if eval_set else None
+            return entry.result.metrics if entry and entry.result else []
 
         score_rows: list[Text | Group] = []
-        for split_label, initial_metrics, final_metrics in splits_to_render:
+        for split_label in ("train", "validation", "test"):
+            initial_metrics = _metrics_for(initial_set, split_label)
+            final_metrics = _metrics_for(final_set, split_label)
             if not initial_metrics and not final_metrics:
                 continue
             all_metric_names = set(
                 [x["metric_name"] for x in initial_metrics]
                 + [x["metric_name"] for x in final_metrics]
             )
-            initial_scores_grp = []
-            final_scores_grp = []
-            percent_changes_grp = []
+            initial_scores_grp: list[Text] = []
+            final_scores_grp: list[Text] = []
+            percent_changes_grp: list[Text] = []
             for metric_name in all_metric_names:
                 initial_score_obj = next(
-                    (
-                        x
-                        for x in initial_metrics
-                        if x["metric_name"] == metric_name
-                    ),
+                    (x for x in initial_metrics if x["metric_name"] == metric_name),
                     None,
                 )
-                initial_score = initial_score_obj["score"] if initial_score_obj else None
-                optimized_score_obj = next(
-                    (
-                        x
-                        for x in final_metrics
-                        if x["metric_name"] == metric_name
-                    ),
+                final_score_obj = next(
+                    (x for x in final_metrics if x["metric_name"] == metric_name),
                     None,
                 )
-                optimized_score = (
-                    optimized_score_obj["score"] if optimized_score_obj else None
+                initial_score = (
+                    initial_score_obj["score"] if initial_score_obj else None
                 )
+                final_score = final_score_obj["score"] if final_score_obj else None
 
-                # Process initial scores
                 style = (
                     STYLES["success"]
                     if isinstance(initial_score, (float, int))
                     else STYLES["warning"]
                 )
-                value_str = (
+                init_str = (
                     f"{initial_score:.4f}"
                     if isinstance(initial_score, (float, int))
                     else (
@@ -381,41 +368,33 @@ class BenchmarkLogger:
                     )
                 )
                 initial_scores_grp.append(
-                    Text.assemble(f" • {metric_name}: ", (value_str, style))
+                    Text.assemble(f" • {metric_name}: ", (init_str, style))
                 )
 
-                # Process final scores
                 final_style = (
                     STYLES["success"]
-                    if isinstance(optimized_score, (float, int))
+                    if isinstance(final_score, (float, int))
                     else STYLES["warning"]
                 )
-                final_value_str = (
-                    f"{optimized_score:.4f}"
-                    if isinstance(optimized_score, (float, int))
-                    else (
-                        "[dim]N/A[/dim]"
-                        if optimized_score is None
-                        else str(optimized_score)
-                    )
+                final_str = (
+                    f"{final_score:.4f}"
+                    if isinstance(final_score, (float, int))
+                    else ("[dim]N/A[/dim]" if final_score is None else str(final_score))
                 )
                 final_scores_grp.append(
-                    Text.assemble(
-                        f" • Final {metric_name}: ", (final_value_str, final_style)
-                    )
+                    Text.assemble(f" • Final {metric_name}: ", (final_str, final_style))
                 )
 
-                # Process percentage change
                 percent_change_text = self._calculate_percentage_change(
-                    initial_score, optimized_score, metric_name
+                    initial_score, final_score, metric_name
                 )
                 percent_changes_grp.append(
                     Text.assemble(f" • {metric_name}: ", percent_change_text)
                 )
 
             split_label_display = f"{split_label.capitalize()} Scores:"
+            score_rows.append(Text(split_label_display, style="underline"))
             if initial_scores_grp:
-                score_rows.append(Text(split_label_display, style="underline"))
                 score_rows.append(Group(*initial_scores_grp))
             if final_scores_grp:
                 score_rows.append(Text("Final:", style="underline dim"))
@@ -600,53 +579,53 @@ class BenchmarkLogger:
                     initial_metrics: list[dict] | None,
                     final_metrics: list[dict] | None,
                 ) -> None:
-                    if split_label not in processed_data_for_table[table_key]["splits"]:
-                        processed_data_for_table[table_key]["splits"][split_label] = {
-                            "initial": {},
-                            "final": {},
-                        }
+                    splits_map = processed_data_for_table[table_key]["splits"]  # type: ignore[assignment]
+                    if not isinstance(splits_map, dict):
+                        return
+                    if split_label not in splits_map:
+                        splits_map[split_label] = {"initial": {}, "final": {}}
                     if initial_metrics:
                         for metric_entry in initial_metrics:
                             metric_display_name = metric_entry.get(
                                 "metric_name", "Unknown"
                             )
                             all_metric_keys.add((split_label, metric_display_name))
-                            processed_data_for_table[table_key]["splits"][split_label][
-                                "initial"
-                            ][metric_display_name] = metric_entry.get("score")  # type: ignore
+                            splits_map[split_label]["initial"][metric_display_name] = (
+                                metric_entry.get("score")
+                            )  # type: ignore[arg-type]
                     if final_metrics:
                         for metric_entry in final_metrics:
                             metric_display_name = metric_entry.get(
                                 "metric_name", "Unknown"
                             )
                             all_metric_keys.add((split_label, metric_display_name))
-                            processed_data_for_table[table_key]["splits"][split_label][
-                                "final"
-                            ][metric_display_name] = metric_entry.get("score")  # type: ignore
+                            splits_map[split_label]["final"][metric_display_name] = (
+                                metric_entry.get("score")
+                            )  # type: ignore[arg-type]
 
-                eval_split = (
-                    task_summary.evaluation_split
-                    if getattr(task_summary, "evaluation_split", None)
-                    else "evaluation"
-                )
-                _merge_split(
-                    eval_split,
-                    task_summary.initial_evaluation.metrics
-                    if task_summary.initial_evaluation
-                    else [],
-                    task_summary.optimized_evaluation.metrics
-                    if task_summary.optimized_evaluation
-                    else [],
-                )
-                _merge_split(
-                    "test",
-                    getattr(task_summary, "initial_test_evaluation", None).metrics
-                    if getattr(task_summary, "initial_test_evaluation", None)
-                    else [],
-                    task_summary.test_evaluation.metrics
-                    if task_summary.test_evaluation
-                    else [],
-                )
+                evals = getattr(task_summary, "evaluations", {}) or {}
+                initial_set = evals.get("initial")
+                final_set = evals.get("final")
+
+                def _metrics_for(
+                    eval_set: Any, split_label: str
+                ) -> list[dict[str, Any]]:
+                    entry = getattr(eval_set, split_label, None) if eval_set else None
+                    if entry is None:
+                        return []
+                    result = getattr(entry, "result", None)
+                    return (
+                        result.metrics
+                        if result and getattr(result, "metrics", None)
+                        else []
+                    )
+
+                for split_label in ("train", "validation", "test"):
+                    _merge_split(
+                        split_label,
+                        _metrics_for(initial_set, split_label),
+                        _metrics_for(final_set, split_label),
+                    )
 
             # Sort by dataset, then optimizer, then model for consistent table output
             sorted_table_keys = sorted(processed_data_for_table.keys())
@@ -658,20 +637,30 @@ class BenchmarkLogger:
                 time_taken_for_run = data_for_run_key.get("time", 0)
                 # temperature_for_run = data_for_run_key.get("temperature")
                 llm_calls_for_run = data_for_run_key.get("llm_calls_total_optimization")
-                splits_data = data_for_run_key["splits"]
+                splits_data = data_for_run_key.get("splits", {})
                 is_new_block = last_dataset_optimizer_model != key_tuple
 
                 metric_rows_built = 0
                 for split_label, metric_name_to_display in sorted(
                     list(all_metric_keys)
                 ):
-                    split_scores = splits_data.get(
-                        split_label, {"initial": {}, "final": {}}
+                    split_scores = (
+                        splits_data.get(split_label, {"initial": {}, "final": {}})
+                        if isinstance(splits_data, dict)
+                        else {"initial": {}, "final": {}}
                     )
-                    initial_val = split_scores["initial"].get(  # type: ignore[attr-defined]
-                        metric_name_to_display
+                    initial_scores_map = (
+                        split_scores.get("initial", {})
+                        if isinstance(split_scores, dict)
+                        else {}
                     )
-                    final_val = split_scores["final"].get(metric_name_to_display)  # type: ignore
+                    final_scores_map = (
+                        split_scores.get("final", {})
+                        if isinstance(split_scores, dict)
+                        else {}
+                    )
+                    initial_val = initial_scores_map.get(metric_name_to_display)
+                    final_val = final_scores_map.get(metric_name_to_display)
 
                     if (
                         initial_val is not None or final_val is not None
@@ -713,12 +702,12 @@ class BenchmarkLogger:
                         display_llm_calls = (
                             str(llm_calls_for_run)
                             if llm_calls_for_run is not None and metric_rows_built == 0
-                            else (
-                                "[dim]-[/dim]" if metric_rows_built == 0 else ""
-                            )
+                            else ("[dim]-[/dim]" if metric_rows_built == 0 else "")
                         )  # Display LLM calls
                         display_time = (
-                            f"{time_taken_for_run:.2f}" if metric_rows_built == 0 else ""
+                            f"{time_taken_for_run:.2f}"
+                            if metric_rows_built == 0
+                            else ""
                         )
 
                         # Add a line (end_section)
