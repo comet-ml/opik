@@ -28,21 +28,24 @@ Focus on making the prompt more effective by:
 5. Maintaining conciseness while being complete
 
 CRITICAL CONSTRAINTS (Anti-Data-Leakage):
-1. DO NOT reference specific dataset field names (like 'answer', 'context', 'supporting_facts')
+1. DO NOT reference specific dataset field names from evaluation data (like 'answer', 'context', 'supporting_facts' from QA datasets)
 2. DO NOT reference specific metric names or evaluation methods (like 'F1 score', 'HotpotQA', 'token-level')
 3. DO NOT include evaluation-specific terminology in the generated prompts
-4. DO NOT mention dataset structure or internal implementation details
+4. DO NOT mention dataset-specific structure or internal evaluation implementation details
 5. Focus on GENERAL task instructions that would work across different datasets of the same type
+
+IMPORTANT: Domain terminology is allowed. For coding tasks, terms like 'function', 'class', 'method', 'code', 'test case' are legitimate domain knowledge, not data leakage. For other tasks, use appropriate domain terminology.
 
 Variable Usage:
 - Use {variable_name} syntax for variables that exist in the original prompt
-- DO NOT add new variables that weren't in the original prompt
-- DO NOT expose internal dataset structure through variable names
+- You MAY add new variables if they improve the prompt's effectiveness and are task-appropriate (e.g., {code}, {language}, {function_name} for coding tasks)
+- DO NOT add variables that expose dataset-specific field names from evaluation data
+- Variables should represent task inputs/outputs, not internal dataset structure
 - The prompt should be generalizable to similar tasks
 
 Instructions:
 1. If there is a system prompt, prioritize adding instructions there if and only if it makes sense.
-2. DO NOT add any variables or parameters to the prompt you are editing.
+2. You MAY add variables or parameters if they improve prompt effectiveness and are appropriate for the task domain.
 3. You can reuse variables that already exist in the prompt.
 4. Ensure prompts would work on NEW, UNSEEN data of the same task type.
 
