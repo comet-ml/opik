@@ -17,7 +17,7 @@ from ....mcp_utils.prompt_segments import (
     apply_segment_updates,
 )
 from ..prompts import (
-    REASONING_SYSTEM_PROMPT,
+    build_reasoning_system_prompt,
     build_candidate_generation_user_prompt,
     build_mcp_tool_description_user_prompt,
 )
@@ -192,7 +192,7 @@ def generate_candidate_prompts(
         # Prepare pattern injection guidance
         pattern_guidance = ""
         if winning_patterns and random.random() < optimizer.pattern_injection_rate:
-            pattern_guidance = "\n\nWINNING PATTERNS TO CONSIDER:\n"
+            pattern_guidance = "WINNING PATTERNS TO CONSIDER:\n"
             pattern_guidance += "The following patterns have been successful in high-scoring prompts:\n"
             for i, pattern in enumerate(winning_patterns, 1):
                 pattern_guidance += f"{i}. {pattern}\n"
@@ -200,7 +200,7 @@ def generate_candidate_prompts(
                 "\nConsider incorporating these patterns where appropriate, "
             )
             pattern_guidance += (
-                "but adapt them to fit the current prompt's needs.\n"
+                "but adapt them to fit the current prompt's needs."
             )
             logger.info(
                 f"Injecting {len(winning_patterns)} patterns into generation"
@@ -255,7 +255,7 @@ def generate_candidate_prompts(
 
             content = _llm_calls.call_model(
                 messages=[
-                    {"role": "system", "content": REASONING_SYSTEM_PROMPT},
+                    {"role": "system", "content": build_reasoning_system_prompt()},
                     {"role": "user", "content": user_prompt},
                 ],
                 model=optimizer.model,
@@ -435,7 +435,7 @@ def generate_mcp_candidate_prompts(
 
             content = _llm_calls.call_model(
                 messages=[
-                    {"role": "system", "content": REASONING_SYSTEM_PROMPT},
+                    {"role": "system", "content": build_reasoning_system_prompt()},
                     {"role": "user", "content": instruction},
                 ],
                 model=optimizer.model,

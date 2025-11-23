@@ -12,7 +12,7 @@ from collections import Counter
 import re
 import logging
 
-from ..prompts import PATTERN_EXTRACTION_SYSTEM_PROMPT, build_pattern_extraction_user_prompt
+from ..prompts import build_pattern_extraction_system_prompt, build_pattern_extraction_user_prompt
 
 logger = logging.getLogger(__name__)
 
@@ -135,7 +135,7 @@ class PromptHallOfFame:
                 messages=[
                     {
                         "role": "system",
-                        "content": PATTERN_EXTRACTION_SYSTEM_PROMPT
+                        "content": build_pattern_extraction_system_prompt()
                     },
                     {
                         "role": "user",

@@ -12,8 +12,13 @@ import textwrap
 START_DELIM = "{"
 END_DELIM = "}"
 
-# System prompt for the meta-reasoning LLM that generates improved prompts
-REASONING_SYSTEM_PROMPT = """You are an expert prompt engineer. Your task is to improve prompts for any type of task.
+def build_reasoning_system_prompt() -> str:
+    """Build the system prompt for the meta-reasoning LLM that generates improved prompts.
+
+    Returns:
+        System prompt string for the reasoning LLM
+    """
+    return """You are an expert prompt engineer. Your task is to improve prompts for any type of task.
 
 Focus on making the prompt more effective by:
 1. Being clear and specific about what is expected
@@ -104,7 +109,7 @@ def build_candidate_generation_user_prompt(
     # Add pattern section if patterns are provided
     pattern_section = ""
     if pattern_guidance:
-        pattern_section = f"\n{pattern_guidance}\n"
+        pattern_section = f"\n{META_PROMPT_SECTIONS['patterns'].format(patterns=pattern_guidance)}\n"
 
     return textwrap.dedent(
         f"""
@@ -191,8 +196,13 @@ def build_mcp_tool_description_user_prompt(
     ).strip()
 
 
-# System prompt for Hall of Fame pattern extraction
-PATTERN_EXTRACTION_SYSTEM_PROMPT = """You are an expert at analyzing successful prompts and extracting reusable patterns.
+def build_pattern_extraction_system_prompt() -> str:
+    """Build the system prompt for Hall of Fame pattern extraction.
+
+    Returns:
+        System prompt string for pattern extraction
+    """
+    return """You are an expert at analyzing successful prompts and extracting reusable patterns.
 
 Your goal is to identify what makes prompts effective at achieving high scores on specific metrics.
 Focus on structural and stylistic elements that can be transferred to new prompts.
