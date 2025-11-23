@@ -832,12 +832,8 @@ class MetaPromptOptimizer(BaseOptimizer):
     def _calculate_improvement(
         self, current_score: float, previous_score: float
     ) -> float:
-        """Calculate the improvement percentage between scores."""
-        return (
-            (current_score - previous_score) / previous_score
-            if previous_score > 0
-            else 0
-        )
+        """Calculate the improvement percentage between scores (delegates to ops)."""
+        return result_ops.calculate_improvement(current_score, previous_score)
 
     def _create_round_data(
         self,
