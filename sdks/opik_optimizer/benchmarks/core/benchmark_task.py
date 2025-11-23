@@ -18,6 +18,7 @@ class DatasetMetadata(BaseModel):
 
 
 class TaskEvaluationResult(BaseModel):
+    model_config = {"arbitrary_types_allowed": True}
     metrics: list[
         dict[
             Literal[
@@ -39,7 +40,10 @@ class TaskEvaluationResult(BaseModel):
 class EvaluationSet(BaseModel):
     """Grouped evaluations by split for a single stage (initial/final)."""
 
+    model_config = {"arbitrary_types_allowed": True}
+
     class EvaluationEntry(BaseModel):
+        model_config = {"arbitrary_types_allowed": True}
         step_id: str | None = None
         result: TaskEvaluationResult | None = None
 
@@ -50,6 +54,8 @@ class EvaluationSet(BaseModel):
 
 class EvaluationStage(BaseModel):
     """Stage-aware evaluation entry (e.g., initial baseline, post-optimization)."""
+
+    model_config = {"arbitrary_types_allowed": True}
 
     stage: str
     split: str | None = None
