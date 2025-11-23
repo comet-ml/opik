@@ -73,6 +73,9 @@ public interface ProjectMetricsDAO {
     Mono<BigDecimal> getAverageDuration(List<UUID> projectIds, @NonNull Instant startTime, Instant endTime);
 
     Mono<BigDecimal> getTotalTraceErrors(List<UUID> projectIds, @NonNull Instant startTime, Instant endTime);
+
+    Mono<BigDecimal> getAverageFeedbackScore(List<UUID> projectIds, @NonNull Instant startTime, Instant endTime,
+            EntityType entityType, String feedbackScoreName);
 }
 
 @Slf4j
@@ -578,6 +581,18 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                 <if(uuid_to_time)>AND id \\<= :uuid_to_time<endif>;
             """;
 
+    private static final String GET_AVERAGE_FEEDBACK_SCORE = """
+            SELECT
+                avg(value) AS avg_feedback_score
+            FROM authored_feedback_scores final
+            WHERE workspace_id = :workspace_id
+                AND entity_type = :entity_type
+                AND name = :feedback_score_name
+                AND created_at >= parseDateTime64BestEffort(:start_time, 9)
+                AND created_at \\<= parseDateTime64BestEffort(:end_time, 9)
+                <if(project_ids)> AND project_id IN :project_ids <endif>;
+            """;
+
     private static final String GET_THREAD_COUNT = """
             %s
             SELECT <bucket> AS bucket,
@@ -768,6 +783,41 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
                 "total_trace_errors");
     }
 
+    @Override
+    public Mono<BigDecimal> getAverageFeedbackScore(List<UUID> projectIds, @NonNull Instant startTime, Instant endTime,
+            EntityType entityType, String feedbackScoreName) {
+        return template.nonTransaction(connection -> {
+            var stTemplate = TemplateUtils.newST(GET_AVERAGE_FEEDBACK_SCORE);
+
+            // Add project_ids flag to template if provided
+            if (projectIds != null && !projectIds.isEmpty()) {
+                stTemplate.add("project_ids", true);
+            }
+
+            // Create statement once with all flags set
+            var statement = connection.createStatement(stTemplate.render())
+                    .bind("start_time", startTime.toString())
+                    .bind("end_time", endTime.toString())
+                    .bind("entity_type", entityType.getType())
+                    .bind("feedback_score_name", feedbackScoreName);
+
+            // Bind project IDs if provided
+            if (projectIds != null && !projectIds.isEmpty()) {
+                statement.bind("project_ids", projectIds.toArray(new UUID[0]));
+            }
+
+            InstrumentAsyncUtils.Segment segment = startSegment("getAverageFeedbackScore", "Clickhouse", "get");
+
+            return makeMonoContextAware(bindWorkspaceIdToMono(statement))
+                    .flatMapMany(result -> result
+                            .map((row, metadata) -> Optional
+                                    .ofNullable(getOptionalValue(row, "avg_feedback_score", BigDecimal.class))))
+                    .next()
+                    .mapNotNull(opt -> opt.orElse(null))
+                    .doFinally(signalType -> endSegment(segment));
+        });
+    }
+
     private Mono<BigDecimal> getAlertMetric(@NonNull String query, List<UUID> projectIds, @NonNull Instant startTime,
             Instant endTime, @NonNull String segmentName, @NonNull String rowName) {
         return template.nonTransaction(connection -> {
@@ -806,11 +856,22 @@ class ProjectMetricsDAOImpl implements ProjectMetricsDAO {
             InstrumentAsyncUtils.Segment segment = startSegment(segmentName, "Clickhouse", "get");
 
             return makeMonoContextAware(bindWorkspaceIdToMono(statement))
-                    .flatMapMany(result -> result.map((row, metadata) -> row.get(rowName, BigDecimal.class)))
+                    .flatMapMany(result -> result
+                            .map((row, metadata) -> Optional
+                                    .ofNullable(getOptionalValue(row, rowName, BigDecimal.class))))
                     .next()
-                    .defaultIfEmpty(BigDecimal.ZERO)
+                    .mapNotNull(opt -> opt.orElse(null))
                     .doFinally(signalType -> endSegment(segment));
         });
+    }
+
+    private <T> T getOptionalValue(Row row, String columnName, Class<T> type) {
+        try {
+            return row.get(columnName, type);
+        } catch (Exception e) {
+            // Column doesn't exist in this query result - return null
+            return null;
+        }
     }
 
     private Mono<? extends Result> getMetric(
