@@ -1,0 +1,27 @@
+{
+  "seed": 123,
+  "test_mode": true,
+  "generators": [
+    {
+      "datasets": [
+        { "dataset": "tiny_test" },
+        { "dataset": { "loader": "tiny_test", "count": 2 } }
+      ],
+      "models": [
+        { "name": "openai/gpt-4.1-mini", "model_parameters": { "temperature": 0.2 } }
+      ],
+      "optimizers": [
+        { "name": "few_shot", "optimizer_prompt_params": { "max_trials": 1, "n_samples": 1 } },
+        {
+          "name": "evolutionary_optimizer",
+          "optimizer_prompt_params": { "max_trials": 1, "population_size": 2, "num_generations": 1 }
+        }
+      ],
+      "metrics": ["benchmarks.metrics.hotpot.hotpot_f1"],
+      "prompt": [
+        { "role": "system", "content": "Answer the question briefly and correctly." },
+        { "role": "user", "content": "{text}" }
+      ]
+    }
+  ]
+}

@@ -158,7 +158,7 @@ class ParameterOptimizer(BaseOptimizer):
             experiment_config["validation_dataset"] = validation_dataset.name
             experiment_config["validation_dataset_id"] = validation_dataset.id
 
-        # Logic on which datset to use for scoring
+        # Logic on which dataset to use for scoring
         evaluation_dataset = (
             validation_dataset if validation_dataset is not None else dataset
         )

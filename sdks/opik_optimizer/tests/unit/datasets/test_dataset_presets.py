@@ -9,16 +9,16 @@ from opik_optimizer.utils import dataset_utils
 
 
 CURATED_DATASETS = [
-    ("ai2_arc", "train", 300),
-    ("gsm8k", "train", 300),
-    ("truthful_qa", "validation", 300),
-    ("cnn_dailymail", "validation", 100),
-    ("ragbench_sentence_relevance", "train", 300),
-    ("election_questions", "test", 300),
-    ("medhallu", "train", 300),
-    ("rag_hallucinations", "train", 300),
+    ("ai2_arc", "train", 150),
+    ("gsm8k", "train", 150),
+    ("truthful_qa", "validation", 150),
+    ("cnn_dailymail", "validation", 150),
+    ("ragbench_sentence_relevance", "train", 150),
+    ("election_questions", "test", 150),
+    ("medhallu", "train", 150),
+    ("rag_hallucinations", "train", 150),
     ("tiny_test", "train", 5),
-    ("halu_eval_300", "train", 300),
+    ("halu_eval_300", "train", 150),
 ]
 
 

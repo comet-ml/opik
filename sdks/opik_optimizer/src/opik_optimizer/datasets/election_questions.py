@@ -10,12 +10,24 @@ ELECTION_QUESTIONS_SPEC = DatasetSpec(
     default_source_split="test",
     prefer_presets=True,
     presets={
-        "test": DatasetSplitPreset(
+        "train": DatasetSplitPreset(
             source_split="test",
             start=0,
-            count=300,
+            count=150,
             dataset_name="election_questions_train",
-        )
+        ),
+        "validation": DatasetSplitPreset(
+            source_split="test",
+            start=150,
+            count=150,
+            dataset_name="election_questions_validation",
+        ),
+        "test": DatasetSplitPreset(
+            source_split="test",
+            start=300,
+            count=150,
+            dataset_name="election_questions_test",
+        ),
     },
 )
 

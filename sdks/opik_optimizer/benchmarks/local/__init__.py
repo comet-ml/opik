@@ -1,1 +1,1 @@
-"""Local benchmark execution modules."""
+"""Local runner helpers (checkpointing, logging)."""

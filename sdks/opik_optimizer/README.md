@@ -16,14 +16,14 @@ The Opik Agent Optimizer refines your prompts to achieve better performance from
 
 ## 🎯 Key Features
 
-- **Standardized API**: All optimizers follow the same interface for `optimize_prompt()` and `optimize_mcp()` methods
-- **Optimizer Chaining**: Results from one optimizer can be used as input for another
-- **MCP Support**: Built-in support for Model Context Protocol tool calling
-- **Consistent Results**: All optimizers return standardized `OptimizationResult` objects
-- **Counter Tracking**: Built-in LLM and tool call counters for monitoring usage
-- **Type Safety**: Full type hints and validation for robust development
-- **Backward Compatibility**: All original parameters preserved through kwargs extraction
-- **Deprecation Warnings**: Clear warnings for deprecated parameters with migration guidance
+* **Standardized API**: All optimizers follow the same interface for `optimize_prompt()` and `optimize_mcp()` methods
+* **Optimizer Chaining**: Results from one optimizer can be used as input for another
+* **MCP Support**: Built-in support for Model Context Protocol tool calling
+* **Consistent Results**: All optimizers return standardized `OptimizationResult` objects
+* **Counter Tracking**: Built-in LLM and tool call counters for monitoring usage
+* **Type Safety**: Full type hints and validation for robust development
+* **Backward Compatibility**: All original parameters preserved through kwargs extraction
+* **Deprecation Warnings**: Clear warnings for deprecated parameters with migration guidance
 
 Opik Optimizer is a component of the [Opik platform](https://github.com/comet-ml/opik), an open-source LLM evaluation platform by Comet.
 For more information about the broader Opik ecosystem, visit our [Website](https://www.comet.com/site/products/opik/) or [Documentation](https://www.comet.com/docs/opik/).
@@ -40,7 +40,8 @@ Explore Opik Optimizer's capabilities with our interactive notebook:
 
 To get started with Opik Optimizer, follow these steps:
 
-1.  **Install the package:**
+1. **Install the package:**
+
     ```bash
     # using pip
     pip install opik-optimizer
@@ -49,8 +50,10 @@ To get started with Opik Optimizer, follow these steps:
     uv pip install opik-optimizer
     ```
 
-2.  **Configure Opik (Optional, for advanced features):**
+2. **Configure Opik (Optional, for advanced features):**
+
     If you plan to log optimization experiments to Comet or use Opik Datasets, you'll need to configure the Opik client:
+
     ```bash
     # Install the main Opik CLI (if not already installed)
     pip install opik
@@ -59,21 +62,25 @@ To get started with Opik Optimizer, follow these steps:
     opik configure
     # When prompted, enter your Opik API key and workspace details.
     ```
+
     Using Opik with Comet allows you to track your optimization runs, compare results, and manage datasets seamlessly.
 
-3.  **Set up LLM Provider API Keys:**
+3. **Set up LLM Provider API Keys:**
+
     Ensure your environment variables are set for the LLM(s) you intend to use. For example, for OpenAI models:
+
     ```bash
     export OPENAI_API_KEY="your_openai_api_key"
     ```
+
     The optimizer utilizes LiteLLM, so you can configure keys for various providers as per LiteLLM's documentation.
 
 You'll typically need:
 
-*   An LLM model name (e.g., "gpt-4o-mini", "claude-3-haiku-20240307").
-*   An [Opik Dataset](https://www.comet.com/docs/opik/evaluation/manage_datasets/) (or a compatible local dataset/data generator).
-*   An [Opik Metric](https://www.comet.com/docs/opik/evaluation/metrics/overview/) (or a custom evaluation function).
-*   A starting prompt (template string).
+* An LLM model name (e.g., "gpt-4o-mini", "claude-3-haiku-20240307").
+* An [Opik Dataset](https://www.comet.com/docs/opik/evaluation/manage_datasets/) (or a compatible local dataset/data generator).
+* An [Opik Metric](https://www.comet.com/docs/opik/evaluation/metrics/overview/) (or a custom evaluation function).
+* A starting prompt (template string).
 
 ## Standardized API
 
@@ -158,6 +165,7 @@ result = optimizer.optimize_prompt(
 # Display the best prompt and its score
 result.display()
 ```
+
 The `result` object contains the optimized prompt, evaluation scores, and other details from the optimization process. If `project_name` is provided and Opik is configured, results will also be logged to your Comet workspace.
 
 The optimizer automatically logs run metadata—including optimizer version, tool schemas, prompt messages, and the models used—so you get consistent experiment context without any additional arguments. If you still need custom tags (for example identifying the dataset or task), pass an `experiment_config` dictionary and your fields will be merged on top of the defaults.
@@ -168,9 +176,9 @@ The Opik Agent Optimizer supports **true tool optimization** for MCP (Model Cont
 
 ### Key Features
 
-- **MCP Tool Optimization** - Optimize MCP tool descriptions and usage patterns (Beta)
-- **Tool-Aware Analysis** - The optimizer understands MCP tool schemas and usage patterns
-- **Multi-step Workflow Support** - Optimize complex agent workflows involving MCP tools
+* **MCP Tool Optimization** - Optimize MCP tool descriptions and usage patterns (Beta)
+* **Tool-Aware Analysis** - The optimizer understands MCP tool schemas and usage patterns
+* **Multi-step Workflow Support** - Optimize complex agent workflows involving MCP tools
 
 ### Agent Function Calling (Not Tool Optimization)
 
@@ -228,8 +236,8 @@ The following parameters are deprecated and will be removed in future versions:
 
 ### Constructor Parameters
 
-- **`project_name`** in optimizer constructors: Set `project_name` in the `ChatPrompt` instead
-- **`num_threads`** in optimizer constructors: Use `n_threads` instead
+* **`project_name`** in optimizer constructors: Set `project_name` in the `ChatPrompt` instead
+* **`num_threads`** in optimizer constructors: Use `n_threads` instead
 
 ### Example Migration
 
@@ -284,22 +292,28 @@ Underlying utilities are available in `src/opik_optimizer/utils/{prompt_segments
 
 To contribute or use the Opik Optimizer from source:
 
-1.  **Clone the Opik repository:**
+1. **Clone the Opik repository:**
+
     ```bash
     git clone git@github.com:comet-ml/opik.git
     ```
-2.  **Navigate to the optimizer's directory:**
+
+2. **Navigate to the optimizer's directory:**
+
     ```bash
     cd opik/sdks/opik_optimizer  # Adjust 'opik' if you cloned into a different folder name
     ```
-3.  **Install in editable mode (with development dependencies):**
+
+3. **Install in editable mode (with development dependencies):**
+
     ```bash
     pip install -e .[dev]
     ```
+
     The `[dev]` extra installs dependencies useful for development, such as `pytest`.
 
 ## Requirements
 
-- **Python `>=3.10,<3.13`** (see [Python version requirements](https://github.com/comet-ml/opik/pull/3373))
-- Opik API key (recommended for full functionality, configure via `opik configure`)
-- API key for your chosen LLM provider (e.g., OpenAI, Anthropic, Gemini), configured as per LiteLLM guidelines.
+* **Python `>=3.10,<3.13`** (see [Python version requirements](https://github.com/comet-ml/opik/pull/3373))
+* Opik API key (recommended for full functionality, configure via `opik configure`)
+* API key for your chosen LLM provider (e.g., OpenAI, Anthropic, Gemini), configured as per LiteLLM guidelines.

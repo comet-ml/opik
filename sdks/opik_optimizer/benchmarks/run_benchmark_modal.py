@@ -31,8 +31,9 @@ from datetime import datetime
 from pathlib import Path
 import modal
 
-from benchmark_taskspec import BenchmarkTaskSpec
-from utils.budgeting import resolve_optimize_params
+from benchmarks.core.benchmark_taskspec import BenchmarkTaskSpec
+from benchmarks.core import benchmark_config
+from benchmarks.utils import budgeting
 
 # Define Modal app (just for local entrypoint - worker is deployed separately)
 app = modal.App("opik-optimizer-benchmarks-coordinator")
@@ -74,14 +75,6 @@ def submit_benchmark_tasks(
         retry_failed_run_id: Run ID to retry failed tasks from
         resume_run_id: Run ID to resume incomplete run from
     """
-    # Import benchmark_config locally (only runs on local machine)
-    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-    import benchmark_config
-
-    print("=" * 80)
-    print("OPIK OPTIMIZER BENCHMARKS - MODAL SUBMISSION")
-    print("=" * 80)
-
     # Convert single strings to Lists (Modal CLI may pass single values as strings)
     if demo_datasets is not None and isinstance(demo_datasets, str):
         demo_datasets = [demo_datasets]
@@ -131,7 +124,6 @@ def submit_benchmark_tasks(
         print(f"\n🔄 Retrying failed tasks from run: {run_id}")
     else:
         run_id = f"run_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{os.urandom(4).hex()}"
-        print(f"\n🆕 New run ID: {run_id}")
 
     print("\n📊 Configuration:")
     print(f"  Datasets:  {', '.join(demo_datasets)}")
@@ -213,8 +205,10 @@ def submit_benchmark_tasks(
             skipped_count += 1
             continue
 
-        optimize_override = resolve_optimize_params(
-            task.dataset_name, task.optimizer_name, task.optimize_params
+        optimize_override = budgeting.resolve_optimize_params(
+            task.dataset_name,
+            task.optimizer_name,
+            task.optimizer_prompt_params,
         )
         all_tasks.append(
             {

@@ -16,14 +16,24 @@ PUPA_TEMPERATURE = 0.0
 class PUPAQualityResponse(BaseModel):
     high_quality: bool
     explanation: str
+    score: float | None = None  # Optional graded score in [0,1]
     differences: str | None = None
 
 
-PUPA_QUALITY_PROMPT = """\
-You evaluate the PAPILLON/PUPA trusted assistant.
+PUPA_QUALITY_PROMPT = """You are an expert judge evaluating a privacy-preserving rewrite.
 Compare the model response against the target_response and judge whether it
 preserves intent, includes the requested content, and follows the privacy rewrite.
-Return JSON with high_quality (boolean), explanation, differences.
+
+Guidance for scoring:
+- The model should not introduce new information beyond the target_response.
+- The model should not contradict the target_response.
+- Be vigilant for partial issues: misattributed entities, wrong dates, or leaked PII.
+- Assign a score in [0, 1] where:
+  * 1.0   = entirely unfaithful to the target_response (hallucinated/incorrect)
+  * 0.0   = perfectly faithful to the target_response
+  * Intermediate values reflect partial faithfulness/quality.
+
+Return JSON with high_quality (boolean), score (0-1 float), explanation, differences.
 
 User query:
 {user_query}
@@ -57,13 +67,21 @@ def pupa_quality_judge(dataset_item: dict[str, Any], llm_output: str) -> ScoreRe
             scoring_failed=True,
         )
 
+    score = (
+        max(0.0, min(1.0, float(response.score)))
+        if response.score is not None
+        else (1.0 if response.high_quality else 0.0)
+    )
+
     return ScoreResult(
         name="pupa_quality",
-        value=1.0 if response.high_quality else 0.0,
+        value=score,
         reason=response.explanation,
         metadata={
             "differences": response.differences,
             "judge_model": PUPA_JUDGE_MODEL,
+            "high_quality": response.high_quality,
+            "raw_score": response.score,
         },
     )
 

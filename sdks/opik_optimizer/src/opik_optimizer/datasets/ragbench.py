@@ -14,9 +14,21 @@ RAGBENCH_SPEC = DatasetSpec(
         "train": DatasetSplitPreset(
             source_split="train",
             start=0,
-            count=300,
+            count=150,
             dataset_name="ragbench_sentence_relevance_train",
-        )
+        ),
+        "validation": DatasetSplitPreset(
+            source_split="validation",
+            start=0,
+            count=150,
+            dataset_name="ragbench_sentence_relevance_validation",
+        ),
+        "test": DatasetSplitPreset(
+            source_split="test",
+            start=0,
+            count=150,
+            dataset_name="ragbench_sentence_relevance_test",
+        ),
     },
 )
 

@@ -15,9 +15,21 @@ GSM8K_SPEC = DatasetSpec(
         "train": DatasetSplitPreset(
             source_split="train",
             start=0,
-            count=300,
+            count=150,
             dataset_name="gsm8k_train",
-        )
+        ),
+        "validation": DatasetSplitPreset(
+            source_split="train",
+            start=150,
+            count=150,
+            dataset_name="gsm8k_validation",
+        ),
+        "test": DatasetSplitPreset(
+            source_split="test",
+            start=0,
+            count=150,
+            dataset_name="gsm8k_test",
+        ),
     },
 )
 

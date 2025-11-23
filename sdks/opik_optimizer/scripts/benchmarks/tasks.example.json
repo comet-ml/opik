@@ -1,0 +1,55 @@
+{
+  "seed": 42,
+  "test_mode": true,
+  "tasks": [
+    {
+      "dataset": {
+        "loader": "hotpot",
+        "split": "train",
+        "count": 10,
+        "dataset_name": "hotpot_train"
+      },
+      "optimizer": "few_shot",
+      "model": "openai/gpt-4.1-mini",
+      "model_parameters": { "temperature": 0.3 },
+      "optimizer_prompt_params": { "max_trials": 1, "n_samples": 1 },
+      "metrics": ["benchmarks.metrics.hotpot.hotpot_f1"],
+      "prompt": [
+        { "role": "system", "content": "Answer the question based on the given context." },
+        { "role": "user", "content": "{question}" }
+      ]
+    },
+    {
+      "dataset": "tiny_test",
+      "datasets": { "train": { "loader": "tiny_test", "count": 3 } },
+      "optimizer": "evolutionary_optimizer",
+      "model": "openai/gpt-4.1-mini",
+      "optimizer_prompt_params": { "max_trials": 1, "population_size": 2, "num_generations": 1 },
+      "metrics": [
+        {
+          "path": "benchmarks.core.benchmark_config.create_levenshtein_ratio_metric",
+          "kwargs": { "reference_col": "label" }
+        }
+      ],
+      "prompt": [
+        { "role": "system", "content": "Answer the question briefly and correctly." },
+        { "role": "user", "content": "{text}" }
+      ]
+    },
+    {
+      "dataset": "hotpot_train",
+      "datasets": {
+        "train": { "loader": "hotpot", "split": "train", "count": 5 },
+        "validation": { "loader": "hotpot", "split": "validation", "count": 3 },
+        "test": { "loader": "hotpot", "split": "test", "count": 2 }
+      },
+      "optimizer": "hierarchical_reflective",
+      "model": "openai/gpt-4.1-mini",
+      "optimizer_prompt_params": { "max_trials": 2 },
+      "prompt": [
+        { "role": "system", "content": "Answer the question based on the given context." },
+        { "role": "user", "content": "{question}" }
+      ]
+    }
+  ]
+}

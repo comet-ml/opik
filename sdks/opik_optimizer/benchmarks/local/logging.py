@@ -4,6 +4,7 @@ import os
 import re
 import sys
 import typing
+import hashlib
 from datetime import datetime
 from typing import Any, Optional
 from collections.abc import Callable
@@ -30,7 +31,7 @@ from rich.table import Table
 from rich.text import Text
 
 if typing.TYPE_CHECKING:
-    from benchmark_task import TaskResult
+    from benchmarks.core.benchmark_task import TaskResult
 
 console = Console(
     width=120,
@@ -157,6 +158,7 @@ class BenchmarkLogger:
         optimizer_name: str,
         model_name: str,
         status: str,
+        short_id: str | None = None,
     ) -> None:
         self.tasks_status[future] = {
             "desc": f"Running: {dataset_name} - {optimizer_name} - {model_name}",
@@ -164,6 +166,7 @@ class BenchmarkLogger:
             "optimizer_name": optimizer_name,
             "model_name": model_name,
             "status": status,
+            "short_id": short_id,
         }
 
     def remove_active_task_status(
@@ -181,14 +184,23 @@ class BenchmarkLogger:
             dataset_name = status_info.get("dataset_name", "Unknown Task")
             optimizer_name = status_info.get("optimizer_name", "?")
             model_name = status_info.get("model_name", "?")
+            short_id = status_info.get("short_id")
 
-            display_text = f" • {dataset_name} + {model_name}"
             if status_info["status"] == "Running":
-                active_list.append(
-                    Text.assemble(
-                        (display_text, "yellow"), (f" [{optimizer_name}]", "dim")
+                if short_id:
+                    line = Text.assemble(
+                        " • ",
+                        (f"#{short_id} ", "dim"),
+                        (f"{dataset_name} + {model_name}", "yellow"),
+                        (f" [{optimizer_name}]", "dim"),
                     )
-                )
+                else:
+                    line = Text.assemble(
+                        " • ",
+                        (f"{dataset_name} + {model_name}", "yellow"),
+                        (f" [{optimizer_name}]", "dim"),
+                    )
+                active_list.append(line)
 
         if not active_list:
             active_tasks_content = Group(Text("Waiting for tasks...", style="dim"))
@@ -259,6 +271,36 @@ class BenchmarkLogger:
         table.add_column()
 
         table.add_row("Dataset:", f"[bold]{dataset_name}[/bold]")
+        evaluation_split = getattr(task_detail_data, "evaluation_split", None)
+        dataset_metadata = getattr(task_detail_data, "dataset_metadata", {}) or {}
+        if evaluation_split:
+            eval_meta = dataset_metadata.get(evaluation_split)
+            eval_label = (
+                eval_meta.name
+                if eval_meta and getattr(eval_meta, "name", None)
+                else evaluation_split
+            )
+            table.add_row("Eval split:", eval_label)
+        evals_for_split = getattr(task_detail_data, "evaluations", {}) or {}
+        has_test = False
+        initial_set = evals_for_split.get("initial")
+        final_set = evals_for_split.get("final")
+        test_entry = (
+            (initial_set.test if initial_set else None)
+            or (final_set.test if final_set else None)
+            if hasattr(initial_set, "test") or hasattr(final_set, "test")
+            else None
+        )
+        if test_entry and getattr(test_entry, "result", None):
+            has_test = True
+        if has_test:
+            test_meta = dataset_metadata.get("test")
+            test_label = (
+                test_meta.name
+                if test_meta and getattr(test_meta, "name", None)
+                else "test"
+            )
+            table.add_row("Test split:", test_label)
         table.add_row("Optimizer:", f"[bold]{optimizer_name}[/bold]")
         if task_detail_data.timestamp_end:
             table.add_row(
@@ -275,102 +317,91 @@ class BenchmarkLogger:
             else "[dim]N/A[/dim]"
         )
         table.add_row("LLM Calls (Opt):", llm_calls_str)
+        # Process scores per split
+        evals = getattr(task_detail_data, "evaluations", {}) or {}
+        initial_set = evals.get("initial")
+        final_set = evals.get("final")
 
-        # Process scores
-        initial_evaluation_metrics = (
-            task_detail_data.initial_evaluation.metrics
-            if task_detail_data.initial_evaluation
-            else []
-        )
-        final_evaluation_metrics = (
-            task_detail_data.optimized_evaluation.metrics
-            if task_detail_data.optimized_evaluation
-            else []
-        )
-
-        all_metric_names = set(
-            [x["metric_name"] for x in initial_evaluation_metrics]
-            + [x["metric_name"] for x in final_evaluation_metrics]
-        )
-        initial_scores_grp = []
-        final_scores_grp = []
-        percent_changes_grp = []
-        for metric_name in all_metric_names:
-            initial_score_obj = next(
-                (
-                    x
-                    for x in initial_evaluation_metrics
-                    if x["metric_name"] == metric_name
-                ),
-                None,
-            )
-            initial_score = initial_score_obj["score"] if initial_score_obj else None
-            optimized_score_obj = next(
-                (
-                    x
-                    for x in final_evaluation_metrics
-                    if x["metric_name"] == metric_name
-                ),
-                None,
-            )
-            optimized_score = (
-                optimized_score_obj["score"] if optimized_score_obj else None
-            )
-
-            # Process initial scores
-            style = (
-                STYLES["success"]
-                if isinstance(initial_score, (float, int))
-                else STYLES["warning"]
-            )
-            value_str = (
-                f"{initial_score:.4f}"
-                if isinstance(initial_score, (float, int))
-                else ("[dim]N/A[/dim]" if initial_score is None else str(initial_score))
-            )
-            initial_scores_grp.append(
-                Text.assemble(f" • {metric_name}: ", (value_str, style))
-            )
-
-            # Process final scores
-            final_style = (
-                STYLES["success"]
-                if isinstance(optimized_score, (float, int))
-                else STYLES["warning"]
-            )
-            final_value_str = (
-                f"{optimized_score:.4f}"
-                if isinstance(optimized_score, (float, int))
-                else (
-                    "[dim]N/A[/dim]"
-                    if optimized_score is None
-                    else str(optimized_score)
-                )
-            )
-            final_scores_grp.append(
-                Text.assemble(
-                    f" • Final {metric_name}: ", (final_value_str, final_style)
-                )
-            )
-
-            # Process percentage change
-            percent_change_text = self._calculate_percentage_change(
-                initial_score, optimized_score, metric_name
-            )
-            percent_changes_grp.append(
-                Text.assemble(f" • {metric_name}: ", percent_change_text)
-            )
+        def _metrics_for(eval_set: Any, split_label: str) -> list[dict[str, Any]]:
+            entry = getattr(eval_set, split_label, None) if eval_set else None
+            return entry.result.metrics if entry and entry.result else []
 
         score_rows: list[Text | Group] = []
-        if initial_scores_grp:
-            score_rows.append(Text("Initial Scores:", style="underline"))
-            score_rows.append(Group(*initial_scores_grp))
-        if final_scores_grp:
-            score_rows.append(Text("Final Scores:", style="underline"))
-            score_rows.append(Group(*final_scores_grp))
-        if percent_changes_grp:
-            score_rows.append(Text("% Change:", style="underline"))
-            score_rows.append(Group(*percent_changes_grp))
+        for split_label in ("train", "validation", "test"):
+            initial_metrics = _metrics_for(initial_set, split_label)
+            final_metrics = _metrics_for(final_set, split_label)
+            if not initial_metrics and not final_metrics:
+                continue
+            all_metric_names = set(
+                [x["metric_name"] for x in initial_metrics]
+                + [x["metric_name"] for x in final_metrics]
+            )
+            initial_scores_grp: list[Text] = []
+            final_scores_grp: list[Text] = []
+            percent_changes_grp: list[Text] = []
+            for metric_name in all_metric_names:
+                initial_score_obj = next(
+                    (x for x in initial_metrics if x["metric_name"] == metric_name),
+                    None,
+                )
+                final_score_obj = next(
+                    (x for x in final_metrics if x["metric_name"] == metric_name),
+                    None,
+                )
+                initial_score = (
+                    initial_score_obj["score"] if initial_score_obj else None
+                )
+                final_score = final_score_obj["score"] if final_score_obj else None
+
+                style = (
+                    STYLES["success"]
+                    if isinstance(initial_score, (float, int))
+                    else STYLES["warning"]
+                )
+                init_str = (
+                    f"{initial_score:.4f}"
+                    if isinstance(initial_score, (float, int))
+                    else (
+                        "[dim]N/A[/dim]"
+                        if initial_score is None
+                        else str(initial_score)
+                    )
+                )
+                initial_scores_grp.append(
+                    Text.assemble(f" • {metric_name}: ", (init_str, style))
+                )
+
+                final_style = (
+                    STYLES["success"]
+                    if isinstance(final_score, (float, int))
+                    else STYLES["warning"]
+                )
+                final_str = (
+                    f"{final_score:.4f}"
+                    if isinstance(final_score, (float, int))
+                    else ("[dim]N/A[/dim]" if final_score is None else str(final_score))
+                )
+                final_scores_grp.append(
+                    Text.assemble(f" • Final {metric_name}: ", (final_str, final_style))
+                )
+
+                percent_change_text = self._calculate_percentage_change(
+                    initial_score, final_score, metric_name
+                )
+                percent_changes_grp.append(
+                    Text.assemble(f" • {metric_name}: ", percent_change_text)
+                )
+
+            split_label_display = f"{split_label.capitalize()} Scores:"
+            score_rows.append(Text(split_label_display, style="underline"))
+            if initial_scores_grp:
+                score_rows.append(Group(*initial_scores_grp))
+            if final_scores_grp:
+                score_rows.append(Text("Final:", style="underline dim"))
+                score_rows.append(Group(*final_scores_grp))
+            if percent_changes_grp:
+                score_rows.append(Text("% Change:", style="underline dim"))
+                score_rows.append(Group(*percent_changes_grp))
 
         if score_rows:
             table.add_row("Scores:", Group(*score_rows))
@@ -418,7 +449,7 @@ class BenchmarkLogger:
                 width=120,
             )
         else:
-            error_panel = Text("No error occured.", style="dim")
+            error_panel = Text("No error occurred.", style="dim")
 
         main_content_group = Group(
             table, Text("\n"), final_prompt_panel, Text("\n"), error_panel
@@ -486,6 +517,7 @@ class BenchmarkLogger:
                 overflow="ellipsis",
                 no_wrap=True,
             )
+            results_table.add_column("ID", no_wrap=True, width=7)
             results_table.add_column(
                 "Optimizer", max_width=25, overflow="fold", no_wrap=False
             )
@@ -495,13 +527,22 @@ class BenchmarkLogger:
             # results_table.add_column("🔥", justify="center", no_wrap=True)
             results_table.add_column("☎️", justify="right", no_wrap=True)
             results_table.add_column("Metric", no_wrap=True)
+            results_table.add_column("Split", no_wrap=True)
             results_table.add_column("Run (s)", justify="right", no_wrap=True)
             results_table.add_column("Initial", justify="right", no_wrap=True)
             results_table.add_column("Final", justify="right", no_wrap=True)
             results_table.add_column("% Change", justify="right", no_wrap=True)
 
-            all_metrics_names = set()
+            all_metric_keys: set[tuple[str, str]] = set()
             processed_data_for_table = {}
+
+            def _short_id(task_id: str) -> str:
+                base = (
+                    f"{getattr(self, 'run_id', '')}:{task_id}"
+                    if getattr(self, "run_id", None)
+                    else task_id
+                )
+                return hashlib.sha1(base.encode()).hexdigest()[:5]
 
             for task_summary in results:  # task_summary is an item from self.results
                 if task_summary.status != "Success":
@@ -521,8 +562,7 @@ class BenchmarkLogger:
 
                 table_key = (dataset_name, optimizer_name, model_name)
                 processed_data_for_table[table_key] = {
-                    "initial": {},
-                    "final": {},
+                    "splits": {},
                     "time": time_taken,
                     "task_id": task_id,
                     "temperature": None,
@@ -534,29 +574,58 @@ class BenchmarkLogger:
                     task_summary.llm_calls_total_optimization
                 )
 
-                initial_eval_metrics = (
-                    task_summary.initial_evaluation.metrics
-                    if task_summary.initial_evaluation
-                    else []
-                )
-                for metric_entry in initial_eval_metrics:
-                    metric_display_name = metric_entry.get("metric_name", "Unknown")
-                    all_metrics_names.add(metric_display_name)
-                    processed_data_for_table[table_key]["initial"][
-                        metric_display_name
-                    ] = metric_entry.get("score")  # type: ignore
+                def _merge_split(
+                    split_label: str,
+                    initial_metrics: list[dict] | None,
+                    final_metrics: list[dict] | None,
+                ) -> None:
+                    splits_map = processed_data_for_table[table_key]["splits"]  # type: ignore[assignment]
+                    if not isinstance(splits_map, dict):
+                        return
+                    if split_label not in splits_map:
+                        splits_map[split_label] = {"initial": {}, "final": {}}
+                    if initial_metrics:
+                        for metric_entry in initial_metrics:
+                            metric_display_name = metric_entry.get(
+                                "metric_name", "Unknown"
+                            )
+                            all_metric_keys.add((split_label, metric_display_name))
+                            splits_map[split_label]["initial"][metric_display_name] = (
+                                metric_entry.get("score")
+                            )  # type: ignore[arg-type]
+                    if final_metrics:
+                        for metric_entry in final_metrics:
+                            metric_display_name = metric_entry.get(
+                                "metric_name", "Unknown"
+                            )
+                            all_metric_keys.add((split_label, metric_display_name))
+                            splits_map[split_label]["final"][metric_display_name] = (
+                                metric_entry.get("score")
+                            )  # type: ignore[arg-type]
 
-                final_eval_metrics = (
-                    task_summary.optimized_evaluation.metrics
-                    if task_summary.optimized_evaluation
-                    else []
-                )
-                for metric_entry in final_eval_metrics:
-                    metric_display_name = metric_entry.get("metric_name", "Unknown")
-                    all_metrics_names.add(metric_display_name)
-                    processed_data_for_table[table_key]["final"][
-                        metric_display_name
-                    ] = metric_entry.get("score")  # type: ignore
+                evals = getattr(task_summary, "evaluations", {}) or {}
+                initial_set = evals.get("initial")
+                final_set = evals.get("final")
+
+                def _metrics_for(
+                    eval_set: Any, split_label: str
+                ) -> list[dict[str, Any]]:
+                    entry = getattr(eval_set, split_label, None) if eval_set else None
+                    if entry is None:
+                        return []
+                    result = getattr(entry, "result", None)
+                    return (
+                        result.metrics
+                        if result and getattr(result, "metrics", None)
+                        else []
+                    )
+
+                for split_label in ("train", "validation", "test"):
+                    _merge_split(
+                        split_label,
+                        _metrics_for(initial_set, split_label),
+                        _metrics_for(final_set, split_label),
+                    )
 
             # Sort by dataset, then optimizer, then model for consistent table output
             sorted_table_keys = sorted(processed_data_for_table.keys())
@@ -568,19 +637,30 @@ class BenchmarkLogger:
                 time_taken_for_run = data_for_run_key.get("time", 0)
                 # temperature_for_run = data_for_run_key.get("temperature")
                 llm_calls_for_run = data_for_run_key.get("llm_calls_total_optimization")
-                scores_by_metric = {
-                    "initial": data_for_run_key["initial"],
-                    "final": data_for_run_key["final"],
-                }
+                splits_data = data_for_run_key.get("splits", {})
                 is_new_block = last_dataset_optimizer_model != key_tuple
 
-                for metric_i, metric_name_to_display in enumerate(
-                    sorted(list(all_metrics_names))
+                metric_rows_built = 0
+                for split_label, metric_name_to_display in sorted(
+                    list(all_metric_keys)
                 ):
-                    initial_val = scores_by_metric["initial"].get(  # type: ignore[attr-defined]
-                        metric_name_to_display
+                    split_scores = (
+                        splits_data.get(split_label, {"initial": {}, "final": {}})
+                        if isinstance(splits_data, dict)
+                        else {"initial": {}, "final": {}}
                     )
-                    final_val = scores_by_metric["final"].get(metric_name_to_display)  # type: ignore
+                    initial_scores_map = (
+                        split_scores.get("initial", {})
+                        if isinstance(split_scores, dict)
+                        else {}
+                    )
+                    final_scores_map = (
+                        split_scores.get("final", {})
+                        if isinstance(split_scores, dict)
+                        else {}
+                    )
+                    initial_val = initial_scores_map.get(metric_name_to_display)
+                    final_val = final_scores_map.get(metric_name_to_display)
 
                     if (
                         initial_val is not None or final_val is not None
@@ -595,7 +675,14 @@ class BenchmarkLogger:
                             if isinstance(final_val, (int, float))
                             else "[dim]-[/dim]"
                         )
-                        percent_change_text = ""  # calculate_percentage_change(initial_val, final_val, metric_name_to_display)
+
+                        percent_change_text = self._calculate_percentage_change(
+                            initial_val
+                            if isinstance(initial_val, (int, float))
+                            else None,
+                            final_val if isinstance(final_val, (int, float)) else None,
+                            metric_name_to_display,
+                        )
 
                         dataset_text = Text(dataset, overflow="ellipsis")
                         dataset_text.truncate(25)
@@ -603,35 +690,47 @@ class BenchmarkLogger:
                         model_text = Text("\n".join(model_parts), overflow="ellipsis")
                         model_text.truncate(20)
 
-                        display_dataset = dataset_text if metric_i == 0 else ""
-                        display_optimizer = optimizer if metric_i == 0 else ""
-                        display_model = model_text if metric_i == 0 else ""
-                        # display_temp = f"{temperature_for_run:.1f}" if isinstance(temperature_for_run, (int, float)) else "[dim]-[/dim]" if metric_i == 0 else ""
+                        display_dataset = dataset_text if metric_rows_built == 0 else ""
+                        display_id = (
+                            f"[dim]{_short_id(str(data_for_run_key.get('task_id', '')))}[/dim]"
+                            if metric_rows_built == 0
+                            else ""
+                        )
+                        display_optimizer = optimizer if metric_rows_built == 0 else ""
+                        display_model = model_text if metric_rows_built == 0 else ""
+                        # display_temp = f"{temperature_for_run:.1f}" if isinstance(temperature_for_run, (int, float)) else "[dim]-[/dim]" if metric_rows_built == 0 else ""
                         display_llm_calls = (
                             str(llm_calls_for_run)
-                            if llm_calls_for_run is not None and metric_i == 0
-                            else ("[dim]-[/dim]" if metric_i == 0 else "")
+                            if llm_calls_for_run is not None and metric_rows_built == 0
+                            else ("[dim]-[/dim]" if metric_rows_built == 0 else "")
                         )  # Display LLM calls
                         display_time = (
-                            f"{time_taken_for_run:.2f}" if metric_i == 0 else ""
+                            f"{time_taken_for_run:.2f}"
+                            if metric_rows_built == 0
+                            else ""
                         )
 
                         # Add a line (end_section)
-                        end_section_flag = is_new_block and i > 0 and metric_i == 0
+                        end_section_flag = (
+                            is_new_block and i > 0 and metric_rows_built == 0
+                        )
 
                         results_table.add_row(
                             display_dataset,
+                            display_id,
                             display_optimizer,
                             display_model,
                             # display_temp,
                             display_llm_calls,
                             metric_name_to_display,
+                            split_label,
                             display_time,
                             initial_str,
                             final_str,
                             percent_change_text,
                             end_section=end_section_flag,
                         )
+                        metric_rows_built += 1
                 last_dataset_optimizer_model = key_tuple
 
             if not processed_data_for_table:
@@ -694,7 +793,13 @@ def log_console_output_to_file() -> Callable:
                 checkpoint_folder = kwargs["checkpoint_folder"]
                 kwargs.pop("checkpoint_folder")
             else:
-                checkpoint_folder = os.path.abspath("./benchmark_results")
+                checkpoint_folder = os.path.abspath(
+                    os.path.join(
+                        os.path.expanduser("~"),
+                        ".opik_optimizer",
+                        "benchmark_results",
+                    )
+                )
             # Extract function arguments for the log filename
             dataset_name = kwargs.get(
                 "dataset_name", args[0] if len(args) > 0 else "unknown"

@@ -17,29 +17,23 @@ import traceback
 from concurrent.futures import Future, ProcessPoolExecutor, wait, FIRST_COMPLETED
 from datetime import datetime
 from typing import Any
+import hashlib
+import json
 
-from local import checkpoint as benchmark_checkpoint
-from local import logging as benchmark_logging
-import benchmark_config
-from benchmark_task import (
-    TaskEvaluationResult,
+from benchmarks.local import checkpoint as benchmark_checkpoint
+from benchmarks.local import logging as benchmark_logging
+from benchmarks.core.benchmark_task import (
     TaskResult,
     TASK_STATUS_FAILED,
     TASK_STATUS_PENDING,
     TASK_STATUS_RUNNING,
-    TASK_STATUS_SUCCESS,
 )
-from benchmark_taskspec import BenchmarkTaskSpec
+from benchmarks.core.benchmark_taskspec import BenchmarkTaskSpec
+from benchmarks.core.benchmark_results import BenchmarkRunResult
+from benchmarks.utils.serialization import make_serializable
 
-import opik_optimizer
-import opik_optimizer.datasets
-from opik_optimizer import (
-    BaseOptimizer,
-    reporting_utils,
-    ChatPrompt,
-)
-
-from utils.budgeting import resolve_optimize_params
+from benchmarks.utils.budgeting import resolve_optimize_params
+from benchmarks.utils.task_runner import execute_task, preflight_tasks
 
 
 @benchmark_logging.log_console_output_to_file()
@@ -49,114 +43,26 @@ def run_optimization(
     optimizer_name: str,
     model_name: str,
     test_mode: bool,
+    model_parameters: dict[str, Any] | None = None,
     optimizer_params_override: dict[str, Any] | None = None,
     optimizer_prompt_params_override: dict[str, Any] | None = None,
+    datasets: dict[str, Any] | None = None,
+    metrics: list[str | dict[str, Any]] | None = None,
+    prompt_messages: list[dict[str, Any]] | None = None,
 ) -> TaskResult:
-    timestamp_start = time.time()
-
-    initial_prompt = None
-    optimized_prompt = None
-
-    with reporting_utils.suppress_opik_logs():
-        try:
-            # Initialize the dataset, optimizer_class, metrics and initial_prompt
-            dataset_config = benchmark_config.DATASET_CONFIG[dataset_name]
-            dataset = getattr(opik_optimizer.datasets, dataset_name)(
-                test_mode=test_mode
-            )
-
-            optimizer_config = benchmark_config.OPTIMIZER_CONFIGS[optimizer_name]
-            constructor_kwargs = dict(optimizer_config.params)
-            if optimizer_params_override:
-                constructor_kwargs.update(optimizer_params_override)
-            optimizer: BaseOptimizer = getattr(
-                opik_optimizer, optimizer_config.class_name
-            )(model=model_name, **constructor_kwargs)
-
-            messages = benchmark_config.INITIAL_PROMPTS[dataset_name]
-            initial_prompt = ChatPrompt(messages=messages)  # type: ignore
-
-            # Start by running a first evaluation
-            start_time_initial_eval = time.time()
-            initial_evaluation = []
-            for metric_ in dataset_config.metrics:
-                result = optimizer.evaluate_prompt(
-                    prompt=initial_prompt, dataset=dataset, metric=metric_, n_threads=4
-                )
-                initial_evaluation.append(
-                    {
-                        "metric_name": metric_.__name__,
-                        "score": result,
-                        "timestamp": time.time(),
-                    }
-                )
-            initial_evaluation_duration = time.time() - start_time_initial_eval
-
-            # Run optimization
-            optimize_kwargs = dict(optimizer_config.optimize_params)
-            if optimizer_prompt_params_override:
-                optimize_kwargs.update(optimizer_prompt_params_override)
-            optimization_results = optimizer.optimize_prompt(
-                prompt=initial_prompt,
-                dataset=dataset,
-                metric=dataset_config.metrics[0],
-                **optimize_kwargs,
-            )
-            optimized_prompt = ChatPrompt(messages=optimization_results.prompt)
-
-            # Run final evaluation
-            start_time_final_eval = time.time()
-            optimized_evaluation = []
-            for metric_ in dataset_config.metrics:
-                result = optimizer.evaluate_prompt(
-                    prompt=optimized_prompt,
-                    dataset=dataset,
-                    metric=metric_,
-                    n_threads=4,
-                )
-                optimized_evaluation.append(
-                    {
-                        "metric_name": metric_.__name__,
-                        "score": result,
-                        "timestamp": time.time(),
-                    }
-                )
-            optimized_evaluation_duration = time.time() - start_time_final_eval
-
-            return TaskResult(
-                id=task_id,
-                dataset_name=dataset_name,
-                optimizer_name=optimizer_name,
-                model_name=model_name,
-                status=TASK_STATUS_SUCCESS,
-                timestamp_start=timestamp_start,
-                initial_prompt=initial_prompt,
-                initial_evaluation=TaskEvaluationResult(
-                    metrics=initial_evaluation,  # type: ignore
-                    duration_seconds=initial_evaluation_duration,
-                ),
-                optimized_prompt=optimized_prompt,
-                optimized_evaluation=TaskEvaluationResult(
-                    metrics=optimized_evaluation,  # type: ignore
-                    duration_seconds=optimized_evaluation_duration,
-                ),
-                error_message=None,
-                llm_calls_total_optimization=optimization_results.llm_calls,
-                optimization_raw_result=optimization_results,
-                timestamp_end=time.time(),
-            )
-        except Exception:
-            return TaskResult(
-                id=f"{dataset_name}_{optimizer_name}_{model_name}",
-                dataset_name=dataset_name,
-                optimizer_name=optimizer_name,
-                model_name=model_name,
-                status=TASK_STATUS_FAILED,
-                timestamp_start=timestamp_start,
-                initial_prompt=initial_prompt,
-                error_message=traceback.format_exc(),
-                timestamp_end=time.time(),
-            )
+    return execute_task(
+        task_id=task_id,
+        dataset_name=dataset_name,
+        optimizer_name=optimizer_name,
+        model_name=model_name,
+        model_parameters=model_parameters,
+        test_mode=test_mode,
+        optimizer_params_override=optimizer_params_override,
+        optimizer_prompt_params_override=optimizer_prompt_params_override,
+        datasets=datasets,
+        metrics=metrics,  # propagate manifest/CLI metric overrides
+        prompt_messages=prompt_messages,
+    )
 
 
 class BenchmarkRunner:
@@ -171,6 +77,27 @@ class BenchmarkRunner:
         self.benchmark_logger = benchmark_logging.BenchmarkLogger()
         self.checkpoint_dir = checkpoint_dir
 
+    def _write_run_results(
+        self,
+        checkpoint_folder: str,
+        task_specs: list[BenchmarkTaskSpec],
+        task_results: list[TaskResult],
+        preflight_report: Any | None,
+    ) -> str:
+        results_path = os.path.join(checkpoint_folder, "results.json")
+        run_result = BenchmarkRunResult(
+            run_id=self.run_id or "",
+            test_mode=self.test_mode,
+            preflight=preflight_report,
+            tasks=task_specs,
+            task_results=task_results,
+            checkpoint_path=checkpoint_folder,
+            results_path=results_path,
+        )
+        with open(results_path, "w") as f:
+            json.dump(make_serializable(run_result), f, indent=2)
+        return results_path
+
     def run_benchmarks(
         self,
         demo_datasets: list[str],
@@ -179,6 +106,7 @@ class BenchmarkRunner:
         retry_failed_run_id: str | None,
         resume_run_id: str | None,
         task_specs: list[BenchmarkTaskSpec] | None = None,
+        preflight_info: dict[str, Any] | None = None,
     ) -> None:
         # Create unique id
         if resume_run_id and retry_failed_run_id:
@@ -189,8 +117,13 @@ class BenchmarkRunner:
             self.run_id = retry_failed_run_id
         else:
             self.run_id = (
-                f"run_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{os.urandom(4).hex()}"
+                f"opt_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{os.urandom(4).hex()}"
             )
+
+        if preflight_info is None:
+            preflight_info = {}
+        preflight_info.setdefault("run_id", self.run_id)
+        preflight_info.setdefault("checkpoint_dir", self.checkpoint_dir)
 
         if task_specs is None:
             tasks: list[BenchmarkTaskSpec] = [
@@ -206,6 +139,9 @@ class BenchmarkRunner:
             ]
         else:
             tasks = task_specs
+
+        # Fail fast before launching workers
+        preflight_report = preflight_tasks(tasks, info=preflight_info)
 
         datasets_for_log = sorted({task.dataset_name for task in tasks})
         optimizers_for_log = sorted({task.optimizer_name for task in tasks})
@@ -240,6 +176,10 @@ class BenchmarkRunner:
             models_for_log = checkpoint_manager.models
         else:
             checkpoint_manager.save()
+        if preflight_report:
+            checkpoint_manager.set_preflight_report(
+                preflight_report.model_dump()  # type: ignore[call-arg]
+            )
 
         # Start scheduling the tasks
         start_time = time.time()
@@ -250,7 +190,9 @@ class BenchmarkRunner:
 
             with ProcessPoolExecutor(max_workers=self.max_workers) as executor:
                 # Submit all tasks and map futures to metadata
-                future_to_info: dict[Future[TaskResult], tuple[str, str, str, str]] = {}
+                future_to_info: dict[
+                    Future[TaskResult], tuple[str, str, str, str, str]
+                ] = {}
 
                 failed_ids = {
                     x.id
@@ -273,7 +215,9 @@ class BenchmarkRunner:
                         continue
 
                     optimize_override = resolve_optimize_params(
-                        task.dataset_name, task.optimizer_name, task.optimize_params
+                        task.dataset_name,
+                        task.optimizer_name,
+                        task.optimizer_prompt_params,
                     )
                     future = executor.submit(
                         run_optimization,
@@ -281,13 +225,21 @@ class BenchmarkRunner:
                         dataset_name=task.dataset_name,
                         optimizer_name=task.optimizer_name,
                         model_name=task.model_name,
+                        model_parameters=task.model_parameters,
                         test_mode=task.test_mode,
                         optimizer_params_override=task.optimizer_params,
                         optimizer_prompt_params_override=optimize_override,
+                        datasets=task.datasets,
+                        metrics=task.metrics,
+                        prompt_messages=task.prompt_messages,
                     )
 
+                    short_id = hashlib.sha1(
+                        f"{self.run_id}:{task_id}".encode()
+                    ).hexdigest()[:5]
                     future_to_info[future] = (
                         task_id,
+                        short_id,
                         task.dataset_name,
                         task.optimizer_name,
                         task.model_name,
@@ -305,6 +257,7 @@ class BenchmarkRunner:
                     )
                     self.benchmark_logger.update_active_task_status(
                         future=future,
+                        short_id=short_id,
                         dataset_name=task.dataset_name,
                         optimizer_name=task.optimizer_name,
                         model_name=task.model_name,
@@ -334,6 +287,7 @@ class BenchmarkRunner:
                     for running_future in current_running[:slots_available]:
                         (
                             tid,
+                            sid,
                             dn,
                             on,
                             mn,
@@ -351,6 +305,7 @@ class BenchmarkRunner:
                         )
                         self.benchmark_logger.update_active_task_status(
                             future=running_future,
+                            short_id=sid,
                             dataset_name=dn,
                             optimizer_name=on,
                             model_name=mn,
@@ -376,6 +331,7 @@ class BenchmarkRunner:
                         for future in done:
                             (
                                 task_id,
+                                short_id,
                                 dataset_name,
                                 optimizer_name,
                                 model_name,
@@ -389,6 +345,7 @@ class BenchmarkRunner:
                                 checkpoint_manager.update_task_result(result)
                                 self.benchmark_logger.update_active_task_status(
                                     future=future,
+                                    short_id=short_id,
                                     dataset_name=dataset_name,
                                     optimizer_name=optimizer_name,
                                     model_name=model_name,
@@ -408,6 +365,7 @@ class BenchmarkRunner:
                                 checkpoint_manager.update_task_result(result)
                                 self.benchmark_logger.update_active_task_status(
                                     future=future,
+                                    short_id=future_to_info[future][1],
                                     dataset_name=dataset_name,
                                     optimizer_name=optimizer_name,
                                     model_name=model_name,
@@ -434,3 +392,11 @@ class BenchmarkRunner:
             results=task_results,
             total_duration=total_duration,
         )
+
+        results_path = self._write_run_results(
+            checkpoint_folder=checkpoint_folder,
+            task_specs=tasks,
+            task_results=checkpoint_manager.task_results,
+            preflight_report=preflight_report,
+        )
+        benchmark_logging.console.print(f"[dim]Saved results to {results_path}[/dim]")

@@ -1,4 +1,5 @@
 import logging
+import math
 from typing import Any
 from collections.abc import Callable
 
@@ -154,7 +155,28 @@ def _evaluate_internal(
         return 0.0, None
 
     if dataset_item_ids:
-        items = [item for item in items if item.get("id") in dataset_item_ids]
+        # FIXME: In rare cases sometimes dataset ids are missing (cause unknown, skip those for now)
+        available_ids = {item.get("id") for item in items}
+        missing_ids = [
+            item_id for item_id in dataset_item_ids if item_id not in available_ids
+        ]
+        if missing_ids:
+            logger.warning(
+                "Dropping %s dataset_item_ids not present in dataset %s (showing first 5): %s",
+                len(missing_ids),
+                getattr(dataset, "name", None) or "<unknown>",
+                missing_ids[:5],
+            )
+        dataset_item_ids = [
+            item_id for item_id in dataset_item_ids if item_id in available_ids
+        ]
+        if not dataset_item_ids:
+            logger.warning(
+                "All provided dataset_item_ids were missing; evaluating on full dataset instead."
+            )
+            dataset_item_ids = None
+        else:
+            items = [item for item in items if item.get("id") in dataset_item_ids]
 
     eval_metrics = [_create_metric_class(metric)]
 
@@ -199,8 +221,19 @@ def _evaluate_internal(
     if not objective_score_results:
         return 0.0, evaluation_result
 
-    avg_score = sum(
-        [score_result_.value for score_result_ in objective_score_results]
-    ) / len(objective_score_results)
+    # FIXME: Possible misconfiguration when we are comparing 0 to 0 and get inf+
+    # We should avoid these from running in the first place by checking results
+    # further up, but this is a simple fix to avoid ending up in a dead loop.
+    finite_values = [
+        score_result_.value
+        for score_result_ in objective_score_results
+        if score_result_.value is not None and math.isfinite(score_result_.value)
+    ]
+    if not finite_values:
+        raise ValueError(
+            f"All metric scores were non-finite for metric '{objective_metric_name}'."
+        )
+
+    avg_score = sum(finite_values) / len(finite_values)
 
     return avg_score, evaluation_result

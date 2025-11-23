@@ -15,9 +15,21 @@ AI2_ARC_SPEC = DatasetSpec(
         "train": DatasetSplitPreset(
             source_split="train",
             start=0,
-            count=300,
+            count=150,
             dataset_name="ai2_arc_train",
-        )
+        ),
+        "validation": DatasetSplitPreset(
+            source_split="validation",
+            start=0,
+            count=150,
+            dataset_name="ai2_arc_validation",
+        ),
+        "test": DatasetSplitPreset(
+            source_split="test",
+            start=0,
+            count=150,
+            dataset_name="ai2_arc_test",
+        ),
     },
 )
 
