@@ -849,6 +849,38 @@ class MetaPromptOptimizer(BaseOptimizer):
             winning_patterns=winning_patterns,
         )
 
+    def _generate_agent_bundle_candidates(
+        self,
+        current_prompts: dict[str, chat_prompt.ChatPrompt],
+        best_score: float,
+        round_num: int,
+        previous_rounds: list[OptimizationRound],
+        metric: Callable,
+        optimization_id: str | None = None,
+        project_name: str | None = None,
+        winning_patterns: list[str] | None = None,
+        mcp_config: MCPExecutionConfig | None = None,
+    ) -> tuple[dict[str, chat_prompt.ChatPrompt], dict[str, dict[str, str | None]]]:
+        """
+        Generate updated prompts for a bundle of named agents in one meta-prompt pass.
+
+        MCP-enabled flows are explicitly disabled for this path.
+        """
+        return candidate_ops.generate_agent_bundle_candidates(
+            optimizer=self,
+            current_prompts=current_prompts,
+            best_score=best_score,
+            round_num=round_num,
+            previous_rounds=previous_rounds,
+            metric=metric,
+            build_history_context_fn=self._build_history_context,
+            get_task_context_fn=self._get_task_context,
+            optimization_id=optimization_id,
+            project_name=project_name,
+            winning_patterns=winning_patterns,
+            mcp_config=mcp_config,
+        )
+
     def _generate_mcp_candidate_prompts(
         self,
         current_prompt: chat_prompt.ChatPrompt,
