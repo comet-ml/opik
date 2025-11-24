@@ -44,6 +44,60 @@ from functools import lru_cache
 logger = logging.getLogger(__name__)
 
 
+def _sanitize_query(query: str, max_length: int = 500) -> str:
+    """
+    Sanitize and clean Wikipedia search query.
+    
+    Removes:
+    - Leading/trailing whitespace (trimmed at every step)
+    - Common prefixes like "Wikipedia search query:", "Search query:", etc.
+    - Wrapping quotes if they surround the entire query
+    - Newlines and excessive whitespace
+    
+    Args:
+        query: Raw search query string
+        max_length: Maximum query length (default: 500, currently unused)
+    
+    Returns:
+        Cleaned and sanitized query string (always trimmed)
+    """
+    if not query:
+        return ""
+    
+    # Trim whitespace at the start
+    query = query.strip()
+    if not query:
+        return ""
+    
+    # Remove common prefixes (case-insensitive)
+    prefixes = [
+        "wikipedia search query:",
+        "search query:",
+        "wikipedia query:",
+        "query:",
+        "search:",
+    ]
+    query_lower = query.lower()
+    for prefix in prefixes:
+        if query_lower.startswith(prefix):
+            query = query[len(prefix) :].strip()  # Trim after removing prefix
+            break
+    
+    # Remove newlines and normalize whitespace (split() already handles trimming)
+    query = " ".join(query.split())
+    
+    # Remove wrapping quotes if they surround the entire query
+    query = query.strip()
+    if len(query) >= 2:
+        if (query.startswith('"') and query.endswith('"')) or (
+            query.startswith("'") and query.endswith("'")
+        ):
+            query = query[1:-1].strip()  # Trim after removing quotes
+    
+    # Final trim to ensure no leading/trailing whitespace
+    return query.strip()
+
+
 def search_wikipedia(
     query: str,
     search_type: Literal["api", "colbert", "bm25"] = "api",
@@ -126,12 +180,16 @@ def _search_wikipedia_api(query: str, max_results: int = 3) -> list[str]:
     Search Wikipedia using the Wikipedia API.
 
     Args:
-        query: Search query
+        query: Search query (will be sanitized)
         max_results: Maximum number of results
 
     Returns:
         List of formatted results
     """
+    query = _sanitize_query(query)
+    if not query:
+        return ["No valid search query provided"]
+    
     try:
         # Search for pages using the search API
         search_params: dict[str, str | int] = {
@@ -182,12 +240,16 @@ def _search_wikipedia_colbert(query: str, k: int = 3) -> list[str]:
     Falls back to API if ColBERT is unavailable.
 
     Args:
-        query: Search query
+        query: Search query (will be sanitized)
         k: Number of results
 
     Returns:
         List of search results
     """
+    query = _sanitize_query(query)
+    if not query:
+        return ["No valid search query provided"]
+    
     try:
         from dsp.modules.colbertv2 import ColBERTv2
     except ImportError:
@@ -217,7 +279,7 @@ def _search_wikipedia_bm25(
     Falls back to API if BM25 is unavailable or no index provided.
 
     Args:
-        query: Search query
+        query: Search query (will be sanitized)
         n: Number of results
         index_dir: Path to local BM25 index
         hf_repo: HuggingFace repo ID for BM25 index
@@ -225,6 +287,10 @@ def _search_wikipedia_bm25(
     Returns:
         List of search results
     """
+    query = _sanitize_query(query)
+    if not query:
+        return ["No valid search query provided"]
+    
     try:
         import bm25s
     except ImportError:
