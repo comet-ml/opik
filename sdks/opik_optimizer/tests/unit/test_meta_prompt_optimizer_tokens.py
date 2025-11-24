@@ -131,7 +131,7 @@ class TestAdaptiveContextFitting:
             # First call: too many tokens, second call: fits
             mock_count.side_effect = [3000, 1500]
 
-            context = get_task_context(
+            context, token_count = get_task_context(
                 dataset=mock_dataset,
                 metric=mock_metric,
                 num_examples=5,
@@ -154,7 +154,7 @@ class TestAdaptiveContextFitting:
             # First call: still too big, second call: fits with reduced truncation
             mock_count.side_effect = [2500, 1800]
 
-            context = get_task_context(
+            context, token_count = get_task_context(
                 dataset=mock_dataset,
                 metric=mock_metric,
                 num_examples=1,
@@ -180,7 +180,7 @@ class TestAdaptiveContextFitting:
             with patch(
                 "opik_optimizer.algorithms.meta_prompt_optimizer.ops.context_ops.logger"
             ) as mock_logger:
-                context = get_task_context(
+                context, token_count = get_task_context(
                     dataset=mock_dataset,
                     metric=mock_metric,
                     num_examples=1,
@@ -217,7 +217,7 @@ class TestColumnSelection:
         ) as mock_count:
             mock_count.return_value = 100  # Fits within budget
 
-            context = get_task_context(
+            context, token_count = get_task_context(
                 dataset=mock_dataset,
                 metric=mock_metric,
                 num_examples=1,
@@ -255,7 +255,7 @@ class TestColumnSelection:
             with patch(
                 "opik_optimizer.algorithms.meta_prompt_optimizer.ops.context_ops.logger"
             ) as mock_logger:
-                context = get_task_context(
+                context, token_count = get_task_context(
                     dataset=mock_dataset,
                     metric=mock_metric,
                     num_examples=1,
