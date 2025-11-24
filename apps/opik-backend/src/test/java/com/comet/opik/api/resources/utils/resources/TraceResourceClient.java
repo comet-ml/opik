@@ -1,6 +1,7 @@
 package com.comet.opik.api.resources.utils.resources;
 
 import com.comet.opik.api.BatchDeleteByProject;
+import com.comet.opik.api.CommentsBatchCreate;
 import com.comet.opik.api.DeleteFeedbackScore;
 import com.comet.opik.api.DeleteThreadFeedbackScores;
 import com.comet.opik.api.DeleteTraceThreads;
@@ -19,6 +20,7 @@ import com.comet.opik.api.TraceThreadIdentifier;
 import com.comet.opik.api.TraceThreadSearchStreamRequest;
 import com.comet.opik.api.TraceThreadUpdate;
 import com.comet.opik.api.TraceUpdate;
+import com.comet.opik.api.CommentsBatchCreate;
 import com.comet.opik.api.filter.TraceFilter;
 import com.comet.opik.api.filter.TraceThreadFilter;
 import com.comet.opik.api.resources.utils.TestUtils;
@@ -199,6 +201,16 @@ public class TraceResourceClient extends BaseCommentResourceClient {
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .header(WORKSPACE_HEADER, workspaceName)
                 .post(Entity.json(TraceBatch.builder().traces(traces).build()));
+    }
+
+    public Response callTraceCommentsBatchCreate(Set<UUID> ids, String text, String apiKey, String workspaceName) {
+        return client.target(RESOURCE_PATH.formatted(baseURI))
+                .path("comments")
+                .path("batch")
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .post(Entity.json(CommentsBatchCreate.builder().ids(ids).text(text).build()));
     }
 
     public Trace getById(UUID id, String workspaceName, String apiKey) {
@@ -674,7 +686,7 @@ public class TraceResourceClient extends BaseCommentResourceClient {
                 .accept(MediaType.APPLICATION_JSON_TYPE)
                 .cookie(RequestContext.SESSION_COOKIE, sessionToken)
                 .header(WORKSPACE_HEADER, workspaceName)
-                .post(Entity.json(new TraceBatch(traces)));
+                .post(Entity.json(TraceBatch.builder().traces(traces).build()));
     }
 
     public void batchUpdateTraces(TraceBatchUpdate batchUpdate, String apiKey, String workspaceName) {
