@@ -240,7 +240,6 @@ def generate_candidate_prompts(
             metric_focus_instruction=metric_focus_instruction,
             prompts_per_round=optimizer.prompts_per_round,
             pattern_guidance=pattern_guidance,
-            feedback=feedback,
         )
 
         # Log the complete meta-reasoning prompt being sent to the model
