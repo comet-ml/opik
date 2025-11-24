@@ -1,5 +1,6 @@
 import logging
 from typing import Any, cast
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from collections.abc import Callable
 
 import opik
@@ -1175,49 +1176,36 @@ class MetaPromptOptimizer(BaseOptimizer):
             if not isinstance(run_result, dict):
                 raise ValueError("bundle runner must return a dict with 'final_output'")
 
-            final_output = run_result.get("final_output") or run_result.get("output")
-            trace = run_result.get("trace") or {"system": _bundle_system_context()}
-            if final_output is None:
-                final_output = ""
-            return {"llm_output": final_output, "trace": trace}
-
-        try:
-            # Use the shared evaluator to enable num_threads for bundles.
-            avg_score, _ = task_evaluator.evaluate_with_result(
-                dataset=dataset,
-                evaluated_task=_evaluated_task,
-                metric=metric,
-                num_threads=getattr(self, "n_threads", 1),
-                optimization_id=self.current_optimization_id,
-                n_samples=n_samples,
-                experiment_config=None,
-                verbose=self.verbose,
+            final_output_val = run_result.get("final_output")
+            if final_output_val is None:
+                final_output_val = run_result.get("output")
+            final_output_str: str = (
+                final_output_val if isinstance(final_output_val, str) else ""
             )
-            # evaluate_with_result returns (float score, EvalResult). We normalized metric
-            # values (including ScoreResult) inside evaluate already.
-            return avg_score
-        except Exception:
-            # Fallback to sequential path if concurrency fails (e.g., runner not threadsafe).
-            items = dataset.get_items()
-            if n_samples is not None:
-                items = items[:n_samples]
-            if not items:
-                return 0.0
-            scores_list: list[float] = []
-            for item in items:
-                run_result = _evaluated_task(item)
-                final_output = run_result.get("llm_output", "")
-                trace = run_result.get("trace") or {}
-                try:
-                    score = metric(item, final_output, trace)  # type: ignore[misc]
-                except TypeError:
-                    score = metric(item, final_output)  # type: ignore[misc]
-                if hasattr(score, "value"):
-                    score_value = getattr(score, "value", score)
-                else:
-                    score_value = score
-                scores_list.append(float(score_value))
-            return sum(scores_list) / len(scores_list)
+            trace = run_result.get("trace") or {"system": _bundle_system_context()}
+            return {"llm_output": final_output_str, "trace": trace}
+
+        # Sequential evaluation (keeps metric signature flexibility with trace support)
+        items = dataset.get_items()
+        if n_samples is not None:
+            items = items[:n_samples]
+        if not items:
+            return 0.0
+        scores_list: list[float] = []
+        for item in items:
+            run_result = _evaluated_task(item)
+            final_output = run_result.get("llm_output", "")
+            trace = run_result.get("trace") or {}
+            try:
+                score = metric(item, final_output, trace)  # type: ignore[misc]
+            except TypeError:
+                score = metric(item, final_output)  # type: ignore[misc]
+            if hasattr(score, "value"):
+                score_value = getattr(score, "value", score)
+            else:
+                score_value = score
+            scores_list.append(float(score_value))
+        return sum(scores_list) / len(scores_list)
 
 
 __all__ = ["MetaPromptOptimizer", "_sync_tool_description_in_system"]
