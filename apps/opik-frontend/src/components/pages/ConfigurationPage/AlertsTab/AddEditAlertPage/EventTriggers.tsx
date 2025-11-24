@@ -24,6 +24,7 @@ import { Separator } from "@/components/ui/separator";
 import { Input } from "@/components/ui/input";
 import SelectBox from "@/components/shared/SelectBox/SelectBox";
 import ProjectsSelectBox from "@/components/pages-shared/automations/ProjectsSelectBox";
+import AlertFeedbackScoresSelect from "@/components/shared/AlertFeedbackScoresSelect/AlertFeedbackScoresSelect";
 import { DropdownOption } from "@/types/shared";
 import { AlertFormType } from "./schema";
 import { TRIGGER_CONFIG } from "./helpers";
@@ -48,6 +49,11 @@ const WINDOW_OPTIONS: DropdownOption<string>[] = [
   { label: "7 days", value: "604800" },
   { label: "15 days", value: "1296000" },
   { label: "30 days", value: "2592000" },
+];
+
+const OPERATOR_OPTIONS: DropdownOption<string>[] = [
+  { label: ">", value: ">" },
+  { label: "<", value: "<" },
 ];
 
 function getThresholdLabel(eventType: ALERT_EVENT_TYPE): string {
@@ -185,6 +191,132 @@ const EventTriggers: React.FunctionComponent<EventTriggersProps> = ({
     );
   };
 
+  const renderFeedbackScoreThresholdConfig = (
+    index: number,
+    eventType: ALERT_EVENT_TYPE,
+  ) => {
+    return (
+      <div className="flex flex-wrap items-end gap-2">
+        <Label className="comet-body-s self-center text-muted-slate">
+          When
+        </Label>
+        <FormField
+          control={form.control}
+          name={`triggers.${index}.name` as Path<AlertFormType>}
+          render={({ field, formState }) => {
+            const validationErrors = get(formState.errors, [
+              "triggers",
+              index,
+              "name",
+            ]);
+            return (
+              <FormItem className="min-w-[150px] flex-1">
+                <FormControl>
+                  <AlertFeedbackScoresSelect
+                    value={field.value as string}
+                    onChange={field.onChange}
+                    eventType={eventType}
+                    className={cn("h-8", {
+                      "border-destructive": Boolean(validationErrors?.message),
+                    })}
+                  />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            );
+          }}
+        />
+        <FormField
+          control={form.control}
+          name={`triggers.${index}.operator` as Path<AlertFormType>}
+          render={({ field, formState }) => {
+            const validationErrors = get(formState.errors, [
+              "triggers",
+              index,
+              "operator",
+            ]);
+            return (
+              <FormItem className="w-16">
+                <FormControl>
+                  <SelectBox
+                    value={field.value as string}
+                    onChange={field.onChange}
+                    options={OPERATOR_OPTIONS}
+                    className={cn("h-8 text-left", {
+                      "border-destructive": Boolean(validationErrors?.message),
+                    })}
+                    placeholder=">"
+                  />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            );
+          }}
+        />
+        <FormField
+          control={form.control}
+          name={`triggers.${index}.threshold` as Path<AlertFormType>}
+          render={({ field, formState }) => {
+            const validationErrors = get(formState.errors, [
+              "triggers",
+              index,
+              "threshold",
+            ]);
+            return (
+              <FormItem className="w-24">
+                <FormControl>
+                  <Input
+                    className={cn("h-8", {
+                      "border-destructive": Boolean(validationErrors?.message),
+                    })}
+                    type="number"
+                    step="0.01"
+                    placeholder="0.7"
+                    value={field.value as string}
+                    onChange={field.onChange}
+                    onBlur={field.onBlur}
+                    name={field.name}
+                  />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            );
+          }}
+        />
+        <Label className="comet-body-s self-center text-muted-slate">
+          in the last
+        </Label>
+        <FormField
+          control={form.control}
+          name={`triggers.${index}.window` as Path<AlertFormType>}
+          render={({ field, formState }) => {
+            const validationErrors = get(formState.errors, [
+              "triggers",
+              index,
+              "window",
+            ]);
+            return (
+              <FormItem className="min-w-[120px] flex-1">
+                <FormControl>
+                  <SelectBox
+                    value={field.value as string}
+                    onChange={field.onChange}
+                    options={WINDOW_OPTIONS}
+                    className={cn("h-8 text-left", {
+                      "border-destructive": Boolean(validationErrors?.message),
+                    })}
+                    placeholder="Select time window"
+                  />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            );
+          }}
+        />
+      </div>
+    );
+  };
+
   const allEventTypes = useMemo(() => {
     const eventTypes = Object.values(ALERT_EVENT_TYPE) as ALERT_EVENT_TYPE[];
     return eventTypes.filter((t) =>
@@ -296,6 +428,10 @@ const EventTriggers: React.FunctionComponent<EventTriggersProps> = ({
                   field.eventType === ALERT_EVENT_TYPE.trace_cost ||
                   field.eventType === ALERT_EVENT_TYPE.trace_latency ||
                   field.eventType === ALERT_EVENT_TYPE.trace_errors;
+                const isFeedbackScoreTrigger =
+                  field.eventType === ALERT_EVENT_TYPE.trace_feedback_score ||
+                  field.eventType ===
+                    ALERT_EVENT_TYPE.trace_thread_feedback_score;
 
                 return (
                   <div key={field.id}>
@@ -332,6 +468,11 @@ const EventTriggers: React.FunctionComponent<EventTriggersProps> = ({
                         </div>
                         {isThresholdTrigger &&
                           renderThresholdConfig(index, field.eventType)}
+                        {isFeedbackScoreTrigger &&
+                          renderFeedbackScoreThresholdConfig(
+                            index,
+                            field.eventType,
+                          )}
                       </div>
                       <div className="flex items-center">
                         <Button
