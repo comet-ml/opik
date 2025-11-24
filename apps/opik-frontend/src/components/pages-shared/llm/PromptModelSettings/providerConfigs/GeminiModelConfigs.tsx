@@ -1,17 +1,38 @@
 import React from "react";
 
 import SliderInputControl from "@/components/shared/SliderInputControl/SliderInputControl";
-import { LLMGeminiConfigsType } from "@/types/providers";
+import {
+  LLMGeminiConfigsType,
+  PROVIDER_MODEL_TYPE,
+} from "@/types/providers";
 import { DEFAULT_GEMINI_CONFIGS } from "@/constants/llm";
 import PromptModelConfigsTooltipContent from "@/components/pages-shared/llm/PromptModelSettings/providerConfigs/PromptModelConfigsTooltipContent";
 import isUndefined from "lodash/isUndefined";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Label } from "@/components/ui/label";
+import ExplainerIcon from "@/components/shared/ExplainerIcon/ExplainerIcon";
 
 interface geminiModelConfigsProps {
   configs: LLMGeminiConfigsType;
+  model?: PROVIDER_MODEL_TYPE | "";
   onChange: (configs: Partial<LLMGeminiConfigsType>) => void;
 }
 
-const GeminiModelConfigs = ({ configs, onChange }: geminiModelConfigsProps) => {
+const GeminiModelConfigs = ({
+  configs,
+  model,
+  onChange,
+}: geminiModelConfigsProps) => {
+  const isGemini3Pro =
+    model === PROVIDER_MODEL_TYPE.GEMINI_3_PRO ||
+    model === PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_PRO;
+
   return (
     <div className="flex w-72 flex-col gap-6">
       {!isUndefined(configs.temperature) && (
@@ -60,6 +81,31 @@ const GeminiModelConfigs = ({ configs, onChange }: geminiModelConfigsProps) => {
             <PromptModelConfigsTooltipContent text="Controls diversity via nucleus sampling: 0.5 means half of all likelihood-weighted options are considered" />
           }
         />
+      )}
+
+      {isGemini3Pro && (
+        <div className="space-y-2">
+          <div className="flex items-center space-x-2">
+            <Label htmlFor="thinkingLevel" className="text-sm font-medium">
+              Thinking level
+            </Label>
+            <ExplainerIcon description="Controls the depth of reasoning the model performs before responding. Higher thinking level may result in more thorough but slower responses." />
+          </div>
+          <Select
+            value={configs.thinkingLevel || "low"}
+            onValueChange={(value: "low" | "high") =>
+              onChange({ thinkingLevel: value })
+            }
+          >
+            <SelectTrigger>
+              <SelectValue placeholder="Select thinking level" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="low">Low</SelectItem>
+              <SelectItem value="high">High</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
       )}
     </div>
   );
