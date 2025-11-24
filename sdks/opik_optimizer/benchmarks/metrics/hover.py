@@ -70,13 +70,23 @@ def hover_label_accuracy(dataset_item: dict[str, Any], llm_output: str) -> Score
 class HoverJudgeResponse(BaseModel):
     label_match: bool
     explanation: str
+    score: float | None = None  # Optional graded score in [0,1]
     suggestions: str | None = None
 
 
-HOVER_JUDGE_PROMPT = """\
-You are evaluating a HoVer claim-verification run.
+HOVER_JUDGE_PROMPT = """You are an expert judge evaluating a HoVer claim-verification run.
 Compare the model's verdict with the gold label and explain the decision quality.
-Return strict JSON with: label_match (boolean), explanation, suggestions.
+
+Guidance for scoring:
+- The model verdict should match the gold label (SUPPORTED or NOT_SUPPORTED).
+- Be vigilant for partial hallucinations or misattributions (e.g., wrong entity/date pairing).
+- Consider whether the model introduces unsupported facts or contradicts the gold label/facts.
+- Assign a score in [0, 1] where:
+  * 1.0   = completely wrong / unfaithful to the gold label and facts
+  * 0.0   = perfectly faithful to the gold label and facts
+  * Intermediate values reflect partial correctness or minor issues.
+
+Return strict JSON with: label_match (boolean), score (0-1 float), explanation, suggestions.
 
 Claim:
 {claim}
@@ -116,12 +126,20 @@ def hover_judge_feedback(dataset_item: dict[str, Any], llm_output: str) -> Score
             scoring_failed=True,
         )
 
+    score = (
+        max(0.0, min(1.0, float(response.score)))
+        if response.score is not None
+        else (1.0 if response.label_match else 0.0)
+    )
+
     return ScoreResult(
         name="hover_judge",
-        value=1.0 if response.label_match else 0.0,
+        value=score,
         reason=response.explanation,
         metadata={
             "suggestions": response.suggestions,
             "judge_model": HOVER_JUDGE_MODEL,
+            "label_match": response.label_match,
+            "raw_score": response.score,
         },
     )

@@ -69,6 +69,7 @@ const THREAD_FILTER_COLUMNS: ColumnData<Thread>[] = [
     id: "tags",
     label: "Tags",
     type: COLUMN_TYPE.list,
+    iconType: "tags",
   },
   {
     id: "start_time",

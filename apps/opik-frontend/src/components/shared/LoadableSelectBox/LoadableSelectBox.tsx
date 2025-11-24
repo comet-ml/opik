@@ -3,6 +3,7 @@ import isFunction from "lodash/isFunction";
 import toLower from "lodash/toLower";
 import isArray from "lodash/isArray";
 import { Check, ChevronDown, ExternalLink } from "lucide-react";
+import { Link } from "@tanstack/react-router";
 
 import {
   Popover,
@@ -35,6 +36,7 @@ interface BaseLoadableSelectBoxProps {
   actionPanel?: ReactElement;
   minWidth?: number;
   emptyState?: ReactElement;
+  showTooltip?: boolean;
 }
 
 interface SingleSelectProps extends BaseLoadableSelectBoxProps {
@@ -72,6 +74,7 @@ export const LoadableSelectBox = ({
   actionPanel,
   minWidth = 0,
   multiselect = false,
+  showTooltip = false,
   emptyState,
   ...props
 }: LoadableSelectBoxProps) => {
@@ -208,10 +211,21 @@ export const LoadableSelectBox = ({
   const hasBottomActions = hasMoreSection || hasActionPanel;
 
   const tooltipContent = useMemo(() => {
-    if (!multiselect || !selectedValues.length || isOpen) return null;
+    if (isOpen) return null;
 
-    return titleText;
-  }, [multiselect, selectedValues.length, titleText, isOpen]);
+    if (multiselect) {
+      return selectedValues.length ? titleText : null;
+    } else {
+      return showTooltip && value ? titleText : null;
+    }
+  }, [
+    showTooltip,
+    multiselect,
+    selectedValues.length,
+    titleText,
+    isOpen,
+    value,
+  ]);
 
   const buttonElement = (
     <Button
@@ -233,7 +247,7 @@ export const LoadableSelectBox = ({
 
   return (
     <Popover onOpenChange={openChangeHandler} open={isOpen} modal>
-      {multiselect && tooltipContent ? (
+      {tooltipContent ? (
         <TooltipWrapper content={tooltipContent}>
           <PopoverTrigger asChild>{buttonElement}</PopoverTrigger>
         </TooltipWrapper>
@@ -323,15 +337,15 @@ export const LoadableSelectBox = ({
                         size="icon-xs"
                         asChild
                       >
-                        <a
-                          href={option.action.href}
+                        <Link
+                          to={option.action.href}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="inline-flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100"
                           onClick={(e) => e.stopPropagation()}
                         >
                           <ExternalLink className="size-3.5 shrink-0" />
-                        </a>
+                        </Link>
                       </Button>
                     </TooltipWrapper>
                   )}

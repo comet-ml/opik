@@ -72,12 +72,24 @@ TRUTHFUL_QA_SPEC = DatasetSpec(
     default_source_split="validation",
     prefer_presets=True,
     presets={
-        "validation": DatasetSplitPreset(
+        "train": DatasetSplitPreset(
             source_split="validation",
             start=0,
-            count=300,
+            count=150,
             dataset_name="truthful_qa_train",
-        )
+        ),
+        "validation": DatasetSplitPreset(
+            source_split="validation",
+            start=150,
+            count=150,
+            dataset_name="truthful_qa_validation",
+        ),
+        "test": DatasetSplitPreset(
+            source_split="validation",
+            start=300,
+            count=150,
+            dataset_name="truthful_qa_test",
+        ),
     },
     records_transform=_truthful_transform,
     custom_loader=_truthful_custom_loader,

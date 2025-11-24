@@ -27,6 +27,7 @@ type DataTableProps = {
   truncationEnabled?: boolean;
   variant?: "default" | "minimal";
   itemsPerPage?: number[];
+  disabled?: boolean;
 };
 
 const DEFAULT_ITEMS_PER_PAGE = [5, 10, 25, 50, 100];
@@ -41,6 +42,7 @@ const DataTablePagination = ({
   truncationEnabled = true,
   variant = "default",
   itemsPerPage = DEFAULT_ITEMS_PER_PAGE,
+  disabled = false,
 }: DataTableProps) => {
   const maxSize =
     supportsTruncation && !truncationEnabled
@@ -53,9 +55,9 @@ const DataTablePagination = ({
   const from = Math.max(size * (page - 1) + 1, 0);
   const to = Math.min(size * page, total);
   const totalPages = Math.ceil(total / size);
-  const disabledPrevious = page === 1;
-  const disabledNext = page === totalPages || !totalPages;
-  const disabledSizeChange = !isFunction(sizeChange);
+  const disabledPrevious = page === 1 || disabled;
+  const disabledNext = page === totalPages || !totalPages || disabled;
+  const disabledSizeChange = !isFunction(sizeChange) || disabled;
 
   const text = isMinimal
     ? `${from}-${to} of ${total}`
@@ -78,7 +80,9 @@ const DataTablePagination = ({
 
   return (
     <div
-      className={`flex flex-row justify-end ${isMinimal ? "gap-1" : "gap-4"}`}
+      className={`flex flex-row justify-end ${isMinimal ? "gap-1" : "gap-4"} ${
+        disabled ? "pointer-events-none opacity-50" : ""
+      }`}
     >
       {showWarning && <TruncationDisabledWarning />}
       <div className={`flex flex-row ${isMinimal ? "gap-0.5" : "gap-2"}`}>

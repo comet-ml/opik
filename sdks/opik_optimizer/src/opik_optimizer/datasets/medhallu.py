@@ -15,9 +15,21 @@ MEDHALLU_SPEC = DatasetSpec(
         "train": DatasetSplitPreset(
             source_split="train",
             start=0,
-            count=300,
+            count=150,
             dataset_name="medhallu_train",
-        )
+        ),
+        "validation": DatasetSplitPreset(
+            source_split="train",
+            start=150,
+            count=150,
+            dataset_name="medhallu_validation",
+        ),
+        "test": DatasetSplitPreset(
+            source_split="train",
+            start=300,
+            count=150,
+            dataset_name="medhallu_test",
+        ),
     },
 )
 

@@ -407,7 +407,7 @@ class EvolutionaryOptimizer(BaseOptimizer):
             mcp_config: MCP tool-calling configuration (default: None).
         """
 
-        # Logic on which datset to use for scoring
+        # Logic on which dataset to use for scoring
         if validation_dataset is not None:
             logger.warning(
                 f"{self.__class__.__name__} currently does not support validation dataset. "

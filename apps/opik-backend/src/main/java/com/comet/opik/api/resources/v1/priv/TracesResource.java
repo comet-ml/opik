@@ -60,7 +60,6 @@ import jakarta.inject.Provider;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
-import jakarta.ws.rs.BadRequestException;
 import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.DELETE;
 import jakarta.ws.rs.DefaultValue;
@@ -491,10 +490,6 @@ public class TracesResource {
     @JsonView({FeedbackDefinition.View.Public.class})
     public Response findFeedbackScoreNames(@QueryParam("project_id") UUID projectId) {
 
-        if (projectId == null) {
-            throw new BadRequestException("project_id must be provided");
-        }
-
         String workspaceId = requestContext.get().getWorkspaceId();
 
         log.info("Find feedback score names by project_id '{}', on workspaceId '{}'",
@@ -908,7 +903,7 @@ public class TracesResource {
             @ApiResponse(responseCode = "200", description = "Find Trace Threads Feedback Score names", content = @Content(array = @ArraySchema(schema = @Schema(implementation = String.class))))
     })
     @JsonView({FeedbackDefinition.View.Public.class})
-    public Response findTraceThreadsFeedbackScoreNames(@QueryParam("project_id") @NotNull UUID projectId) {
+    public Response findTraceThreadsFeedbackScoreNames(@QueryParam("project_id") UUID projectId) {
 
         String workspaceId = requestContext.get().getWorkspaceId();
 

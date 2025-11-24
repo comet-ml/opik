@@ -1,6 +1,6 @@
 package com.comet.opik.infrastructure;
 
-import com.comet.opik.utils.JsonUtils;
+import com.comet.opik.infrastructure.redis.RedisStreamCodec;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import io.dropwizard.util.Duration;
@@ -13,9 +13,6 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import lombok.Data;
 import org.redisson.client.codec.Codec;
-import org.redisson.codec.CompositeCodec;
-import org.redisson.codec.JsonJacksonCodec;
-import org.redisson.codec.LZ4CodecV2;
 
 import java.util.concurrent.TimeUnit;
 
@@ -23,9 +20,6 @@ import java.util.concurrent.TimeUnit;
 public class WebhookConfig implements StreamConfiguration {
 
     public static final String PAYLOAD_FIELD = "message";
-
-    private static final CompositeCodec CODEC = new CompositeCodec(new LZ4CodecV2(),
-            new JsonJacksonCodec(JsonUtils.getMapper()));
 
     @Valid @JsonProperty
     private boolean enabled = false;
@@ -84,10 +78,11 @@ public class WebhookConfig implements StreamConfiguration {
     @NotNull @MinDuration(value = 1, unit = TimeUnit.MINUTES)
     private Duration pendingMessageDuration;
 
+    // lazy codec creation to ensure it picks up the configured JsonUtils mapper
     @Override
     @JsonIgnore
     public Codec getCodec() {
-        return CODEC;
+        return RedisStreamCodec.JAVA.getCodec();
     }
 
     /**
