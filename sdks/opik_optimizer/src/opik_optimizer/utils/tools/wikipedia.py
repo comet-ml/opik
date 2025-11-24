@@ -258,19 +258,23 @@ def _search_wikipedia_bm25(
 
             # Load corpus from Parquet chunks
             try:
-                import pyarrow.parquet as pq
+                import pyarrow.parquet as pq  # type: ignore[import-not-found]
             except ImportError:
-                logger.warning("pyarrow not available for Parquet corpus, falling back to API")
+                logger.warning(
+                    "pyarrow not available for Parquet corpus, falling back to API"
+                )
                 return _search_wikipedia_api(query, max_results=n)
 
             # Load all Parquet chunks and combine
             corpus_list = []
             for parquet_file in sorted(parquet_files):
-                table = pq.read_table(parquet_file, columns=['title', 'text'])
+                table = pq.read_table(parquet_file, columns=["title", "text"])
                 df = table.to_pandas()
                 # Combine title and text back to "Title | Text" format
                 corpus_list.extend(
-                    df.apply(lambda row: f"{row['title']} | {row['text']}", axis=1).tolist()
+                    df.apply(
+                        lambda row: f"{row['title']} | {row['text']}", axis=1
+                    ).tolist()
                 )
             corpus = corpus_list
             logger.debug(f"Loaded {len(corpus)} documents from Parquet")
@@ -312,7 +316,9 @@ def _search_wikipedia_bm25(
                 logger.debug(f"Retrieved doc {idx}, len={len(passage)}")
                 passages.append(passage)
             else:
-                logger.warning(f"Index {idx} out of bounds (corpus size: {len(corpus)})")
+                logger.warning(
+                    f"Index {idx} out of bounds (corpus size: {len(corpus)})"
+                )
 
         # Pad if needed
         if len(passages) < n:
