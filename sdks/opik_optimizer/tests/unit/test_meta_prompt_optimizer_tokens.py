@@ -137,7 +137,6 @@ class TestAdaptiveContextFitting:
                 num_examples=5,
                 max_tokens=2000,
                 model="gpt-4",
-                verbose=0,
             )
 
             # Should have called count_tokens twice (reduced from 5 to 4 examples)
@@ -161,7 +160,6 @@ class TestAdaptiveContextFitting:
                 num_examples=1,
                 max_tokens=2000,
                 model="gpt-4",
-                verbose=0,
             )
 
             # Should have reduced truncation limit
@@ -188,7 +186,6 @@ class TestAdaptiveContextFitting:
                     num_examples=1,
                     max_tokens=2000,
                     model="gpt-4",
-                    verbose=0,
                 )
 
                 # Should log warning about not fitting
@@ -227,7 +224,6 @@ class TestColumnSelection:
                 columns=["question", "hint"],  # Only these columns
                 max_tokens=2000,
                 model="gpt-4",
-                verbose=0,
             )
 
             # Should include selected columns
@@ -265,8 +261,6 @@ class TestColumnSelection:
                     num_examples=1,
                     columns=["nonexistent_col"],  # Invalid column
                     max_tokens=2000,
-                    model="gpt-4",
-                    verbose=0,
                 )
 
                 # Should log warning
