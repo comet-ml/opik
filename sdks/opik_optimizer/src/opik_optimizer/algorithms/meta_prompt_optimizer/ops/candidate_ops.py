@@ -165,7 +165,6 @@ def generate_candidate_prompts(
     optimization_id: str | None = None,
     project_name: str | None = None,
     winning_patterns: list[str] | None = None,
-    feedback: dict | None = None,
 ) -> list[chat_prompt.ChatPrompt]:
     """
     Generate candidate prompts using meta-prompting.
