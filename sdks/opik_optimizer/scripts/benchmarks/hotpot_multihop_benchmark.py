@@ -10,6 +10,7 @@ Usage:
     python scripts/benchmarks/hotpot_multihop_benchmark.py
 """
 
+import os
 import random
 import logging
 from opik_optimizer.datasets import hotpot
@@ -46,11 +47,15 @@ print()
 
 # Dataset splits (matching GEPA paper: 150 train, 300 val, 300 test)
 print("Loading datasets...")
-train_dataset = hotpot(count=150, split="train", dataset_name="hotpot_train", test_mode=True)
+train_dataset = hotpot(
+    count=150, split="train", dataset_name="hotpot_train", test_mode=True
+)
 validation_dataset = hotpot(
     count=300, split="validation", dataset_name="hotpot_validation", test_mode=True
 )
-test_dataset = hotpot(count=300, split="test", dataset_name="hotpot_test", test_mode=True)
+test_dataset = hotpot(
+    count=300, split="test", dataset_name="hotpot_test", test_mode=True
+)
 
 print(f"  - Train: {len(train_dataset.get_items())} samples")
 print(f"  - Validation: {len(validation_dataset.get_items())} samples")
@@ -74,6 +79,12 @@ def wikipedia_search(query: str, n: int = 5) -> list[str]:
     Returns:
         List of passage texts
     """
+    # If Wikipedia is disabled, return empty list without padding
+    # Check environment variable at call time (not at module load time)
+    disable_flag = os.getenv("OPIK_DISABLE_WIKIPEDIA", "").strip().lower()
+    if disable_flag in ("1", "true", "yes", "on"):
+        return []
+    
     with tool_logger.log_tool("wikipedia_api", query):
         results = search_wikipedia(query, search_type="api", k=n)
     # Return top n results, padding if necessary
@@ -93,6 +104,11 @@ def bm25_wikipedia_search(query: str, n: int = 5) -> list[str]:
 
     Falls back to API search if BM25 index is unavailable.
     """
+    # If Wikipedia is disabled, return empty list
+    # Check environment variable at call time (not at module load time)
+    disable_flag = os.getenv("OPIK_DISABLE_WIKIPEDIA", "").strip().lower()
+    if disable_flag in ("1", "true", "yes", "on"):
+        return []
 
     try:
         with tool_logger.log_tool("wikipedia_bm25", query):
@@ -115,7 +131,9 @@ def bm25_wikipedia_search(query: str, n: int = 5) -> list[str]:
 # Use bm25_wikipedia_search for fair comparison with GEPA paper
 # Use wikipedia_search for quick testing without BM25 download
 SEARCH_FN = wikipedia_search  # FIXME: Switch to bm25_wikipedia_search before merging
-print(f"Search function: {SEARCH_FN.__name__} (API mode - FIXME: switch to BM25 before merging)")
+print(
+    f"Search function: {SEARCH_FN.__name__} (API mode - FIXME: switch to BM25 before merging)"
+)
 print()
 
 # ============================================================================

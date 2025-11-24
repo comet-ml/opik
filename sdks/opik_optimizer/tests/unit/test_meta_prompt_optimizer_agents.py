@@ -17,7 +17,9 @@ def test_optimize_prompt_bundle_updates_best(monkeypatch):
                 system="do the task but better",
             )
         }
-        return updated, {"agent_a": {"improvement_focus": "clarity", "reasoning": "added guidance"}}
+        return updated, {
+            "agent_a": {"improvement_focus": "clarity", "reasoning": "added guidance"}
+        }
 
     monkeypatch.setattr(
         optimizer,
@@ -60,10 +62,15 @@ def test_optimize_prompt_bundle_rejects_mcp(monkeypatch):
             prompt=prompts,
             dataset=type("D", (), {"get_items": lambda self: [{}]})(),
             metric=lambda item, output, trace=None: 0.0,
-            candidate_generator_kwargs={"run_bundle_fn": lambda bundle, item: {"final_output": "x"}},
+            candidate_generator_kwargs={
+                "run_bundle_fn": lambda bundle, item: {"final_output": "x"}
+            },
             max_trials=1,
             mcp_config=MCPExecutionConfig(
-                coordinator=None, tool_name="tool", fallback_arguments=None, fallback_invoker=None
+                coordinator=None,
+                tool_name="tool",
+                fallback_arguments=None,
+                fallback_invoker=None,
             ),
         )
 
@@ -82,7 +89,9 @@ def test_optimize_prompt_bundle_preserves_non_returned_agent(monkeypatch):
                 system="updated",
             )
         }  # missing agent_b on purpose
-        return updated, {"agent_a": {"improvement_focus": "clarity", "reasoning": "n/a"}}
+        return updated, {
+            "agent_a": {"improvement_focus": "clarity", "reasoning": "n/a"}
+        }
 
     monkeypatch.setattr(
         optimizer,
@@ -94,7 +103,9 @@ def test_optimize_prompt_bundle_preserves_non_returned_agent(monkeypatch):
         prompt=initial_prompts,
         dataset=type("D", (), {"get_items": lambda self: [{}]})(),
         metric=lambda item, output, trace=None: 0.0,
-        candidate_generator_kwargs={"run_bundle_fn": lambda bundle, item: {"final_output": "x"}},
+        candidate_generator_kwargs={
+            "run_bundle_fn": lambda bundle, item: {"final_output": "x"}
+        },
         max_trials=1,
     )
 
@@ -118,7 +129,10 @@ def test_optimize_prompt_bundle_metric(monkeypatch):
 
     def run_bundle_fn(bundle, item):
         joined_names = "-".join(sorted(bundle.keys()))
-        return {"final_output": f"{item['q']}-{joined_names}", "trace": {"agents": list(bundle.keys())}}
+        return {
+            "final_output": f"{item['q']}-{joined_names}",
+            "trace": {"agents": list(bundle.keys())},
+        }
 
     def metric(item, output, trace=None):
         assert trace["agents"] == ["step1", "step2"]

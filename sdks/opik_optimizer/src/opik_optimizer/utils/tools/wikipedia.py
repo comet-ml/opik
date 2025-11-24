@@ -34,6 +34,7 @@ Example:
 
 import logging
 import re
+import os
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Any, Literal, cast
@@ -47,28 +48,28 @@ logger = logging.getLogger(__name__)
 def _sanitize_query(query: str, max_length: int = 500) -> str:
     """
     Sanitize and clean Wikipedia search query.
-    
+
     Removes:
     - Leading/trailing whitespace (trimmed at every step)
     - Common prefixes like "Wikipedia search query:", "Search query:", etc.
     - Wrapping quotes if they surround the entire query
     - Newlines and excessive whitespace
-    
+
     Args:
         query: Raw search query string
         max_length: Maximum query length (default: 500, currently unused)
-    
+
     Returns:
         Cleaned and sanitized query string (always trimmed)
     """
     if not query:
         return ""
-    
+
     # Trim whitespace at the start
     query = query.strip()
     if not query:
         return ""
-    
+
     # Remove common prefixes (case-insensitive)
     prefixes = [
         "wikipedia search query:",
@@ -82,10 +83,10 @@ def _sanitize_query(query: str, max_length: int = 500) -> str:
         if query_lower.startswith(prefix):
             query = query[len(prefix) :].strip()  # Trim after removing prefix
             break
-    
+
     # Remove newlines and normalize whitespace (split() already handles trimming)
     query = " ".join(query.split())
-    
+
     # Remove wrapping quotes if they surround the entire query
     query = query.strip()
     if len(query) >= 2:
@@ -93,7 +94,7 @@ def _sanitize_query(query: str, max_length: int = 500) -> str:
             query.startswith("'") and query.endswith("'")
         ):
             query = query[1:-1].strip()  # Trim after removing quotes
-    
+
     # Final trim to ensure no leading/trailing whitespace
     return query.strip()
 
@@ -147,6 +148,12 @@ def search_wikipedia(
             bm25_index_dir="./wiki17_abstracts"
         )
     """
+    # Check environment variable at call time (not at module load time)
+    disable_flag = os.getenv("OPIK_DISABLE_WIKIPEDIA", "").strip().lower()
+    if disable_flag in ("1", "true", "yes", "on"):
+        logger.warning("Wikipedia tool disabled via OPIK_DISABLE_WIKIPEDIA.")
+        return []
+
     # Handle backward compatibility with use_api parameter
     if use_api is not None:
         import warnings
@@ -190,7 +197,7 @@ def _search_wikipedia_api(query: str, k: int = 3) -> list[str]:
     query = _sanitize_query(query)
     if not query:
         return ["No valid search query provided"]
-    
+
     try:
         # Search for pages using the search API
         search_params: dict[str, str | int] = {
@@ -250,7 +257,7 @@ def _search_wikipedia_colbert(query: str, k: int = 3) -> list[str]:
     query = _sanitize_query(query)
     if not query:
         return ["No valid search query provided"]
-    
+
     try:
         from dsp.modules.colbertv2 import ColBERTv2
     except ImportError:
@@ -291,7 +298,7 @@ def _search_wikipedia_bm25(
     query = _sanitize_query(query)
     if not query:
         return ["No valid search query provided"]
-    
+
     try:
         import bm25s
     except ImportError:

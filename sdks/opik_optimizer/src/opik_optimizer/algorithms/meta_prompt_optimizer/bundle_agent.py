@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from typing import Any, Callable
+from typing import Any
+from collections.abc import Callable
 
 from ...optimizable_agent import OptimizableAgent
 from ...api_objects import chat_prompt

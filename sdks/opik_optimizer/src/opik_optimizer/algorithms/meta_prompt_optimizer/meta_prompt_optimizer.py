@@ -390,9 +390,7 @@ class MetaPromptOptimizer(BaseOptimizer):
                 "prompts_per_round": self.prompts_per_round,
                 "n_samples": n_samples,
                 "auto_continue": auto_continue,
-                "validation_dataset": getattr(
-                    validation_dataset, "name", None
-                )
+                "validation_dataset": getattr(validation_dataset, "name", None)
                 if validation_dataset is not None
                 else None,
             },
@@ -614,12 +612,19 @@ class MetaPromptOptimizer(BaseOptimizer):
                 if is_bundle:
                     generator = self._generate_agent_bundle_candidates
                     generator_kwargs = dict(candidate_generator_kwargs or {})
-                    prompts_this_round = 1
+                    # Strip evaluation-only params
+                    for _key in ("run_bundle_fn", "bundle_plan", "bundle_agent_class"):
+                        generator_kwargs.pop(_key, None)
+                    prompts_this_round = min(
+                        self.prompts_per_round, max_trials - trials_used
+                    )
                     is_synthesis_round = False
                 else:
                     if is_synthesis_round and not candidate_generator:
                         # Synthesis round: combine top performers into comprehensive prompts
-                        logger.info("Combining top performers into comprehensive prompts")
+                        logger.info(
+                            "Combining top performers into comprehensive prompts"
+                        )
 
                         generator = self._generate_synthesis_prompts
                         # Synthesis doesn't use patterns
@@ -650,9 +655,9 @@ class MetaPromptOptimizer(BaseOptimizer):
                                 )
 
                 try:
-                    agent_metadata: dict[str, dict[str, str | None]] | None = None
+                    agent_metadata: list[dict[str, dict[str, str | None]]] | None = None
                     if is_bundle:
-                        candidate_prompts, agent_metadata = generator(
+                        bundle_generation = generator(
                             current_prompts=best_prompt,  # type: ignore[arg-type]
                             best_score=best_score,
                             round_num=round_num,
@@ -662,7 +667,16 @@ class MetaPromptOptimizer(BaseOptimizer):
                             project_name=self.project_name,
                             **generator_kwargs,
                         )
-                        candidate_prompts = [candidate_prompts]
+                        if isinstance(bundle_generation, tuple) and len(bundle_generation) == 2:
+                            prompts_part = bundle_generation[0]
+                            agent_metadata = bundle_generation[1]  # type: ignore[assignment]
+                            if isinstance(prompts_part, list):
+                                candidate_prompts = prompts_part
+                            else:
+                                candidate_prompts = [prompts_part]
+                        else:
+                            candidate_prompts = [bundle_generation]  # type: ignore[list-item]
+                        candidate_prompts = candidate_prompts[:prompts_this_round]
                     else:
                         candidate_prompts = generator(
                             project_name=self.project_name,
@@ -766,7 +780,8 @@ class MetaPromptOptimizer(BaseOptimizer):
                                 )
 
                             eval_report.set_final_score(best_score, prompt_score)
-                            trials_used += 1
+                            if not is_bundle:
+                                trials_used += 1
                         except Exception:
                             logger.warning("Failed evaluating agent; continuing...")
                             prompt_score = 0
@@ -825,6 +840,8 @@ class MetaPromptOptimizer(BaseOptimizer):
                     best_prompt = best_candidate_this_round
 
                 # Increment counters
+                if is_bundle:
+                    trials_used += 1
                 round_num += 1
 
         if tool_panel_style and getattr(best_prompt, "tools", None):
@@ -997,6 +1014,7 @@ class MetaPromptOptimizer(BaseOptimizer):
         project_name: str | None = None,
         winning_patterns: list[str] | None = None,
         mcp_config: MCPExecutionConfig | None = None,
+        **_: Any,
     ) -> tuple[dict[str, chat_prompt.ChatPrompt], dict[str, dict[str, str | None]]]:
         """
         Generate updated prompts for a bundle of named agents in one meta-prompt pass.

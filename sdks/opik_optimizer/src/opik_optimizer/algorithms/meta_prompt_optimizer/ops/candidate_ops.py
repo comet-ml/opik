@@ -451,7 +451,9 @@ def generate_agent_bundle_candidates(
     project_name: str | None = None,
     winning_patterns: list[str] | None = None,
     mcp_config: MCPExecutionConfig | None = None,
-) -> tuple[dict[str, chat_prompt.ChatPrompt], dict[str, dict[str, str | None]]]:
+) -> tuple[
+    list[dict[str, chat_prompt.ChatPrompt]], list[dict[str, dict[str, str | None]]]
+]:
     """
     Generate updated prompts for multiple named agents in a single meta-prompt pass.
 
@@ -535,91 +537,127 @@ def generate_agent_bundle_candidates(
                 metadata=metadata_for_call,
                 optimization_id=optimization_id,
             )
+            if optimizer.verbose >= 1:
+                logger.info("Raw agent bundle LLM response:\n%s", content)
+            else:
+                logger.debug("Raw agent bundle LLM response:\n%s", content)
 
             json_result = None
             try:
                 json_result = json.loads(content)
-            except json.JSONDecodeError:
+            except json.JSONDecodeError as exc:
                 import re
 
-                json_match = re.search(r"\{.*\}", content, re.DOTALL)
-                if json_match:
-                    json_result = json.loads(json_match.group())
-                else:
+                # NOTE: Some models return fenced JSON blocks or prepend/append prose.
+                # Collect likely JSON snippets and try them in order of size.
+                candidates: list[str] = []
+
+                # Try fenced ```json ... ``` blocks
+                fenced = re.findall(r"```json\s*(\{.*?\})\s*```", content, re.DOTALL)
+                candidates.extend(fenced)
+
+                # Fallback: any JSON object blob
+                candidates.extend(re.findall(r"\{.*\}", content, re.DOTALL))
+
+                for candidate in sorted(set(candidates), key=len, reverse=True):
+                    try:
+                        json_result = json.loads(candidate)
+                        break
+                    except Exception:
+                        continue
+
+                if json_result is None:
                     raise ValueError(
-                        f"No JSON object found in response via regex. - received: {content}"
+                        "No parseable JSON object found in response "
+                        f"(original error: {exc})"
                     )
 
+            candidate_payloads: list[dict[str, Any]] = []
             if isinstance(json_result, list):
-                if (
-                    len(json_result) == 1
-                    and isinstance(json_result[0], dict)
-                    and "agents" in json_result[0]
+                # backwards compatibility: list with dict/agents
+                candidate_payloads = [obj for obj in json_result if isinstance(obj, dict)]
+            elif isinstance(json_result, dict):
+                if "candidates" in json_result and isinstance(
+                    json_result["candidates"], list
                 ):
-                    json_result = json_result[0]
-            if not isinstance(json_result, dict) or "agents" not in json_result:
-                raise ValueError("Parsed JSON missing top-level 'agents' key.")
+                    candidate_payloads = [
+                        c for c in json_result["candidates"] if isinstance(c, dict)
+                    ]
+                elif "agents" in json_result:
+                    candidate_payloads = [json_result]
 
-            agents_payload = json_result.get("agents", [])
-            if not isinstance(agents_payload, list):
-                raise ValueError("'agents' key must be a list.")
+            if not candidate_payloads:
+                raise ValueError("Parsed JSON missing 'agents' or 'candidates' key.")
 
-            updated_prompts: dict[str, chat_prompt.ChatPrompt] = {}
-            agent_metadata: dict[str, dict[str, str | None]] = {}
+            prompt_candidates: list[dict[str, chat_prompt.ChatPrompt]] = []
+            metadata_candidates: list[dict[str, dict[str, str | None]]] = []
 
-            for item in agents_payload:
-                if not isinstance(item, dict):
-                    logger.warning("Skipping non-dict agent payload: %s", item)
+            for cand in candidate_payloads:
+                agents_payload = cand.get("agents", [])
+                if not isinstance(agents_payload, list):
+                    logger.warning("'agents' key must be a list; skipping candidate.")
                     continue
 
-                name = item.get("name")
-                if not name:
-                    logger.warning("Skipping agent entry missing a name: %s", item)
-                    continue
+                updated_prompts: dict[str, chat_prompt.ChatPrompt] = {}
+                agent_metadata: dict[str, dict[str, str | None]] = {}
 
-                if name not in current_prompts:
-                    logger.warning(
-                        "Received update for unknown agent '%s'; skipping.", name
-                    )
-                    continue
+                for item in agents_payload:
+                    if not isinstance(item, dict):
+                        logger.warning("Skipping non-dict agent payload: %s", item)
+                        continue
 
-                messages = item.get("messages")
-                if not isinstance(messages, list):
-                    logger.warning(
-                        "Agent '%s' missing messages; preserving original.", name
-                    )
-                    messages = current_prompts[name].get_messages()
+                    name = item.get("name")
+                    if not name:
+                        logger.warning("Skipping agent entry missing a name: %s", item)
+                        continue
 
-                try:
-                    updated_prompt = chat_prompt.ChatPrompt(
-                        name=current_prompts[name].name or name,
-                        messages=messages,
-                        tools=current_prompts[name].tools,
-                        function_map=current_prompts[name].function_map,
-                        model=current_prompts[name].model,
-                        model_parameters=current_prompts[name].model_kwargs,
-                        invoke=current_prompts[name].invoke,
-                    )
-                    updated_prompts[name] = updated_prompt
-                    agent_metadata[name] = {
-                        "improvement_focus": item.get("improvement_focus"),
-                        "reasoning": item.get("reasoning"),
-                    }
-                except Exception as exc:
-                    logger.warning(
-                        "Failed to build ChatPrompt for agent '%s': %s", name, exc
-                    )
+                    if name not in current_prompts:
+                        logger.warning(
+                            "Received update for unknown agent '%s'; skipping.", name
+                        )
+                        continue
 
-            # Preserve any agents that were not returned to avoid losing prompts
-            for name, prompt in current_prompts.items():
-                if name not in updated_prompts:
-                    updated_prompts[name] = prompt
+                    messages = item.get("messages")
+                    if not isinstance(messages, list):
+                        logger.warning(
+                            "Agent '%s' missing messages; preserving original.", name
+                        )
+                        messages = current_prompts[name].get_messages()
 
-            if not updated_prompts:
+                    try:
+                        updated_prompt = chat_prompt.ChatPrompt(
+                            name=current_prompts[name].name or name,
+                            messages=messages,
+                            tools=current_prompts[name].tools,
+                            function_map=current_prompts[name].function_map,
+                            model=current_prompts[name].model,
+                            model_parameters=current_prompts[name].model_kwargs,
+                            invoke=current_prompts[name].invoke,
+                        )
+                        updated_prompts[name] = updated_prompt
+                        agent_metadata[name] = {
+                            "improvement_focus": item.get("improvement_focus"),
+                            "reasoning": item.get("reasoning"),
+                        }
+                    except Exception as exc:
+                        logger.warning(
+                            "Failed to build ChatPrompt for agent '%s': %s", name, exc
+                        )
+
+                # Preserve any agents that were not returned to avoid losing prompts
+                for name, prompt in current_prompts.items():
+                    if name not in updated_prompts:
+                        updated_prompts[name] = prompt
+
+                if updated_prompts:
+                    prompt_candidates.append(updated_prompts)
+                    metadata_candidates.append(agent_metadata)
+
+            if not prompt_candidates:
                 raise ValueError("No valid agent prompts returned from response.")
 
             candidate_generation_report.set_generated_prompts()
-            return updated_prompts, agent_metadata
+            return prompt_candidates, metadata_candidates
 
         except Exception as e:
             if isinstance(e, (BadRequestError, StructuredOutputParsingError)):
