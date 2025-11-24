@@ -45,7 +45,7 @@ from functools import lru_cache
 logger = logging.getLogger(__name__)
 
 
-def _sanitize_query(query: str, max_length: int = 500) -> str:
+def _sanitize_query(query: str) -> str:
     """
     Sanitize and clean Wikipedia search query.
 
@@ -57,7 +57,6 @@ def _sanitize_query(query: str, max_length: int = 500) -> str:
 
     Args:
         query: Raw search query string
-        max_length: Maximum query length (default: 500, currently unused)
 
     Returns:
         Cleaned and sanitized query string (always trimmed)
