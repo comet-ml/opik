@@ -373,13 +373,13 @@ def _resolve_bm25_index_path(
         if not repo_id:
             raise FileNotFoundError(f"BM25 index missing at {index_dir}")
         index_dir.mkdir(parents=True, exist_ok=True)
-        return _download_bm25_index(repo_id=repo_id, target_dir=index_dir)
+        return _cached_bm25_index(repo_id=repo_id, target_dir=str(index_dir))
 
     if not repo_id:
         raise FileNotFoundError(
             "BM25 index path not provided and no repo_id to download"
         )
-    return _download_bm25_index(repo_id=repo_id)
+    return _cached_bm25_index(repo_id=repo_id, target_dir=None)
 
 
 def _download_bm25_index(
@@ -406,6 +406,9 @@ def _download_bm25_index(
     logger.info(f"⚙️ Wikipedia BM25: Downloading index: '{repo_id}' from huggingface")
     if target_dir is not None:
         target_dir.mkdir(parents=True, exist_ok=True)
+        # If already materialized, skip re-download to avoid repeated logs/IO.
+        if any(target_dir.glob("corpus_*.parquet")):
+            return target_dir
         download_path = snapshot_download(
             repo_id=repo_id,
             repo_type="dataset",
@@ -421,6 +424,15 @@ def _download_bm25_index(
     )
     logger.debug(f"Downloaded to {download_path}")
     return Path(download_path)
+
+
+@lru_cache(maxsize=1)
+def _cached_bm25_index(repo_id: str, target_dir: str | None) -> Path:
+    """Cache downloaded BM25 index paths per repo/target."""
+    return _download_bm25_index(
+        repo_id=repo_id,
+        target_dir=Path(target_dir) if target_dir else None,
+    )
 
 
 @lru_cache(maxsize=1)

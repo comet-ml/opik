@@ -537,10 +537,37 @@ def generate_agent_bundle_candidates(
                 metadata=metadata_for_call,
                 optimization_id=optimization_id,
             )
-            if optimizer.verbose >= 1:
-                logger.info("Raw agent bundle LLM response:\n%s", content)
-            else:
-                logger.debug("Raw agent bundle LLM response:\n%s", content)
+            summary_logged = False
+            try:
+                parsed = json.loads(content)
+                cand_list: list[dict[str, Any]] | None = (
+                    parsed.get("candidates") if isinstance(parsed, dict) else None
+                )
+                if cand_list:
+                    logger.debug(
+                        "Bundle LLM response: %d candidate bundles", len(cand_list)
+                    )
+                    for idx, cand in enumerate(cand_list, start=1):
+                        agents = [
+                            a.get("name")
+                            for a in cand.get("agents", [])
+                            if isinstance(a, dict) and a.get("name")
+                        ]
+                        focus = cand.get("bundle_improvement_focus")
+                        logger.debug(
+                            "  Candidate %d: agents=%s focus=%s",
+                            idx,
+                            agents,
+                            (focus[:120] + "...")
+                            if isinstance(focus, str) and len(focus) > 120
+                            else focus,
+                        )
+                        summary_logged = True
+            except Exception:
+                pass
+
+            if not summary_logged:
+                logger.debug("Bundle LLM raw response len=%d", len(content or ""))
 
             json_result = None
             try:
