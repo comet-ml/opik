@@ -18,6 +18,8 @@ from benchmarks.agents.hotpot_multihop_agent import HotpotMultiHopAgent
 from opik_optimizer.utils.tools.wikipedia import search_wikipedia
 from opik_optimizer.utils.llm_logger import LLMLogger
 from opik_optimizer.logging_config import setup_logging
+from opik_optimizer import MetaPromptOptimizer
+from opik_optimizer.algorithms.meta_prompt_optimizer.bundle_agent import BundleAgent
 
 # Configure logging
 setup_logging()
@@ -91,19 +93,19 @@ def bm25_wikipedia_search(query: str, n: int = 5) -> list[str]:
 
     Falls back to API search if BM25 index is unavailable.
     """
+
     try:
         with tool_logger.log_tool("wikipedia_bm25", query):
             results = search_wikipedia(
                 query,
                 search_type="bm25",
                 n=n,
-                bm25_hf_repo="Comet/wikipedia-2017-bm25",  # Production index
+                bm25_hf_repo="Comet/wikipedia-2017-bm25",
             )
         return results
 
     except Exception as e:
-        logger.warning(f"BM25 search failed: {e}")
-        logger.warning("Falling back to API Wikipedia search")
+        logger.warning(f"BM25 search failed (will fallback to API): {e}")
         return wikipedia_search(query, n)
 
 
@@ -167,7 +169,8 @@ for i, item in enumerate(validation_dataset.get_items()[:10]):  # Sample 10 for 
     try:
         output = agent.execute(question, verbose=False)
         score = multihop_metric(item, output)
-        baseline_scores.append(score)
+        score_val = score.value if hasattr(score, "value") else float(score)
+        baseline_scores.append(score_val)
         if (i + 1) % 5 == 0:
             print(f"  Evaluated {i + 1}/10 samples...")
     except Exception as e:
@@ -196,44 +199,51 @@ print("Training on hotpot_train (150 samples)...")
 print("Validation on hotpot_validation (300 samples)...")
 print()
 
-# TODO: Implement agent optimization
-# The optimizer needs to support multi-prompt optimization
-# For now, we'll optimize just the final_answer prompt as a starting point
-
-print("NOTE: Full multi-prompt optimization not yet implemented.")
-print("For now, you can optimize individual prompts manually or wait for")
-print("agent optimization support in MetaPromptOptimizer.")
-print()
-
-# Example of how it would work:
-"""
 optimizer = MetaPromptOptimizer(
     model="openai/gpt-4.1-mini",
     model_parameters={"temperature": 1.0},
     seed=SEED,
 )
 
-# Option 1: Optimize specific prompt
-result = optimizer.optimize_prompt(
-    prompt=agent.prompts["final_answer"],
-    dataset=train_dataset,
-    validation_dataset=validation_dataset,
-    metric=lambda item: multihop_metric(
-        item,
-        agent.execute(item["question"])
-    ),
-    max_trials=100,
-)
 
-# Option 2: Optimize entire agent (future feature)
-result = optimizer.optimize_agent(
-    agent=agent,
+def run_bundle_fn(bundle: dict, item: dict) -> dict:
+    """
+    Execute the multi-hop pipeline using the provided prompt bundle.
+    """
+    tmp_agent = HotpotMultiHopAgent(
+        search_fn=SEARCH_FN,
+        model=agent.model,
+        model_parameters=agent.model_parameters,
+        num_passages_per_hop=agent.num_passages,
+        prompts=bundle,
+    )
+    output = tmp_agent._execute_with_prompts(bundle, item["question"], verbose=False)
+    return {"final_output": output.get("answer", ""), "trace": output}
+
+
+def bundle_metric(item: dict, output: str, trace: dict | None = None) -> float:
+    # trace carries intermediate hops if needed
+    return hotpot_f1(item, output)
+
+
+print("Running multi-prompt optimization (MetaPromptOptimizer)...")
+opt_result = optimizer.optimize_prompt(
+    prompt=agent.prompts,  # dict[str, ChatPrompt] triggers bundle mode
     dataset=train_dataset,
-    validation_dataset=validation_dataset,
-    metric=multihop_metric,
-    max_trials=100,
+    metric=bundle_metric,
+    candidate_generator_kwargs={
+        "run_bundle_fn": run_bundle_fn,
+        "bundle_agent_class": BundleAgent,
+    },
+    max_trials=1,  # increase for more meta rounds; watch rollout budget
+    n_samples=None,
 )
-"""
+print(f"Optimization best score: {opt_result.score:.4f}")
+# opt_result.prompt holds best messages for single prompt; for bundle, use details if present
+try:
+    agent.prompts = opt_result.details.get("best_prompts", agent.prompts)  # type: ignore[assignment]
+except Exception:
+    pass
 
 # ============================================================================
 # TESTING
