@@ -1,9 +1,4 @@
-import {
-  PROVIDER_MODEL_TYPE,
-  LLMPromptConfigsType,
-  COMPOSED_PROVIDER_TYPE,
-  LLMOpenAIConfigsType,
-} from "@/types/providers";
+import { PROVIDER_MODEL_TYPE, COMPOSED_PROVIDER_TYPE } from "@/types/providers";
 import { REASONING_MODELS } from "@/constants/llm";
 import { PROVIDER_TYPE } from "@/types/providers";
 import { parseComposedProviderType } from "@/lib/provider";
@@ -42,16 +37,16 @@ export const getDefaultTemperatureForModel = (
  * This function ensures that OpenAI reasoning models (GPT-5 family, O-series)
  * have their temperature set to at least 1.0, as they don't support temperature < 1
  *
- * @param currentConfig - The current provider config
+ * @param currentConfig - The current provider config (can be LLMPromptConfigsType or a more specific config type)
  * @param model - The model type
  * @param provider - The composed provider type
  * @returns Updated config with temperature adjusted if needed, or the original config
  */
-export const updateProviderConfig = (
-  currentConfig: LLMPromptConfigsType | undefined,
+export const updateProviderConfig = <T extends { temperature?: number }>(
+  currentConfig: T | undefined,
   model: PROVIDER_MODEL_TYPE | "",
   provider: COMPOSED_PROVIDER_TYPE,
-): LLMPromptConfigsType | undefined => {
+): T | undefined => {
   if (!currentConfig) {
     return currentConfig;
   }
@@ -62,13 +57,13 @@ export const updateProviderConfig = (
   if (
     providerType === PROVIDER_TYPE.OPEN_AI &&
     isReasoningModel(model) &&
-    typeof (currentConfig as LLMOpenAIConfigsType).temperature === "number" &&
-    (currentConfig as LLMOpenAIConfigsType).temperature < 1
+    typeof currentConfig.temperature === "number" &&
+    currentConfig.temperature < 1
   ) {
     return {
       ...currentConfig,
       temperature: 1.0,
-    } as LLMPromptConfigsType;
+    };
   }
 
   return currentConfig;
