@@ -625,7 +625,7 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
                 tt.scored_at
             FROM trace_threads tt final
             WHERE tt.id IN :ids AND tt.workspace_id = :workspace_id
-            ORDER BY tt.last_updated_at DESC
+            ORDER BY (tt.workspace_id, tt.project_id, tt.thread_id, tt.id) DESC, tt.last_updated_at DESC
             LIMIT 1 BY tt.id;""";
 
     @Override

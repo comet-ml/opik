@@ -3570,7 +3570,7 @@ class TraceDAOImpl implements TraceDAO {
                 :truncation_threshold as truncation_threshold
             FROM traces t
             WHERE t.id IN :ids AND t.workspace_id = :workspace_id
-            ORDER BY t.last_updated_at DESC
+            ORDER BY (t.workspace_id, t.project_id, t.id) DESC, t.last_updated_at DESC
             LIMIT 1 BY t.id;""";
 
     @Override
