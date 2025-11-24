@@ -26,6 +26,7 @@ export enum RESOURCE_TYPE {
   optimization,
   trial,
   annotationQueue,
+  dashboard,
 }
 
 export const RESOURCE_MAP = {
@@ -84,6 +85,14 @@ export const RESOURCE_MAP = {
     deleted: "Deleted annotation queue",
     label: "annotation queue",
     color: "var(--color-pink)",
+  },
+  [RESOURCE_TYPE.dashboard]: {
+    url: "/$workspaceName/dashboards/$dashboardId",
+    icon: LayoutGrid,
+    param: "dashboardId",
+    deleted: "Deleted dashboard",
+    label: "dashboard",
+    color: "var(--color-blue)",
   },
 };
 
