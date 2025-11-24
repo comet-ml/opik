@@ -24,6 +24,7 @@ import { COLUMN_TYPE, OnChangeFn } from "@/types/shared";
 import { Trace } from "@/types/traces";
 import { formatDate, formatDuration } from "@/lib/date";
 import { formatCost } from "@/lib/money";
+import { manageToolFilter } from "@/lib/traces";
 import useAppStore from "@/store/AppStore";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import Loader from "@/components/shared/Loader/Loader";
@@ -57,7 +58,7 @@ import {
 } from "@/components/ui/resizable";
 import ThreadComments from "./ThreadComments";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { StringParam, useQueryParam } from "use-query-params";
+import { JsonParam, StringParam, useQueryParam } from "use-query-params";
 import ThreadAnnotations from "./ThreadAnnotations";
 import SetInactiveConfirmDialog from "./SetInactiveConfirmDialog";
 import ThreadStatusTag from "@/components/shared/ThreadStatusTag/ThreadStatusTag";
@@ -120,6 +121,14 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
   const [activeTab = DEFAULT_TAB, setActiveTab] = useQueryParam(
     "threadTab",
     StringParam,
+    {
+      updateType: "replaceIn",
+    },
+  );
+
+  const [tracePanelFilters, setTracePanelFilters] = useQueryParam(
+    `trace_panel_filters`,
+    JsonParam,
     {
       updateType: "replaceIn",
     },
@@ -192,11 +201,16 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
   );
 
   const handleOpenTrace = useCallback(
-    (id: string) => {
+    (id: string, shouldFilterToolCalls: boolean) => {
+      // Manage tool filter: add if shouldFilterToolCalls is true, remove if false
+      setTracePanelFilters(
+        manageToolFilter(tracePanelFilters, shouldFilterToolCalls),
+      );
+
       onClose();
       setTraceId(id);
     },
-    [setTraceId, onClose],
+    [tracePanelFilters, setTracePanelFilters, setTraceId, onClose],
   );
 
   const handleThreadDelete = useCallback(() => {
