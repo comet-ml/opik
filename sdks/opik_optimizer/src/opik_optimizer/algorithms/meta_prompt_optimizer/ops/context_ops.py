@@ -54,7 +54,6 @@ def get_task_context(
     columns: list[str] | None = None,
     max_tokens: int = 2000,
     model: str = "gpt-4",
-    verbose: int = 1,
     extract_metric_understanding: bool = True,
 ) -> tuple[str, int]:
     """
