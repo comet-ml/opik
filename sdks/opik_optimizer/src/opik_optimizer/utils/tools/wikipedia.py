@@ -139,7 +139,7 @@ def _search_wikipedia_api(query: str, max_results: int = 3) -> list[str]:
         }
 
         headers = {
-            "User-Agent": "OpikOptimizer/1.0 (https://github.com/opik-ai/opik-optimizer)"
+            "User-Agent": "OpikOptimizer/1.0 (https://github.com/comet-ml/opik)"
         }
         search_response = requests.get(
             "https://en.wikipedia.org/w/api.php",
