@@ -24,6 +24,17 @@ jobs:
       - name: Install Fern
         run: npm install -g fern-api
 
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install Opik Optimizer SDK (for Fern docs)
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e sdks/opik_optimizer
+
       - name: Set branch name
         run: |
           echo "BRANCH_NAME=github-actions/NA-automatically-update-openapi-spec-and-fern-code-$(date +%Y-%m-%d-%H-%M-%S)" >> $GITHUB_ENV
@@ -43,6 +54,10 @@ jobs:
           cd -
           ./scripts/generate_openapi.sh
 
+      - name: Generate Opik Optimizer Fern docs
+        run: |
+          python sdks/opik_optimizer/scripts/generate_fern_docs.py --write
+
       - name: Commit files
         run: |
           set -ex
@@ -52,6 +67,7 @@ jobs:
           git add sdks/typescript/src/opik/rest_api/
           git add sdks/code_generation/fern/openapi/openapi.yaml
           git add apps/opik-documentation/documentation/fern/openapi/opik.yaml
+          git add apps/opik-documentation/documentation/fern/docs/agent_optimization/opik_optimizer/reference.mdx
           git commit --allow-empty -m "[NA] [SDK] [DOCS] Update automatically OpenAPI spec and Fern code"
 
       - name: Create Pull Request
@@ -62,18 +78,18 @@ jobs:
           title: "[NA] [SDK] [DOCS] Update automatically OpenAPI spec and Fern code"
           body: |
             ## Details
-            Automated update of OpenAPI spec and Fern code after running `./scripts/generate_openapi.sh`.
-          
+            Automated update of OpenAPI spec and Fern code after running `./scripts/generate_openapi.sh` and `./sdks/opik_optimizer/scripts/generate_fern_docs.py`.
+
             ## Change checklist
             - [ ] User facing changes
             - [X] Documentation updated
-          
+
             ## Issues
             N/A
-          
+
             ## Testing
             - Passed CI
-          
+
             ## Documentation
             - https://buildwithfern.com/learn/cli-api-reference/cli-reference/commands#fern-generate
           base: main
