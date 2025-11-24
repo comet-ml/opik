@@ -1,4 +1,4 @@
-import React, { useCallback } from "react";
+import React, { useCallback, useMemo } from "react";
 import { keepPreviousData } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
 import {
@@ -11,14 +11,15 @@ import SyntaxHighlighter from "@/components/shared/SyntaxHighlighter/SyntaxHighl
 import { Trace } from "@/types/traces";
 import { useSMEFlow } from "../SMEFlowContext";
 import { useAnnotationTreeState } from "./AnnotationTreeStateContext";
-import { ExpandedState } from "@tanstack/react-table";
 import useTraceById from "@/api/traces/useTraceById";
+import { processInputData } from "@/lib/images";
+import AttachmentsList from "@/components/pages-shared/traces/TraceDetailsPanel/TraceDataViewer/AttachmentsList";
 
 const STALE_TIME = 5 * 60 * 1000; // 5 minutes
 
 const TraceDataViewer: React.FC = () => {
   const { currentItem, nextItem } = useSMEFlow();
-  const { state, updateExpanded, updateScrollTop } = useAnnotationTreeState();
+  const { state, updateScrollTop } = useAnnotationTreeState();
 
   const trace = currentItem as Trace;
   const nextTrace = nextItem as Trace | undefined;
@@ -49,23 +50,9 @@ const TraceDataViewer: React.FC = () => {
 
   const displayTrace = fullTrace || trace;
 
-  // Handlers for expanded state changes
-  const handleInputExpandedChange = useCallback(
-    (
-      updaterOrValue: ExpandedState | ((old: ExpandedState) => ExpandedState),
-    ) => {
-      updateExpanded("input", updaterOrValue);
-    },
-    [updateExpanded],
-  );
-
-  const handleOutputExpandedChange = useCallback(
-    (
-      updaterOrValue: ExpandedState | ((old: ExpandedState) => ExpandedState),
-    ) => {
-      updateExpanded("output", updaterOrValue);
-    },
-    [updateExpanded],
+  const { media } = useMemo(
+    () => processInputData(displayTrace?.input),
+    [displayTrace?.input],
   );
 
   // Handlers for scroll position changes
@@ -101,12 +88,11 @@ const TraceDataViewer: React.FC = () => {
       <Accordion
         type="multiple"
         className="w-full"
-        defaultValue={["input", "output"]}
+        defaultValue={["attachments", "input", "output"]}
       >
-        <AccordionItem className="group" value="input" disabled>
-          <AccordionTrigger className="pointer-events-none [&>svg]:hidden">
-            Input
-          </AccordionTrigger>
+        {displayTrace && <AttachmentsList data={displayTrace} media={media} />}
+        <AccordionItem className="group" value="input">
+          <AccordionTrigger>Input</AccordionTrigger>
           <AccordionContent
             forceMount
             className="group-data-[state=closed]:hidden"
@@ -116,8 +102,6 @@ const TraceDataViewer: React.FC = () => {
               prettifyConfig={{ fieldType: "input" }}
               preserveKey="syntax-highlighter-annotation-input"
               withSearch
-              controlledExpanded={state.input.expanded}
-              onExpandedChange={handleInputExpandedChange}
               scrollPosition={state.input.scrollTop}
               onScrollPositionChange={handleInputScrollChange}
               maxHeight="400px"
@@ -125,10 +109,8 @@ const TraceDataViewer: React.FC = () => {
           </AccordionContent>
         </AccordionItem>
 
-        <AccordionItem className="group" value="output" disabled>
-          <AccordionTrigger className="pointer-events-none [&>svg]:hidden">
-            Output
-          </AccordionTrigger>
+        <AccordionItem className="group" value="output">
+          <AccordionTrigger>Output</AccordionTrigger>
           <AccordionContent
             forceMount
             className="group-data-[state=closed]:hidden"
@@ -138,8 +120,6 @@ const TraceDataViewer: React.FC = () => {
               prettifyConfig={{ fieldType: "output" }}
               preserveKey="syntax-highlighter-annotation-output"
               withSearch
-              controlledExpanded={state.output.expanded}
-              onExpandedChange={handleOutputExpandedChange}
               scrollPosition={state.output.scrollTop}
               onScrollPositionChange={handleOutputScrollChange}
               maxHeight="400px"

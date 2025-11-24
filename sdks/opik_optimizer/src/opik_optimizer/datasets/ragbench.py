@@ -1,48 +1,57 @@
+from __future__ import annotations
+
 import opik
 
+from opik_optimizer.api_objects.types import DatasetSpec, DatasetSplitPreset
+from opik_optimizer.utils.dataset_utils import DatasetHandle
 
-def ragbench_sentence_relevance(test_mode: bool = False) -> opik.Dataset:
-    """
-    Dataset containing the first 300 samples of the RAGBench sentence relevance dataset.
-    """
-    dataset_name = (
-        "ragbench_sentence_relevance"
-        if not test_mode
-        else "ragbench_sentence_relevance_test"
+RAGBENCH_SPEC = DatasetSpec(
+    name="ragbench_sentence_relevance",
+    hf_path="wandb/ragbench-sentence-relevance-balanced",
+    default_source_split="train",
+    prefer_presets=True,
+    presets={
+        "train": DatasetSplitPreset(
+            source_split="train",
+            start=0,
+            count=150,
+            dataset_name="ragbench_sentence_relevance_train",
+        ),
+        "validation": DatasetSplitPreset(
+            source_split="validation",
+            start=0,
+            count=150,
+            dataset_name="ragbench_sentence_relevance_validation",
+        ),
+        "test": DatasetSplitPreset(
+            source_split="test",
+            start=0,
+            count=150,
+            dataset_name="ragbench_sentence_relevance_test",
+        ),
+    },
+)
+
+_RAGBENCH_HANDLE = DatasetHandle(RAGBENCH_SPEC)
+
+
+def ragbench_sentence_relevance(
+    *,
+    split: str | None = None,
+    count: int | None = None,
+    start: int | None = None,
+    dataset_name: str | None = None,
+    test_mode: bool = False,
+    seed: int | None = None,
+    test_mode_count: int | None = None,
+) -> opik.Dataset:
+    """RAGBench sentence relevance slices."""
+    return _RAGBENCH_HANDLE.load(
+        split=split,
+        count=count,
+        start=start,
+        dataset_name=dataset_name,
+        test_mode=test_mode,
+        seed=seed,
+        test_mode_count=test_mode_count,
     )
-    nb_items = 300 if not test_mode else 5
-
-    client = opik.Opik()
-    dataset = client.get_or_create_dataset(dataset_name)
-
-    items = dataset.get_items()
-    if len(items) == nb_items:
-        return dataset
-    elif len(items) != 0:
-        raise ValueError(
-            f"Dataset {dataset_name} contains {len(items)} items, expected {nb_items}. We recommend deleting the dataset and re-creating it."
-        )
-    elif len(items) == 0:
-        import datasets as ds
-
-        # Load data from file and insert into the dataset
-        download_config = ds.DownloadConfig(download_desc=False, disable_tqdm=True)
-        ds.disable_progress_bar()
-        hf_dataset = ds.load_dataset(
-            "wandb/ragbench-sentence-relevance-balanced",
-            download_config=download_config,
-        )
-
-        data = [
-            {
-                "question": item["question"],
-                "sentence": item["sentence"],
-                "label": item["label"],
-            }
-            for item in hf_dataset["train"].select(range(nb_items))
-        ]
-        ds.enable_progress_bar()
-
-        dataset.insert(data)
-
-        return dataset

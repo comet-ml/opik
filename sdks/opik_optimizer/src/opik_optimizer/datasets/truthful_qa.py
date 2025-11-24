@@ -1,113 +1,120 @@
+from __future__ import annotations
+
 import opik
 from typing import Any
 
+from opik_optimizer.api_objects.types import DatasetSpec, DatasetSplitPreset
+from opik_optimizer.utils.dataset_utils import DatasetHandle
 
-def truthful_qa(test_mode: bool = False) -> opik.Dataset:
-    """
-    Dataset containing the first 300 samples of the TruthfulQA dataset.
-    """
-    dataset_name = "truthful_qa" if not test_mode else "truthful_qa_test"
-    nb_items = 300 if not test_mode else 5
 
-    client = opik.Opik()
-    dataset = client.get_or_create_dataset(dataset_name)
-
-    items = dataset.get_items()
-    if len(items) == nb_items:
-        return dataset
-    elif len(items) != 0:
-        raise ValueError(
-            f"Dataset {dataset_name} contains {len(items)} items, expected {nb_items}. We recommend deleting the dataset and re-creating it."
-        )
-    elif len(items) == 0:
-        import datasets as ds
-
-        # Load data from file and insert into the dataset
-        download_config = ds.DownloadConfig(download_desc=False, disable_tqdm=True)
-        ds.disable_progress_bar()
-
-        gen_dataset = ds.load_dataset(
-            "truthful_qa", "generation", download_config=download_config
-        )
-        mc_dataset = ds.load_dataset(
-            "truthful_qa", "multiple_choice", download_config=download_config
-        )
-
-        data: list[dict[str, Any]] = []
-        for gen_item, mc_item in zip(
-            gen_dataset["validation"], mc_dataset["validation"]
-        ):
-            if len(data) >= nb_items:
-                break
-
-            # Get correct answers from both configurations
-            correct_answers = set(gen_item["correct_answers"])
-            if "mc1_targets" in mc_item:
+def _truthful_transform(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    data: list[dict[str, Any]] = []
+    for rec in records:
+        gen_item = rec["gen"]
+        mc_item = rec["mc"]
+        correct_answers = set(gen_item["correct_answers"])
+        for target in ("mc1_targets", "mc2_targets"):
+            if target in mc_item:
+                choices = mc_item[target]["choices"]
+                labels = mc_item[target]["labels"]
                 correct_answers.update(
-                    [
-                        choice
-                        for choice, label in zip(
-                            mc_item["mc1_targets"]["choices"],
-                            mc_item["mc1_targets"]["labels"],
-                        )
-                        if label == 1
-                    ]
+                    choice for choice, label in zip(choices, labels) if label == 1
                 )
-            if "mc2_targets" in mc_item:
-                correct_answers.update(
-                    [
-                        choice
-                        for choice, label in zip(
-                            mc_item["mc2_targets"]["choices"],
-                            mc_item["mc2_targets"]["labels"],
-                        )
-                        if label == 1
-                    ]
-                )
+        all_answers = set(gen_item["correct_answers"] + gen_item["incorrect_answers"])
+        for target in ("mc1_targets", "mc2_targets"):
+            if target in mc_item:
+                all_answers.update(mc_item[target]["choices"])
+        example = {
+            "question": gen_item["question"],
+            "answer": gen_item["best_answer"],
+            "choices": list(all_answers),
+            "correct_answer": gen_item["best_answer"],
+            "input": gen_item["question"],
+            "output": gen_item["best_answer"],
+            "context": gen_item.get("source", ""),
+            "type": "TEXT",
+            "category": gen_item["category"],
+            "source": "MANUAL",
+            "correct_answers": list(correct_answers),
+            "incorrect_answers": gen_item["incorrect_answers"],
+        }
+        data.append(example)
+    return data
 
-            # Get all possible answers
-            all_answers = set(
-                gen_item["correct_answers"] + gen_item["incorrect_answers"]
-            )
-            if "mc1_targets" in mc_item:
-                all_answers.update(mc_item["mc1_targets"]["choices"])
-            if "mc2_targets" in mc_item:
-                all_answers.update(mc_item["mc2_targets"]["choices"])
 
-            # Create a single example with all necessary fields
-            example = {
-                "question": gen_item["question"],
-                "answer": gen_item["best_answer"],
-                "choices": list(all_answers),
-                "correct_answer": gen_item["best_answer"],
-                "input": gen_item["question"],  # For AnswerRelevance metric
-                "output": gen_item["best_answer"],  # For output_key requirement
-                "context": gen_item.get("source", ""),  # Use source as context
-                "type": "TEXT",  # Set type to TEXT as required by Opik
-                "category": gen_item["category"],
-                "source": "MANUAL",  # Set source to MANUAL as required by Opik
-                "correct_answers": list(
-                    correct_answers
-                ),  # Keep track of all correct answers
-                "incorrect_answers": gen_item[
-                    "incorrect_answers"
-                ],  # Keep track of incorrect answers
-            }
+def _truthful_custom_loader(
+    source_split: str, start: int, count: int | None, seed: int
+) -> list[dict[str, Any]]:
+    import datasets as ds
 
-            # Ensure all required fields are present
-            required_fields = [
-                "question",
-                "answer",
-                "choices",
-                "correct_answer",
-                "input",
-                "output",
-                "context",
-            ]
-            if all(field in example and example[field] for field in required_fields):
-                data.append(example)
-        ds.enable_progress_bar()
+    download_config = ds.DownloadConfig(download_desc=False, disable_tqdm=True)
+    gen_dataset = ds.load_dataset(
+        "truthful_qa", "generation", download_config=download_config
+    )[source_split]
+    mc_dataset = ds.load_dataset(
+        "truthful_qa", "multiple_choice", download_config=download_config
+    )[source_split]
+    available = max(0, len(gen_dataset) - start)
+    total = available if count is None else min(count, available)
+    pairs = list(
+        zip(
+            gen_dataset.select(range(start, start + total)),
+            mc_dataset.select(range(start, start + total)),
+        )
+    )
+    return [{"gen": gen, "mc": mc} for gen, mc in pairs]
 
-        dataset.insert(data)
 
-        return dataset
+TRUTHFUL_QA_SPEC = DatasetSpec(
+    name="truthful_qa",
+    hf_path="truthful_qa",
+    hf_name="generation",
+    default_source_split="validation",
+    prefer_presets=True,
+    presets={
+        "train": DatasetSplitPreset(
+            source_split="validation",
+            start=0,
+            count=150,
+            dataset_name="truthful_qa_train",
+        ),
+        "validation": DatasetSplitPreset(
+            source_split="validation",
+            start=150,
+            count=150,
+            dataset_name="truthful_qa_validation",
+        ),
+        "test": DatasetSplitPreset(
+            source_split="validation",
+            start=300,
+            count=150,
+            dataset_name="truthful_qa_test",
+        ),
+    },
+    records_transform=_truthful_transform,
+    custom_loader=_truthful_custom_loader,
+)
+
+_TRUTHFUL_QA_HANDLE = DatasetHandle(TRUTHFUL_QA_SPEC)
+
+
+def truthful_qa(
+    *,
+    split: str | None = None,
+    count: int | None = None,
+    start: int | None = None,
+    dataset_name: str | None = None,
+    test_mode: bool = False,
+    seed: int | None = None,
+    test_mode_count: int | None = None,
+) -> opik.Dataset:
+    """TruthfulQA slices combining generation and multiple-choice views."""
+    return _TRUTHFUL_QA_HANDLE.load(
+        split=split,
+        count=count,
+        start=start,
+        dataset_name=dataset_name,
+        test_mode=test_mode,
+        seed=seed,
+        test_mode_count=test_mode_count,
+    )

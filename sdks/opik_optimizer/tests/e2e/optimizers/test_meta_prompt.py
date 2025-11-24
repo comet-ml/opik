@@ -4,11 +4,9 @@ from opik.evaluation.metrics import LevenshteinRatio
 from opik.evaluation.metrics.score_result import ScoreResult
 from typing import Any
 
-from opik_optimizer import (
-    MetaPromptOptimizer,
-    datasets,
-)
-from opik_optimizer.optimization_config import chat_prompt
+import opik_optimizer
+
+pytestmark = pytest.mark.integration
 
 
 def test_metaprompt_optimizer() -> None:
@@ -16,29 +14,37 @@ def test_metaprompt_optimizer() -> None:
     if not os.getenv("OPENAI_API_KEY"):
         pytest.fail("OPENAI_API_KEY environment variable must be set for e2e tests")
     # Prepare dataset (using tiny_test for faster execution)
-    dataset = datasets.tiny_test()
+    dataset = opik_optimizer.datasets.tiny_test()
 
     # Define metric and task configuration (see docs for more options)
     def levenshtein_ratio(dataset_item: dict[str, Any], llm_output: str) -> ScoreResult:
         metric = LevenshteinRatio()
         return metric.score(reference=dataset_item["label"], output=llm_output)
 
-    prompt = chat_prompt.ChatPrompt(
+    prompt = opik_optimizer.ChatPrompt(
         system="Provide an answer to the question.", user="{text}"
     )
 
     # Initialize optimizer with reduced parameters for faster testing
-    optimizer = MetaPromptOptimizer(
-        model="openai/gpt-4o",  # or "azure/gpt-4"
-        model_parameters={"temperature": 0.1, "max_tokens": 10000},
-        n_threads=1,
-        prompts_per_round=2,  # Reduced from 4
+    optimizer = opik_optimizer.MetaPromptOptimizer(
+        model="openai/gpt-5-mini",
+        model_parameters={
+            "temperature": 1,
+            "max_tokens": 1000,
+            "reasoning_effort": "minimal",
+        },
+        n_threads=2,
+        prompts_per_round=1,
         seed=42,
     )
 
     # Run optimization with reduced sample size
     results = optimizer.optimize_prompt(
-        dataset=dataset, metric=levenshtein_ratio, prompt=prompt, n_samples=3
+        dataset=dataset,
+        metric=levenshtein_ratio,
+        prompt=prompt,
+        n_samples=1,
+        max_trials=1,
     )
 
     # Enhanced OptimizationResult validation
@@ -122,13 +128,15 @@ def test_metaprompt_optimizer() -> None:
 
     # Validate model configuration in details
     assert "model" in results.details, "Details should contain 'model'"
-    assert results.details["model"] == "openai/gpt-4o", (
-        f"Expected openai/gpt-4o, got {results.details['model']}"
+    assert results.details["model"] == optimizer.model, (
+        f"Expected {optimizer.model}, got {results.details['model']}"
     )
 
     assert "temperature" in results.details, "Details should contain 'temperature'"
-    assert results.details["temperature"] == 0.1, (
-        f"Expected temperature 0.1, got {results.details['temperature']}"
+    assert (
+        results.details["temperature"] == optimizer.model_parameters["temperature"]
+    ), (
+        f"Expected temperature {optimizer.model_parameters['temperature']}, got {results.details['temperature']}"
     )
 
     # History validation - MetaPrompt uses details['rounds'] instead of history

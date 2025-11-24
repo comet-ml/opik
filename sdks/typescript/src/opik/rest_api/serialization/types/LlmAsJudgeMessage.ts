@@ -6,18 +6,28 @@ import * as serializers from "../index";
 import * as OpikApi from "../../api/index";
 import * as core from "../../core";
 import { LlmAsJudgeMessageRole } from "./LlmAsJudgeMessageRole";
+import { LlmAsJudgeMessageContent } from "./LlmAsJudgeMessageContent";
 
 export const LlmAsJudgeMessage: core.serialization.ObjectSchema<
     serializers.LlmAsJudgeMessage.Raw,
     OpikApi.LlmAsJudgeMessage
 > = core.serialization.object({
     role: LlmAsJudgeMessageRole,
-    content: core.serialization.string(),
+    content: core.serialization.string().optional(),
+    contentArray: core.serialization.property(
+        "content_array",
+        core.serialization.list(LlmAsJudgeMessageContent).optional(),
+    ),
+    stringContent: core.serialization.property("string_content", core.serialization.boolean().optional()),
+    structuredContent: core.serialization.property("structured_content", core.serialization.boolean().optional()),
 });
 
 export declare namespace LlmAsJudgeMessage {
     export interface Raw {
         role: LlmAsJudgeMessageRole.Raw;
-        content: string;
+        content?: string | null;
+        content_array?: LlmAsJudgeMessageContent.Raw[] | null;
+        string_content?: boolean | null;
+        structured_content?: boolean | null;
     }
 }

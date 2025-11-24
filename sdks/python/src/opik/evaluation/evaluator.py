@@ -338,10 +338,11 @@ def evaluate_experiment(
             client=client, experiment_name=experiment_name
         )
 
+    dataset_ = client.get_dataset(name=experiment.dataset_name)
+
     test_cases = rest_operations.get_experiment_test_cases(
-        client=client,
-        experiment_id=experiment.id,
-        dataset_id=experiment.dataset_id,
+        experiment_=experiment,
+        dataset_=dataset_,
         scoring_key_mapping=scoring_key_mapping,
     )
     first_trace_id = test_cases[0].trace_id
@@ -380,7 +381,7 @@ def evaluate_experiment(
 
     if verbose >= 1:
         report.display_experiment_results(
-            experiment.dataset_name,
+            dataset_.name,
             total_time,
             test_results,
             computed_experiment_scores,
@@ -388,7 +389,7 @@ def evaluate_experiment(
 
     experiment_url = url_helpers.get_experiment_url_by_id(
         experiment_id=experiment.id,
-        dataset_id=experiment.dataset_id,
+        dataset_id=dataset_.id,
         url_override=client.config.url_override,
     )
 
@@ -401,7 +402,7 @@ def evaluate_experiment(
         experiment.log_experiment_scores(score_results=computed_experiment_scores)
 
     evaluation_result_ = evaluation_result.EvaluationResult(
-        dataset_id=experiment.dataset_id,
+        dataset_id=dataset_.id,
         experiment_id=experiment.id,
         experiment_name=experiment.name,
         test_results=test_results,
@@ -412,7 +413,7 @@ def evaluate_experiment(
 
     if verbose >= 2:
         report.display_evaluation_scores_statistics(
-            dataset_name=experiment.dataset_name,
+            dataset_name=dataset_.name,
             evaluation_results=evaluation_result_,
         )
 
@@ -427,7 +428,10 @@ def _build_prompt_evaluation_task(
         {
             "vision": ModelCapabilities.supports_vision(
                 getattr(model, "model_name", None)
-            )
+            ),
+            "video": ModelCapabilities.supports_video(
+                getattr(model, "model_name", None)
+            ),
         },
     )
     chat_prompt_template = ChatPromptTemplate(messages=messages)

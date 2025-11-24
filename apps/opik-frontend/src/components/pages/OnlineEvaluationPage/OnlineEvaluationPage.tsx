@@ -141,9 +141,13 @@ const PAGINATION_SIZE_KEY = "workspace-rules-pagination-size";
 
 export const OnlineEvaluationPage: React.FC = () => {
   const resetDialogKeyRef = useRef(0);
-  const [openDialog, setOpenDialog] = useState<boolean>(false);
-
+  const [openDialogForCreate, setOpenDialogForCreate] =
+    useState<boolean>(false);
   const [search = "", setSearch] = useQueryParam("search", StringParam, {
+    updateType: "replaceIn",
+  });
+
+  const [editRuleId, setEditRuleId] = useQueryParam("editRule", StringParam, {
     updateType: "replaceIn",
   });
 
@@ -198,6 +202,9 @@ export const OnlineEvaluationPage: React.FC = () => {
 
   const rows: EvaluatorsRule[] = useMemo(() => data?.content ?? [], [data]);
 
+  const editingRule = rows.find((r) => r.id === editRuleId);
+  const isDialogOpen = Boolean(editingRule) || openDialogForCreate;
+
   const [selectedColumns, setSelectedColumns] = useLocalStorageState<string[]>(
     SELECTED_COLUMNS_KEY,
     {
@@ -221,6 +228,14 @@ export const OnlineEvaluationPage: React.FC = () => {
   const selectedRows: EvaluatorsRule[] = useMemo(() => {
     return rows.filter((row) => rowSelection[row.id]);
   }, [rowSelection, rows]);
+
+  const handleOpenEditDialog = useCallback(
+    (ruleId: string) => {
+      setEditRuleId(ruleId);
+      resetDialogKeyRef.current = resetDialogKeyRef.current + 1;
+    },
+    [setEditRuleId],
+  );
 
   const columns = useMemo(() => {
     return [
@@ -248,11 +263,16 @@ export const OnlineEvaluationPage: React.FC = () => {
         enableHiding: false,
         enableSorting: false,
       } as ColumnDef<EvaluatorsRule>,
-      generateActionsColumDef({
-        cell: RuleRowActionsCell,
+      generateActionsColumDef<EvaluatorsRule>({
+        cell: (props) => (
+          <RuleRowActionsCell
+            {...props}
+            openEditDialog={handleOpenEditDialog}
+          />
+        ),
       }),
     ];
-  }, [columnsOrder, selectedColumns, sortableBy]);
+  }, [columnsOrder, selectedColumns, sortableBy, handleOpenEditDialog]);
 
   const resizeConfig = useMemo(
     () => ({
@@ -274,9 +294,19 @@ export const OnlineEvaluationPage: React.FC = () => {
   );
 
   const handleNewRuleClick = useCallback(() => {
-    setOpenDialog(true);
+    setOpenDialogForCreate(true);
     resetDialogKeyRef.current = resetDialogKeyRef.current + 1;
   }, []);
+
+  const handleCloseDialog = useCallback(
+    (open: boolean) => {
+      setOpenDialogForCreate(open);
+      if (!open) {
+        setEditRuleId(undefined);
+      }
+    },
+    [setEditRuleId],
+  );
 
   // Filter out "type" (Scope), "enabled" (Status), and "sampling_rate" from filter options
   const filterableColumns = useMemo(
@@ -300,8 +330,9 @@ export const OnlineEvaluationPage: React.FC = () => {
         <NoRulesPage openModal={handleNewRuleClick} Wrapper={NoDataPage} />
         <AddEditRuleDialog
           key={resetDialogKeyRef.current}
-          open={openDialog}
-          setOpen={setOpenDialog}
+          open={isDialogOpen}
+          setOpen={handleCloseDialog}
+          rule={editingRule}
         />
       </>
     );
@@ -372,8 +403,9 @@ export const OnlineEvaluationPage: React.FC = () => {
       </div>
       <AddEditRuleDialog
         key={resetDialogKeyRef.current}
-        open={openDialog}
-        setOpen={setOpenDialog}
+        open={isDialogOpen}
+        setOpen={handleCloseDialog}
+        rule={editingRule}
       />
     </div>
   );

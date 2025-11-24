@@ -1,44 +1,80 @@
+from __future__ import annotations
+
 import opik
+from typing import Any
+
+from opik_optimizer.api_objects.types import DatasetSpec, DatasetSplitPreset
+from opik_optimizer.utils.dataset_utils import DatasetHandle, add_record_index
 
 
-def halu_eval_300(test_mode: bool = False) -> opik.Dataset:
+def _halu_records_transform(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Normalize HF columns and add a stable index to avoid deduplication loss."""
+    normalized = [
+        {
+            "input": rec["user_query"],
+            "llm_output": rec["chatgpt_response"],
+            "expected_hallucination_label": rec["hallucination"],
+        }
+        for rec in records
+    ]
+    return add_record_index(normalized)
+
+
+HALU_EVAL_SPEC = DatasetSpec(
+    name="halu_eval",
+    hf_path="pminervini/HaluEval",
+    hf_name="general",
+    default_source_split="train",
+    prefer_presets=True,
+    presets={
+        "train": DatasetSplitPreset(
+            source_split="data",
+            start=0,
+            count=150,
+            dataset_name="halu_eval_300_train",
+        ),
+        "validation": DatasetSplitPreset(
+            source_split="data",
+            start=150,
+            count=150,
+            dataset_name="halu_eval_validation",
+        ),
+        "test": DatasetSplitPreset(
+            source_split="data",
+            start=300,
+            count=150,
+            dataset_name="halu_eval_test",
+        ),
+    },
+    records_transform=_halu_records_transform,  # de-dupe sensitive dataset, inject ids
+)
+
+_HALU_EVAL_HANDLE = DatasetHandle(HALU_EVAL_SPEC)
+
+
+def halu_eval_300(
+    *,
+    split: str | None = None,
+    count: int | None = None,
+    start: int | None = None,
+    dataset_name: str | None = None,
+    test_mode: bool = False,
+    seed: int | None = None,
+    test_mode_count: int | None = None,
+) -> opik.Dataset:
     """
-    Dataset containing the first 300 samples of the HaluEval dataset.
+    Load slices of the HaluEval dataset (user query, ChatGPT response, label).
+
+    The default call returns the 300-example slice used in our demos. Override
+    ``split``/``count``/``start``/``dataset_name`` to stream other sections of the
+    dataset.
     """
-    dataset_name = "halu_eval_300" if not test_mode else "halu_eval_300_test"
-    nb_items = 300 if not test_mode else 5
-
-    client = opik.Opik()
-    dataset = client.get_or_create_dataset(dataset_name)
-
-    items = dataset.get_items()
-    if len(items) == nb_items:
-        return dataset
-    elif len(items) != 0:
-        raise ValueError(
-            f"Dataset {dataset_name} contains {len(items)} items, expected {nb_items}. We recommend deleting the dataset and re-creating it."
-        )
-    elif len(items) == 0:
-        import pandas as pd
-
-        try:
-            df = pd.read_parquet(
-                "hf://datasets/pminervini/HaluEval/general/data-00000-of-00001.parquet"
-            )
-        except Exception:
-            raise Exception("Unable to download HaluEval; please try again") from None
-
-        sample_size = min(nb_items, len(df))
-        df_sampled = df.sample(n=sample_size, random_state=42)
-
-        dataset_records = [
-            {
-                "input": x["user_query"],
-                "llm_output": x["chatgpt_response"],
-                "expected_hallucination_label": x["hallucination"],
-            }
-            for x in df_sampled.to_dict(orient="records")
-        ]
-
-        dataset.insert(dataset_records)
-        return dataset
+    return _HALU_EVAL_HANDLE.load(
+        split=split,
+        count=count,
+        start=start,
+        dataset_name=dataset_name,
+        test_mode=test_mode,
+        seed=seed,
+        test_mode_count=test_mode_count,
+    )

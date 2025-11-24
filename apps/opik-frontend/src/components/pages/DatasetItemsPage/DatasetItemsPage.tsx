@@ -1,10 +1,12 @@
 import React, { useCallback, useMemo, useRef, useState } from "react";
 import { ColumnPinningState, RowSelectionState } from "@tanstack/react-table";
-import findIndex from "lodash/findIndex";
 import get from "lodash/get";
-import isBoolean from "lodash/isBoolean";
-import isFunction from "lodash/isFunction";
-import { NumberParam, StringParam, useQueryParam } from "use-query-params";
+import {
+  JsonParam,
+  NumberParam,
+  StringParam,
+  useQueryParam,
+} from "use-query-params";
 import useLocalStorageState from "use-local-storage-state";
 import { keepPreviousData } from "@tanstack/react-query";
 
@@ -17,9 +19,11 @@ import useQueryParamAndLocalStorageState from "@/hooks/useQueryParamAndLocalStor
 import ColumnsButton from "@/components/shared/ColumnsButton/ColumnsButton";
 import DateTag from "@/components/shared/DateTag/DateTag";
 import SearchInput from "@/components/shared/SearchInput/SearchInput";
+import FiltersButton from "@/components/shared/FiltersButton/FiltersButton";
 import useDatasetItemsList from "@/api/datasets/useDatasetItemsList";
 import useDatasetById from "@/api/datasets/useDatasetById";
 import { DatasetItem } from "@/types/datasets";
+import { Filters } from "@/types/filters";
 import {
   COLUMN_ID_ID,
   COLUMN_SELECT_ID,
@@ -28,12 +32,12 @@ import {
   DynamicColumn,
   ROW_HEIGHT,
 } from "@/types/shared";
-import ResizableSidePanel from "@/components/shared/ResizableSidePanel/ResizableSidePanel";
-import DatasetItemPanelContent from "@/components/pages/DatasetItemsPage/DatasetItemPanelContent";
+import DatasetItemEditor from "@/components/pages/DatasetItemsPage/DatasetItemEditor/DatasetItemEditor";
 import DatasetItemsActionsPanel from "@/components/pages/DatasetItemsPage/DatasetItemsActionsPanel";
 import { DatasetItemRowActionsCell } from "@/components/pages/DatasetItemsPage/DatasetItemRowActionsCell";
 import DataTableRowHeightSelector from "@/components/shared/DataTableRowHeightSelector/DataTableRowHeightSelector";
 import AddEditDatasetItemDialog from "@/components/pages/DatasetItemsPage/AddEditDatasetItemDialog";
+import AddDatasetItemSidebar from "@/components/pages/DatasetItemsPage/AddDatasetItemSidebar";
 import DatasetTagsList from "@/components/pages/DatasetItemsPage/DatasetTagsList";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
@@ -42,14 +46,16 @@ import { buildDocsUrl } from "@/lib/utils";
 import DataTableNoData from "@/components/shared/DataTableNoData/DataTableNoData";
 import AutodetectCell from "@/components/shared/DataTableCells/AutodetectCell";
 import LinkCell from "@/components/shared/DataTableCells/LinkCell";
+import ListCell from "@/components/shared/DataTableCells/ListCell";
 import { formatDate } from "@/lib/date";
 import { mapDynamicColumnTypesToColumnType } from "@/lib/filters";
 import {
   generateActionsColumDef,
   generateSelectColumDef,
 } from "@/components/shared/DataTable/utils";
-import { useTruncationEnabled } from "@/components/server-sync-provider";
 import UseDatasetDropdown from "@/components/pages/DatasetItemsPage/UseDatasetDropdown";
+import { RESOURCE_TYPE } from "@/components/shared/ResourceLink/ResourceLink";
+import { DATASET_ITEM_DATA_PREFIX } from "@/constants/datasets";
 
 const getRowId = (d: DatasetItem) => d.id;
 
@@ -58,7 +64,7 @@ export const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
   right: [],
 };
 
-export const DEFAULT_SELECTED_COLUMNS: string[] = ["id", "created_at"];
+export const DEFAULT_SELECTED_COLUMNS: string[] = ["id", "created_at", "tags"];
 
 const SELECTED_COLUMNS_KEY = "dataset-items-selected-columns";
 const COLUMNS_WIDTH_KEY = "dataset-items-columns-width";
@@ -69,7 +75,7 @@ const ROW_HEIGHT_KEY = "dataset-items-row-height";
 
 const DatasetItemsPage = () => {
   const datasetId = useDatasetIdFromURL();
-  const truncationEnabled = useTruncationEnabled();
+  const truncationEnabled = false;
 
   const [activeRowId = "", setActiveRowId] = useQueryParam("row", StringParam, {
     updateType: "replaceIn",
@@ -82,6 +88,14 @@ const DatasetItemsPage = () => {
   const [search = "", setSearch] = useQueryParam("search", StringParam, {
     updateType: "replaceIn",
   });
+
+  const [filters = [], setFilters] = useQueryParam<Filters, Filters>(
+    "filters",
+    JsonParam,
+    {
+      updateType: "replaceIn",
+    },
+  );
 
   const [size, setSize] = useQueryParamAndLocalStorageState<
     number | null | undefined
@@ -107,27 +121,36 @@ const DatasetItemsPage = () => {
 
   const resetDialogKeyRef = useRef(0);
   const [openDialog, setOpenDialog] = useState<boolean>(false);
+  const [openAddSidebar, setOpenAddSidebar] = useState<boolean>(false);
 
   const { data: dataset } = useDatasetById({
     datasetId,
   });
 
-  const { data, isPending } = useDatasetItemsList(
-    {
-      datasetId,
-      page: page as number,
-      size: size as number,
-      search: search!,
-      truncate: truncationEnabled,
-    },
-    {
-      placeholderData: keepPreviousData,
-    },
+  const { data, isPending, isPlaceholderData, isFetching } =
+    useDatasetItemsList(
+      {
+        datasetId,
+        filters,
+        page: page as number,
+        size: size as number,
+        search: search!,
+        truncate: truncationEnabled,
+      },
+      {
+        placeholderData: keepPreviousData,
+      },
+    );
+  const datasetColumns = useMemo(
+    () =>
+      (data?.columns ?? []).sort((c1, c2) => c1.name.localeCompare(c2.name)),
+    [data?.columns],
   );
 
   const { refetch: refetchExportData } = useDatasetItemsList(
     {
       datasetId,
+      filters,
       page: page as number,
       size: size as number,
       search: search!,
@@ -193,14 +216,12 @@ const DatasetItemsPage = () => {
   }, [refetchExportData, rowSelection]);
 
   const dynamicDatasetColumns = useMemo(() => {
-    return (data?.columns ?? [])
-      .sort((c1, c2) => c1.name.localeCompare(c2.name))
-      .map<DynamicColumn>((c) => ({
-        id: c.name,
-        label: c.name,
-        columnType: mapDynamicColumnTypesToColumnType(c.types),
-      }));
-  }, [data]);
+    return datasetColumns.map<DynamicColumn>((c) => ({
+      id: `${DATASET_ITEM_DATA_PREFIX}.${c.name}`,
+      label: c.name,
+      columnType: mapDynamicColumnTypesToColumnType(c.types),
+    }));
+  }, [datasetColumns]);
 
   const dynamicColumnsIds = useMemo(
     () => dynamicDatasetColumns.map((c) => c.id),
@@ -226,6 +247,15 @@ const DatasetItemsPage = () => {
     );
 
     retVal.push({
+      id: "tags",
+      label: "Tags",
+      type: COLUMN_TYPE.list,
+      iconType: "tags",
+      accessorFn: (row) => row.tags || [],
+      cell: ListCell as never,
+    });
+
+    retVal.push({
       id: "created_at",
       label: "Created",
       type: COLUMN_TYPE.time,
@@ -247,6 +277,17 @@ const DatasetItemsPage = () => {
 
     return retVal;
   }, [dynamicDatasetColumns]);
+
+  const filtersColumnData = useMemo(() => {
+    return [
+      {
+        id: "tags",
+        label: "Tags",
+        type: COLUMN_TYPE.list,
+        iconType: "tags" as const,
+      },
+    ];
+  }, []);
 
   const handleRowClick = useCallback(
     (row: DatasetItem) => {
@@ -290,37 +331,15 @@ const DatasetItemsPage = () => {
   }, [columns, selectedColumns]);
 
   const handleNewDatasetItemClick = useCallback(() => {
-    setOpenDialog(true);
-    resetDialogKeyRef.current = resetDialogKeyRef.current + 1;
-  }, []);
-
-  const rowIndex = findIndex(rows, (row) => activeRowId === row.id);
-
-  const hasNext = rowIndex >= 0 ? rowIndex < rows.length - 1 : false;
-  const hasPrevious = rowIndex >= 0 ? rowIndex > 0 : false;
-
-  const handleRowChange = useCallback(
-    (shift: number) => {
-      setActiveRowId(rows[rowIndex + shift]?.id ?? "");
-    },
-    [rowIndex, rows, setActiveRowId],
-  );
+    if (data?.total && data.total > 0) {
+      setOpenAddSidebar(true);
+    } else {
+      setOpenDialog(true);
+      resetDialogKeyRef.current = resetDialogKeyRef.current + 1;
+    }
+  }, [data?.total]);
 
   const handleClose = useCallback(() => setActiveRowId(""), [setActiveRowId]);
-
-  const horizontalNavigation = useMemo(
-    () =>
-      isBoolean(hasNext) &&
-      isBoolean(hasPrevious) &&
-      isFunction(handleRowChange)
-        ? {
-            onChange: handleRowChange,
-            hasNext,
-            hasPrevious,
-          }
-        : undefined,
-    [handleRowChange, hasNext, hasPrevious],
-  );
 
   const resizeConfig = useMemo(
     () => ({
@@ -355,8 +374,11 @@ const DatasetItemsPage = () => {
           </div>
         )}
         {dataset?.created_at && (
-          <div className="mb-2 flex gap-4 overflow-x-auto">
-            <DateTag date={dataset?.created_at} />
+          <div className="mb-2 flex gap-2 overflow-x-auto">
+            <DateTag
+              date={dataset?.created_at}
+              resource={RESOURCE_TYPE.dataset}
+            />
           </div>
         )}
         <DatasetTagsList
@@ -373,6 +395,11 @@ const DatasetItemsPage = () => {
             placeholder="Search"
             className="w-[320px]"
             dimension="sm"
+          />
+          <FiltersButton
+            columns={filtersColumnData}
+            filters={filters}
+            onChange={setFilters}
           />
         </div>
         <div className="flex items-center gap-2">
@@ -411,6 +438,7 @@ const DatasetItemsPage = () => {
         onRowClick={handleRowClick}
         activeRowId={activeRowId ?? ""}
         resizeConfig={resizeConfig}
+        showLoadingOverlay={isPlaceholderData && isFetching}
         selectionConfig={{
           rowSelection,
           setRowSelection,
@@ -446,21 +474,28 @@ const DatasetItemsPage = () => {
           truncationEnabled={truncationEnabled}
         />
       </div>
-      <ResizableSidePanel
-        panelId="dataset-items"
-        entity="item"
-        open={Boolean(activeRowId)}
+      <DatasetItemEditor
+        datasetItemId={activeRowId as string}
+        datasetId={datasetId}
+        columns={datasetColumns}
         onClose={handleClose}
-        horizontalNavigation={horizontalNavigation}
-      >
-        <DatasetItemPanelContent datasetItemId={activeRowId as string} />
-      </ResizableSidePanel>
+        isOpen={Boolean(activeRowId)}
+        rows={rows}
+        setActiveRowId={setActiveRowId}
+      />
 
       <AddEditDatasetItemDialog
         key={resetDialogKeyRef.current}
         datasetId={datasetId}
         open={openDialog}
         setOpen={setOpenDialog}
+      />
+
+      <AddDatasetItemSidebar
+        datasetId={datasetId}
+        open={openAddSidebar}
+        setOpen={setOpenAddSidebar}
+        columns={datasetColumns}
       />
     </div>
   );

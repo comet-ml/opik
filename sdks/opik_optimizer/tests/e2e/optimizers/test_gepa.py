@@ -12,11 +12,9 @@ if importlib.util.find_spec("gepa") is None:
         "gepa package is required for GEPA optimizer tests. Install with: pip install 'opik_optimizer[dev]'"
     )
 
-from opik_optimizer import (
-    GepaOptimizer,
-    datasets,
-)
-from opik_optimizer.optimization_config import chat_prompt
+import opik_optimizer
+
+pytestmark = pytest.mark.integration
 
 
 def test_gepa_optimizer() -> None:
@@ -25,21 +23,25 @@ def test_gepa_optimizer() -> None:
         pytest.fail("OPENAI_API_KEY environment variable must be set for e2e tests")
 
     # Prepare dataset (using tiny_test for faster execution)
-    dataset = datasets.tiny_test()
+    dataset = opik_optimizer.datasets.tiny_test()
 
     # Define metric and task configuration (see docs for more options)
     def levenshtein_ratio(dataset_item: dict[str, Any], llm_output: str) -> ScoreResult:
         metric = LevenshteinRatio()
         return metric.score(reference=dataset_item["label"], output=llm_output)
 
-    prompt = chat_prompt.ChatPrompt(
+    prompt = opik_optimizer.ChatPrompt(
         system="Provide an answer to the question.", user="{text}"
     )
 
     # Initialize optimizer with reduced parameters for faster testing
-    optimizer = GepaOptimizer(
-        model="openai/gpt-4o-mini",
-        model_parameters={"temperature": 0.1, "max_tokens": 1000},
+    optimizer = opik_optimizer.GepaOptimizer(
+        model="openai/gpt-5-mini",
+        model_parameters={
+            "temperature": 1,
+            "max_tokens": 1000,
+            "reasoning_effort": "minimal",
+        },
         n_threads=2,
         seed=42,
     )
@@ -49,8 +51,8 @@ def test_gepa_optimizer() -> None:
         dataset=dataset,
         metric=levenshtein_ratio,
         prompt=prompt,
-        n_samples=3,
-        max_trials=3,
+        n_samples=1,
+        max_trials=2,
     )
 
     # Enhanced OptimizationResult validation
@@ -64,6 +66,9 @@ def test_gepa_optimizer() -> None:
     )
     assert results.metric_name == "levenshtein_ratio", (
         f"Expected metric name 'levenshtein_ratio', got {results.metric_name}"
+    )
+    assert results.details.get("model") == optimizer.model, (
+        f"Expected model {optimizer.model}, got {results.details.get('model')}"
     )
 
     # Results structure validation

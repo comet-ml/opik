@@ -31,6 +31,8 @@ from ..types.trace_public import TracePublic
 from ..types.trace_thread import TraceThread
 from ..types.trace_thread_filter import TraceThreadFilter
 from ..types.trace_thread_page import TraceThreadPage
+from ..types.trace_thread_update import TraceThreadUpdate
+from ..types.trace_update import TraceUpdate
 from ..types.trace_write import TraceWrite
 from ..types.value_entry import ValueEntry
 
@@ -244,6 +246,171 @@ class RawTracesClient:
         try:
             if 200 <= _response.status_code < 300:
                 return HttpResponse(response=_response, data=None)
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
+        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+
+    def create_traces(
+        self, *, traces: typing.Sequence[TraceWrite], request_options: typing.Optional[RequestOptions] = None
+    ) -> HttpResponse[None]:
+        """
+        Create traces
+
+        Parameters
+        ----------
+        traces : typing.Sequence[TraceWrite]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        HttpResponse[None]
+        """
+        _response = self._client_wrapper.httpx_client.request(
+            "v1/private/traces/batch",
+            method="POST",
+            json={
+                "traces": convert_and_respect_annotation_metadata(
+                    object_=traces, annotation=typing.Sequence[TraceWrite], direction="write"
+                ),
+            },
+            headers={
+                "content-type": "application/json",
+            },
+            request_options=request_options,
+            omit=OMIT,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                return HttpResponse(response=_response, data=None)
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
+        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+
+    def batch_update_traces(
+        self,
+        *,
+        ids: typing.Sequence[str],
+        update: TraceUpdate,
+        merge_tags: typing.Optional[bool] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> HttpResponse[None]:
+        """
+        Update multiple traces
+
+        Parameters
+        ----------
+        ids : typing.Sequence[str]
+            List of trace IDs to update (max 1000)
+
+        update : TraceUpdate
+
+        merge_tags : typing.Optional[bool]
+            If true, merge tags with existing tags instead of replacing them. Default: false
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        HttpResponse[None]
+        """
+        _response = self._client_wrapper.httpx_client.request(
+            "v1/private/traces/batch",
+            method="PATCH",
+            json={
+                "ids": ids,
+                "update": convert_and_respect_annotation_metadata(
+                    object_=update, annotation=TraceUpdate, direction="write"
+                ),
+                "merge_tags": merge_tags,
+            },
+            headers={
+                "content-type": "application/json",
+            },
+            request_options=request_options,
+            omit=OMIT,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                return HttpResponse(response=_response, data=None)
+            if _response.status_code == 400:
+                raise BadRequestError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
+        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+
+    def batch_update_threads(
+        self,
+        *,
+        ids: typing.Sequence[str],
+        update: TraceThreadUpdate,
+        merge_tags: typing.Optional[bool] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> HttpResponse[None]:
+        """
+        Update multiple threads
+
+        Parameters
+        ----------
+        ids : typing.Sequence[str]
+            List of thread model IDs to update (max 1000)
+
+        update : TraceThreadUpdate
+
+        merge_tags : typing.Optional[bool]
+            If true, merge tags with existing tags instead of replacing them. Default: false
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        HttpResponse[None]
+        """
+        _response = self._client_wrapper.httpx_client.request(
+            "v1/private/traces/threads/batch",
+            method="PATCH",
+            json={
+                "ids": ids,
+                "update": convert_and_respect_annotation_metadata(
+                    object_=update, annotation=TraceThreadUpdate, direction="write"
+                ),
+                "merge_tags": merge_tags,
+            },
+            headers={
+                "content-type": "application/json",
+            },
+            request_options=request_options,
+            omit=OMIT,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                return HttpResponse(response=_response, data=None)
+            if _response.status_code == 400:
+                raise BadRequestError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
             _response_json = _response.json()
         except JSONDecodeError:
             raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
@@ -474,45 +641,6 @@ class RawTracesClient:
                 ),
                 "last_updated_at": last_updated_at,
                 "thread_id": thread_id,
-            },
-            headers={
-                "content-type": "application/json",
-            },
-            request_options=request_options,
-            omit=OMIT,
-        )
-        try:
-            if 200 <= _response.status_code < 300:
-                return HttpResponse(response=_response, data=None)
-            _response_json = _response.json()
-        except JSONDecodeError:
-            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
-        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
-
-    def create_traces(
-        self, *, traces: typing.Sequence[TraceWrite], request_options: typing.Optional[RequestOptions] = None
-    ) -> HttpResponse[None]:
-        """
-        Create traces
-
-        Parameters
-        ----------
-        traces : typing.Sequence[TraceWrite]
-
-        request_options : typing.Optional[RequestOptions]
-            Request-specific configuration.
-
-        Returns
-        -------
-        HttpResponse[None]
-        """
-        _response = self._client_wrapper.httpx_client.request(
-            "v1/private/traces/batch",
-            method="POST",
-            json={
-                "traces": convert_and_respect_annotation_metadata(
-                    object_=traces, annotation=typing.Sequence[TraceWrite], direction="write"
-                ),
             },
             headers={
                 "content-type": "application/json",
@@ -1523,10 +1651,10 @@ class RawTracesClient:
             If true, returns attachment references like [file.png]; if false, downloads and reinjects stripped attachments
 
         from_time : typing.Optional[dt.datetime]
-            Filter trace threads created from this time (ISO-8601 format). Must be provided together with 'to_time'.
+            Filter trace threads created from this time (ISO-8601 format).
 
         to_time : typing.Optional[dt.datetime]
-            Filter trace threads created up to this time (ISO-8601 format). Must be provided together with 'from_time' and must be after 'from_time'.
+            Filter trace threads created up to this time (ISO-8601 format). If not provided, defaults to current time. Must be after 'from_time'.
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration. You can pass in configuration such as `chunk_size`, and more to customize the request and response.
@@ -1625,10 +1753,10 @@ class RawTracesClient:
             If true, returns attachment references like [file.png]; if false, downloads and reinjects stripped attachments
 
         from_time : typing.Optional[dt.datetime]
-            Filter traces created from this time (ISO-8601 format). Must be provided together with 'to_time'.
+            Filter traces created from this time (ISO-8601 format).
 
         to_time : typing.Optional[dt.datetime]
-            Filter traces created up to this time (ISO-8601 format). Must be provided together with 'from_time' and must be after 'from_time'.
+            Filter traces created up to this time (ISO-8601 format). If not provided, defaults to current time. Must be after 'from_time'.
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration. You can pass in configuration such as `chunk_size`, and more to customize the request and response.
@@ -2114,6 +2242,171 @@ class AsyncRawTracesClient:
             raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
         raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
 
+    async def create_traces(
+        self, *, traces: typing.Sequence[TraceWrite], request_options: typing.Optional[RequestOptions] = None
+    ) -> AsyncHttpResponse[None]:
+        """
+        Create traces
+
+        Parameters
+        ----------
+        traces : typing.Sequence[TraceWrite]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        AsyncHttpResponse[None]
+        """
+        _response = await self._client_wrapper.httpx_client.request(
+            "v1/private/traces/batch",
+            method="POST",
+            json={
+                "traces": convert_and_respect_annotation_metadata(
+                    object_=traces, annotation=typing.Sequence[TraceWrite], direction="write"
+                ),
+            },
+            headers={
+                "content-type": "application/json",
+            },
+            request_options=request_options,
+            omit=OMIT,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                return AsyncHttpResponse(response=_response, data=None)
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
+        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+
+    async def batch_update_traces(
+        self,
+        *,
+        ids: typing.Sequence[str],
+        update: TraceUpdate,
+        merge_tags: typing.Optional[bool] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> AsyncHttpResponse[None]:
+        """
+        Update multiple traces
+
+        Parameters
+        ----------
+        ids : typing.Sequence[str]
+            List of trace IDs to update (max 1000)
+
+        update : TraceUpdate
+
+        merge_tags : typing.Optional[bool]
+            If true, merge tags with existing tags instead of replacing them. Default: false
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        AsyncHttpResponse[None]
+        """
+        _response = await self._client_wrapper.httpx_client.request(
+            "v1/private/traces/batch",
+            method="PATCH",
+            json={
+                "ids": ids,
+                "update": convert_and_respect_annotation_metadata(
+                    object_=update, annotation=TraceUpdate, direction="write"
+                ),
+                "merge_tags": merge_tags,
+            },
+            headers={
+                "content-type": "application/json",
+            },
+            request_options=request_options,
+            omit=OMIT,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                return AsyncHttpResponse(response=_response, data=None)
+            if _response.status_code == 400:
+                raise BadRequestError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
+        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+
+    async def batch_update_threads(
+        self,
+        *,
+        ids: typing.Sequence[str],
+        update: TraceThreadUpdate,
+        merge_tags: typing.Optional[bool] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> AsyncHttpResponse[None]:
+        """
+        Update multiple threads
+
+        Parameters
+        ----------
+        ids : typing.Sequence[str]
+            List of thread model IDs to update (max 1000)
+
+        update : TraceThreadUpdate
+
+        merge_tags : typing.Optional[bool]
+            If true, merge tags with existing tags instead of replacing them. Default: false
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        AsyncHttpResponse[None]
+        """
+        _response = await self._client_wrapper.httpx_client.request(
+            "v1/private/traces/threads/batch",
+            method="PATCH",
+            json={
+                "ids": ids,
+                "update": convert_and_respect_annotation_metadata(
+                    object_=update, annotation=TraceThreadUpdate, direction="write"
+                ),
+                "merge_tags": merge_tags,
+            },
+            headers={
+                "content-type": "application/json",
+            },
+            request_options=request_options,
+            omit=OMIT,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                return AsyncHttpResponse(response=_response, data=None)
+            if _response.status_code == 400:
+                raise BadRequestError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
+        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+
     async def close_trace_thread(
         self,
         *,
@@ -2339,45 +2632,6 @@ class AsyncRawTracesClient:
                 ),
                 "last_updated_at": last_updated_at,
                 "thread_id": thread_id,
-            },
-            headers={
-                "content-type": "application/json",
-            },
-            request_options=request_options,
-            omit=OMIT,
-        )
-        try:
-            if 200 <= _response.status_code < 300:
-                return AsyncHttpResponse(response=_response, data=None)
-            _response_json = _response.json()
-        except JSONDecodeError:
-            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
-        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
-
-    async def create_traces(
-        self, *, traces: typing.Sequence[TraceWrite], request_options: typing.Optional[RequestOptions] = None
-    ) -> AsyncHttpResponse[None]:
-        """
-        Create traces
-
-        Parameters
-        ----------
-        traces : typing.Sequence[TraceWrite]
-
-        request_options : typing.Optional[RequestOptions]
-            Request-specific configuration.
-
-        Returns
-        -------
-        AsyncHttpResponse[None]
-        """
-        _response = await self._client_wrapper.httpx_client.request(
-            "v1/private/traces/batch",
-            method="POST",
-            json={
-                "traces": convert_and_respect_annotation_metadata(
-                    object_=traces, annotation=typing.Sequence[TraceWrite], direction="write"
-                ),
             },
             headers={
                 "content-type": "application/json",
@@ -3388,10 +3642,10 @@ class AsyncRawTracesClient:
             If true, returns attachment references like [file.png]; if false, downloads and reinjects stripped attachments
 
         from_time : typing.Optional[dt.datetime]
-            Filter trace threads created from this time (ISO-8601 format). Must be provided together with 'to_time'.
+            Filter trace threads created from this time (ISO-8601 format).
 
         to_time : typing.Optional[dt.datetime]
-            Filter trace threads created up to this time (ISO-8601 format). Must be provided together with 'from_time' and must be after 'from_time'.
+            Filter trace threads created up to this time (ISO-8601 format). If not provided, defaults to current time. Must be after 'from_time'.
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration. You can pass in configuration such as `chunk_size`, and more to customize the request and response.
@@ -3491,10 +3745,10 @@ class AsyncRawTracesClient:
             If true, returns attachment references like [file.png]; if false, downloads and reinjects stripped attachments
 
         from_time : typing.Optional[dt.datetime]
-            Filter traces created from this time (ISO-8601 format). Must be provided together with 'to_time'.
+            Filter traces created from this time (ISO-8601 format).
 
         to_time : typing.Optional[dt.datetime]
-            Filter traces created up to this time (ISO-8601 format). Must be provided together with 'from_time' and must be after 'from_time'.
+            Filter traces created up to this time (ISO-8601 format). If not provided, defaults to current time. Must be after 'from_time'.
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration. You can pass in configuration such as `chunk_size`, and more to customize the request and response.

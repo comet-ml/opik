@@ -28,6 +28,8 @@ target/
 /sdks/opik_optimizer/artifacts
 /sdks/opik_optimizer/benchmark_results/
 /sdks/opik_optimizer/node_modules
+/sdks/opik_optimizer/*prof*
+/sdks/opik_optimizer/.coverage*
 
 # FE related
 /apps/opik-frontend/dist

@@ -9,7 +9,10 @@ import langchain_openai
 
 import opik
 from opik.integrations.langchain import OpikTracer, extract_current_langgraph_span_data
-from opik import jsonable_encoder
+from opik import jsonable_encoder, context_storage
+from opik.api_objects import span, trace
+from opik.api_objects import opik_client
+from opik.types import DistributedTraceHeadersDict
 
 from ...testlib import (
     ANY_BUT_NONE,
@@ -85,45 +88,148 @@ def test_langgraph__happyflow(
         spans=[
             SpanModel(
                 id=ANY_BUT_NONE,
-                name="LangGraph",
-                input=initial_state,
+                name="respond_to_greeting",
+                input={"input": initial_state},
                 output=result,
-                tags=["tag1", "tag2"],
-                metadata={
-                    "a": "b",
-                    "created_from": "langchain",
-                },
+                metadata=ANY_DICT,
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
                 spans=[
                     SpanModel(
                         id=ANY_BUT_NONE,
-                        name="respond_to_greeting",
-                        input={"input": initial_state},
-                        output=result,
-                        metadata=ANY_DICT,
+                        type="tool",
+                        name="greeting_text_creator",
+                        input={"input": initial_state["message"]},
+                        output={"output": result["response"]},
                         start_time=ANY_BUT_NONE,
                         end_time=ANY_BUT_NONE,
-                        spans=[
-                            SpanModel(
-                                id=ANY_BUT_NONE,
-                                type="tool",
-                                name="greeting_text_creator",
-                                input={"input": initial_state["message"]},
-                                output={"output": result["response"]},
-                                start_time=ANY_BUT_NONE,
-                                end_time=ANY_BUT_NONE,
-                                spans=[],
-                            ),
-                        ],
+                        spans=[],
                     ),
                 ],
-            )
+            ),
         ],
     )
 
     assert len(fake_backend.trace_trees) == 1
     assert len(callback.created_traces()) == 1
+    assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
+
+
+def test_langgraph__invoked_from_tracked_function__langgraph_span_is_kept(
+    fake_backend,
+):
+    """Test that LangGraph happy flow works correctly when invoked from a tracked function.
+
+    When LangGraph is invoked from a tracked function, the LangGraph span should be kept
+    (not skipped) and attached to the parent span.
+    """
+
+    class State(BaseModel):
+        message: str
+        response: str = ""
+
+    @opik.track(type="tool")
+    def greeting_text_creator(input: str) -> str:
+        if "hello" in input.lower() or "hi" in input.lower():
+            response = "Hello! How can I help you today?"
+        else:
+            response = "Greetings! Is there something I can assist you with?"
+
+        return response
+
+    def respond_to_greeting(state: State) -> Dict[str, Any]:
+        greeting = state.message
+        response = greeting_text_creator(greeting)
+        return {"message": state.message, "response": response}
+
+    builder = StateGraph(State)
+    builder.add_node("respond_to_greeting", respond_to_greeting)
+    builder.add_edge(START, "respond_to_greeting")
+    builder.add_edge("respond_to_greeting", END)
+
+    graph = builder.compile()
+
+    callback = OpikTracer(
+        tags=["tag1", "tag2"],
+        metadata={"a": "b"},
+    )
+
+    @opik.track(name="invoke_graph")
+    def invoke_graph_from_tracked_function(
+        input_data: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        return graph.invoke(input_data, config={"callbacks": [callback]})
+
+    initial_state = {
+        "message": "Hi there!",
+        "response": "",
+    }
+    result = invoke_graph_from_tracked_function(initial_state)
+
+    callback.flush()
+
+    EXPECTED_TRACE_TREE = TraceModel(
+        id=ANY_BUT_NONE,
+        name="invoke_graph",
+        input={"input_data": initial_state},
+        output=result,
+        start_time=ANY_BUT_NONE,
+        end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
+        spans=[
+            SpanModel(
+                id=ANY_BUT_NONE,
+                name="invoke_graph",
+                input={"input_data": initial_state},
+                output=result,
+                start_time=ANY_BUT_NONE,
+                end_time=ANY_BUT_NONE,
+                spans=[
+                    SpanModel(
+                        id=ANY_BUT_NONE,
+                        name="LangGraph",
+                        input=initial_state,
+                        output=result,
+                        tags=["tag1", "tag2"],
+                        metadata={
+                            "a": "b",
+                            "created_from": "langchain",
+                        },
+                        start_time=ANY_BUT_NONE,
+                        end_time=ANY_BUT_NONE,
+                        spans=[
+                            SpanModel(
+                                id=ANY_BUT_NONE,
+                                name="respond_to_greeting",
+                                input={"input": initial_state},
+                                output=result,
+                                metadata=ANY_DICT,
+                                start_time=ANY_BUT_NONE,
+                                end_time=ANY_BUT_NONE,
+                                spans=[
+                                    SpanModel(
+                                        id=ANY_BUT_NONE,
+                                        type="tool",
+                                        name="greeting_text_creator",
+                                        input={"input": initial_state["message"]},
+                                        output={"output": result["response"]},
+                                        start_time=ANY_BUT_NONE,
+                                        end_time=ANY_BUT_NONE,
+                                        spans=[],
+                                    ),
+                                ],
+                            ),
+                        ],
+                    ),
+                ],
+            ),
+        ],
+    )
+
+    assert len(fake_backend.trace_trees) == 1
+    assert (
+        len(callback.created_traces()) == 0
+    )  # No new trace created, attached to existing trace
     assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
 
 
@@ -179,7 +285,7 @@ def test_langgraph__ChatOpenAI_used_in_the_node_with_config__langchain_looses_pa
         spans=[
             SpanModel(
                 id=ANY_BUT_NONE,
-                name="LangGraph",
+                name="chatbot_with_config_passed",
                 input=expected_input,
                 output=ANY_DICT.containing({"messages": ANY_LIST}),
                 metadata=ANY_DICT.containing({"created_from": "langchain"}),
@@ -188,33 +294,20 @@ def test_langgraph__ChatOpenAI_used_in_the_node_with_config__langchain_looses_pa
                 spans=[
                     SpanModel(
                         id=ANY_BUT_NONE,
-                        name="chatbot_with_config_passed",
-                        input=expected_input,
-                        output=ANY_DICT.containing({"messages": ANY_LIST}),
+                        name="ChatOpenAI",
+                        input={"messages": ANY_LIST},
+                        output=ANY_DICT.containing({"generations": ANY_LIST}),
                         metadata=ANY_DICT.containing({"created_from": "langchain"}),
                         start_time=ANY_BUT_NONE,
                         end_time=ANY_BUT_NONE,
-                        spans=[
-                            SpanModel(
-                                id=ANY_BUT_NONE,
-                                name="ChatOpenAI",
-                                input={"messages": ANY_LIST},
-                                output=ANY_DICT.containing({"generations": ANY_LIST}),
-                                metadata=ANY_DICT.containing(
-                                    {"created_from": "langchain"}
-                                ),
-                                start_time=ANY_BUT_NONE,
-                                end_time=ANY_BUT_NONE,
-                                usage=EXPECTED_FULL_OPENAI_USAGE_LOGGED_FORMAT,
-                                model=ANY_STRING.starting_with(OPENAI_MODEL_FOR_TESTS),
-                                provider="openai",
-                                type="llm",
-                                spans=[],
-                            ),
-                        ],
+                        usage=EXPECTED_FULL_OPENAI_USAGE_LOGGED_FORMAT,
+                        model=ANY_STRING.starting_with(OPENAI_MODEL_FOR_TESTS),
+                        provider="openai",
+                        type="llm",
+                        spans=[],
                     ),
                 ],
-            )
+            ),
         ],
     )
 
@@ -387,19 +480,19 @@ def test_langgraph__node_returning_command__output_captured_correctly(
     trace_tree = fake_backend.trace_trees[0]
 
     def find_span_by_name(spans, name):
-        for span in spans:
-            if span.name == name:
-                return span
-            if span.spans:
-                found = find_span_by_name(span.spans, name)
+        for span_ in spans:
+            if span_.name == name:
+                return span_
+            if span_.spans:
+                found = find_span_by_name(span_.spans, name)
                 if found:
                     return found
         return None
 
-    root_span = trace_tree.spans[0]
-    node_a_span = find_span_by_name(root_span.spans, "node_a")
-    node_b_span = find_span_by_name(root_span.spans, "node_b_command")
-    node_c_span = find_span_by_name(root_span.spans, "node_c")
+    # Node spans are now direct children of the trace (no LangGraph span wrapper)
+    node_a_span = find_span_by_name(trace_tree.spans, "node_a")
+    node_b_span = find_span_by_name(trace_tree.spans, "node_b_command")
+    node_c_span = find_span_by_name(trace_tree.spans, "node_c")
 
     assert node_a_span is not None
     assert node_b_span is not None
@@ -500,33 +593,21 @@ async def test_extract_current_langgraph_span_data__async_langgraph_node__happyf
         spans=[
             SpanModel(
                 id=ANY_BUT_NONE,
-                name="LangGraph",
+                name="async_span_extractor",
                 input=ANY_DICT.containing({"messages": ANY_LIST}),
                 output=ANY_DICT.containing({"messages": ANY_LIST}),
                 metadata=ANY_DICT.containing({"created_from": "langchain"}),
-                tags=["span-extraction-test"],
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
                 spans=[
                     SpanModel(
                         id=ANY_BUT_NONE,
-                        name="async_span_extractor",
-                        input=ANY_DICT.containing({"messages": ANY_LIST}),
-                        output=ANY_DICT.containing({"messages": ANY_LIST}),
-                        metadata=ANY_DICT.containing({"created_from": "langchain"}),
+                        name="inner_tracked_function",
+                        input={"x": 21},
+                        output={"output": 42},
                         start_time=ANY_BUT_NONE,
                         end_time=ANY_BUT_NONE,
-                        spans=[
-                            SpanModel(
-                                id=ANY_BUT_NONE,
-                                name="inner_tracked_function",
-                                input={"x": 21},
-                                output={"output": 42},
-                                start_time=ANY_BUT_NONE,
-                                end_time=ANY_BUT_NONE,
-                                spans=[],
-                            ),
-                        ],
+                        spans=[],
                     ),
                 ],
             ),
@@ -537,4 +618,456 @@ async def test_extract_current_langgraph_span_data__async_langgraph_node__happyf
 
     assert len(fake_backend.trace_trees) == 1
     assert len(opik_tracer.created_traces()) == 1
+    assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
+
+
+def test_langgraph__distributed_headers__langgraph_span_is_kept(
+    fake_backend,
+):
+    """Test that LangGraph works correctly with distributed tracing headers.
+
+    When LangGraph is invoked with distributed headers, the LangGraph span should be kept
+    (not skipped) and should be added to the distributed trace/span.
+    """
+    project_name = "langgraph-integration-test--distributed-headers"
+    client = opik_client.get_client_cached()
+
+    # PREPARE DISTRIBUTED HEADERS
+    trace_data = trace.TraceData(
+        name="custom-distributed-headers--trace",
+        input={
+            "key1": 1,
+            "key2": "val2",
+        },
+        project_name=project_name,
+        tags=["tag_d1", "tag_d2"],
+    )
+    trace_data.init_end_time()
+    client.trace(**trace_data.as_parameters)
+
+    span_data = span.SpanData(
+        trace_id=trace_data.id,
+        parent_span_id=None,
+        name="custom-distributed-headers--span",
+        input={
+            "input": "custom-distributed-headers--input",
+        },
+        project_name=project_name,
+        tags=["tag_d3", "tag_d4"],
+    )
+    span_data.init_end_time().update(
+        output={"output": "custom-distributed-headers--output"},
+    )
+    client.span(**span_data.as_parameters)
+
+    distributed_headers = DistributedTraceHeadersDict(
+        opik_trace_id=span_data.trace_id,
+        opik_parent_span_id=span_data.id,
+    )
+
+    # CREATE LANGRAPH
+    class State(BaseModel):
+        message: str
+        response: str = ""
+
+    @opik.track(type="tool")
+    def greeting_text_creator(input: str) -> str:
+        if "hello" in input.lower() or "hi" in input.lower():
+            response = "Hello! How can I help you today?"
+        else:
+            response = "Greetings! Is there something I can assist you with?"
+
+        return response
+
+    def respond_to_greeting(state: State) -> Dict[str, Any]:
+        greeting = state.message
+        response = greeting_text_creator(greeting)
+        return {"message": state.message, "response": response}
+
+    builder = StateGraph(State)
+    builder.add_node("respond_to_greeting", respond_to_greeting)
+    builder.add_edge(START, "respond_to_greeting")
+    builder.add_edge("respond_to_greeting", END)
+
+    graph = builder.compile()
+
+    callback = OpikTracer(
+        project_name=project_name,
+        tags=["tag1", "tag2"],
+        metadata={"a": "b"},
+        distributed_headers=distributed_headers,
+    )
+
+    initial_state = {
+        "message": "Hi there!",
+        "response": "",
+    }
+    graph.invoke(initial_state, config={"callbacks": [callback]})
+
+    callback.flush()
+
+    assert len(fake_backend.trace_trees) == 1
+    assert (
+        len(callback.created_traces()) == 0
+    )  # No new trace created, attached to the distributed trace
+
+    EXPECTED_TRACE_TREE = TraceModel(
+        id=ANY_BUT_NONE,
+        start_time=ANY_BUT_NONE,
+        name="custom-distributed-headers--trace",
+        project_name="langgraph-integration-test--distributed-headers",
+        input={"key1": 1, "key2": "val2"},
+        tags=["tag_d1", "tag_d2"],
+        end_time=ANY_BUT_NONE,
+        spans=[
+            SpanModel(
+                id=ANY_BUT_NONE,
+                start_time=ANY_BUT_NONE,
+                name="custom-distributed-headers--span",
+                input={"input": "custom-distributed-headers--input"},
+                output={"output": "custom-distributed-headers--output"},
+                tags=["tag_d3", "tag_d4"],
+                type="general",
+                end_time=ANY_BUT_NONE,
+                project_name="langgraph-integration-test--distributed-headers",
+                spans=[
+                    SpanModel(
+                        id=ANY_BUT_NONE,
+                        start_time=ANY_BUT_NONE,
+                        name="LangGraph",
+                        input={"message": "Hi there!", "response": ""},
+                        output={
+                            "message": "Hi there!",
+                            "response": "Hello! How can I help you today?",
+                        },
+                        tags=["tag1", "tag2"],
+                        metadata={"a": "b", "created_from": "langchain"},
+                        type="general",
+                        end_time=ANY_BUT_NONE,
+                        project_name="langgraph-integration-test--distributed-headers",
+                        spans=[
+                            SpanModel(
+                                id=ANY_BUT_NONE,
+                                start_time=ANY_BUT_NONE,
+                                name="respond_to_greeting",
+                                input={
+                                    "input": {"message": "Hi there!", "response": ""}
+                                },
+                                output={
+                                    "message": "Hi there!",
+                                    "response": "Hello! How can I help you today?",
+                                },
+                                metadata=ANY_DICT.containing(
+                                    {"created_from": "langchain"}
+                                ),
+                                type="general",
+                                end_time=ANY_BUT_NONE,
+                                project_name="langgraph-integration-test--distributed-headers",
+                                spans=[
+                                    SpanModel(
+                                        id=ANY_BUT_NONE,
+                                        start_time=ANY_BUT_NONE,
+                                        name="greeting_text_creator",
+                                        input={"input": "Hi there!"},
+                                        output={
+                                            "output": "Hello! How can I help you today?"
+                                        },
+                                        type="tool",
+                                        end_time=ANY_BUT_NONE,
+                                        project_name="langgraph-integration-test--distributed-headers",
+                                        last_updated_at=ANY_BUT_NONE,
+                                    )
+                                ],
+                                last_updated_at=ANY_BUT_NONE,
+                            )
+                        ],
+                        last_updated_at=ANY_BUT_NONE,
+                    )
+                ],
+                last_updated_at=ANY_BUT_NONE,
+            )
+        ],
+        last_updated_at=ANY_BUT_NONE,
+    )
+
+    assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
+
+
+def test_langgraph__used_when_there_was_already_existing_span__langgraph_span_is_kept(
+    fake_backend,
+):
+    class State(BaseModel):
+        message: str
+        response: str = ""
+
+    @opik.track(type="tool")
+    def greeting_text_creator(input: str) -> str:
+        if "hello" in input.lower() or "hi" in input.lower():
+            response = "Hello! How can I help you today?"
+        else:
+            response = "Greetings! Is there something I can assist you with?"
+
+        return response
+
+    def respond_to_greeting(state: State) -> Dict[str, Any]:
+        greeting = state.message
+        response = greeting_text_creator(greeting)
+        return {"message": state.message, "response": response}
+
+    builder = StateGraph(State)
+    builder.add_node("respond_to_greeting", respond_to_greeting)
+    builder.add_edge(START, "respond_to_greeting")
+    builder.add_edge("respond_to_greeting", END)
+
+    graph = builder.compile()
+
+    # create external span
+    client = opik_client.get_client_cached()
+    trace_data = trace.TraceData(
+        name="manually-created-trace",
+        input={
+            "key1": 1,
+            "key2": "val2",
+        },
+    )
+    trace_data.init_end_time()
+    client.trace(**trace_data.as_parameters)
+
+    span_data = span.SpanData(
+        trace_id=trace_data.id,
+        name="manually-created-span",
+        input={"input": "input-of-manually-created-span"},
+    )
+    context_storage.add_span_data(span_data)
+
+    # invoke graph with callback
+    callback = OpikTracer(
+        tags=["tag1", "tag2"],
+        metadata={"a": "b"},
+    )
+    initial_state = {
+        "message": "Hi there!",
+        "response": "",
+    }
+    graph.invoke(initial_state, config={"callbacks": [callback]})
+
+    span_data = context_storage.pop_span_data()
+    span_data.init_end_time().update(
+        output={"output": "output-of-manually-created-span"}
+    )
+    client.span(**span_data.__dict__)
+
+    callback.flush()
+
+    EXPECTED_TRACE_TREE = TraceModel(
+        id=ANY_BUT_NONE,
+        start_time=ANY_BUT_NONE,
+        name="manually-created-trace",
+        project_name="Default Project",
+        input={"key1": 1, "key2": "val2"},
+        end_time=ANY_BUT_NONE,
+        spans=[
+            SpanModel(
+                id=ANY_BUT_NONE,
+                start_time=ANY_BUT_NONE,
+                name="manually-created-span",
+                input={"input": "input-of-manually-created-span"},
+                output={"output": "output-of-manually-created-span"},
+                type="general",
+                end_time=ANY_BUT_NONE,
+                project_name="Default Project",
+                spans=[
+                    SpanModel(
+                        id=ANY_BUT_NONE,
+                        start_time=ANY_BUT_NONE,
+                        name="LangGraph",
+                        input={"message": "Hi there!", "response": ""},
+                        output={
+                            "message": "Hi there!",
+                            "response": "Hello! How can I help you today?",
+                        },
+                        tags=["tag1", "tag2"],
+                        metadata={"a": "b", "created_from": "langchain"},
+                        type="general",
+                        end_time=ANY_BUT_NONE,
+                        project_name="Default Project",
+                        spans=[
+                            SpanModel(
+                                id=ANY_BUT_NONE,
+                                start_time=ANY_BUT_NONE,
+                                name="respond_to_greeting",
+                                input={
+                                    "input": {
+                                        "message": "Hi there!",
+                                        "response": "",
+                                    }
+                                },
+                                output={
+                                    "message": "Hi there!",
+                                    "response": "Hello! How can I help you today?",
+                                },
+                                metadata=ANY_DICT.containing(
+                                    {"created_from": "langchain"}
+                                ),
+                                type="general",
+                                end_time=ANY_BUT_NONE,
+                                project_name="Default Project",
+                                spans=[
+                                    SpanModel(
+                                        id=ANY_BUT_NONE,
+                                        start_time=ANY_BUT_NONE,
+                                        name="greeting_text_creator",
+                                        input={"input": "Hi there!"},
+                                        output={
+                                            "output": "Hello! How can I help you today?"
+                                        },
+                                        type="tool",
+                                        end_time=ANY_BUT_NONE,
+                                        project_name="Default Project",
+                                        last_updated_at=ANY_BUT_NONE,
+                                    )
+                                ],
+                                last_updated_at=ANY_BUT_NONE,
+                            )
+                        ],
+                        last_updated_at=ANY_BUT_NONE,
+                    )
+                ],
+                last_updated_at=ANY_BUT_NONE,
+            )
+        ],
+        last_updated_at=ANY_BUT_NONE,
+    )
+
+    assert len(fake_backend.trace_trees) == 1
+    assert (
+        len(callback.created_traces()) == 0
+    )  # No new trace created, attached to the existing trace
+    assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
+
+
+def test_langgraph__used_when_there_was_already_existing_trace_without_span__langgraph_span_is_kept(
+    fake_backend,
+):
+    class State(BaseModel):
+        message: str
+        response: str = ""
+
+    @opik.track(type="tool")
+    def greeting_text_creator(input: str) -> str:
+        if "hello" in input.lower() or "hi" in input.lower():
+            response = "Hello! How can I help you today?"
+        else:
+            response = "Greetings! Is there something I can assist you with?"
+
+        return response
+
+    def respond_to_greeting(state: State) -> Dict[str, Any]:
+        greeting = state.message
+        response = greeting_text_creator(greeting)
+        return {"message": state.message, "response": response}
+
+    builder = StateGraph(State)
+    builder.add_node("respond_to_greeting", respond_to_greeting)
+    builder.add_edge(START, "respond_to_greeting")
+    builder.add_edge("respond_to_greeting", END)
+
+    graph = builder.compile()
+
+    # create external trace and invoke LangGraph within
+    client = opik_client.get_client_cached()
+    trace_data = trace.TraceData(
+        name="manually-created-trace",
+        input={"input": "input-of-manually-created-trace"},
+    )
+    context_storage.set_trace_data(trace_data)
+
+    # invoke graph with callback
+    callback = OpikTracer(
+        tags=["tag1", "tag2"],
+        metadata={"a": "b"},
+    )
+    initial_state = {
+        "message": "Hi there!",
+        "response": "",
+    }
+    graph.invoke(initial_state, config={"callbacks": [callback]})
+
+    # Send trace data
+    trace_data = context_storage.pop_trace_data()
+    trace_data.init_end_time().update(
+        output={"output": "output-of-manually-created-trace"}
+    )
+    client.trace(**trace_data.__dict__)
+
+    callback.flush()
+
+    EXPECTED_TRACE_TREE = TraceModel(
+        id=ANY_BUT_NONE,
+        start_time=ANY_BUT_NONE,
+        name="manually-created-trace",
+        project_name="Default Project",
+        input={"input": "input-of-manually-created-trace"},
+        output={"output": "output-of-manually-created-trace"},
+        end_time=ANY_BUT_NONE,
+        spans=[
+            SpanModel(
+                id=ANY_BUT_NONE,
+                start_time=ANY_BUT_NONE,
+                name="LangGraph",
+                input={"message": "Hi there!", "response": ""},
+                output={
+                    "message": "Hi there!",
+                    "response": "Hello! How can I help you today?",
+                },
+                tags=["tag1", "tag2"],
+                metadata={"a": "b", "created_from": "langchain"},
+                type="general",
+                end_time=ANY_BUT_NONE,
+                project_name="Default Project",
+                spans=[
+                    SpanModel(
+                        id=ANY_BUT_NONE,
+                        start_time=ANY_BUT_NONE,
+                        name="respond_to_greeting",
+                        input={
+                            "input": {
+                                "message": "Hi there!",
+                                "response": "",
+                            }
+                        },
+                        output={
+                            "message": "Hi there!",
+                            "response": "Hello! How can I help you today?",
+                        },
+                        metadata=ANY_DICT.containing({"created_from": "langchain"}),
+                        type="general",
+                        end_time=ANY_BUT_NONE,
+                        project_name="Default Project",
+                        spans=[
+                            SpanModel(
+                                id=ANY_BUT_NONE,
+                                start_time=ANY_BUT_NONE,
+                                name="greeting_text_creator",
+                                input={"input": "Hi there!"},
+                                output={"output": "Hello! How can I help you today?"},
+                                type="tool",
+                                end_time=ANY_BUT_NONE,
+                                project_name="Default Project",
+                                last_updated_at=ANY_BUT_NONE,
+                            )
+                        ],
+                        last_updated_at=ANY_BUT_NONE,
+                    )
+                ],
+                last_updated_at=ANY_BUT_NONE,
+            )
+        ],
+        last_updated_at=ANY_BUT_NONE,
+    )
+
+    assert len(fake_backend.trace_trees) == 1
+    assert (
+        len(callback.created_traces()) == 0
+    )  # No new trace created, attached to the existing trace
     assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])

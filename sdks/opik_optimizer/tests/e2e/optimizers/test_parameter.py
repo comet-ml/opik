@@ -5,8 +5,9 @@ import pytest
 from opik.evaluation.metrics import LevenshteinRatio
 from opik.evaluation.metrics.score_result import ScoreResult
 
-from opik_optimizer import ParameterOptimizer, datasets
-from opik_optimizer.optimization_config import chat_prompt
+import opik_optimizer
+
+pytestmark = pytest.mark.integration
 
 
 def test_parameter_optimizer() -> None:
@@ -15,22 +16,27 @@ def test_parameter_optimizer() -> None:
         pytest.fail("OPENAI_API_KEY environment variable must be set for e2e tests")
 
     # Prepare dataset (using tiny_test for faster execution)
-    dataset = datasets.tiny_test()
+    dataset = opik_optimizer.datasets.tiny_test()
 
     # Define metric
     def levenshtein_ratio(dataset_item: dict[str, Any], llm_output: str) -> ScoreResult:
         metric = LevenshteinRatio()
         return metric.score(reference=dataset_item["label"], output=llm_output)
 
-    prompt = chat_prompt.ChatPrompt(
+    prompt = opik_optimizer.ChatPrompt(
         system="Provide an answer to the question.", user="{text}"
     )
 
     # Initialize optimizer with reduced parameters for faster testing
-    optimizer = ParameterOptimizer(
-        model="openai/gpt-4o",
-        default_n_trials=3,  # Reduced for faster testing
-        n_threads=1,
+    optimizer = opik_optimizer.ParameterOptimizer(
+        model="openai/gpt-5-mini",
+        model_parameters={
+            "temperature": 1,
+            "max_tokens": 1000,
+            "reasoning_effort": "minimal",
+        },
+        default_n_trials=1,
+        n_threads=2,
         seed=42,
         local_search_ratio=0.5,
         local_search_scale=0.3,
@@ -48,7 +54,7 @@ def test_parameter_optimizer() -> None:
         metric=levenshtein_ratio,
         prompt=prompt,
         parameter_space=parameter_space,
-        n_samples=3,
+        n_samples=1,
     )
 
     # Enhanced OptimizationResult validation
@@ -169,8 +175,8 @@ def test_parameter_optimizer() -> None:
 
     # Validate model configuration in details
     assert "model" in results.details, "Details should contain 'model'"
-    assert isinstance(results.details["model"], str), (
-        f"Model should be a string, got {type(results.details['model'])}"
+    assert results.details["model"] == optimizer.model, (
+        f"Expected model {optimizer.model}, got {results.details['model']}"
     )
 
     # History validation

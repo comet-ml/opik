@@ -18,6 +18,7 @@ public enum DatasetItemField implements Field {
     LAST_UPDATED_AT(LAST_UPDATED_AT_QUERY_PARAM, FieldType.DATE_TIME),
     CREATED_BY(CREATED_BY_QUERY_PARAM, FieldType.STRING),
     LAST_UPDATED_BY(LAST_UPDATED_BY_QUERY_PARAM, FieldType.STRING),
+    TAGS(TAGS_QUERY_PARAM, FieldType.LIST),
     ;
 
     private final String queryParamField;

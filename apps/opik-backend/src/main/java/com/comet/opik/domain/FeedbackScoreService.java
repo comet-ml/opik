@@ -6,6 +6,7 @@ import com.comet.opik.api.FeedbackScoreItem;
 import com.comet.opik.api.FeedbackScoreNames;
 import com.comet.opik.api.Project;
 import com.comet.opik.api.TraceThreadStatus;
+import com.comet.opik.api.Visibility;
 import com.comet.opik.domain.threads.TraceThreadCriteria;
 import com.comet.opik.domain.threads.TraceThreadModel;
 import com.comet.opik.domain.threads.TraceThreadService;
@@ -17,6 +18,7 @@ import com.google.inject.Singleton;
 import io.dropwizard.jersey.errors.ErrorMessage;
 import jakarta.annotation.Nullable;
 import jakarta.inject.Inject;
+import jakarta.inject.Provider;
 import jakarta.validation.constraints.NotNull;
 import jakarta.ws.rs.ClientErrorException;
 import jakarta.ws.rs.core.Response;
@@ -81,6 +83,7 @@ class FeedbackScoreServiceImpl implements FeedbackScoreService {
     private final @NonNull TraceDAO traceDAO;
     private final @NonNull ProjectService projectService;
     private final @NonNull TraceThreadService traceThreadService;
+    private final @NonNull Provider<RequestContext> requestContext;
 
     @Builder(toBuilder = true)
     record ProjectDto<T extends FeedbackScoreItem>(Project project, List<T> scores) {
@@ -186,9 +189,22 @@ class FeedbackScoreServiceImpl implements FeedbackScoreService {
     }
 
     @Override
-    public Mono<FeedbackScoreNames> getTraceFeedbackScoreNames(@NonNull UUID projectId) {
-        // Will throw an error in case we try to get private project with public visibility
-        projectService.get(projectId);
+    public Mono<FeedbackScoreNames> getTraceFeedbackScoreNames(UUID projectId) {
+        if (projectId == null) {
+            // Allow only for private access
+            boolean isPublic = Optional.ofNullable(requestContext.get().getVisibility())
+                    .map(v -> v == Visibility.PUBLIC)
+                    .orElse(false);
+
+            if (isPublic) {
+                return Mono.error(new ClientErrorException("Project ID is required for public access",
+                        Response.Status.BAD_REQUEST));
+            }
+        } else {
+            // Will throw an error in case we try to get private project with public visibility
+            projectService.get(projectId);
+        }
+
         return dao.getTraceFeedbackScoreNames(projectId)
                 .map(names -> names.stream().map(FeedbackScoreNames.ScoreName::new).toList())
                 .map(FeedbackScoreNames::new);
@@ -255,8 +271,8 @@ class FeedbackScoreServiceImpl implements FeedbackScoreService {
     }
 
     @Override
-    public Mono<FeedbackScoreNames> getTraceThreadsFeedbackScoreNames(@NotNull UUID projectId) {
-        return dao.getProjectsTraceThreadsFeedbackScoreNames(List.of(projectId))
+    public Mono<FeedbackScoreNames> getTraceThreadsFeedbackScoreNames(UUID projectId) {
+        return dao.getProjectsTraceThreadsFeedbackScoreNames(projectId == null ? List.of() : List.of(projectId))
                 .map(names -> names.stream().map(FeedbackScoreNames.ScoreName::new).toList())
                 .map(FeedbackScoreNames::new);
     }

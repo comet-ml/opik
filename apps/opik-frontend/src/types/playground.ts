@@ -5,7 +5,7 @@ import { LLMMessage, ProviderMessageType } from "@/types/llm";
 import {
   LLMPromptConfigsType,
   PROVIDER_MODEL_TYPE,
-  PROVIDER_TYPE,
+  COMPOSED_PROVIDER_TYPE,
 } from "@/types/providers";
 import { SPAN_TYPE } from "@/types/traces";
 
@@ -14,7 +14,7 @@ export interface PlaygroundPromptType {
   id: string;
   messages: LLMMessage[];
   model: PROVIDER_MODEL_TYPE | "";
-  provider: PROVIDER_TYPE | "";
+  provider: COMPOSED_PROVIDER_TYPE | "";
   configs: LLMPromptConfigsType;
 }
 
@@ -81,7 +81,9 @@ export interface LogSpan {
   startTime: string;
   endTime: string;
   input: { messages: ProviderMessageType[] };
-  output: { choices: ChatCompletionMessageChoiceType[] };
+  output:
+    | { choices: ChatCompletionMessageChoiceType[] }
+    | { output: string | null };
   usage?: UsageType | null;
   model?: string;
   provider?: string;

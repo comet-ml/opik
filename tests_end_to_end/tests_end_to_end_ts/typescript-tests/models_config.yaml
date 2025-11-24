@@ -58,26 +58,11 @@ providers:
         enabled: true
         test_playground: true
         test_online_scoring: true
-      - name: "Claude Sonnet 4"
-        ui_selector: "Claude Sonnet 4"
-        enabled: true
-        test_playground: true
-        test_online_scoring: true
       - name: "Claude Haiku 4.5"
         ui_selector: "Claude Haiku 4.5"
         enabled: true
         test_playground: true
         test_online_scoring: true
-      - name: "Claude Haiku 3.5"
-        ui_selector: "Claude Haiku 3.5"
-        enabled: false
-        test_playground: false
-        test_online_scoring: false
-      - name: "Claude Sonnet 3.7"
-        ui_selector: "Claude Sonnet 3.7"
-        enabled: false
-        test_playground: false
-        test_online_scoring: false
 
 test_config:
   skip_missing_api_keys: true

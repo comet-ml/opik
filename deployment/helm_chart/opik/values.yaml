@@ -24,12 +24,43 @@ serviceAccount:
   name: ""
   annotations: {}
 
-demoDataJob: 
+demoDataJob:
   enabled: true
 
 nodeSelector: {}
 tolerations: []
 affinity: {}
+
+caCerts:
+  # -- (list) Additional Certificate Authority Certificates to trust.
+  # Each list entry has two keys: `name` and `content`. `name` should be a
+  # unique identifier. content Should be PEM formated Public Certificate
+  # contents.
+  additionalCACerts:
+
+  # -- Certificates are Public Keys + Metadata, but some organizations may
+  # still prefer storing these in Secrets.
+  additionalCACertsInSecret: false
+
+  # -- If there is an existing ConfigMap containing the additional CA
+  # Certificates you can provide its name here instead of creatinga a new one.
+  # If `additionalCACertsInSecret` is `true` we will look for this name in
+  # Secrets.
+  existingAdditionalCACertsRef:
+
+  overwriteJavaCATrustStore:
+    # -- If enabled we will not inject additional CA Certificates to the Java
+    # TrustStore, but instead will mount a given volume containing a Java Trust
+    # Store to replace the default one in the containers.
+    enabled: false
+    # -- A Kubernetes Volume definition which will contain a valid Java Trust
+    # Store. See
+    # https://kubernetes.io/docs/reference/kubernetes-api/config-and-storage-resources/volume/
+    # for valid parameters.
+    volume: {}
+    # -- The sub-path of the valid Java Trust Store to mount from the volume.
+    subPath: cacerts
+
 
 component:
   backend:
@@ -59,7 +90,7 @@ component:
         repository: curlimages/curl
         tag: 8.12.1
     waitForMysql:
-      enabled: true
+      enabled: false
       mysql:
         host: opik-mysql
         port: 3306
@@ -67,6 +98,9 @@ component:
         registry: docker.io
         repository: busybox
         tag: 1.36
+    resources:
+      requests:
+        ephemeral-storage: 10Gi
     livenessProbe:
       path: /health-check?name=all&type=alive
       port:  8080
@@ -122,6 +156,8 @@ component:
         enabled: false
         hosts: []
         secretName: ""
+    # @ignored
+    usesJavaTrustStore: true
 
   python-backend:
     enabled: true
@@ -205,6 +241,9 @@ component:
       enabled: false
     backendConfigMap:
       enabled: false
+    resources:
+      requests:
+        ephemeral-storage: 10Gi
     volumeMounts:
     - mountPath: /etc/nginx/conf.d/
       name: opik-frontend-nginx
@@ -503,7 +542,7 @@ clickhouse:
     name: ""
   zookeeper:
       host: opik-zookeeper
-  backup: 
+  backup:
     enabled: false
     successfulJobsHistoryLimit: 1
     serviceAccount:

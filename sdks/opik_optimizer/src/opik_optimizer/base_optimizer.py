@@ -16,14 +16,11 @@ from opik.api_objects import optimization
 from opik import Dataset, opik_context
 from pydantic import BaseModel
 
-from . import _throttle, optimization_result
-from .cache_config import initialize_cache
-from .optimization_config import chat_prompt, mappers
+from . import optimization_result
+from .api_objects import chat_prompt
 from .optimizable_agent import OptimizableAgent
 from .utils import create_litellm_agent_class
-from . import task_evaluator
-
-_limiter = _throttle.get_rate_limiter_for_current_opik_installation()
+from . import task_evaluator, helpers
 
 # Don't use unsupported params:
 litellm.drop_params = True
@@ -57,6 +54,7 @@ class BaseOptimizer(ABC):
         verbose: int = 1,
         seed: int = 42,
         model_parameters: dict[str, Any] | None = None,
+        name: str | None = None,
     ) -> None:
         """
         Base class for optimizers.
@@ -70,12 +68,14 @@ class BaseOptimizer(ABC):
                presence_penalty, frequency_penalty.
                See: https://docs.litellm.ai/docs/completion/input
                Note: These params control the optimizer's reasoning model, NOT the prompt evaluation.
+           name: Optional name for the optimizer instance. This will be used when creating optimizations.
         """
         self.model = model
         self.reasoning_model = model
         self.model_parameters = model_parameters or {}
         self.verbose = verbose
         self.seed = seed
+        self.name = name
         self._history: list[OptimizationRound] = []
         self.experiment_config = None
         self.llm_call_counter = 0
@@ -83,9 +83,6 @@ class BaseOptimizer(ABC):
         self._opik_client = None  # Lazy initialization
         self.current_optimization_id: str | None = None  # Track current optimization
         self.project_name: str = "Optimization"  # Default project name
-
-        # Initialize shared cache
-        initialize_cache()
 
     def _reset_counters(self) -> None:
         """Reset all call counters for a new optimization run."""
@@ -136,7 +133,11 @@ class BaseOptimizer(ABC):
         return self._opik_client
 
     def _validate_optimization_inputs(
-        self, prompt: "chat_prompt.ChatPrompt", dataset: "Dataset", metric: Callable
+        self,
+        prompt: "chat_prompt.ChatPrompt",
+        dataset: "Dataset",
+        metric: Callable,
+        support_content_parts: bool = False,
     ) -> None:
         """
         Validate common optimization inputs.
@@ -160,23 +161,59 @@ class BaseOptimizer(ABC):
                 "Metric must be a function that takes `dataset_item` and `llm_output` as arguments."
             )
 
+        if prompt._has_content_parts() and not support_content_parts:
+            raise ValueError(
+                "Prompt has content parts, which are not supported by this optimizer - You can use the Hierarchical Reflective Optimizer instead."
+            )
+
     def _setup_agent_class(
         self, prompt: "chat_prompt.ChatPrompt", agent_class: Any = None
     ) -> Any:
-        """
-        Setup agent class for optimization.
+        """Resolve the agent class used for prompt evaluations.
+
+        Ensures custom implementations inherit from :class:`OptimizableAgent` and that
+        the optimizer reference is always available to track metrics.
 
         Args:
-            prompt: The chat prompt
-            agent_class: Optional custom agent class
+            prompt: The chat prompt driving the agent instance.
+            agent_class: Optional custom agent class supplied by the caller.
 
         Returns:
-            The agent class to use
+            The agent class to instantiate for dataset evaluations.
         """
         if agent_class is None:
             return create_litellm_agent_class(prompt, optimizer_ref=self)
-        else:
-            return agent_class
+        if not issubclass(agent_class, OptimizableAgent):
+            raise TypeError(
+                f"agent_class must inherit from OptimizableAgent, got {agent_class.__name__}"
+            )
+        return agent_class
+
+    def _bind_optimizer_to_agent(self, agent: OptimizableAgent) -> OptimizableAgent:
+        """Attach this optimizer to the agent instance without mutating the class."""
+        try:
+            agent.optimizer = self  # type: ignore[attr-defined]
+        except Exception:  # pragma: no cover - custom agents may forbid new attrs
+            logger.debug(
+                "Unable to record optimizer on agent instance of %s",
+                agent.__class__.__name__,
+            )
+        return agent
+
+    def _instantiate_agent(
+        self,
+        *args: Any,
+        agent_class: type[OptimizableAgent] | None = None,
+        **kwargs: Any,
+    ) -> OptimizableAgent:
+        """
+        Instantiate the provided agent_class (or self.agent_class) and bind optimizer.
+        """
+        resolved_class = agent_class or getattr(self, "agent_class", None)
+        if resolved_class is None:
+            raise ValueError("agent_class must be provided before instantiation")
+        agent = resolved_class(*args, **kwargs)
+        return self._bind_optimizer_to_agent(agent)
 
     def _extract_tool_prompts(
         self, tools: list[dict[str, Any]] | None
@@ -201,273 +238,8 @@ class BaseOptimizer(ABC):
         }
 
     # ------------------------------------------------------------------
-    # LLM call methods
-    # ------------------------------------------------------------------
-
-    def _prepare_model_params(
-        self,
-        call_time_params: dict[str, Any],
-        response_model: type[BaseModel] | None = None,
-        is_reasoning: bool = False,
-    ) -> dict[str, Any]:
-        """
-        Prepare parameters for LiteLLM call by merging and adding monitoring.
-
-        Args:
-            call_time_params: Dict of LiteLLM params from call-time overrides
-            response_model: Optional Pydantic model for structured output
-            is_reasoning: Flag for metadata tagging
-
-        Returns:
-            Dictionary ready for litellm.completion/acompletion
-        """
-        from opik.evaluation.models.litellm import opik_monitor as opik_litellm_monitor
-
-        # Merge optimizer's model_parameters with call-time overrides
-        merged_params = {**self.model_parameters, **call_time_params}
-
-        # Add Opik monitoring wrapper
-        final_params = opik_litellm_monitor.try_add_opik_monitoring_to_params(
-            merged_params
-        )
-
-        # Add reasoning metadata if applicable
-        if is_reasoning and "metadata" in final_params:
-            if "opik_call_type" not in final_params["metadata"]:
-                final_params["metadata"]["opik_call_type"] = "reasoning"
-
-        # Configure project_name and tags for Opik tracing
-        if "metadata" not in final_params:
-            final_params["metadata"] = {}
-        if "opik" not in final_params["metadata"]:
-            final_params["metadata"]["opik"] = {}
-
-        # Set project name for optimizer reasoning calls
-        final_params["metadata"]["opik"]["project_name"] = self.project_name
-
-        # Add tags if optimization_id is available
-        if self.current_optimization_id:
-            final_params["metadata"]["opik"]["tags"] = [
-                self.current_optimization_id,
-                "Prompt Optimization",
-            ]
-
-        # Add structured output support
-        if response_model is not None:
-            final_params["response_format"] = response_model
-
-        return final_params
-
-    def _parse_response(
-        self,
-        response: Any,
-        response_model: type[BaseModel] | None = None,
-    ) -> BaseModel | str:
-        """
-        Parse LiteLLM response, with optional structured output parsing.
-
-        Args:
-            response: The response from litellm.completion/acompletion
-            response_model: Optional Pydantic model for structured output
-
-        Returns:
-            If response_model is provided, returns an instance of that model.
-            Otherwise, returns the raw string response.
-        """
-        content = response.choices[0].message.content
-
-        # When using structured outputs with Pydantic models, LiteLLM automatically
-        # parses the response. Parse the JSON string into the Pydantic model
-        if response_model is not None:
-            return response_model.model_validate_json(content)
-
-        return content
-
-    def _build_call_time_params(
-        self,
-        temperature: float | None = None,
-        max_tokens: int | None = None,
-        max_completion_tokens: int | None = None,
-        top_p: float | None = None,
-        presence_penalty: float | None = None,
-        frequency_penalty: float | None = None,
-        metadata: dict[str, Any] | None = None,
-    ) -> dict[str, Any]:
-        """
-        Build dictionary of call-time LiteLLM parameter overrides.
-
-        Args:
-            temperature: Sampling temperature (0-2)
-            max_tokens: Maximum tokens to generate
-            max_completion_tokens: Upper bound for generated tokens
-            top_p: Nucleus sampling probability mass
-            presence_penalty: Penalty for new tokens based on presence
-            frequency_penalty: Penalty for new tokens based on frequency
-            metadata: Optional metadata dict for monitoring
-
-        Returns:
-            Dictionary of non-None parameters for LiteLLM
-        """
-        call_time_params: dict[str, Any] = {}
-        if temperature is not None:
-            call_time_params["temperature"] = temperature
-        if max_tokens is not None:
-            call_time_params["max_tokens"] = max_tokens
-        if max_completion_tokens is not None:
-            call_time_params["max_completion_tokens"] = max_completion_tokens
-        if top_p is not None:
-            call_time_params["top_p"] = top_p
-        if presence_penalty is not None:
-            call_time_params["presence_penalty"] = presence_penalty
-        if frequency_penalty is not None:
-            call_time_params["frequency_penalty"] = frequency_penalty
-        if metadata is not None:
-            call_time_params["metadata"] = metadata
-        return call_time_params
-
-    @_throttle.rate_limited(_limiter)
-    def _call_model(
-        self,
-        messages: list[dict[str, str]],
-        model: str | None = None,
-        seed: int | None = None,
-        response_model: type[BaseModel] | None = None,
-        is_reasoning: bool = False,
-        # Explicit call-time overrides for LiteLLM params
-        temperature: float | None = None,
-        max_tokens: int | None = None,
-        max_completion_tokens: int | None = None,
-        top_p: float | None = None,
-        presence_penalty: float | None = None,
-        frequency_penalty: float | None = None,
-        # Optimizer-specific metadata (not passed to LiteLLM)
-        optimization_id: str | None = None,
-        metadata: dict[str, Any] | None = None,
-    ) -> BaseModel | str:
-        """
-        Call the LLM model with optional structured output.
-
-        Args:
-            messages: List of message dictionaries with 'role' and 'content' keys
-            model: The model to use (defaults to self.model)
-            seed: Random seed for reproducibility (defaults to self.seed)
-            response_model: Optional Pydantic model for structured output
-            is_reasoning: Flag for metadata tagging (not passed to LiteLLM)
-            temperature: Sampling temperature (0-2)
-            max_tokens: Maximum tokens to generate
-            max_completion_tokens: Upper bound for generated tokens
-            top_p: Nucleus sampling probability mass
-            presence_penalty: Penalty for new tokens based on presence
-            frequency_penalty: Penalty for new tokens based on frequency
-            optimization_id: Optional ID for optimization tracking (metadata only)
-            metadata: Optional metadata dict for monitoring
-
-        Returns:
-            If response_model is provided, returns an instance of that model.
-            Otherwise, returns the raw string response.
-        """
-        self._increment_llm_counter()
-
-        # Build dict of call-time LiteLLM parameter overrides (non-None only)
-        call_time_params = self._build_call_time_params(
-            temperature=temperature,
-            max_tokens=max_tokens,
-            max_completion_tokens=max_completion_tokens,
-            top_p=top_p,
-            presence_penalty=presence_penalty,
-            frequency_penalty=frequency_penalty,
-            metadata=metadata,
-        )
-
-        final_params_for_litellm = self._prepare_model_params(
-            call_time_params, response_model, is_reasoning
-        )
-
-        response = litellm.completion(
-            model=model or self.model,
-            messages=messages,
-            seed=seed if seed is not None else self.seed,
-            num_retries=6,
-            **final_params_for_litellm,
-        )
-
-        return self._parse_response(response, response_model)
-
-    @_throttle.rate_limited(_limiter)
-    async def _call_model_async(
-        self,
-        messages: list[dict[str, str]],
-        model: str | None = None,
-        seed: int | None = None,
-        response_model: type[BaseModel] | None = None,
-        is_reasoning: bool = False,
-        # Explicit call-time overrides for LiteLLM params
-        temperature: float | None = None,
-        max_tokens: int | None = None,
-        max_completion_tokens: int | None = None,
-        top_p: float | None = None,
-        presence_penalty: float | None = None,
-        frequency_penalty: float | None = None,
-        # Optimizer-specific metadata (not passed to LiteLLM)
-        optimization_id: str | None = None,
-        metadata: dict[str, Any] | None = None,
-    ) -> BaseModel | str:
-        """
-        Async version of _call_model using litellm.acompletion.
-
-        Args:
-            messages: List of message dictionaries with 'role' and 'content' keys
-            model: The model to use (defaults to self.model)
-            seed: Random seed for reproducibility (defaults to self.seed)
-            response_model: Optional Pydantic model for structured output
-            is_reasoning: Flag for metadata tagging (not passed to LiteLLM)
-            temperature: Sampling temperature (0-2)
-            max_tokens: Maximum tokens to generate
-            max_completion_tokens: Upper bound for generated tokens
-            top_p: Nucleus sampling probability mass
-            presence_penalty: Penalty for new tokens based on presence
-            frequency_penalty: Penalty for new tokens based on frequency
-            optimization_id: Optional ID for optimization tracking (metadata only)
-            metadata: Optional metadata dict for monitoring
-
-        Returns:
-            If response_model is provided, returns an instance of that model.
-            Otherwise, returns the raw string response.
-        """
-        self._increment_llm_counter()
-
-        # Build dict of call-time LiteLLM parameter overrides (non-None only)
-        call_time_params = self._build_call_time_params(
-            temperature=temperature,
-            max_tokens=max_tokens,
-            max_completion_tokens=max_completion_tokens,
-            top_p=top_p,
-            presence_penalty=presence_penalty,
-            frequency_penalty=frequency_penalty,
-            metadata=metadata,
-        )
-
-        final_params_for_litellm = self._prepare_model_params(
-            call_time_params, response_model, is_reasoning
-        )
-
-        response = await litellm.acompletion(
-            model=model or self.model,
-            messages=messages,
-            seed=seed if seed is not None else self.seed,
-            num_retries=6,
-            **final_params_for_litellm,
-        )
-
-        return self._parse_response(response, response_model)
-
-    # ------------------------------------------------------------------
     # Experiment metadata helpers
     # ------------------------------------------------------------------
-
-    @staticmethod
-    def _drop_none(metadata: dict[str, Any]) -> dict[str, Any]:
-        return {k: v for k, v in metadata.items() if v is not None}
 
     @staticmethod
     def _deep_merge_dicts(
@@ -523,7 +295,7 @@ class BaseOptimizer(ABC):
             params: list[dict[str, Any]] = []
             for parameter in sig.parameters.values():
                 params.append(
-                    self._drop_none(
+                    helpers.drop_none(
                         {
                             "name": parameter.name,
                             "kind": parameter.kind.name,
@@ -540,7 +312,7 @@ class BaseOptimizer(ABC):
                 )
 
             signatures.append(
-                self._drop_none(
+                helpers.drop_none(
                     {
                         "name": name,
                         "parameters": params,
@@ -556,7 +328,7 @@ class BaseOptimizer(ABC):
         agent_config["model"] = getattr(prompt, "model", None) or self.model
         agent_config["tools"] = self._serialize_tools(prompt)
         agent_config["optimizer"] = self.__class__.__name__
-        return self._drop_none(agent_config)
+        return helpers.drop_none(agent_config)
 
     def get_optimizer_metadata(self) -> dict[str, Any]:
         """Override in subclasses to expose optimizer-specific parameters."""
@@ -583,7 +355,36 @@ class BaseOptimizer(ABC):
         if extra_parameters:
             metadata["parameters"] = extra_parameters
 
-        return self._drop_none(metadata)
+        return helpers.drop_none(metadata)
+
+    def _build_optimization_metadata(
+        self, agent_class: type[OptimizableAgent] | None = None
+    ) -> dict[str, Any]:
+        """
+        Build metadata dictionary for optimization creation to be used when
+        creating Opik optimizations.
+
+        Args:
+            agent_class: Optional agent class. If None, will try to get from self.agent_class.
+
+        Returns:
+            Dictionary with 'optimizer' and optionally 'agent_class' keys.
+        """
+        metadata: dict[str, Any] = {"optimizer": self.__class__.__name__}
+        if self.name:
+            metadata["name"] = self.name
+
+        # Try to get agent_class name from parameter or instance
+        agent_class_name: str | None = None
+        if agent_class is not None:
+            agent_class_name = getattr(agent_class, "__name__", None)
+        elif hasattr(self, "agent_class") and self.agent_class is not None:
+            agent_class_name = getattr(self.agent_class, "__name__", None)
+
+        if agent_class_name:
+            metadata["agent_class"] = agent_class_name
+
+        return metadata
 
     def _prepare_experiment_config(
         self,
@@ -591,16 +392,26 @@ class BaseOptimizer(ABC):
         prompt: "chat_prompt.ChatPrompt",
         dataset: Dataset,
         metric: Callable,
+        validation_dataset: Dataset | None = None,
         experiment_config: dict[str, Any] | None = None,
         configuration_updates: dict[str, Any] | None = None,
         additional_metadata: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
-        dataset_id = getattr(dataset, "id", None)
+        """
+        Prepare experiment configuration with dataset tracking.
+
+        Args:
+            dataset_training: Training dataset (used for feedback/context)
+            validation_dataset: Optional validation dataset (used for ranking)
+        """
         project_name = (
             getattr(self.agent_class, "project_name", None)
             if hasattr(self, "agent_class")
             else None
         )
+        # Ensure experiment traces follow the project name supplied to optimize_prompt.
+        if not project_name:
+            project_name = getattr(self, "project_name", None)
         if not project_name:
             project_name = getattr(prompt, "project_name", None)
         if not project_name:
@@ -615,8 +426,8 @@ class BaseOptimizer(ABC):
             ),
             "agent_config": self._build_agent_config(prompt),
             "metric": getattr(metric, "__name__", str(metric)),
-            "dataset": getattr(dataset, "name", None),
-            "dataset_id": dataset_id,
+            "dataset_training": dataset.name,
+            "dataset_training_id": dataset.id,
             "optimizer": self.__class__.__name__,
             "optimizer_metadata": self._build_optimizer_metadata(),
             "tool_signatures": self._summarize_tool_signatures(prompt),
@@ -639,7 +450,11 @@ class BaseOptimizer(ABC):
         if experiment_config:
             base_config = self._deep_merge_dicts(base_config, experiment_config)
 
-        return self._drop_none(base_config)
+        if validation_dataset:
+            base_config["validation_dataset"] = validation_dataset.name
+            base_config["validation_dataset_id"] = validation_dataset.id
+
+        return helpers.drop_none(base_config)
 
     @abstractmethod
     def optimize_prompt(
@@ -652,6 +467,8 @@ class BaseOptimizer(ABC):
         auto_continue: bool = False,
         agent_class: type[OptimizableAgent] | None = None,
         project_name: str = "Optimization",
+        optimization_id: str | None = None,
+        validation_dataset: Dataset | None = None,
         *args: Any,
         **kwargs: Any,
     ) -> optimization_result.OptimizationResult:
@@ -659,7 +476,9 @@ class BaseOptimizer(ABC):
         Optimize a prompt.
 
         Args:
-           dataset: Opik dataset name, or Opik dataset
+           dataset: Opik dataset name, or Opik dataset (training set - used for feedback/context)
+               TODO/FIXME: This parameter will be deprecated in favor of dataset_training.
+               For now, it serves as the training dataset parameter.
            metric: A metric function, this function should have two arguments:
                dataset_item and llm_output
            prompt: the prompt to optimize
@@ -667,6 +486,13 @@ class BaseOptimizer(ABC):
            output_key: output field of dataset
            experiment_config: Optional configuration for the experiment
            project_name: Opik project name for logging traces (default: "Optimization")
+           optimization_id: Optional ID to use when creating the Opik optimization run;
+               when provided it must be a valid UUIDv7 string.
+           validation_dataset: Optional validation dataset (validation set - used for ranking candidates).
+               When provided, the optimizer uses the training dataset for understanding failure modes
+               and generating improvements, then evaluates candidates on the validation dataset to select
+               the best one. This helps prevent overfitting to the training data. If not provided, uses
+               the same dataset for both training and validation, which may lead to overfitting.
            **kwargs: Additional arguments for optimization
         """
         pass
@@ -729,7 +555,7 @@ class BaseOptimizer(ABC):
         else:
             self.agent_class = agent_class
 
-        agent = self.agent_class(prompt)
+        agent = self._instantiate_agent(prompt)
 
         def llm_task(dataset_item: dict[str, Any]) -> dict[str, str]:
             messages = prompt.get_messages(dataset_item)
@@ -743,7 +569,7 @@ class BaseOptimizer(ABC):
                 )
 
             result = {
-                mappers.EVALUATED_LLM_TASK_OUTPUT: cleaned_model_output,
+                "llm_output": cleaned_model_output,
             }
             return result
 

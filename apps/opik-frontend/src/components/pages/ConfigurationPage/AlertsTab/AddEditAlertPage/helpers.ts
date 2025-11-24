@@ -38,9 +38,9 @@ export const ALERT_TYPE_ICONS = {
 
 export const TRIGGER_CONFIG: Record<ALERT_EVENT_TYPE, TriggerConfig> = {
   [ALERT_EVENT_TYPE.trace_errors]: {
-    title: "New error in trace",
+    title: "Trace errors threshold",
     description:
-      "Triggered when a new error is detected in a trace within the selected projects.",
+      "Triggered when the number of trace errors exceeds the specified threshold in selected projects.",
     hasScope: true,
   },
   [ALERT_EVENT_TYPE.trace_guardrails_triggered]: {
@@ -50,15 +50,15 @@ export const TRIGGER_CONFIG: Record<ALERT_EVENT_TYPE, TriggerConfig> = {
     hasScope: true,
   },
   [ALERT_EVENT_TYPE.trace_feedback_score]: {
-    title: "New score added to trace",
+    title: "Trace feedback score threshold",
     description:
-      "Triggered when a new feedback score is added to a trace in the selected projects.",
+      "Triggered when the average feedback score for traces exceeds the specified threshold in selected projects.",
     hasScope: true,
   },
   [ALERT_EVENT_TYPE.trace_thread_feedback_score]: {
-    title: "New score added to thread",
+    title: "Thread feedback score threshold",
     description:
-      "Triggered when a new feedback score is added to a thread in the selected projects.",
+      "Triggered when the average feedback score for threads exceeds the specified threshold in selected projects.",
     hasScope: true,
   },
   [ALERT_EVENT_TYPE.prompt_created]: {
@@ -84,6 +84,18 @@ export const TRIGGER_CONFIG: Record<ALERT_EVENT_TYPE, TriggerConfig> = {
     description: "Triggered when an experiment completes in the workspace.",
     hasScope: false,
   },
+  [ALERT_EVENT_TYPE.trace_cost]: {
+    title: "Cost threshold",
+    description:
+      "Triggered when total trace cost exceeds the specified threshold in the selected projects.",
+    hasScope: true,
+  },
+  [ALERT_EVENT_TYPE.trace_latency]: {
+    title: "Latency threshold",
+    description:
+      "Triggered when average trace latency exceeds the specified threshold in the selected projects.",
+    hasScope: true,
+  },
 };
 
 const getProjectIdsFromTriggerConfigs = (
@@ -98,10 +110,41 @@ const getProjectIdsFromTriggerConfigs = (
     if (!projectIds || projectIds.trim() === "") {
       return [];
     }
-    return projectIds.split(",");
+    try {
+      // Parse JSON array format
+      return JSON.parse(projectIds);
+    } catch {
+      // Fallback to comma-separated format for backwards compatibility
+      return projectIds.split(",");
+    }
   }
 
   return [];
+};
+
+const getThresholdFromTriggerConfigs = (
+  configType: ALERT_TRIGGER_CONFIG_TYPE,
+  triggerConfigs?: AlertTriggerConfig[],
+): {
+  threshold?: string;
+  window?: string;
+  name?: string;
+  operator?: string;
+} => {
+  const thresholdConfig = triggerConfigs?.find(
+    (config) => config.type === configType,
+  );
+
+  if (thresholdConfig?.config_value) {
+    return {
+      threshold: thresholdConfig.config_value.threshold,
+      window: thresholdConfig.config_value.window,
+      name: thresholdConfig.config_value.name,
+      operator: thresholdConfig.config_value.operator,
+    };
+  }
+
+  return {};
 };
 
 const createProjectScopeTriggerConfig = (
@@ -113,8 +156,38 @@ const createProjectScopeTriggerConfig = (
     {
       type: ALERT_TRIGGER_CONFIG_TYPE["scope:project"],
       config_value: {
-        project_ids: projectIds.join(","),
+        project_ids: JSON.stringify(projectIds),
       },
+    },
+  ];
+};
+
+const createThresholdTriggerConfig = (
+  configType: ALERT_TRIGGER_CONFIG_TYPE,
+  threshold?: string,
+  window?: string,
+  name?: string,
+  operator?: string,
+): AlertTriggerConfig[] => {
+  if (!threshold || !window) return [];
+
+  const config_value: Record<string, string> = {
+    threshold,
+    window,
+  };
+
+  // Add name and operator for feedback score triggers
+  if (name) {
+    config_value.name = name;
+  }
+  if (operator) {
+    config_value.operator = operator;
+  }
+
+  return [
+    {
+      type: configType,
+      config_value,
     },
   ];
 };
@@ -129,10 +202,39 @@ export const alertTriggersToFormTriggers = (
     const triggerProjectIds = getProjectIdsFromTriggerConfigs(
       trigger.trigger_configs,
     );
+
+    // Extract threshold and window for cost/latency/errors/feedback score triggers
+    let thresholdData = {};
+    if (trigger.event_type === ALERT_EVENT_TYPE.trace_cost) {
+      thresholdData = getThresholdFromTriggerConfigs(
+        ALERT_TRIGGER_CONFIG_TYPE["threshold:cost"],
+        trigger.trigger_configs,
+      );
+    } else if (trigger.event_type === ALERT_EVENT_TYPE.trace_latency) {
+      thresholdData = getThresholdFromTriggerConfigs(
+        ALERT_TRIGGER_CONFIG_TYPE["threshold:latency"],
+        trigger.trigger_configs,
+      );
+    } else if (trigger.event_type === ALERT_EVENT_TYPE.trace_errors) {
+      thresholdData = getThresholdFromTriggerConfigs(
+        ALERT_TRIGGER_CONFIG_TYPE["threshold:errors"],
+        trigger.trigger_configs,
+      );
+    } else if (
+      trigger.event_type === ALERT_EVENT_TYPE.trace_feedback_score ||
+      trigger.event_type === ALERT_EVENT_TYPE.trace_thread_feedback_score
+    ) {
+      thresholdData = getThresholdFromTriggerConfigs(
+        ALERT_TRIGGER_CONFIG_TYPE["threshold:feedback_score"],
+        trigger.trigger_configs,
+      );
+    }
+
     return {
       eventType: trigger.event_type,
       projectIds:
         triggerProjectIds.length > 0 ? triggerProjectIds : allProjectIds,
+      ...thresholdData,
     };
   });
 };
@@ -141,13 +243,59 @@ export const formTriggersToAlertTriggers = (
   triggers: TriggerFormType[],
   allProjectIds: string[],
 ): AlertTrigger[] => {
-  return triggers.map((trigger) => ({
-    event_type: trigger.eventType,
-    trigger_configs:
-      trigger.projectIds.length === allProjectIds.length
-        ? []
-        : createProjectScopeTriggerConfig(trigger.projectIds),
-  }));
+  return triggers.map((trigger) => {
+    const configs: AlertTriggerConfig[] = [];
+
+    // Add project scope config if needed
+    if (trigger.projectIds.length !== allProjectIds.length) {
+      configs.push(...createProjectScopeTriggerConfig(trigger.projectIds));
+    }
+
+    // Add threshold config for cost/latency/errors/feedback score triggers
+    if (trigger.eventType === ALERT_EVENT_TYPE.trace_cost) {
+      configs.push(
+        ...createThresholdTriggerConfig(
+          ALERT_TRIGGER_CONFIG_TYPE["threshold:cost"],
+          trigger.threshold,
+          trigger.window,
+        ),
+      );
+    } else if (trigger.eventType === ALERT_EVENT_TYPE.trace_latency) {
+      configs.push(
+        ...createThresholdTriggerConfig(
+          ALERT_TRIGGER_CONFIG_TYPE["threshold:latency"],
+          trigger.threshold,
+          trigger.window,
+        ),
+      );
+    } else if (trigger.eventType === ALERT_EVENT_TYPE.trace_errors) {
+      configs.push(
+        ...createThresholdTriggerConfig(
+          ALERT_TRIGGER_CONFIG_TYPE["threshold:errors"],
+          trigger.threshold,
+          trigger.window,
+        ),
+      );
+    } else if (
+      trigger.eventType === ALERT_EVENT_TYPE.trace_feedback_score ||
+      trigger.eventType === ALERT_EVENT_TYPE.trace_thread_feedback_score
+    ) {
+      configs.push(
+        ...createThresholdTriggerConfig(
+          ALERT_TRIGGER_CONFIG_TYPE["threshold:feedback_score"],
+          trigger.threshold,
+          trigger.window,
+          trigger.name,
+          trigger.operator,
+        ),
+      );
+    }
+
+    return {
+      event_type: trigger.eventType,
+      trigger_configs: configs,
+    };
+  });
 };
 
 // Field mapping configuration for webhook examples

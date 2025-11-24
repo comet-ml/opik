@@ -1,16 +1,23 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
+import useLocalStorageState from "use-local-storage-state";
 import PlaygroundPrompt from "@/components/pages/PlaygroundPage/PlaygroundPrompts/PlaygroundPrompt";
 import ConfirmDialog from "@/components/shared/ConfirmDialog/ConfirmDialog";
 import { generateDefaultPrompt } from "@/lib/playground";
-import { PROVIDER_TYPE } from "@/types/providers";
+import { COMPOSED_PROVIDER_TYPE } from "@/types/providers";
 import { Button } from "@/components/ui/button";
 import { Plus, RotateCcw } from "lucide-react";
-import { PLAYGROUND_LAST_PICKED_MODEL } from "@/constants/llm";
+import {
+  PLAYGROUND_LAST_PICKED_MODEL,
+  PLAYGROUND_SELECTED_DATASET_KEY,
+} from "@/constants/llm";
 import {
   useAddPrompt,
   usePromptCount,
   usePromptIds,
+  useSetIsRunning,
   useSetPromptMap,
+  useClearCreatedExperiments,
+  useSetSelectedRuleIds,
 } from "@/store/PlaygroundStore";
 import useLastPickedModel from "@/hooks/useLastPickedModel";
 import useLLMProviderModelsData from "@/hooks/useLLMProviderModelsData";
@@ -19,9 +26,10 @@ import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 
 interface PlaygroundPromptsState {
   workspaceName: string;
-  providerKeys: PROVIDER_TYPE[];
+  providerKeys: COMPOSED_PROVIDER_TYPE[];
   isPendingProviderKeys: boolean;
   onResetHeight: () => void;
+  hasDataset: boolean;
 }
 
 const PlaygroundPrompts = ({
@@ -29,21 +37,31 @@ const PlaygroundPrompts = ({
   providerKeys,
   isPendingProviderKeys,
   onResetHeight,
+  hasDataset,
 }: PlaygroundPromptsState) => {
   const promptCount = usePromptCount();
   const addPrompt = useAddPrompt();
   const setPromptMap = useSetPromptMap();
+  const clearCreatedExperiments = useClearCreatedExperiments();
+  const setSelectedRuleIds = useSetSelectedRuleIds();
+  const setIsRunning = useSetIsRunning();
   const resetKeyRef = useRef(0);
   const scrollToPromptRef = useRef<string>("");
   const [open, setOpen] = useState<boolean>(false);
 
   const promptIds = usePromptIds();
-
   const [lastPickedModel] = useLastPickedModel({
     key: PLAYGROUND_LAST_PICKED_MODEL,
   });
   const { calculateModelProvider, calculateDefaultModel } =
     useLLMProviderModelsData();
+
+  const [, setDatasetId] = useLocalStorageState<string | null>(
+    PLAYGROUND_SELECTED_DATASET_KEY,
+    {
+      defaultValue: null,
+    },
+  );
 
   const handleAddPrompt = () => {
     const newPrompt = generateDefaultPrompt({
@@ -64,6 +82,10 @@ const PlaygroundPrompts = ({
       modelResolver: calculateDefaultModel,
     });
     setPromptMap([newPrompt.id], { [newPrompt.id]: newPrompt });
+    setDatasetId(null);
+    setSelectedRuleIds(null);
+    clearCreatedExperiments();
+    setIsRunning(false);
     onResetHeight();
   }, [
     providerKeys,
@@ -71,6 +93,10 @@ const PlaygroundPrompts = ({
     calculateModelProvider,
     calculateDefaultModel,
     setPromptMap,
+    setDatasetId,
+    setSelectedRuleIds,
+    clearCreatedExperiments,
+    setIsRunning,
     onResetHeight,
   ]);
 
@@ -82,7 +108,7 @@ const PlaygroundPrompts = ({
   }, [promptCount, isPendingProviderKeys, resetPlayground]);
 
   return (
-    <>
+    <div className="flex h-full flex-col">
       <div className="mb-4 flex items-center justify-between">
         <div className="flex items-center gap-1">
           <h1 className="comet-title-l">Playground</h1>
@@ -111,7 +137,11 @@ const PlaygroundPrompts = ({
         </div>
       </div>
 
-      <div className="flex size-full gap-[var(--item-gap)]">
+      <div
+        className={`flex size-full gap-[var(--item-gap)] ${
+          hasDataset ? "h-auto min-h-0 flex-1 overflow-x-auto" : ""
+        }`}
+      >
         {promptIds.map((promptId, idx) => (
           <PlaygroundPrompt
             workspaceName={workspaceName}
@@ -132,10 +162,10 @@ const PlaygroundPrompts = ({
         setOpen={setOpen}
         onConfirm={resetPlayground}
         title="Reset playground"
-        description="Resetting the Playground will discard all unsaved prompts. This action can’t be undone. Are you sure you want to continue?"
+        description="Resetting the Playground will discard all unsaved prompts. This action can't be undone. Are you sure you want to continue?"
         confirmText="Reset playground"
       />
-    </>
+    </div>
   );
 };
 

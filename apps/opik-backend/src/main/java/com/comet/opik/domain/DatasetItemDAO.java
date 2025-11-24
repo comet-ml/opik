@@ -3,6 +3,8 @@ package com.comet.opik.domain;
 import com.clickhouse.client.ClickHouseException;
 import com.comet.opik.api.Column;
 import com.comet.opik.api.DatasetItem;
+import com.comet.opik.api.DatasetItemUpdate;
+import com.comet.opik.api.filter.DatasetItemFilter;
 import com.comet.opik.api.filter.ExperimentsComparisonFilter;
 import com.comet.opik.api.sorting.SortingFactoryDatasets;
 import com.comet.opik.domain.filter.FilterQueryBuilder;
@@ -10,7 +12,9 @@ import com.comet.opik.domain.filter.FilterStrategy;
 import com.comet.opik.domain.sorting.SortingQueryBuilder;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
+import com.comet.opik.utils.template.TemplateUtils;
 import com.fasterxml.jackson.databind.JsonNode;
+import com.google.common.base.Preconditions;
 import com.google.inject.ImplementedBy;
 import io.opentelemetry.instrumentation.annotations.WithSpan;
 import io.r2dbc.spi.Connection;
@@ -41,8 +45,8 @@ import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils
 import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils.startSegment;
 import static com.comet.opik.utils.AsyncUtils.makeFluxContextAware;
 import static com.comet.opik.utils.AsyncUtils.makeMonoContextAware;
-import static com.comet.opik.utils.TemplateUtils.QueryItem;
-import static com.comet.opik.utils.TemplateUtils.getQueryItemPlaceHolder;
+import static com.comet.opik.utils.template.TemplateUtils.QueryItem;
+import static com.comet.opik.utils.template.TemplateUtils.getQueryItemPlaceHolder;
 
 @ImplementedBy(DatasetItemDAOImpl.class)
 public interface DatasetItemDAO {
@@ -64,6 +68,9 @@ public interface DatasetItemDAO {
 
     Mono<com.comet.opik.api.ProjectStats> getExperimentItemsStats(UUID datasetId, Set<UUID> experimentIds,
             List<ExperimentsComparisonFilter> filters);
+
+    Mono<Void> bulkUpdate(Set<UUID> ids, List<DatasetItemFilter> filters, DatasetItemUpdate update,
+            boolean mergeTags);
 }
 
 @Singleton
@@ -91,6 +98,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                 trace_id,
                 span_id,
                 data,
+                tags,
                 created_at,
                 workspace_id,
                 created_by,
@@ -105,6 +113,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                          :traceId<item.index>,
                          :spanId<item.index>,
                          :data<item.index>,
+                         :tags<item.index>,
                          now64(9),
                          :workspace_id,
                          :createdBy<item.index>,
@@ -158,6 +167,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                 trace_id,
                 span_id,
                 source,
+                tags,
                 created_at,
                 last_updated_at,
                 created_by,
@@ -623,6 +633,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                 di.trace_id AS trace_id,
                 di.span_id AS span_id,
                 di.source AS source,
+                di.tags AS tags,
                 di.created_at AS created_at,
                 di.last_updated_at AS last_updated_at,
                 di.created_by AS created_by,
@@ -731,6 +742,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                 di.trace_id,
                 di.span_id,
                 di.source,
+                di.tags,
                 di.created_at,
                 di.last_updated_at,
                 di.created_by,
@@ -808,6 +820,48 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                 AND id IN (SELECT trace_id FROM experiment_items_final)
             ) as t ON t.id = ei.trace_id
             ;
+            """;
+
+    private static final String BULK_UPDATE = """
+            INSERT INTO dataset_items (
+                workspace_id,
+                dataset_id,
+                source,
+                trace_id,
+                span_id,
+                id,
+                input,
+                expected_output,
+                metadata,
+                created_at,
+                last_updated_at,
+                created_by,
+                last_updated_by,
+                data,
+                tags
+            )
+            SELECT
+                s.workspace_id,
+                s.dataset_id,
+                s.source,
+                s.trace_id,
+                s.span_id,
+                s.id,
+                <if(input)> :input <else> s.input <endif> as input,
+                <if(expected_output)> :expected_output <else> s.expected_output <endif> as expected_output,
+                <if(metadata)> :metadata <else> s.metadata <endif> as metadata,
+                s.created_at,
+                now64(9) as last_updated_at,
+                s.created_by,
+                :user_name as last_updated_by,
+                <if(data)> :data <else> s.data <endif> as data,
+                <if(tags)><if(merge_tags)>arrayConcat(s.tags, :tags)<else>:tags<endif><else>s.tags<endif> as tags
+            FROM dataset_items AS s
+            WHERE s.workspace_id = :workspace_id
+            <if(ids)> AND s.id IN :ids <endif>
+            <if(dataset_item_filters)> AND (<dataset_item_filters>) <endif>
+            ORDER BY (s.workspace_id, s.dataset_id, s.source, s.trace_id, s.span_id, s.id) DESC, s.last_updated_at DESC
+            LIMIT 1 BY s.id;
             """;
 
     private static final String SELECT_DATASET_ITEMS_WITH_EXPERIMENT_ITEMS_STATS = String.format(
@@ -924,7 +978,8 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                         SELECT DISTINCT
                             eif.trace_id as trace_id,
                             t.duration as duration,
-                            s.total_estimated_cost as total_estimated_cost
+                            s.total_estimated_cost as total_estimated_cost,
+                            s.usage as usage
                         FROM experiment_items_filtered eif
                         LEFT JOIN (
                             SELECT
@@ -940,7 +995,8 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                         LEFT JOIN (
                             SELECT
                                 trace_id,
-                                sum(total_estimated_cost) as total_estimated_cost
+                                sum(total_estimated_cost) as total_estimated_cost,
+                                sumMap(usage) as usage
                             FROM spans final
                             WHERE workspace_id = :workspace_id
                             AND trace_id IN (SELECT trace_id FROM experiment_items_filtered)
@@ -977,7 +1033,8 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                         avgIf(tc.total_estimated_cost, tc.total_estimated_cost > 0) AS total_estimated_cost_,
                         toDecimal128(if(isNaN(total_estimated_cost_), 0, total_estimated_cost_), 12) AS total_estimated_cost_avg,
                         sumIf(tc.total_estimated_cost, tc.total_estimated_cost > 0) AS total_estimated_cost_sum_,
-                        toDecimal128(total_estimated_cost_sum_, 12) AS total_estimated_cost_sum
+                        toDecimal128(total_estimated_cost_sum_, 12) AS total_estimated_cost_sum,
+                        avgMap(tc.usage) AS usage
                     FROM experiment_items_filtered ei
                     LEFT JOIN traces_with_cost_and_duration AS tc ON ei.trace_id = tc.trace_id
                     LEFT JOIN feedback_scores_agg AS f ON ei.trace_id = f.entity_id
@@ -1008,7 +1065,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
 
         List<QueryItem> queryItems = getQueryItemPlaceHolder(items.size());
 
-        var template = new ST(sqlTemplate)
+        var template = TemplateUtils.newST(sqlTemplate)
                 .add("items", queryItems);
 
         String sql = template.render();
@@ -1029,6 +1086,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                 statement.bind("traceId" + i, DatasetItemResultMapper.getOrDefault(item.traceId()));
                 statement.bind("spanId" + i, DatasetItemResultMapper.getOrDefault(item.spanId()));
                 statement.bind("data" + i, DatasetItemResultMapper.getOrDefault(data));
+                statement.bind("tags" + i, item.tags() != null ? item.tags().toArray(String[]::new) : new String[]{});
                 statement.bind("createdBy" + i, userName);
                 statement.bind("lastUpdatedBy" + i, userName);
                 i++;
@@ -1066,7 +1124,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
         log.info("Getting dataset items by datasetId '{}', limit '{}', lastRetrievedId '{}'",
                 datasetId, limit, lastRetrievedId);
 
-        ST template = new ST(SELECT_DATASET_ITEMS_STREAM);
+        var template = TemplateUtils.newST(SELECT_DATASET_ITEMS_STREAM);
 
         if (lastRetrievedId != null) {
             template.add("lastRetrievedId", lastRetrievedId);
@@ -1139,7 +1197,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
     public Mono<List<Column>> getOutputColumns(@NonNull UUID datasetId, Set<UUID> experimentIds) {
         return asyncTemplate.nonTransaction(connection -> {
 
-            ST template = new ST(SELECT_DATASET_EXPERIMENT_ITEMS_COLUMNS_BY_DATASET_ID);
+            var template = TemplateUtils.newST(SELECT_DATASET_EXPERIMENT_ITEMS_COLUMNS_BY_DATASET_ID);
 
             if (CollectionUtils.isNotEmpty(experimentIds)) {
                 template.add("experiment_ids", experimentIds);
@@ -1186,7 +1244,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
     }
 
     private ST newFindTemplate(String query, DatasetItemSearchCriteria datasetItemSearchCriteria) {
-        var template = new ST(query);
+        var template = TemplateUtils.newST(query);
 
         Optional.ofNullable(datasetItemSearchCriteria.filters())
                 .ifPresent(filters -> {
@@ -1254,7 +1312,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
 
                     Segment segmentContent = startSegment(DATASET_ITEMS, CLICKHOUSE, contentSegmentName);
 
-                    ST selectTemplate = newFindTemplate(query, datasetItemSearchCriteria);
+                    var selectTemplate = newFindTemplate(query, datasetItemSearchCriteria);
                     selectTemplate = ImageUtils.addTruncateToTemplate(selectTemplate,
                             datasetItemSearchCriteria.truncate());
                     selectTemplate = selectTemplate.add("truncationSize",
@@ -1321,7 +1379,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
 
         return asyncTemplate.nonTransaction(connection -> {
 
-            ST countTemplate = newFindTemplate(countQuery, datasetItemSearchCriteria);
+            var countTemplate = newFindTemplate(countQuery, datasetItemSearchCriteria);
 
             var statement = connection.createStatement(countTemplate.render())
                     .bind("datasetId", datasetItemSearchCriteria.datasetId());
@@ -1368,7 +1426,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
         log.info("Getting experiment items stats for dataset '{}' and experiments '{}' with filters '{}'", datasetId,
                 experimentIds, filters);
 
-        ST template = new ST(SELECT_DATASET_ITEMS_WITH_EXPERIMENT_ITEMS_STATS);
+        var template = TemplateUtils.newST(SELECT_DATASET_ITEMS_WITH_EXPERIMENT_ITEMS_STATS);
         template.add("dataset_id", datasetId);
         if (!experimentIds.isEmpty()) {
             template.add("experiment_ids", true);
@@ -1425,6 +1483,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
 
         Optional.ofNullable(filters)
                 .ifPresent(filtersParam -> {
+                    // Bind all filters - the builder will handle both regular and aggregated filters
                     filterQueryBuilder.bind(statement, filtersParam,
                             com.comet.opik.domain.filter.FilterStrategy.EXPERIMENT_ITEM);
                     filterQueryBuilder.bind(statement, filtersParam,
@@ -1434,5 +1493,94 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                     filterQueryBuilder.bind(statement, filtersParam,
                             com.comet.opik.domain.filter.FilterStrategy.DATASET_ITEM);
                 });
+    }
+
+    @Override
+    @WithSpan
+    public Mono<Void> bulkUpdate(Set<UUID> ids, List<DatasetItemFilter> filters,
+            @NonNull DatasetItemUpdate update, boolean mergeTags) {
+        boolean hasIds = CollectionUtils.isNotEmpty(ids);
+        boolean hasFilters = CollectionUtils.isNotEmpty(filters);
+
+        Preconditions.checkArgument(hasIds || hasFilters, "Either ids or filters must be provided");
+
+        if (hasIds) {
+            log.info("Bulk updating '{}' dataset items by IDs", ids.size());
+        } else {
+            log.info("Bulk updating dataset items by filters");
+        }
+
+        var template = newBulkUpdateTemplate(update, BULK_UPDATE, mergeTags);
+
+        // Add ids or filters to template
+        if (hasIds) {
+            template.add("ids", true);
+        } else {
+            filterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.DATASET_ITEM)
+                    .ifPresent(datasetItemFilters -> template.add("dataset_item_filters", datasetItemFilters));
+        }
+
+        var query = template.render();
+
+        return asyncTemplate.nonTransaction(connection -> {
+            var statement = connection.createStatement(query);
+
+            // Bind ids if provided
+            if (hasIds) {
+                statement.bind("ids", ids);
+            }
+
+            bindBulkUpdateParams(update, statement);
+
+            // Bind filter parameters if provided
+            if (hasFilters) {
+                filterQueryBuilder.bind(statement, filters, FilterStrategy.DATASET_ITEM);
+            }
+
+            String segmentOperation = hasIds ? "bulk_update" : "bulk_update_by_filters";
+            Segment segment = startSegment("dataset_items", "Clickhouse", segmentOperation);
+
+            String successMessage = hasIds
+                    ? "Completed bulk update for '%s' dataset items".formatted(ids.size())
+                    : "Completed bulk update for dataset items matching filters";
+
+            return makeFluxContextAware(AsyncContextUtils.bindUserNameAndWorkspaceContextToStream(statement))
+                    .doFinally(signalType -> endSegment(segment))
+                    .then()
+                    .doOnSuccess(__ -> log.info(successMessage));
+        });
+    }
+
+    private ST newBulkUpdateTemplate(com.comet.opik.api.DatasetItemUpdate update, String sql, boolean mergeTags) {
+        var template = TemplateUtils.newST(sql);
+
+        Optional.ofNullable(update.input())
+                .ifPresent(input -> template.add("input", input));
+        Optional.ofNullable(update.expectedOutput())
+                .ifPresent(expectedOutput -> template.add("expected_output", expectedOutput));
+        Optional.ofNullable(update.metadata())
+                .ifPresent(metadata -> template.add("metadata", metadata.toString()));
+        Optional.ofNullable(update.data())
+                .ifPresent(data -> template.add("data", data.toString()));
+        Optional.ofNullable(update.tags())
+                .ifPresent(tags -> {
+                    template.add("tags", tags.toString());
+                    template.add("merge_tags", mergeTags);
+                });
+
+        return template;
+    }
+
+    private void bindBulkUpdateParams(com.comet.opik.api.DatasetItemUpdate update, Statement statement) {
+        Optional.ofNullable(update.input())
+                .ifPresent(input -> statement.bind("input", input));
+        Optional.ofNullable(update.expectedOutput())
+                .ifPresent(expectedOutput -> statement.bind("expected_output", expectedOutput));
+        Optional.ofNullable(update.metadata())
+                .ifPresent(metadata -> statement.bind("metadata", DatasetItemResultMapper.getOrDefault(metadata)));
+        Optional.ofNullable(update.data())
+                .ifPresent(data -> statement.bind("data", DatasetItemResultMapper.getOrDefault(data)));
+        Optional.ofNullable(update.tags())
+                .ifPresent(tags -> statement.bind("tags", tags.toArray(String[]::new)));
     }
 }

@@ -1,13 +1,21 @@
 import os
 from unittest.mock import Mock
 
-
+from opik_optimizer.api_objects import chat_prompt
 from opik_optimizer.optimizable_agent import OptimizableAgent
-from opik_optimizer.optimization_config import chat_prompt
+import opik_optimizer
 
 
 class TestOptimizableAgent:
     """Test cases for OptimizableAgent class."""
+
+    def _build_prompt(self) -> chat_prompt.ChatPrompt:
+        return chat_prompt.ChatPrompt(
+            name="test",
+            messages=[{"role": "user", "content": "Hello {name}?"}],
+            model="gpt-4o-mini",
+            model_parameters={"temperature": 0.1},
+        )
 
     def test_opik_project_name_not_overwritten_when_already_set(self) -> None:
         """Test that OPIK_PROJECT_NAME is not overwritten when already set in environment."""
@@ -16,7 +24,7 @@ class TestOptimizableAgent:
         agent_project_name = "Agent Project"
 
         # Create a mock prompt
-        mock_prompt = Mock(spec=chat_prompt.ChatPrompt)
+        mock_prompt = Mock(spec=opik_optimizer.ChatPrompt)
 
         # Set up the environment variable before agent initialization
         os.environ["OPIK_PROJECT_NAME"] = original_project_name
@@ -38,10 +46,21 @@ class TestOptimizableAgent:
             if "OPIK_PROJECT_NAME" in os.environ:
                 del os.environ["OPIK_PROJECT_NAME"]
 
+    def test_model_configuration_copied_from_prompt(self) -> None:
+        prompt = self._build_prompt()
+        agent = OptimizableAgent(prompt=prompt)
+
+        assert agent.model == "gpt-4o-mini"
+        assert agent.model_kwargs == {"temperature": 0.1}
+
+        # Mutate prompt after initialization to confirm agent keeps its own copy
+        prompt.model_kwargs["temperature"] = 0.9
+        assert agent.model_kwargs == {"temperature": 0.1}
+
     def test_opik_project_name_set_when_not_in_environment(self) -> None:
         """Test that OPIK_PROJECT_NAME is set when not already in environment."""
         # Create a mock prompt
-        mock_prompt = Mock(spec=chat_prompt.ChatPrompt)
+        mock_prompt = Mock(spec=opik_optimizer.ChatPrompt)
 
         # Ensure the environment variable is not set
         if "OPIK_PROJECT_NAME" in os.environ:
@@ -71,7 +90,7 @@ class TestOptimizableAgent:
     def test_opik_project_name_with_default_project_name(self) -> None:
         """Test that OPIK_PROJECT_NAME is set with default project name when not in environment."""
         # Create a mock prompt
-        mock_prompt = Mock(spec=chat_prompt.ChatPrompt)
+        mock_prompt = Mock(spec=opik_optimizer.ChatPrompt)
 
         # Ensure the environment variable is not set
         if "OPIK_PROJECT_NAME" in os.environ:

@@ -7,7 +7,7 @@ import CustomIcon from "@/icons/integrations/custom.svg?react";
 
 import { PROVIDER_MODEL_TYPE, PROVIDER_TYPE } from "@/types/providers";
 
-type IconType = typeof OpenAIIcon;
+export type IconType = typeof OpenAIIcon;
 
 export type PROVIDER_OPTION_TYPE = {
   label: string;
@@ -77,3 +77,5 @@ export const PROVIDERS: PROVIDERS_TYPE = {
 export const PROVIDERS_OPTIONS = Object.values(PROVIDERS);
 
 export const CUSTOM_PROVIDER_MODEL_PREFIX = "custom-llm";
+
+export const LEGACY_CUSTOM_PROVIDER_NAME = "default";

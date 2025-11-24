@@ -93,6 +93,12 @@ Call opik api on http://localhost:5173/api
 | altinity-clickhouse-operator.serviceMonitor.enabled | bool | `false` |  |
 | altinity-clickhouse-operator.serviceMonitor.interval | string | `""` |  |
 | basicAuth | bool | `false` |  |
+| caCerts.additionalCACerts | list | `nil` | Additional Certificate Authority Certificates to trust. Each list entry has two keys: `name` and `content`. `name` should be a unique identifier. content Should be PEM formated Public Certificate contents. |
+| caCerts.additionalCACertsInSecret | bool | `false` | Certificates are Public Keys + Metadata, but some organizations may still prefer storing these in Secrets. |
+| caCerts.existingAdditionalCACertsRef | string | `nil` | If there is an existing ConfigMap containing the additional CA Certificates you can provide its name here instead of creatinga a new one. If `additionalCACertsInSecret` is `true` we will look for this name in Secrets. |
+| caCerts.overwriteJavaCATrustStore.enabled | bool | `false` | If enabled we will not inject additional CA Certificates to the Java TrustStore, but instead will mount a given volume containing a Java Trust Store to replace the default one in the containers. |
+| caCerts.overwriteJavaCATrustStore.subPath | string | `"cacerts"` | The sub-path of the valid Java Trust Store to mount from the volume. |
+| caCerts.overwriteJavaCATrustStore.volume | object | `{}` | A Kubernetes Volume definition which will contain a valid Java Trust Store. See https://kubernetes.io/docs/reference/kubernetes-api/config-and-storage-resources/volume/ for valid parameters. |
 | clickhouse.adminUser.password | string | `"opik"` |  |
 | clickhouse.adminUser.useSecret.enabled | bool | `false` |  |
 | clickhouse.adminUser.username | string | `"opik"` |  |
@@ -231,6 +237,7 @@ Call opik api on http://localhost:5173/api
 | component.backend.readinessProbe.path | string | `"/health-check?name=all&type=ready"` |  |
 | component.backend.readinessProbe.port | int | `8080` |  |
 | component.backend.replicaCount | int | `1` |  |
+| component.backend.resources.requests.ephemeral-storage | string | `"10Gi"` |  |
 | component.backend.run_migration | bool | `true` |  |
 | component.backend.service.ports[0].name | string | `"http"` |  |
 | component.backend.service.ports[0].port | int | `8080` |  |
@@ -249,7 +256,7 @@ Call opik api on http://localhost:5173/api
 | component.backend.waitForClickhouse.image.registry | string | `"docker.io"` |  |
 | component.backend.waitForClickhouse.image.repository | string | `"curlimages/curl"` |  |
 | component.backend.waitForClickhouse.image.tag | string | `"8.12.1"` |  |
-| component.backend.waitForMysql.enabled | bool | `true` |  |
+| component.backend.waitForMysql.enabled | bool | `false` |  |
 | component.backend.waitForMysql.image.registry | string | `"docker.io"` |  |
 | component.backend.waitForMysql.image.repository | string | `"busybox"` |  |
 | component.backend.waitForMysql.image.tag | float | `1.36` |  |
@@ -275,6 +282,7 @@ Call opik api on http://localhost:5173/api
 | component.frontend.maps | list | `[]` |  |
 | component.frontend.metrics.enabled | bool | `false` |  |
 | component.frontend.replicaCount | int | `1` |  |
+| component.frontend.resources.requests.ephemeral-storage | string | `"10Gi"` |  |
 | component.frontend.service.ports[0].name | string | `"http"` |  |
 | component.frontend.service.ports[0].port | int | `5173` |  |
 | component.frontend.service.ports[0].protocol | string | `"TCP"` |  |

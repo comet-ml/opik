@@ -51,7 +51,7 @@ examples, or tool interactions.
   </Accordion>
   <Accordion title="Dataset (for Optimization)">
     A collection of data items, typically with inputs and expected outputs (ground truth), used to guide and evaluate
-    the prompt optimization process. See [Datasets](/evaluation/manage_datasets) for more information.
+    the prompt optimization process. For best results, split your data into separate training and validation datasets—the optimizer uses the training dataset to analyze failures and generate improvements, then evaluates candidates on the validation dataset to prevent overfitting. See [Datasets](/evaluation/manage_datasets) and [Define datasets](/agent_optimization/optimization/define_datasets) for more information.
   </Accordion>
   <Accordion title="Optimization Run">
     A single execution of a prompt optimization process using a specific configuration. For example,
@@ -60,7 +60,8 @@ examples, or tool interactions.
   </Accordion>
   <Accordion title="Optimization Trial">
     Each optimization run is made up of one or more optimization trials. A trial corresponds to a
-    single evaluation of a candidate prompt or prompt configuration. You can few each
+    single evaluation of a candidate prompt or prompt configuration. You can view each trial's prompt,
+    score, and reasoning history inside the Opik UI to understand optimizer progress.
   </Accordion>
   <Accordion title="Prompt model">
   The model that is used to evaluate the prompt. This is the model that you use the prompt with,

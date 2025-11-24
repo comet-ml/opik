@@ -16,9 +16,11 @@ import com.comet.opik.api.ProjectStats;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.Trace.TracePage;
 import com.comet.opik.api.TraceBatch;
+import com.comet.opik.api.TraceBatchUpdate;
 import com.comet.opik.api.TraceSearchStreamRequest;
 import com.comet.opik.api.TraceThread;
 import com.comet.opik.api.TraceThreadBatchIdentifier;
+import com.comet.opik.api.TraceThreadBatchUpdate;
 import com.comet.opik.api.TraceThreadIdentifier;
 import com.comet.opik.api.TraceThreadSearchStreamRequest;
 import com.comet.opik.api.TraceThreadUpdate;
@@ -58,7 +60,6 @@ import jakarta.inject.Provider;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
-import jakarta.ws.rs.BadRequestException;
 import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.DELETE;
 import jakarta.ws.rs.DefaultValue;
@@ -130,8 +131,8 @@ public class TracesResource {
             @QueryParam("strip_attachments") @DefaultValue("false") @Schema(description = "If true, returns attachment references like [file.png]; if false, downloads and reinjects stripped attachments") boolean stripAttachments,
             @QueryParam("sorting") String sorting,
             @QueryParam("exclude") String exclude,
-            @QueryParam("from_time") @Schema(description = "Filter traces created from this time (ISO-8601 format). Must be provided together with 'to_time'.") Instant startTime,
-            @QueryParam("to_time") @Schema(description = "Filter traces created up to this time (ISO-8601 format). Must be provided together with 'from_time' and must be after 'from_time'.") Instant endTime) {
+            @QueryParam("from_time") @Schema(description = "Filter traces created from this time (ISO-8601 format).") Instant startTime,
+            @QueryParam("to_time") @Schema(description = "Filter traces created up to this time (ISO-8601 format). If not provided, defaults to current time. Must be after 'from_time'.") Instant endTime) {
 
         validateProjectNameAndProjectId(projectName, projectId);
         validateTimeRangeParameters(startTime, endTime);
@@ -306,6 +307,28 @@ public class TracesResource {
     }
 
     @PATCH
+    @Path("/batch")
+    @Operation(operationId = "batchUpdateTraces", summary = "Batch update traces", description = "Update multiple traces", responses = {
+            @ApiResponse(responseCode = "204", description = "No Content"),
+            @ApiResponse(responseCode = "400", description = "Bad Request", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))})
+    @RateLimited
+    public Response batchUpdate(
+            @RequestBody(content = @Content(schema = @Schema(implementation = TraceBatchUpdate.class))) @Valid @NotNull TraceBatchUpdate batchUpdate) {
+
+        String workspaceId = requestContext.get().getWorkspaceId();
+
+        log.info("Batch updating '{}' traces on workspaceId '{}'", batchUpdate.ids().size(), workspaceId);
+
+        service.batchUpdate(batchUpdate)
+                .contextWrite(ctx -> setRequestContext(ctx, requestContext))
+                .block();
+
+        log.info("Batch updated '{}' traces on workspaceId '{}'", batchUpdate.ids().size(), workspaceId);
+
+        return Response.noContent().build();
+    }
+
+    @PATCH
     @Path("{id}")
     @Operation(operationId = "updateTrace", summary = "Update trace by id", description = "Update trace by id", responses = {
             @ApiResponse(responseCode = "204", description = "No Content")})
@@ -367,8 +390,8 @@ public class TracesResource {
     public Response getStats(@QueryParam("project_id") UUID projectId,
             @QueryParam("project_name") String projectName,
             @QueryParam("filters") String filters,
-            @QueryParam("from_time") @Schema(description = "Filter traces created from this time (ISO-8601 format). Must be provided together with 'to_time'.") Instant startTime,
-            @QueryParam("to_time") @Schema(description = "Filter traces created up to this time (ISO-8601 format). Must be provided together with 'from_time' and must be after 'from_time'.") Instant endTime) {
+            @QueryParam("from_time") @Schema(description = "Filter traces created from this time (ISO-8601 format).") Instant startTime,
+            @QueryParam("to_time") @Schema(description = "Filter traces created up to this time (ISO-8601 format). If not provided, defaults to current time. Must be after 'from_time'.") Instant endTime) {
 
         validateProjectNameAndProjectId(projectName, projectId);
         validateTimeRangeParameters(startTime, endTime);
@@ -466,10 +489,6 @@ public class TracesResource {
     })
     @JsonView({FeedbackDefinition.View.Public.class})
     public Response findFeedbackScoreNames(@QueryParam("project_id") UUID projectId) {
-
-        if (projectId == null) {
-            throw new BadRequestException("project_id must be provided");
-        }
 
         String workspaceId = requestContext.get().getWorkspaceId();
 
@@ -587,8 +606,8 @@ public class TracesResource {
             @QueryParam("strip_attachments") @DefaultValue("false") @Schema(description = "If true, returns attachment references like [file.png]; if false, downloads and reinjects stripped attachments") boolean stripAttachments,
             @QueryParam("filters") String filters,
             @QueryParam("sorting") String sorting,
-            @QueryParam("from_time") @Schema(description = "Filter trace threads created from this time (ISO-8601 format). Must be provided together with 'to_time'.") Instant startTime,
-            @QueryParam("to_time") @Schema(description = "Filter trace threads created up to this time (ISO-8601 format). Must be provided together with 'from_time' and must be after 'from_time'.") Instant endTime) {
+            @QueryParam("from_time") @Schema(description = "Filter trace threads created from this time (ISO-8601 format).") Instant startTime,
+            @QueryParam("to_time") @Schema(description = "Filter trace threads created up to this time (ISO-8601 format). If not provided, defaults to current time. Must be after 'from_time'.") Instant endTime) {
 
         validateProjectNameAndProjectId(projectName, projectId);
         validateTimeRangeParameters(startTime, endTime);
@@ -788,6 +807,28 @@ public class TracesResource {
     }
 
     @PATCH
+    @Path("/threads/batch")
+    @Operation(operationId = "batchUpdateThreads", summary = "Batch update threads", description = "Update multiple threads", responses = {
+            @ApiResponse(responseCode = "204", description = "No Content"),
+            @ApiResponse(responseCode = "400", description = "Bad Request", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))})
+    @RateLimited
+    public Response batchUpdateThreads(
+            @RequestBody(content = @Content(schema = @Schema(implementation = TraceThreadBatchUpdate.class))) @Valid @NotNull TraceThreadBatchUpdate batchUpdate) {
+
+        String workspaceId = requestContext.get().getWorkspaceId();
+
+        log.info("Batch updating '{}' threads on workspaceId '{}'", batchUpdate.ids().size(), workspaceId);
+
+        traceThreadService.batchUpdate(batchUpdate)
+                .contextWrite(ctx -> setRequestContext(ctx, requestContext))
+                .block();
+
+        log.info("Batch updated '{}' threads on workspaceId '{}'", batchUpdate.ids().size(), workspaceId);
+
+        return Response.noContent().build();
+    }
+
+    @PATCH
     @Path("/threads/{threadModelId}")
     @Operation(operationId = "updateThread", summary = "Update thread", description = "Update thread", responses = {
             @ApiResponse(responseCode = "204", description = "No Content"),
@@ -862,7 +903,7 @@ public class TracesResource {
             @ApiResponse(responseCode = "200", description = "Find Trace Threads Feedback Score names", content = @Content(array = @ArraySchema(schema = @Schema(implementation = String.class))))
     })
     @JsonView({FeedbackDefinition.View.Public.class})
-    public Response findTraceThreadsFeedbackScoreNames(@QueryParam("project_id") @NotNull UUID projectId) {
+    public Response findTraceThreadsFeedbackScoreNames(@QueryParam("project_id") UUID projectId) {
 
         String workspaceId = requestContext.get().getWorkspaceId();
 

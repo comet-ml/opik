@@ -1133,7 +1133,7 @@ class ExperimentsResourceTest {
 
             var prompt = podamFactory.manufacturePojo(Prompt.class);
             PromptVersion promptVersion = promptResourceClient.createPromptVersion(prompt, apiKey, workspaceName);
-            PromptVersionLink versionLink = buildVersionLink(promptVersion);
+            PromptVersionLink versionLink = buildVersionLink(promptVersion, prompt.name());
 
             var experiments = experimentResourceClient.generateExperimentList()
                     .stream()
@@ -1857,7 +1857,7 @@ class ExperimentsResourceTest {
             List<Experiment> expectedExperiments = IntStream.range(0, expectedMatchCount)
                     .parallel()
                     .mapToObj(i -> {
-                        PromptVersionLink versionLink = buildVersionLink(promptVersion);
+                        PromptVersionLink versionLink = buildVersionLink(promptVersion, prompt.name());
                         var experiment = experimentResourceClient.createPartialExperiment()
                                 .datasetName(dataset.name())
                                 .promptVersion(versionLink)
@@ -1900,8 +1900,8 @@ class ExperimentsResourceTest {
             List<Experiment> expectedExperiments = IntStream.range(0, expectedMatchCount)
                     .parallel()
                     .mapToObj(i -> {
-                        PromptVersionLink versionLink = buildVersionLink(promptVersion);
-                        PromptVersionLink versionLink2 = buildVersionLink(promptVersion2);
+                        PromptVersionLink versionLink = buildVersionLink(promptVersion, prompt.name());
+                        PromptVersionLink versionLink2 = buildVersionLink(promptVersion2, prompt2.name());
 
                         var experiment = experimentResourceClient.createPartialExperiment()
                                 .datasetName(dataset.name())
@@ -2083,7 +2083,7 @@ class ExperimentsResourceTest {
 
         @ParameterizedTest
         @ValueSource(strings = {"feedback_scores", "feedback_score.dsfsdfd", "feedback_scores."})
-        void whenSortingByFeedbackScores__thenReturnPage(String field) {
+        void whenSortingByInvalidFeedbackScoresPattern__thenIgnoreAndReturnPage(String field) {
 
             var workspaceName = UUID.randomUUID().toString();
             var workspaceId = UUID.randomUUID().toString();
@@ -2104,7 +2104,7 @@ class ExperimentsResourceTest {
                     null,
                     null,
                     null)) {
-                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
             }
         }
 
@@ -2286,7 +2286,7 @@ class ExperimentsResourceTest {
 
                 var prompt = podamFactory.manufacturePojo(Prompt.class);
                 PromptVersion promptVersion = promptResourceClient.createPromptVersion(prompt, apiKey, workspaceName);
-                PromptVersionLink versionLink = buildVersionLink(promptVersion);
+                PromptVersionLink versionLink = buildVersionLink(promptVersion, prompt.name());
 
                 var experiments = experimentResourceClient.generateExperimentList()
                         .stream()
@@ -2571,7 +2571,7 @@ class ExperimentsResourceTest {
 
                 var prompt = podamFactory.manufacturePojo(Prompt.class);
                 PromptVersion promptVersion = promptResourceClient.createPromptVersion(prompt, apiKey, workspaceName);
-                PromptVersionLink versionLink = buildVersionLink(promptVersion);
+                PromptVersionLink versionLink = buildVersionLink(promptVersion, prompt.name());
 
                 var experiments = experimentResourceClient.generateExperimentList()
                         .stream()
@@ -2832,11 +2832,12 @@ class ExperimentsResourceTest {
                 .build();
     }
 
-    private static PromptVersionLink buildVersionLink(PromptVersion promptVersion) {
+    private static PromptVersionLink buildVersionLink(PromptVersion promptVersion, String promptName) {
         return PromptVersionLink.builder()
                 .id(promptVersion.id())
                 .commit(promptVersion.commit())
                 .promptId(promptVersion.promptId())
+                .promptName(promptName)
                 .build();
     }
 
@@ -3143,7 +3144,7 @@ class ExperimentsResourceTest {
                                     var prompt = podamFactory.manufacturePojo(Prompt.class);
                                     var promptVersion = promptResourceClient.createPromptVersion(prompt, API_KEY,
                                             TEST_WORKSPACE);
-                                    return buildVersionLink(promptVersion);
+                                    return buildVersionLink(promptVersion, prompt.name());
                                 })
                                 .toList();
                         var experiment = experimentResourceClient.createPartialExperiment()
@@ -3445,7 +3446,7 @@ class ExperimentsResourceTest {
             var promptVersion = promptResourceClient.createPromptVersion(prompt, API_KEY, TEST_WORKSPACE);
 
             var versionLink = new PromptVersionLink(promptVersion.id(), promptVersion.commit(),
-                    promptVersion.promptId());
+                    promptVersion.promptId(), promptName);
 
             var expectedExperiment = experimentResourceClient.createPartialExperiment()
                     .promptVersion(versionLink)
@@ -3513,7 +3514,7 @@ class ExperimentsResourceTest {
         @Test
         void createWithInvalidPromptVersionId() {
             var experiment = podamFactory.manufacturePojo(Experiment.class).toBuilder()
-                    .promptVersion(new PromptVersionLink(GENERATOR.generate(), null, GENERATOR.generate()))
+                    .promptVersion(new PromptVersionLink(GENERATOR.generate(), null, GENERATOR.generate(), null))
                     .build();
 
             var expectedError = new ErrorMessage(HttpStatus.SC_CONFLICT, "Prompt version not found");
@@ -5692,6 +5693,58 @@ class ExperimentsResourceTest {
                             .name("accuracy")
                             .value(null) // null value
                             .build()))));
+        }
+
+        @Test
+        @DisplayName("when updating experiment multiple times with partial updates, then latest values are preserved")
+        void updateExperiment_whenMultiplePartialUpdates_thenLatestValuesPreserved() {
+            var originalName = "original-" + RandomStringUtils.secure().nextAlphanumeric(32);
+            var originalMetadata = podamFactory.manufacturePojo(JsonNode.class);
+            var initialExperiment = experimentResourceClient.createPartialExperiment()
+                    .name(originalName)
+                    .metadata(originalMetadata)
+                    .build();
+            var experimentId = experimentResourceClient.create(initialExperiment, API_KEY, TEST_WORKSPACE);
+
+            // First update: Change both name and metadata with random values
+            var firstUpdateName = "first-update-" + RandomStringUtils.secure().nextAlphanumeric(32);
+            var firstUpdateMetadata = podamFactory.manufacturePojo(JsonNode.class);
+            var firstUpdate = ExperimentUpdate.builder()
+                    .name(firstUpdateName)
+                    .metadata(firstUpdateMetadata)
+                    .build();
+            experimentResourceClient.updateExperiment(
+                    experimentId, firstUpdate, API_KEY, TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
+
+            // Second update: Change only the name with random value
+            var secondUpdateName = "second-update-" + RandomStringUtils.secure().nextAlphanumeric(32);
+            var secondUpdate = ExperimentUpdate.builder()
+                    .name(secondUpdateName)
+                    .build();
+            experimentResourceClient.updateExperiment(
+                    experimentId, secondUpdate, API_KEY, TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
+
+            // Verify that metadata from first update is preserved (not from original)
+            var expectedExperiment = initialExperiment.toBuilder()
+                    .name(secondUpdateName)
+                    .metadata(firstUpdateMetadata)
+                    .build();
+            getAndAssert(experimentId, expectedExperiment, TEST_WORKSPACE, API_KEY);
+
+            // Third update: Change only the metadata with random value
+            var thirdUpdateMetadata = podamFactory.manufacturePojo(JsonNode.class);
+            var thirdUpdate = ExperimentUpdate.builder()
+                    .metadata(thirdUpdateMetadata)
+                    .build();
+            experimentResourceClient.updateExperiment(
+                    experimentId, thirdUpdate, API_KEY, TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
+
+            // Verify that name from second update is preserved (not from first or original)
+            var finalExpectedExperiment = initialExperiment.toBuilder()
+                    .name(secondUpdateName)
+                    .metadata(thirdUpdateMetadata)
+                    .build();
+            getAndAssert(experimentId, finalExpectedExperiment, TEST_WORKSPACE, API_KEY);
         }
     }
 }

@@ -4,17 +4,13 @@ Test counter functionality across optimizers.
 
 from typing import Any
 
-from opik_optimizer.gepa_optimizer.gepa_optimizer import GepaOptimizer
-from opik_optimizer.meta_prompt_optimizer.meta_prompt_optimizer import (
+from opik_optimizer import (
     MetaPromptOptimizer,
-)
-from opik_optimizer.few_shot_bayesian_optimizer.few_shot_bayesian_optimizer import (
     FewShotBayesianOptimizer,
-)
-from opik_optimizer.evolutionary_optimizer.evolutionary_optimizer import (
     EvolutionaryOptimizer,
+    GepaOptimizer,
 )
-from opik_optimizer.optimization_config import chat_prompt
+import opik_optimizer
 
 
 class TestCounterFunctionality:
@@ -156,7 +152,7 @@ class TestCounterFunctionality:
         optimizer = GepaOptimizer(model="gpt-4o-mini")
 
         # Create a mock prompt
-        prompt = chat_prompt.ChatPrompt(
+        prompt = opik_optimizer.ChatPrompt(
             system="You are a helpful assistant.", user="Answer: {text}"
         )
 

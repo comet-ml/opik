@@ -1,17 +1,13 @@
 package com.comet.opik.domain;
 
-import com.comet.opik.api.AlertEventType;
 import com.comet.opik.api.DeleteFeedbackScore;
 import com.comet.opik.api.FeedbackScore;
 import com.comet.opik.api.FeedbackScoreItem;
 import com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItemThread;
 import com.comet.opik.api.ScoreSource;
-import com.comet.opik.api.events.webhooks.AlertEvent;
-import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
-import com.comet.opik.utils.TemplateUtils;
+import com.comet.opik.utils.template.TemplateUtils;
 import com.google.common.base.Preconditions;
-import com.google.common.eventbus.EventBus;
 import com.google.inject.ImplementedBy;
 import io.opentelemetry.instrumentation.annotations.WithSpan;
 import io.r2dbc.spi.Connection;
@@ -36,6 +32,7 @@ import java.util.stream.Collectors;
 
 import static com.comet.opik.api.AlertEventType.TRACE_FEEDBACK_SCORE;
 import static com.comet.opik.api.AlertEventType.TRACE_THREAD_FEEDBACK_SCORE;
+import static com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItemThread;
 import static com.comet.opik.domain.AsyncContextUtils.bindUserNameAndWorkspaceContextToStream;
 import static com.comet.opik.domain.AsyncContextUtils.bindWorkspaceIdToMono;
 import static com.comet.opik.utils.AsyncUtils.makeFluxContextAware;
@@ -328,7 +325,6 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
             """;
 
     private final @NonNull TransactionTemplateAsync asyncTemplate;
-    private final @NonNull EventBus eventBus;
 
     @Override
     @WithSpan
@@ -357,64 +353,19 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
 
         Preconditions.checkArgument(CollectionUtils.isNotEmpty(scores), "Argument 'scores' must not be empty");
 
-        return Mono.deferContextual(ctx -> {
-            String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
-            String workspaceName = ctx.getOrDefault(RequestContext.WORKSPACE_NAME, "");
-            String userName = ctx.get(RequestContext.USER_NAME);
+        return asyncTemplate.nonTransaction(connection -> {
 
-            return asyncTemplate.nonTransaction(connection -> {
+            var template = TemplateUtils.getBatchSql(BULK_INSERT_FEEDBACK_SCORE, scores.size());
+            template.add("author", author);
 
-                ST template = TemplateUtils.getBatchSql(BULK_INSERT_FEEDBACK_SCORE, scores.size());
-                template.add("author", author);
+            var statement = connection.createStatement(template.render());
 
-                var statement = connection.createStatement(template.render());
+            bindParameters(entityType, scores, statement, author);
 
-                bindParameters(entityType, scores, statement, author);
-
-                return makeFluxContextAware(bindUserNameAndWorkspaceContextToStream(statement))
-                        .flatMap(Result::getRowsUpdated)
-                        .reduce(Long::sum);
-            })
-                    .doOnSuccess(cnt -> {
-                        switch (entityType) {
-                            case TRACE ->
-                                publishAlertEvent(scores, author, TRACE_FEEDBACK_SCORE, workspaceId, workspaceName,
-                                        userName);
-                            case THREAD ->
-                                publishAlertEvent(scores, author, TRACE_THREAD_FEEDBACK_SCORE, workspaceId,
-                                        workspaceName, userName);
-                            default -> {
-                                // no-op
-                            }
-                        }
-                    });
+            return makeFluxContextAware(bindUserNameAndWorkspaceContextToStream(statement))
+                    .flatMap(Result::getRowsUpdated)
+                    .reduce(Long::sum);
         });
-    }
-
-    private void publishAlertEvent(List<? extends FeedbackScoreItem> scores, String author, AlertEventType eventType,
-            String workspaceId, String workspaceName, String userName) {
-        if (CollectionUtils.isEmpty(scores)) {
-            return;
-        }
-
-        var scoresWithAuthor = scores.stream()
-                .map(item -> switch (item) {
-                    case FeedbackScoreItem.FeedbackScoreBatchItem tracingItem -> tracingItem.toBuilder()
-                            .author(author)
-                            .build();
-                    case FeedbackScoreBatchItemThread threadItem -> threadItem.toBuilder()
-                            .author(author)
-                            .build();
-                }).toList();
-
-        eventBus.post(AlertEvent.builder()
-                .eventType(eventType)
-                .workspaceId(workspaceId)
-                .workspaceName(workspaceName)
-                .userName(userName)
-                .projectId(scores.getFirst().projectId())
-                .payload(scoresWithAuthor)
-                .build());
     }
 
     @Override
@@ -450,7 +401,7 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
         return asyncTemplate.nonTransaction(connection -> {
 
             // Delete from feedback_scores table
-            var deleteFeedbackScore = new ST(DELETE_FEEDBACK_SCORE)
+            var deleteFeedbackScore = TemplateUtils.newST(DELETE_FEEDBACK_SCORE)
                     .add("table_name", "feedback_scores");
 
             if (StringUtils.isNotBlank(score.author())) {
@@ -471,7 +422,7 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
                     .flatMap(result -> Mono.from(result.getRowsUpdated()));
 
             // Delete from authored_feedback_scores table
-            var deleteAuthoredFeedbackScore = new ST(DELETE_FEEDBACK_SCORE)
+            var deleteAuthoredFeedbackScore = TemplateUtils.newST(DELETE_FEEDBACK_SCORE)
                     .add("table_name", "authored_feedback_scores");
             Optional.ofNullable(score.author())
                     .filter(StringUtils::isNotBlank)
@@ -527,7 +478,7 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
         return asyncTemplate.nonTransaction(connection -> {
 
             // Delete from feedback_scores table
-            ST template1 = new ST(DELETE_FEEDBACK_SCORE_BY_ENTITY_IDS);
+            var template1 = TemplateUtils.newST(DELETE_FEEDBACK_SCORE_BY_ENTITY_IDS);
             template1.add("names", names);
             template1.add("table_name", "feedback_scores");
 
@@ -548,7 +499,7 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
                     .flatMap(result -> Mono.from(result.getRowsUpdated()));
 
             // Delete from authored_feedback_scores table
-            ST template2 = new ST(DELETE_FEEDBACK_SCORE_BY_ENTITY_IDS);
+            var template2 = TemplateUtils.newST(DELETE_FEEDBACK_SCORE_BY_ENTITY_IDS);
             template2.add("names", names);
             template2.add("table_name", "authored_feedback_scores");
             Optional.ofNullable(author)
@@ -571,12 +522,12 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
 
     @Override
     @WithSpan
-    public Mono<List<String>> getTraceFeedbackScoreNames(@NonNull UUID projectId) {
+    public Mono<List<String>> getTraceFeedbackScoreNames(UUID projectId) {
         return asyncTemplate.nonTransaction(connection -> {
 
-            ST template = new ST(SELECT_FEEDBACK_SCORE_NAMES);
+            var template = TemplateUtils.newST(SELECT_FEEDBACK_SCORE_NAMES);
 
-            List<UUID> projectIds = List.of(projectId);
+            List<UUID> projectIds = projectId == null ? List.of() : List.of(projectId);
 
             bindTemplateParam(projectIds, false, null, false, template);
 
@@ -592,8 +543,9 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
     @WithSpan
     public Mono<List<ScoreNameWithType>> getExperimentsFeedbackScoreNames(Set<UUID> experimentIds) {
         return asyncTemplate.nonTransaction(connection -> {
-            ST template = new ST(SELECT_FEEDBACK_SCORE_NAMES);
+            var template = TemplateUtils.newST(SELECT_FEEDBACK_SCORE_NAMES);
             bindTemplateParam(null, true, experimentIds, true, template);
+
             var statement = connection.createStatement(template.render());
             bindStatementParam(null, experimentIds, statement, EntityType.TRACE);
 
@@ -610,7 +562,7 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
     public Mono<List<String>> getProjectsFeedbackScoreNames(Set<UUID> projectIds) {
         return asyncTemplate.nonTransaction(connection -> {
 
-            ST template = new ST(SELECT_PROJECTS_FEEDBACK_SCORE_NAMES);
+            var template = TemplateUtils.newST(SELECT_PROJECTS_FEEDBACK_SCORE_NAMES);
 
             if (CollectionUtils.isNotEmpty(projectIds)) {
                 template.add("project_ids", projectIds);
@@ -630,11 +582,10 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
 
     @Override
     public Mono<List<String>> getProjectsTraceThreadsFeedbackScoreNames(@NonNull List<UUID> projectIds) {
-        Preconditions.checkArgument(CollectionUtils.isNotEmpty(projectIds), "Argument 'projectId' must not be empty");
 
         return asyncTemplate.nonTransaction(connection -> {
 
-            ST template = new ST(SELECT_FEEDBACK_SCORE_NAMES);
+            var template = TemplateUtils.newST(SELECT_FEEDBACK_SCORE_NAMES);
 
             bindTemplateParam(projectIds, false, null, false, template);
 
@@ -656,7 +607,7 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
             List<String> sources = List.of(ScoreSource.UI.getValue(), ScoreSource.SDK.getValue());
 
             // Delete from feedback_scores table
-            var template1 = new ST(DELETE_FEEDBACK_SCORE_BY_ENTITY_IDS);
+            var template1 = TemplateUtils.newST(DELETE_FEEDBACK_SCORE_BY_ENTITY_IDS);
             template1.add("project_id", projectId);
             template1.add("sources", sources);
             template1.add("table_name", "feedback_scores");
@@ -668,7 +619,7 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
                     .bind("project_id", projectId);
 
             // Delete from authored_feedback_scores table
-            var template2 = new ST(DELETE_FEEDBACK_SCORE_BY_ENTITY_IDS);
+            var template2 = TemplateUtils.newST(DELETE_FEEDBACK_SCORE_BY_ENTITY_IDS);
             template2.add("project_id", projectId);
             template2.add("sources", sources);
             template2.add("table_name", "authored_feedback_scores");
@@ -691,7 +642,7 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
     public Mono<List<String>> getSpanFeedbackScoreNames(@NonNull UUID projectId, SpanType type) {
         return asyncTemplate.nonTransaction(connection -> {
 
-            ST template = new ST(SELECT_SPAN_FEEDBACK_SCORE_NAMES);
+            var template = TemplateUtils.newST(SELECT_SPAN_FEEDBACK_SCORE_NAMES);
 
             if (type != null) {
                 template.add("type", type.name());
@@ -748,7 +699,7 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
         log.info("Deleting feedback scores by span entityId, traceIds count '{}'", traceIds.size());
 
         // Delete from feedback_scores table
-        var template1 = new ST(DELETE_SPANS_CASCADE_FEEDBACK_SCORE);
+        var template1 = TemplateUtils.newST(DELETE_SPANS_CASCADE_FEEDBACK_SCORE);
         Optional.ofNullable(projectId)
                 .ifPresent(id -> template1.add("project_id", id));
         template1.add("table_name", "feedback_scores");
@@ -761,7 +712,7 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
         }
 
         // Delete from authored_feedback_scores table
-        var template2 = new ST(DELETE_SPANS_CASCADE_FEEDBACK_SCORE);
+        var template2 = TemplateUtils.newST(DELETE_SPANS_CASCADE_FEEDBACK_SCORE);
         Optional.ofNullable(projectId)
                 .ifPresent(id -> template2.add("project_id", id));
         template2.add("table_name", "authored_feedback_scores");
@@ -782,7 +733,7 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
         log.info("Deleting feedback scores by entityType '{}', entityIds count '{}'", entityType, entityIds.size());
 
         // Delete from feedback_scores table
-        var template1 = new ST(DELETE_FEEDBACK_SCORE_BY_ENTITY_IDS);
+        var template1 = TemplateUtils.newST(DELETE_FEEDBACK_SCORE_BY_ENTITY_IDS);
         Optional.ofNullable(projectId)
                 .ifPresent(id -> template1.add("project_id", id));
         template1.add("table_name", "feedback_scores");
@@ -796,7 +747,7 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
         }
 
         // Delete from authored_feedback_scores table
-        var template2 = new ST(DELETE_FEEDBACK_SCORE_BY_ENTITY_IDS);
+        var template2 = TemplateUtils.newST(DELETE_FEEDBACK_SCORE_BY_ENTITY_IDS);
         Optional.ofNullable(projectId)
                 .ifPresent(id -> template2.add("project_id", id));
         template2.add("table_name", "authored_feedback_scores");

@@ -62,6 +62,7 @@ export const TREE_FILTER_COLUMNS: ColumnData<Span>[] = [
     id: "tags",
     label: "Tags",
     type: COLUMN_TYPE.list,
+    iconType: "tags",
   },
   {
     id: "usage.total_tokens",
@@ -123,9 +124,8 @@ const getData = (field: FILTER_FIELDS, data: Trace | Span): string => {
     case FILTER_FIELDS.TOKEN_USAGE:
     case FILTER_FIELDS.ERROR_INFO:
     case FILTER_FIELDS.METADATA: {
-      const value = get(data, field, null);
-      if (isNil(value)) return "";
-      return toLower(JSON.stringify(value));
+      const value = get(data, field, false);
+      return value ? toLower(JSON.stringify(value)) : "";
     }
     default:
       return "";

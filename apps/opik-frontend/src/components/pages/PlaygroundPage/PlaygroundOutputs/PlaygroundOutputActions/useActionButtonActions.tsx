@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useRef } from "react";
 import asyncLib from "async";
 import { useQueryClient } from "@tanstack/react-query";
 
@@ -12,14 +12,18 @@ import {
   useCreatedExperiments,
   useSetCreatedExperiments,
   useClearCreatedExperiments,
+  useIsRunning,
+  useSetIsRunning,
 } from "@/store/PlaygroundStore";
 
 import { useToast } from "@/components/ui/use-toast";
 import createLogPlaygroundProcessor, {
   LogProcessorArgs,
+  TraceMapping,
 } from "@/api/playground/createLogPlaygroundProcessor";
 import usePromptDatasetItemCombination from "@/components/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundOutputActions/usePromptDatasetItemCombination";
 import { useNavigateToExperiment } from "@/hooks/useNavigateToExperiment";
+import { useUpdateOutputTraceId } from "@/store/PlaygroundStore";
 
 const LIMIT_STREAMING_CALLS = 5;
 
@@ -46,8 +50,9 @@ const useActionButtonActions = ({
 
   const { toast } = useToast();
 
-  const [isRunning, setIsRunning] = useState(false);
-  const [isToStop, setIsToStop] = useState(false);
+  const isRunning = useIsRunning();
+  const setIsRunning = useSetIsRunning();
+  const isToStopRef = useRef(false);
   const createdExperiments = useCreatedExperiments();
   const setCreatedExperiments = useSetCreatedExperiments();
   const clearCreatedExperiments = useClearCreatedExperiments();
@@ -56,25 +61,26 @@ const useActionButtonActions = ({
   const abortControllersRef = useRef(new Map<string, AbortController>());
 
   const resetOutputMap = useResetOutputMap();
+  const updateOutputTraceId = useUpdateOutputTraceId();
 
   const resetState = useCallback(() => {
     resetOutputMap();
     abortControllersRef.current.clear();
     setIsRunning(false);
-    clearCreatedExperiments(); // Clear experiments when resetting
-  }, [resetOutputMap, clearCreatedExperiments]);
+    clearCreatedExperiments();
+  }, [resetOutputMap, clearCreatedExperiments, setIsRunning]);
 
   const stopAll = useCallback(() => {
+    setIsRunning(false);
     // nothing to stop
     if (abortControllersRef.current.size === 0) {
       return;
     }
 
-    setIsToStop(true);
+    isToStopRef.current = true;
     abortControllersRef.current.forEach((controller) => controller.abort());
-
     abortControllersRef.current.clear();
-  }, []);
+  }, [setIsRunning]);
 
   const storeExperiments = useCallback(
     (experiments: LogExperiment[]) => {
@@ -101,13 +107,34 @@ const useActionButtonActions = ({
           description: e.message,
         });
       },
-      onCreateTraces: () => {
+      onCreateTraces: (traces, mappings: TraceMapping[]) => {
+        // Store trace IDs in the output map
+        mappings.forEach((mapping) => {
+          updateOutputTraceId(
+            mapping.promptId,
+            mapping.datasetItemId || "",
+            mapping.traceId,
+          );
+        });
+
         queryClient.invalidateQueries({
           queryKey: [PROJECTS_KEY],
         });
       },
+      onExperimentItemsComplete: () => {
+        // Invalidate experiments to refresh the experiments list
+        queryClient.invalidateQueries({
+          queryKey: ["experiments"],
+        });
+      },
     };
-  }, [queryClient, promptIds.length, storeExperiments, toast]);
+  }, [
+    queryClient,
+    promptIds.length,
+    storeExperiments,
+    toast,
+    updateOutputTraceId,
+  ]);
 
   const addAbortController = useCallback(
     (key: string, value: AbortController) => {
@@ -124,7 +151,7 @@ const useActionButtonActions = ({
   const { createCombinations, processCombination } =
     usePromptDatasetItemCombination({
       workspaceName,
-      isToStop,
+      isToStopRef,
       datasetItems,
       datasetName,
       selectedRuleIds,
@@ -135,7 +162,7 @@ const useActionButtonActions = ({
   const runAll = useCallback(async () => {
     resetState();
     setIsRunning(true);
-    clearCreatedExperiments(); // Clear previous experiments when starting a new run
+    clearCreatedExperiments();
 
     const logProcessor = createLogPlaygroundProcessor(logProcessorHandlers);
 
@@ -147,13 +174,17 @@ const useActionButtonActions = ({
       async (combination: DatasetItemPromptCombination) =>
         processCombination(combination, logProcessor),
       () => {
+        // Signal that all logs have been sent
+        logProcessor.finishLogging();
+
         setIsRunning(false);
-        setIsToStop(false);
+        isToStopRef.current = false;
         abortControllersRef.current.clear();
       },
     );
   }, [
     resetState,
+    setIsRunning,
     clearCreatedExperiments,
     createCombinations,
     processCombination,

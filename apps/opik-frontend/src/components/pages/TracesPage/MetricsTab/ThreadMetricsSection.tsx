@@ -69,6 +69,7 @@ const THREAD_FILTER_COLUMNS: ColumnData<Thread>[] = [
     id: "tags",
     label: "Tags",
     type: COLUMN_TYPE.list,
+    iconType: "tags",
   },
   {
     id: "start_time",
@@ -90,8 +91,8 @@ const THREAD_FILTER_COLUMNS: ColumnData<Thread>[] = [
 interface ThreadMetricsSectionProps {
   projectId: string;
   interval: INTERVAL_TYPE;
-  intervalStart: string;
-  intervalEnd: string;
+  intervalStart: string | undefined;
+  intervalEnd: string | undefined;
   hasThreads: boolean;
 }
 

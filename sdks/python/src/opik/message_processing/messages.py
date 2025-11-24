@@ -1,7 +1,7 @@
 import dataclasses
 import datetime
 from dataclasses import field
-from typing import Optional, Any, Dict, List, Union, Literal
+from typing import Optional, Any, Dict, List, Union, Literal, Set
 
 from . import arguments_utils
 from ..rest_api.types import span_write, trace_write
@@ -50,6 +50,10 @@ class CreateTraceMessage(BaseMessage):
         data["id"] = data.pop("trace_id")
         return data
 
+    @staticmethod
+    def fields_to_anonymize() -> Set[str]:
+        return {"input", "output", "metadata"}
+
 
 @dataclasses.dataclass
 class UpdateTraceMessage(BaseMessage):
@@ -77,6 +81,10 @@ class UpdateTraceMessage(BaseMessage):
         data = super().as_payload_dict()
         data["id"] = data.pop("trace_id")
         return data
+
+    @staticmethod
+    def fields_to_anonymize() -> Set[str]:
+        return {"input", "output", "metadata"}
 
 
 @dataclasses.dataclass
@@ -112,6 +120,10 @@ class CreateSpanMessage(BaseMessage):
         data["total_estimated_cost"] = data.pop("total_cost")
         return data
 
+    @staticmethod
+    def fields_to_anonymize() -> Set[str]:
+        return {"input", "output", "metadata"}
+
 
 @dataclasses.dataclass
 class UpdateSpanMessage(BaseMessage):
@@ -143,6 +155,10 @@ class UpdateSpanMessage(BaseMessage):
         data["id"] = data.pop("span_id")
         data["total_estimated_cost"] = data.pop("total_cost")
         return data
+
+    @staticmethod
+    def fields_to_anonymize() -> Set[str]:
+        return {"input", "output", "metadata"}
 
 
 @dataclasses.dataclass
@@ -200,10 +216,18 @@ class AddThreadsFeedbackScoresBatchMessage(BaseMessage):
 class CreateSpansBatchMessage(BaseMessage):
     batch: List[span_write.SpanWrite]
 
+    @staticmethod
+    def fields_to_anonymize() -> Set[str]:
+        return {"input", "output", "metadata"}
+
 
 @dataclasses.dataclass
 class CreateTraceBatchMessage(BaseMessage):
     batch: List[trace_write.TraceWrite]
+
+    @staticmethod
+    def fields_to_anonymize() -> Set[str]:
+        return {"input", "output", "metadata"}
 
 
 @dataclasses.dataclass

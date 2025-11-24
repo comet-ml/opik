@@ -2,9 +2,10 @@ from unittest.mock import Mock, patch
 from typing import Any
 
 import opik
-from opik_optimizer.evolutionary_optimizer import EvolutionaryOptimizer
-from opik_optimizer.optimization_config import chat_prompt
+from opik_optimizer import EvolutionaryOptimizer
+import opik_optimizer
 from opik_optimizer.optimizable_agent import OptimizableAgent
+from opik_optimizer.algorithms.evolutionary_optimizer.ops import evaluation_ops
 
 
 def test_evaluate_prompt_uses_evolved_prompt_in_experiment_config() -> None:
@@ -25,7 +26,7 @@ def test_evaluate_prompt_uses_evolved_prompt_in_experiment_config() -> None:
         return 0.85
 
     # Create original prompt
-    original_prompt = chat_prompt.ChatPrompt(messages=original_prompt_messages)
+    original_prompt = opik_optimizer.ChatPrompt(messages=original_prompt_messages)
     original_prompt.model = "test_model"
     original_prompt.model_kwargs = {"temperature": 0.5}
 
@@ -52,7 +53,8 @@ def test_evaluate_prompt_uses_evolved_prompt_in_experiment_config() -> None:
         "opik_optimizer.task_evaluator.evaluate",
         side_effect=mock_task_evaluator_evaluate,
     ):
-        result = optimizer._evaluate_prompt(
+        result = evaluation_ops.evaluate_prompt(
+            optimizer=optimizer,
             prompt=original_prompt,
             messages=evolved_prompt_messages,
             dataset=mock_dataset,

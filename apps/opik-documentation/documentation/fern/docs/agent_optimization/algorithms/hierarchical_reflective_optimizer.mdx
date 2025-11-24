@@ -17,7 +17,7 @@ failures, and generates targeted improvements to address each failure mode syste
 
 ## How It Works
 
-The Hiearchical Reflective Optimizer has been developed by the Opik team to improve prompts that
+The Hierarchical Reflective Optimizer has been developed by the Opik team to improve prompts that
 might have already gone through a few rounds of manual prompt engineering. It focuses on identifying
 why a prompt is failing and then updating the prompts to address the issues.
 
@@ -30,7 +30,7 @@ synthesize the findings across all batches to identify the core issues with the 
 
 <Tip>
 The optimizer is open-source, you can check out the root cause analysis code and prompts in the
-[Opik repository](https://github.com/comet-ml/opik/tree/main/sdks/opik_optimizer/src/opik_optimizer/hierarchical_reflective_optimizer).
+[Opik repository](https://github.com/comet-ml/opik/tree/main/sdks/opik_optimizer/src/opik_optimizer/algorithms/hierarchical_reflective_optimizer).
 </Tip>
 
 ## Quickstart
@@ -42,7 +42,7 @@ from opik_optimizer import HierarchicalReflectiveOptimizer, ChatPrompt, datasets
 from opik.evaluation.metrics.score_result import ScoreResult
 
 # 1. Define your evaluation dataset
-dataset = datasets.hotpot_300()  # or use your own dataset
+dataset = datasets.hotpot(count=300)  # or use your own dataset
 
 # 2. Configure the evaluation metric (MUST return reasons!)
 def answer_quality_metric(dataset_item, llm_output):

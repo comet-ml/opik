@@ -1,16 +1,18 @@
-import { useCallback, useEffect, useRef, useState } from "react";
-import { combineContentWithImages, parseContentWithImages } from "@/lib/llm";
-import { OnChangeFn } from "@/types/shared";
+import { useCallback } from "react";
+import { MessageContent, TextPart, ImagePart, VideoPart } from "@/types/llm";
+import { parseLLMMessageContent } from "@/lib/llm";
 
 interface UseMessageContentProps {
-  content: string;
-  onChangeContent: (newContent: string) => void;
+  content: MessageContent;
+  onChangeContent: (newContent: MessageContent) => void;
 }
 
 interface UseMessageContentReturn {
   localText: string;
   images: string[];
-  setImages: OnChangeFn<string[]>;
+  videos: string[];
+  setImages: (newImages: string[]) => void;
+  setVideos: (newVideos: string[]) => void;
   handleContentChange: (newText: string) => void;
 }
 
@@ -18,46 +20,68 @@ export const useMessageContent = ({
   content,
   onChangeContent,
 }: UseMessageContentProps): UseMessageContentReturn => {
-  const lastProcessedContentRef = useRef<string>(content);
-  const { text: initText, images: initImages } =
-    parseContentWithImages(content);
-  const [localText, setLocalText] = useState(initText);
-  const [images, setImages] = useState<string[]>(initImages);
+  // Parse content directly from prop - no state
+  const { text, images, videos } = parseLLMMessageContent(content);
 
-  useEffect(() => {
-    if (content !== lastProcessedContentRef.current) {
-      const { text, images: parsedImages } = parseContentWithImages(content);
-      setLocalText(text);
-      setImages(parsedImages);
-      lastProcessedContentRef.current = combineContentWithImages(
-        text,
-        parsedImages,
-      );
-    }
-  }, [content]);
+  // Helper to rebuild MessageContent from parts
+  const buildMessageContent = useCallback(
+    (
+      newText: string,
+      newImages: string[],
+      newVideos: string[],
+    ): MessageContent => {
+      if (newImages.length === 0 && newVideos.length === 0) {
+        return newText;
+      }
 
-  useEffect(() => {
-    const newContent = combineContentWithImages(localText, images);
-    if (newContent !== lastProcessedContentRef.current) {
-      lastProcessedContentRef.current = newContent;
-      onChangeContent(newContent);
-    }
-  }, [images, localText, onChangeContent]);
+      const parts: Array<TextPart | ImagePart | VideoPart> = [];
+      if (newText.trim()) {
+        parts.push({ type: "text", text: newText });
+      }
+      newImages.forEach((url) => {
+        parts.push({ type: "image_url", image_url: { url } });
+      });
+      newVideos.forEach((url) => {
+        parts.push({ type: "video_url", video_url: { url } });
+      });
+      return parts;
+    },
+    [],
+  );
 
+  // Handler for text changes
   const handleContentChange = useCallback(
     (newText: string) => {
-      setLocalText(newText);
-      const newContent = combineContentWithImages(newText, images);
-      lastProcessedContentRef.current = newContent;
+      const newContent = buildMessageContent(newText, images, videos);
       onChangeContent(newContent);
     },
-    [images, onChangeContent],
+    [images, videos, buildMessageContent, onChangeContent],
+  );
+
+  // Handler for images changes
+  const handleSetImages = useCallback(
+    (newImages: string[]) => {
+      const newContent = buildMessageContent(text, newImages, videos);
+      onChangeContent(newContent);
+    },
+    [text, videos, buildMessageContent, onChangeContent],
+  );
+
+  // Handler for videos changes
+  const handleSetVideos = useCallback(
+    (newVideos: string[]) => {
+      const newContent = buildMessageContent(text, images, newVideos);
+      onChangeContent(newContent);
+    },
+    [text, images, buildMessageContent, onChangeContent],
   );
 
   return {
-    localText,
+    localText: text,
     images,
-    setImages,
+    videos,
+    setImages: handleSetImages,
+    setVideos: handleSetVideos,
     handleContentChange,
   };
 };

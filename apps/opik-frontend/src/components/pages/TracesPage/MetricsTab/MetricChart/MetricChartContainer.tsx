@@ -31,8 +31,8 @@ interface MetricContainerChartProps {
   chartType: "bar" | "line";
   projectId: string;
   interval: INTERVAL_TYPE;
-  intervalStart: string;
-  intervalEnd: string;
+  intervalStart: string | undefined;
+  intervalEnd: string | undefined;
   metricName: METRIC_NAME_TYPE;
   renderValue?: (data: ChartTooltipRenderValueArguments) => ValueType;
   labelsMap?: Record<string, string>;
@@ -108,7 +108,9 @@ const MetricContainerChart = ({
 
       trace.data.forEach((d, dataIndex) => {
         values.push(d.value);
-        transformedData[dataIndex][trace.name] = d.value;
+        if (transformedData[dataIndex]) {
+          transformedData[dataIndex][trace.name] = d.value;
+        }
       });
     });
 

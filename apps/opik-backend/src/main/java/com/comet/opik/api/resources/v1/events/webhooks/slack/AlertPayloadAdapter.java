@@ -2,11 +2,10 @@ package com.comet.opik.api.resources.v1.events.webhooks.slack;
 
 import com.comet.opik.api.AlertEventType;
 import com.comet.opik.api.Experiment;
-import com.comet.opik.api.FeedbackScoreItem;
 import com.comet.opik.api.Guardrail;
 import com.comet.opik.api.Prompt;
 import com.comet.opik.api.PromptVersion;
-import com.comet.opik.api.Trace;
+import com.comet.opik.api.events.webhooks.MetricsAlertPayload;
 import com.comet.opik.api.events.webhooks.WebhookEvent;
 import com.comet.opik.api.resources.v1.events.webhooks.pagerduty.PagerDutyWebhookPayloadMapper;
 import com.comet.opik.utils.JsonUtils;
@@ -32,22 +31,13 @@ public class AlertPayloadAdapter {
     private static final TypeReference<PromptVersion> PROMPT_VERSION_TYPE_REFERENCE = new TypeReference<>() {
     };
 
-    private static final TypeReference<List<Trace>> LIST_TRACE_TYPE_REFERENCE = new TypeReference<>() {
-    };
-
-    private static final TypeReference<List<FeedbackScoreItem.FeedbackScoreBatchItem>> LIST_TRACE_SCORE_TYPE_REFERENCE = new TypeReference<>() {
-    };
-
-    private static final TypeReference<List<FeedbackScoreItem.FeedbackScoreBatchItemThread>> LIST_THREAD_SCORE_TYPE_REFERENCE = new TypeReference<>() {
-    };
-
     private static final TypeReference<List<Guardrail>> LIST_GUARDRAIL_TYPE_REFERENCE = new TypeReference<>() {
     };
 
     private static final TypeReference<List<Experiment>> EXPERIMENT_TYPE_REFERENCE = new TypeReference<>() {
     };
 
-    private static final TypeReference<String> STRING_TYPE_REFERENCE = new TypeReference<>() {
+    private static final TypeReference<MetricsAlertPayload> METRICS_ALERT_PAYLOAD_TYPE_REFERENCE = new TypeReference<>() {
     };
 
     public static WebhookEvent<Map<String, Object>> prepareWebhookPayload(
@@ -97,12 +87,11 @@ public class AlertPayloadAdapter {
             case PROMPT_DELETED -> LIST_PROMPT_TYPE_REFERENCE;
             case PROMPT_CREATED -> PROMPT_TYPE_REFERENCE;
             case PROMPT_COMMITTED -> PROMPT_VERSION_TYPE_REFERENCE;
-            case TRACE_ERRORS -> LIST_TRACE_TYPE_REFERENCE;
-            case TRACE_FEEDBACK_SCORE -> LIST_TRACE_SCORE_TYPE_REFERENCE;
-            case TRACE_THREAD_FEEDBACK_SCORE -> LIST_THREAD_SCORE_TYPE_REFERENCE;
             case TRACE_GUARDRAILS_TRIGGERED -> LIST_GUARDRAIL_TYPE_REFERENCE;
             case EXPERIMENT_FINISHED -> EXPERIMENT_TYPE_REFERENCE;
-            default -> STRING_TYPE_REFERENCE;
+            case TRACE_COST, TRACE_LATENCY, TRACE_ERRORS, TRACE_FEEDBACK_SCORE,
+                    TRACE_THREAD_FEEDBACK_SCORE ->
+                METRICS_ALERT_PAYLOAD_TYPE_REFERENCE;
         };
     }
 }

@@ -172,7 +172,7 @@ authentication:
 # https://www.dropwizard.io/en/stable/manual/configuration.html#servers
 server:
   # Default: false
-  # Description: Whether to enable virtual threads for Jetty’s thread pool.
+  # Description: Whether to enable virtual threads for Jetty's thread pool.
   enableVirtualThreads: ${ENABLE_VIRTUAL_THREADS:-false}
   # https://www.dropwizard.io/en/stable/manual/configuration.html#gzip
   gzip:
@@ -185,7 +185,18 @@ server:
   # Description: Maximum size of request headers to prevent 431 errors from long URLs with many filters
   applicationConnectors:
     - type: http
+      # Default: 8080
+      # Description: The port on which the application HTTP connector listens
+      port: ${SERVER_APPLICATION_PORT:-8080}
       maxRequestHeaderSize: ${SERVER_MAX_REQUEST_HEADER_SIZE:-16KB}
+      # Default: 1m
+      # Description: The maximum idle time for a connection, after which it will be closed.
+      idleTimeout: ${SERVER_IDLE_TIMEOUT:-1m}
+  adminConnectors:
+    - type: http
+      # Default: 8081
+      # Description: The port on which the admin HTTP connector listens
+      port: ${SERVER_ADMIN_PORT:-8081}
 
 # Jackson JSON processing configuration
 # Controls limits for JSON deserialization to prevent memory exhaustion
@@ -204,6 +215,9 @@ batchOperations:
     # Description: The maximal number of ids to be used for IN clause. Find requests with a larger number of ids will
     # involve the use of temp tables for querying
     maxExperimentInClauseSize: ${BATCH_OPERATIONS_MAX_EXPERIMENT_IN_CLAUSE_SIZE:-5000}
+    # Default: 1000
+    # Description: The batch size for processing CSV files. Dataset items are saved to the database in batches of this size.
+    csvBatchSize: ${BATCH_OPERATIONS_CSV_BATCH_SIZE:-1000}
 
 # Configuration for rate limit. This is not enabled by default for open source installations.
 # If enabled, rate limit is applied to creation and update of various entities including traces, spans, projects,
@@ -319,10 +333,10 @@ onlineScoring:
   # Default: online_scoring
   # Description: A consumer group name so multiple instances can share the stream load
   consumerGroupName: ${REDIS_SCORING_CONSUMER_GROUP_NAME:-'online_scoring'}
-  # Default: 5
+  # Default: 10
   # Description: Maximum number of messages returned within a Redis Stream get
   # This is the global default value, can be overridden per stream
-  consumerBatchSize: ${REDIS_SCORING_CONSUMER_BATCH_SIZE:-5}
+  consumerBatchSize: ${REDIS_SCORING_CONSUMER_BATCH_SIZE:-10}
   # Default: 10
   # Description: Claim pending messages every N polling intervals (global default)
   claimIntervalRatio: ${REDIS_SCORING_CLAIM_INTERVAL_RATIO:-10}
@@ -526,6 +540,9 @@ serviceToggles:
   # Default: false
   # Description: Whether or not Welcome Wizard is enabled
   welcomeWizardEnabled: ${TOGGLE_WELCOME_WIZARD_ENABLED:-"false"}
+  # Default: false
+  # Description: Whether or not CSV upload feature is enabled for dataset items
+  csvUploadEnabled: ${TOGGLE_CSV_UPLOAD_ENABLED:-"false"}
 
 # Trace Thread configuration
 traceThreadConfig:
@@ -659,3 +676,16 @@ webhook:
     # Default: 100ms
     # Description: Maximum time to wait for acquiring alert job lock
     alertJobLockWaitTimeout: ${WEBHOOK_DEBOUNCING_ALERT_JOB_LOCK_WAIT_TIMEOUT:-100ms}
+  metrics:
+    # Default: 300s
+    # Description: Initial delay before the first metrics alert job execution
+    initialDelay: ${WEBHOOK_METRICS_INITIAL_DELAY:-300s}
+    # Default: 300s
+    # Description: Fixed delay between metrics alert job executions (waits this duration after completion)
+    fixedDelay: ${WEBHOOK_METRICS_FIXED_DELAY:-300s}
+    # Default: 60s
+    # Description: Timeout for metrics alert job execution
+    metricsAlertJobTimeout: ${WEBHOOK_METRICS_ALERT_JOB_TIMEOUT:-60s}
+    # Default: 1s
+    # Description: Maximum time to wait for acquiring metrics alert job lock
+    metricsAlertJobLockWaitTimeout: ${WEBHOOK_METRICS_ALERT_JOB_LOCK_WAIT_TIMEOUT:-1s}

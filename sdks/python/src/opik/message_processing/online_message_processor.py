@@ -4,12 +4,11 @@ from typing import Callable, Dict, Type, Any
 import pydantic
 import tenacity
 
-from . import messages, message_processors
+from . import encoder_helpers, messages, message_processors
 from .. import (
     exceptions as exceptions,
     logging_messages as logging_messages,
     dict_utils,
-    jsonable_encoder,
 )
 from ..rate_limit import rate_limit
 from ..rest_api import client as rest_api_client, core as rest_api_core
@@ -128,7 +127,12 @@ class OpikMessageProcessor(message_processors.BaseMessageProcessor):
         cleaned_create_span_kwargs = dict_utils.remove_none_from_dict(
             create_span_kwargs
         )
-        cleaned_create_span_kwargs = jsonable_encoder.encode(cleaned_create_span_kwargs)
+        cleaned_create_span_kwargs = encoder_helpers.encode_and_anonymize(
+            cleaned_create_span_kwargs,
+            fields_to_anonymize=message.fields_to_anonymize(),
+            object_type="span",
+        )
+
         LOGGER.debug("Create span request: %s", cleaned_create_span_kwargs)
         self._rest_client.spans.create_span(**cleaned_create_span_kwargs)
 
@@ -140,9 +144,12 @@ class OpikMessageProcessor(message_processors.BaseMessageProcessor):
         cleaned_create_trace_kwargs = dict_utils.remove_none_from_dict(
             create_trace_kwargs
         )
-        cleaned_create_trace_kwargs = jsonable_encoder.encode(
-            cleaned_create_trace_kwargs
+        cleaned_create_trace_kwargs = encoder_helpers.encode_and_anonymize(
+            cleaned_create_trace_kwargs,
+            fields_to_anonymize=message.fields_to_anonymize(),
+            object_type="trace",
         )
+
         LOGGER.debug("Create trace request: %s", cleaned_create_trace_kwargs)
         self._rest_client.traces.create_trace(**cleaned_create_trace_kwargs)
 
@@ -155,7 +162,12 @@ class OpikMessageProcessor(message_processors.BaseMessageProcessor):
         cleaned_update_span_kwargs = dict_utils.remove_none_from_dict(
             update_span_kwargs
         )
-        cleaned_update_span_kwargs = jsonable_encoder.encode(cleaned_update_span_kwargs)
+        cleaned_update_span_kwargs = encoder_helpers.encode_and_anonymize(
+            cleaned_update_span_kwargs,
+            fields_to_anonymize=message.fields_to_anonymize(),
+            object_type="span",
+        )
+
         LOGGER.debug("Update span request: %s", cleaned_update_span_kwargs)
         self._rest_client.spans.update_span(**cleaned_update_span_kwargs)
 
@@ -168,9 +180,12 @@ class OpikMessageProcessor(message_processors.BaseMessageProcessor):
         cleaned_update_trace_kwargs = dict_utils.remove_none_from_dict(
             update_trace_kwargs
         )
-        cleaned_update_trace_kwargs = jsonable_encoder.encode(
-            cleaned_update_trace_kwargs
+        cleaned_update_trace_kwargs = encoder_helpers.encode_and_anonymize(
+            cleaned_update_trace_kwargs,
+            fields_to_anonymize=message.fields_to_anonymize(),
+            object_type="trace",
         )
+
         LOGGER.debug("Update trace request: %s", cleaned_update_trace_kwargs)
         self._rest_client.traces.update_trace(**cleaned_update_trace_kwargs)
         LOGGER.debug("Sent trace %s", message.trace_id)

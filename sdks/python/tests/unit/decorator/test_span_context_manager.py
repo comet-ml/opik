@@ -1,6 +1,7 @@
 import pytest
 
 import opik
+import opik.opik_context
 from opik.api_objects import attachment
 from opik.types import FeedbackScoreDict, ErrorInfoDict
 
@@ -447,3 +448,58 @@ def test_start_as_current_span__parent_trace_exists__new_not_created(fake_backen
     )
 
     assert_equal(expected=EXPECTED_TRACE_TREE, actual=fake_backend.trace_trees[0])
+
+
+def test_start_as_current_span__context_cleanup__span_and_trace_removed_after_exit(
+    fake_backend,
+):
+    """Test that the span and trace are properly removed from context after the context manager exits."""
+    # Verify no trace or span exists before
+    assert opik.opik_context.get_current_trace_data() is None
+    assert opik.opik_context.get_current_span_data() is None
+
+    # Create span (which will also create a trace) and verify they exist inside context
+    with opik.start_as_current_span("test-span", flush=True) as span:
+        current_span = opik.opik_context.get_current_span_data()
+        current_trace = opik.opik_context.get_current_trace_data()
+        assert current_span is not None
+        assert current_span.id == span.id
+        assert current_trace is not None
+        assert current_trace.id == span.trace_id
+
+    # Verify span and trace are removed from context after exit
+    assert opik.opik_context.get_current_trace_data() is None
+    assert opik.opik_context.get_current_span_data() is None
+
+    # Verify span and trace were logged to backend
+    assert len(fake_backend.trace_trees) == 1
+    assert fake_backend.trace_trees[0].name == "test-span"
+    assert len(fake_backend.trace_trees[0].spans) == 1
+    assert fake_backend.trace_trees[0].spans[0].name == "test-span"
+
+
+def test_start_as_current_span__context_cleanup__with_parent_trace__only_span_removed(
+    fake_backend,
+):
+    """Test that when a parent trace exists, only the span is removed from context after exit."""
+    # Create parent trace
+    with opik.start_as_current_trace("parent-trace", flush=True) as parent_trace:
+        # Verify no span exists before
+        assert opik.opik_context.get_current_span_data() is None
+
+        # Create span and verify it exists inside context
+        with opik.start_as_current_span("test-span", flush=True) as span:
+            current_span = opik.opik_context.get_current_span_data()
+            current_trace = opik.opik_context.get_current_trace_data()
+            assert current_span is not None
+            assert current_span.id == span.id
+            assert current_trace is not None
+            assert current_trace.id == parent_trace.id
+
+        # Verify span is removed but parent trace remains
+        assert opik.opik_context.get_current_span_data() is None
+        assert opik.opik_context.get_current_trace_data() is not None
+        assert opik.opik_context.get_current_trace_data().id == parent_trace.id
+
+    # Verify parent trace is removed after parent context exits
+    assert opik.opik_context.get_current_trace_data() is None

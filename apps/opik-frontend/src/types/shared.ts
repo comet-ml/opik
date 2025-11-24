@@ -9,6 +9,9 @@ export type DropdownOption<TDataType> = {
   description?: string;
   tooltip?: string;
   disabled?: boolean;
+  action?: {
+    href?: string;
+  };
 };
 
 export const COLUMN_ID_ID = "id";
@@ -61,7 +64,7 @@ export type Explainer = {
   docHash?: string;
 };
 
-export type HeaderIconType = COLUMN_TYPE | "guardrails";
+export type HeaderIconType = COLUMN_TYPE | "guardrails" | "tags";
 
 export type ColumnData<T> = {
   id: string;

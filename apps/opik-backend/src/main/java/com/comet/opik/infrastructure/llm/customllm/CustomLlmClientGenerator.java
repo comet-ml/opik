@@ -1,13 +1,13 @@
 package com.comet.opik.infrastructure.llm.customllm;
 
 import com.comet.opik.api.evaluators.LlmAsJudgeModelParameters;
+import com.comet.opik.domain.llm.langchain4j.OpikOpenAiChatModel;
 import com.comet.opik.infrastructure.LlmProviderClientConfig;
 import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
 import com.comet.opik.infrastructure.llm.LlmProviderClientGenerator;
 import dev.langchain4j.http.client.jdk.JdkHttpClient;
 import dev.langchain4j.http.client.jdk.JdkHttpClientBuilder;
 import dev.langchain4j.model.chat.ChatModel;
-import dev.langchain4j.model.openai.OpenAiChatModel;
 import dev.langchain4j.model.openai.internal.OpenAiClient;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
@@ -17,8 +17,6 @@ import org.apache.commons.lang3.StringUtils;
 
 import java.net.http.HttpClient;
 import java.util.Optional;
-
-import static com.comet.opik.infrastructure.llm.customllm.CustomLlmModelNameChecker.CUSTOM_LLM_MODEL_PREFIX;
 
 @RequiredArgsConstructor
 @Slf4j
@@ -73,10 +71,21 @@ public class CustomLlmClientGenerator implements LlmProviderClientGenerator<Open
         JdkHttpClientBuilder jdkHttpClientBuilder = JdkHttpClient.builder()
                 .httpClientBuilder(httpClientBuilder);
 
-        var builder = OpenAiChatModel.builder()
+        // Extract provider_name from configuration (null for legacy providers)
+        String providerName = Optional.ofNullable(config.configuration())
+                .map(configuration -> configuration.get("provider_name"))
+                .orElse(null);
+
+        // Extract the actual model name using the provider name
+        String actualModelName = CustomLlmModelNameChecker.extractModelName(modelParameters.name(), providerName);
+
+        log.debug("Cleaned model name from '{}' to '{}' (providerName='{}') for ChatModel",
+                modelParameters.name(), actualModelName, providerName);
+
+        var builder = OpikOpenAiChatModel.builder()
                 .baseUrl(baseUrl)
                 .httpClientBuilder(jdkHttpClientBuilder)
-                .modelName(modelParameters.name().replace(CUSTOM_LLM_MODEL_PREFIX, ""))
+                .modelName(actualModelName)
                 .apiKey(config.apiKey())
                 .logRequests(true)
                 .logResponses(true);
@@ -91,7 +100,9 @@ public class CustomLlmClientGenerator implements LlmProviderClientGenerator<Open
         Optional.ofNullable(modelParameters.temperature()).ifPresent(builder::temperature);
         Optional.ofNullable(modelParameters.seed()).ifPresent(builder::seed);
 
-        return builder.build();
+        // Pass custom parameters directly to constructor since builder inheritance
+        // doesn't allow us to chain our custom methods cleanly
+        return new OpikOpenAiChatModel(builder, modelParameters.customParameters());
     }
 
     @Override

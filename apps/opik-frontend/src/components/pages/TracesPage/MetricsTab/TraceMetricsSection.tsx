@@ -78,6 +78,7 @@ const TRACE_FILTER_COLUMNS: ColumnData<BaseTraceData>[] = [
     id: "tags",
     label: "Tags",
     type: COLUMN_TYPE.list,
+    iconType: "tags",
   },
   {
     id: "thread_id",
@@ -104,8 +105,8 @@ const TRACE_FILTER_COLUMNS: ColumnData<BaseTraceData>[] = [
 interface TraceMetricsSectionProps {
   projectId: string;
   interval: INTERVAL_TYPE;
-  intervalStart: string;
-  intervalEnd: string;
+  intervalStart: string | undefined;
+  intervalEnd: string | undefined;
   hasTraces: boolean;
 }
 

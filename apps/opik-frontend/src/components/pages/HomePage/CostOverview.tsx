@@ -24,8 +24,8 @@ import { ChartTooltipRenderValueArguments } from "@/components/shared/ChartToolt
 type CostOverviewProps = {
   projects: Project[];
   projectsPending: boolean;
-  intervalStart: string;
-  intervalEnd: string;
+  intervalStart: string | undefined;
+  intervalEnd: string | undefined;
 };
 
 export const CostOverview: React.FC<CostOverviewProps> = ({

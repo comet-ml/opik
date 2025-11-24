@@ -4,14 +4,14 @@ from opik_optimizer import (
     ChatPrompt,
     EvolutionaryOptimizer,
 )
-from opik_optimizer.datasets import hotpot_300
+from opik_optimizer.datasets import hotpot
 
 from opik.evaluation.metrics import LevenshteinRatio
 from opik.evaluation.metrics.score_result import ScoreResult
 
 from adk_agent import ADKAgent
 
-dataset = hotpot_300()
+dataset = hotpot(count=25)
 
 
 def levenshtein_ratio(dataset_item: dict[str, Any], llm_output: str) -> ScoreResult:
@@ -32,23 +32,24 @@ prompt = ChatPrompt(
     user="{question}",
 )
 
-# Optimize it:
 optimizer = EvolutionaryOptimizer(
+    name="ADK Agent",
     model="openai/gpt-4o-mini",
     enable_moo=False,
     enable_llm_crossover=True,
     infer_output_style=True,
     verbose=1,
-    n_threads=1,
-    population_size=10,
-    num_generations=3,
+    n_threads=2,
+    population_size=5,
+    num_generations=2,
 )
+
 optimization_result = optimizer.optimize_prompt(
     prompt=prompt,
     agent_class=ADKAgent,
     dataset=dataset,
     metric=levenshtein_ratio,
-    n_samples=10,
+    n_samples=5,
 )
 
 optimization_result.display()

@@ -2,6 +2,7 @@ package com.comet.opik.api.resources.v1.priv;
 
 import com.codahale.metrics.annotation.Timed;
 import com.comet.opik.api.BatchDelete;
+import com.comet.opik.api.CreateDatasetItemsFromSpansRequest;
 import com.comet.opik.api.CreateDatasetItemsFromTracesRequest;
 import com.comet.opik.api.Dataset;
 import com.comet.opik.api.DatasetExpansion;
@@ -9,6 +10,7 @@ import com.comet.opik.api.DatasetExpansionResponse;
 import com.comet.opik.api.DatasetIdentifier;
 import com.comet.opik.api.DatasetItem;
 import com.comet.opik.api.DatasetItemBatch;
+import com.comet.opik.api.DatasetItemBatchUpdate;
 import com.comet.opik.api.DatasetItemStreamRequest;
 import com.comet.opik.api.DatasetItemsDelete;
 import com.comet.opik.api.DatasetUpdate;
@@ -22,6 +24,7 @@ import com.comet.opik.api.filter.FiltersFactory;
 import com.comet.opik.api.resources.v1.priv.validate.ParamsValidator;
 import com.comet.opik.api.sorting.SortingFactoryDatasets;
 import com.comet.opik.api.sorting.SortingField;
+import com.comet.opik.domain.CsvDatasetItemProcessor;
 import com.comet.opik.domain.DatasetCriteria;
 import com.comet.opik.domain.DatasetExpansionService;
 import com.comet.opik.domain.DatasetItemSearchCriteria;
@@ -31,6 +34,7 @@ import com.comet.opik.domain.EntityType;
 import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.domain.Streamer;
 import com.comet.opik.domain.workspaces.WorkspaceMetadataService;
+import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.ratelimit.RateLimited;
 import com.comet.opik.utils.RetryUtils;
@@ -54,6 +58,8 @@ import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.DELETE;
 import jakarta.ws.rs.DefaultValue;
 import jakarta.ws.rs.GET;
+import jakarta.ws.rs.NotFoundException;
+import jakarta.ws.rs.PATCH;
 import jakarta.ws.rs.POST;
 import jakarta.ws.rs.PUT;
 import jakarta.ws.rs.Path;
@@ -67,8 +73,10 @@ import jakarta.ws.rs.core.UriInfo;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.glassfish.jersey.media.multipart.FormDataParam;
 import org.glassfish.jersey.server.ChunkedOutput;
 
+import java.io.InputStream;
 import java.net.URI;
 import java.util.List;
 import java.util.Optional;
@@ -78,6 +86,7 @@ import java.util.function.Predicate;
 
 import static com.comet.opik.api.Dataset.DatasetPage;
 import static com.comet.opik.utils.AsyncUtils.setRequestContext;
+import static org.apache.commons.collections4.CollectionUtils.emptyIfNull;
 
 @Path("/v1/private/datasets")
 @Produces(MediaType.APPLICATION_JSON)
@@ -97,6 +106,8 @@ public class DatasetsResource {
     private final @NonNull Streamer streamer;
     private final @NonNull SortingFactoryDatasets sortingFactory;
     private final @NonNull WorkspaceMetadataService workspaceMetadataService;
+    private final @NonNull CsvDatasetItemProcessor csvProcessor;
+    private final @NonNull OpikConfiguration config;
 
     @GET
     @Path("/{id}")
@@ -297,6 +308,53 @@ public class DatasetsResource {
         return Response.ok(datasetItem).build();
     }
 
+    @PATCH
+    @Path("/items/batch")
+    @Operation(operationId = "batchUpdateDatasetItems", summary = "Batch update dataset items", description = "Update multiple dataset items", responses = {
+            @ApiResponse(responseCode = "204", description = "No Content"),
+            @ApiResponse(responseCode = "400", description = "Bad Request", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))})
+    @RateLimited
+    public Response batchUpdate(
+            @RequestBody(content = @Content(schema = @Schema(implementation = DatasetItemBatchUpdate.class))) @Valid @NotNull DatasetItemBatchUpdate batchUpdate) {
+
+        String workspaceId = requestContext.get().getWorkspaceId();
+
+        log.info("Batch updating dataset items. workspaceId='{}', idsSize='{}', filters='{}'", workspaceId,
+                emptyIfNull(batchUpdate.ids()).size(), emptyIfNull(batchUpdate.filters()).size());
+
+        itemService.batchUpdate(batchUpdate)
+                .contextWrite(ctx -> setRequestContext(ctx, requestContext))
+                .block();
+
+        log.info("Batch updated dataset items. workspaceId='{}', idsSize='{}', filters='{}'", workspaceId,
+                emptyIfNull(batchUpdate.ids()).size(), emptyIfNull(batchUpdate.filters()).size());
+
+        return Response.noContent().build();
+    }
+
+    @PATCH
+    @Path("/items/{itemId}")
+    @Operation(operationId = "patchDatasetItem", summary = "Partially update dataset item by id", description = "Partially update dataset item by id. Only provided fields will be updated.", responses = {
+            @ApiResponse(responseCode = "204", description = "No content"),
+            @ApiResponse(responseCode = "404", description = "Dataset item not found")
+    })
+    @RateLimited
+    public Response patchDatasetItem(
+            @PathParam("itemId") @NotNull UUID itemId,
+            @RequestBody(content = @Content(schema = @Schema(implementation = DatasetItem.class))) @JsonView(DatasetItem.View.Write.class) @NotNull DatasetItem item) {
+
+        String workspaceId = requestContext.get().getWorkspaceId();
+
+        log.info("Patching dataset item by id '{}' on workspace_id '{}'", itemId, workspaceId);
+        itemService.patch(itemId, item)
+                .contextWrite(ctx -> setRequestContext(ctx, requestContext))
+                .retryWhen(RetryUtils.handleConnectionError())
+                .block();
+        log.info("Patched dataset item by id '{}' on workspace_id '{}'", itemId, workspaceId);
+
+        return Response.noContent().build();
+    }
+
     @GET
     @Path("/{id}/items")
     @Operation(operationId = "getDatasetItems", summary = "Get dataset items", description = "Get dataset items", responses = {
@@ -379,7 +437,7 @@ public class DatasetsResource {
 
         log.info("Creating dataset items batch by datasetId '{}', datasetName '{}', size '{}' on workspaceId '{}'",
                 batch.datasetId(), batch.datasetId(), batch.items().size(), workspaceId);
-        itemService.save(new DatasetItemBatch(batch.datasetName(), batch.datasetId(), items))
+        itemService.verifyDatasetExistsAndSave(new DatasetItemBatch(batch.datasetName(), batch.datasetId(), items))
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .retryWhen(RetryUtils.handleConnectionError())
                 .block();
@@ -413,6 +471,64 @@ public class DatasetsResource {
                 datasetId, request.traceIds().size(), workspaceId);
 
         return Response.noContent().build();
+    }
+
+    @POST
+    @Path("/{dataset_id}/items/from-spans")
+    @Operation(operationId = "createDatasetItemsFromSpans", summary = "Create dataset items from spans", description = "Create dataset items from spans with enriched metadata", responses = {
+            @ApiResponse(responseCode = "204", description = "No content"),
+    })
+    @RateLimited
+    public Response createDatasetItemsFromSpans(
+            @PathParam("dataset_id") UUID datasetId,
+            @RequestBody(content = @Content(schema = @Schema(implementation = CreateDatasetItemsFromSpansRequest.class))) @NotNull @Valid CreateDatasetItemsFromSpansRequest request) {
+
+        String workspaceId = requestContext.get().getWorkspaceId();
+
+        log.info("Creating dataset items from spans for dataset '{}', span count '{}' on workspaceId '{}'",
+                datasetId, request.spanIds().size(), workspaceId);
+
+        itemService.createFromSpans(datasetId, request.spanIds(), request.enrichmentOptions())
+                .contextWrite(ctx -> setRequestContext(ctx, requestContext))
+                .retryWhen(RetryUtils.handleConnectionError())
+                .block();
+
+        log.info("Created dataset items from spans for dataset '{}', span count '{}' on workspaceId '{}'",
+                datasetId, request.spanIds().size(), workspaceId);
+
+        return Response.noContent().build();
+    }
+
+    @POST
+    @Path("/items/from-csv")
+    @Consumes(MediaType.MULTIPART_FORM_DATA)
+    @Operation(operationId = "createDatasetItemsFromCsv", summary = "Create dataset items from CSV file", description = "Create dataset items from uploaded CSV file. CSV should have headers in the first row. Processing happens asynchronously in batches.", responses = {
+            @ApiResponse(responseCode = "202", description = "Accepted - CSV processing started"),
+            @ApiResponse(responseCode = "400", description = "Bad Request", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
+            @ApiResponse(responseCode = "404", description = "Not Found - CSV upload feature is disabled", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
+    })
+    @RateLimited
+    public Response createDatasetItemsFromCsv(
+            @FormDataParam("file") @NotNull InputStream fileInputStream,
+            @FormDataParam("dataset_id") @NotNull UUID datasetId) {
+
+        if (!config.getServiceToggles().isCsvUploadEnabled()) {
+            log.warn("CSV upload feature is disabled, returning 404");
+            throw new NotFoundException("CSV upload feature is not enabled");
+        }
+
+        String workspaceId = requestContext.get().getWorkspaceId();
+        String userName = requestContext.get().getUserName();
+        Visibility visibility = requestContext.get().getVisibility();
+
+        log.info("CSV upload request for dataset '{}' on workspaceId '{}'", datasetId, workspaceId);
+
+        csvProcessor.processUploadedCsv(fileInputStream, datasetId, workspaceId, userName, visibility);
+
+        log.info("CSV upload accepted for dataset '{}' on workspaceId '{}', processing asynchronously", datasetId,
+                workspaceId);
+
+        return Response.status(Response.Status.ACCEPTED).build();
     }
 
     @POST
