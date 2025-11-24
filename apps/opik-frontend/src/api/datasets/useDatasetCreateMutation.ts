@@ -40,8 +40,9 @@ const useDatasetCreateMutation = () => {
       const errors = get(error, ["response", "data", "errors"], []);
       const message =
         Array.isArray(errors) && errors.length > 0
-          ? errors[0]
-          : get(error, ["response", "data", "message"], error.message);
+          ? errors.join("; ")
+          : get(error, ["response", "data", "message"], error.message) ||
+            "An unknown error occurred while creating a dataset. Please try again.";
 
       toast({
         title: "Error",
