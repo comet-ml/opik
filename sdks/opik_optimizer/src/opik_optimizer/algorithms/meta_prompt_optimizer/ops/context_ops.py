@@ -142,9 +142,9 @@ def get_task_context(
             for key in input_fields:
                 value = sample_item.get(key, "")
                 # Convert to string and remove all newlines and excessive whitespace
-                value_str = str(value).replace('\n', ' ').replace('\r', ' ')
+                value_str = str(value).replace("\n", " ").replace("\r", " ")
                 # Collapse multiple spaces into single space
-                value_str = re.sub(r'\s+', ' ', value_str).strip()
+                value_str = re.sub(r"\s+", " ", value_str).strip()
                 # Truncate long values
                 if len(value_str) > max_value_length:
                     value_str = value_str[:max_value_length] + "..."
