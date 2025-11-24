@@ -137,7 +137,7 @@ const PlaygroundPrompt = ({
       const shouldUpdateConfigs =
         newProvider !== provider ||
         isReasoningModel(newModel) !== isReasoningModel(model);
-      
+
       updatePrompt(promptId, {
         model: newModel,
         provider: newProvider,
