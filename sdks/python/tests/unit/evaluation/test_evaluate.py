@@ -1689,3 +1689,156 @@ def test_evaluate_prompt__2_trials_lead_to_2_experiment_items_per_dataset_item(
 
     for trace in dataset_item_2_traces:
         assert_equal(EXPECTED_TRACE_DATASET_ITEM_2, trace)
+
+
+def test_evaluate_items__happyflow(fake_backend):
+    items = [
+        {"input": "What is 2+2?", "expected_output": "4"},
+        {"input": "What is 3+3?", "expected_output": "6"},
+    ]
+
+    def simple_task(item):
+        # Simple echo task for testing
+        if "2+2" in item["input"]:
+            return {"output": "4"}
+        return {"output": "6"}
+
+    results = evaluation.evaluator.evaluate_items(
+        items=items,
+        task=simple_task,
+        scoring_metrics=[metrics.Equals()],
+        scoring_key_mapping={"reference": "expected_output"},
+        scoring_threads=1,  # Use single thread for deterministic order
+    )
+
+    assert len(results) == 2
+
+    # Check first result
+    assert results[0].dataset_item_content["input"] == "What is 2+2?"
+    assert results[0].dataset_item_content["expected_output"] == "4"
+    assert results[0].task_output == {"output": "4"}
+    assert len(results[0].score_results) == 1
+    assert results[0].score_results[0].value == 1.0  # Equals should pass
+    assert results[0].score_results[0].name == "equals_metric"
+
+    # Check second result
+    assert results[1].dataset_item_content["input"] == "What is 3+3?"
+    assert results[1].dataset_item_content["expected_output"] == "6"
+    assert results[1].task_output == {"output": "6"}
+    assert len(results[1].score_results) == 1
+    assert results[1].score_results[0].value == 1.0  # Equals should pass
+
+
+def test_evaluate_items__with_scoring_key_mapping(fake_backend):
+    items = [
+        {"user_question": "Hello?", "expected_answer": "Hi"},
+    ]
+
+    def task(item):
+        return {"model_response": "Hi"}
+
+    results = evaluation.evaluate_items(
+        items=items,
+        task=task,
+        scoring_metrics=[metrics.Equals()],
+        scoring_key_mapping={
+            "input": "user_question",
+            "output": "model_response",
+            "reference": "expected_answer",
+        },
+        scoring_threads=1,
+    )
+
+    assert len(results) == 1
+    assert results[0].score_results[0].value == 1.0
+
+
+def test_evaluate_items__multiple_metrics(fake_backend):
+    items = [
+        {"input": "test", "expected_output": "test"},
+    ]
+
+    def task(item):
+        return {"output": "test"}
+
+    class CustomMetric(metrics.base_metric.BaseMetric):
+        def score(self, output: str, **kwargs):
+            return score_result.ScoreResult(
+                name="custom_metric",
+                value=0.5,
+            )
+
+    results = evaluation.evaluator.evaluate_items(
+        items=items,
+        task=task,
+        scoring_metrics=[metrics.Equals(), CustomMetric()],
+        scoring_key_mapping={"reference": "expected_output"},
+        scoring_threads=1,
+    )
+
+    assert len(results) == 1
+    assert len(results[0].score_results) == 2
+    assert results[0].score_results[0].name == "equals_metric"
+    assert results[0].score_results[0].value == 1.0
+    assert results[0].score_results[1].name == "custom_metric"
+    assert results[0].score_results[1].value == 0.5
+
+
+def test_evaluate_items__task_execution(fake_backend):
+    items = [{"value": 5, "expected": 10}]
+
+    task_calls = []
+
+    def task(item):
+        task_calls.append(item)
+        return {"result": item["value"] * 2}
+
+    results = evaluation.evaluator.evaluate_items(
+        items=items,
+        task=task,
+        scoring_metrics=[metrics.Equals()],
+        scoring_key_mapping={"output": "result", "reference": "expected"},
+        scoring_threads=1,
+    )
+
+    # Verify task was called
+    assert len(task_calls) == 1
+    assert "value" in task_calls[0]
+
+    # Verify result
+    assert results[0].task_output == {"result": 10}
+
+
+def test_evaluate_items__no_metrics_returns_empty(fake_backend):
+    items = [{"input": "test"}]
+
+    def task(item):
+        return {"output": "test"}
+
+    results = evaluation.evaluate_items(
+        items=items,
+        task=task,
+        scoring_metrics=[],
+        scoring_threads=1,
+    )
+
+    assert results == []
+
+
+def test_evaluate_items__creates_traces(fake_backend):
+    items = [{"input": "test", "expected": "result"}]
+
+    def task(item):
+        return {"output": "result"}
+
+    results = evaluation.evaluator.evaluate_items(
+        items=items,
+        task=task,
+        scoring_metrics=[metrics.Equals()],
+        scoring_key_mapping={"reference": "expected"},
+        scoring_threads=1,
+    )
+
+    # Verify evaluation completed successfully
+    assert len(results) == 1
+    assert results[0].task_output == {"output": "result"}

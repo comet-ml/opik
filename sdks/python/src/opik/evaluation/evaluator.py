@@ -6,6 +6,8 @@ from .. import Prompt
 from ..api_objects import opik_client
 from ..api_objects import dataset, experiment
 from ..api_objects.experiment import helpers as experiment_helpers
+from ..api_objects.prompt import chat_prompt_template
+from ..api_objects.prompt import types as prompt_types
 from . import (
     asyncio_support,
     engine,
@@ -19,8 +21,6 @@ from .models import ModelCapabilities, base_model, models_factory
 from .scorers import scorer_function, scorer_wrapper_metric
 from .types import LLMTask, ScoringKeyMappingType
 from .. import url_helpers
-from opik.api_objects.prompt.chat_prompt_template import ChatPromptTemplate
-from opik.api_objects.prompt.types import SupportedModalities
 
 LOGGER = logging.getLogger(__name__)
 MODALITY_SUPPORT_DOC_URL = (
@@ -178,7 +178,6 @@ def _evaluate_task(
         evaluation_engine = engine.EvaluationEngine(
             client=client,
             project_name=project_name,
-            experiment_=experiment,
             scoring_metrics=scoring_metrics,
             workers=task_threads,
             verbose=verbose,
@@ -191,6 +190,7 @@ def _evaluate_task(
             dataset_item_ids=dataset_item_ids,
             dataset_sampler=dataset_sampler,
             trial_count=trial_count,
+            experiment_=experiment,
         )
 
     total_time = time.time() - start_time
@@ -303,7 +303,6 @@ def evaluate_experiment(
         evaluation_engine = engine.EvaluationEngine(
             client=client,
             project_name=project_name,
-            experiment_=experiment,
             scoring_metrics=scoring_metrics,
             workers=scoring_threads,
             verbose=verbose,
@@ -350,7 +349,7 @@ def _build_prompt_evaluation_task(
     model: base_model.OpikBaseModel, messages: List[Dict[str, Any]]
 ) -> Callable[[Dict[str, Any]], Dict[str, Any]]:
     supported_modalities = cast(
-        SupportedModalities,
+        prompt_types.SupportedModalities,
         {
             "vision": ModelCapabilities.supports_vision(
                 getattr(model, "model_name", None)
@@ -360,9 +359,9 @@ def _build_prompt_evaluation_task(
             ),
         },
     )
-    chat_prompt_template = ChatPromptTemplate(messages=messages)
+    prompt_template = chat_prompt_template.ChatPromptTemplate(messages=messages)
 
-    required_modalities = chat_prompt_template.required_modalities()
+    required_modalities = prompt_template.required_modalities()
     unsupported_modalities = {
         modality
         for modality in required_modalities
@@ -381,7 +380,7 @@ def _build_prompt_evaluation_task(
 
     def _prompt_evaluation_task(prompt_variables: Dict[str, Any]) -> Dict[str, Any]:
         template_type_override = prompt_variables.get("type")
-        processed_messages = chat_prompt_template.format(
+        processed_messages = prompt_template.format(
             variables=prompt_variables,
             supported_modalities=supported_modalities,
             template_type=template_type_override,
@@ -499,7 +498,6 @@ def evaluate_prompt(
         evaluation_engine = engine.EvaluationEngine(
             client=client,
             project_name=project_name,
-            experiment_=experiment,
             scoring_metrics=scoring_metrics,
             workers=task_threads,
             verbose=verbose,
@@ -512,6 +510,7 @@ def evaluate_prompt(
             dataset_item_ids=dataset_item_ids,
             dataset_sampler=dataset_sampler,
             trial_count=trial_count,
+            experiment_=experiment,
         )
 
     total_time = time.time() - start_time
@@ -654,10 +653,126 @@ def evaluate_optimization_trial(
     )
 
 
-def _wrap_scoring_functions(
+def evaluate_items(
+    items: List[Dict[str, Any]],
+    task: LLMTask,
     scoring_metrics: Optional[List[base_metric.BaseMetric]] = None,
     scoring_functions: Optional[List[scorer_function.ScorerFunction]] = None,
     project_name: Optional[str] = None,
+    verbose: int = 0,
+    scoring_key_mapping: Optional[ScoringKeyMappingType] = None,
+    scoring_threads: int = 16,
+) -> List[evaluation_result.TestResultForItemsEvaluation]:
+    """
+    Lightweight evaluation function that evaluates a task on dataset items
+    without requiring a Dataset object or creating an experiment.
+
+    This function is useful for optimization scenarios where you need to evaluate many
+    candidate solutions quickly using Opik's metric infrastructure. It creates traces for
+    tracking but doesn't require experiment setup or dataset management.
+
+    Args:
+        items: List of dataset item contents (dictionaries with the data to evaluate).
+
+        task: A callable object that takes dict with dataset item content
+            as input and returns dict which will later be used for scoring.
+
+        scoring_metrics: List of metrics to calculate during evaluation.
+            Each metric's `score(...)` method will be called with arguments taken from
+            the dataset item and task output.
+
+        scoring_functions: List of scorer functions to be executed during evaluation.
+            Each scorer function accepts predefined arguments:
+                • dataset_item — a dictionary containing the dataset item content,
+                • task_outputs — a dictionary containing the LLM task output.
+
+        project_name: The name of the project for logging traces.
+
+        verbose: Controls evaluation output logs and progress bars.
+            0 - no outputs (default), 1 - enable outputs.
+
+        scoring_key_mapping: A dictionary that allows you to rename keys present in either
+            the dataset item or the task output to match the keys expected by scoring metrics.
+
+        scoring_threads: Number of thread workers to run scoring metrics.
+
+    Returns:
+        List of TestResultForItemsEvaluation objects containing the scores for each item.
+
+    Example:
+        ```python
+        import opik
+        from opik.evaluation.metrics import Equals
+
+        items = [
+            {"input": "What is 2+2?", "expected_output": "4"},
+            {"input": "What is 3+3?", "expected_output": "6"},
+        ]
+
+        def my_task(item):
+            # Your LLM call here
+            question = item["input"]
+            # ... call model ...
+            return {"output": model_output}
+
+        results = opik.evaluate_items(
+            items=items,
+            task=my_task,
+            scoring_metrics=[Equals()],
+            scoring_key_mapping={"output": "output"},
+        )
+
+        for result in results:
+            print(f"Score: {result.score_results[0].value}")
+        ```
+    """
+    # Wrap scoring functions if any
+    scoring_metrics = _wrap_scoring_functions(
+        scoring_functions=scoring_functions,
+        scoring_metrics=scoring_metrics,
+        project_name=project_name,
+    )
+
+    if not scoring_metrics:
+        LOGGER.warning("No scoring metrics provided for items evaluation")
+        return []
+
+    client = opik_client.get_client_cached()
+
+    # Create evaluation engine
+    with asyncio_support.async_http_connections_expire_immediately():
+        evaluation_engine = engine.EvaluationEngine(
+            client=client,
+            project_name=project_name,
+            scoring_metrics=scoring_metrics,
+            workers=scoring_threads,
+            verbose=verbose,
+            scoring_key_mapping=scoring_key_mapping,
+        )
+
+        # Use the new evaluate_items method
+        test_results = evaluation_engine.evaluate_items(
+            items=items,
+            task=task,
+        )
+
+    # Convert TestResult to TestResultForItemsEvaluation
+    results = [
+        evaluation_result.TestResultForItemsEvaluation(
+            dataset_item_content=test_result.test_case.dataset_item_content,
+            task_output=test_result.test_case.task_output,
+            score_results=test_result.score_results,
+        )
+        for test_result in test_results
+    ]
+
+    return results
+
+
+def _wrap_scoring_functions(
+    scoring_metrics: Optional[List[base_metric.BaseMetric]],
+    scoring_functions: Optional[List[scorer_function.ScorerFunction]],
+    project_name: Optional[str],
 ) -> List[base_metric.BaseMetric]:
     if scoring_functions:
         function_metrics = scorer_wrapper_metric.wrap_scorer_functions(

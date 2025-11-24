@@ -37,7 +37,6 @@ class EvaluationEngine:
         self,
         client: opik_client.Opik,
         project_name: Optional[str],
-        experiment_: experiment.Experiment,
         scoring_metrics: List[base_metric.BaseMetric],
         workers: int,
         verbose: int,
@@ -45,7 +44,6 @@ class EvaluationEngine:
     ) -> None:
         self._client = client
         self._project_name = project_name
-        self._experiment = experiment_
         self._workers = workers
         self._verbose = verbose
         self._scoring_metrics: List[base_metric.BaseMetric] = []
@@ -99,6 +97,7 @@ class EvaluationEngine:
         item: dataset_item.DatasetItem,
         task: LLMTask,
         trial_id: int,
+        experiment_: Optional[experiment.Experiment],
     ) -> test_result.TestResult:
         if not hasattr(task, "opik_tracked"):
             name = task.__name__ if hasattr(task, "__name__") else "llm_task"
@@ -113,7 +112,7 @@ class EvaluationEngine:
         )
 
         with helpers.evaluate_llm_task_context(
-            experiment=self._experiment,
+            experiment=experiment_,
             dataset_item_id=item.id,
             trace_data=trace_data,
             client=self._client,
@@ -160,6 +159,7 @@ class EvaluationEngine:
         dataset_item_ids: Optional[List[str]],
         dataset_sampler: Optional[samplers.BaseDatasetSampler],
         trial_count: int,
+        experiment_: Optional[experiment.Experiment],
     ) -> List[test_result.TestResult]:
         task_span_scoring_enabled = False
         if len(self._task_span_scoring_metrics) > 0:
@@ -185,6 +185,7 @@ class EvaluationEngine:
                     item=item,
                     task=task,
                     trial_id=trial_id,
+                    experiment_=experiment_,
                 )
                 for item in dataset_items
             ]
@@ -210,6 +211,54 @@ class EvaluationEngine:
             message_processors_chain.toggle_local_emulator_message_processor(
                 active=False, chain=self._client._message_processor
             )
+
+        return test_results
+
+    def evaluate_items(
+        self,
+        items: List[Dict[str, Any]],
+        task: LLMTask,
+    ) -> List[test_result.TestResult]:
+        """
+        Evaluate a list of dataset items using a task function.
+
+        This method creates traces for each evaluation but doesn't require a Dataset object
+        or experiment. It's useful for optimization scenarios where you have items in memory
+        and want to evaluate them with a task function.
+
+        Args:
+            items: List of dataset item contents (dictionaries).
+            task: A callable that takes a dataset item dict and returns a dict with outputs.
+
+        Returns:
+            List of TestResult objects containing scores for each item.
+        """
+        # Convert raw items to DatasetItem objects for compatibility
+        dataset_items = [
+            dataset_item.DatasetItem(
+                id=f"temp_item_{idx}",
+                **item,
+            )
+            for idx, item in enumerate(items)
+        ]
+
+        evaluation_tasks: List[EvaluationTask[test_result.TestResult]] = [
+            functools.partial(
+                self._evaluate_llm_task,
+                item=item,
+                task=task,
+                trial_id=0,
+                experiment_=None,  # Items evaluation doesn't use experiments
+            )
+            for item in dataset_items
+        ]
+
+        test_results = evaluation_tasks_executor.execute(
+            evaluation_tasks,
+            self._workers,
+            self._verbose,
+            desc="Items evaluation",
+        )
 
         return test_results
 

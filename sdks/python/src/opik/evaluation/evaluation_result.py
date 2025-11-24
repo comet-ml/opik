@@ -1,10 +1,13 @@
-from typing import List, Optional, Dict
+from typing import List, Optional, Dict, Any, TYPE_CHECKING
 from collections import defaultdict
 import logging
 
 import dataclasses
 
 from . import score_statistics, test_result
+
+if TYPE_CHECKING:
+    from .metrics import score_result
 
 LOGGER = logging.getLogger(__name__)
 
@@ -143,3 +146,22 @@ class EvaluationResult:
             )
 
         return dataset_items_results
+
+
+@dataclasses.dataclass
+class TestResultForItemsEvaluation:
+    """
+    Lightweight result type for items evaluation that doesn't require experiments.
+
+    This is used by evaluate_items() to return scoring results for dataset items
+    without the overhead of experiment tracking or dataset management.
+
+    Attributes:
+        dataset_item_content: The original dataset item content that was evaluated.
+        task_output: The task output that was scored.
+        score_results: List of score results from the evaluation metrics.
+    """
+
+    dataset_item_content: Dict[str, Any]
+    task_output: Dict[str, Any]
+    score_results: List["score_result.ScoreResult"]
