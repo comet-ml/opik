@@ -1,6 +1,6 @@
 from typing import Any
 
-from opik import track  # noqa: E402
+import opik
 import opik_optimizer
 from opik_optimizer import ChatPrompt
 from opik_optimizer import GepaOptimizer
