@@ -66,6 +66,8 @@ class MetaPromptOptimizer(BaseOptimizer):
     # --- Constants for Default Configuration ---
     DEFAULT_PROMPTS_PER_ROUND = 4  # Same as DEFAULT_NUM_GENERATIONS
     DEFAULT_SYNTHESIS_PROMPTS_PER_ROUND = 2
+    DEFAULT_SYNTHESIS_START_ROUND = 3
+    DEFAULT_SYNTHESIS_ROUND_INTERVAL = 3
     DEFAULT_NUM_THREADS = 12
     DEFAULT_SEED = 42
     DEFAULT_NUM_TASK_EXAMPLES = 5
@@ -105,6 +107,8 @@ class MetaPromptOptimizer(BaseOptimizer):
         )
         self.prompts_per_round = prompts_per_round
         self.synthesis_prompts_per_round = self.DEFAULT_SYNTHESIS_PROMPTS_PER_ROUND
+        self.synthesis_start_round = self.DEFAULT_SYNTHESIS_START_ROUND
+        self.synthesis_round_interval = self.DEFAULT_SYNTHESIS_ROUND_INTERVAL
         self.n_threads = n_threads
         self.dataset: Dataset | None = None
         self.enable_context = enable_context
@@ -544,7 +548,12 @@ class MetaPromptOptimizer(BaseOptimizer):
                 )
 
                 # Create a set of candidate prompts
-                is_synthesis_round = round_num >= 4 and (round_num - 4) % 5 == 0
+                is_synthesis_round = (
+                    round_num >= self.synthesis_start_round
+                    and (round_num - self.synthesis_start_round)
+                    % self.synthesis_round_interval
+                    == 0
+                )
 
                 if is_synthesis_round and not candidate_generator:
                     # Synthesis round: combine top performers into comprehensive prompts
