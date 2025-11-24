@@ -63,8 +63,14 @@ def evaluate_prompt(
                 subset_size = n_samples
                 logger.debug(f"Using specified n_samples: {subset_size} items")
         else:
-            # Calculate 20% of total, but no more than 20 items and no more than total items
-            subset_size = min(total_items, min(20, max(10, int(total_items * 0.2))))
+            # FIXME: This is a hack to ensure we don't evaluate on too many items
+            # This should be a configuration parameter and centralised
+            #
+            # Calculate 20% of total, but no more than 100 items and no more than total items
+            DEFAULT_EVALUATION_SUBSET_SIZE = min(
+                total_items, max(100, int(total_items * 0.2))
+            )
+            subset_size = DEFAULT_EVALUATION_SUBSET_SIZE
             logger.debug(
                 f"Using automatic subset size calculation: {subset_size} items (20% of {total_items} total items)"
             )
