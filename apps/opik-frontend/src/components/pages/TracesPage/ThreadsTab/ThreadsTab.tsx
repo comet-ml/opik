@@ -12,7 +12,7 @@ import {
   ColumnSort,
   RowSelectionState,
 } from "@tanstack/react-table";
-import { RotateCw } from "lucide-react";
+import { MessageSquareText, RotateCw } from "lucide-react";
 import findIndex from "lodash/findIndex";
 import isNumber from "lodash/isNumber";
 import get from "lodash/get";
@@ -433,20 +433,22 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
         }) as ColumnData<Thread>,
     );
 
-    const reasonColumns = allScoreColumns.map(
-      ({ label, id }) =>
-        ({
-          id: `${id}_reason`,
-          label: `${label} (reason)`,
-          type: COLUMN_TYPE.string,
-          cell: FeedbackScoreReasonCell as never,
-          accessorFn: (row) =>
-            row.feedback_scores?.find((f) => f.name === label),
-        }) as ColumnData<Thread>,
-    );
+    const reasonColumns = showReasons
+      ? allScoreColumns.map(
+          ({ label, id }) =>
+            ({
+              id: `${id}_reason`,
+              label: `${label} (reason)`,
+              type: COLUMN_TYPE.string,
+              cell: FeedbackScoreReasonCell as never,
+              accessorFn: (row) =>
+                row.feedback_scores?.find((f) => f.name === label),
+            }) as ColumnData<Thread>,
+        )
+      : [];
 
     return [...scoreColumns, ...reasonColumns];
-  }, [dynamicScoresColumns]);
+  }, [dynamicScoresColumns, showReasons]);
 
   const rows: Thread[] = useMemo(() => data?.content ?? [], [data]);
 
@@ -474,6 +476,13 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
   >(COLUMNS_WIDTH_KEY, {
     defaultValue: {},
   });
+
+  const [showReasons, setShowReasons] = useLocalStorageState<boolean>(
+    "threads-show-reasons",
+    {
+      defaultValue: false,
+    },
+  );
 
   const selectedRows: Thread[] = useMemo(() => {
     return rows.filter((row) => rowSelection[row.id]);
@@ -667,6 +676,23 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
             type={height as ROW_HEIGHT}
             setType={setHeight}
           />
+          <TooltipWrapper
+            content={
+              showReasons
+                ? "Hide score reason columns"
+                : "Show score reason columns"
+            }
+          >
+            <Button
+              variant={showReasons ? "default" : "outline"}
+              size="sm"
+              className="shrink-0"
+              onClick={() => setShowReasons(!showReasons)}
+            >
+              <MessageSquareText className="mr-1.5 size-3.5" />
+              Reasons
+            </Button>
+          </TooltipWrapper>
           <ColumnsButton
             columns={DEFAULT_COLUMNS}
             selectedColumns={selectedColumns}

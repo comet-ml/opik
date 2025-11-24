@@ -1,5 +1,5 @@
 import React, { useCallback, useMemo, useRef, useState } from "react";
-import { ChartLine, Info, RotateCw } from "lucide-react";
+import { ChartLine, Info, MessageSquareText, RotateCw } from "lucide-react";
 import { ColumnSort, Row, RowSelectionState } from "@tanstack/react-table";
 import { useNavigate } from "@tanstack/react-router";
 import useLocalStorageState from "use-local-storage-state";
@@ -284,6 +284,13 @@ const ExperimentsPage: React.FC = () => {
     },
   );
 
+  const [showReasons, setShowReasons] = useLocalStorageState<boolean>(
+    `${STORAGE_KEY_PREFIX}-show-reasons`,
+    {
+      defaultValue: false,
+    },
+  );
+
   const { isFeedbackScoresPending, dynamicScoresColumns } =
     useExperimentsFeedbackScores();
 
@@ -369,6 +376,7 @@ const ExperimentsPage: React.FC = () => {
     actionsCell: ExperimentRowActionsCell,
     sortedColumns,
     setSortedColumns,
+    showReasons,
   });
 
   const handleRowClick = useCallback(
@@ -607,6 +615,23 @@ const ExperimentsPage: React.FC = () => {
               onClick={() => refetch()}
             >
               <RotateCw />
+            </Button>
+          </TooltipWrapper>
+          <TooltipWrapper
+            content={
+              showReasons
+                ? "Hide score reason columns"
+                : "Show score reason columns"
+            }
+          >
+            <Button
+              variant={showReasons ? "default" : "outline"}
+              size="sm"
+              className="shrink-0"
+              onClick={() => setShowReasons(!showReasons)}
+            >
+              <MessageSquareText className="mr-1.5 size-3.5" />
+              Reasons
             </Button>
           </TooltipWrapper>
           <ColumnsButton

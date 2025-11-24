@@ -11,7 +11,7 @@ import {
   ColumnSort,
   RowSelectionState,
 } from "@tanstack/react-table";
-import { RotateCw } from "lucide-react";
+import { MessageSquareText, RotateCw } from "lucide-react";
 import findIndex from "lodash/findIndex";
 import isObject from "lodash/isObject";
 import isNumber from "lodash/isNumber";
@@ -538,6 +538,13 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
     defaultValue: {},
   });
 
+  const [showReasons, setShowReasons] = useLocalStorageState<boolean>(
+    "traces-show-reasons",
+    {
+      defaultValue: false,
+    },
+  );
+
   const dynamicScoresColumns = useMemo(() => {
     return (feedbackScoresData?.scores ?? [])
       .sort((c1, c2) => c1.name.localeCompare(c2.name))
@@ -549,9 +556,9 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
   }, [feedbackScoresData?.scores]);
 
   const dynamicColumnsIds = useMemo(() => {
-    const scoreIds = dynamicScoresColumns.map((c) => c.id);
-    const reasonIds = dynamicScoresColumns.map((c) => `${c.id}_reason`);
-    return [...scoreIds, ...reasonIds];
+    // Only manage score column IDs in dynamic columns cache
+    // Reason columns are controlled by the global toggle, not individual column settings
+    return dynamicScoresColumns.map((c) => c.id);
   }, [dynamicScoresColumns]);
 
   useDynamicColumnsCache({
@@ -589,20 +596,22 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
         }) as ColumnData<BaseTraceData>,
     );
 
-    const reasonColumns = allScoreColumns.map(
-      ({ label, id }) =>
-        ({
-          id: `${id}_reason`,
-          label: `${label} (reason)`,
-          type: COLUMN_TYPE.string,
-          cell: FeedbackScoreReasonCell as never,
-          accessorFn: (row) =>
-            row.feedback_scores?.find((f) => f.name === label),
-        }) as ColumnData<BaseTraceData>,
-    );
+    const reasonColumns = showReasons
+      ? allScoreColumns.map(
+          ({ label, id }) =>
+            ({
+              id: `${id}_reason`,
+              label: `${label} (reason)`,
+              type: COLUMN_TYPE.string,
+              cell: FeedbackScoreReasonCell as never,
+              accessorFn: (row) =>
+                row.feedback_scores?.find((f) => f.name === label),
+            }) as ColumnData<BaseTraceData>,
+        )
+      : [];
 
     return [...scoreColumns, ...reasonColumns];
-  }, [dynamicScoresColumns]);
+  }, [dynamicScoresColumns, showReasons]);
 
   const selectedRows: Array<Trace | Span> = useMemo(() => {
     return rows.filter((row) => rowSelection[row.id]);
@@ -965,6 +974,23 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
             type={height as ROW_HEIGHT}
             setType={setHeight}
           />
+          <TooltipWrapper
+            content={
+              showReasons
+                ? "Hide score reason columns"
+                : "Show score reason columns"
+            }
+          >
+            <Button
+              variant={showReasons ? "default" : "outline"}
+              size="sm"
+              className="shrink-0"
+              onClick={() => setShowReasons(!showReasons)}
+            >
+              <MessageSquareText className="mr-1.5 size-3.5" />
+              Reasons
+            </Button>
+          </TooltipWrapper>
           <ColumnsButton
             columns={columnData}
             selectedColumns={selectedColumns}

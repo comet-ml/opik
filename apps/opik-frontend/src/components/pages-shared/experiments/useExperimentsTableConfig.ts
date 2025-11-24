@@ -55,6 +55,7 @@ export type UseExperimentsTableConfigProps<T> = {
   actionsCell?: ColumnDefTemplate<CellContext<T, unknown>>;
   sortedColumns: ColumnSort[];
   setSortedColumns: OnChangeFn<ColumnSort[]>;
+  showReasons?: boolean;
 };
 
 export const useExperimentsTableConfig = <
@@ -73,6 +74,7 @@ export const useExperimentsTableConfig = <
   actionsCell,
   sortedColumns,
   setSortedColumns,
+  showReasons = false,
 }: UseExperimentsTableConfigProps<T>) => {
   const [selectedColumns, setSelectedColumns] = useLocalStorageState<string[]>(
     `${storageKeyPrefix}-selected-columns`,
@@ -101,9 +103,9 @@ export const useExperimentsTableConfig = <
   });
 
   const dynamicColumnsIds = useMemo(() => {
-    const scoreIds = dynamicScoresColumns.map((c) => c.id);
-    const reasonIds = dynamicScoresColumns.map((c) => `${c.id}_reason`);
-    return [...scoreIds, ...reasonIds];
+    // Only manage score column IDs in dynamic columns cache
+    // Reason columns are controlled by the global toggle, not individual column settings
+    return dynamicScoresColumns.map((c) => c.id);
   }, [dynamicScoresColumns]);
 
   useDynamicColumnsCache({
@@ -143,22 +145,24 @@ export const useExperimentsTableConfig = <
         }) as ColumnData<T>,
     );
 
-    const reasonColumns = dynamicScoresColumns.map(
-      ({ label, id }) =>
-        ({
-          id: `${id}_reason`,
-          label: `${label} (reason)`,
-          type: COLUMN_TYPE.string,
-          cell: FeedbackScoreReasonCell as never,
-          accessorFn: (row: T) =>
-            (
-              row as T & { feedback_scores?: Array<{ name: string }> }
-            ).feedback_scores?.find((f) => f.name === label),
-        }) as ColumnData<T>,
-    );
+    const reasonColumns = showReasons
+      ? dynamicScoresColumns.map(
+          ({ label, id }) =>
+            ({
+              id: `${id}_reason`,
+              label: `${label} (reason)`,
+              type: COLUMN_TYPE.string,
+              cell: FeedbackScoreReasonCell as never,
+              accessorFn: (row: T) =>
+                (
+                  row as T & { feedback_scores?: Array<{ name: string }> }
+                ).feedback_scores?.find((f) => f.name === label),
+            }) as ColumnData<T>,
+        )
+      : [];
 
     return [...scoreColumns, ...reasonColumns];
-  }, [dynamicScoresColumns]);
+  }, [dynamicScoresColumns, showReasons]);
 
   const selectedRows = useMemo(() => {
     return experiments.filter(
