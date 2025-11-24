@@ -6,6 +6,7 @@ import opik
 from opik import evaluation, exceptions, url_helpers
 from opik.api_objects import opik_client
 from opik.api_objects.dataset import dataset_item
+from opik.api_objects.experiment import experiment
 from opik.evaluation import evaluator as evaluator_module, metrics, samplers
 from opik.evaluation.metrics import score_result
 from opik.evaluation.models import models_factory
@@ -1709,16 +1710,27 @@ def test_evaluate__with_experiment_scores(fake_backend):
     def say_task(dataset_item: Dict[str, Any]):
         return {"output": "hello"}
 
-    mock_experiment = mock.Mock()
-    mock_experiment.id = "experiment-id"
-    mock_experiment.name = "test-experiment"
+    # Create a real Experiment instance with mocked dependencies
+    mock_rest_client = mock.Mock()
+    mock_experiments_api = mock.Mock()
+    mock_update_experiment = mock.Mock()
+    mock_experiments_api.update_experiment = mock_update_experiment
+    mock_rest_client.experiments = mock_experiments_api
+
+    real_experiment = experiment.Experiment(
+        id="experiment-id",
+        name="test-experiment",
+        dataset_name="test-dataset",
+        rest_client=mock_rest_client,
+        streamer=mock.Mock(),
+        experiments_client=mock.Mock(),
+    )
+
     mock_create_experiment = mock.Mock()
-    mock_create_experiment.return_value = mock_experiment
+    mock_create_experiment.return_value = real_experiment
 
     mock_get_experiment_url_by_id = mock.Mock()
     mock_get_experiment_url_by_id.return_value = "any_url"
-
-    mock_update_experiment = mock.Mock()
 
     def compute_accuracy_stats(test_results: List) -> List[score_result.ScoreResult]:
         """Compute max accuracy across all test results."""
@@ -1743,19 +1755,14 @@ def test_evaluate__with_experiment_scores(fake_backend):
         with mock.patch.object(
             url_helpers, "get_experiment_url_by_id", mock_get_experiment_url_by_id
         ):
-            with mock.patch.object(
-                opik_client.Opik, "rest_client", mock.Mock()
-            ) as mock_rest_client:
-                mock_rest_client.experiments = mock.Mock()
-                mock_rest_client.experiments.update_experiment = mock_update_experiment
-                result = evaluation.evaluate(
-                    dataset=mock_dataset,
-                    task=say_task,
-                    experiment_name="test-experiment",
-                    scoring_metrics=[metrics.Equals()],
-                    task_threads=1,
-                    experiment_scores=[compute_accuracy_stats],
-                )
+            result = evaluation.evaluate(
+                dataset=mock_dataset,
+                task=say_task,
+                experiment_name="test-experiment",
+                scoring_metrics=[metrics.Equals()],
+                task_threads=1,
+                experiment_scoring_functions=[compute_accuracy_stats],
+            )
 
     # Verify experiment scores were computed and stored
     assert len(result.experiment_scores) == 1
@@ -1813,7 +1820,7 @@ def test_evaluate__with_experiment_scores_empty_results(fake_backend):
                 experiment_name="test-experiment",
                 scoring_metrics=[metrics.Equals()],
                 task_threads=1,
-                experiment_scores=[compute_accuracy_stats],
+                experiment_scoring_functions=[compute_accuracy_stats],
             )
 
     # Verify experiment scores are empty when no test results
