@@ -34,10 +34,12 @@ Example:
 
 import logging
 import re
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Any, Literal, cast
 
 import requests
+from functools import lru_cache
 
 logger = logging.getLogger(__name__)
 
@@ -108,7 +110,10 @@ def search_wikipedia(
         return _search_wikipedia_colbert(query, k=n)
     elif search_type == "bm25":
         return _search_wikipedia_bm25(
-            query, n=n, index_dir=bm25_index_dir, hf_repo=bm25_hf_repo
+            query,
+            n=n,
+            index_dir=bm25_index_dir,
+            hf_repo=bm25_hf_repo,
         )
     else:
         raise ValueError(
@@ -232,64 +237,11 @@ def _search_wikipedia_bm25(
         return _search_wikipedia_api(query, max_results=n)
 
     try:
-        # Load BM25 index
-        if hf_repo:
-            index_path = _download_bm25_index(hf_repo)
-        elif index_dir:
-            index_path = Path(index_dir)
-        else:
-            # This shouldn't happen due to the check above, but for type safety
-            raise ValueError("Either index_dir or hf_repo must be provided")
+        index_path = _resolve_bm25_index_path(
+            index_dir=Path(index_dir) if index_dir else None, repo_id=hf_repo
+        )
 
-        if not index_path.exists():
-            raise FileNotFoundError(f"Index directory not found: {index_path}")
-
-        # Load retriever and corpus
-        # Check if we have Parquet corpus (optimized format) or JSONL (standard)
-        parquet_files = list(index_path.glob("corpus_*.parquet"))
-        jsonl_files = list(index_path.glob("*corpus*.jsonl"))
-
-        if parquet_files:
-            # Optimized Parquet format - load BM25 index without corpus
-            logger.debug(f"Found {len(parquet_files)} Parquet corpus files")
-            retriever = bm25s.BM25.load(str(index_path), load_corpus=False)
-
-            # Load corpus from Parquet chunks
-            try:
-                import importlib
-
-                # Optional dependency; load dynamically to avoid hard dependency on pyarrow
-                pq = cast(Any, importlib.import_module("pyarrow.parquet"))
-            except ImportError:
-                logger.warning(
-                    "pyarrow not available for Parquet corpus, falling back to API"
-                )
-                return _search_wikipedia_api(query, max_results=n)
-
-            # Load all Parquet chunks and combine
-            corpus_list = []
-            for parquet_file in sorted(parquet_files):
-                table = pq.read_table(parquet_file, columns=["title", "text"])
-                df = table.to_pandas()
-                # Combine title and text back to "Title | Text" format
-                corpus_list.extend(
-                    df.apply(
-                        lambda row: f"{row['title']} | {row['text']}", axis=1
-                    ).tolist()
-                )
-            corpus = corpus_list
-            logger.debug(f"Loaded {len(corpus)} documents from Parquet")
-
-        elif jsonl_files:
-            # Standard JSONL format
-            logger.debug("Found JSONL corpus file")
-            retriever = bm25s.BM25.load(str(index_path), load_corpus=True)
-            corpus = retriever.corpus
-        else:
-            raise FileNotFoundError(f"No corpus files found in {index_path}")
-
-        if corpus is None or len(corpus) == 0:
-            raise ValueError("Corpus is empty or failed to load")
+        retriever, corpus = _load_bm25_retriever_and_corpus(str(index_path))
 
         # Initialize stemmer for query tokenization (optional)
         try:
@@ -314,7 +266,6 @@ def _search_wikipedia_bm25(
         for idx in results[0]:  # First query
             if idx < len(corpus):
                 passage = corpus[idx]
-                logger.debug(f"Retrieved doc {idx}, len={len(passage)}")
                 passages.append(passage)
             else:
                 logger.warning(
@@ -323,7 +274,6 @@ def _search_wikipedia_bm25(
 
         # Pad if needed
         if len(passages) < n:
-            logger.debug(f"Padding {n - len(passages)} empty results")
             passages.extend([""] * (n - len(passages)))
 
         return passages[:n]
@@ -333,13 +283,43 @@ def _search_wikipedia_bm25(
         return _search_wikipedia_api(query, max_results=n)
 
 
-def _download_bm25_index(repo_id: str, cache_dir: str | None = None) -> Path:
+@lru_cache(maxsize=1)
+def _resolve_bm25_index_path(
+    index_dir: Path | None,
+    repo_id: str | None,
+) -> Path:
+    """
+    Resolve the BM25 index path, downloading once if necessary.
+
+    - If index_dir is provided: use it, download there if missing and repo_id is provided.
+    - If no index_dir: rely on huggingface_hub default cache for repo_id.
+    """
+    if index_dir:
+        if index_dir.exists():
+            return index_dir
+        if not repo_id:
+            raise FileNotFoundError(f"BM25 index missing at {index_dir}")
+        index_dir.mkdir(parents=True, exist_ok=True)
+        return _download_bm25_index(repo_id=repo_id, target_dir=index_dir)
+
+    if not repo_id:
+        raise FileNotFoundError(
+            "BM25 index path not provided and no repo_id to download"
+        )
+    return _download_bm25_index(repo_id=repo_id)
+
+
+def _download_bm25_index(
+    repo_id: str,
+    target_dir: Path | None = None,
+) -> Path:
     """
     Download BM25 index from HuggingFace Hub.
 
     Args:
         repo_id: HuggingFace repo ID (default: "Comet/wikipedia-2017-bm25")
         cache_dir: Local cache directory (default: ~/.opik_optimizer/.cache/wikipedia_bm25)
+        local_dir: Explicit local directory path to place the snapshot (overrides repo_id-based path)
 
     Returns:
         Path to downloaded index
@@ -351,22 +331,132 @@ def _download_bm25_index(repo_id: str, cache_dir: str | None = None) -> Path:
             "huggingface_hub not installed. Install with: pip install huggingface-hub"
         )
 
-    # Use default cache directory in user's home
-    if cache_dir is None:
-        cache_dir = str(Path.home() / ".opik_optimizer" / ".cache" / "wikipedia_bm25")
-
-    logger.info(f"Downloading BM25 index from HuggingFace: {repo_id}")
-
-    cache_path = Path(cache_dir)
-    cache_path.mkdir(parents=True, exist_ok=True)
-
-    local_dir = cache_path / repo_id.replace("/", "_")
-    snapshot_download(
+    logger.info(f"⚙️ Wikipedia BM25: Downloading index: '{repo_id}' from huggingface")
+    if target_dir is not None:
+        target_dir.mkdir(parents=True, exist_ok=True)
+        download_path = snapshot_download(
+            repo_id=repo_id,
+            repo_type="dataset",
+            local_dir=str(target_dir),
+            local_dir_use_symlinks=False,
+        )
+        logger.debug(f"Downloaded to {download_path}")
+        return Path(download_path)
+    download_path = snapshot_download(
         repo_id=repo_id,
         repo_type="dataset",
-        local_dir=str(local_dir),
         local_dir_use_symlinks=False,
     )
+    logger.debug(f"Downloaded to {download_path}")
+    return Path(download_path)
 
-    logger.info(f"Downloaded to {local_dir}")
-    return local_dir
+
+@lru_cache(maxsize=1)
+def _load_bm25_retriever_and_corpus(
+    index_path_str: str, use_mmap: bool = True
+) -> tuple[Any, list[str]]:
+    """
+    Load BM25 retriever and corpus once per process to avoid repeated heavy loads.
+
+    Uses memory-mapping (mmap) by default to reduce memory usage. According to bm25s docs
+    (https://github.com/xhluca/bm25s):
+    - mmap=True: Memory-maps the index matrices (~1GB) instead of loading into RAM
+    - Reduces memory from ~4-6GB to ~0.5-2GB with minimal performance impact
+    - OS handles paging, query performance remains fast (<100ms per query)
+    - Load time: ~0.5-1s vs ~8-25s for in-memory loading
+
+    Example from bm25s benchmarks (NQ dataset, 2M+ documents):
+    - In-memory: 8.61s load, 4.36GB RAM
+    - Memory-mapped: 0.53s load, 0.49GB RAM (16x faster load, 9x less memory)
+
+    Args:
+        index_path_str: Path to the BM25 index directory
+        use_mmap: Whether to use memory-mapping for the BM25 index (default: True)
+
+    Returns:
+        Tuple of (retriever, corpus)
+    """
+    import bm25s
+
+    index_path = Path(index_path_str)
+
+    # If the path string points to a JSON/JSONL file, load that; otherwise assume Parquet directory
+    if index_path.suffix in {".jsonl", ".json"}:
+        logger.debug(f"Loading JSON corpus from {index_path}")
+        retriever = bm25s.BM25.load(
+            str(index_path.parent), load_corpus=True, mmap=use_mmap
+        )
+        corpus = retriever.corpus or []
+        logger.info("⚙️ Wikipedia BM25 Index loaded")
+    else:
+        parquet_files = sorted(
+            [p for p in index_path.iterdir() if p.suffix == ".parquet"]
+        )
+        if parquet_files:
+            # Load BM25 index with memory-mapping
+            retriever = bm25s.BM25.load(
+                str(index_path), load_corpus=False, mmap=use_mmap
+            )
+            logger.info("⚙️ Wikipedia BM25 Index loaded (memory-mapped)")
+
+            try:
+                import importlib
+
+                pq = cast(Any, importlib.import_module("pyarrow.parquet"))
+            except ImportError:
+                raise ImportError("pyarrow not available for Parquet corpus")
+
+            # Load corpus from Parquet files in parallel
+            def _load_parquet_file(parquet_file: Path) -> tuple[int, list[str]]:
+                """Load a single parquet file and return (file_index, documents)."""
+                table = pq.read_table(parquet_file, columns=["title", "text"])
+                df = table.to_pandas()
+                # Use vectorized operations instead of df.apply
+                title_col = df["title"].fillna("").astype(str)
+                text_col = df["text"].fillna("").astype(str)
+                return parquet_files.index(parquet_file), (
+                    title_col + " | " + text_col
+                ).tolist()
+
+            # Load files in parallel (4 workers for I/O-bound operations)
+            max_workers = min(4, len(parquet_files))
+            corpus_parts: dict[int, list[str]] = {}
+
+            with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                futures = {
+                    executor.submit(_load_parquet_file, parquet_file): parquet_file
+                    for parquet_file in parquet_files
+                }
+
+                for future in as_completed(futures):
+                    parquet_file = futures[future]
+                    try:
+                        file_idx, file_data = future.result()
+                        corpus_parts[file_idx] = file_data
+                        logger.debug(
+                            f"Loaded {parquet_file.name}: {len(file_data):,} docs"
+                        )
+                    except Exception as e:
+                        logger.error(f"Failed to load {parquet_file.name}: {e}")
+                        raise
+
+            # Combine in order
+            corpus = []
+            for i in range(len(parquet_files)):
+                corpus.extend(corpus_parts[i])
+
+            logger.info(
+                f"⚙️ Wikipedia BM25 Corpus loaded: {len(corpus):,} documents from {len(parquet_files)} files"
+            )
+        else:
+            logger.debug("Loading JSONL corpus (no Parquet files found)")
+            retriever = bm25s.BM25.load(
+                str(index_path), load_corpus=True, mmap=use_mmap
+            )
+            corpus = retriever.corpus or []
+            logger.info("⚙️ Wikipedia BM25 Index loaded")
+
+    if not corpus:
+        raise ValueError("Corpus is empty or failed to load")
+
+    return retriever, corpus
