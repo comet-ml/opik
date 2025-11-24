@@ -121,6 +121,9 @@ const UserMenu = () => {
 
   const isAcademic = organization?.academic;
 
+  const isLLMOnlyOrganization =
+    organization?.role === ORGANIZATION_ROLE_TYPE.opik;
+
   const handleChangeOrganization = (newOrganization: Organization) => {
     const newOrganizationWorkspaces = userInvitedWorkspaces.filter(
       (workspace) => workspace.organizationId === newOrganization.id,
@@ -188,15 +191,17 @@ const UserMenu = () => {
           <DropdownMenuLabel>Your apps</DropdownMenuLabel>
 
           <DropdownMenuGroup>
-            <DropdownMenuItem
-              className="flex cursor-pointer flex-row gap-3"
-              onClick={handleSwitchToEM}
-            >
-              <span className="flex size-6 items-center justify-center rounded-[6px] bg-[var(--feature-experiment-management)] text-[8px] font-medium text-white">
-                EM
-              </span>
-              <span>Experiment management</span>
-            </DropdownMenuItem>
+            {!isLLMOnlyOrganization ? (
+              <DropdownMenuItem
+                className="flex cursor-pointer flex-row gap-3"
+                onClick={handleSwitchToEM}
+              >
+                <span className="flex size-6 items-center justify-center rounded-[6px] bg-[var(--feature-experiment-management)] text-[8px] font-medium text-white">
+                  EM
+                </span>
+                <span>Experiment management</span>
+              </DropdownMenuItem>
+            ) : null}
 
             <DropdownMenuItem className="flex cursor-pointer flex-row gap-3">
               <span className="flex size-6 items-center justify-center rounded-[6px] bg-[var(--feature-llm)] text-[8px] font-medium text-white">
@@ -219,7 +224,7 @@ const UserMenu = () => {
           <div className="flex items-center gap-2 px-4 py-2">
             {renderAvatar()}
             <TooltipWrapper content={user.userName}>
-              <span className="comet-body-s-accented truncate text-foreground">
+              <span className="comet-body-s-accented text-foreground truncate">
                 {user.userName}
               </span>
             </TooltipWrapper>
@@ -269,13 +274,15 @@ const UserMenu = () => {
           </DropdownMenuGroup>
           <DropdownMenuSeparator />
           <DropdownMenuGroup>
-            <a href={buildUrl("account-settings", workspaceName)}>
-              <DropdownMenuItem className="cursor-pointer">
-                <Settings className="mr-2 size-4" />
-                <span>Account settings</span>
-              </DropdownMenuItem>
-            </a>
-            {isOrganizationAdmin ? (
+            {!isLLMOnlyOrganization ? (
+              <a href={buildUrl("account-settings", workspaceName)}>
+                <DropdownMenuItem className="cursor-pointer">
+                  <Settings className="mr-2 size-4" />
+                  <span>Account settings</span>
+                </DropdownMenuItem>
+              </a>
+            ) : null}
+            {isOrganizationAdmin && !isLLMOnlyOrganization ? (
               <a
                 href={buildUrl(
                   `organizations/${workspace?.organizationId}`,
@@ -319,7 +326,7 @@ const UserMenu = () => {
                 </DropdownMenuPortal>
               </DropdownMenuSub>
             ) : null}
-            {inviteMembersURL ? (
+            {inviteMembersURL && !isLLMOnlyOrganization ? (
               <a href={inviteMembersURL}>
                 <DropdownMenuItem className="cursor-pointer">
                   <UserPlus className="mr-2 size-4" />
@@ -348,7 +355,7 @@ const UserMenu = () => {
           <DropdownMenuGroup>
             <DropdownMenuSub>
               <DropdownMenuSubTrigger className="flex cursor-pointer items-center">
-                <span className="mr-2 mt-px flex size-4 items-center justify-center rounded border border-border text-xs">
+                <span className="border-border mr-2 mt-px flex size-4 items-center justify-center rounded border text-xs">
                   {organization?.name.charAt(0).toUpperCase()}
                 </span>
                 <span className="comet-body-s truncate">
@@ -421,7 +428,7 @@ const UserMenu = () => {
             <>
               <DropdownMenuSeparator />
               <DropdownMenuItem
-                className="cursor-pointer justify-center text-light-slate"
+                className="text-light-slate cursor-pointer justify-center"
                 onClick={() => {
                   copy(APP_VERSION);
                   toast({ description: "Successfully copied version" });
