@@ -31,10 +31,10 @@ def calculate_improvement(current_score: float, previous_score: float) -> float:
 
 def create_round_data(
     round_num: int,
-    current_best_prompt: chat_prompt.ChatPrompt,
+    current_best_prompt: Any,
     current_best_score: float,
-    best_prompt_overall: chat_prompt.ChatPrompt,
-    evaluated_candidates: list[tuple[chat_prompt.ChatPrompt, float]],
+    best_prompt_overall: Any,
+    evaluated_candidates: list[tuple[Any, float]],
     previous_best_score: float,
     improvement_this_round: float,
 ) -> OptimizationRound:
@@ -60,9 +60,16 @@ def create_round_data(
         if getattr(prompt, "tools", None):
             tool_entries = copy.deepcopy(list(prompt.tools or []))
 
+        if isinstance(prompt, dict):
+            prompt_payload: Any = {
+                name: p.get_messages() for name, p in prompt.items()
+            }
+        else:
+            prompt_payload = prompt.get_messages()
+
         generated_prompts_log.append(
             {
-                "prompt": prompt.get_messages(),
+                "prompt": prompt_payload,
                 "tools": tool_entries,
                 "score": score,
                 "improvement": improvement_vs_prev,
@@ -96,6 +103,7 @@ def create_result(
     model: str,
     model_parameters: dict[str, Any],
     extract_tool_prompts_fn: Callable,
+    final_bundle_prompts: dict[str, list[dict[str, Any]]] | None = None,
 ) -> OptimizationResult:
     """
     Create the final OptimizationResult object.
@@ -132,6 +140,9 @@ def create_result(
 
     if best_tools:
         details["final_tools"] = best_tools
+    if final_bundle_prompts:
+        details["final_bundle_prompts"] = final_bundle_prompts
+        details["best_prompts"] = final_bundle_prompts
 
     tool_prompts = extract_tool_prompts_fn(best_tools)
 
