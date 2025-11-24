@@ -24,8 +24,8 @@ from .dataset import rest_operations as dataset_rest_operations
 from .experiment import experiments_client
 from .experiment import helpers as experiment_helpers
 from .experiment import rest_operations as experiment_rest_operations
-from .prompt import Prompt, PromptType
-from .prompt.client import PromptClient
+from . import prompt as prompt_module
+from .prompt import client as prompt_client
 from .threads import threads_client
 from .trace import migration as trace_migration, trace_client
 from .. import (
@@ -917,8 +917,8 @@ class Opik:
         dataset_name: str,
         name: Optional[str] = None,
         experiment_config: Optional[Dict[str, Any]] = None,
-        prompt: Optional[Prompt] = None,
-        prompts: Optional[List[Prompt]] = None,
+        prompt: Optional[prompt_module.base_prompt.BasePrompt] = None,
+        prompts: Optional[List[prompt_module.base_prompt.BasePrompt]] = None,
         type: Literal["regular", "trial", "mini-batch"] = "regular",
         optimization_id: Optional[str] = None,
     ) -> experiment.Experiment:
@@ -1393,70 +1393,188 @@ class Opik:
         name: str,
         prompt: str,
         metadata: Optional[Dict[str, Any]] = None,
-        type: PromptType = PromptType.MUSTACHE,
-    ) -> Prompt:
+        type: prompt_module.PromptType = prompt_module.PromptType.MUSTACHE,
+    ) -> prompt_module.Prompt:
         """
-        Creates a new prompt with the given name and template.
-        If a prompt with the same name already exists, it will create a new version of the existing prompt if the templates differ.
+        Creates a new text prompt with the given name and template.
+        If a text prompt with the same name already exists, it will create a new version of the existing prompt if the templates differ.
 
         Parameters:
             name: The name of the prompt.
             prompt: The template content of the prompt.
             metadata: Optional metadata to be included in the prompt.
+            type: The template type (MUSTACHE or JINJA2).
 
         Returns:
             A Prompt object containing details of the created or retrieved prompt.
 
         Raises:
-            ApiError: If there is an error during the creation of the prompt and the status code is not 409.
+            PromptTemplateStructureMismatch: If a chat prompt with the same name already exists (template structure is immutable).
+            ApiError: If there is an error during the creation of the prompt.
         """
-        prompt_client = PromptClient(self._rest_client)
-        prompt_version = prompt_client.create_prompt(
+        prompt_client_ = prompt_client.PromptClient(self._rest_client)
+        prompt_version = prompt_client_.create_prompt(
             name=name, prompt=prompt, metadata=metadata, type=type
         )
-        return Prompt.from_fern_prompt_version(name, prompt_version)
+        return prompt_module.Prompt.from_fern_prompt_version(name, prompt_version)
+
+    def create_chat_prompt(
+        self,
+        name: str,
+        messages: List[Dict[str, Any]],
+        metadata: Optional[Dict[str, Any]] = None,
+        type: prompt_module.PromptType = prompt_module.PromptType.MUSTACHE,
+    ) -> prompt_module.ChatPrompt:
+        """
+        Creates a new chat prompt with the given name and message templates.
+        If a chat prompt with the same name already exists, it will create a new version if the messages differ.
+
+        Parameters:
+            name: The name of the chat prompt.
+            messages: List of message dictionaries with 'role' and 'content' fields.
+            metadata: Optional metadata to be included in the prompt.
+            type: The template type (MUSTACHE or JINJA2).
+
+        Returns:
+            A ChatPrompt object containing details of the created or retrieved chat prompt.
+
+        Raises:
+            PromptTemplateStructureMismatch: If a text prompt with the same name already exists (template structure is immutable).
+            ApiError: If there is an error during the creation of the prompt.
+        """
+        return prompt_module.ChatPrompt(
+            name=name, messages=messages, metadata=metadata, type=type
+        )
 
     def get_prompt(
         self,
         name: str,
         commit: Optional[str] = None,
-    ) -> Optional[Prompt]:
+    ) -> Optional[prompt_module.Prompt]:
         """
-        Retrieve the prompt detail for a given prompt name and commit version.
+        Retrieve a text prompt by name and optional commit version.
+
+        This method only returns text prompts.
 
         Parameters:
             name: The name of the prompt.
             commit: An optional commit version of the prompt. If not provided, the latest version is retrieved.
 
         Returns:
-            Prompt: The details of the specified prompt.
+            Prompt: The details of the specified text prompt, or None if not found.
+
+        Raises:
+            PromptTemplateStructureMismatch: If the prompt exists but is a chat prompt (template structure mismatch).
         """
-        prompt_client = PromptClient(self._rest_client)
-        fern_prompt_version = prompt_client.get_prompt(name=name, commit=commit)
+        prompt_client_ = prompt_client.PromptClient(self._rest_client)
+        fern_prompt_version = prompt_client_.get_prompt(
+            name=name, commit=commit, raise_if_not_template_structure="text"
+        )
+
         if fern_prompt_version is None:
             return None
 
-        return Prompt.from_fern_prompt_version(name, fern_prompt_version)
+        return prompt_module.Prompt.from_fern_prompt_version(name, fern_prompt_version)
 
-    def get_prompt_history(self, name: str) -> List[Prompt]:
+    def get_chat_prompt(
+        self,
+        name: str,
+        commit: Optional[str] = None,
+    ) -> Optional[prompt_module.ChatPrompt]:
         """
-        Retrieve all the prompt versions history for a given prompt name.
+        Retrieve a chat prompt by name and optional commit version.
+
+        This method only returns chat prompts.
+
+        Parameters:
+            name: The name of the prompt.
+            commit: An optional commit version of the prompt. If not provided, the latest version is retrieved.
+
+        Returns:
+            ChatPrompt: The details of the specified chat prompt, or None if not found.
+
+        Raises:
+            PromptTemplateStructureMismatch: If the prompt exists but is a text prompt (template structure mismatch).
+        """
+        prompt_client_ = prompt_client.PromptClient(self._rest_client)
+        fern_prompt_version = prompt_client_.get_prompt(
+            name=name, commit=commit, raise_if_not_template_structure="chat"
+        )
+
+        if fern_prompt_version is None:
+            return None
+
+        return prompt_module.ChatPrompt.from_fern_prompt_version(
+            name, fern_prompt_version
+        )
+
+    def get_prompt_history(self, name: str) -> List[prompt_module.Prompt]:
+        """
+        Retrieve all text prompt versions history for a given prompt name.
 
         Parameters:
             name: The name of the prompt.
 
         Returns:
-            List[Prompt]: A list of Prompt instances for the given name.
+            List[Prompt]: A list of text Prompt instances for the given name, or an empty list if not found.
+
+        Raises:
+            PromptTemplateStructureMismatch: If the prompt exists but is a chat prompt (template structure mismatch).
         """
-        prompt_client = PromptClient(self._rest_client)
-        fern_prompt_versions = prompt_client.get_all_prompt_versions(name=name)
+        prompt_client_ = prompt_client.PromptClient(self._rest_client)
+
+        # First, validate that this is a text prompt by trying to get the latest version
+        # Let PromptTemplateStructureMismatch exception propagate - this is a hard error
+        latest_version = prompt_client_.get_prompt(
+            name=name, raise_if_not_template_structure="text"
+        )
+
+        if latest_version is None:
+            return []
+
+        # Now get all versions (we know it's a text prompt)
+        fern_prompt_versions = prompt_client_.get_all_prompt_versions(name=name)
+
         result = [
-            Prompt.from_fern_prompt_version(name, version)
+            prompt_module.Prompt.from_fern_prompt_version(name, version)
             for version in fern_prompt_versions
         ]
         return result
 
-    def get_all_prompts(self, name: str) -> List[Prompt]:
+    def get_chat_prompt_history(self, name: str) -> List[prompt_module.ChatPrompt]:
+        """
+        Retrieve all chat prompt versions history for a given prompt name.
+
+        Parameters:
+            name: The name of the prompt.
+
+        Returns:
+            List[ChatPrompt]: A list of ChatPrompt instances for the given name, or an empty list if not found.
+
+        Raises:
+            PromptTemplateStructureMismatch: If the prompt exists but is a text prompt (template structure mismatch).
+        """
+        prompt_client_ = prompt_client.PromptClient(self._rest_client)
+
+        # First, validate that this is a chat prompt by trying to get the latest version
+        # Let PromptTemplateStructureMismatch exception propagate - this is a hard error
+        latest_version = prompt_client_.get_prompt(
+            name=name, raise_if_not_template_structure="chat"
+        )
+
+        if latest_version is None:
+            return []
+
+        # Now get all versions (we know it's a chat prompt)
+        fern_prompt_versions = prompt_client_.get_all_prompt_versions(name=name)
+
+        result = [
+            prompt_module.ChatPrompt.from_fern_prompt_version(name, version)
+            for version in fern_prompt_versions
+        ]
+        return result
+
+    def get_all_prompts(self, name: str) -> List[prompt_module.Prompt]:
         """
         DEPRECATED: Please use Opik.get_prompt_history() instead.
         Retrieve all the prompt versions history for a given prompt name.
@@ -1465,16 +1583,18 @@ class Opik:
             name: The name of the prompt.
 
         Returns:
-            List[Prompt]: A list of Prompt instances for the given name.
+            List[prompt_module.Prompt]: A list of Prompt instances for the given name.
         """
         LOGGER.warning(
             "Opik.get_all_prompts() is deprecated. Please use Opik.get_prompt_history() instead."
         )
         return self.get_prompt_history(name)
 
-    def search_prompts(self, filter_string: Optional[str] = None) -> List[Prompt]:
+    def search_prompts(
+        self, filter_string: Optional[str] = None
+    ) -> List[Union[prompt_module.Prompt, prompt_module.ChatPrompt]]:
         """
-        Retrieve the latest prompt versions for the given search parameters.
+        Retrieve the latest prompt versions (both string and chat prompts) for the given search parameters.
 
         Parameters:
             filter_string: A filter string to narrow down the search using Opik Query Language (OQL).
@@ -1484,11 +1604,13 @@ class Opik:
                 - `id`, `name`: String fields
                 - `tags`: List field (use "contains" operator only)
                 - `created_by`: String field
+                - `template_structure`: String field ("string" or "chat")
 
                 Supported operators by column:
                 - `id`: =, !=, contains, not_contains, starts_with, ends_with, >, <
                 - `name`: =, !=, contains, not_contains, starts_with, ends_with, >, <
                 - `created_by`: =, !=, contains, not_contains, starts_with, ends_with, >, <
+                - `template_structure`: =, !=
                 - `tags`: contains (only)
 
                 Examples:
@@ -1497,23 +1619,36 @@ class Opik:
                 - `name contains "summary"` - Filter by name substring
                 - `created_by = "user@example.com"` - Filter by creator
                 - `id starts_with "prompt_"` - Filter by ID prefix
+                - `template_structure = "text"` - Only text prompts
+                - `template_structure = "chat"` - Only chat prompts
 
-                If not provided, all prompts matching the name filter will be returned.
+                If not provided, all prompts (both text and chat) will be returned.
 
         Returns:
-            List[Prompt]: A list of Prompt instances found.
+            List[Union[Prompt, ChatPrompt]]: A list of Prompt and/or ChatPrompt instances found.
         """
-        parsed_filters = None
-        if filter_string:
-            oql = opik_query_language.OpikQueryLanguage(filter_string)
-            parsed_filters = oql.get_filter_expressions()
+        oql = opik_query_language.OpikQueryLanguage(filter_string or "")
+        parsed_filters = oql.get_filter_expressions()
 
-        prompt_client = PromptClient(self._rest_client)
-        name_and_versions = prompt_client.search_prompts(parsed_filters=parsed_filters)
-        prompts: List[Prompt] = [
-            Prompt.from_fern_prompt_version(prompt_name, version)
-            for (prompt_name, version) in name_and_versions
-        ]
+        prompt_client_ = prompt_client.PromptClient(self._rest_client)
+        search_results = prompt_client_.search_prompts(parsed_filters=parsed_filters)
+
+        # Convert to Prompt or ChatPrompt objects based on template_structure
+        prompts: List[Union[prompt_module.Prompt, prompt_module.ChatPrompt]] = []
+        for result in search_results:
+            if result.template_structure == "chat":
+                prompts.append(
+                    prompt_module.ChatPrompt.from_fern_prompt_version(
+                        result.name, result.prompt_version_detail
+                    )
+                )
+            else:
+                prompts.append(
+                    prompt_module.Prompt.from_fern_prompt_version(
+                        result.name, result.prompt_version_detail
+                    )
+                )
+
         return prompts
 
     def create_optimization(
