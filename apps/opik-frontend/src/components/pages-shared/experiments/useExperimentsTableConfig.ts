@@ -123,7 +123,7 @@ export const useExperimentsTableConfig = <
         ({ label, id, columnType, type: scoreType }) =>
           ({
             id,
-            label,
+            label: scoreType === "experiment_scores" ? label : `${label} (avg)`,
             type: columnType,
             header: FeedbackScoreHeader as never,
             cell: FeedbackScoreCell as never,
