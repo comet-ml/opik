@@ -1189,6 +1189,8 @@ class MetaPromptOptimizer(BaseOptimizer):
         # current interface strips trace context and mismatches some bundle metrics. Until
         # task_evaluator grows a trace-aware hook or a pluggable runner, we keep this
         # local thread pool for bundles.
+        # TODO(opik): add per-task log prefixes (thread-aware) so interleaved tool/LLM logs
+        # remain readable during parallel bundle evals.
         items = dataset.get_items()
         if n_samples is not None:
             items = items[:n_samples]
