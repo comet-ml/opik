@@ -5,10 +5,10 @@ from typing_extensions import TypedDict
 
 import litellm
 
-from opik import track
+from opik import track  # noqa: E402
 from opik.integrations.langchain import OpikTracer
 from opik_optimizer import ChatPrompt, OptimizableAgent
-from opik_optimizer.utils import search_wikipedia
+from opik_optimizer.utils.tools.wikipedia import search_wikipedia
 from opik_optimizer.utils.llm_logger import LLMLogger
 
 from langgraph.graph import StateGraph
@@ -36,11 +36,11 @@ class AgentState(TypedDict):
     context: str
     answer: str
 
-
+@track(type="tool")
 def search_wikipedia_tool(query: str) -> list[str]:
     """Wrapper for the shared Wikipedia search helper."""
     with logger.log_tool("search_wikipedia", query):
-        return search_wikipedia(query, use_api=True)
+        return search_wikipedia(query, search_type="api")
 
 
 search_wikipedia_tool = track(type="tool")(search_wikipedia_tool)

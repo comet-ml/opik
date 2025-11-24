@@ -1,8 +1,8 @@
-import opik  # noqa: E402
+from opik import track  # noqa: E402
 from opik_optimizer import ChatPrompt  # noqa: E402
 from opik_optimizer import ParameterOptimizer, ParameterSearchSpace  # noqa: E402
 from opik_optimizer.datasets import hotpot  # noqa: E402
-from opik_optimizer.utils import search_wikipedia  # noqa: E402
+from opik_optimizer.utils.tools.wikipedia import search_wikipedia  # noqa: E402
 
 from utils.metrics import answer_correctness_score
 
@@ -18,7 +18,7 @@ Provide concise answers based on the search results."""
 
 @opik.track(type="tool")
 def search_wikipedia_tool(query: str) -> list[str]:
-    return search_wikipedia(query, use_api=True)
+    return search_wikipedia(query, search_type="api")
 
 
 prompt = ChatPrompt(

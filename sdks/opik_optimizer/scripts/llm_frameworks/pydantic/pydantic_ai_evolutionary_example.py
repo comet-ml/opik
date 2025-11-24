@@ -9,7 +9,8 @@ from opik_optimizer import (
     EvolutionaryOptimizer,
 )
 from opik_optimizer.datasets import hotpot
-from opik_optimizer.utils import search_wikipedia
+from opik_optimizer.utils.tools.wikipedia import search_wikipedia
+from opik import track
 from pydantic_ai_agent import PydanticAIAgent
 
 
@@ -47,7 +48,11 @@ prompt = ChatPrompt(
             },
         },
     ],
-    function_map={"search_wikipedia": search_wikipedia},
+    function_map={
+        "search_wikipedia": opik.track(type="tool")(
+            lambda query: search_wikipedia(query, search_type="api")
+        )
+    },
 )
 
 optimizer = EvolutionaryOptimizer(

@@ -5,10 +5,10 @@ from opik_optimizer import (
     OptimizableAgent,
     ChatPrompt,
 )
-from opik_optimizer.utils import search_wikipedia
+from opik_optimizer.utils.tools.wikipedia import search_wikipedia
 from opik_optimizer.utils.llm_logger import LLMLogger
 from opik.integrations.adk import OpikTracer
-from opik import track
+from opik import track  # noqa: E402
 
 from google.adk.agents import LlmAgent
 from google.adk.models.lite_llm import LiteLlm
@@ -28,13 +28,14 @@ logger.info("[bold green]═══ ADK Agent loaded ═══[/bold green]")
 
 
 # Create a wrapper without default parameters for ADK compatibility
+@track(type="tool")
 def search_wikipedia_adk(query: str) -> list[str]:
     """
     This agent is used to search wikipedia. It can retrieve additional details
     about a topic.
     """
     with logger.log_tool("search_wikipedia", query):
-        return search_wikipedia(query, use_api=True)
+        return search_wikipedia(query, search_type="api")
 
 
 # Input schema used by both agents

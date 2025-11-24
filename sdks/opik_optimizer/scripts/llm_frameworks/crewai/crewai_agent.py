@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 from opik_optimizer import OptimizableAgent, ChatPrompt
-from opik_optimizer.utils import search_wikipedia
+from opik_optimizer.utils.tools.wikipedia import search_wikipedia
 from opik_optimizer.utils.llm_logger import LLMLogger
-from opik import track
+from opik import track  # noqa: E402
 from crewai import Agent, Crew, Task
 from crewai.tools import tool as crewai_tool
 from langchain_openai import ChatOpenAI
@@ -29,7 +29,7 @@ def search_wikipedia_tool(query: str) -> list[str]:
         A list of relevant Wikipedia article excerpts.
     """
     with logger.log_tool("search_wikipedia", query):
-        return search_wikipedia(query, use_api=True)
+        return search_wikipedia(query, search_type="api")
 
 
 class CrewAIAgent(OptimizableAgent):
