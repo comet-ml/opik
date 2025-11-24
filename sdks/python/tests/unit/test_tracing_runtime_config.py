@@ -17,9 +17,6 @@ def reset_tracing_state() -> Generator[None, None, None]:
     runtime_config.reset_tracing_to_config_default()
 
 
-# Basic API Tests
-
-
 @pytest.mark.parametrize("first,second", [(False, True), (True, False)])
 def test_set_and_get__both_states__works_correctly(first: bool, second: bool) -> None:
     opik.set_tracing_active(first)
@@ -47,9 +44,6 @@ def test_reset_to_config_default__happyflow(monkeypatch: Any) -> None:
     assert opik.is_tracing_active() is False
 
 
-# Decorator Tests - Sync Function
-
-
 @opik.track(name="add_numbers")
 def add_numbers(x: int, y: int) -> int:
     return x + y
@@ -73,9 +67,6 @@ def test_track_decorator__sync_function__respects_runtime_flag() -> None:
         result = add_numbers(4, 5)
         assert result == 9
         assert mocked_create.called
-
-
-# Decorator Tests - Async Function
 
 
 @opik.track(name="async_add")
@@ -102,9 +93,6 @@ def test_track_decorator__async_function__respects_runtime_flag():
         assert mocked_create.called
 
 
-# Decorator Tests - Generator Function
-
-
 @opik.track(name="gen_numbers")
 def gen_numbers(limit: int):
     for i in range(limit):
@@ -129,9 +117,6 @@ def test_track_decorator__generator_function__respects_runtime_flag():
         for _ in gen_numbers(2):
             pass
         assert mocked_create.called
-
-
-# Decorator Tests - Async Generator Function
 
 
 @opik.track(name="async_gen_numbers")
