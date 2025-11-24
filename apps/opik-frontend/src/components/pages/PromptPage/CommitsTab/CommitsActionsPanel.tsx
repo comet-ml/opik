@@ -1,10 +1,11 @@
 import React, { useRef, useState } from "react";
-import { Split } from "lucide-react";
+import { Split, Tag } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { PromptVersion } from "@/types/prompts";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import ComparePromptVersionDialog from "@/components/pages/PromptPage/CommitsTab/ComparePromptVersionDialog";
+import AddTagDialog from "@/components/pages/PromptPage/CommitsTab/AddTagDialog";
 import ExplainerIcon from "@/components/shared/ExplainerIcon/ExplainerIcon";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 
@@ -16,19 +17,47 @@ const CommitsActionsPanel: React.FunctionComponent<
   CommitsActionsPanelsProps
 > = ({ versions }) => {
   const resetKeyRef = useRef(0);
-  const [open, setOpen] = useState<boolean>(false);
-  const disabled = versions?.length < 2;
+  const [open, setOpen] = useState<number | boolean>(false);
+  const disabled = versions?.length === 0;
+  const compareDisabled = versions?.length < 2;
 
   return (
     <div className="flex items-center gap-2">
       <ComparePromptVersionDialog
-        key={resetKeyRef.current}
-        open={open}
+        key={`compare-${resetKeyRef.current}`}
+        open={open === 1}
         setOpen={setOpen}
         versions={versions}
       />
+      <AddTagDialog
+        key={`tag-${resetKeyRef.current}`}
+        rows={versions}
+        open={open === 2}
+        setOpen={setOpen}
+      />
+      <TooltipWrapper content="Add tags">
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => {
+            setOpen(2);
+            resetKeyRef.current = resetKeyRef.current + 1;
+          }}
+          disabled={disabled}
+        >
+          <Tag className="mr-2 size-4" />
+          Add tags
+        </Button>
+      </TooltipWrapper>
       <TooltipWrapper content="Compare commits">
-        <Button size="sm" onClick={() => setOpen(true)} disabled={disabled}>
+        <Button
+          size="sm"
+          onClick={() => {
+            setOpen(1);
+            resetKeyRef.current = resetKeyRef.current + 1;
+          }}
+          disabled={compareDisabled}
+        >
           <Split className="mr-1.5 size-3.5" />
           Compare
         </Button>
