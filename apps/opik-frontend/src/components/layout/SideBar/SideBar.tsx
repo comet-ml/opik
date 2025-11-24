@@ -17,6 +17,7 @@ import {
   ChevronRight,
   SparklesIcon,
   UserPen,
+  BarChart3,
 } from "lucide-react";
 import { keepPreviousData } from "@tanstack/react-query";
 
@@ -27,6 +28,7 @@ import useExperimentsList from "@/api/datasets/useExperimentsList";
 import useRulesList from "@/api/automations/useRulesList";
 import useOptimizationsList from "@/api/optimizations/useOptimizationsList";
 import { OnChangeFn } from "@/types/shared";
+import { FeatureToggleKeys } from "@/types/feature-toggles";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { buildDocsUrl, cn } from "@/lib/utils";
@@ -55,6 +57,14 @@ const MENU_ITEMS: MenuItemGroup[] = [
         type: MENU_ITEM_TYPE.router,
         icon: LucideHome,
         label: "Home",
+      },
+      {
+        id: "dashboards",
+        path: "/$workspaceName/dashboards",
+        type: MENU_ITEM_TYPE.router,
+        icon: BarChart3,
+        label: "Dashboards",
+        featureFlag: FeatureToggleKeys.DASHBOARDS_ENABLED,
       },
     ],
   },

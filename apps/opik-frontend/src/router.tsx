@@ -41,6 +41,8 @@ import CompareOptimizationsPage from "@/components/pages/CompareOptimizationsPag
 import CompareTrialsPage from "@/components/pages/CompareTrialsPage/CompareTrialsPage";
 import AddEditAlertPage from "@/components/pages/ConfigurationPage/AlertsTab/AddEditAlertPage/AddEditAlertPage";
 import AlertNestedRoute from "@/components/pages/ConfigurationPage/AlertsTab/AddEditAlertPage/AlertNestedRoute";
+import DashboardPage from "@/components/pages/DashboardPage/DashboardPage";
+import DashboardsPage from "@/components/pages/DashboardsPage/DashboardsPage";
 
 declare module "@tanstack/react-router" {
   interface StaticDataRouteOption {
@@ -151,6 +153,30 @@ const homeRouteNew = createRoute({
   component: HomePage,
   staticData: {
     title: "Home",
+  },
+});
+
+// ----------- dashboards
+const dashboardsRoute = createRoute({
+  path: "/dashboards",
+  getParentRoute: () => workspaceRoute,
+  staticData: {
+    title: "Dashboards",
+  },
+});
+
+const dashboardsPageRoute = createRoute({
+  path: "/",
+  getParentRoute: () => dashboardsRoute,
+  component: DashboardsPage,
+});
+
+const dashboardDetailRoute = createRoute({
+  path: "/$dashboardId",
+  getParentRoute: () => dashboardsRoute,
+  component: DashboardPage,
+  staticData: {
+    param: "dashboardId",
   },
 });
 
@@ -449,6 +475,7 @@ const routeTree = rootRoute.addChildren([
     homeRoute,
     homeRouteNew,
     workspaceRoute.addChildren([
+      dashboardsRoute.addChildren([dashboardsPageRoute, dashboardDetailRoute]),
       projectsRoute.addChildren([
         projectsListRoute,
         projectRoute.addChildren([tracesRoute]),
