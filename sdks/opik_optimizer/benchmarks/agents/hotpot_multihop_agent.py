@@ -44,6 +44,7 @@ class HotpotMultiHopAgent:
         model: str = "openai/gpt-4.1-mini",
         model_parameters: dict | None = None,
         num_passages_per_hop: int = 5,
+        prompts: dict[str, ChatPrompt] | None = None,
     ):
         """
         Initialize the multi-hop agent.
@@ -60,7 +61,7 @@ class HotpotMultiHopAgent:
         self.num_passages = num_passages_per_hop
 
         # Define prompts for each step (to be optimized)
-        self.prompts = self._create_initial_prompts()
+        self.prompts = prompts or self._create_initial_prompts()
 
     def _create_initial_prompts(self) -> dict[str, ChatPrompt]:
         """Create initial (unoptimized) prompts for each pipeline step."""
@@ -133,6 +134,11 @@ class HotpotMultiHopAgent:
         Returns:
             Dict with 'answer' and intermediate steps for debugging
         """
+        return self._execute_with_prompts(self.prompts, question, verbose)
+
+    def _execute_with_prompts(
+        self, prompts: dict[str, ChatPrompt], question: str, verbose: bool = False
+    ) -> dict[str, Any]:
         context = {"question": question}
 
         # === HOP 1: Initial search ===
@@ -140,7 +146,9 @@ class HotpotMultiHopAgent:
             logger.info(f"Question: {question}")
 
         # Generate first query
-        query_1_response = self._invoke_prompt("create_query_1", {"question": question})
+        query_1_response = self._invoke_prompt(
+            prompts, "create_query_1", {"question": question}
+        )
         context["query_1"] = self._extract_text(query_1_response)
 
         if verbose:
@@ -155,7 +163,9 @@ class HotpotMultiHopAgent:
 
         # Summarize and identify gaps
         summary_1_response = self._invoke_prompt(
-            "summarize_1", {"question": question, "passages": context["passages_1"]}
+            prompts,
+            "summarize_1",
+            {"question": question, "passages": context["passages_1"]},
         )
         summary_1_text = self._extract_text(summary_1_response)
 
@@ -172,6 +182,7 @@ class HotpotMultiHopAgent:
 
         # Generate refined query
         query_2_response = self._invoke_prompt(
+            prompts,
             "create_query_2",
             {
                 "question": question,
@@ -193,6 +204,7 @@ class HotpotMultiHopAgent:
 
         # Update summary
         summary_2_response = self._invoke_prompt(
+            prompts,
             "summarize_2",
             {
                 "question": question,
@@ -208,19 +220,23 @@ class HotpotMultiHopAgent:
         # === FINAL ANSWER ===
 
         answer_response = self._invoke_prompt(
-            "final_answer", {"question": question, "summary_2": context["summary_2"]}
+            prompts,
+            "final_answer",
+            {"question": question, "summary_2": context["summary_2"]},
         )
         context["answer"] = self._extract_text(answer_response)
 
         if verbose:
             logger.info(f"Final answer: {context['answer']}")
-        agent_logger.agent_response(context["answer"])
+        # Note: agent_response is already logged by _invoke_prompt's log_invoke context manager
 
         return context
 
-    def _invoke_prompt(self, prompt_name: str, inputs: dict[str, str]) -> Any:
+    def _invoke_prompt(
+        self, prompts: dict[str, ChatPrompt], prompt_name: str, inputs: dict[str, str]
+    ) -> Any:
         """Invoke a prompt with given inputs."""
-        prompt = self.prompts[prompt_name]
+        prompt = prompts[prompt_name]
         # Get formatted messages from prompt
         messages = prompt.get_messages(dataset_item=inputs)
         input_preview = inputs.get("question") or str(inputs)
@@ -279,6 +295,8 @@ class HotpotMultiHopAgent:
 
     def _log_search(self, query: str, n: int) -> list[str]:
         """Call the configured search_fn with tool-style logging."""
-        tool_name = getattr(self.search_fn, "__name__", self.search_fn.__class__.__name__)
+        tool_name = getattr(
+            self.search_fn, "__name__", self.search_fn.__class__.__name__
+        )
         with agent_logger.log_tool(tool_name, query):
             return self.search_fn(query, n)
