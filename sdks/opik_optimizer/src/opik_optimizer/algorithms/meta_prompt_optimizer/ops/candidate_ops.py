@@ -259,14 +259,6 @@ def generate_candidate_prompts(
             pattern_guidance=pattern_guidance,
         )
 
-        # Log the complete meta-reasoning prompt being sent to the model
-        # FIXME: Remove before merging
-        logger.debug(
-            f"Generated Meta-Reasoning Prompt (Round {round_num + 1})\n"
-            f"System Prompt: {build_reasoning_system_prompt(optimizer.allow_user_prompt_optimization)}\n"
-            f"User Prompt: {user_prompt}\n"
-        )
-
         try:
             # Prepare metadata for optimization algorithm call
             metadata_for_call: dict[str, Any] = {}
