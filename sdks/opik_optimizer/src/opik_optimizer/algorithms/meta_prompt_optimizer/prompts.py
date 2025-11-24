@@ -87,7 +87,6 @@ def build_candidate_generation_user_prompt(
     task_context_str: str,
     analysis_instruction: str,
     metric_focus_instruction: str,
-    improvement_point_1: str,
     prompts_per_round: int,
     pattern_guidance: str = "",  # NEW: Pattern injection support
 ) -> str:
@@ -100,7 +99,6 @@ def build_candidate_generation_user_prompt(
         task_context_str: Task-specific context from dataset and metric
         analysis_instruction: Instruction for analyzing the prompt
         metric_focus_instruction: Instruction focusing on metric improvement
-        improvement_point_1: First improvement guideline
         prompts_per_round: Number of prompts to generate
         pattern_guidance: Optional winning patterns to inject
 
@@ -146,7 +144,7 @@ def build_candidate_generation_user_prompt(
             - Approach: explicit constraints, implicit guidance, meta-cognitive prompting, role-playing
 
             STRATEGIC GUIDANCE:
-            {improvement_point_1}
+            - Be more specific and clear about expectations based on the task
             - Build on patterns from top-performing prompts in the Hall of Fame
             - Try counter-intuitive approaches - sometimes the opposite of conventional wisdom works
             - Experiment with being MORE specific in some versions and MORE abstract in others
