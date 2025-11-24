@@ -571,6 +571,16 @@ export const prettifyMessage = (
 };
 
 /**
+ * Predicate to check if a filter is a tool span filter.
+ */
+const isToolFilter = (filter: Filter): boolean => {
+  return (
+    filter.field === SPAN_TYPE_FILTER_COLUMN.id &&
+    filter.value === SPAN_TYPE.tool
+  );
+};
+
+/**
  * Manages the tool span filter based on the shouldFilter parameter.
  * - When shouldFilter is true: adds the tool filter if it doesn't already exist
  * - When shouldFilter is false: removes the tool filter if it exists
@@ -583,11 +593,7 @@ export const manageToolFilter = (
   const filters = currentFilters || [];
 
   // Check if tool filter already exists
-  const hasToolFilter = filters.some(
-    (filter) =>
-      filter.field === SPAN_TYPE_FILTER_COLUMN.id &&
-      filter.value === SPAN_TYPE.tool,
-  );
+  const hasToolFilter = filters.some(isToolFilter);
 
   if (shouldFilter) {
     // Add tool filter if it doesn't exist
@@ -606,13 +612,7 @@ export const manageToolFilter = (
   } else {
     // Remove tool filter if it exists
     if (hasToolFilter) {
-      return filters.filter(
-        (filter) =>
-          !(
-            filter.field === SPAN_TYPE_FILTER_COLUMN.id &&
-            filter.value === SPAN_TYPE.tool
-          ),
-      );
+      return filters.filter((filter) => !isToolFilter(filter));
     }
   }
 
