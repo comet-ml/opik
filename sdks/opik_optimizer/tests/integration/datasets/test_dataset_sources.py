@@ -93,8 +93,8 @@ def ensured_hf_cache(
 @pytest.mark.integration
 @pytest.mark.parametrize("spec", CURATED_SPECS, ids=lambda spec: spec.name)
 def test_hf_sources_resolve_one_record(
-    spec: DatasetSpec, ensured_hf_cache: Path
-) -> None:  # noqa: ARG001
+    spec: DatasetSpec, _ensured_hf_cache: Path
+) -> None:
     """
     Ensure each curated dataset can fetch at least one record directly from Hugging Face.
 

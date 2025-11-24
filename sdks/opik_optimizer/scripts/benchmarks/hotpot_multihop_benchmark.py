@@ -93,7 +93,7 @@ def bm25_wikipedia_search(query: str, n: int = 5) -> list[str]:
             query,
             search_type="bm25",
             n=n,
-            bm25_hf_repo="Comet/wikipedia-2017-bm25"  # Production index
+            bm25_hf_repo="Comet/wikipedia-2017-bm25",  # Production index
         )
         return results
 

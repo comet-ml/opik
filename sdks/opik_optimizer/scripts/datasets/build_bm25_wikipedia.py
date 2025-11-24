@@ -33,24 +33,24 @@ import logging
 import tarfile
 import urllib.request
 from pathlib import Path
-from typing import Any
 
 # Setup logging
 logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
 
 # Check for optional dependencies
 try:
     import bm25s
+
     BM25S_AVAILABLE = True
 except ImportError:
     BM25S_AVAILABLE = False
 
 try:
     import Stemmer
+
     STEMMER_AVAILABLE = True
 except ImportError:
     STEMMER_AVAILABLE = False
@@ -110,6 +110,7 @@ def build_bm25_index(
         import ujson as json_lib
     except ImportError:
         import json as json_lib  # type: ignore[no-redef]
+
         logger.warning("ujson not installed, using standard json (slower)")
 
     output_path = Path(output_dir)
@@ -178,11 +179,13 @@ def build_bm25_index(
 
         # Save BM25 index without corpus first
         import tempfile
+
         with tempfile.TemporaryDirectory() as temp_dir:
             retriever.save(temp_dir, corpus=None)
 
             # Copy BM25 index files (.npz) to output
             import shutil
+
             output_path = Path(output_dir)
             output_path.mkdir(parents=True, exist_ok=True)
 
@@ -204,11 +207,7 @@ def build_bm25_index(
             title = parts[0].strip() if len(parts) > 0 else ""
             text = parts[1].strip() if len(parts) > 1 else doc_text
 
-            documents.append({
-                'id': i,
-                'title': title,
-                'text': text
-            })
+            documents.append({"id": i, "title": title, "text": text})
 
             # Write chunk when reaching chunk_size
             if len(documents) >= chunk_size:
@@ -216,8 +215,8 @@ def build_bm25_index(
                 pq.write_table(
                     table,
                     output_path / f"corpus_{chunk_num:04d}.parquet",
-                    compression='zstd',
-                    compression_level=9
+                    compression="zstd",
+                    compression_level=9,
                 )
                 logger.info(f"Written chunk {chunk_num} ({len(documents)} documents)")
                 documents = []
@@ -229,8 +228,8 @@ def build_bm25_index(
             pq.write_table(
                 table,
                 output_path / f"corpus_{chunk_num:04d}.parquet",
-                compression='zstd',
-                compression_level=9
+                compression="zstd",
+                compression_level=9,
             )
             logger.info(f"Written final chunk {chunk_num} ({len(documents)} documents)")
     else:
@@ -241,30 +240,39 @@ def build_bm25_index(
 
     # Calculate and display sizes
     import os
-    index_size = sum(os.path.getsize(os.path.join(output_dir, f))
-                     for f in os.listdir(output_dir)
-                     if os.path.isfile(os.path.join(output_dir, f)))
+
+    index_size = sum(
+        os.path.getsize(os.path.join(output_dir, f))
+        for f in os.listdir(output_dir)
+        if os.path.isfile(os.path.join(output_dir, f))
+    )
     index_size_gb = index_size / (1024**3)
 
     logger.info(f"\n✅ BM25 index built successfully at {output_dir}")
     logger.info(f"   - Corpus size: {len(corpus)} documents")
     logger.info(f"   - Index size: {index_size_gb:.2f} GB")
-    logger.info(f"   - Format: {'Parquet (optimized)' if optimize else 'JSONL (standard)'}")
+    logger.info(
+        f"   - Format: {'Parquet (optimized)' if optimize else 'JSONL (standard)'}"
+    )
     logger.info(f"   - Parameters: k1={k1}, b={b}")
 
     if optimize:
-        logger.info(f"\n📦 Optimization enabled:")
-        logger.info(f"   - Corpus format: Chunked Parquet with ZSTD compression")
+        logger.info("\n📦 Optimization enabled:")
+        logger.info("   - Corpus format: Chunked Parquet with ZSTD compression")
         logger.info(f"   - Chunk size: {chunk_size} documents")
-        logger.info(f"   - Benefits: 40-50% smaller, streaming access, faster HF downloads")
+        logger.info(
+            "   - Benefits: 40-50% smaller, streaming access, faster HF downloads"
+        )
 
     logger.info("\n💡 Usage:")
     logger.info("   from opik_optimizer.utils.tools.wikipedia import search_wikipedia")
-    logger.info(f'   results = search_wikipedia("your query", search_type="bm25", n=5, bm25_index_dir="{output_dir}")')
+    logger.info(
+        f'   results = search_wikipedia("your query", search_type="bm25", n=5, bm25_index_dir="{output_dir}")'
+    )
     logger.info("\n📤 To upload to HuggingFace:")
-    logger.info(f'   python scripts/datasets/build_bm25_wikipedia.py upload \\')
+    logger.info("   python scripts/datasets/build_bm25_wikipedia.py upload \\")
     logger.info(f'       --index-dir "{output_dir}" \\')
-    logger.info(f'       --repo-id "your-org/wikipedia-2017-bm25"')
+    logger.info('       --repo-id "your-org/wikipedia-2017-bm25"')
 
 
 def optimize_bm25_index(
@@ -304,14 +312,13 @@ def optimize_bm25_index(
         import pyarrow as pa
         import pyarrow.parquet as pq
     except ImportError:
-        raise ImportError(
-            "PyArrow not installed. Install with: pip install pyarrow"
-        )
+        raise ImportError("PyArrow not installed. Install with: pip install pyarrow")
 
     try:
         import ujson as json_lib
     except ImportError:
         import json as json_lib  # type: ignore[no-redef]
+
         logger.warning("ujson not installed, using standard json (slower)")
 
     input_path = Path(input_dir)
@@ -330,7 +337,7 @@ def optimize_bm25_index(
     documents = []
     chunk_num = 0
 
-    with open(corpus_file, 'r') as f:
+    with open(corpus_file) as f:
         for i, line in enumerate(f):
             # Check limit
             if limit is not None and i >= limit:
@@ -342,9 +349,9 @@ def optimize_bm25_index(
             # bm25s saves corpus as {"id": n, "text": "Title | Text"}
             # Parse the text field to extract title and text
             if isinstance(doc, dict):
-                full_text = doc.get('text', '')
+                full_text = doc.get("text", "")
                 if isinstance(full_text, list):
-                    full_text = ' '.join(full_text)
+                    full_text = " ".join(full_text)
 
                 # Split "Title | Text" format
                 parts = full_text.split(" | ", 1)
@@ -356,11 +363,7 @@ def optimize_bm25_index(
                 title = parts[0].strip() if len(parts) > 0 else ""
                 text_content = parts[1].strip() if len(parts) > 1 else str(doc)
 
-            documents.append({
-                'id': i,
-                'title': title,
-                'text': text_content
-            })
+            documents.append({"id": i, "title": title, "text": text_content})
 
             # Write chunk when reaching chunk_size
             if len(documents) >= chunk_size:
@@ -368,8 +371,8 @@ def optimize_bm25_index(
                 pq.write_table(
                     table,
                     output_path / f"corpus_{chunk_num:04d}.parquet",
-                    compression='zstd',
-                    compression_level=9
+                    compression="zstd",
+                    compression_level=9,
                 )
                 logger.info(f"Written chunk {chunk_num} ({len(documents)} documents)")
                 documents = []
@@ -381,8 +384,8 @@ def optimize_bm25_index(
             pq.write_table(
                 table,
                 output_path / f"corpus_{chunk_num:04d}.parquet",
-                compression='zstd',
-                compression_level=9
+                compression="zstd",
+                compression_level=9,
             )
             logger.info(f"Written final chunk {chunk_num} ({len(documents)} documents)")
 
@@ -391,10 +394,14 @@ def optimize_bm25_index(
 
     if limit is not None:
         logger.warning(f"⚠️  WARNING: Using --limit={limit} creates an INVALID index!")
-        logger.warning(f"   The BM25 matrices reference all 5.2M docs, but corpus only has {limit} docs")
-        logger.warning(f"   This index WILL NOT WORK for actual searches!")
-        logger.warning(f"   Only use --limit for testing upload/download, not for searching")
-        logger.warning(f"   Skipping BM25 index file copy...")
+        logger.warning(
+            f"   The BM25 matrices reference all 5.2M docs, but corpus only has {limit} docs"
+        )
+        logger.warning("   This index WILL NOT WORK for actual searches!")
+        logger.warning(
+            "   Only use --limit for testing upload/download, not for searching"
+        )
+        logger.warning("   Skipping BM25 index file copy...")
         # Don't copy BM25 files when limit is used
     else:
         for pattern in ["*.npz", "*.npy", "*.json"]:
@@ -409,14 +416,14 @@ def optimize_bm25_index(
     original_size = sum(f.stat().st_size for f in input_path.glob("*") if f.is_file())
     optimized_size = sum(f.stat().st_size for f in output_path.glob("*") if f.is_file())
 
-    logger.info(f"\n✅ Optimization complete!")
+    logger.info("\n✅ Optimization complete!")
     logger.info(f"   - Original size: {original_size / (1024**3):.2f} GB")
     logger.info(f"   - Optimized size: {optimized_size / (1024**3):.2f} GB")
-    logger.info(f"   - Savings: {(1 - optimized_size/original_size) * 100:.1f}%")
-    logger.info(f"\n📦 Chunked corpus format enables:")
-    logger.info(f"   - Streaming access (load chunks on-demand)")
-    logger.info(f"   - Better compression (zstd level 9)")
-    logger.info(f"   - Faster HuggingFace downloads (parallel chunks)")
+    logger.info(f"   - Savings: {(1 - optimized_size / original_size) * 100:.1f}%")
+    logger.info("\n📦 Chunked corpus format enables:")
+    logger.info("   - Streaming access (load chunks on-demand)")
+    logger.info("   - Better compression (zstd level 9)")
+    logger.info("   - Faster HuggingFace downloads (parallel chunks)")
 
 
 def upload_bm25_to_huggingface(
@@ -493,7 +500,6 @@ def upload_bm25_to_huggingface(
     has_jsonl = len(list(index_path.glob("*corpus*.jsonl"))) > 0
 
     # Calculate actual index size
-    import os
     index_size = sum(f.stat().st_size for f in index_path.glob("*") if f.is_file())
     index_size_gb = index_size / (1024**3)
 
@@ -562,7 +568,7 @@ The index uses BM25 (Best Matching 25), a probabilistic ranking function widely 
 
 We created this index for the [Opik Optimizer](https://github.com/comet-ml/opik) project to enable reproducible prompt optimization experiments and agent benchmarking. By using the same Wikipedia 2017 corpus as established research, we ensure that optimization results are directly comparable to published baselines. The Parquet-compressed format reduces download size by 67% while maintaining full search fidelity, making it practical for cloud deployments and CI/CD pipelines where storage costs and download times matter.
 
-**Size**: {index_size_gb:.2f} GB | **Format**: {'Parquet (67% compressed)' if has_parquet else 'JSONL'} | **Documents**: 5.2M
+**Size**: {index_size_gb:.2f} GB | **Format**: {"Parquet (67% compressed)" if has_parquet else "JSONL"} | **Documents**: 5.2M
 
 {format_info}
 
@@ -697,93 +703,80 @@ def main() -> None:
 
     # Build command
     build_parser = subparsers.add_parser(
-        "build",
-        help="Build BM25 index from Wikipedia corpus"
+        "build", help="Build BM25 index from Wikipedia corpus"
     )
     build_parser.add_argument(
         "--output-dir",
         default="wiki17_abstracts",
-        help="Output directory for index (default: wiki17_abstracts)"
+        help="Output directory for index (default: wiki17_abstracts)",
     )
     build_parser.add_argument(
         "--corpus-jsonl",
-        help="Path to pre-downloaded corpus JSONL file (skips download)"
+        help="Path to pre-downloaded corpus JSONL file (skips download)",
     )
     build_parser.add_argument(
         "--download-url",
         default="https://huggingface.co/dspy/cache/resolve/main/wiki.abstracts.2017.tar.gz",
-        help="URL to download corpus from"
+        help="URL to download corpus from",
     )
     build_parser.add_argument(
-        "--k1",
-        type=float,
-        default=0.9,
-        help="BM25 k1 parameter (default: 0.9)"
+        "--k1", type=float, default=0.9, help="BM25 k1 parameter (default: 0.9)"
     )
     build_parser.add_argument(
-        "--b",
-        type=float,
-        default=0.4,
-        help="BM25 b parameter (default: 0.4)"
+        "--b", type=float, default=0.4, help="BM25 b parameter (default: 0.4)"
     )
     build_parser.add_argument(
         "--optimize",
         action="store_true",
-        help="Build with Parquet optimization (40-50%% smaller, requires pyarrow)"
+        help="Build with Parquet optimization (40-50%% smaller, requires pyarrow)",
     )
     build_parser.add_argument(
         "--chunk-size",
         type=int,
         default=100000,
-        help="Documents per Parquet chunk (default: 100000, only used with --optimize)"
+        help="Documents per Parquet chunk (default: 100000, only used with --optimize)",
     )
 
     # Optimize command
     optimize_parser = subparsers.add_parser(
-        "optimize",
-        help="Optimize existing index to Parquet format"
+        "optimize", help="Optimize existing index to Parquet format"
     )
     optimize_parser.add_argument(
         "--index-dir",
         required=True,
-        help="Directory containing existing BM25 index (JSONL format)"
+        help="Directory containing existing BM25 index (JSONL format)",
     )
     optimize_parser.add_argument(
         "--output-dir",
         required=True,
-        help="Directory to save optimized index (Parquet format)"
+        help="Directory to save optimized index (Parquet format)",
     )
     optimize_parser.add_argument(
         "--chunk-size",
         type=int,
         default=100000,
-        help="Documents per Parquet partition (default: 100000)"
+        help="Documents per Parquet partition (default: 100000)",
     )
     optimize_parser.add_argument(
         "--limit",
         type=int,
-        help="Limit number of documents (for testing, e.g., --limit 1000)"
+        help="Limit number of documents (for testing, e.g., --limit 1000)",
     )
 
     # Upload command
     upload_parser = subparsers.add_parser(
-        "upload",
-        help="Upload index to HuggingFace Hub"
+        "upload", help="Upload index to HuggingFace Hub"
     )
     upload_parser.add_argument(
-        "--index-dir",
-        required=True,
-        help="Directory containing the built BM25 index"
+        "--index-dir", required=True, help="Directory containing the built BM25 index"
     )
     upload_parser.add_argument(
         "--repo-id",
         required=True,
-        help="HuggingFace repo ID (e.g., 'opik-ai/wikipedia-2017-bm25')"
+        help="HuggingFace repo ID (e.g., 'opik-ai/wikipedia-2017-bm25')",
     )
     upload_parser.add_argument(
-        "--private",
-        action="store_true",
-        help="Make the repository private"
+        "--private", action="store_true", help="Make the repository private"
     )
 
     args = parser.parse_args()
