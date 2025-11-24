@@ -2,6 +2,7 @@ package com.comet.opik.domain.mapping;
 
 import com.comet.opik.domain.mapping.otel.GenAIMappingRules;
 import com.comet.opik.domain.mapping.otel.GeneralMappingRules;
+import com.comet.opik.domain.mapping.otel.LangFuseMappingRules;
 import com.comet.opik.domain.mapping.otel.LiveKitMappingRules;
 import com.comet.opik.domain.mapping.otel.LogfireMappingRules;
 import com.comet.opik.domain.mapping.otel.OpenInferenceMappingRules;
@@ -27,7 +28,8 @@ public class OpenTelemetryMappingRuleFactory {
             LiveKitMappingRules.getRules(),
             PydanticMappingRules.getRules(),
             GeneralMappingRules.getRules(),
-            SmolagentsMappingRules.getRules())
+            SmolagentsMappingRules.getRules(),
+            LangFuseMappingRules.getRules())
             .flatMap(List::stream)
             .toList();
 
