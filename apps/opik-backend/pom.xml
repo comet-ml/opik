@@ -306,7 +306,7 @@
         <dependency>
             <groupId>io.opentelemetry.proto</groupId>
             <artifactId>opentelemetry-proto</artifactId>
-            <version>1.8.0-alpha</version>
+            <version>1.9.0-alpha</version>
         </dependency>
         <dependency>
             <groupId>org.apache.tika</groupId>
