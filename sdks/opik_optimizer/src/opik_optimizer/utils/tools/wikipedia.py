@@ -16,11 +16,18 @@ Example:
     # ColBERT neural search
     results = search_wikipedia("What is Python?", search_type="colbert")
 
-    # BM25 local search
+    # BM25 search with HuggingFace index
     results = search_wikipedia(
         "What is Python?",
         search_type="bm25",
         bm25_hf_repo="Comet/wikipedia-2017-bm25"
+    )
+
+    # BM25 search with local index
+    results = search_wikipedia(
+        "What is Python?",
+        search_type="bm25",
+        bm25_index_dir="./wiki17_abstracts"
     )
     ```
 """
@@ -175,8 +182,11 @@ def _search_wikipedia_colbert(query: str, k: int = 3) -> list[str]:
     Returns:
         List of search results
     """
-    if not COLBERT_AVAILABLE:
+    try:
+        from dsp.modules.colbertv2 import ColBERTv2
+    except ImportError:
         logger.warning("ColBERTv2 not available, falling back to API search")
+        logger.debug("Install dspy for ColBERT support")
         return _search_wikipedia_api(query, max_results=k)
 
     logger.info("ColBERTv2: %s", query)
@@ -209,8 +219,11 @@ def _search_wikipedia_bm25(
     Returns:
         List of search results
     """
-    if not BM25S_AVAILABLE:
+    try:
+        import bm25s
+    except ImportError:
         logger.warning("bm25s not available, falling back to API search")
+        logger.debug("Install with: pip install bm25s[full]")
         return _search_wikipedia_api(query, max_results=n)
 
     if not index_dir and not hf_repo:
@@ -231,10 +244,12 @@ def _search_wikipedia_bm25(
         retriever = bm25s.BM25.load(str(index_path), load_corpus=True)
         corpus = retriever.corpus
 
-        # Initialize stemmer for query tokenization
-        if STEMMER_AVAILABLE:
+        # Initialize stemmer for query tokenization (optional)
+        try:
+            import Stemmer
             stemmer = Stemmer.Stemmer("english")
-        else:
+        except ImportError:
+            logger.debug("PyStemmer not available, tokenizing without stemming")
             stemmer = None
 
         # Tokenize query
