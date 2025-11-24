@@ -1,3 +1,5 @@
+# mypy: ignore-errors
+
 import pytest
 
 from opik_optimizer import MetaPromptOptimizer, ChatPrompt
