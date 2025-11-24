@@ -7,13 +7,14 @@ Requires:
   set OPENAI_API_KEY for LiteLLM-backed models
 """
 
+import opik  # noqa: E402
 from typing import Any
 
 from opik.evaluation.metrics import LevenshteinRatio
 from opik.evaluation.metrics.score_result import ScoreResult
 
 from opik_optimizer import GepaOptimizer, ChatPrompt, datasets
-from opik_optimizer.utils import search_wikipedia
+from opik_optimizer.utils.tools.wikipedia import search_wikipedia
 
 
 def levenshtein_ratio(dataset_item: dict[str, Any], llm_output: str) -> ScoreResult:
@@ -51,7 +52,9 @@ def main() -> None:
             }
         ],
         function_map={
-            "search_wikipedia": lambda query: search_wikipedia(query, use_api=True)
+            "search_wikipedia": opik.track(type="tool")(
+                lambda query: search_wikipedia(query, search_type="api")
+            )
         },
     )
 
