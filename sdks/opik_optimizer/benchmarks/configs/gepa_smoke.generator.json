@@ -17,7 +17,16 @@
       "optimizers": [
         { "name": "few_shot", "optimizer_prompt_params": { "max_trials": 2, "n_samples": 1 } },
         { "name": "evolutionary_optimizer", "optimizer_prompt_params": { "max_trials": 2, "population_size": 3, "num_generations": 1 } },
-        { "name": "gepa", "optimizer_prompt_params": { "max_trials": 2, "n_samples": 1 } },
+        {
+          "name": "gepa",
+          "optimizer_prompt_params": {
+            "max_trials": 2,
+            "n_samples": 1,
+            "reflection_minibatch_size": 1,
+            "candidate_selection_strategy": "pareto",
+            "skip_perfect_score": false
+          }
+        },
         { "name": "hierarchical_reflective", "optimizer_prompt_params": { "max_trials": 2 } },
         { "name": "meta_prompt", "optimizer_prompt_params": { "max_trials": 2 } }
       ],

@@ -13,6 +13,10 @@ import sys
 from typing import Any
 
 import modal
+from benchmarks.benchmark_constants import (
+    WORKER_TIMEOUT_SECONDS,
+    MODAL_SECRET_NAME,
+)
 
 # Define Modal app
 app = modal.App("opik-optimizer-benchmarks")
@@ -48,6 +52,7 @@ image = (
     )
 )
 
+
 # Create Modal volume for persistent result storage
 # Results persist indefinitely, beyond Modal's 7-day FunctionCall limit
 results_volume = modal.Volume.from_name(
@@ -59,7 +64,7 @@ results_volume = modal.Volume.from_name(
 # Create with e.g.:
 #   modal secret create opik-benchmarks OPIK_API_KEY="$OPIK_API_KEY" OPENAI_API_KEY="$OPENAI_API_KEY"
 modal_secrets = [
-    modal.Secret.from_name("opik-benchmarks"),
+    modal.Secret.from_name(MODAL_SECRET_NAME),
 ]
 
 
@@ -67,7 +72,7 @@ modal_secrets = [
     image=image,
     volumes={"/results": results_volume},
     secrets=modal_secrets,
-    timeout=3600,  # 1 hour timeout per task
+    timeout=WORKER_TIMEOUT_SECONDS,
     retries=modal.Retries(
         max_retries=2,
         initial_delay=10.0,
