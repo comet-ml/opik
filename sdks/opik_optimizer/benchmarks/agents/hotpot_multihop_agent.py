@@ -47,7 +47,7 @@ class HotpotMultiHopAgent:
         Initialize the multi-hop agent.
 
         Args:
-            search_fn: Function(query: str, n: int) -> list[str] of passage texts
+            search_fn: A callable that takes a query string and count, returning a list of passage texts.
             model: LLM model to use
             model_parameters: Model parameters (temperature, etc.)
             num_passages_per_hop: Number of passages to retrieve per search
