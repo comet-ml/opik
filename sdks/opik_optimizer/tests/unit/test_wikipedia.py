@@ -1,7 +1,7 @@
 """Unit tests for Wikipedia search tools."""
 
 import pytest
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import Mock, patch
 from pathlib import Path
 
 from opik_optimizer.utils.tools.wikipedia import (
@@ -227,6 +227,7 @@ class TestDownloadBM25Index:
         # Mock the import and download
         mock_download = Mock()
         with patch("builtins.__import__") as mock_import:
+
             def import_side_effect(name, *args, **kwargs):
                 if name == "huggingface_hub":
                     # Return a mock module with snapshot_download
@@ -239,7 +240,9 @@ class TestDownloadBM25Index:
 
             # This will fail because we can't properly mock the import inside the function
             # Let's just test that it raises the right error when huggingface_hub is missing
-            pytest.skip("Cannot properly test download without huggingface_hub installed")
+            pytest.skip(
+                "Cannot properly test download without huggingface_hub installed"
+            )
 
     def test_download_with_custom_cache(self) -> None:
         """Test downloading index with custom cache directory."""
@@ -252,6 +255,7 @@ class TestDownloadBM25Index:
         # This only works if huggingface_hub is actually not installed
         try:
             import huggingface_hub  # noqa: F401
+
             pytest.skip("huggingface_hub is installed, cannot test missing import")
         except ImportError:
             # Good - it's not installed, we can test the error
