@@ -545,12 +545,6 @@ class MetaPromptOptimizer(BaseOptimizer):
                     # Synthesis round: combine top performers into comprehensive prompts
                     logger.info("Combining top performers into comprehensive prompts")
 
-                    # Display synthesis round in rich console
-                    num_hof_entries = (
-                        len(self.hall_of_fame.entries)
-                        if self.hall_of_fame and hasattr(self.hall_of_fame, "entries")
-                        else 0
-                    )
                     generator = self._generate_synthesis_prompts
                     # Synthesis doesn't use patterns
                     generator_kwargs = {}
@@ -773,7 +767,7 @@ class MetaPromptOptimizer(BaseOptimizer):
             extract_tool_prompts_fn=self._extract_tool_prompts,
         )
 
-    def _get_task_context(self, metric: Callable) -> str:
+    def _get_task_context(self, metric: Callable) -> tuple[str, int]:
         """Get task-specific context from the dataset and metric (delegates to ops)."""
         return context_ops.get_task_context(
             dataset=self.dataset,

@@ -160,19 +160,6 @@ def get_task_context(
                 f"{len(input_fields)} fields, max_value_length={max_value_length}"
             )
 
-            # Display task context info in rich console
-            from .. import reporting
-
-            reporting.display_task_context_info(
-                num_examples=current_num_examples,
-                num_fields=len(input_fields),
-                columns=columns,
-                token_count=token_count,
-                max_tokens=max_tokens,
-                was_reduced=(current_num_examples < len(samples)),
-                verbose=verbose,
-            )
-
             return context, token_count
 
         # Over budget - try to reduce
