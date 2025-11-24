@@ -4,9 +4,9 @@ from opik_optimizer import (
     OptimizableAgent,
     ChatPrompt,
 )
-from opik_optimizer.utils import search_wikipedia
+from opik_optimizer.utils.tools.wikipedia import search_wikipedia
 from opik_optimizer.utils.llm_logger import LLMLogger
-from opik import track
+from opik import track  # noqa: E402
 from pydantic_ai import Agent
 from pydantic_ai.tools import RunContext
 from pydantic_ai.messages import ModelRequest, UserPromptPart, SystemPromptPart
@@ -23,7 +23,7 @@ def search_wikipedia_tool(ctx: RunContext, query: str) -> list[str]:
     Search Wikipedia for information about a topic. Returns relevant article abstracts.
     """
     with logger.log_tool("search_wikipedia", query):
-        return search_wikipedia(query, use_api=True)
+        return search_wikipedia(query, search_type="api")
 
 
 class PydanticAIAgent(OptimizableAgent):

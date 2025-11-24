@@ -1,11 +1,11 @@
 from typing import Any
 
-import opik
+from opik import track  # noqa: E402
 import opik_optimizer
 from opik_optimizer import ChatPrompt
 from opik_optimizer import GepaOptimizer
 from opik_optimizer.datasets import hotpot
-from opik_optimizer.utils import search_wikipedia
+from opik_optimizer.utils.tools.wikipedia import search_wikipedia
 
 from opik.evaluation.metrics import LevenshteinRatio, Equals
 from opik.evaluation.metrics.score_result import ScoreResult
@@ -47,7 +47,11 @@ prompt = ChatPrompt(
             },
         },
     ],
-    function_map={"search_wikipedia": opik.track(type="tool")(search_wikipedia)},
+    function_map={
+        "search_wikipedia": opik.track(type="tool")(
+            lambda query: search_wikipedia(query, search_type="api")
+        )
+    },
 )
 
 optimizer = GepaOptimizer(

@@ -186,6 +186,7 @@ Many optimizers can optimize **agents that use function calling**, but this is d
 
 ```python
 from opik_optimizer import GepaOptimizer, ChatPrompt
+from opik_optimizer.utils.tools.wikipedia import search_wikipedia
 
 # GEPA example: optimizing an agent with function calling
 prompt = ChatPrompt(
@@ -208,7 +209,7 @@ prompt = ChatPrompt(
         }
     ],
     function_map={
-        "search_wikipedia": lambda query: search_wikipedia(query, use_api=True)
+        "search_wikipedia": lambda query: search_wikipedia(query)
     }
 )
 

@@ -2,7 +2,7 @@ import opik  # noqa: E402
 from opik_optimizer import ChatPrompt  # noqa: E402
 from opik_optimizer import FewShotBayesianOptimizer  # noqa: E402
 from opik_optimizer.datasets import hotpot  # noqa: E402
-from opik_optimizer.utils import search_wikipedia  # noqa: E402
+from opik_optimizer.utils.tools.wikipedia import search_wikipedia  # noqa: E402
 
 from optimizer_algorithms.utils.metrics import answer_correctness_score
 
@@ -15,12 +15,6 @@ validation_dataset = hotpot(count=5)
 system_prompt = """Answer the question with a direct, accurate response.
 You have access to a Wikipedia search tool - use it to find relevant information before answering.
 Provide concise answers based on the search results."""
-
-
-@opik.track(type="tool")
-def search_wikipedia_tool(query: str) -> list[str]:
-    return search_wikipedia(query, use_api=True)
-
 
 prompt = ChatPrompt(
     system=system_prompt,
@@ -44,7 +38,11 @@ prompt = ChatPrompt(
             },
         },
     ],
-    function_map={"search_wikipedia": search_wikipedia_tool},
+    function_map={
+        "search_wikipedia": opik.track(type="tool")(
+            lambda query: search_wikipedia(query, search_type="api")
+        )
+    },
 )
 
 # Define the metric to optimize
