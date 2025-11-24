@@ -9,6 +9,7 @@ import com.comet.opik.api.DatasetUpdate;
 import com.comet.opik.api.ExperimentType;
 import com.comet.opik.api.Visibility;
 import com.comet.opik.api.error.EntityAlreadyExistsException;
+import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.api.events.DatasetsDeleted;
 import com.comet.opik.api.sorting.SortingFactoryDatasets;
 import com.comet.opik.api.sorting.SortingField;
@@ -22,7 +23,6 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.eventbus.EventBus;
 import com.google.inject.ImplementedBy;
-import io.dropwizard.jersey.errors.ErrorMessage;
 import io.opentelemetry.instrumentation.annotations.WithSpan;
 import jakarta.inject.Inject;
 import jakarta.inject.Provider;
@@ -51,15 +51,11 @@ import static com.comet.opik.api.Dataset.DatasetPage;
 import static com.comet.opik.domain.ExperimentItemDAO.ExperimentSummary;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONLY;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
-import static jakarta.ws.rs.core.Response.Status.CONFLICT;
-import static jakarta.ws.rs.core.Response.Status.NOT_FOUND;
 import static java.util.stream.Collectors.toMap;
 import static java.util.stream.Collectors.toSet;
 
 @ImplementedBy(DatasetServiceImpl.class)
 public interface DatasetService {
-
-    String DATASET_ALREADY_EXISTS = "A dataset with this name already exists. Please choose a different name.";
 
     Dataset save(Dataset dataset);
 
@@ -105,6 +101,8 @@ public interface DatasetService {
 @Slf4j
 class DatasetServiceImpl implements DatasetService {
 
+    private static final String DATASET_ALREADY_EXISTS = "Dataset already exists";
+
     private final @NonNull IdGenerator idGenerator;
     private final @NonNull TransactionTemplate template;
     private final @NonNull Provider<RequestContext> requestContext;
@@ -145,8 +143,7 @@ class DatasetServiceImpl implements DatasetService {
             } catch (UnableToExecuteStatementException e) {
                 if (e.getCause() instanceof SQLIntegrityConstraintViolationException) {
                     log.info(DATASET_ALREADY_EXISTS);
-                    throw new EntityAlreadyExistsException(
-                            new ErrorMessage(CONFLICT.getStatusCode(), DATASET_ALREADY_EXISTS));
+                    throw new EntityAlreadyExistsException(new ErrorMessage(List.of(DATASET_ALREADY_EXISTS)));
                 } else {
                     throw e;
                 }
@@ -226,8 +223,7 @@ class DatasetServiceImpl implements DatasetService {
             } catch (UnableToExecuteStatementException e) {
                 if (e.getCause() instanceof SQLIntegrityConstraintViolationException) {
                     log.info(DATASET_ALREADY_EXISTS);
-                    throw new EntityAlreadyExistsException(
-                            new ErrorMessage(CONFLICT.getStatusCode(), DATASET_ALREADY_EXISTS));
+                    throw new EntityAlreadyExistsException(new ErrorMessage(List.of(DATASET_ALREADY_EXISTS)));
                 } else {
                     throw e;
                 }
@@ -326,9 +322,7 @@ class DatasetServiceImpl implements DatasetService {
         String message = "Dataset not found";
         log.info(message);
         return new NotFoundException(message,
-                Response.status(NOT_FOUND)
-                        .entity(new ErrorMessage(NOT_FOUND.getStatusCode(), message))
-                        .build());
+                Response.status(Response.Status.NOT_FOUND).entity(new ErrorMessage(List.of(message))).build());
     }
 
     /**
