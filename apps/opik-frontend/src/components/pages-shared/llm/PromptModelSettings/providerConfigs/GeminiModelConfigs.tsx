@@ -1,10 +1,7 @@
 import React from "react";
 
 import SliderInputControl from "@/components/shared/SliderInputControl/SliderInputControl";
-import {
-  LLMGeminiConfigsType,
-  PROVIDER_MODEL_TYPE,
-} from "@/types/providers";
+import { LLMGeminiConfigsType, PROVIDER_MODEL_TYPE } from "@/types/providers";
 import { DEFAULT_GEMINI_CONFIGS } from "@/constants/llm";
 import PromptModelConfigsTooltipContent from "@/components/pages-shared/llm/PromptModelSettings/providerConfigs/PromptModelConfigsTooltipContent";
 import isUndefined from "lodash/isUndefined";

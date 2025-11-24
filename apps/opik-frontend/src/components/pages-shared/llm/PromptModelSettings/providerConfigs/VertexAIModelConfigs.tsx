@@ -1,10 +1,7 @@
 import React from "react";
 
 import SliderInputControl from "@/components/shared/SliderInputControl/SliderInputControl";
-import {
-  LLMVertexAIConfigsType,
-  PROVIDER_MODEL_TYPE,
-} from "@/types/providers";
+import { LLMVertexAIConfigsType, PROVIDER_MODEL_TYPE } from "@/types/providers";
 import { DEFAULT_VERTEX_AI_CONFIGS } from "@/constants/llm";
 import PromptModelConfigsTooltipContent from "@/components/pages-shared/llm/PromptModelSettings/providerConfigs/PromptModelConfigsTooltipContent";
 import isUndefined from "lodash/isUndefined";
