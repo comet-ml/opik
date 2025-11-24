@@ -6099,20 +6099,23 @@ class TracesResourceTest {
 
             // Create a thread by creating a trace
             var threadId = UUID.randomUUID().toString();
-            create(createTrace().toBuilder().projectName(projectName).threadId(threadId).build(), API_KEY,
-                    TEST_WORKSPACE);
+            create(createTrace().toBuilder()
+                            .projectName(projectName)
+                            .threadId(threadId)
+                            .build(),
+                    API_KEY, TEST_WORKSPACE);
 
             // Wait for thread to be created
             Awaitility.await()
                     .atMost(5, TimeUnit.SECONDS)
                     .untilAsserted(() -> {
-                        var threads = traceResourceClient.getTraceThreads(projectId, null, API_KEY, TEST_WORKSPACE,
-                                null, null, null);
+                        var threads = traceResourceClient.getTraceThreads(
+                                projectId, null, API_KEY, TEST_WORKSPACE, null, null, null);
                         assertThat(threads.content()).hasSize(1);
                     });
 
-            var threads = traceResourceClient.getTraceThreads(projectId, null, API_KEY, TEST_WORKSPACE,
-                    null, null, null);
+            var threads = traceResourceClient.getTraceThreads(
+                    projectId, null, API_KEY, TEST_WORKSPACE, null, null, null);
             var threadModelId = threads.content().getFirst().threadModelId();
 
             // First batch update: Set original tags
@@ -6149,7 +6152,8 @@ class TracesResourceTest {
             traceResourceClient.batchUpdateThreads(thirdBatchUpdate, API_KEY, TEST_WORKSPACE);
 
             // Verify that thread has the latest tags (not from first or second update)
-            var finalThread = traceResourceClient.getTraceThread(threadId, projectId, API_KEY, TEST_WORKSPACE);
+            var finalThread = traceResourceClient.getTraceThread(
+                    threadId, projectId, API_KEY, TEST_WORKSPACE);
             assertThat(finalThread.tags()).containsExactlyInAnyOrderElementsOf(thirdTags);
         }
 

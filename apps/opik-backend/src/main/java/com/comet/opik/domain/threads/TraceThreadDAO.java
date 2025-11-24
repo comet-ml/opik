@@ -623,10 +623,11 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
                 <if(tags)><if(merge_tags)>arrayConcat(tt.tags, :tags)<else>:tags<endif><else>tt.tags<endif> as tags,
                 tt.sampling_per_rule,
                 tt.scored_at
-            FROM trace_threads tt final
+            FROM trace_threads tt
             WHERE tt.id IN :ids AND tt.workspace_id = :workspace_id
             ORDER BY (tt.workspace_id, tt.project_id, tt.thread_id, tt.id) DESC, tt.last_updated_at DESC
-            LIMIT 1 BY tt.id;""";
+            LIMIT 1 BY tt.id;
+            """;
 
     @Override
     public Mono<Void> bulkUpdate(@NonNull List<UUID> ids, @NonNull TraceThreadUpdate update, boolean mergeTags) {
