@@ -239,13 +239,8 @@ def build_bm25_index(
         )
 
     # Calculate and display sizes
-    import os
     index_size = sum(
-        f.stat().st_size
-        for f in Path(output_dir).glob('*')
-        if f.is_file()
-    )
-        if os.path.isfile(os.path.join(output_dir, f))
+        f.stat().st_size for f in Path(output_dir).glob("*") if f.is_file()
     )
     index_size_gb = index_size / (1024**3)
 
