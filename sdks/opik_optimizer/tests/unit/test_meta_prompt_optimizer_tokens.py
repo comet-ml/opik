@@ -108,7 +108,9 @@ class TestAdaptiveContextFitting:
         mock_dataset = Mock()
         items = []
         for i in range(num_items):
-            value_text = "x" * 500 if long_values else f"Sample text {i}"
+            # Use longer values (2500 chars) to ensure truncation actually happens
+            # when max_value_length is reduced during adaptive fitting
+            value_text = "x" * 2500 if long_values else f"Sample text {i}"
             items.append(
                 {
                     "id": f"item_{i}",

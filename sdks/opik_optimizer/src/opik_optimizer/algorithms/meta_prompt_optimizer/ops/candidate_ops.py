@@ -46,7 +46,10 @@ def _sync_tool_description_in_system(prompt: chat_prompt.ChatPrompt) -> None:
 
     start = system_text.index(PROMPT_TOOL_HEADER) + len(PROMPT_TOOL_HEADER)
     end = system_text.index(PROMPT_TOOL_FOOTER)
+
+    before_block = system_text[: start - len(PROMPT_TOOL_HEADER)]
     middle_block = system_text[start:end]
+    after_block = system_text[end + len(PROMPT_TOOL_FOOTER) :]
 
     import re
 
@@ -56,15 +59,30 @@ def _sync_tool_description_in_system(prompt: chat_prompt.ChatPrompt) -> None:
             continue
 
         description_text = tool.get("function", {}).get("description", "")
-        pattern = rf"(-\s*{re.escape(tool_name)}:\s)(.*)"
-        middle_block = re.sub(
-            pattern,
+
+        # Update tool list in the before block (e.g., "- tool-name: description")
+        tool_list_pattern = rf"(-\s*{re.escape(tool_name)}:\s)(.*)"
+        before_block = re.sub(
+            tool_list_pattern,
             lambda match: f"{match.group(1)}{description_text}",
-            middle_block,
-            count=1,
+            before_block,
         )
 
-    new_system = system_text[:start] + middle_block + system_text[end:]
+        # Update description in the middle block (just the description text)
+        # The middle block may contain just the description or have other formatting
+        middle_block = middle_block.strip()
+        if middle_block:
+            middle_block = f"\n{description_text}\n"
+        else:
+            middle_block = description_text
+
+    new_system = (
+        before_block
+        + PROMPT_TOOL_HEADER
+        + middle_block
+        + PROMPT_TOOL_FOOTER
+        + after_block
+    )
     prompt.system = new_system
 
 
