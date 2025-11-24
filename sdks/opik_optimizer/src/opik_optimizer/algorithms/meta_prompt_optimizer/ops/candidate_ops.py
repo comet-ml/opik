@@ -26,6 +26,7 @@ from ..prompts import (
 from .. import reporting
 from litellm.exceptions import BadRequestError
 from ...._llm_calls import StructuredOutputParsingError
+from ....mcp_utils.mcp_workflow import MCPExecutionConfig
 
 logger = logging.getLogger(__name__)
 
@@ -172,6 +173,21 @@ def sanitize_generated_prompts(
     return prompt_json
 
 
+def _format_agent_prompts_for_prompt(
+    agent_prompts: dict[str, chat_prompt.ChatPrompt],
+) -> str:
+    """
+    Render named chat prompts into a string block for the meta-prompt.
+    """
+    blocks: list[str] = []
+    for agent_name, prompt in agent_prompts.items():
+        messages = prompt.get_messages()
+        blocks.append(
+            f"Agent name: {agent_name}\nMessages:\n{json.dumps(messages, indent=2)}"
+        )
+    return "\n\n".join(blocks)
+
+
 def generate_candidate_prompts(
     optimizer: Any,
     current_prompt: chat_prompt.ChatPrompt,
@@ -258,6 +274,8 @@ def generate_candidate_prompts(
             metric_focus_instruction=metric_focus_instruction,
             prompts_per_round=optimizer.prompts_per_round,
             pattern_guidance=pattern_guidance,
+            mode="single",
+            agent_blocks=None,
         )
 
         try:
@@ -276,7 +294,7 @@ def generate_candidate_prompts(
                     {
                         "role": "system",
                         "content": build_reasoning_system_prompt(
-                            optimizer.allow_user_prompt_optimization
+                            optimizer.allow_user_prompt_optimization, mode="single"
                         ),
                     },
                     {"role": "user", "content": user_prompt},
@@ -417,6 +435,197 @@ def generate_candidate_prompts(
                 raise
             raise ValueError(
                 f"Unexpected error during candidate prompt generation: {e}"
+            )
+
+
+def generate_agent_bundle_candidates(
+    optimizer: Any,
+    current_prompts: dict[str, chat_prompt.ChatPrompt],
+    best_score: float,
+    round_num: int,
+    previous_rounds: list[OptimizationRound],
+    metric: Callable,
+    build_history_context_fn: Callable,
+    get_task_context_fn: Callable,
+    optimization_id: str | None = None,
+    project_name: str | None = None,
+    winning_patterns: list[str] | None = None,
+    mcp_config: MCPExecutionConfig | None = None,
+) -> tuple[dict[str, chat_prompt.ChatPrompt], dict[str, dict[str, str | None]]]:
+    """
+    Generate updated prompts for multiple named agents in a single meta-prompt pass.
+
+    Returns:
+        (updated_prompts, agent_metadata) where agent_metadata contains reasoning per agent.
+    """
+    if mcp_config is not None:
+        raise ValueError(
+            "Multi-agent prompt generation is disabled for MCP tool optimization."
+        )
+
+    with reporting.display_candidate_generation_report(
+        len(current_prompts), verbose=optimizer.verbose
+    ) as candidate_generation_report:
+        logger.debug(f"\nGenerating agent bundle prompts for round {round_num + 1}")
+        logger.debug("Generating from agents: %s", list(current_prompts.keys()))
+        logger.debug(f"Current best score: {best_score:.4f}")
+
+        pattern_guidance = ""
+        if winning_patterns and random.random() < optimizer.pattern_injection_rate:
+            pattern_guidance = "WINNING PATTERNS TO CONSIDER:\n"
+            pattern_guidance += (
+                "The following patterns have been successful in high-scoring prompts:\n"
+            )
+            for i, pattern in enumerate(winning_patterns, 1):
+                pattern_guidance += f"{i}. {pattern}\n"
+            pattern_guidance += "\nAdapt these patterns per agent where appropriate."
+            logger.info(f"Injecting {len(winning_patterns)} patterns into generation")
+
+        history_context = build_history_context_fn(previous_rounds)
+        task_context_str = ""
+        analysis_instruction = ""
+        metric_focus_instruction = ""
+
+        if optimizer.enable_context:
+            task_context_str, _ = get_task_context_fn(metric=metric)
+            analysis_instruction = "Analyze the examples/feedback (if any), metric description, and score history."
+            metric_focus_instruction = "Focus on improving evaluation scores while keeping each agent's role distinct."
+        else:
+            analysis_instruction = (
+                "Analyze score history and each agent's role before proposing changes."
+            )
+            metric_focus_instruction = "Generate effective, role-appropriate updates."
+
+        agent_blocks = _format_agent_prompts_for_prompt(current_prompts)
+        user_prompt = build_candidate_generation_user_prompt(
+            current_prompt_messages="",  # unused in bundle mode
+            best_score=best_score,
+            history_context=history_context,
+            task_context_str=task_context_str,
+            analysis_instruction=analysis_instruction,
+            metric_focus_instruction=metric_focus_instruction,
+            prompts_per_round=optimizer.prompts_per_round,
+            pattern_guidance=pattern_guidance,
+            mode="bundle",
+            agent_blocks=agent_blocks,
+        )
+
+        try:
+            metadata_for_call: dict[str, Any] = {}
+            if project_name:
+                metadata_for_call["project_name"] = project_name
+                metadata_for_call["opik"] = {"project_name": project_name}
+            if optimization_id and "opik" in metadata_for_call:
+                metadata_for_call["opik"]["optimization_id"] = optimization_id
+            metadata_for_call["optimizer_name"] = optimizer.__class__.__name__
+            metadata_for_call["opik_call_type"] = "optimization_algorithm"
+
+            content = _llm_calls.call_model(
+                messages=[
+                    {
+                        "role": "system",
+                        "content": build_reasoning_system_prompt(
+                            optimizer.allow_user_prompt_optimization, mode="bundle"
+                        ),
+                    },
+                    {"role": "user", "content": user_prompt},
+                ],
+                model=optimizer.model,
+                model_parameters=optimizer.model_parameters,
+                metadata=metadata_for_call,
+                optimization_id=optimization_id,
+            )
+
+            json_result = None
+            try:
+                json_result = json.loads(content)
+            except json.JSONDecodeError:
+                import re
+
+                json_match = re.search(r"\{.*\}", content, re.DOTALL)
+                if json_match:
+                    json_result = json.loads(json_match.group())
+                else:
+                    raise ValueError(
+                        f"No JSON object found in response via regex. - received: {content}"
+                    )
+
+            if isinstance(json_result, list):
+                if (
+                    len(json_result) == 1
+                    and isinstance(json_result[0], dict)
+                    and "agents" in json_result[0]
+                ):
+                    json_result = json_result[0]
+            if not isinstance(json_result, dict) or "agents" not in json_result:
+                raise ValueError("Parsed JSON missing top-level 'agents' key.")
+
+            agents_payload = json_result.get("agents", [])
+            if not isinstance(agents_payload, list):
+                raise ValueError("'agents' key must be a list.")
+
+            updated_prompts: dict[str, chat_prompt.ChatPrompt] = {}
+            agent_metadata: dict[str, dict[str, str | None]] = {}
+
+            for item in agents_payload:
+                if not isinstance(item, dict):
+                    logger.warning("Skipping non-dict agent payload: %s", item)
+                    continue
+
+                name = item.get("name")
+                if not name:
+                    logger.warning("Skipping agent entry missing a name: %s", item)
+                    continue
+
+                if name not in current_prompts:
+                    logger.warning(
+                        "Received update for unknown agent '%s'; skipping.", name
+                    )
+                    continue
+
+                messages = item.get("messages")
+                if not isinstance(messages, list):
+                    logger.warning(
+                        "Agent '%s' missing messages; preserving original.", name
+                    )
+                    messages = current_prompts[name].get_messages()
+
+                try:
+                    updated_prompt = chat_prompt.ChatPrompt(
+                        name=current_prompts[name].name or name,
+                        messages=messages,
+                        tools=current_prompts[name].tools,
+                        function_map=current_prompts[name].function_map,
+                        model=current_prompts[name].model,
+                        model_parameters=current_prompts[name].model_kwargs,
+                        invoke=current_prompts[name].invoke,
+                    )
+                    updated_prompts[name] = updated_prompt
+                    agent_metadata[name] = {
+                        "improvement_focus": item.get("improvement_focus"),
+                        "reasoning": item.get("reasoning"),
+                    }
+                except Exception as exc:
+                    logger.warning(
+                        "Failed to build ChatPrompt for agent '%s': %s", name, exc
+                    )
+
+            # Preserve any agents that were not returned to avoid losing prompts
+            for name, prompt in current_prompts.items():
+                if name not in updated_prompts:
+                    updated_prompts[name] = prompt
+
+            if not updated_prompts:
+                raise ValueError("No valid agent prompts returned from response.")
+
+            candidate_generation_report.set_generated_prompts()
+            return updated_prompts, agent_metadata
+
+        except Exception as e:
+            if isinstance(e, (BadRequestError, StructuredOutputParsingError)):
+                raise
+            raise ValueError(
+                f"Unexpected error during agent bundle prompt generation: {e}"
             )
 
 
