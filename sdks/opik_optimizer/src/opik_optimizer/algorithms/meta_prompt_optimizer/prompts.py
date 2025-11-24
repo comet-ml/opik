@@ -174,7 +174,7 @@ def build_candidate_generation_user_prompt(
 
             IMPORTANT REMINDERS:
             - CHECK THE "Available input variables" section above - your prompts MUST use ALL necessary input variables
-            - If you see variables like {start}context{end}, {start}question{end}, {start}code{end}, etc. listed, INCLUDE THEM in your prompts
+            - If you see variables like {{start}}context{{end}}, {{start}}question{{end}}, {{start}}code{{end}}, etc. listed, INCLUDE THEM in your prompts
             - Avoid mentioning specific dataset fields, metric names, or evaluation terminology
             - Keep prompts generalizable to similar tasks
 
