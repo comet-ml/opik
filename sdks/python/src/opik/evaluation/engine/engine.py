@@ -18,7 +18,7 @@ from opik.evaluation.types import LLMTask, ScoringKeyMappingType
 
 from . import evaluation_tasks_executor, exception_analyzer, helpers, metrics_evaluator
 from .types import EvaluationTask
-from ..metrics import arguments_helpers, base_metric, score_result
+from ..metrics import base_metric, score_result
 from ...message_processing.emulation import models
 
 
@@ -41,7 +41,6 @@ class EvaluationEngine:
         self._project_name = project_name
         self._workers = workers
         self._verbose = verbose
-        self._scoring_key_mapping = scoring_key_mapping
 
         # Delegate metric analysis to MetricsEvaluator
         self._metrics_evaluator = metrics_evaluator.MetricsEvaluator(
@@ -56,7 +55,6 @@ class EvaluationEngine:
         trial_id: int = 0,
     ) -> test_result.TestResult:
         score_results = self._metrics_evaluator.compute_regular_scores(
-            scoring_inputs=test_case_.scoring_inputs,
             dataset_item_content=test_case_.dataset_item_content,
             task_output=test_case_.task_output,
         )
@@ -113,18 +111,12 @@ class EvaluationEngine:
 
             opik_context.update_current_trace(output=task_output_)
 
-            scoring_inputs = arguments_helpers.create_scoring_inputs(
-                dataset_item=item_content,
-                task_output=task_output_,
-                scoring_key_mapping=self._scoring_key_mapping,
-            )
-
             test_case_ = test_case.TestCase(
                 trace_id=trace_data.id,
                 dataset_item_id=item.id,
-                scoring_inputs=scoring_inputs,
                 task_output=task_output_,
                 dataset_item_content=item_content,
+                scoring_key_mapping=self._metrics_evaluator._scoring_key_mapping,
             )
             test_result_ = self._evaluate_test_case(
                 test_case_=test_case_,
@@ -366,7 +358,6 @@ class EvaluationEngine:
         test_case_: test_case.TestCase,
     ) -> List[score_result.ScoreResult]:
         score_results = self._metrics_evaluator.compute_task_span_scores(
-            scoring_inputs=test_case_.scoring_inputs,
             dataset_item_content=test_case_.dataset_item_content,
             task_output=test_case_.task_output,
             task_span=task_span,

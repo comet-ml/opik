@@ -4,7 +4,7 @@ from typing import List, Optional
 from opik.api_objects import dataset, experiment, opik_client
 from opik.types import FeedbackScoreDict
 from . import test_case
-from .metrics import arguments_helpers, score_result
+from .metrics import score_result
 from .types import ScoringKeyMappingType
 
 LOGGER = logging.getLogger(__name__)
@@ -67,11 +67,8 @@ def get_experiment_test_cases(
                 trace_id=item.trace_id,
                 dataset_item_id=item.dataset_item_id,
                 task_output=item.evaluation_task_output,
-                scoring_inputs=arguments_helpers.create_scoring_inputs(
-                    dataset_item=dataset_item_data,
-                    task_output=item.evaluation_task_output,
-                    scoring_key_mapping=scoring_key_mapping,
-                ),
+                dataset_item_content=dataset_item_data,
+                scoring_key_mapping=scoring_key_mapping,
             )
         )
 
