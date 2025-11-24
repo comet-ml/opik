@@ -13,8 +13,12 @@ START_DELIM = "{"
 END_DELIM = "}"
 
 
-def build_reasoning_system_prompt() -> str:
+def build_reasoning_system_prompt(allow_user_prompt_optimization: bool = True) -> str:
     """Build the system prompt for the meta-reasoning LLM that generates improved prompts.
+
+    Args:
+        allow_user_prompt_optimization: If True, allows modifying both system and user prompts.
+                                       If False, only system prompt is modified.
 
     Returns:
         System prompt string for the reasoning LLM
@@ -47,6 +51,8 @@ def build_reasoning_system_prompt() -> str:
         - DO NOT add variables that expose dataset-specific field names from evaluation data
         - Variables should represent task inputs/outputs, not internal dataset structure
 
+        {{mode_instruction}}
+
         Instructions:
         1. FIRST: Review "Available input variables" in task context - ensure your prompt uses ALL necessary input variables for the task
         2. If there is a system prompt, prioritize adding instructions there if and only if it makes sense.
@@ -72,6 +78,14 @@ def build_reasoning_system_prompt() -> str:
         }"""
         )
         .strip()
+        .replace(
+            "{{mode_instruction}}",
+            (
+                "OPTIMIZATION MODE: You can modify BOTH system and user prompts."
+                if allow_user_prompt_optimization
+                else "OPTIMIZATION MODE: You can ONLY modify the system prompt. The user prompt will remain unchanged from the original."
+            ),
+        )
         .replace("{start}", START_DELIM)
         .replace("{end}", END_DELIM)
     )
@@ -386,15 +400,22 @@ def build_synthesis_prompt(
         - Combining proven elements rather than experimenting with new approaches
         - Each prompt should be comprehensive and complete, not a variation
 
-        Return a JSON array with EXACTLY 2 comprehensive synthesis prompts:
+        CRITICAL - Return VALID JSON with EXACTLY 2 prompts in this EXACT structure:
         {{
             "prompts": [
                 {{
-                    "prompt": [{{"role": "system", "content": "...comprehensive combined prompt..."}}, ...],
+                    "prompt": [{{"role": "system", "content": "...comprehensive combined prompt..."}}, {{"role": "user", "content": "..."}}],
                     "improvement_focus": "Synthesis of top performers",
                     "reasoning": "How this combines the best elements from the top prompts"
+                }},
+                {{
+                    "prompt": [{{"role": "system", "content": "...second comprehensive prompt..."}}, {{"role": "user", "content": "..."}}],
+                    "improvement_focus": "Alternative synthesis approach",
+                    "reasoning": "How this takes a different synthesis strategy"
                 }}
             ]
         }}
+
+        IMPORTANT: Each prompt object MUST have "prompt", "improvement_focus", and "reasoning" fields. Do NOT mix array and object syntax.
         """
     ).strip()
