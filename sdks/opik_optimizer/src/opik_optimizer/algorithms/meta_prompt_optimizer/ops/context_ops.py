@@ -5,8 +5,10 @@ This module contains functions for building task context and history context.
 """
 
 from collections.abc import Callable
+from typing import Any
 import logging
 import random
+import re
 
 import opik
 from ....base_optimizer import OptimizationRound
@@ -47,7 +49,8 @@ def get_task_context(
     columns: list[str] | None = None,
     max_tokens: int = 2000,
     model: str = "gpt-4",
-) -> str:
+    verbose: int = 1,
+) -> tuple[str, int]:
     """
     Get task-specific context from the dataset and metric configuration.
     Always sanitizes to prevent data leakage. Token-aware with adaptive fitting.
@@ -59,12 +62,13 @@ def get_task_context(
         columns: Specific columns to include (None = all input columns)
         max_tokens: Token budget for dataset examples ONLY (adaptive fitting limit)
         model: Model name for token counting (default: gpt-4)
+        verbose: Verbosity level for display output (default: 1)
 
     Returns:
-        Sanitized task context string that fits within token budget
+        Tuple of (sanitized task context string, actual token count used)
     """
     if dataset is None:
-        return ""
+        return "", 0
 
     samples = []
     try:
@@ -75,10 +79,10 @@ def get_task_context(
         samples = random.sample(items, num_to_sample) if len(items) > 0 else []
     except Exception as e:
         logger.warning(f"Could not get samples from dataset: {e}")
-        return ""
+        return "", 0
 
     if not samples:
-        return ""
+        return "", 0
 
     # Use first sample to determine field structure
     sample = samples[0]
@@ -111,7 +115,9 @@ def get_task_context(
         input_fields = all_input_fields
 
     # Build context with adaptive fitting
-    max_value_length = 150  # Start with this truncation limit
+    max_value_length = (
+        500  # Start with generous truncation limit, will reduce if needed
+    )
     current_num_examples = len(samples)
 
     while current_num_examples > 0:
@@ -132,17 +138,18 @@ def get_task_context(
         # Show multiple sanitized examples
         context += f"Example inputs from dataset ({current_num_examples} samples):\n\n"
         for idx, sample_item in enumerate(samples[:current_num_examples], 1):
-            context += f"Example {idx}:\n"
+            context += f"Example {idx}:\n```\n"
             for key in input_fields:
                 value = sample_item.get(key, "")
+                # Convert to string and remove all newlines and excessive whitespace
+                value_str = str(value).replace('\n', ' ').replace('\r', ' ')
+                # Collapse multiple spaces into single space
+                value_str = re.sub(r'\s+', ' ', value_str).strip()
                 # Truncate long values
-                value_str = (
-                    str(value)[:max_value_length] + "..."
-                    if len(str(value)) > max_value_length
-                    else str(value)
-                )
-                context += f"  {START_DELIM}{key}{END_DELIM}: {value_str}\n"
-            context += "\n"
+                if len(value_str) > max_value_length:
+                    value_str = value_str[:max_value_length] + "..."
+                context += f"{START_DELIM}{key}{END_DELIM}: {value_str}\n"
+            context += "```\n\n"
 
         # Count tokens
         token_count = count_tokens(context, model)
@@ -152,7 +159,21 @@ def get_task_context(
                 f"Task context: {token_count} tokens, {current_num_examples} examples, "
                 f"{len(input_fields)} fields, max_value_length={max_value_length}"
             )
-            return context
+
+            # Display task context info in rich console
+            from .. import reporting
+
+            reporting.display_task_context_info(
+                num_examples=current_num_examples,
+                num_fields=len(input_fields),
+                columns=columns,
+                token_count=token_count,
+                max_tokens=max_tokens,
+                was_reduced=(current_num_examples < len(samples)),
+                verbose=verbose,
+            )
+
+            return context, token_count
 
         # Over budget - try to reduce
         if current_num_examples > 1:
@@ -173,10 +194,10 @@ def get_task_context(
                 f"Cannot fit task context within {max_tokens} tokens (currently {token_count}). "
                 f"Returning minimal context."
             )
-            return context
+            return context, token_count
 
     # Fallback if we somehow exit the loop
-    return ""
+    return "", 0
 
 
 def build_history_context(
@@ -197,17 +218,23 @@ def build_history_context(
 
     # Prioritize Hall of Fame entries - show the BEST prompts across ALL rounds
     if hall_of_fame and hasattr(hall_of_fame, "entries") and hall_of_fame.entries:
-        context += "\n🏆 HALL OF FAME - Best Performing Prompts Across All Rounds:\n"
+        context += "\nHall of Fame: Best Performing Prompts Across All Rounds:\n"
         context += "=" * 80 + "\n"
         context += "Study these top performers carefully - what patterns make them successful?\n\n"
 
         # Show top 5 entries with FULL prompts (we have plenty of token budget)
         for i, entry in enumerate(hall_of_fame.entries[:5], 1):
             improvement_pct = entry.improvement_over_baseline * 100
-            context += f"\n#{i} WINNER | Trial {entry.trial_number} | Score: {entry.score:.4f} | Improvement: {improvement_pct:+.1f}%\n"
+            context += f"\n#{i} WINNER | Trial [{entry.trial_number}[] | Score: [{entry.score:.4f}] | Improvement: [{improvement_pct:+.1f}%]\n"
 
-            # Show FULL prompt - no truncation!
-            context += f"Full Prompt:\n{str(entry.prompt_messages)}\n"
+            # Print Prompts
+            context += "Full Prompt Messages:\n"
+            for msg in entry.prompt_messages:
+                role = msg.get("role", "unknown")
+                content = msg.get("content", "")
+                # Show complete content without truncation
+                context += f"  [{role.upper()}]: {content}\n"
+            context += "\n"
 
             # Show extracted patterns if available
             if entry.extracted_patterns:
@@ -229,9 +256,11 @@ def build_history_context(
                 reverse=True,
             )
 
-            for p in sorted_generated[:2]:  # Reduced from 3 to 2 to save tokens
+            # Show top prompts per round
+            # TODO: Set this as a CONST
+            for p in sorted_generated[:2]:
                 prompt_text = p.get("prompt", "N/A")
                 score = p.get("score", float("nan"))
-                context += f"- Score {score:.4f}: {prompt_text[:120]}...\n"
+                context += f"- Score {score:.4f}:\n{prompt_text}\n\n"
 
     return context
