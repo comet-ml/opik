@@ -84,9 +84,9 @@ public class OpikGeminiChatModel implements ChatModel {
                 convertedContents.add(content);
             } else if (content instanceof VideoContent videoContent) {
                 // Convert VideoContent to ImageContent (Gemini treats videos as images)
+                String videoUrlString = videoContent.video().url().toString();
                 log.debug("Converting VideoContent to ImageContent for Gemini: {}",
-                        videoContent.video().url().toString().substring(0,
-                                Math.min(50, videoContent.video().url().toString().length())));
+                        videoUrlString.substring(0, Math.min(50, videoUrlString.length())));
                 convertedContents.add(ImageContent.from(videoContent.video().url()));
             }
             // Other content types are passed through as-is
