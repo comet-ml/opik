@@ -7,7 +7,7 @@ COPY package*.json ./
 COPY patches ./patches
 RUN npm install
 # Copy and build the application
-COPY . .
+COPY --exclude=nginx . .
 
 ARG OPIK_VERSION
 ARG SENTRY_ENABLED
@@ -22,43 +22,35 @@ ARG BUILD_MODE=production
 RUN npm run build -- --mode $BUILD_MODE
 
 # Production stage
-FROM nginx:1.28.0-bookworm
-
+# Using nginx alpine image with OpenTelemetry support
+FROM nginx:1.29.3-alpine-otel AS nginx
 
 # Add label for later inspection
 ARG BUILD_MODE=production
 LABEL build.mode="${BUILD_MODE}"
 
-# Copy and install Fluent Bit using installer from builder stage
-RUN if [ "$BUILD_MODE" != "comet" ]; then \
-apt-get update && apt-get install -y gpg && apt-get clean \
-      # Install packages for NGINX and Fluent Bit \
-      curl -sL https://raw.githubusercontent.com/fluent/fluent-bit/master/install.sh | sh && \
-      mkdir -p /etc/fluent-bit /var/log/fluent-bit && \
-      chown -R nginx:nginx /etc/fluent-bit /var/log/fluent-bit; \
-    fi
+# Copy custom nginx.conf with OpenTelemetry and dual logging configuration
+COPY --chown=nginx:nginx --chmod=0755 nginx /etc/nginx
+# Copy entrypoint script for conditional OpenTelemetry configuration
+COPY --chown=nginx:nginx --chmod=0755 entrypoint.sh /docker-entrypoint.d/opik-frontend-entrypoint.sh
 
-# implement changes required to run NGINX as an unprivileged user
-RUN sed -r -i '/access_log.*main/d \
-   ; /listen       \[::\]:80/d \
-   ; s~^(\s*error_log\s+)[^\s]+(\s.+)$~\1/dev/stderr\2~' /etc/nginx/nginx.conf \
- && sed -r -i 's~^(\s*listen\s+)80([\s;].*)$~\18080\2~' /etc/nginx/conf.d/default.conf \
- && rm -f /etc/nginx/nginx.conf.default \
- && mkdir -p /var/cache/nginx /run /var/log/nginx \
- && chown -R nginx:nginx /var/cache/nginx /etc/nginx /run /var/run /var/log/nginx \
- && chmod -R g+w /var/cache/nginx /etc/nginx /run /var/run \
- && ln -sf /dev/stderr /var/log/nginx/error.log \
- && ln -sf /dev/stdout /var/log/nginx/access.log
+# Install gettext for envsubst (needed for environment variable substitution)
+# RUN apk add --no-cache gettext
+
+# Setup directories and permissions for unprivileged user
+# Remove any existing symlinks to stdout/stderr and create actual log files
+RUN chown -R nginx:nginx /var/log/nginx /var/cache/nginx /run \
+ && rm -f /var/log/nginx/access.log /var/log/nginx/error.log
 
 # Copy the built files from the builder stage
 COPY --from=builder /opt/frontend/dist /usr/share/nginx/html
 
-# Copy entrypoint script (fluent-bit.conf is mounted via volume)
-COPY entrypoint.sh /opt/frontend/entrypoint.sh
-RUN chmod a+x /opt/frontend/entrypoint.sh
-EXPOSE 5173
+# Expose port (default 8080, can be overridden via NGINX_PORT env var)
+EXPOSE 8080
 
 USER nginx:nginx
 
-# Use entrypoint script to start nginx and conditionally start Fluent Bit
-CMD ["/opt/frontend/entrypoint.sh"]
+# Use entrypoint script to conditionally configure OpenTelemetry
+# The entrypoint script uses envsubst to generate otel.conf from template
+# Note: access_log is configured to write to both file and stdout in nginx.conf
+# ENTRYPOINT ["/entrypoint.sh"]

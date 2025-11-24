@@ -287,8 +287,9 @@ services:
       - /var/lib/docker
 
   frontend:
-    image: ghcr.io/comet-ml/opik/opik-frontend:${OPIK_VERSION:-latest}
-    pull_policy: always
+    # image: ghcr.io/comet-ml/opik/opik-frontend:${OPIK_VERSION:-latest}
+    image: opik-frontend:${OPIK_VERSION:-latest}
+    # pull_policy: always
     profiles:
       - opik
       - local-be
@@ -297,26 +298,82 @@ services:
       dockerfile: Dockerfile
     hostname: frontend
     ports:
-      - "5173:5173" # Frontend server port
-      - "2020:2020" # Fluent Bit HTTP server (when enabled)
+      - "${NGINX_PORT:-8080}:${NGINX_PORT:-8080}" # Frontend server port (configurable via NGINX_PORT env var)
     volumes:
       - ./nginx_${OPIK_FRONTEND_FLAVOR:-default}_local.conf:/etc/nginx/conf.d/default.conf
-      - ./fluent-bit.conf:/etc/fluent-bit/fluent-bit.conf:ro
+      - nginx-logs:/var/log/nginx
     depends_on:
       backend:
         condition: service_healthy
+      otel-collector:
+        condition: service_started
     healthcheck:
-      test: [ "CMD", "curl", "-f", "http://localhost:5173" ]
+      test: [ "CMD-SHELL", "curl -f http://localhost:$${NGINX_PORT:-8080}/health || exit 1" ]
       interval: 1s
       timeout: 30s
       retries: 10
       start_period: 1s
     environment:
       OPIK_VERSION: ${OPIK_VERSION:-latest}
-      # OTEL log shipping configuration (Fluent Bit integrated in frontend container)
-      ENABLE_OTEL_LOG_EXPORT: ${ENABLE_OTEL_LOG_EXPORT:-false}
+      OTEL_ENABLE: ${OTEL_ENABLE:-false}
+      OTEL_COLLECTOR_HOST: ${OTEL_COLLECTOR_HOST:-otel-collector}
+      OTEL_COLLECTOR_PORT: ${OTEL_COLLECTOR_PORT:-4318}
+      NGINX_PORT: ${NGINX_PORT:-8080}
+
+  # OpenTelemetry Collector - receives logs, traces, and metrics via OTLP
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.139.0
+    pull_policy: always
+    profiles:
+      - opik
+      - local-be
+    hostname: otel-collector
+    volumes:
+      - ./otel-collector-config.yaml:/etc/otelcol/config.yaml:ro
+    ports:
+      - "4317:4317" # OTLP gRPC receiver
+      - "4318:4318" # OTLP HTTP receiver
+      - "13133:13133" # Health check endpoint
+    command: ["--config=/etc/otelcol/config.yaml"]
+    healthcheck:
+      # Use the OpenTelemetry collector's health check endpoint on port 13133
+      # The health_check extension is configured in otel-collector-config.yaml
+      test: [ "CMD", "/otelcol-contrib", "--config=/etc/otelcol/config.yaml", "validate" ]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+
+  # Fluent Bit sidecar for log shipping to OTEL collector
+  # Shares nginx logs via volume and runs as separate container
+  fluent-bit:
+    image: fluent/fluent-bit:2.2.3
+    pull_policy: always
+    profiles:
+      - opik
+      - local-be
+    hostname: fluent-bit
+    volumes:
+      - nginx-logs:/var/log/nginx:ro
+      - ./fluent-bit.conf:/fluent-bit/etc/fluent-bit.conf:ro
+      - fluent-bit-data:/var/lib/fluent-bit
+    depends_on:
+      frontend:
+        condition: service_healthy
+      otel-collector:
+        condition: service_healthy
+    environment:
       OTEL_COLLECTOR_HOST: ${OTEL_COLLECTOR_HOST:-otel-collector}
       OTEL_COLLECTOR_PORT: ${OTEL_COLLECTOR_PORT:-4317}
+    command: ["/fluent-bit/bin/fluent-bit", "-c", "/fluent-bit/etc/fluent-bit.conf"]
+    # Healthcheck: verify fluent-bit process is running
+    healthcheck:
+      test: [ "CMD-SHELL", "pgrep -f fluent-bit || exit 1" ]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
 
 networks:
   default:
@@ -329,3 +386,5 @@ volumes:
   zookeeper:
   redis-data:
   minio-data:
+  nginx-logs:
+  fluent-bit-data:
