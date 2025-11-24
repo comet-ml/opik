@@ -75,7 +75,7 @@ def wikipedia_search(query: str, n: int = 5) -> list[str]:
         List of passage texts
     """
     with tool_logger.log_tool("wikipedia_api", query):
-        results = search_wikipedia(query, search_type="api", n=n)
+        results = search_wikipedia(query, search_type="api", k=n)
     # Return top n results, padding if necessary
     return results[:n] if len(results) >= n else results + [""] * (n - len(results))
 
@@ -99,7 +99,7 @@ def bm25_wikipedia_search(query: str, n: int = 5) -> list[str]:
             results = search_wikipedia(
                 query,
                 search_type="bm25",
-                n=n,
+                k=n,
                 bm25_hf_repo="Comet/wikipedia-2017-bm25",
             )
         return results
@@ -110,10 +110,12 @@ def bm25_wikipedia_search(query: str, n: int = 5) -> list[str]:
 
 
 # Choose search function
+# FIXME: Before merging, switch back to bm25_wikipedia_search for fair comparison with GEPA paper
+# Currently using API mode for testing (no BM25 index download required)
 # Use bm25_wikipedia_search for fair comparison with GEPA paper
 # Use wikipedia_search for quick testing without BM25 download
-SEARCH_FN = bm25_wikipedia_search  # or wikipedia_search for testing
-print(f"Search function: {SEARCH_FN.__name__}")
+SEARCH_FN = wikipedia_search  # FIXME: Switch to bm25_wikipedia_search before merging
+print(f"Search function: {SEARCH_FN.__name__} (API mode - FIXME: switch to BM25 before merging)")
 print()
 
 # ============================================================================
@@ -272,10 +274,11 @@ print("IMPLEMENTATION NOTES")
 print("=" * 80)
 print()
 print("1. SEARCH FUNCTION:")
-print("   ✅ BM25 search enabled with Comet/wikipedia-2017-bm25")
+print("   ⚠️  Currently using API mode (wikipedia_search) for testing")
+print("   ⚠️  FIXME: Switch to BM25 (bm25_wikipedia_search) before merging")
+print("   ✅ BM25 search available with Comet/wikipedia-2017-bm25")
 print("   ✅ Same Wikipedia 2017 corpus as GEPA/Arize paper")
 print("   ✅ Optimized Parquet format (1.61 GB, downloads on first run)")
-print("   - Switch to wikipedia_search() for quick testing without download")
 print()
 print("2. OPTIMIZATION:")
 print("   - MetaPromptOptimizer needs multi-prompt optimization support")

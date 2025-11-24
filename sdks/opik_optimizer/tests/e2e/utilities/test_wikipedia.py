@@ -24,7 +24,7 @@ class TestWikipediaAPIE2E:
 
     def test_api_search_multiple_results(self) -> None:
         """Test API search returns multiple results."""
-        results = search_wikipedia("Machine learning", search_type="api", n=3)
+        results = search_wikipedia("Machine learning", search_type="api", k=3)
 
         # Should return up to 3 results
         assert len(results) <= 3

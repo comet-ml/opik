@@ -263,7 +263,7 @@ def build_bm25_index(
     logger.info("\n💡 Usage:")
     logger.info("   from opik_optimizer.utils.tools.wikipedia import search_wikipedia")
     logger.info(
-        f'   results = search_wikipedia("your query", search_type="bm25", n=5, bm25_index_dir="{output_dir}")'
+        f'   results = search_wikipedia("your query", search_type="bm25", k=5, bm25_index_dir="{output_dir}")'
     )
     logger.info("\n📤 To upload to HuggingFace:")
     logger.info("   python scripts/datasets/build_bm25_wikipedia.py upload \\")
