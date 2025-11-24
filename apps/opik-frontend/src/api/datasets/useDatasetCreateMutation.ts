@@ -36,11 +36,13 @@ const useDatasetCreateMutation = () => {
       };
     },
     onError: (error: AxiosError) => {
-      const message = get(
-        error,
-        ["response", "data", "message"],
-        error.message,
-      );
+      // Backend returns {errors: ["error message"]} for 409 conflicts
+      const errors = get(error, ["response", "data", "errors"], []);
+      const message =
+        Array.isArray(errors) && errors.length > 0
+          ? errors.join("; ")
+          : get(error, ["response", "data", "message"], error.message) ||
+            "An unknown error occurred while creating a dataset. Please try again.";
 
       toast({
         title: "Error",
