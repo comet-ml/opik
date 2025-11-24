@@ -316,7 +316,6 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
                   </div>
                   <ConfigurableFeedbackScoreTable
                     feedbackScores={traceData.span_feedback_scores}
-                    onDeleteFeedbackScore={onDeleteFeedbackScore}
                     onAddHumanReview={() =>
                       setActiveSection(DetailsActionSection.Annotations)
                     }
