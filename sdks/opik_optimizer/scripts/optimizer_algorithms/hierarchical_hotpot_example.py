@@ -11,7 +11,7 @@ Note: The HierarchicalReflectiveOptimizer requires metrics that return
 ScoreResult with detailed 'reason' fields for effective root cause analysis.
 """
 
-from opik import track  # noqa: E402
+import opik
 from opik_optimizer import ChatPrompt  # noqa: E402
 from opik_optimizer import HierarchicalReflectiveOptimizer  # noqa: E402
 from opik_optimizer.datasets import hotpot  # noqa: E402

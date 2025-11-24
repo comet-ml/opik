@@ -1,5 +1,7 @@
 """Unit tests for Wikipedia search tools."""
 
+from typing import Any
+
 import pytest
 from unittest.mock import Mock, patch
 from pathlib import Path
@@ -217,9 +219,7 @@ class TestDownloadBM25Index:
 
     @patch("pathlib.Path.mkdir")
     @patch("pathlib.Path.home")
-    def test_download_with_default_cache(
-        self, mock_home: Mock, mock_mkdir: Mock
-    ) -> None:
+    def test_download_with_default_cache(self, mock_home: Mock) -> None:
         """Test downloading index with default cache directory."""
         # Mock home directory
         mock_home.return_value = Path("/home/user")
@@ -228,7 +228,7 @@ class TestDownloadBM25Index:
         mock_download = Mock()
         with patch("builtins.__import__") as mock_import:
 
-            def import_side_effect(name, *args, **kwargs):
+            def import_side_effect(name: str, *args: Any, **kwargs: Any) -> Any:
                 if name == "huggingface_hub":
                     # Return a mock module with snapshot_download
                     mock_module = Mock()

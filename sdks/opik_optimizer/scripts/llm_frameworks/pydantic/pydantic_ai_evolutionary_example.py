@@ -1,6 +1,6 @@
 from typing import Any
 
-
+import opik
 from opik.evaluation.metrics.score_result import ScoreResult
 from opik.evaluation.metrics import LevenshteinRatio
 
@@ -10,7 +10,6 @@ from opik_optimizer import (
 )
 from opik_optimizer.datasets import hotpot
 from opik_optimizer.utils.tools.wikipedia import search_wikipedia
-from opik import track
 from pydantic_ai_agent import PydanticAIAgent
 
 

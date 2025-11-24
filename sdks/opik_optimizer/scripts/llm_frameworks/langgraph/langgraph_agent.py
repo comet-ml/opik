@@ -36,6 +36,7 @@ class AgentState(TypedDict):
     context: str
     answer: str
 
+
 @track(type="tool")
 def search_wikipedia_tool(query: str) -> list[str]:
     """Wrapper for the shared Wikipedia search helper."""
