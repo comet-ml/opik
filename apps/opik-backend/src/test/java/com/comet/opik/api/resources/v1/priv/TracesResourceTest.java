@@ -6100,9 +6100,9 @@ class TracesResourceTest {
             // Create a thread by creating a trace
             var threadId = UUID.randomUUID().toString();
             create(createTrace().toBuilder()
-                            .projectName(projectName)
-                            .threadId(threadId)
-                            .build(),
+                    .projectName(projectName)
+                    .threadId(threadId)
+                    .build(),
                     API_KEY, TEST_WORKSPACE);
 
             // Wait for thread to be created
