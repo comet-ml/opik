@@ -1,7 +1,5 @@
 """End-to-end test for Wikipedia API search."""
 
-import pytest
-
 from opik_optimizer.utils.tools.wikipedia import search_wikipedia
 
 
@@ -11,7 +9,9 @@ class TestWikipediaAPIE2E:
     def test_api_search_basic_query(self) -> None:
         """Test basic Wikipedia API search with a real query."""
         # Use a well-known topic that should always return results
-        results = search_wikipedia("Python programming language", search_type="api", n=1)
+        results = search_wikipedia(
+            "Python programming language", search_type="api", n=1
+        )
 
         # Should return at least one result
         assert len(results) >= 1
