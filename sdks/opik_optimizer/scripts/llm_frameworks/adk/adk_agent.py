@@ -31,8 +31,8 @@ logger.info("[bold green]═══ ADK Agent loaded ═══[/bold green]")
 @track(type="tool")
 def search_wikipedia_adk(query: str) -> list[str]:
     """
-    This agent is used to search wikipedia. It can retrieve additional details
-    about a topic.
+    Wikipedia search tool wrapper for ADK compatibility. This function searches Wikipedia
+    for the given query and returns relevant results. Intended for use as a tool function.
     """
     with logger.log_tool("search_wikipedia", query):
         return search_wikipedia(query, search_type="api")
