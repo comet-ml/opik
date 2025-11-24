@@ -9,7 +9,6 @@ from ...base_optimizer import BaseOptimizer, OptimizationRound
 from ...api_objects import chat_prompt
 from ...optimization_result import OptimizationResult
 from ...optimizable_agent import OptimizableAgent
-from ... import task_evaluator
 from ... import _throttle
 from . import reporting
 from .ops.halloffame_ops import PromptHallOfFame
@@ -1185,27 +1184,58 @@ class MetaPromptOptimizer(BaseOptimizer):
             trace = run_result.get("trace") or {"system": _bundle_system_context()}
             return {"llm_output": final_output_str, "trace": trace}
 
-        # Sequential evaluation (keeps metric signature flexibility with trace support)
+        # Parallel evaluation with trace preservation; falls back to sequential if needed.
+        # FIXME(opik): task_evaluator.evaluate_with_result would be cleaner here, but its
+        # current interface strips trace context and mismatches some bundle metrics. Until
+        # task_evaluator grows a trace-aware hook or a pluggable runner, we keep this
+        # local thread pool for bundles.
         items = dataset.get_items()
         if n_samples is not None:
             items = items[:n_samples]
         if not items:
             return 0.0
-        scores_list: list[float] = []
-        for item in items:
+
+        def _score_item(item: dict[str, Any]) -> float:
             run_result = _evaluated_task(item)
             final_output = run_result.get("llm_output", "")
             trace = run_result.get("trace") or {}
             try:
-                score = metric(item, final_output, trace)  # type: ignore[misc]
+                score_val = metric(item, final_output, trace)  # type: ignore[misc]
             except TypeError:
-                score = metric(item, final_output)  # type: ignore[misc]
-            if hasattr(score, "value"):
-                score_value = getattr(score, "value", score)
-            else:
-                score_value = score
-            scores_list.append(float(score_value))
-        return sum(scores_list) / len(scores_list)
+                score_val = metric(item, final_output)  # type: ignore[misc]
+            if hasattr(score_val, "value"):
+                score_val = getattr(score_val, "value", score_val)
+            return float(score_val)
+
+        scores_list: list[float] = []
+        n_threads = max(getattr(self, "n_threads", 1) or 1, 1)
+        if n_threads > 1 and len(items) > 1:
+            try:
+                with ThreadPoolExecutor(max_workers=n_threads) as executor:
+                    futures = {
+                        executor.submit(_score_item, item): item for item in items
+                    }
+                    for future in as_completed(futures):
+                        try:
+                            scores_list.append(future.result())
+                        except Exception as exc:
+                            logger.warning("Bundle scoring failed for an item: %s", exc)
+            except Exception as exc:
+                logger.warning(
+                    "Parallel bundle evaluation failed, falling back: %s", exc
+                )
+                scores_list.clear()
+
+        if not scores_list:
+            for item in items:
+                try:
+                    scores_list.append(_score_item(item))
+                except Exception as exc:
+                    logger.warning(
+                        "Sequential bundle scoring failed for an item: %s", exc
+                    )
+
+        return sum(scores_list) / len(scores_list) if scores_list else 0.0
 
 
 __all__ = ["MetaPromptOptimizer", "_sync_tool_description_in_system"]
