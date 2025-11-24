@@ -301,11 +301,19 @@ def generate_candidate_prompts(
             # Validate the parsed JSON structure
             if isinstance(json_result, list):
                 # Check if it's a wrapped format: [{"prompts": [...]}]
-                if len(json_result) == 1 and isinstance(json_result[0], dict) and "prompts" in json_result[0]:
+                if (
+                    len(json_result) == 1
+                    and isinstance(json_result[0], dict)
+                    and "prompts" in json_result[0]
+                ):
                     json_result = json_result[0]
                 # Check if it's unwrapped: [{prompt: ..., improvement_focus: ..., reasoning: ...}, ...]
-                elif all(isinstance(item, dict) and "prompt" in item for item in json_result):
-                    logger.debug("Received unwrapped prompt list, wrapping in 'prompts' key")
+                elif all(
+                    isinstance(item, dict) and "prompt" in item for item in json_result
+                ):
+                    logger.debug(
+                        "Received unwrapped prompt list, wrapping in 'prompts' key"
+                    )
                     json_result = {"prompts": json_result}
 
             if not isinstance(json_result, dict) or "prompts" not in json_result:
@@ -506,3 +514,231 @@ def generate_mcp_candidate_prompts(
             return candidates
         except Exception as exc:
             raise ValueError(f"Error generating MCP prompt candidates: {exc}")
+
+
+def generate_synthesis_prompts(
+    optimizer: Any,
+    current_prompt: chat_prompt.ChatPrompt,
+    best_score: float,
+    round_num: int,
+    previous_rounds: list[OptimizationRound],
+    metric: Callable,
+    get_task_context_fn: Callable,
+    optimization_id: str | None = None,
+    project_name: str | None = None,
+) -> list[chat_prompt.ChatPrompt]:
+    """
+    Generate synthesis prompts that combine top performers into comprehensive prompts.
+
+    This is called every N rounds to prevent convergence to overly terse solutions
+    by combining successful elements from multiple high-performing prompts.
+
+    Args:
+        optimizer: Reference to the optimizer instance
+        current_prompt: Current best prompt
+        best_score: Current best score
+        round_num: Current round number
+        previous_rounds: List of previous optimization rounds
+        metric: Metric function
+        get_task_context_fn: Function to get task context
+        optimization_id: Optional optimization ID
+        project_name: Optional project name
+
+    Returns:
+        List of 1-2 comprehensive synthesis prompts
+    """
+    from ..prompts import build_synthesis_prompt
+
+    with reporting.display_candidate_generation_report(
+        2,
+        verbose=optimizer.verbose,  # Synthesis generates 1-2 prompts
+    ) as candidate_generation_report:
+        # Get top performers from Hall of Fame
+        top_prompts_with_scores: list[tuple[list[dict[str, str]], float, str]] = []
+
+        if optimizer.hall_of_fame and hasattr(optimizer.hall_of_fame, "entries"):
+            # Get top 3-5 entries from Hall of Fame
+            for entry in optimizer.hall_of_fame.entries[:5]:
+                prompt_messages = entry.prompt_messages
+                score = entry.score
+
+                # Build comprehensive reasoning with all available context
+                reasoning_parts = []
+                reasoning_parts.append(f"Trial #{entry.trial_number}")
+                reasoning_parts.append(
+                    f"Improvement: {entry.improvement_over_baseline * 100:+.1f}% over baseline"
+                )
+
+                # Include extracted patterns if available
+                if entry.extracted_patterns:
+                    reasoning_parts.append(
+                        f"Winning patterns: {' | '.join(entry.extracted_patterns)}"
+                    )
+
+                # Include metadata if available
+                if entry.metadata:
+                    for key, value in entry.metadata.items():
+                        if value and key not in ["prompt_messages", "score"]:
+                            reasoning_parts.append(f"{key}: {value}")
+
+                reasoning = " | ".join(reasoning_parts)
+                top_prompts_with_scores.append((prompt_messages, score, reasoning))
+
+        # Fallback: if Hall of Fame is empty or not available, use recent rounds
+        if not top_prompts_with_scores:
+            logger.warning("Hall of Fame empty - using recent rounds for synthesis")
+            # Collect best prompts from recent rounds
+            for round_data in reversed(previous_rounds[-5:]):
+                sorted_generated = sorted(
+                    round_data.generated_prompts,
+                    key=lambda p: p.get("score", -float("inf")),
+                    reverse=True,
+                )
+                if sorted_generated:
+                    best = sorted_generated[0]
+                    prompt_text = best.get("prompt", "")
+                    score = best.get("score", 0.0)
+                    reasoning = best.get("reasoning", "")
+                    # Try to parse as messages
+                    try:
+                        messages = eval(prompt_text) if prompt_text else []
+                        top_prompts_with_scores.append((messages, score, reasoning))
+                    except Exception:
+                        continue
+
+        if not top_prompts_with_scores:
+            raise ValueError(
+                "Cannot generate synthesis prompts no top performers available"
+            )
+
+        logger.info(
+            f"Synthesizing from {len(top_prompts_with_scores)} top-performing prompts"
+        )
+
+        # Get task context
+        task_context_str = ""
+        if optimizer.enable_context:
+            task_context_str, _ = get_task_context_fn(metric=metric)  # Unpack tuple
+
+        # Build synthesis prompt
+        synthesis_user_prompt = build_synthesis_prompt(
+            top_prompts_with_scores=top_prompts_with_scores,
+            task_context_str=task_context_str,
+            best_score=best_score,
+        )
+        synthesis_system_prompt = build_reasoning_system_prompt()
+
+        try:
+            # Prepare metadata for synthesis call
+            metadata_for_call: dict[str, Any] = {}
+            if project_name:
+                metadata_for_call["project_name"] = project_name
+                metadata_for_call["opik"] = {"project_name": project_name}
+            if optimization_id and "opik" in metadata_for_call:
+                metadata_for_call["opik"]["optimization_id"] = optimization_id
+            metadata_for_call["optimizer_name"] = optimizer.__class__.__name__
+            metadata_for_call["opik_call_type"] = "optimization_algorithm_synthesis"
+
+            content = _llm_calls.call_model(
+                messages=[
+                    {"role": "system", "content": synthesis_system_prompt},
+                    {"role": "user", "content": synthesis_user_prompt},
+                ],
+                model=optimizer.model,
+                model_parameters=optimizer.model_parameters,
+                metadata=metadata_for_call,
+                optimization_id=optimization_id,
+            )
+
+            # Parse JSON response
+            json_result = None
+            try:
+                json_result = json.loads(content)
+            except json.JSONDecodeError:
+                import re
+
+                json_match = re.search(r"\{.*\}", content, re.DOTALL)
+                if json_match:
+                    try:
+                        json_result = json.loads(json_match.group())
+                    except json.JSONDecodeError as e:
+                        raise ValueError(
+                            f"Could not parse synthesis JSON: {e} - received: {json_match.group()}"
+                        )
+                else:
+                    raise ValueError(
+                        f"No JSON object found in synthesis response: {content}"
+                    )
+
+            # Validate structure - handle both wrapped and unwrapped formats
+            if isinstance(json_result, list):
+                # Check if it's a wrapped format: [{"prompts": [...]}]
+                if (
+                    len(json_result) == 1
+                    and isinstance(json_result[0], dict)
+                    and "prompts" in json_result[0]
+                ):
+                    json_result = json_result[0]
+                # Check if it's unwrapped: [{prompt: ..., improvement_focus: ..., reasoning: ...}, ...]
+                elif all(
+                    isinstance(item, dict) and "prompt" in item for item in json_result
+                ):
+                    json_result = {"prompts": json_result}
+
+            if not isinstance(json_result, dict) or "prompts" not in json_result:
+                raise ValueError(
+                    f"Invalid synthesis JSON structure - received: {json_result}"
+                )
+
+            if not isinstance(json_result["prompts"], list):
+                raise ValueError(
+                    "'prompts' key does not contain a list in synthesis response"
+                )
+
+            # Extract synthesis prompts (expecting 1-2)
+            valid_prompts: list[chat_prompt.ChatPrompt] = []
+            for item in json_result["prompts"]:
+                if (
+                    isinstance(item, dict)
+                    and "prompt" in item
+                    and isinstance(item["prompt"], list)
+                ):
+                    # Get user text from current prompt
+                    if current_prompt.user:
+                        user_text = current_prompt.user
+                    else:
+                        if current_prompt.messages is not None:
+                            user_text = current_prompt.messages[-1]["content"]
+                        else:
+                            raise Exception("User content not found in chat-prompt!")
+
+                    valid_prompts.append(
+                        chat_prompt.ChatPrompt(
+                            system=item["prompt"][0]["content"],
+                            user=user_text,
+                            tools=current_prompt.tools,
+                            function_map=current_prompt.function_map,
+                        )
+                    )
+
+                    # Log synthesis details
+                    focus = item.get("improvement_focus", "N/A")
+                    reasoning = item.get("reasoning", "N/A")
+                    logger.info("Generated synthesis prompt:")
+                    logger.info(f"  Improvement focus: {focus}")
+                    logger.info(f"  Reasoning: {reasoning}")
+                    logger.debug(f"  Full prompt: {item['prompt']}")
+
+            if not valid_prompts:
+                raise ValueError("No valid synthesis prompts generated")
+
+            candidate_generation_report.set_generated_prompts()
+
+            return valid_prompts
+
+        except Exception as e:
+            if isinstance(e, (BadRequestError, StructuredOutputParsingError)):
+                raise
+            raise ValueError(
+                f"Unexpected error during synthesis prompt generation: {e}"
+            )
