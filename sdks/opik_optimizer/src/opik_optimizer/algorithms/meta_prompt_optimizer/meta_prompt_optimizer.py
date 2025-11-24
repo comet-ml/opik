@@ -1,5 +1,5 @@
 import logging
-from typing import Any
+from typing import Any, cast
 from collections.abc import Callable
 
 import opik
@@ -320,7 +320,8 @@ class MetaPromptOptimizer(BaseOptimizer):
                 raise ValueError(
                     "Bundle optimization does not support MCP tool optimization."
                 )
-            first_agent_prompt = next(iter(prompt.values()))
+            bundle_prompt_dict = cast(dict[str, chat_prompt.ChatPrompt], prompt)
+            first_agent_prompt = next(iter(bundle_prompt_dict.values()))
             self.agent_class = self._setup_agent_class(first_agent_prompt, agent_class)
         else:
             self._validate_optimization_inputs(prompt, dataset, metric)  # type: ignore[arg-type]
@@ -513,7 +514,7 @@ class MetaPromptOptimizer(BaseOptimizer):
             validation_dataset if validation_dataset is not None else dataset
         )
 
-        current_prompt = prompt
+        current_prompt: Any = prompt
         with reporting.display_evaluation(verbose=self.verbose) as baseline_reporter:
             if validation_dataset is not None:
                 experiment_config = experiment_config or {}
@@ -555,7 +556,7 @@ class MetaPromptOptimizer(BaseOptimizer):
                     mcp_config=mcp_config,
                 )
             best_score = initial_score
-            best_prompt = current_prompt
+            best_prompt: Any = current_prompt
             rounds: list[OptimizationRound] = []
 
             baseline_reporter.set_score(initial_score)
@@ -808,8 +809,11 @@ class MetaPromptOptimizer(BaseOptimizer):
                 if self.hall_of_fame and best_cand_score_avg > 0 and not is_bundle:
                     from .ops.halloffame_ops import HallOfFameEntry
 
+                    best_candidate_chat = cast(
+                        chat_prompt.ChatPrompt, best_candidate_this_round
+                    )
                     entry = HallOfFameEntry(
-                        prompt_messages=best_candidate_this_round.get_messages(),
+                        prompt_messages=best_candidate_chat.get_messages(),
                         score=best_cand_score_avg,
                         trial_number=trials_used,
                         improvement_over_baseline=(
@@ -846,7 +850,7 @@ class MetaPromptOptimizer(BaseOptimizer):
                     trials_used += 1
                 round_num += 1
 
-        if tool_panel_style and getattr(best_prompt, "tools", None):
+        if tool_panel_style and (not is_bundle) and getattr(best_prompt, "tools", None):
             description = (
                 best_prompt.tools[0].get("function", {}).get("description", "")
                 if best_prompt.tools
@@ -868,10 +872,13 @@ class MetaPromptOptimizer(BaseOptimizer):
             best_tools = getattr(first_prompt, "tools", None)
         else:
             bundle_messages = None
+            best_prompt_chat = cast(chat_prompt.ChatPrompt, best_prompt)
             best_prompt_messages = (
-                best_prompt.get_messages() if best_prompt is not None else []
+                best_prompt_chat.get_messages() if best_prompt_chat is not None else []
             )
-            best_tools = getattr(best_prompt, "tools", None) if best_prompt else None
+            best_tools = (
+                getattr(best_prompt_chat, "tools", None) if best_prompt_chat else None
+            )
 
         reporting.display_result(
             initial_score,
@@ -916,10 +923,10 @@ class MetaPromptOptimizer(BaseOptimizer):
     def _create_round_data(
         self,
         round_num: int,
-        current_best_prompt: chat_prompt.ChatPrompt,
+        current_best_prompt: Any,
         current_best_score: float,
-        best_prompt_overall: chat_prompt.ChatPrompt,
-        evaluated_candidates: list[tuple[chat_prompt.ChatPrompt, float]],
+        best_prompt_overall: Any,
+        evaluated_candidates: list[tuple[Any, float]],
         previous_best_score: float,
         improvement_this_round: float,
     ) -> OptimizationRound:
@@ -1147,7 +1154,7 @@ class MetaPromptOptimizer(BaseOptimizer):
         def _evaluated_task(dataset_item: dict[str, Any]) -> dict[str, Any]:
             if callable(run_bundle_fn):
                 run_result = run_bundle_fn(bundle_prompts, dataset_item)
-            elif bundle_agent_class is not None:
+            elif bundle_agent_class is not None and callable(bundle_agent_class):
                 agent: Any = bundle_agent_class(
                     prompts=bundle_prompts,
                     plan=bundle_plan,
@@ -1156,10 +1163,12 @@ class MetaPromptOptimizer(BaseOptimizer):
                 run_result = agent.run_bundle(dataset_item)  # type: ignore[attr-defined]
             else:
                 first_prompt = next(iter(bundle_prompts.values()))
+                invoker = getattr(first_prompt, "invoke", None)
+                final_output = ""
+                if callable(invoker):
+                    final_output = invoker(first_prompt.get_messages(dataset_item))
                 run_result = {
-                    "final_output": first_prompt.invoke(
-                        first_prompt.get_messages(dataset_item)
-                    ),
+                    "final_output": final_output,
                     "trace": {},
                 }
 
