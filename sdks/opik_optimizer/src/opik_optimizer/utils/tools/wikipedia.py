@@ -392,8 +392,7 @@ def _download_bm25_index(
 
     Args:
         repo_id: HuggingFace repo ID (default: "Comet/wikipedia-2017-bm25")
-        cache_dir: Local cache directory (default: ~/.opik_optimizer/.cache/wikipedia_bm25)
-        local_dir: Explicit local directory path to place the snapshot (overrides repo_id-based path)
+        target_dir: Optional local directory path to place the snapshot
 
     Returns:
         Path to downloaded index
