@@ -183,7 +183,7 @@ def _evaluate_task(
             verbose=verbose,
             scoring_key_mapping=scoring_key_mapping,
         )
-        test_results = evaluation_engine.evaluate_llm_tasks(
+        test_results = evaluation_engine.evaluate_llm_task_on_dataset(
             dataset_=dataset,
             task=task,
             nb_samples=nb_samples,
@@ -503,7 +503,7 @@ def evaluate_prompt(
             verbose=verbose,
             scoring_key_mapping=None,
         )
-        test_results = evaluation_engine.evaluate_llm_tasks(
+        test_results = evaluation_engine.evaluate_llm_task_on_dataset(
             dataset_=dataset,
             task=_build_prompt_evaluation_task(model=opik_model, messages=messages),
             nb_samples=nb_samples,
@@ -751,7 +751,7 @@ def evaluate_items(
         )
 
         # Use the new evaluate_items method
-        test_results = evaluation_engine.evaluate_items(
+        test_results = evaluation_engine.evaluate_llm_task_on_dict_items(
             items=items,
             task=task,
         )

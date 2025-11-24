@@ -49,7 +49,7 @@ class EvaluationEngine:
         )
 
     @opik.track(name="metrics_calculation")  # type: ignore[attr-defined,has-type]
-    def _evaluate_test_case(
+    def _run_metrics_for_test_case(
         self,
         test_case_: test_case.TestCase,
         trial_id: int = 0,
@@ -75,7 +75,35 @@ class EvaluationEngine:
         )
         return test_result_
 
-    def _evaluate_llm_task(
+    @opik.track(  # type: ignore[attr-defined,has-type]
+        name="task_span_metrics_calculation",
+        ignore_arguments=["test_case_"],
+    )
+    def _run_metrics_for_test_case_with_task_span(
+        self,
+        trace_id: str,
+        task_span: models.SpanModel,
+        test_case_: test_case.TestCase,
+    ) -> List[score_result.ScoreResult]:
+        score_results, mapped_scoring_inputs = (
+            self._metrics_evaluator.compute_task_span_scores(
+                dataset_item_content=test_case_.dataset_item_content,
+                task_output=test_case_.task_output,
+                task_span=task_span,
+            )
+        )
+        test_case_.mapped_scoring_inputs = mapped_scoring_inputs
+
+        # log feedback scores
+        rest_operations.log_test_result_feedback_scores(
+            client=self._client,
+            score_results=score_results,
+            trace_id=trace_id,
+            project_name=self._project_name,
+        )
+        return score_results
+
+    def _compute_test_result_for_llm_task(
         self,
         item: dataset_item.DatasetItem,
         task: LLMTask,
@@ -120,14 +148,14 @@ class EvaluationEngine:
                 task_output=task_output_,
                 dataset_item_content=item_content,
             )
-            test_result_ = self._evaluate_test_case(
+            test_result_ = self._run_metrics_for_test_case(
                 test_case_=test_case_,
                 trial_id=trial_id,
             )
 
         return test_result_
 
-    def _execute_evaluation_with_span_scoring(
+    def _compute_test_results_for_llm_task(
         self,
         dataset_items: List[dataset_item.DatasetItem],
         task: LLMTask,
@@ -135,55 +163,12 @@ class EvaluationEngine:
         trial_count: int,
         description: str,
     ) -> List[test_result.TestResult]:
-        """
-        Common evaluation logic with task span scoring support.
-
-        Executes evaluation tasks for the given dataset items with optional
-        task span scoring enabled if task span metrics are configured.
-
-        Args:
-            dataset_items: List of dataset items to evaluate.
-            task: The LLM task function to execute.
-            experiment_: Optional experiment to associate evaluations with.
-            trial_count: Number of evaluation trials to run.
-            description: Description for progress display.
-
-        Returns:
-            List of test results from all trials.
-        """
-        if not self._metrics_evaluator.has_task_span_metrics:
-            return self._execute_evaluation_tasks(
-                dataset_items, task, experiment_, trial_count, description
-            )
-
-        LOGGER.debug(
-            "Detected %d LLM task span scoring metrics — enabling handling of the LLM task evaluation span.",
-            len(self._metrics_evaluator.task_span_metrics),
-        )
-
-        with local_recording.record_traces_locally() as recording:
-            test_results = self._execute_evaluation_tasks(
-                dataset_items, task, experiment_, trial_count, description
-            )
-            self._evaluate_llm_tasks_spans_from_recording(test_results, recording)
-
-        return test_results
-
-    def _execute_evaluation_tasks(
-        self,
-        dataset_items: List[dataset_item.DatasetItem],
-        task: LLMTask,
-        experiment_: Optional[experiment.Experiment],
-        trial_count: int,
-        description: str,
-    ) -> List[test_result.TestResult]:
-        """Execute evaluation tasks without span scoring."""
         test_results: List[test_result.TestResult] = []
 
         for trial_id in range(trial_count):
             evaluation_tasks: List[EvaluationTask[test_result.TestResult]] = [
                 functools.partial(
-                    self._evaluate_llm_task,
+                    self._compute_test_result_for_llm_task,
                     item=item,
                     task=task,
                     trial_id=trial_id,
@@ -203,7 +188,7 @@ class EvaluationEngine:
 
         return test_results
 
-    def evaluate_llm_tasks(
+    def evaluate_llm_task_on_dataset(
         self,
         dataset_: dataset.Dataset,
         task: LLMTask,
@@ -221,21 +206,31 @@ class EvaluationEngine:
         if dataset_sampler is not None:
             dataset_items = dataset_sampler.sample(dataset_items)
 
-        return self._execute_evaluation_with_span_scoring(
-            dataset_items=dataset_items,
-            task=task,
-            experiment_=experiment_,
-            trial_count=trial_count,
-            description="Evaluation",
+        if not self._metrics_evaluator.has_task_span_metrics:
+            return self._compute_test_results_for_llm_task(
+                dataset_items, task, experiment_, trial_count, "Evaluation"
+            )
+
+        LOGGER.debug(
+            "Detected %d LLM task span scoring metrics — enabling handling of the LLM task evaluation span.",
+            len(self._metrics_evaluator.task_span_metrics),
         )
 
-    def evaluate_items(
+        with local_recording.record_traces_locally() as recording:
+            test_results = self._compute_test_results_for_llm_task(
+                dataset_items, task, experiment_, trial_count, "Evaluation"
+            )
+            self._update_test_results_with_task_span_metrics(test_results, recording)
+
+        return test_results
+
+    def evaluate_llm_task_on_dict_items(
         self,
         items: List[Dict[str, Any]],
         task: LLMTask,
     ) -> List[test_result.TestResult]:
         """
-        Evaluate a list of dataset items using a task function.
+        Evaluate an LLM task on a list of dict items.
 
         This method creates traces for each evaluation but doesn't require a Dataset object
         or experiment. It's useful for optimization scenarios where you have items in memory
@@ -257,15 +252,25 @@ class EvaluationEngine:
             for idx, item in enumerate(items)
         ]
 
-        return self._execute_evaluation_with_span_scoring(
-            dataset_items=dataset_items,
-            task=task,
-            experiment_=None,  # Items evaluation doesn't use experiments
-            trial_count=1,
-            description="Items evaluation",
+        if not self._metrics_evaluator.has_task_span_metrics:
+            return self._compute_test_results_for_llm_task(
+                dataset_items, task, None, 1, "Items evaluation"
+            )
+
+        LOGGER.debug(
+            "Detected %d LLM task span scoring metrics — enabling handling of the LLM task evaluation span.",
+            len(self._metrics_evaluator.task_span_metrics),
         )
 
-    def _evaluate_llm_tasks_spans_from_recording(
+        with local_recording.record_traces_locally() as recording:
+            test_results = self._compute_test_results_for_llm_task(
+                dataset_items, task, None, 1, "Items evaluation"
+            )
+            self._update_test_results_with_task_span_metrics(test_results, recording)
+
+        return test_results
+
+    def _update_test_results_with_task_span_metrics(
         self,
         test_results: List[test_result.TestResult],
         recording: local_recording._LocalRecordingHandle,
@@ -280,7 +285,7 @@ class EvaluationEngine:
         # Create span evaluation tasks from LLM tasks evaluation results and evaluate them in parallel
         span_evaluation_tasks: List[EvaluationTask[test_result.TestResult]] = [
             functools.partial(
-                self._evaluate_llm_task_result_span,
+                self._update_test_result_with_task_span_metrics,
                 evaluation_task_result=test_result_,
                 trace_trees=trace_trees,
             )
@@ -298,7 +303,7 @@ class EvaluationEngine:
             "Task evaluation span handling is disabled — the evaluation has been completed."
         )
 
-    def _evaluate_llm_task_result_span(
+    def _update_test_result_with_task_span_metrics(
         self,
         evaluation_task_result: test_result.TestResult,
         trace_trees: List[models.TraceModel],
@@ -340,7 +345,7 @@ class EvaluationEngine:
             ),
             client=self._client,
         ):
-            score_results = self._score_llm_task_result_span(
+            score_results = self._run_metrics_for_test_case_with_task_span(
                 trace_id=trace_id,
                 task_span=evaluation_span,
                 test_case_=evaluation_task_result.test_case,
@@ -349,41 +354,13 @@ class EvaluationEngine:
             evaluation_task_result.score_results += score_results
             return evaluation_task_result
 
-    @opik.track(  # type: ignore[attr-defined,has-type]
-        name="task_span_metrics_calculation",
-        ignore_arguments=["test_case_"],
-    )
-    def _score_llm_task_result_span(
-        self,
-        trace_id: str,
-        task_span: models.SpanModel,
-        test_case_: test_case.TestCase,
-    ) -> List[score_result.ScoreResult]:
-        score_results, mapped_scoring_inputs = (
-            self._metrics_evaluator.compute_task_span_scores(
-                dataset_item_content=test_case_.dataset_item_content,
-                task_output=test_case_.task_output,
-                task_span=task_span,
-            )
-        )
-        test_case_.mapped_scoring_inputs = mapped_scoring_inputs
-
-        # log feedback scores
-        rest_operations.log_test_result_feedback_scores(
-            client=self._client,
-            score_results=score_results,
-            trace_id=trace_id,
-            project_name=self._project_name,
-        )
-        return score_results
-
     def evaluate_test_cases(
         self,
         test_cases: List[test_case.TestCase],
     ) -> List[test_result.TestResult]:
         evaluation_tasks: List[EvaluationTask[test_result.TestResult]] = [
             functools.partial(
-                self._evaluate_test_case,
+                self._run_metrics_for_test_case,
                 test_case_=test_case_,
             )
             for test_case_ in test_cases
