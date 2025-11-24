@@ -101,7 +101,7 @@ def _sanitize_query(query: str, max_length: int = 500) -> str:
 def search_wikipedia(
     query: str,
     search_type: Literal["api", "colbert", "bm25"] = "api",
-    n: int = 3,
+    k: int = 3,
     bm25_index_dir: str | None = None,
     bm25_hf_repo: str | None = None,
     use_api: bool | None = None,  # Backward compatibility
@@ -115,7 +115,7 @@ def search_wikipedia(
             - "api": Wikipedia API (default, fast, always available)
             - "colbert": ColBERTv2 neural search (requires remote server)
             - "bm25": BM25 local retrieval (requires index)
-        n: Number of results to return (default: 3)
+        k: Number of results to return (default: 3). Industry standard parameter name.
         bm25_index_dir: Path to local BM25 index (only for search_type="bm25")
         bm25_hf_repo: HuggingFace repo for BM25 index (only for search_type="bm25")
         use_api: DEPRECATED. Use search_type parameter instead.
@@ -126,20 +126,21 @@ def search_wikipedia(
         List of search result strings
 
     Example:
-        # API search (default)
-        results = search_wikipedia("What is Python?")
+        # API search (default, 5 results)
+        results = search_wikipedia("What is Python?", k=5)
 
-        # ColBERT search
-        results = search_wikipedia("What is Python?", search_type="colbert")
+        # ColBERT search (10 results)
+        results = search_wikipedia("What is Python?", search_type="colbert", k=10)
 
-        # BM25 search from HuggingFace
+        # BM25 search from HuggingFace (5 results)
         results = search_wikipedia(
             "What is Python?",
             search_type="bm25",
+            k=5,
             bm25_hf_repo="Comet/wikipedia-2017-bm25"
         )
 
-        # BM25 search from local index
+        # BM25 search from local index (3 results, default)
         results = search_wikipedia(
             "What is Python?",
             search_type="bm25",
@@ -159,13 +160,13 @@ def search_wikipedia(
 
     # Route to appropriate search backend
     if search_type == "api":
-        return _search_wikipedia_api(query, max_results=n)
+        return _search_wikipedia_api(query, k=k)
     elif search_type == "colbert":
-        return _search_wikipedia_colbert(query, k=n)
+        return _search_wikipedia_colbert(query, k=k)
     elif search_type == "bm25":
         return _search_wikipedia_bm25(
             query,
-            n=n,
+            k=k,
             index_dir=bm25_index_dir,
             hf_repo=bm25_hf_repo,
         )
@@ -175,13 +176,13 @@ def search_wikipedia(
         )
 
 
-def _search_wikipedia_api(query: str, max_results: int = 3) -> list[str]:
+def _search_wikipedia_api(query: str, k: int = 3) -> list[str]:
     """
     Search Wikipedia using the Wikipedia API.
 
     Args:
         query: Search query (will be sanitized)
-        max_results: Maximum number of results
+        k: Number of results to return (industry standard parameter name)
 
     Returns:
         List of formatted results
@@ -197,7 +198,7 @@ def _search_wikipedia_api(query: str, max_results: int = 3) -> list[str]:
             "format": "json",
             "list": "search",
             "srsearch": query,
-            "srlimit": max_results,
+            "srlimit": k,
             "srprop": "snippet",
         }
 
@@ -216,7 +217,7 @@ def _search_wikipedia_api(query: str, max_results: int = 3) -> list[str]:
 
         results = []
         if "query" in search_data and "search" in search_data["query"]:
-            for item in search_data["query"]["search"][:max_results]:
+            for item in search_data["query"]["search"][:k]:
                 page_title = item["title"]
                 snippet = item.get("snippet", "")
 
@@ -255,7 +256,7 @@ def _search_wikipedia_colbert(query: str, k: int = 3) -> list[str]:
     except ImportError:
         logger.warning("ColBERTv2 not available, falling back to API search")
         logger.debug("Install dspy for ColBERT support")
-        return _search_wikipedia_api(query, max_results=k)
+        return _search_wikipedia_api(query, k=k)
 
     logger.info("ColBERTv2: %s", query)
     try:
@@ -264,12 +265,12 @@ def _search_wikipedia_colbert(query: str, k: int = 3) -> list[str]:
         return [str(item.text) for item in colbert_results if hasattr(item, "text")]
     except Exception as e:
         logger.info("ColBERTv2 failed (%s), fallback to Wikipedia API", e)
-        return _search_wikipedia_api(query, max_results=k)
+        return _search_wikipedia_api(query, k=k)
 
 
 def _search_wikipedia_bm25(
     query: str,
-    n: int = 5,
+    k: int = 3,
     index_dir: str | None = None,
     hf_repo: str | None = None,
 ) -> list[str]:
@@ -280,7 +281,7 @@ def _search_wikipedia_bm25(
 
     Args:
         query: Search query (will be sanitized)
-        n: Number of results
+        k: Number of results to return (industry standard parameter name, default: 3)
         index_dir: Path to local BM25 index
         hf_repo: HuggingFace repo ID for BM25 index
 
@@ -296,11 +297,11 @@ def _search_wikipedia_bm25(
     except ImportError:
         logger.warning("bm25s not available, falling back to API search")
         logger.debug("Install with: pip install bm25s[full]")
-        return _search_wikipedia_api(query, max_results=n)
+        return _search_wikipedia_api(query, k=k)
 
     if not index_dir and not hf_repo:
         logger.warning("No BM25 index provided, falling back to API search")
-        return _search_wikipedia_api(query, max_results=n)
+        return _search_wikipedia_api(query, k=k)
 
     try:
         index_path = _resolve_bm25_index_path(
@@ -323,8 +324,8 @@ def _search_wikipedia_bm25(
             [query], stopwords="en", stemmer=stemmer if stemmer else None
         )
 
-        # Get top n results
-        results, scores = retriever.retrieve(query_tokens, k=n)
+        # Get top k results
+        results, scores = retriever.retrieve(query_tokens, k=k)
 
         # Extract passages
         passages = []
@@ -339,14 +340,14 @@ def _search_wikipedia_bm25(
                 )
 
         # Pad if needed
-        if len(passages) < n:
-            passages.extend([""] * (n - len(passages)))
+        if len(passages) < k:
+            passages.extend([""] * (k - len(passages)))
 
-        return passages[:n]
+        return passages[:k]
 
     except Exception as e:
         logger.warning("BM25 search failed (%s), falling back to API search", e)
-        return _search_wikipedia_api(query, max_results=n)
+        return _search_wikipedia_api(query, k=k)
 
 
 @lru_cache(maxsize=1)

@@ -112,20 +112,20 @@ class TestSearchWikipediaBM25:
         mock_api.return_value = ["fallback result"]
 
         # bm25s module won't be available in most test environments
-        results = _search_wikipedia_bm25("test", n=1, index_dir="/tmp/test")
+        results = _search_wikipedia_bm25("test", k=1, index_dir="/tmp/test")
 
         assert results == ["fallback result"]
-        mock_api.assert_called_once_with("test", max_results=1)
+        mock_api.assert_called_once_with("test", k=1)
 
     @patch("opik_optimizer.utils.tools.wikipedia._search_wikipedia_api")
     def test_bm25_no_index_fallback(self, mock_api: Mock) -> None:
         """Test fallback when no index provided."""
         mock_api.return_value = ["fallback result"]
 
-        results = _search_wikipedia_bm25("test", n=1, index_dir=None, hf_repo=None)
+        results = _search_wikipedia_bm25("test", k=1, index_dir=None, hf_repo=None)
 
         assert results == ["fallback result"]
-        mock_api.assert_called_once_with("test", max_results=1)
+        mock_api.assert_called_once_with("test", k=1)
 
     @patch("opik_optimizer.utils.tools.wikipedia._search_wikipedia_api")
     def test_bm25_index_not_found_fallback(self, mock_api: Mock) -> None:
@@ -134,7 +134,7 @@ class TestSearchWikipediaBM25:
 
         # Test will naturally fall back because /nonexistent/path doesn't exist
         # The import will succeed, but the path check will fail
-        results = _search_wikipedia_bm25("test", n=1, index_dir="/nonexistent/path")
+        results = _search_wikipedia_bm25("test", k=1, index_dir="/nonexistent/path")
 
         assert results == ["fallback result"]
 
@@ -150,24 +150,24 @@ class TestSearchWikipediaUnified:
         results = search_wikipedia("test")
 
         assert results == ["result"]
-        mock_api.assert_called_once_with("test", max_results=3)
+        mock_api.assert_called_once_with("test", k=3)
 
     @patch("opik_optimizer.utils.tools.wikipedia._search_wikipedia_api")
     def test_explicit_api_search(self, mock_api: Mock) -> None:
         """Test explicit API search type."""
         mock_api.return_value = ["result"]
 
-        results = search_wikipedia("test", search_type="api", n=5)
+        results = search_wikipedia("test", search_type="api", k=5)
 
         assert results == ["result"]
-        mock_api.assert_called_once_with("test", max_results=5)
+        mock_api.assert_called_once_with("test", k=5)
 
     @patch("opik_optimizer.utils.tools.wikipedia._search_wikipedia_colbert")
     def test_colbert_search(self, mock_colbert: Mock) -> None:
         """Test ColBERT search type."""
         mock_colbert.return_value = ["result"]
 
-        results = search_wikipedia("test", search_type="colbert", n=5)
+        results = search_wikipedia("test", search_type="colbert", k=5)
 
         assert results == ["result"]
         mock_colbert.assert_called_once_with("test", k=5)
