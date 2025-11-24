@@ -4,9 +4,6 @@ from collections.abc import Callable
 
 import opik
 from opik import Dataset
-from opik.environment import get_tqdm_for_current_environment
-
-
 from ...base_optimizer import BaseOptimizer, OptimizationRound
 from ...api_objects import chat_prompt
 from ...optimization_result import OptimizationResult
@@ -26,8 +23,6 @@ from ...utils.prompt_segments import extract_prompt_segments
 
 # Import ops modules
 from .ops import evaluation_ops, candidate_ops, context_ops, result_ops
-
-tqdm = get_tqdm_for_current_environment()
 
 # Set up logging
 logger = logging.getLogger(__name__)  # Gets logger configured by setup_logging
@@ -162,17 +157,12 @@ class MetaPromptOptimizer(BaseOptimizer):
                 f"Model {self.model} max tokens: {model_max_tokens}, "
                 f"calculated dataset context budget: {calculated_max}"
             )
-            # Store for display
-            self._model_max_tokens = model_max_tokens
-            self._calculated_context_budget = calculated_max
         except Exception as e:
             logger.debug(
                 f"Could not get max tokens for model {self.model}: {e}. "
                 f"Using default max: {self.DEFAULT_DATASET_CONTEXT_MAX_TOKENS}"
             )
             calculated_max = self.DEFAULT_DATASET_CONTEXT_MAX_TOKENS
-            self._model_max_tokens = None
-            self._calculated_context_budget = calculated_max
 
         # Apply absolute safety limit (for custom models or huge context windows)
         max_tokens = min(calculated_max, self.DEFAULT_DATASET_CONTEXT_MAX_TOKENS)
@@ -401,7 +391,7 @@ class MetaPromptOptimizer(BaseOptimizer):
             raise e
 
     # FIXME: To be removed once MCP is fully supported
-    def optimize_mcp(
+    def optimize_mcp(  # noqa: vulture
         self,
         prompt: chat_prompt.ChatPrompt,
         dataset: Dataset,

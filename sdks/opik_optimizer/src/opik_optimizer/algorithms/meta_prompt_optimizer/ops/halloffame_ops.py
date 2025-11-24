@@ -151,9 +151,9 @@ class PromptHallOfFame:
             patterns = self._parse_pattern_response(response)
 
             if patterns:
-                logger.info(f"Extracted {len(patterns)} patterns from hall of fame")
+                logger.debug(f"Extracted {len(patterns)} patterns from hall of fame")
                 for i, pattern in enumerate(patterns, 1):
-                    logger.info(f"  Pattern {i}: {pattern[:100]}...")
+                    logger.debug(f"  Pattern {i}: {pattern[:100]}...")
 
                 # Store patterns
                 self.extracted_patterns.extend(patterns)
