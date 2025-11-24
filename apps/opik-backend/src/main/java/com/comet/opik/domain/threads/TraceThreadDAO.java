@@ -624,7 +624,9 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
                 tt.sampling_per_rule,
                 tt.scored_at
             FROM trace_threads tt final
-            WHERE tt.id IN :ids AND tt.workspace_id = :workspace_id;""";
+            WHERE tt.id IN :ids AND tt.workspace_id = :workspace_id
+            ORDER BY tt.last_updated_at DESC
+            LIMIT 1 BY tt.id;""";
 
     @Override
     public Mono<Void> bulkUpdate(@NonNull List<UUID> ids, @NonNull TraceThreadUpdate update, boolean mergeTags) {

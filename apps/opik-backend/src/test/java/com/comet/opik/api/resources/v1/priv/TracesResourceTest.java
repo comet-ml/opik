@@ -6091,6 +6091,69 @@ class TracesResourceTest {
         }
 
         @Test
+        @DisplayName("when batch updating threads multiple times, then latest values are preserved")
+        void batchUpdate__whenMultiplePartialUpdates__thenLatestValuesPreserved() {
+            var projectName = "project-" + RandomStringUtils.secure().nextAlphanumeric(32);
+            projectResourceClient.createProject(projectName, API_KEY, TEST_WORKSPACE);
+            var projectId = projectResourceClient.getByName(projectName, API_KEY, TEST_WORKSPACE).id();
+
+            // Create a thread by creating a trace
+            var threadId = UUID.randomUUID().toString();
+            create(createTrace().toBuilder().projectName(projectName).threadId(threadId).build(), API_KEY,
+                    TEST_WORKSPACE);
+
+            // Wait for thread to be created
+            Awaitility.await()
+                    .atMost(5, TimeUnit.SECONDS)
+                    .untilAsserted(() -> {
+                        var threads = traceResourceClient.getTraceThreads(projectId, null, API_KEY, TEST_WORKSPACE,
+                                null, null, null);
+                        assertThat(threads.content()).hasSize(1);
+                    });
+
+            var threads = traceResourceClient.getTraceThreads(projectId, null, API_KEY, TEST_WORKSPACE,
+                    null, null, null);
+            var threadModelId = threads.content().getFirst().threadModelId();
+
+            // First batch update: Set original tags
+            var originalTags = Set.of("tag-" + RandomStringUtils.secure().nextAlphanumeric(8));
+            var firstBatchUpdate = TraceThreadBatchUpdate.builder()
+                    .ids(Set.of(threadModelId))
+                    .update(TraceThreadUpdate.builder()
+                            .tags(originalTags)
+                            .build())
+                    .mergeTags(false)
+                    .build();
+            traceResourceClient.batchUpdateThreads(firstBatchUpdate, API_KEY, TEST_WORKSPACE);
+
+            // Second batch update: Update with new tags
+            var secondTags = Set.of("updated-" + RandomStringUtils.secure().nextAlphanumeric(8));
+            var secondBatchUpdate = TraceThreadBatchUpdate.builder()
+                    .ids(Set.of(threadModelId))
+                    .update(TraceThreadUpdate.builder()
+                            .tags(secondTags)
+                            .build())
+                    .mergeTags(false)
+                    .build();
+            traceResourceClient.batchUpdateThreads(secondBatchUpdate, API_KEY, TEST_WORKSPACE);
+
+            // Third batch update: Update with final tags
+            var thirdTags = Set.of("final-" + RandomStringUtils.secure().nextAlphanumeric(8));
+            var thirdBatchUpdate = TraceThreadBatchUpdate.builder()
+                    .ids(Set.of(threadModelId))
+                    .update(TraceThreadUpdate.builder()
+                            .tags(thirdTags)
+                            .build())
+                    .mergeTags(false)
+                    .build();
+            traceResourceClient.batchUpdateThreads(thirdBatchUpdate, API_KEY, TEST_WORKSPACE);
+
+            // Verify that thread has the latest tags (not from first or second update)
+            var finalThread = traceResourceClient.getTraceThread(threadId, projectId, API_KEY, TEST_WORKSPACE);
+            assertThat(finalThread.tags()).containsExactlyInAnyOrderElementsOf(thirdTags);
+        }
+
+        @Test
         @DisplayName("when batch update with empty IDs, then return 400")
         void batchUpdate__whenEmptyIds__thenReturn400() {
             var batchUpdate = TraceThreadBatchUpdate.builder()
