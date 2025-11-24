@@ -138,6 +138,3 @@ def test_experiment_scoring_functions__standard_deviation__computed_and_logged(
         f"Expected experiment score value {expected_stdev} in backend, but got {experiment_data.experiment_scores[0].value}. "
         f"Full score object: {experiment_data.experiment_scores[0]}"
     )
-
-
-

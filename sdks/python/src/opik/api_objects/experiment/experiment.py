@@ -6,7 +6,6 @@ from opik.message_processing.batching import sequence_splitter
 from opik.message_processing import messages, streamer
 from opik.rest_api import client as rest_api_client
 from opik.rest_api.types import experiment_public, ExperimentScore
-from opik.rest_api.types import experiment_public
 from . import experiment_item, experiments_client
 from .. import constants, helpers
 from ...api_objects.prompt import Prompt
@@ -118,9 +117,6 @@ class Experiment:
         Returns:
             List of ExperimentItemContent objects for this experiment.
         """
-        result: List[experiment_item.ExperimentItemContent] = []
-        max_endpoint_batch_size = rest_stream_parser.MAX_ENDPOINT_BATCH_SIZE
-
         if max_results is None:
             max_results = 10000  # TODO: remove this once we have a proper way to get all experiment items
 

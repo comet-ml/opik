@@ -808,8 +808,7 @@ class ExperimentDAO {
     Mono<Experiment> getById(@NonNull UUID id) {
         log.info("Getting experiment by id '{}'", id);
         var limit = 1;
-        var template = TemplateUtils.new
-          (FIND);
+        var template = TemplateUtils.newST(FIND);
         template.add("id", id.toString());
         template.add("limit", limit);
         return Mono.from(connectionFactory.create())

@@ -68,11 +68,11 @@ def compute_hallucination_stats(
         for x in test_results
         if x.score_results and len(x.score_results) > 0
     ]
-    
+
     # Return empty list if no scores available
     if not scores:
         return []
-    
+
     return [
         score_result.ScoreResult(
             name="Custom metric",
