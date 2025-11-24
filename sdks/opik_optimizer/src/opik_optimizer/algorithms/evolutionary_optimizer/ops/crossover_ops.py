@@ -129,6 +129,104 @@ def deap_crossover(ind1: Any, ind2: Any, verbose: int = 1) -> tuple[Any, Any]:
     return child1, child2
 
 
+def _semantic_crossover(
+    parent1_messages: list[dict[str, str]],
+    parent2_messages: list[dict[str, str]],
+    output_style_guidance: str,
+    model: str,
+    model_parameters: dict[str, Any],
+) -> tuple[list[dict[str, str]], list[dict[str, str]]]:
+    """
+    Semantic crossover: Extract key instructions from both parents
+    and create meaningful combinations (inspired by GEPA's instruction blending).
+
+    This is more sophisticated than word/sentence swapping - it understands
+    and recombines the semantic content.
+    """
+    system_prompt = f"""You are an expert at analyzing and combining prompts.
+
+Your task is to create two new prompts by meaningfully blending elements from two parent prompts.
+
+Process:
+1. Analyze each parent prompt to identify:
+   - Core instructions and objectives
+   - Key constraints or requirements
+   - Structural approaches
+   - Phrasing styles
+
+2. Create two distinct offspring by:
+   - Combining complementary elements from both parents
+   - Preserving semantic coherence (don't just swap sentences)
+   - Maintaining {output_style_guidance}
+   - Creating meaningful variations (not copies)
+
+3. Ensure offspring are:
+   - Grammatically correct
+   - Logically structured
+   - Different from each parent
+   - Different from each other
+
+Return ONLY a JSON array with two prompt arrays:
+[
+  [
+    {{"role": "system", "content": "first offspring content"}},
+    {{"role": "user", "content": "..."}}
+  ],
+  [
+    {{"role": "system", "content": "second offspring content"}},
+    {{"role": "user", "content": "..."}}
+  ]
+]"""
+
+    user_prompt = f"""Parent Prompt 1:
+{json.dumps(parent1_messages, indent=2)}
+
+Parent Prompt 2:
+{json.dumps(parent2_messages, indent=2)}
+
+Create two new prompts by semantically blending these parents.
+Focus on combining their strengths and creating meaningful variations."""
+
+    try:
+        response_content = _llm_calls.call_model(
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+            model=model,
+            model_parameters=model_parameters,
+            is_reasoning=True,
+        )
+
+        # Parse response
+        children: list[list[dict[str, str]]] = []
+        try:
+            parsed = json.loads(response_content)
+            if isinstance(parsed, list) and len(parsed) >= 2:
+                children = parsed[:2]
+        except Exception:
+            # Fallback: try to extract arrays
+            extracted = _extract_json_arrays(response_content)
+            for arr in extracted[:2]:
+                try:
+                    parsed = json.loads(arr)
+                    if isinstance(parsed, list):
+                        children.append(parsed)
+                except Exception:
+                    continue
+
+        if len(children) >= 2:
+            return children[0], children[1]
+        else:
+            raise ValueError(
+                "Could not extract two valid children from semantic crossover"
+            )
+
+    except Exception as e:
+        logger.warning(f"Semantic crossover failed: {e}")
+        raise
+
+
 def llm_deap_crossover(
     ind1: Any,
     ind2: Any,
@@ -136,6 +234,7 @@ def llm_deap_crossover(
     model: str,
     model_parameters: dict[str, Any],
     verbose: int = 1,
+    use_semantic: bool = True,
 ) -> tuple[Any, Any]:
     """Perform crossover by asking an LLM to blend two parent prompts."""
     reporting.display_message(
@@ -146,6 +245,39 @@ def llm_deap_crossover(
     parent2_messages: list[dict[str, str]] = ind2
     current_output_style_guidance = output_style_guidance
 
+    # Try semantic crossover first
+    if use_semantic:
+        try:
+            logger.debug("Attempting semantic crossover (instruction blending)")
+            child1_messages, child2_messages = _semantic_crossover(
+                parent1_messages,
+                parent2_messages,
+                current_output_style_guidance,
+                model,
+                model_parameters,
+            )
+
+            # Create individuals
+            child1 = creator.Individual(child1_messages)
+            child2 = creator.Individual(child2_messages)
+
+            # Preserve tools and function_map
+            if hasattr(ind1, "tools"):
+                setattr(child1, "tools", getattr(ind1, "tools"))
+            if hasattr(ind1, "function_map"):
+                setattr(child1, "function_map", getattr(ind1, "function_map"))
+            if hasattr(ind2, "tools"):
+                setattr(child2, "tools", getattr(ind2, "tools"))
+            if hasattr(ind2, "function_map"):
+                setattr(child2, "function_map", getattr(ind2, "function_map"))
+
+            logger.debug("Semantic crossover successful")
+            return child1, child2
+
+        except Exception as e:
+            logger.debug(f"Semantic crossover failed, falling back to standard: {e}")
+
+    # Original LLM crossover logic as fallback
     user_prompt_for_llm_crossover = evo_prompts.llm_crossover_user_prompt(
         parent1_messages, parent2_messages, current_output_style_guidance
     )
