@@ -16,11 +16,13 @@ from opik_optimizer.datasets import hotpot
 from benchmarks.metrics.hotpot import hotpot_f1
 from benchmarks.agents.hotpot_multihop_agent import HotpotMultiHopAgent
 from opik_optimizer.utils.tools.wikipedia import search_wikipedia
+from opik_optimizer.utils.llm_logger import LLMLogger
 from opik_optimizer.logging_config import setup_logging
 
 # Configure logging
 setup_logging()
 logger = logging.getLogger(__name__)
+tool_logger = LLMLogger("hotpot_multihop_benchmark", agent_name="Hotpot Multi-Hop")
 
 # Set seed for reproducibility
 SEED = 42
@@ -70,7 +72,8 @@ def wikipedia_search(query: str, n: int = 5) -> list[str]:
     Returns:
         List of passage texts
     """
-    results = search_wikipedia(query, search_type="api", n=n)  # Use API search
+    with tool_logger.log_tool("wikipedia_api", query):
+        results = search_wikipedia(query, search_type="api", n=n)
     # Return top n results, padding if necessary
     return results[:n] if len(results) >= n else results + [""] * (n - len(results))
 
@@ -89,12 +92,13 @@ def bm25_wikipedia_search(query: str, n: int = 5) -> list[str]:
     Falls back to API search if BM25 index is unavailable.
     """
     try:
-        results = search_wikipedia(
-            query,
-            search_type="bm25",
-            n=n,
-            bm25_hf_repo="Comet/wikipedia-2017-bm25",  # Production index
-        )
+        with tool_logger.log_tool("wikipedia_bm25", query):
+            results = search_wikipedia(
+                query,
+                search_type="bm25",
+                n=n,
+                bm25_hf_repo="Comet/wikipedia-2017-bm25",  # Production index
+            )
         return results
 
     except Exception as e:
