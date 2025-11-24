@@ -49,7 +49,7 @@ class EvaluationEngine:
         )
 
     @opik.track(name="metrics_calculation")  # type: ignore[attr-defined,has-type]
-    def _run_metrics_for_test_case(
+    def _compute_test_result_for_test_case(
         self,
         test_case_: test_case.TestCase,
         trial_id: int = 0,
@@ -79,7 +79,7 @@ class EvaluationEngine:
         name="task_span_metrics_calculation",
         ignore_arguments=["test_case_"],
     )
-    def _run_metrics_for_test_case_with_task_span(
+    def _compute_scores_for_test_case_with_task_span(
         self,
         trace_id: str,
         task_span: models.SpanModel,
@@ -148,7 +148,7 @@ class EvaluationEngine:
                 task_output=task_output_,
                 dataset_item_content=item_content,
             )
-            test_result_ = self._run_metrics_for_test_case(
+            test_result_ = self._compute_test_result_for_test_case(
                 test_case_=test_case_,
                 trial_id=trial_id,
             )
@@ -187,6 +187,90 @@ class EvaluationEngine:
             )
 
         return test_results
+
+    def _update_test_result_with_task_span_metrics(
+        self,
+        evaluation_task_result: test_result.TestResult,
+        trace_trees: List[models.TraceModel],
+    ) -> test_result.TestResult:
+        # find related trace
+        trace_id = evaluation_task_result.test_case.trace_id
+        task_trace = None
+        for trace_ in trace_trees:
+            if trace_.id == trace_id:
+                task_trace = trace_
+                break
+
+        if task_trace is None:
+            raise ValueError(
+                f"No trace found for test result: {evaluation_task_result}"
+            )
+
+        # find evaluation span
+        if len(task_trace.spans) == 0:
+            raise ValueError(
+                f"Task trace contains no spans. Task span metrics require at least one span to be present in the execution trace. Test result: {evaluation_task_result}"
+            )
+        # the first span is the evaluation span
+        evaluation_span = task_trace.spans[0]
+
+        with helpers.evaluate_llm_task_result_spans_context(
+            trace_data=trace.TraceData(
+                id=trace_id,
+                name=task_trace.name,
+                start_time=task_trace.start_time,
+                metadata=task_trace.metadata,
+                input=task_trace.input,
+                output=task_trace.output,
+                tags=task_trace.tags,
+                project_name=self._project_name,
+                created_by="evaluation",
+                error_info=task_trace.error_info,
+                thread_id=task_trace.thread_id,
+            ),
+            client=self._client,
+        ):
+            score_results = self._compute_scores_for_test_case_with_task_span(
+                trace_id=trace_id,
+                task_span=evaluation_span,
+                test_case_=evaluation_task_result.test_case,
+            )
+            # append scores to the input test result
+            evaluation_task_result.score_results += score_results
+            return evaluation_task_result
+
+    def _update_test_results_with_task_span_metrics(
+        self,
+        test_results: List[test_result.TestResult],
+        recording: local_recording._LocalRecordingHandle,
+    ) -> None:
+        """Evaluate task spans from a local recording."""
+        # Get trace trees from the recording (this flushes automatically)
+        trace_trees = recording.trace_trees
+        if len(trace_trees) == 0:
+            LOGGER.warning("No trace trees found in the local recording.")
+            return
+
+        # Create span evaluation tasks from LLM tasks evaluation results and evaluate them in parallel
+        span_evaluation_tasks: List[EvaluationTask[test_result.TestResult]] = [
+            functools.partial(
+                self._update_test_result_with_task_span_metrics,
+                evaluation_task_result=test_result_,
+                trace_trees=trace_trees,
+            )
+            for test_result_ in test_results
+        ]
+
+        evaluation_tasks_executor.execute(
+            span_evaluation_tasks,
+            self._workers,
+            self._verbose,
+            desc="LLM task spans evaluation",
+        )
+
+        LOGGER.debug(
+            "Task evaluation span handling is disabled — the evaluation has been completed."
+        )
 
     def evaluate_llm_task_on_dataset(
         self,
@@ -270,97 +354,13 @@ class EvaluationEngine:
 
         return test_results
 
-    def _update_test_results_with_task_span_metrics(
-        self,
-        test_results: List[test_result.TestResult],
-        recording: local_recording._LocalRecordingHandle,
-    ) -> None:
-        """Evaluate task spans from a local recording."""
-        # Get trace trees from the recording (this flushes automatically)
-        trace_trees = recording.trace_trees
-        if len(trace_trees) == 0:
-            LOGGER.warning("No trace trees found in the local recording.")
-            return
-
-        # Create span evaluation tasks from LLM tasks evaluation results and evaluate them in parallel
-        span_evaluation_tasks: List[EvaluationTask[test_result.TestResult]] = [
-            functools.partial(
-                self._update_test_result_with_task_span_metrics,
-                evaluation_task_result=test_result_,
-                trace_trees=trace_trees,
-            )
-            for test_result_ in test_results
-        ]
-
-        evaluation_tasks_executor.execute(
-            span_evaluation_tasks,
-            self._workers,
-            self._verbose,
-            desc="LLM task spans evaluation",
-        )
-
-        LOGGER.debug(
-            "Task evaluation span handling is disabled — the evaluation has been completed."
-        )
-
-    def _update_test_result_with_task_span_metrics(
-        self,
-        evaluation_task_result: test_result.TestResult,
-        trace_trees: List[models.TraceModel],
-    ) -> test_result.TestResult:
-        # find related trace
-        trace_id = evaluation_task_result.test_case.trace_id
-        task_trace = None
-        for trace_ in trace_trees:
-            if trace_.id == trace_id:
-                task_trace = trace_
-                break
-
-        if task_trace is None:
-            raise ValueError(
-                f"No trace found for test result: {evaluation_task_result}"
-            )
-
-        # find evaluation span
-        if len(task_trace.spans) == 0:
-            raise ValueError(
-                f"Task trace contains no spans. Task span metrics require at least one span to be present in the execution trace. Test result: {evaluation_task_result}"
-            )
-        # the first span is the evaluation span
-        evaluation_span = task_trace.spans[0]
-
-        with helpers.evaluate_llm_task_result_spans_context(
-            trace_data=trace.TraceData(
-                id=trace_id,
-                name=task_trace.name,
-                start_time=task_trace.start_time,
-                metadata=task_trace.metadata,
-                input=task_trace.input,
-                output=task_trace.output,
-                tags=task_trace.tags,
-                project_name=self._project_name,
-                created_by="evaluation",
-                error_info=task_trace.error_info,
-                thread_id=task_trace.thread_id,
-            ),
-            client=self._client,
-        ):
-            score_results = self._run_metrics_for_test_case_with_task_span(
-                trace_id=trace_id,
-                task_span=evaluation_span,
-                test_case_=evaluation_task_result.test_case,
-            )
-            # append scores to the input test result
-            evaluation_task_result.score_results += score_results
-            return evaluation_task_result
-
     def evaluate_test_cases(
         self,
         test_cases: List[test_case.TestCase],
     ) -> List[test_result.TestResult]:
         evaluation_tasks: List[EvaluationTask[test_result.TestResult]] = [
             functools.partial(
-                self._run_metrics_for_test_case,
+                self._compute_test_result_for_test_case,
                 test_case_=test_case_,
             )
             for test_case_ in test_cases
