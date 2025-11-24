@@ -44,7 +44,6 @@ class MetaPromptOptimizer(BaseOptimizer):
     - Ensuring prompts follow best practices
     - Refining prompts for clarity and effectiveness
     - Optimizing prompts for specific evaluation metrics
-    - Improving prompts based on performance feedback
 
     The optimizer works by:
     1. Evaluating the current prompt on a dataset
@@ -539,20 +538,43 @@ class MetaPromptOptimizer(BaseOptimizer):
                     self.prompts_per_round, max_trials - trials_used
                 )
 
-                # Step 1. Create a set of candidate prompts
-                generator = candidate_generator or self._generate_candidate_prompts
-                generator_kwargs = dict(candidate_generator_kwargs or {})
+                # Create a set of candidate prompts
+                is_synthesis_round = round_num >= 4 and (round_num - 4) % 5 == 0
 
-                # Add patterns to generator kwargs for injection
-                if self.hall_of_fame:
-                    patterns_to_inject = self.hall_of_fame.get_patterns_for_injection(
-                        n=3
+                if is_synthesis_round and not candidate_generator:
+                    # Synthesis round: combine top performers into comprehensive prompts
+                    logger.info("Combining top performers into comprehensive prompts")
+
+                    # Display synthesis round in rich console
+                    num_hof_entries = (
+                        len(self.hall_of_fame.entries)
+                        if self.hall_of_fame and hasattr(self.hall_of_fame, "entries")
+                        else 0
                     )
-                    if patterns_to_inject:
-                        generator_kwargs["winning_patterns"] = patterns_to_inject
-                        logger.debug(
-                            f"Injecting {len(patterns_to_inject)} patterns into generation"
+                    generator = self._generate_synthesis_prompts
+                    # Synthesis doesn't use patterns
+                    generator_kwargs = {}
+
+                    # Synthesis creates two prompts
+                    # TODO: Set this into a CONST
+                    prompts_this_round = min(
+                        2, max_trials - trials_used
+                    )
+                else:
+                    # Regular Round
+                    generator = candidate_generator or self._generate_candidate_prompts
+                    generator_kwargs = dict(candidate_generator_kwargs or {})
+
+                    # Add patterns to generator kwargs for injection
+                    if self.hall_of_fame:
+                        patterns_to_inject = (
+                            self.hall_of_fame.get_patterns_for_injection(n=3)
                         )
+                        if patterns_to_inject:
+                            generator_kwargs["winning_patterns"] = patterns_to_inject
+                            logger.debug(
+                                f"Injecting {len(patterns_to_inject)} patterns into generation"
+                            )
 
                 try:
                     candidate_prompts = generator(
@@ -819,8 +841,31 @@ class MetaPromptOptimizer(BaseOptimizer):
             panel_style=panel_style,
         )
 
+    def _generate_synthesis_prompts(
+        self,
+        current_prompt: chat_prompt.ChatPrompt,
+        best_score: float,
+        round_num: int,
+        previous_rounds: list[OptimizationRound],
+        metric: Callable,
+        optimization_id: str | None = None,
+        project_name: str | None = None,
+    ) -> list[chat_prompt.ChatPrompt]:
+        """Generate synthesis prompts that combine top performers."""
+        return candidate_ops.generate_synthesis_prompts(
+            optimizer=self,
+            current_prompt=current_prompt,
+            best_score=best_score,
+            round_num=round_num,
+            previous_rounds=previous_rounds,
+            metric=metric,
+            get_task_context_fn=self._get_task_context,
+            optimization_id=optimization_id,
+            project_name=project_name,
+        )
+
     def _build_history_context(self, previous_rounds: list[OptimizationRound]) -> str:
-        """Build context from Hall of Fame and previous optimization rounds (delegates to ops)."""
+        """Build context from Hall of Fame and previous optimization rounds."""
         return context_ops.build_history_context(
             previous_rounds,
             hall_of_fame=self.hall_of_fame if hasattr(self, "hall_of_fame") else None,
