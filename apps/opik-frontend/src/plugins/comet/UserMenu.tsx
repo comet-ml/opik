@@ -280,7 +280,7 @@ const UserMenu = () => {
                 <span>Account settings</span>
               </DropdownMenuItem>
             </a>
-            {isOrganizationAdmin && !isLLMOnlyOrganization ? (
+            {isOrganizationAdmin ? (
               <a
                 href={buildUrl(
                   `organizations/${workspace?.organizationId}`,
