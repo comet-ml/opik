@@ -12,7 +12,7 @@ from .api_objects.span import Span
 from .api_objects.trace import Trace
 from .configurator.configure import configure
 from .decorator.tracker import flush_tracker, track
-from .evaluation import evaluate, evaluate_experiment, evaluate_prompt
+from .evaluation import evaluate, evaluate_experiment, evaluate_items, evaluate_prompt
 from .integrations.sagemaker import auth as sagemaker_auth
 from .plugins.pytest.decorator import llm_unit
 from .types import LLMProvider
@@ -37,6 +37,7 @@ __all__ = [
     "evaluate",
     "evaluate_prompt",
     "evaluate_experiment",
+    "evaluate_items",
     "ExperimentItemContent",
     "ExperimentItemReferences",
     "track",

@@ -233,6 +233,13 @@ class EvaluationEngine:
         Returns:
             List of TestResult objects containing scores for each item.
         """
+        task_span_scoring_enabled = False
+        if len(self._task_span_scoring_metrics) > 0:
+            message_processors_chain.toggle_local_emulator_message_processor(
+                active=True, chain=self._client._message_processor
+            )
+            task_span_scoring_enabled = True
+
         # Convert raw items to DatasetItem objects for compatibility
         dataset_items = [
             dataset_item.DatasetItem(
@@ -259,6 +266,19 @@ class EvaluationEngine:
             self._verbose,
             desc="Items evaluation",
         )
+
+        if task_span_scoring_enabled:
+            # flush Opik client to make sure all spans are collected
+            self._client.flush()
+
+            self._evaluate_llm_tasks_spans(test_results)
+
+            LOGGER.info(
+                "Task evaluation span handling is disabled — the evaluation has been completed."
+            )
+            message_processors_chain.toggle_local_emulator_message_processor(
+                active=False, chain=self._client._message_processor
+            )
 
         return test_results
 
