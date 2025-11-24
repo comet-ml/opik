@@ -87,7 +87,9 @@ def build_reasoning_system_prompt(
         - You will be given multiple named agents (each with its own chat prompt).
         - Keep agent names unchanged.
         - Preserve placeholders, tools, and role ordering per agent.
-        - Return one updated prompt per agent under the top-level key "agents" with fields: name, messages, improvement_focus, reasoning.
+        - Return updated prompts grouped as candidate bundles. Each candidate can include bundle-level improvement_focus and reasoning.
+        - Try to propose multiple distinct candidate bundles (e.g., up to the requested count) if possible.
+        - Each candidate must include every agent under "agents" with fields: name, messages, improvement_focus, reasoning.
         """
             )
             if mode == "bundle"
@@ -98,12 +100,18 @@ def build_reasoning_system_prompt(
             (
                 """
         {
-          "agents": [
+          "candidates": [
             {
-              "name": "<agent_name>",
-              "messages": [{"role": "<role>", "content": "<content>"}],
-              "improvement_focus": "what you changed",
-              "reasoning": "why this should help"
+              "bundle_improvement_focus": "what the whole bundle is trying to improve",
+              "bundle_reasoning": "why these changes should help overall",
+              "agents": [
+                {
+                  "name": "<agent_name>",
+                  "messages": [{"role": "<role>", "content": "<content>"}],
+                  "improvement_focus": "what you changed for this agent",
+                  "reasoning": "why this should help this agent"
+                }
+              ]
             }
           ]
         }"""
@@ -504,7 +512,8 @@ def build_agent_bundle_user_prompt(
 
             {analysis_instruction}
             Generate updated versions for ALL agents above (keep names the same).
-            Return exactly one updated prompt per agent in the specified JSON format under the top-level key "agents".
+            Return between 1 and {prompts_per_round} candidate bundles in the JSON format below.
+            Each candidate bundle must include ALL agents under "agents" and may also include bundle_improvement_focus and bundle_reasoning.
 
             {metric_focus_instruction}
 
@@ -518,9 +527,9 @@ def build_agent_bundle_user_prompt(
             - Preserve tool/function definitions and message ordering.
             - Do NOT rename agents or swap their responsibilities.
 
-            Generate [{prompts_per_round}] distinct variations per agent only if requested; otherwise return a single best version per agent.
+            Generate up to [{prompts_per_round}] distinct bundle candidates when you see multiple viable directions; otherwise return your single best bundle.
 
-            Output must be valid JSON with the top-level key "agents".
+            Output must be valid JSON with the top-level key "candidates" (or "agents" for a single bundle).
             """
         )
         .strip()

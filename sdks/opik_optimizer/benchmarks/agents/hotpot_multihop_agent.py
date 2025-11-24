@@ -26,7 +26,7 @@ agent_logger = LLMLogger("hotpot_multihop_agent", agent_name="Hotpot Multi-Hop")
 
 class HotpotMultiHopAgent:
     """
-    Multi-hop retrieval agent for HotpotQA following GEPA/Arize approach.
+    Multi-hop retrieval agent for HotpotQA.
 
     Pipeline:
     - create_query_1: Generate initial search query

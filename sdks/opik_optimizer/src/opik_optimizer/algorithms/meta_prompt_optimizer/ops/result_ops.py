@@ -61,9 +61,7 @@ def create_round_data(
             tool_entries = copy.deepcopy(list(prompt.tools or []))
 
         if isinstance(prompt, dict):
-            prompt_payload: Any = {
-                name: p.get_messages() for name, p in prompt.items()
-            }
+            prompt_payload: Any = {name: p.get_messages() for name, p in prompt.items()}
         else:
             prompt_payload = prompt.get_messages()
 
@@ -143,9 +141,7 @@ def create_result(
         details["final_tools"] = best_tools
     if final_bundle_prompts:
         details["final_bundle_prompts"] = final_bundle_prompts
-        details["best_prompts"] = (
-            best_bundle_prompts_obj or final_bundle_prompts
-        )
+        details["best_prompts"] = best_bundle_prompts_obj or final_bundle_prompts
 
     tool_prompts = extract_tool_prompts_fn(best_tools)
 

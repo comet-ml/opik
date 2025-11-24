@@ -27,10 +27,10 @@ __all__ = ["LLMLogger"]
 def _sanitize_log_text(text: str) -> str:
     """
     Sanitize text for clean logging by removing newlines and tabs.
-    
+
     Args:
         text: Text to sanitize
-    
+
     Returns:
         Text with newlines and tabs replaced with spaces, normalized whitespace
     """
