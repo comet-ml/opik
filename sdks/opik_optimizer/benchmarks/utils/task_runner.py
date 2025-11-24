@@ -697,7 +697,13 @@ def execute_task(
             )
 
             messages = prompt_messages or _resolve_initial_prompt(bundle.train_name)
-            initial_prompt = ChatPrompt(messages=messages)  # type: ignore[arg-type]
+            # Bind the optimizer's model/model_parameters to the prompt so evaluations
+            # use the requested model instead of ChatPrompt defaults.
+            initial_prompt = ChatPrompt(
+                messages=messages,  # type: ignore[arg-type]
+                model=getattr(optimizer, "model", model_name),
+                model_parameters=getattr(optimizer, "model_parameters", None),
+            )
 
             initial_evaluation = evaluate_prompt_on_dataset(
                 optimizer=optimizer,
@@ -754,7 +760,11 @@ def execute_task(
                 metric=metrics_resolved[0],
                 **optimize_kwargs,
             )
-            optimized_prompt = ChatPrompt(messages=optimization_results.prompt)
+            optimized_prompt = ChatPrompt(
+                messages=optimization_results.prompt,  # type: ignore[arg-type]
+                model=getattr(optimizer, "model", model_name),
+                model_parameters=getattr(optimizer, "model_parameters", None),
+            )
 
             optimized_evaluation = evaluate_prompt_on_dataset(
                 optimizer=optimizer,
