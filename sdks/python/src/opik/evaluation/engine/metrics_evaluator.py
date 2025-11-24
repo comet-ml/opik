@@ -1,6 +1,6 @@
 import inspect
 import logging
-from typing import List, Dict, Any, Optional, Callable
+from typing import List, Dict, Any, Optional, Callable, Tuple
 
 import opik.exceptions as exceptions
 import opik.logging_messages as logging_messages
@@ -171,7 +171,7 @@ class MetricsEvaluator:
         self,
         dataset_item_content: Dict[str, Any],
         task_output: Dict[str, Any],
-    ) -> List[score_result.ScoreResult]:
+    ) -> Tuple[List[score_result.ScoreResult], Dict[str, Any]]:
         """
         Compute scores using regular metrics.
 
@@ -180,7 +180,7 @@ class MetricsEvaluator:
             task_output: Task output
 
         Returns:
-            List of score results from regular metrics
+            Tuple of (score results, mapped scoring inputs used for scoring regular non-wrapper metrics)
         """
         mapped_scoring_inputs = arguments_helpers.create_scoring_inputs(
             dataset_item=dataset_item_content,
@@ -188,7 +188,7 @@ class MetricsEvaluator:
             scoring_key_mapping=self._scoring_key_mapping,
         )
 
-        return _compute_metric_scores(
+        score_results = _compute_metric_scores(
             scoring_metrics=self._regular_metrics,
             mapped_scoring_inputs=mapped_scoring_inputs,
             scoring_key_mapping=self._scoring_key_mapping,
@@ -196,12 +196,14 @@ class MetricsEvaluator:
             task_output=task_output,
         )
 
+        return score_results, mapped_scoring_inputs
+
     def compute_task_span_scores(
         self,
         dataset_item_content: Dict[str, Any],
         task_output: Dict[str, Any],
         task_span: models.SpanModel,
-    ) -> List[score_result.ScoreResult]:
+    ) -> Tuple[List[score_result.ScoreResult], Dict[str, Any]]:
         """
         Compute scores using task span metrics.
 
@@ -211,7 +213,7 @@ class MetricsEvaluator:
             task_span: Span model containing task execution metadata
 
         Returns:
-            List of score results from task span metrics
+            Tuple of (score results, mapped scoring inputs used for scoring regular non-wrapper metrics)
         """
         mapped_scoring_inputs = arguments_helpers.create_scoring_inputs(
             dataset_item=dataset_item_content,
@@ -224,10 +226,12 @@ class MetricsEvaluator:
             EVALUATION_SPAN_PARAMETER_NAME: task_span,
         }
 
-        return _compute_metric_scores(
+        score_results = _compute_metric_scores(
             scoring_metrics=self._task_span_metrics,
             mapped_scoring_inputs=mapped_scoring_inputs_with_span,
             scoring_key_mapping=self._scoring_key_mapping,
             dataset_item_content=dataset_item_content,
             task_output=task_output,
         )
+
+        return score_results, mapped_scoring_inputs_with_span

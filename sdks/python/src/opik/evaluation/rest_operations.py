@@ -68,7 +68,6 @@ def get_experiment_test_cases(
                 dataset_item_id=item.dataset_item_id,
                 task_output=item.evaluation_task_output,
                 dataset_item_content=dataset_item_data,
-                scoring_key_mapping=scoring_key_mapping,
             )
         )
 

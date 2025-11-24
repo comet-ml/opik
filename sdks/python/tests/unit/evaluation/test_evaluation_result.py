@@ -16,7 +16,7 @@ def test_group_by_dataset_item_view__happyflow():
         test_case_obj = test_case.TestCase(
             trace_id=f"trace{trial_id}",
             dataset_item_id="item1",
-            scoring_inputs={"input": "test"},
+            mapped_scoring_inputs={"input": "test"},
             task_output={"output": f"result{trial_id}"},
         )
         test_result_obj = test_result.TestResult(
@@ -65,7 +65,7 @@ def test_group_by_dataset_item_view__multiple_metrics_and_items():
     test_case1 = test_case.TestCase(
         trace_id="trace1",
         dataset_item_id="item1",
-        scoring_inputs={"input": "test1"},
+        mapped_scoring_inputs={"input": "test1"},
         task_output={"output": "result1"},
     )
     test_result1 = test_result.TestResult(
@@ -82,7 +82,7 @@ def test_group_by_dataset_item_view__multiple_metrics_and_items():
     test_case2 = test_case.TestCase(
         trace_id="trace2",
         dataset_item_id="item2",
-        scoring_inputs={"input": "test2"},
+        mapped_scoring_inputs={"input": "test2"},
         task_output={"output": "result2"},
     )
     test_result2 = test_result.TestResult(
@@ -139,7 +139,7 @@ def test_group_by_dataset_item_view__failed_and_invalid_scores():
     test_case_obj = test_case.TestCase(
         trace_id="trace1",
         dataset_item_id="item1",
-        scoring_inputs={"input": "test"},
+        mapped_scoring_inputs={"input": "test"},
         task_output={"output": "result"},
     )
 
@@ -204,7 +204,7 @@ def test_group_by_dataset_item_view__standard_deviation():
         test_case_obj = test_case.TestCase(
             trace_id=f"trace{trial_id}",
             dataset_item_id="item1",
-            scoring_inputs={"input": "test"},
+            mapped_scoring_inputs={"input": "test"},
             task_output={"output": f"result{trial_id}"},
         )
         test_result_obj = test_result.TestResult(
@@ -236,7 +236,7 @@ def test_group_by_dataset_item_view__standard_deviation():
     single_test_case = test_case.TestCase(
         trace_id="single_trace",
         dataset_item_id="item2",
-        scoring_inputs={"input": "test"},
+        mapped_scoring_inputs={"input": "test"},
         task_output={"output": "result"},
     )
     single_test_result = test_result.TestResult(
@@ -271,7 +271,7 @@ def test_aggregate_evaluation_scores__single_metric_multiple_results():
         test_case_obj = test_case.TestCase(
             trace_id=f"trace{trial_id}",
             dataset_item_id=f"item{trial_id}",
-            scoring_inputs={"input": "test"},
+            mapped_scoring_inputs={"input": "test"},
             task_output={"output": f"result{trial_id}"},
         )
         test_result_obj = test_result.TestResult(
@@ -321,7 +321,7 @@ def test_aggregate_evaluation_scores__multiple_metrics():
     test_case1 = test_case.TestCase(
         trace_id="trace1",
         dataset_item_id="item1",
-        scoring_inputs={"input": "test1"},
+        mapped_scoring_inputs={"input": "test1"},
         task_output={"output": "result1"},
     )
     test_result1 = test_result.TestResult(
@@ -335,7 +335,7 @@ def test_aggregate_evaluation_scores__multiple_metrics():
     test_case2 = test_case.TestCase(
         trace_id="trace2",
         dataset_item_id="item2",
-        scoring_inputs={"input": "test2"},
+        mapped_scoring_inputs={"input": "test2"},
         task_output={"output": "result2"},
     )
     test_result2 = test_result.TestResult(
@@ -349,7 +349,7 @@ def test_aggregate_evaluation_scores__multiple_metrics():
     test_case3 = test_case.TestCase(
         trace_id="trace3",
         dataset_item_id="item3",
-        scoring_inputs={"input": "test3"},
+        mapped_scoring_inputs={"input": "test3"},
         task_output={"output": "result3"},
     )
     test_result3 = test_result.TestResult(
@@ -422,7 +422,7 @@ def test_aggregate_evaluation_scores__failed_and_invalid_scores():
     test_case_obj = test_case.TestCase(
         trace_id="trace1",
         dataset_item_id="item1",
-        scoring_inputs={"input": "test"},
+        mapped_scoring_inputs={"input": "test"},
         task_output={"output": "result"},
     )
 
@@ -492,7 +492,7 @@ def test_aggregate_evaluation_scores__single_value_no_std():
     test_case_obj = test_case.TestCase(
         trace_id="trace1",
         dataset_item_id="item1",
-        scoring_inputs={"input": "test"},
+        mapped_scoring_inputs={"input": "test"},
         task_output={"output": "result"},
     )
     test_result_obj = test_result.TestResult(
@@ -534,7 +534,7 @@ def test_aggregate_evaluation_scores__zero_and_negative_values():
         test_case_obj = test_case.TestCase(
             trace_id=f"trace{trial_id}",
             dataset_item_id=f"item{trial_id}",
-            scoring_inputs={"input": "test"},
+            mapped_scoring_inputs={"input": "test"},
             task_output={"output": f"result{trial_id}"},
         )
         test_result_obj = test_result.TestResult(
@@ -580,7 +580,7 @@ def test_aggregate_evaluation_scores__all_scores_filtered_out():
     test_case_obj = test_case.TestCase(
         trace_id="trace1",
         dataset_item_id="item1",
-        scoring_inputs={"input": "test"},
+        mapped_scoring_inputs={"input": "test"},
         task_output={"output": "result"},
     )
 

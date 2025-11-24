@@ -54,10 +54,13 @@ class EvaluationEngine:
         test_case_: test_case.TestCase,
         trial_id: int = 0,
     ) -> test_result.TestResult:
-        score_results = self._metrics_evaluator.compute_regular_scores(
-            dataset_item_content=test_case_.dataset_item_content,
-            task_output=test_case_.task_output,
+        score_results, mapped_scoring_inputs = (
+            self._metrics_evaluator.compute_regular_scores(
+                dataset_item_content=test_case_.dataset_item_content,
+                task_output=test_case_.task_output,
+            )
         )
+        test_case_.mapped_scoring_inputs = mapped_scoring_inputs
 
         test_result_ = test_result.TestResult(
             test_case=test_case_,
@@ -116,7 +119,6 @@ class EvaluationEngine:
                 dataset_item_id=item.id,
                 task_output=task_output_,
                 dataset_item_content=item_content,
-                scoring_key_mapping=self._metrics_evaluator._scoring_key_mapping,
             )
             test_result_ = self._evaluate_test_case(
                 test_case_=test_case_,
@@ -357,11 +359,14 @@ class EvaluationEngine:
         task_span: models.SpanModel,
         test_case_: test_case.TestCase,
     ) -> List[score_result.ScoreResult]:
-        score_results = self._metrics_evaluator.compute_task_span_scores(
-            dataset_item_content=test_case_.dataset_item_content,
-            task_output=test_case_.task_output,
-            task_span=task_span,
+        score_results, mapped_scoring_inputs = (
+            self._metrics_evaluator.compute_task_span_scores(
+                dataset_item_content=test_case_.dataset_item_content,
+                task_output=test_case_.task_output,
+                task_span=task_span,
+            )
         )
+        test_case_.mapped_scoring_inputs = mapped_scoring_inputs
 
         # log feedback scores
         rest_operations.log_test_result_feedback_scores(
