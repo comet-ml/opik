@@ -89,15 +89,16 @@ class EvolutionaryOptimizer(BaseOptimizer):
     DEFAULT_NUM_THREADS = 12
     DEFAULT_HALL_OF_FAME_SIZE = 10
     DEFAULT_ELITISM_SIZE = 3
-    DEFAULT_MIN_MUTATION_RATE = 0.1
-    DEFAULT_MAX_MUTATION_RATE = 0.4
+    DEFAULT_MIN_MUTATION_RATE = 0.15
+    DEFAULT_MAX_MUTATION_RATE = 0.65
     DEFAULT_ADAPTIVE_MUTATION = True
-    DEFAULT_RESTART_THRESHOLD = 0.01
-    DEFAULT_RESTART_GENERATIONS = 3
+    DEFAULT_RESTART_THRESHOLD = 0.005
+    DEFAULT_RESTART_GENERATIONS = 2
     DEFAULT_EARLY_STOPPING_GENERATIONS = 5
     DEFAULT_ENABLE_MOO = True
     DEFAULT_ENABLE_LLM_CROSSOVER = True
     DEFAULT_SEED = 42
+    DEFAULT_DIVERSITY_THRESHOLD = 0.6
     DEFAULT_OUTPUT_STYLE_GUIDANCE = (
         "Produce clear, effective, and high-quality responses suitable for the task."
     )
@@ -224,7 +225,10 @@ class EvolutionaryOptimizer(BaseOptimizer):
         return individual
 
     def _get_adaptive_mutation_rate(self) -> float:
-        """Calculate adaptive mutation rate based on population diversity and progress."""
+        """
+        Calculate adaptive mutation rate based on population diversity and progress.
+        Enhanced with diversity bonus to prevent convergence.
+        """
         if not self.adaptive_mutation or len(self._best_fitness_history) < 2:
             return self.mutation_rate
 
@@ -244,23 +248,60 @@ class EvolutionaryOptimizer(BaseOptimizer):
         else:
             self._generations_without_improvement = 0
 
-        # Adjust mutation rate based on both improvement and diversity
+        # Base mutation rate
+        base_rate = self.mutation_rate
+
+        # Add diversity bonus to mutation rate
+        diversity_bonus = 0.0
+        if current_diversity < self.DEFAULT_DIVERSITY_THRESHOLD:
+            # Calculate how much below threshold (0 to 0.6)
+            diversity_gap = self.DEFAULT_DIVERSITY_THRESHOLD - current_diversity
+            # Bonus scales with gap, up to 0.3 additional mutation rate
+            diversity_bonus = diversity_gap * 0.5
+            logger.debug(
+                f"Low diversity detected ({current_diversity:.3f}), "
+                f"adding bonus: {diversity_bonus:.3f}"
+            )
+
+        # Adjust mutation rate based on improvement, diversity, and stagnation
         if self._generations_without_improvement >= self.DEFAULT_RESTART_GENERATIONS:
             # Significant stagnation - increase mutation significantly
-            return min(self.mutation_rate * 2.5, self.DEFAULT_MAX_MUTATION_RATE)
+            adjusted_rate = min(
+                base_rate * 2.5 + diversity_bonus, self.DEFAULT_MAX_MUTATION_RATE
+            )
         elif (
             recent_improvement < 0.01
             and current_diversity < DEFAULT_DIVERSITY_THRESHOLD
         ):
             # Both stagnating and low diversity - increase mutation significantly
-            return min(self.mutation_rate * 2.0, self.DEFAULT_MAX_MUTATION_RATE)
+            adjusted_rate = min(
+                base_rate * 2.0 + diversity_bonus, self.DEFAULT_MAX_MUTATION_RATE
+            )
         elif recent_improvement < 0.01:
             # Stagnating but good diversity - moderate increase
-            return min(self.mutation_rate * 1.5, self.DEFAULT_MAX_MUTATION_RATE)
+            adjusted_rate = min(
+                base_rate * 1.5 + diversity_bonus * 0.5,  # Partial bonus
+                self.DEFAULT_MAX_MUTATION_RATE,
+            )
         elif recent_improvement > 0.05:
-            # Good progress - decrease mutation
-            return max(self.mutation_rate * 0.8, self.DEFAULT_MIN_MUTATION_RATE)
-        return self.mutation_rate
+            # Good progress - decrease mutation (but still apply diversity bonus if needed)
+            adjusted_rate = max(
+                base_rate * 0.8 + diversity_bonus * 0.3,  # Reduced bonus
+                self.DEFAULT_MIN_MUTATION_RATE,
+            )
+        else:
+            # Normal case - base rate plus diversity bonus
+            adjusted_rate = min(
+                base_rate + diversity_bonus, self.DEFAULT_MAX_MUTATION_RATE
+            )
+
+        if adjusted_rate != base_rate:
+            logger.debug(
+                f"Adaptive mutation: base={base_rate:.3f}, "
+                f"adjusted={adjusted_rate:.3f}, diversity={current_diversity:.3f}"
+            )
+
+        return adjusted_rate
 
     def _run_generation(
         self,
