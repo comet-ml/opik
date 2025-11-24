@@ -55,7 +55,8 @@ class SequencedOptimizableAgent(OptimizableAgent):
         task_id = uuid.uuid4().hex[:8]
         try:
             # Only start a trace if one is not already active (bundle runner may have started it).
-            if opik_context.get_current_trace_id() is None:  # type: ignore[attr-defined]
+            current_trace_id = getattr(opik_context, "get_current_trace_id", lambda: None)()
+            if current_trace_id is None:
                 opik_context.start_trace(
                     tags=["sequence", task_id],
                     metadata={"_opik_graph_definition": self.graph_definition},
