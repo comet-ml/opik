@@ -246,9 +246,45 @@ def _search_wikipedia_bm25(
         if not index_path.exists():
             raise FileNotFoundError(f"Index directory not found: {index_path}")
 
-        # Load retriever
-        retriever = bm25s.BM25.load(str(index_path), load_corpus=True)
-        corpus = retriever.corpus
+        # Load retriever and corpus
+        # Check if we have Parquet corpus (optimized format) or JSONL (standard)
+        parquet_files = list(index_path.glob("corpus_*.parquet"))
+        jsonl_files = list(index_path.glob("*corpus*.jsonl"))
+
+        if parquet_files:
+            # Optimized Parquet format - load BM25 index without corpus
+            logger.debug(f"Found {len(parquet_files)} Parquet corpus files")
+            retriever = bm25s.BM25.load(str(index_path), load_corpus=False)
+
+            # Load corpus from Parquet chunks
+            try:
+                import pyarrow.parquet as pq
+            except ImportError:
+                logger.warning("pyarrow not available for Parquet corpus, falling back to API")
+                return _search_wikipedia_api(query, max_results=n)
+
+            # Load all Parquet chunks and combine
+            corpus_list = []
+            for parquet_file in sorted(parquet_files):
+                table = pq.read_table(parquet_file, columns=['title', 'text'])
+                df = table.to_pandas()
+                # Combine title and text back to "Title | Text" format
+                corpus_list.extend(
+                    df.apply(lambda row: f"{row['title']} | {row['text']}", axis=1).tolist()
+                )
+            corpus = corpus_list
+            logger.debug(f"Loaded {len(corpus)} documents from Parquet")
+
+        elif jsonl_files:
+            # Standard JSONL format
+            logger.debug("Found JSONL corpus file")
+            retriever = bm25s.BM25.load(str(index_path), load_corpus=True)
+            corpus = retriever.corpus
+        else:
+            raise FileNotFoundError(f"No corpus files found in {index_path}")
+
+        if corpus is None or len(corpus) == 0:
+            raise ValueError("Corpus is empty or failed to load")
 
         # Initialize stemmer for query tokenization (optional)
         try:
@@ -269,12 +305,18 @@ def _search_wikipedia_bm25(
 
         # Extract passages
         passages = []
+
         for idx in results[0]:  # First query
             if idx < len(corpus):
-                passages.append(corpus[idx])
+                passage = corpus[idx]
+                logger.debug(f"Retrieved doc {idx}, len={len(passage)}")
+                passages.append(passage)
+            else:
+                logger.warning(f"Index {idx} out of bounds (corpus size: {len(corpus)})")
 
         # Pad if needed
         if len(passages) < n:
+            logger.debug(f"Padding {n - len(passages)} empty results")
             passages.extend([""] * (n - len(passages)))
 
         return passages[:n]
