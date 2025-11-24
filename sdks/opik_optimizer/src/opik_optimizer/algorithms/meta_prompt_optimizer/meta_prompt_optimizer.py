@@ -13,7 +13,6 @@ from ... import _throttle
 from . import reporting
 from .ops.halloffame_ops import PromptHallOfFame
 from .ops.candidate_ops import _sync_tool_description_in_system
-from .bundle_agent import BundleAgent
 from ..._llm_calls import StructuredOutputParsingError
 from litellm.exceptions import BadRequestError
 from ...mcp_utils.mcp_workflow import (
@@ -538,10 +537,15 @@ class MetaPromptOptimizer(BaseOptimizer):
                     if candidate_generator_kwargs
                     else None,  # type: ignore[arg-type]
                     bundle_agent_class=candidate_generator_kwargs.get(
-                        "bundle_agent_class", BundleAgent
+                        "bundle_agent_class"
                     )
                     if candidate_generator_kwargs
-                    else BundleAgent,  # type: ignore[arg-type]
+                    else None,  # type: ignore[arg-type]
+                    bundle_agent_kwargs=candidate_generator_kwargs.get(
+                        "bundle_agent_kwargs"
+                    )
+                    if candidate_generator_kwargs
+                    else None,  # type: ignore[arg-type]
                 )
             else:
                 initial_score = self._evaluate_prompt(
@@ -611,8 +615,14 @@ class MetaPromptOptimizer(BaseOptimizer):
                     generator: Any = self._generate_agent_bundle_candidates
                     generator_kwargs = dict(candidate_generator_kwargs or {})
                     # Strip evaluation-only params
-                    for _key in ("run_bundle_fn", "bundle_plan", "bundle_agent_class"):
+                    for _key in (
+                        "run_bundle_fn",
+                        "bundle_plan",
+                        "bundle_agent_class",
+                        "bundle_agent_kwargs",
+                    ):
                         generator_kwargs.pop(_key, None)
+                    generator_kwargs.pop("bundle_agent_kwargs", None)
                     prompts_this_round = min(
                         self.prompts_per_round, max_trials - trials_used
                     )
@@ -764,10 +774,15 @@ class MetaPromptOptimizer(BaseOptimizer):
                                     if candidate_generator_kwargs
                                     else None,  # type: ignore[arg-type]
                                     bundle_agent_class=candidate_generator_kwargs.get(
-                                        "bundle_agent_class", BundleAgent
+                                        "bundle_agent_class"
                                     )
                                     if candidate_generator_kwargs
-                                    else BundleAgent,  # type: ignore[arg-type]
+                                    else None,  # type: ignore[arg-type]
+                                    bundle_agent_kwargs=candidate_generator_kwargs.get(
+                                        "bundle_agent_kwargs"
+                                    )
+                                    if candidate_generator_kwargs
+                                    else None,  # type: ignore[arg-type]
                                 )
                             else:
                                 prompt_score = self._evaluate_prompt(
@@ -785,8 +800,10 @@ class MetaPromptOptimizer(BaseOptimizer):
                             eval_report.set_final_score(best_score, prompt_score)
                             if not is_bundle:
                                 trials_used += 1
-                        except Exception:
-                            logger.warning("Failed evaluating agent; continuing...")
+                        except Exception as exc:
+                            logger.warning(
+                                "Failed evaluating agent; continuing...", exc_info=exc
+                            )
                             prompt_score = 0
 
                     prompt_scores.append((prompt, prompt_score))
@@ -1124,10 +1141,42 @@ class MetaPromptOptimizer(BaseOptimizer):
         ]
         | None = None,
         bundle_plan: list[str] | Callable[[dict[str, Any]], list[str]] | None = None,
-        bundle_agent_class: type[Any] | None = BundleAgent,
+        bundle_agent_class: type[Any] | None = None,
+        bundle_agent_kwargs: dict[str, Any] | None = None,
     ) -> float:
         """
-        Evaluate a bundle of prompts (agents) using either a user-supplied runner or BundleAgent.
+        Evaluate a bundle of prompts (agents) using either a user-supplied runner or simple sequenced agent.
+
+        This method evaluates a collection of prompts representing different agents in a multi-agent system.
+        It supports three evaluation modes:
+        1. Custom runner function (run_bundle_fn)
+        2. Bundle agent class with a plan
+        3. Simple sequential execution (fallback)
+
+        Args:
+            bundle_prompts: Dictionary mapping agent names to their ChatPrompt configurations.
+                Each prompt represents a different agent in the bundle.
+            dataset: Opik Dataset containing evaluation examples. Each item is passed to the
+                bundle execution for scoring.
+            metric: Evaluation function that takes (dataset_item, llm_output, [trace]) and returns
+                a score (float). The trace dict contains execution context from agent runs.
+            n_samples: Number of dataset items to use for evaluation. If None, uses full dataset.
+            run_bundle_fn: Optional custom function to execute the bundle. Must accept
+                (bundle_prompts, dataset_item) and return dict with 'final_output' and 'trace'.
+            bundle_plan: Optional execution plan for bundle agents. Can be a static list of
+                agent names or a callable that generates the plan dynamically from dataset items.
+            bundle_agent_class: Optional agent class for bundle execution. Must implement
+                run_bundle(dataset_item) method and accept prompts/plan in constructor.
+            bundle_agent_kwargs: Optional extra kwargs for the bundle agent constructor
+                (e.g., search_fn, model, model_parameters).
+
+        Returns:
+            Average score across all evaluated dataset items. Returns 0.0 if no items scored.
+
+        Note:
+            - Uses parallel evaluation via ThreadPoolExecutor when n_threads > 1
+            - Falls back to sequential evaluation if parallel execution fails
+            - Collects trace context from bundle runs to pass to metrics that support it
         """
 
         def _bundle_system_context() -> str:
@@ -1159,17 +1208,26 @@ class MetaPromptOptimizer(BaseOptimizer):
                     prompts=bundle_prompts,
                     plan=bundle_plan,
                     project_name=self.project_name,
+                    **(bundle_agent_kwargs or {}),
                 )
                 run_result = agent.run_bundle(dataset_item)  # type: ignore[attr-defined]
             else:
-                first_prompt = next(iter(bundle_prompts.values()))
-                invoker = getattr(first_prompt, "invoke", None)
+                # Simple sequenced runner over provided prompts in order
+                trace_steps: list[dict[str, Any]] = []
                 final_output = ""
-                if callable(invoker):
-                    final_output = invoker(first_prompt.get_messages(dataset_item))
+                for name, prompt in bundle_prompts.items():
+                    messages = prompt.get_messages(dataset_item)
+                    invoker = getattr(prompt, "invoke", None)
+                    step_output = ""
+                    if callable(invoker):
+                        step_output = invoker(messages)
+                    trace_steps.append(
+                        {"agent": name, "messages": messages, "output": step_output}
+                    )
+                    final_output = step_output
                 run_result = {
                     "final_output": final_output,
-                    "trace": {},
+                    "trace": {"steps": trace_steps},
                 }
 
             if not isinstance(run_result, dict):
