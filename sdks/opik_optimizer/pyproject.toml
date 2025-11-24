@@ -36,7 +36,14 @@ dev = [
     # "google-adk",
     "langgraph",
     "pre-commit",
+    "bm25s",
+    "PyStemmer",
     "scikit-learn",
+]
+bm25 = [ # Extras - pip install opik_optimizer[bm25]
+    "bm25s[full]",
+    "PyStemmer",
+    "huggingface-hub",
 ]
 
 [tool.setuptools.packages.find]
@@ -71,6 +78,10 @@ module = [
     "datasets.*",
     "gepa.*",
     "mcp.*",
+    "bm25s.*",
+    "Stemmer.*",
+    "dsp.*",
+    "huggingface_hub.*",
 ]
 ignore_missing_imports = true
 
