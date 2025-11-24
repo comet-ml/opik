@@ -137,7 +137,8 @@ def test_extract_tool_arguments_handles_nested_dicts() -> None:
     assert extract_tool_arguments(item) == {"query": "docs"}
 
     class Payload:
-        input_values = {"arguments": {"topic": "api"}}
+        def __init__(self) -> None:
+            self.input_values = {"arguments": {"topic": "api"}}
 
     assert extract_tool_arguments(Payload()) == {"topic": "api"}
 
@@ -601,8 +602,6 @@ def test_mcp_tool_invocation_applies_adapter_and_records_summary(
                 summary_var=ContextVar[Optional[str]]("dummy_summary", default=None),
                 follow_up_builder=dummy_follow_up_builder,
             )
-            self._last_summary: str | None = None
-            self._last_follow_up: str | None = None
 
         @property
         def tool_name(self) -> str:
@@ -618,9 +617,6 @@ def test_mcp_tool_invocation_applies_adapter_and_records_summary(
         def fetch_summary(self) -> str | None:
             return self._summary_var.get()
 
-        def get_last_summary(self) -> str | None:
-            return self._last_summary
-
         def build_second_pass_messages(
             self,
             *,
@@ -628,8 +624,6 @@ def test_mcp_tool_invocation_applies_adapter_and_records_summary(
             dataset_item: dict[str, Any],
             summary_override: str | None = None,
         ) -> list[dict[str, Any]] | None:
-            self._last_summary = None
-            self._last_follow_up = None
             summary = (
                 summary_override
                 if summary_override is not None
@@ -639,7 +633,6 @@ def test_mcp_tool_invocation_applies_adapter_and_records_summary(
                 return None
 
             # Simple implementation that just returns the base messages
-            self._last_summary = summary
             return base_messages
 
     def adapter(
