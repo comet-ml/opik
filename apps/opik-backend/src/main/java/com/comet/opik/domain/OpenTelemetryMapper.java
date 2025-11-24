@@ -19,11 +19,10 @@ import java.io.UncheckedIOException;
 import java.nio.ByteBuffer;
 import java.time.Duration;
 import java.time.Instant;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
-import java.util.UUID;
+import java.util.*;
+
+import static com.comet.opik.domain.mapping.OpenTelemetryEventsMapper.processEvents;
+import static com.comet.opik.domain.mapping.OpenTelemetryMappingUtils.extractToJsonColumn;
 
 @UtilityClass
 @Slf4j
@@ -69,7 +68,8 @@ public class OpenTelemetryMapper {
                 .startTime(Instant.ofEpochMilli(startTimeMs))
                 .endTime(Instant.ofEpochMilli(endTimeMs));
 
-        enrichSpanWithAttributes(spanBuilder, otelSpan.getAttributesList(), integrationName);
+        List<Span.Event> events = otelSpan.getEventsList();
+        enrichSpanWithAttributes(spanBuilder, otelSpan.getAttributesList(), integrationName, events);
 
         return spanBuilder.build();
     }
@@ -80,9 +80,10 @@ public class OpenTelemetryMapper {
      * @param spanBuilder the span builder where we will be injecting the extracted values
      * @param attributes the list of span attributes extracted from the otel payload
      * @param integrationName the name of the integration sending the spans (can be empty)
+     * @param events the list of events extracted from the otel payload
      */
     public static void enrichSpanWithAttributes(SpanBuilder spanBuilder, List<KeyValue> attributes,
-            String integrationName) {
+            String integrationName, List<Span.Event> events) {
         Map<String, Integer> usage = new HashMap<>();
         ObjectNode input = JsonUtils.createObjectNode();
         ObjectNode output = JsonUtils.createObjectNode();
@@ -136,6 +137,9 @@ public class OpenTelemetryMapper {
             });
         });
 
+        // Process events and add them to metadata
+        processEvents(events, metadata);
+
         if (!metadata.isEmpty()) {
             spanBuilder.metadata(metadata);
         }
@@ -147,47 +151,6 @@ public class OpenTelemetryMapper {
         }
         if (!usage.isEmpty()) {
             spanBuilder.usage(usage);
-        }
-    }
-
-    static void extractToJsonColumn(ObjectNode node, String key, AnyValue value) {
-        switch (value.getValueCase()) {
-            case STRING_VALUE -> {
-                var stringValue = value.getStringValue();
-                // check if string value is actually a string or a stringfied json
-                if (stringValue.startsWith("\"") || stringValue.startsWith("[")
-                        || stringValue.startsWith("{")) {
-                    try {
-                        var jsonNode = JsonUtils.getJsonNodeFromString(stringValue);
-                        if (jsonNode.isTextual()) {
-                            try {
-                                jsonNode = JsonUtils.getJsonNodeFromString(jsonNode.asText());
-                            } catch (UncheckedIOException e) {
-                                log.warn("Failed to parse nested JSON string for key {}: {}. Using as plain text.",
-                                        key, e.getMessage());
-                                node.put(key, jsonNode.asText());
-                                return;
-                            }
-                        }
-                        node.set(key, jsonNode);
-                    } catch (UncheckedIOException e) {
-                        log.warn("Failed to parse JSON string for key {}: {}. Using as plain text.", key,
-                                e.getMessage());
-                        node.put(key, stringValue);
-                    }
-                } else {
-                    node.put(key, stringValue);
-                }
-            }
-            case INT_VALUE -> node.put(key, value.getIntValue());
-            case DOUBLE_VALUE -> node.put(key, value.getDoubleValue());
-            case BOOL_VALUE -> node.put(key, value.getBoolValue());
-            case ARRAY_VALUE -> {
-                var array = JsonUtils.createArrayNode();
-                value.getArrayValue().getValuesList().forEach(val -> array.add(val.getStringValue()));
-                node.set(key, array);
-            }
-            default -> log.warn("Unsupported attribute: {} -> {}", key, value);
         }
     }
 
