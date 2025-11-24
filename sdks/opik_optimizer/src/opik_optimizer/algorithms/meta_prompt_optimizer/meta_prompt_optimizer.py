@@ -393,7 +393,7 @@ class MetaPromptOptimizer(BaseOptimizer):
             raise e
 
     # FIXME: To be removed once MCP is fully supported
-    def optimize_mcp(  # noqa: vulture
+    def optimize_mcp(
         self,
         prompt: chat_prompt.ChatPrompt,
         dataset: Dataset,
@@ -893,10 +893,14 @@ class MetaPromptOptimizer(BaseOptimizer):
 
     def _build_history_context(self, previous_rounds: list[OptimizationRound]) -> str:
         """Build context from Hall of Fame and previous optimization rounds."""
+        top_prompts_to_show = max(
+            self.prompts_per_round, self.synthesis_prompts_per_round
+        )
         return context_ops.build_history_context(
             previous_rounds,
             hall_of_fame=self.hall_of_fame if hasattr(self, "hall_of_fame") else None,
             pretty_mode=self.prettymode_prompt_history,
+            top_prompts_per_round=top_prompts_to_show,
         )
 
 

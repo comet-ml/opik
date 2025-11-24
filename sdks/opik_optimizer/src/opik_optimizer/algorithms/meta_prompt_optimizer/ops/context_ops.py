@@ -20,7 +20,9 @@ logger = logging.getLogger(__name__)
 DEFAULT_MAX_VALUE_LENGTH = 2000  # Initial truncation limit for field values
 MIN_VALUE_LENGTH = 200  # Minimum truncation limit before giving up
 VALUE_LENGTH_REDUCTION_STEP = 200  # How much to reduce truncation by each iteration
-TOP_PROMPTS_PER_RECENT_ROUND = 2  # Number of prompts to show per recent round
+DEFAULT_TOP_PROMPTS_PER_RECENT_ROUND = (
+    4  # Max of default synthesis and generation counts
+)
 
 # Token counting with litellm
 try:
@@ -227,6 +229,7 @@ def build_history_context(
     previous_rounds: list[OptimizationRound],
     hall_of_fame: Any | None = None,
     pretty_mode: bool = True,
+    top_prompts_per_round: int = DEFAULT_TOP_PROMPTS_PER_RECENT_ROUND,
 ) -> str:
     """
     Build context from Hall of Fame (if available) or previous optimization rounds.
@@ -235,6 +238,7 @@ def build_history_context(
         previous_rounds: List of previous optimization rounds
         hall_of_fame: Optional Hall of Fame object with top-performing prompts
         pretty_mode: If True, show pretty formatted; if False, show as JSON
+        top_prompts_per_round: How many prompts to display from each recent round
 
     Returns:
         History context string
@@ -302,7 +306,7 @@ def build_history_context(
             )
 
             # Show top prompts per round
-            for p in sorted_generated[:TOP_PROMPTS_PER_RECENT_ROUND]:
+            for p in sorted_generated[:top_prompts_per_round]:
                 prompt_data = p.get("prompt", "N/A")
                 score = p.get("score", float("nan"))
                 context += f"- Score {score:.4f}:\n"

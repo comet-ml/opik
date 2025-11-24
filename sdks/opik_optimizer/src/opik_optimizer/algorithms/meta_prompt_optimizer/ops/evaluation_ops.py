@@ -208,7 +208,7 @@ def evaluate_prompt(
     return score
 
 
-def get_evaluation_subset(  # noqa: vulture
+def get_evaluation_subset(
     dataset: opik.Dataset, min_size: int = 20, max_size: int = 100
 ) -> list[dict[str, Any]]:
     """
