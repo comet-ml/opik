@@ -145,7 +145,7 @@ def build_candidate_generation_user_prompt(
             Generate [{prompts_per_round}] DISTINCTLY DIFFERENT prompt variations that:
 
             DIVERSITY DIMENSIONS (explore all of these):
-            - Length: from ultra-minimal (1 sentence) to in-depthcomprehensive (multi-paragraph with reasoning steps)
+            - Length: from ultra-minimal (1 sentence) to in-depth comprehensive (multi-paragraph with reasoning steps)
             - Structure: direct commands, numbered steps, narrative flow, question-based, example-driven
             - Tone: formal instruction, conversational guidance, Socratic questioning, technical specification
             - Approach: explicit constraints, implicit guidance, meta-cognitive prompting, role-playing
@@ -153,6 +153,7 @@ def build_candidate_generation_user_prompt(
             STRATEGIC GUIDANCE:
             - Be more specific and clear about expectations based on the task
             - Build on patterns from top-performing prompts in the Hall of Fame
+            - ADD structure and reasoning guidance (consider prompting frameworks: Situation→Task→Objective→Knowledge→Examples, and/or include role, style, format, job description, constraints)
             - Try counter-intuitive approaches - sometimes the opposite of conventional wisdom works
             - Experiment with being MORE specific in some versions and MORE abstract in others
             - Combine winning elements in unexpected ways
@@ -353,7 +354,7 @@ def build_synthesis_prompt(
         1. COMBINE the most effective elements from the top performers above
         2. CREATE a longer, more detailed prompt that doesn't sacrifice depth for brevity
         3. SYNTHESIZE their successful patterns into a cohesive whole
-        4. ADD structure and reasoning guidance (consider STOKE: Situation→Task→Objective→Knowledge→Examples)
+        4. ADD structure and reasoning guidance (consider prompting frameworks that include situation, task, objective, knowledge, examples, style, format, job description, role)
         5. BE THOROUGH - don't worry about length, focus on completeness and clarity
 
         SYNTHESIS STRATEGIES:

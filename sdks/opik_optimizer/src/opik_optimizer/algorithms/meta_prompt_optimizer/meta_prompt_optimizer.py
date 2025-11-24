@@ -65,6 +65,8 @@ class MetaPromptOptimizer(BaseOptimizer):
         verbose: Controls internal logging/progress bars (0=off, 1=on)
         seed: Random seed for reproducibility
         use_hall_of_fame: Enable Hall of Fame pattern extraction and re-injection
+        prettymode_prompt_history: Display prompt history in pretty format (True) or JSON (False)
+        extract_metric_understanding: Extract and display metric name, direction, and description in task context
     """
 
     # --- Constants for Default Configuration ---
@@ -77,6 +79,8 @@ class MetaPromptOptimizer(BaseOptimizer):
     DEFAULT_PATTERN_INJECTION_RATE = 0.6
     DEFAULT_DATASET_CONTEXT_MAX_TOKENS = 10000
     DEFAULT_DATASET_CONTEXT_RATIO = 0.25
+    DEFAULT_PRETTYMODE_PROMPT_HISTORY = True
+    DEFAULT_EXTRACT_METRIC_UNDERSTANDING = True
 
     def __init__(
         self,
@@ -91,6 +95,8 @@ class MetaPromptOptimizer(BaseOptimizer):
         seed: int = DEFAULT_SEED,
         name: str | None = None,
         use_hall_of_fame: bool = True,
+        prettymode_prompt_history: bool = DEFAULT_PRETTYMODE_PROMPT_HISTORY,
+        extract_metric_understanding: bool = DEFAULT_EXTRACT_METRIC_UNDERSTANDING,
     ) -> None:
         super().__init__(
             model=model,
@@ -112,6 +118,8 @@ class MetaPromptOptimizer(BaseOptimizer):
 
         # Hall of Fame for pattern mining
         self.use_hall_of_fame = use_hall_of_fame
+        self.prettymode_prompt_history = prettymode_prompt_history
+        self.extract_metric_understanding = extract_metric_understanding
         self.hall_of_fame_size = self.DEFAULT_HALL_OF_FAME_SIZE
         self.pattern_extraction_interval = self.DEFAULT_PATTERN_EXTRACTION_INTERVAL
         self.pattern_injection_rate = self.DEFAULT_PATTERN_INJECTION_RATE
@@ -776,6 +784,7 @@ class MetaPromptOptimizer(BaseOptimizer):
             columns=self.task_context_columns,
             max_tokens=self.max_context_tokens,
             model=self.model,
+            extract_metric_understanding=self.extract_metric_understanding,
         )
 
     def _generate_candidate_prompts(
@@ -861,6 +870,7 @@ class MetaPromptOptimizer(BaseOptimizer):
         return context_ops.build_history_context(
             previous_rounds,
             hall_of_fame=self.hall_of_fame if hasattr(self, "hall_of_fame") else None,
+            pretty_mode=self.prettymode_prompt_history,
         )
 
 

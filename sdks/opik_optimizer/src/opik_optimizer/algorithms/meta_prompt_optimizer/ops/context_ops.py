@@ -50,6 +50,7 @@ def get_task_context(
     max_tokens: int = 2000,
     model: str = "gpt-4",
     verbose: int = 1,
+    extract_metric_understanding: bool = True,
 ) -> tuple[str, int]:
     """
     Get task-specific context from the dataset and metric configuration.
@@ -63,6 +64,7 @@ def get_task_context(
         max_tokens: Token budget for dataset examples ONLY (adaptive fitting limit)
         model: Model name for token counting (default: gpt-4)
         verbose: Verbosity level for display output (default: 1)
+        extract_metric_understanding: Extract and display metric name, direction, description
 
     Returns:
         Tuple of (sanitized task context string, actual token count used)
@@ -116,7 +118,7 @@ def get_task_context(
 
     # Build context with adaptive fitting
     max_value_length = (
-        500  # Start with generous truncation limit, will reduce if needed
+        2000  # Start with very generous truncation limit, will reduce if needed
     )
     current_num_examples = len(samples)
 
@@ -129,11 +131,35 @@ def get_task_context(
         )
         context += "\n\n"
 
-        # Generic metric description
-        context += (
-            "Evaluation: Your output will be evaluated for accuracy and quality.\n"
-        )
-        context += "Focus on producing clear, correct responses based on the input.\n\n"
+        # Conditionally extract and add metric information
+        if extract_metric_understanding:
+            # Extract metric information
+            metric_name = getattr(metric, "__name__", str(metric))
+            metric_doc = getattr(metric, "__doc__", None)
+            metric_direction = getattr(metric, "direction", None)
+
+            # Add metric information to context
+            context += "Evaluation Metric:\n"
+            context += f"- Name: {metric_name}\n"
+
+            if metric_direction:
+                context += f"- Goal: {'Maximize' if metric_direction == 'maximize' else 'Minimize'} this metric\n"
+
+            if metric_doc and metric_doc.strip():
+                # Clean up the docstring
+                doc_lines = metric_doc.strip().split("\n")
+                # Take first meaningful line (skip empty lines)
+                description = next(
+                    (line.strip() for line in doc_lines if line.strip()), None
+                )
+                if description:
+                    context += f"- Description: {description}\n"
+
+            context += "\nFocus on producing clear, correct responses that optimize for this metric.\n\n"
+        else:
+            # Generic evaluation message without metric details
+            context += "Evaluation: Your output will be evaluated for accuracy and quality.\n"
+            context += "Focus on producing clear, correct responses based on the input.\n\n"
 
         # Show multiple sanitized examples
         context += f"Example inputs from dataset ({current_num_examples} samples):\n\n"
@@ -169,9 +195,9 @@ def get_task_context(
             logger.debug(
                 f"Reducing examples to {current_num_examples} (was {token_count} tokens)"
             )
-        elif max_value_length > 50:
-            # If only 1 example left, reduce truncation limit
-            max_value_length = max(50, max_value_length - 50)
+        elif max_value_length > 200:
+            # If only 1 example left, reduce truncation limit more gradually
+            max_value_length = max(200, max_value_length - 200)
             logger.debug(
                 f"Reducing truncation to {max_value_length} chars (was {token_count} tokens)"
             )
@@ -190,6 +216,7 @@ def get_task_context(
 def build_history_context(
     previous_rounds: list[OptimizationRound],
     hall_of_fame: Any | None = None,
+    pretty_mode: bool = True,
 ) -> str:
     """
     Build context from Hall of Fame (if available) or previous optimization rounds.
@@ -197,6 +224,7 @@ def build_history_context(
     Args:
         previous_rounds: List of previous optimization rounds
         hall_of_fame: Optional Hall of Fame object with top-performing prompts
+        pretty_mode: If True, show pretty formatted; if False, show as JSON
 
     Returns:
         History context string
@@ -212,16 +240,24 @@ def build_history_context(
         # Show top 5 entries with FULL prompts (we have plenty of token budget)
         for i, entry in enumerate(hall_of_fame.entries[:5], 1):
             improvement_pct = entry.improvement_over_baseline * 100
-            context += f"\n#{i} WINNER | Trial [{entry.trial_number}[] | Score: [{entry.score:.4f}] | Improvement: [{improvement_pct:+.1f}%]\n"
+            context += f"\n#{i} WINNER | Trial {entry.trial_number} | Score: {entry.score:.4f} | Improvement: {improvement_pct:+.1f}%\n"
 
-            # Print Prompts
-            context += "Full Prompt Messages:\n"
-            for msg in entry.prompt_messages:
-                role = msg.get("role", "unknown")
-                content = msg.get("content", "")
-                # Show complete content without truncation
-                context += f"  [{role.upper()}]: {content}\n"
-            context += "\n"
+            # Show prompt based on display preference
+            if pretty_mode:
+                # Show prompt in pretty formatted style
+                context += "Full Prompt Messages:\n"
+                for msg in entry.prompt_messages:
+                    role = msg.get("role", "unknown")
+                    content = msg.get("content", "")
+                    context += f"  [{role.upper()}]: {content}\n"
+                context += "\n"
+            else:
+                # Show prompt in JSON format (same as output format)
+                import json
+
+                context += "Prompt:\n"
+                context += json.dumps(entry.prompt_messages, indent=2)
+                context += "\n"
 
             # Show extracted patterns if available
             if entry.extracted_patterns:
@@ -246,8 +282,29 @@ def build_history_context(
             # Show top prompts per round
             # TODO: Set this as a CONST
             for p in sorted_generated[:2]:
-                prompt_text = p.get("prompt", "N/A")
+                prompt_data = p.get("prompt", "N/A")
                 score = p.get("score", float("nan"))
-                context += f"- Score {score:.4f}:\n{prompt_text}\n\n"
+                context += f"- Score {score:.4f}:\n"
+
+                # Handle both message list format and string format
+                if isinstance(prompt_data, list):
+                    # It's a list of message dicts - apply pretty mode
+                    if pretty_mode:
+                        # Pretty formatted style
+                        for msg in prompt_data:
+                            role = msg.get("role", "unknown")
+                            content = msg.get("content", "")
+                            context += f"  [{role.upper()}]: {content}\n"
+                    else:
+                        # JSON format
+                        import json
+
+                        context += json.dumps(prompt_data, indent=2)
+                        context += "\n"
+                else:
+                    # It's already a string, just show it
+                    context += f"{prompt_data}\n"
+
+                context += "\n"
 
     return context
