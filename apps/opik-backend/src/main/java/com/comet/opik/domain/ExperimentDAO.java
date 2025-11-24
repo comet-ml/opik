@@ -761,7 +761,9 @@ class ExperimentDAO {
                 .bind("name", experiment.name())
                 .bind("metadata", getStringOrDefault(experiment.metadata()))
                 .bind("type", Optional.ofNullable(experiment.type()).orElse(ExperimentType.REGULAR).getValue())
-                .bind("optimization_id", experiment.optimizationId() != null ? experiment.optimizationId() : "")
+                .bind("optimization_id", Optional.ofNullable(experiment.optimizationId())
+                        .map(UUID::toString)
+                        .orElse(""))
                 .bind("status", Optional.ofNullable(experiment.status()).orElse(ExperimentStatus.COMPLETED).getValue())
                 .bind("experiment_scores", Optional.ofNullable(experiment.experimentScores())
                         .filter(scores -> !scores.isEmpty())
@@ -1367,7 +1369,7 @@ class ExperimentDAO {
             template.add("status", experimentUpdate.status().getValue());
         }
 
-        if (CollectionUtils.isNotEmpty(experimentUpdate.experimentScores())) {
+        if (experimentUpdate.experimentScores() != null) {
             template.add("experiment_scores", true);
         }
 
@@ -1391,8 +1393,11 @@ class ExperimentDAO {
             statement.bind("status", experimentUpdate.status().getValue());
         }
 
-        if (CollectionUtils.isNotEmpty(experimentUpdate.experimentScores())) {
-            statement.bind("experiment_scores", JsonUtils.writeValueAsString(experimentUpdate.experimentScores()));
+        if (experimentUpdate.experimentScores() != null) {
+            String scoresJson = experimentUpdate.experimentScores().isEmpty()
+                    ? ""
+                    : JsonUtils.writeValueAsString(experimentUpdate.experimentScores());
+            statement.bind("experiment_scores", scoresJson);
         }
     }
 
