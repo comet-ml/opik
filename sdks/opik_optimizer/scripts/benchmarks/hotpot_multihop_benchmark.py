@@ -84,7 +84,7 @@ def wikipedia_search(query: str, n: int = 5) -> list[str]:
     disable_flag = os.getenv("OPIK_DISABLE_WIKIPEDIA", "").strip().lower()
     if disable_flag in ("1", "true", "yes", "on"):
         return []
-    
+
     with tool_logger.log_tool("wikipedia_api", query):
         results = search_wikipedia(query, search_type="api", k=n)
     # Return top n results, padding if necessary

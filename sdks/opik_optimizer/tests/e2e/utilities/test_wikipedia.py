@@ -10,7 +10,7 @@ class TestWikipediaAPIE2E:
         """Test basic Wikipedia API search with a real query."""
         # Use a well-known topic that should always return results
         results = search_wikipedia(
-            "Python programming language", search_type="api", n=1
+            "Python programming language", search_type="api", k=1
         )
 
         # Should return at least one result
@@ -33,7 +33,7 @@ class TestWikipediaAPIE2E:
 
     def test_api_search_default_parameters(self) -> None:
         """Test API search with default parameters."""
-        # Default should be search_type="api", n=3
+        # Default should be search_type="api", k=3
         results = search_wikipedia("Artificial intelligence")
 
         assert len(results) <= 3

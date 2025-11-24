@@ -35,7 +35,7 @@ class TestSearchWikipediaAPI:
         }
         mock_get.return_value = mock_response
 
-        results = _search_wikipedia_api("Python", max_results=1)
+        results = _search_wikipedia_api("Python", k=1)
 
         assert len(results) == 1
         assert "Python (programming language)" in results[0]
@@ -51,7 +51,7 @@ class TestSearchWikipediaAPI:
         mock_response.json.return_value = {"query": {"search": []}}
         mock_get.return_value = mock_response
 
-        results = _search_wikipedia_api("nonexistentquery12345", max_results=1)
+        results = _search_wikipedia_api("nonexistentquery12345", k=1)
 
         assert len(results) == 1
         assert "No Wikipedia results found" in results[0]
@@ -64,7 +64,7 @@ class TestSearchWikipediaAPI:
         mock_get.return_value = mock_response
 
         with pytest.raises(Exception, match="Search API returned status 500"):
-            _search_wikipedia_api("test", max_results=1)
+            _search_wikipedia_api("test", k=1)
 
     @patch("opik_optimizer.utils.tools.wikipedia.requests.get")
     def test_api_search_network_error(self, mock_get: Mock) -> None:
@@ -72,7 +72,7 @@ class TestSearchWikipediaAPI:
         mock_get.side_effect = Exception("Network error")
 
         with pytest.raises(Exception, match="Wikipedia API request failed"):
-            _search_wikipedia_api("test", max_results=1)
+            _search_wikipedia_api("test", k=1)
 
 
 class TestSearchWikipediaColBERT:
@@ -87,7 +87,7 @@ class TestSearchWikipediaColBERT:
         results = _search_wikipedia_colbert("test", k=1)
 
         assert results == ["fallback result"]
-        mock_api.assert_called_once_with("test", max_results=1)
+        mock_api.assert_called_once_with("test", k=1)
 
     @patch("opik_optimizer.utils.tools.wikipedia._search_wikipedia_api")
     def test_colbert_error_fallback(self, mock_api: Mock) -> None:
@@ -178,12 +178,12 @@ class TestSearchWikipediaUnified:
         mock_bm25.return_value = ["result"]
 
         results = search_wikipedia(
-            "test", search_type="bm25", n=5, bm25_index_dir="/tmp/index"
+            "test", search_type="bm25", k=5, bm25_index_dir="/tmp/index"
         )
 
         assert results == ["result"]
         mock_bm25.assert_called_once_with(
-            "test", n=5, index_dir="/tmp/index", hf_repo=None
+            "test", k=5, index_dir="/tmp/index", hf_repo=None
         )
 
     def test_invalid_search_type(self) -> None:

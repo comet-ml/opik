@@ -575,7 +575,9 @@ def generate_agent_bundle_candidates(
             candidate_payloads: list[dict[str, Any]] = []
             if isinstance(json_result, list):
                 # backwards compatibility: list with dict/agents
-                candidate_payloads = [obj for obj in json_result if isinstance(obj, dict)]
+                candidate_payloads = [
+                    obj for obj in json_result if isinstance(obj, dict)
+                ]
             elif isinstance(json_result, dict):
                 if "candidates" in json_result and isinstance(
                     json_result["candidates"], list

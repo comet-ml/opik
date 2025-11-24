@@ -8,6 +8,7 @@ from ...base_optimizer import BaseOptimizer, OptimizationRound
 from ...api_objects import chat_prompt
 from ...optimization_result import OptimizationResult
 from ...optimizable_agent import OptimizableAgent
+from ... import task_evaluator
 from ... import _throttle
 from . import reporting
 from .ops.halloffame_ops import PromptHallOfFame
@@ -319,12 +320,8 @@ class MetaPromptOptimizer(BaseOptimizer):
                 raise ValueError(
                     "Bundle optimization does not support MCP tool optimization."
                 )
-            self.agent_class = self._setup_agent_class(
-                next(iter(prompt.values())), agent_class
-            )
-            best_prompt: chat_prompt.ChatPrompt | dict[str, chat_prompt.ChatPrompt] = (
-                prompt
-            )
+            first_agent_prompt = next(iter(prompt.values()))
+            self.agent_class = self._setup_agent_class(first_agent_prompt, agent_class)
         else:
             self._validate_optimization_inputs(prompt, dataset, metric)  # type: ignore[arg-type]
             self.agent_class = self._setup_agent_class(prompt, agent_class)  # type: ignore[arg-type]
@@ -490,7 +487,7 @@ class MetaPromptOptimizer(BaseOptimizer):
     def _optimize_prompt(
         self,
         optimization_id: str | None,
-        prompt: chat_prompt.ChatPrompt,
+        prompt: chat_prompt.ChatPrompt | dict[str, chat_prompt.ChatPrompt],
         dataset: Dataset,
         validation_dataset: Dataset | None,
         metric: Callable,
@@ -499,7 +496,7 @@ class MetaPromptOptimizer(BaseOptimizer):
         n_samples: int | None,
         auto_continue: bool,
         mcp_config: MCPExecutionConfig | None = None,
-        candidate_generator: Callable[..., list[chat_prompt.ChatPrompt]] | None = None,
+        candidate_generator: Callable[..., Any] | None = None,
         candidate_generator_kwargs: dict[str, Any] | None = None,
         tool_panel_style: str = "bright_magenta",
     ) -> OptimizationResult:
@@ -547,7 +544,7 @@ class MetaPromptOptimizer(BaseOptimizer):
                 )
             else:
                 initial_score = self._evaluate_prompt(
-                    prompt,
+                    prompt=prompt,  # type: ignore[arg-type]
                     optimization_id=optimization_id,
                     dataset=evaluation_dataset,
                     metric=metric,
@@ -610,7 +607,7 @@ class MetaPromptOptimizer(BaseOptimizer):
                 )
 
                 if is_bundle:
-                    generator = self._generate_agent_bundle_candidates
+                    generator: Any = self._generate_agent_bundle_candidates
                     generator_kwargs = dict(candidate_generator_kwargs or {})
                     # Strip evaluation-only params
                     for _key in ("run_bundle_fn", "bundle_plan", "bundle_agent_class"):
@@ -655,7 +652,9 @@ class MetaPromptOptimizer(BaseOptimizer):
                                 )
 
                 try:
-                    agent_metadata: list[dict[str, dict[str, str | None]]] | None = None
+                    _agent_metadata: list[dict[str, dict[str, str | None]]] | None = (
+                        None
+                    )
                     if is_bundle:
                         bundle_generation = generator(
                             current_prompts=best_prompt,  # type: ignore[arg-type]
@@ -667,9 +666,12 @@ class MetaPromptOptimizer(BaseOptimizer):
                             project_name=self.project_name,
                             **generator_kwargs,
                         )
-                        if isinstance(bundle_generation, tuple) and len(bundle_generation) == 2:
+                        if (
+                            isinstance(bundle_generation, tuple)
+                            and len(bundle_generation) == 2
+                        ):
                             prompts_part = bundle_generation[0]
-                            agent_metadata = bundle_generation[1]  # type: ignore[assignment]
+                            _agent_metadata = bundle_generation[1]  # type: ignore[assignment]
                             if isinstance(prompts_part, list):
                                 candidate_prompts = prompts_part
                             else:
@@ -900,7 +902,9 @@ class MetaPromptOptimizer(BaseOptimizer):
             optimization_id=optimization_id,
             best_tools=best_tools,
             final_bundle_prompts=bundle_messages,
-            best_bundle_prompts_obj=best_prompt if is_bundle else None,
+            best_bundle_prompts_obj=best_prompt
+            if is_bundle and isinstance(best_prompt, dict)
+            else None,
         )
 
     def _calculate_improvement(
@@ -1015,7 +1019,10 @@ class MetaPromptOptimizer(BaseOptimizer):
         winning_patterns: list[str] | None = None,
         mcp_config: MCPExecutionConfig | None = None,
         **_: Any,
-    ) -> tuple[dict[str, chat_prompt.ChatPrompt], dict[str, dict[str, str | None]]]:
+    ) -> tuple[
+        list[dict[str, chat_prompt.ChatPrompt]],
+        list[dict[str, dict[str, str | None]]],
+    ]:
         """
         Generate updated prompts for a bundle of named agents in one meta-prompt pass.
 
@@ -1110,7 +1117,7 @@ class MetaPromptOptimizer(BaseOptimizer):
         ]
         | None = None,
         bundle_plan: list[str] | Callable[[dict[str, Any]], list[str]] | None = None,
-        bundle_agent_class: type[OptimizableAgent] | None = BundleAgent,
+        bundle_agent_class: type[Any] | None = BundleAgent,
     ) -> float:
         """
         Evaluate a bundle of prompts (agents) using either a user-supplied runner or BundleAgent.
@@ -1136,49 +1143,72 @@ class MetaPromptOptimizer(BaseOptimizer):
                     parts.append(system_msg)
             return " ".join(parts).strip()
 
-        def _run(item: dict[str, Any]) -> dict[str, Any]:
+        # Parallel-friendly task wrapper so we can use task_evaluator with num_threads.
+        def _evaluated_task(dataset_item: dict[str, Any]) -> dict[str, Any]:
             if callable(run_bundle_fn):
-                return run_bundle_fn(bundle_prompts, item)
-            if bundle_agent_class is not None:
-                agent = bundle_agent_class(
+                run_result = run_bundle_fn(bundle_prompts, dataset_item)
+            elif bundle_agent_class is not None:
+                agent: Any = bundle_agent_class(
                     prompts=bundle_prompts,
                     plan=bundle_plan,
                     project_name=self.project_name,
                 )
-                return agent.run_bundle(item)
-            first_prompt = next(iter(bundle_prompts.values()))
-            return {
-                "final_output": first_prompt.invoke(first_prompt.get_messages(item)),
-                "trace": {},
-            }
+                run_result = agent.run_bundle(dataset_item)  # type: ignore[attr-defined]
+            else:
+                first_prompt = next(iter(bundle_prompts.values()))
+                run_result = {
+                    "final_output": first_prompt.invoke(
+                        first_prompt.get_messages(dataset_item)
+                    ),
+                    "trace": {},
+                }
 
-        items = dataset.get_items()
-        if n_samples is not None:
-            items = items[:n_samples]
-        if not items:
-            return 0.0
-
-        scores: list[float] = []
-        for item in items:
-            run_result = _run(item)
             if not isinstance(run_result, dict):
                 raise ValueError("bundle runner must return a dict with 'final_output'")
+
             final_output = run_result.get("final_output") or run_result.get("output")
             trace = run_result.get("trace") or {"system": _bundle_system_context()}
             if final_output is None:
                 final_output = ""
-            try:
-                score = metric(item, final_output, trace)  # type: ignore[misc]
-            except TypeError:
-                score = metric(item, final_output)  # type: ignore[misc]
+            return {"llm_output": final_output, "trace": trace}
 
-            # Normalize ScoreResult or plain numeric
-            if hasattr(score, "value"):
-                score_value = getattr(score, "value", score)
-            else:
-                score_value = score
-            scores.append(float(score_value))
-        return sum(scores) / len(scores)
+        try:
+            # Use the shared evaluator to enable num_threads for bundles.
+            avg_score, _ = task_evaluator.evaluate_with_result(
+                dataset=dataset,
+                evaluated_task=_evaluated_task,
+                metric=metric,
+                num_threads=getattr(self, "n_threads", 1),
+                optimization_id=self.current_optimization_id,
+                n_samples=n_samples,
+                experiment_config=None,
+                verbose=self.verbose,
+            )
+            # evaluate_with_result returns (float score, EvalResult). We normalized metric
+            # values (including ScoreResult) inside evaluate already.
+            return avg_score
+        except Exception:
+            # Fallback to sequential path if concurrency fails (e.g., runner not threadsafe).
+            items = dataset.get_items()
+            if n_samples is not None:
+                items = items[:n_samples]
+            if not items:
+                return 0.0
+            scores_list: list[float] = []
+            for item in items:
+                run_result = _evaluated_task(item)
+                final_output = run_result.get("llm_output", "")
+                trace = run_result.get("trace") or {}
+                try:
+                    score = metric(item, final_output, trace)  # type: ignore[misc]
+                except TypeError:
+                    score = metric(item, final_output)  # type: ignore[misc]
+                if hasattr(score, "value"):
+                    score_value = getattr(score, "value", score)
+                else:
+                    score_value = score
+                scores_list.append(float(score_value))
+            return sum(scores_list) / len(scores_list)
 
 
 __all__ = ["MetaPromptOptimizer", "_sync_tool_description_in_system"]
