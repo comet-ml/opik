@@ -912,5 +912,69 @@ class MetaPromptOptimizer(BaseOptimizer):
             top_prompts_per_round=top_prompts_to_show,
         )
 
+    def _evaluate_bundle(
+        self,
+        bundle_prompts: dict[str, chat_prompt.ChatPrompt],
+        dataset: Dataset,
+        metric: Callable,
+        n_samples: int | None = None,
+        run_bundle_fn: Callable[
+            [dict[str, chat_prompt.ChatPrompt], dict[str, Any]], dict[str, Any]
+        ]
+        | None = None,
+        bundle_plan: list[str] | Callable[[dict[str, Any]], list[str]] | None = None,
+        bundle_agent_class: type[OptimizableAgent] | None = BundleAgent,
+    ) -> float:
+        """
+        Evaluate a bundle of prompts (agents) using either a user-supplied runner or BundleAgent.
+        """
+
+        def _run(item: dict[str, Any]) -> dict[str, Any]:
+            if callable(run_bundle_fn):
+                return run_bundle_fn(bundle_prompts, item)
+            if bundle_agent_class is not None:
+                agent = bundle_agent_class(
+                    prompts=bundle_prompts,
+                    plan=bundle_plan,
+                    project_name=self.project_name,
+                )
+                return agent.run_bundle(item)
+            first_prompt = next(iter(bundle_prompts.values()))
+            return {
+                "final_output": first_prompt.invoke(first_prompt.get_messages(item)),
+                "trace": {},
+            }
+
+        items = dataset.get_items()
+        if n_samples is not None:
+            items = items[:n_samples]
+        if not items:
+            return 0.0
+
+        scores: list[float] = []
+        for item in items:
+            run_result = _run(item)
+            if not isinstance(run_result, dict):
+                raise ValueError("bundle runner must return a dict with 'final_output'")
+            final_output = run_result.get("final_output") or run_result.get("output")
+            trace = run_result.get("trace") or {
+                "system": " ".join(
+                    [
+                        getattr(p, "system", "") or ""
+                        for p in bundle_prompts.values()
+                    ]
+                ).strip()
+                if isinstance(bundle_prompts, dict)
+                else ""
+            }
+            if final_output is None:
+                final_output = ""
+            try:
+                score = metric(item, final_output, trace)  # type: ignore[misc]
+            except TypeError:
+                score = metric(item, final_output)  # type: ignore[misc]
+            scores.append(float(score))
+        return sum(scores) / len(scores)
+
 
 __all__ = ["MetaPromptOptimizer", "_sync_tool_description_in_system"]
