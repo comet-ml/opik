@@ -104,6 +104,7 @@ def create_result(
     model_parameters: dict[str, Any],
     extract_tool_prompts_fn: Callable,
     final_bundle_prompts: dict[str, list[dict[str, Any]]] | None = None,
+    best_bundle_prompts_obj: dict[str, chat_prompt.ChatPrompt] | None = None,
 ) -> OptimizationResult:
     """
     Create the final OptimizationResult object.
@@ -142,7 +143,9 @@ def create_result(
         details["final_tools"] = best_tools
     if final_bundle_prompts:
         details["final_bundle_prompts"] = final_bundle_prompts
-        details["best_prompts"] = final_bundle_prompts
+        details["best_prompts"] = (
+            best_bundle_prompts_obj or final_bundle_prompts
+        )
 
     tool_prompts = extract_tool_prompts_fn(best_tools)
 
