@@ -972,6 +972,42 @@ class Opik:
 
         return experiment_
 
+    def update_experiment(
+        self,
+        id: str,
+        name: Optional[str] = None,
+        experiment_config: Optional[Dict[str, Any]] = None,
+    ) -> None:
+        """
+        Update an experiment's name and/or configuration.
+
+        Args:
+            id: The experiment ID.
+            name: The new name for the experiment. If None, the name will not be updated.
+            experiment_config: The new configuration for the experiment. If None, the configuration will not be updated.
+
+        Raises:
+            ValueError: if id is None or empty, or if both name and experiment_config are None
+        """
+        if not id:
+            raise ValueError(
+                f"id must be provided and can not be None or empty, id: {id}"
+            )
+
+        if name is None and experiment_config is None:
+            raise ValueError(
+                "At least one of 'name' or 'experiment_config' must be provided"
+            )
+
+        # Only include parameters that are provided to avoid clearing fields
+        request_params: Dict[str, Any] = {}
+        if name is not None:
+            request_params["name"] = name
+        if experiment_config is not None:
+            request_params["metadata"] = experiment_config
+
+        self._rest_client.experiments.update_experiment(id, **request_params)
+
     def get_experiment_by_name(self, name: str) -> experiment.Experiment:
         """
         Returns an existing experiment by its name.

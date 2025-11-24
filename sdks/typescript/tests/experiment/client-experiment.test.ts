@@ -19,6 +19,7 @@ interface ExperimentTestContext extends TestContext {
     streamExperiments: MockInstance;
     createExperiment: MockInstance;
     deleteExperiments: MockInstance;
+    updateExperiment: MockInstance;
     getDatasetByIdentifier: MockInstance;
   };
 }
@@ -48,6 +49,10 @@ describe("Opik experiment operations", () => {
       deleteExperiments: vi
         .spyOn(client.api.experiments, "deleteExperimentsById")
         .mockImplementation(mockAPIFunction),
+
+      updateExperiment: vi
+        .spyOn(client.api.experiments, "updateExperiment")
+        .mockImplementation(() => createMockHttpResponsePromise(undefined)),
 
       getDatasetByIdentifier: vi
         .spyOn(client.api.datasets, "getDatasetByIdentifier")
@@ -519,6 +524,103 @@ describe("Opik experiment operations", () => {
       await expect(
         client.getDatasetExperiments("test-dataset")
       ).rejects.toThrow(apiError);
+    });
+  });
+
+  describe("updateExperiment", () => {
+    it<ExperimentTestContext>("should update an experiment by ID", async ({
+      client,
+      spies,
+      expect,
+    }) => {
+      const experimentId = "experiment-to-update-id";
+
+      await client.updateExperiment(experimentId, {
+        name: "updated-name",
+        experimentConfig: { k: "v" },
+      });
+
+      expect(spies.updateExperiment).toHaveBeenCalledWith(experimentId, {
+        name: "updated-name",
+        metadata: { k: "v" },
+      });
+    });
+
+    it<ExperimentTestContext>("should update only the name when experimentConfig is not provided", async ({
+      client,
+      spies,
+      expect,
+    }) => {
+      const experimentId = "experiment-to-update-name-only";
+
+      await client.updateExperiment(experimentId, { name: "new-name-only" });
+
+      const callArgs = spies.updateExperiment.mock.calls[0];
+      expect(callArgs[0]).toBe(experimentId);
+      expect(callArgs[1]).toEqual({ name: "new-name-only" });
+      expect(callArgs[1]).not.toHaveProperty("metadata");
+    });
+
+    it<ExperimentTestContext>("should update only the configuration when name is not provided", async ({
+      client,
+      spies,
+      expect,
+    }) => {
+      const experimentId = "experiment-to-update-config-only";
+      const newConfig = { model: "gpt-4", temperature: 0.7 };
+
+      await client.updateExperiment(experimentId, {
+        experimentConfig: newConfig,
+      });
+
+      const callArgs = spies.updateExperiment.mock.calls[0];
+      expect(callArgs[0]).toBe(experimentId);
+      expect(callArgs[1]).toEqual({ metadata: newConfig });
+      expect(callArgs[1]).not.toHaveProperty("name");
+    });
+
+    it<ExperimentTestContext>("should throw error when id is empty string", async ({
+      client,
+      expect,
+    }) => {
+      await expect(
+        client.updateExperiment("", { name: "new-name" })
+      ).rejects.toThrow("id is required to update an experiment");
+    });
+
+    it<ExperimentTestContext>("should throw error when no parameters are provided", async ({
+      client,
+      expect,
+    }) => {
+      const experimentId = "experiment-to-update-no-params";
+
+      await expect(
+        client.updateExperiment(experimentId, {})
+      ).rejects.toThrow("At least one of 'name' or 'experimentConfig' must be provided to update an experiment");
+    });
+
+    it<ExperimentTestContext>("should handle errors during the update operation", async ({
+      client,
+      spies,
+      expect,
+    }) => {
+      const experimentId = "experiment-to-update-error";
+
+      spies.updateExperiment.mockImplementationOnce(() => {
+        throw new Error("Failed to update experiment");
+      });
+
+      await expect(
+        client.updateExperiment(experimentId, {
+          name: "bad-name",
+          experimentConfig: {},
+        })
+      ).rejects.toThrow("Failed to update experiment");
+
+      expect(spies.updateExperiment).toHaveBeenCalledWith(experimentId, {
+        name: "bad-name",
+        metadata: {},
+      });
     });
   });
 });

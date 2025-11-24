@@ -342,6 +342,52 @@ export class OpikClient {
     }
   };
 
+    /**
+     * Updates an experiment by ID
+     *
+     * @param id The ID of the experiment
+     * @param experimentUpdate Object containing the fields to update
+     * @param experimentUpdate.name Optional new name for the experiment
+     * @param experimentUpdate.experimentConfig Optional new configuration for the experiment
+     * @returns Promise that resolves when the experiment is updated
+     * @throws {Error} If id is not provided or if neither name nor experimentConfig is provided
+     */
+    public updateExperiment = async (
+        id: string,
+        experimentUpdate: {
+            name?: string;
+            experimentConfig?: Record<string, unknown>;
+        }
+    ): Promise<void> => {
+        if (!id) {
+            throw new Error("id is required to update an experiment");
+        }
+
+        const { name, experimentConfig } = experimentUpdate;
+
+        if (!name && !experimentConfig) {
+            throw new Error("At least one of 'name' or 'experimentConfig' must be provided to update an experiment");
+        }
+
+        logger.debug(`Updating experiment with ID "${id}"`);
+
+        // Only include parameters that are provided to avoid clearing fields
+        const request: OpikApi.ExperimentUpdate = {};
+        if (name !== undefined) {
+            request.name = name;
+        }
+        if (experimentConfig !== undefined) {
+            request.metadata = experimentConfig;
+        }
+
+        try {
+            await this.api.experiments.updateExperiment(id, request);
+        } catch (error) {
+            logger.error(`Failed to update experiment with ID "${id}"`, { error });
+            throw error;
+        }
+    };
+
   /**
    * Gets an experiment by its unique ID
    *
