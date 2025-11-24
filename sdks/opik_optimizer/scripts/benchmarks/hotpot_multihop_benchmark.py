@@ -148,6 +148,12 @@ SEARCH_FN = bm25_wikipedia_search
 print(f"Search function: {SEARCH_FN.__name__}")
 print()
 
+# Optional one-time BM25 warmup to avoid lazy load during eval
+try:
+    SEARCH_FN("warmup", 1)
+except Exception:
+    pass
+
 # ============================================================================
 # AGENT SETUP
 # ============================================================================
@@ -267,7 +273,7 @@ opt_result = optimizer.optimize_prompt(
             "num_passages_per_hop": NUM_PASSAGES,
         },
     },
-    max_trials=1,  # increase for more meta rounds; watch rollout budget
+    max_trials=3,  # increase for more meta rounds; watch rollout budget
     # n_samples=None,
     n_samples=5,
 )

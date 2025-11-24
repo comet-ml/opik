@@ -14,7 +14,13 @@ class _DummyDataset:
 class _CapturingAgent:
     last_kwargs: dict[str, Any] | None = None
 
-    def __init__(self, prompts, plan=None, project_name=None, **kwargs) -> None:
+    def __init__(
+        self,
+        prompts: dict[str, Any],
+        plan: list[str] | None = None,
+        project_name: str | None = None,
+        **kwargs: Any,
+    ) -> None:
         self.kwargs = kwargs
         self.prompts = prompts
         self.plan = plan

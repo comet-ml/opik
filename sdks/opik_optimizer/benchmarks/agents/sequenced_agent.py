@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from typing import Any, Mapping
+from typing import Any
+from collections.abc import Mapping
 from collections.abc import Callable
 import uuid
 
@@ -8,6 +9,7 @@ from opik import opik_context
 
 from opik_optimizer.optimizable_agent import OptimizableAgent
 from opik_optimizer.api_objects import chat_prompt
+from opik_optimizer.utils.llm_logger import LLMLogger
 
 
 class SequencedOptimizableAgent(OptimizableAgent):
@@ -19,7 +21,9 @@ class SequencedOptimizableAgent(OptimizableAgent):
         plan: list[str] | Callable[[dict[str, Any]], list[str]] | None = None,
         project_name: str | None = None,
         graph_definition: dict[str, Any] | None = None,
-        step_handlers: Mapping[str, Callable[[dict[str, Any], str], dict[str, Any]]] | None = None,
+        step_handlers: Mapping[str, Callable[[dict[str, Any], str], dict[str, Any]]]
+        | None = None,
+        logger: LLMLogger | None = None,
     ) -> None:
         first_prompt = next(iter(prompts.values()))
         super().__init__(prompt=first_prompt, project_name=project_name)
@@ -30,6 +34,7 @@ class SequencedOptimizableAgent(OptimizableAgent):
             "data": "graph TD; Q1[create_query_1]-->S1[summarize_1]; S1-->Q2[create_query_2]; Q2-->S2[summarize_2]; S2-->FA[final_answer];",
         }
         self.step_handlers = dict(step_handlers) if step_handlers else {}
+        self.llm_logger = logger
 
     def get_graph_definition(self) -> dict[str, Any]:
         """Return the graph definition for display or tracing."""
@@ -49,10 +54,16 @@ class SequencedOptimizableAgent(OptimizableAgent):
         dataset_item = dict(dataset_item)  # work on a copy so we can enrich fields
         task_id = uuid.uuid4().hex[:8]
         try:
-            opik_context.start_trace(
-                tags=["sequence", task_id],
-                metadata={"_opik_graph_definition": self.graph_definition},
-            )
+            # Only start a trace if one is not already active (bundle runner may have started it).
+            if opik_context.get_current_trace_id() is None:  # type: ignore[attr-defined]
+                opik_context.start_trace(
+                    tags=["sequence", task_id],
+                    metadata={"_opik_graph_definition": self.graph_definition},
+                )
+            else:
+                opik_context.update_current_trace(
+                    metadata={"_opik_graph_definition": self.graph_definition}
+                )
         except Exception:
             pass
 
@@ -66,8 +77,13 @@ class SequencedOptimizableAgent(OptimizableAgent):
             prompt = self.prompts[step_name]
             try:
                 opik_context.update_current_trace(metadata={"step": step_name})
+                opik_context.start_span(name=step_name)
             except Exception:
                 pass
+            if self.llm_logger:
+                self.llm_logger.agent_invoke(
+                    f"{step_name}: {dataset_item.get('question', '')}"
+                )
             step_output = self.invoke_prompt(prompt, dataset_item)
             messages = prompt.get_messages(dataset_item)
             handler = self.step_handlers.get(step_name)
@@ -85,6 +101,10 @@ class SequencedOptimizableAgent(OptimizableAgent):
             dataset_item = dict(dataset_item)
             dataset_item[step_name + "_output"] = step_output
             final_output = step_output
+            try:
+                opik_context.end_span()
+            except Exception:
+                pass
 
         return {"final_output": final_output, "trace": trace}
 

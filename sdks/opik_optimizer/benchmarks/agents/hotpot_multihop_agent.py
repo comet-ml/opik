@@ -16,6 +16,7 @@ from collections.abc import Callable
 
 from opik_optimizer import ChatPrompt
 from benchmarks.agents.sequenced_agent import SequencedOptimizableAgent
+from opik_optimizer.utils.llm_logger import LLMLogger
 
 
 class HotpotMultiHopAgent(SequencedOptimizableAgent):
@@ -47,6 +48,7 @@ class HotpotMultiHopAgent(SequencedOptimizableAgent):
             plan=self.plan,
             project_name=project_name or "Hotpot Multi-Hop",
             step_handlers=step_handlers,
+            logger=LLMLogger("hotpot_multihop_agent", agent_name="Hotpot Multi-Hop"),
         )
 
     def get_optimizable_prompts(self) -> dict[str, ChatPrompt]:
