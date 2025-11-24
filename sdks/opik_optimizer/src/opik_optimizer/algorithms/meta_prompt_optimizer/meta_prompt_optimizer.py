@@ -1,7 +1,6 @@
 import copy
 import json
 import logging
-import textwrap
 from typing import Any, cast
 from collections.abc import Callable
 
@@ -16,7 +15,7 @@ from ...base_optimizer import BaseOptimizer, OptimizationRound
 from ...api_objects import chat_prompt
 from ...optimization_result import OptimizationResult
 from ...optimizable_agent import OptimizableAgent
-from . import reporting
+from . import reporting, prompts
 import re
 from ... import _llm_calls
 from ..._llm_calls import StructuredOutputParsingError
@@ -112,39 +111,6 @@ class MetaPromptOptimizer(BaseOptimizer):
     # --- Constants for Default Configuration ---
     DEFAULT_ROUNDS = 3
     DEFAULT_PROMPTS_PER_ROUND = 4
-
-    # --- Reasoning System Prompt ---
-    _REASONING_SYSTEM_PROMPT = """You are an expert prompt engineer. Your task is to improve prompts for any type of task.
-
-        Focus on making the prompt more effective by:
-        1. Being clear and specific about what is expected
-        2. Providing necessary context and constraints
-        3. Guiding the model to produce the desired output format
-        4. Removing ambiguity and unnecessary elements
-        5. Maintaining conciseness while being complete
-
-        Instructions:
-        1. If there is a system prompt, prioritize adding instructions there if and only if it makes sense.
-        2. DO NOT add any variables or parameters to the prompt you are editing.
-        3. You can reuse variables that already exist in the prompt.
-
-        Return a JSON array of prompts with the following structure. Make sure to return a valid
-        JSON object with correct use of double quotes and single quotes. JSON keys should be
-        double-quoted:
-        {
-            "prompts": [
-                {
-                    "prompt": [{"role": "<role>", "content": "<content>"}],
-                    "improvement_focus": "what aspect this prompt improves",
-                    "reasoning": "why this improvement should help"
-                },
-                {
-                    "prompt": [{"role": "<role>", "content": "<content>"}],
-                    "improvement_focus": "what aspect this prompt improves",
-                    "reasoning": "why this improvement should help"
-                }
-            ]
-        }"""
 
     def __init__(
         self,
@@ -609,7 +575,7 @@ class MetaPromptOptimizer(BaseOptimizer):
         self._reset_counters()  # Reset counters for run
         initial_prompt = prompt
 
-        # Logic on which datset to use for scoring
+        # Logic on which dataset to use for scoring
         evaluation_dataset = (
             validation_dataset if validation_dataset is not None else dataset
         )
@@ -945,22 +911,16 @@ class MetaPromptOptimizer(BaseOptimizer):
                     "Task context and metric-specific instructions disabled for reasoning prompt."
                 )
 
-            user_prompt = f"""Current prompt: {current_prompt.get_messages()}
-            Current score: {best_score}
-            {history_context}
-            {task_context_str}
-
-            {analysis_instruction}
-            Generate {self.prompts_per_round} improved versions of this prompt.
-            {metric_focus_instruction}
-            Each version should aim to:
-            {improvement_point_1}
-            2. Provide necessary context and constraints (if applicable, without relying on disabled external context).
-            3. Guide the model to produce the desired output format suitable for the task.
-            4. Remove ambiguity and unnecessary elements.
-            5. Maintain conciseness while being complete.
-
-            Return a valid JSON array as specified."""
+            user_prompt = prompts.build_candidate_generation_user_prompt(
+                current_prompt_messages=str(current_prompt.get_messages()),
+                best_score=best_score,
+                history_context=history_context,
+                task_context_str=task_context_str,
+                analysis_instruction=analysis_instruction,
+                metric_focus_instruction=metric_focus_instruction,
+                improvement_point_1=improvement_point_1,
+                prompts_per_round=self.prompts_per_round,
+            )
 
             try:
                 # Prepare metadata for optimization algorithm call
@@ -975,7 +935,7 @@ class MetaPromptOptimizer(BaseOptimizer):
 
                 content = _llm_calls.call_model(
                     messages=[
-                        {"role": "system", "content": self._REASONING_SYSTEM_PROMPT},
+                        {"role": "system", "content": prompts.REASONING_SYSTEM_PROMPT},
                         {"role": "user", "content": user_prompt},
                     ],
                     model=self.model,
@@ -1104,37 +1064,14 @@ class MetaPromptOptimizer(BaseOptimizer):
 
         history_context = self._build_history_context(previous_rounds)
 
-        instruction = textwrap.dedent(
-            f"""
-            Current tool name: {tool_name}
-            Current tool description:
-            ---
-            {current_description}
-            ---
-
-            Tool metadata (JSON):
-            {json.dumps(tool_metadata, indent=2)}
-
-            Current best score: {best_score:.4f}
-            {history_context}
-
-            Generate {self.prompts_per_round} improved descriptions for this tool.
-            Each description should clarify expected input arguments and set explicit expectations
-            for how the tool output must be used in the final response.
-            Avoid changing unrelated parts of the prompt. Focus only on the description text for `{tool_name}`.
-
-            Return a JSON object of the form:
-            {{
-              "prompts": [
-                {{
-                  "tool_description": "...",
-                  "improvement_focus": "...",
-                  "reasoning": "..."
-                }}
-              ]
-            }}
-            """
-        ).strip()
+        instruction = prompts.build_mcp_tool_description_user_prompt(
+            tool_name=tool_name,
+            current_description=current_description,
+            tool_metadata_json=json.dumps(tool_metadata, indent=2),
+            best_score=best_score,
+            history_context=history_context,
+            prompts_per_round=self.prompts_per_round,
+        )
 
         with reporting.display_candidate_generation_report(
             self.prompts_per_round, verbose=self.verbose
@@ -1152,7 +1089,7 @@ class MetaPromptOptimizer(BaseOptimizer):
 
                 content = _llm_calls.call_model(
                     messages=[
-                        {"role": "system", "content": self._REASONING_SYSTEM_PROMPT},
+                        {"role": "system", "content": prompts.REASONING_SYSTEM_PROMPT},
                         {"role": "user", "content": instruction},
                     ],
                     model=self.model,

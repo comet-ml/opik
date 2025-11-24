@@ -52,6 +52,10 @@ def _is_hf_offline_error(exc: Exception) -> bool:
     return any(marker in msg for marker in markers)
 
 
+def _is_disk_full_error(exc: Exception) -> bool:
+    return "No space left on device" in str(exc)
+
+
 def _default_cache_dir() -> Path:
     cache_env = os.getenv("HF_DATASETS_CACHE")
     if cache_env:
@@ -118,6 +122,8 @@ def test_hf_sources_resolve_one_record(
     except Exception as exc:  # pragma: no cover - exercised in offline environments
         if _is_hf_offline_error(exc):
             pytest.skip(f"Hugging Face hub unavailable: {exc}")
+        if _is_disk_full_error(exc):
+            pytest.skip(f"HF cache volume is full: {exc}")
         raise
     assert len(records) == 1
     assert isinstance(records[0], dict)

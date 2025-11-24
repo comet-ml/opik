@@ -9,15 +9,27 @@ CNN_DAILYMAIL_SPEC = DatasetSpec(
     name="cnn_dailymail",
     hf_path="cnn_dailymail",
     hf_name="3.0.0",
-    default_source_split="validation",
+    default_source_split="train",
     prefer_presets=True,
     presets={
+        "train": DatasetSplitPreset(
+            source_split="train",
+            start=0,
+            count=150,
+            dataset_name="cnn_dailymail_train",
+        ),
         "validation": DatasetSplitPreset(
             source_split="validation",
             start=0,
-            count=100,
-            dataset_name="cnn_dailymail_train",
-        )
+            count=150,
+            dataset_name="cnn_dailymail_validation",
+        ),
+        "test": DatasetSplitPreset(
+            source_split="test",
+            start=0,
+            count=150,
+            dataset_name="cnn_dailymail_test",
+        ),
     },
 )
 

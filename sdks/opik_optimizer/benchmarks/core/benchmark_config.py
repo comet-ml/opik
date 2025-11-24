@@ -19,18 +19,7 @@ from opik.evaluation.metrics import (
 from opik.evaluation.metrics.score_result import ScoreResult
 from pydantic import BaseModel
 
-# Allow running both as package (python -m bench...) and as a script, and keep
-# static type checkers happy by falling back gracefully.
-try:
-    from .metrics import hotpot, hover, ifbench, pupa  # type: ignore[import]
-except ImportError:  # pragma: no cover - script execution path
-    import os
-    import sys
-
-    _THIS_DIR = os.path.dirname(__file__)
-    if _THIS_DIR not in sys.path:
-        sys.path.append(_THIS_DIR)
-    from metrics import hotpot, hover, ifbench, pupa
+from benchmarks.metrics import hotpot, hover, ifbench, pupa
 
 
 class BenchmarkDatasetConfig(BaseModel):
@@ -52,7 +41,7 @@ class BenchmarkProjectConfig(BaseModel):
 class BenchmarkOptimizerConfig(BaseModel):
     class_name: str
     params: dict[str, Any]
-    optimize_params: dict[str, Any] = {}
+    optimizer_prompt_params: dict[str, Any] = {}
 
 
 class BenchmarkExperimentConfig(BaseModel):
@@ -172,11 +161,6 @@ DATASET_CONFIG = {
             create_context_precision("question", "answer", "context"),
         ],
     ),
-    "hotpot_300": BenchmarkDatasetConfig(
-        name="hotpot_300",
-        display_name="HotpotQA",
-        metrics=[create_answer_relevance_metric("question")],
-    ),
     "ai2_arc": BenchmarkDatasetConfig(
         name="ai2_arc", display_name="ARC", metrics=[equals]
     ),
@@ -189,6 +173,11 @@ DATASET_CONFIG = {
         name="cnn_dailymail",
         display_name="CNN/Daily Mail",
         metrics=[create_levenshtein_ratio_metric("highlights")],
+    ),
+    "tiny_test": BenchmarkDatasetConfig(
+        name="tiny_test",
+        display_name="Tiny Test",
+        metrics=[create_levenshtein_ratio_metric("label")],
     ),
     "hotpot_train": BenchmarkDatasetConfig(
         name="hotpot_train",
@@ -285,9 +274,24 @@ OPTIMIZER_CONFIGS: dict[str, BenchmarkOptimizerConfig] = {
             "n_threads": 4,
             "seed": 42,
         },
-        optimize_params={
+        optimizer_prompt_params={
             "max_trials": 30,
             "n_samples": 100,
+        },
+    ),
+    "gepa": BenchmarkOptimizerConfig(
+        class_name="GepaOptimizer",
+        params={
+            "n_threads": 4,
+            "verbose": 1,
+            "seed": 42,
+        },
+        optimizer_prompt_params={
+            "max_trials": 30,
+            "n_samples": 3,
+            "reflection_minibatch_size": 3,
+            "candidate_selection_strategy": "pareto",
+            "skip_perfect_score": True,
         },
     ),
     "meta_prompt": BenchmarkOptimizerConfig(
@@ -302,7 +306,7 @@ OPTIMIZER_CONFIGS: dict[str, BenchmarkOptimizerConfig] = {
                 "max_completion_tokens": 9000,
             },
         },
-        optimize_params={
+        optimizer_prompt_params={
             "max_trials": 30,
         },
     ),
@@ -320,7 +324,7 @@ OPTIMIZER_CONFIGS: dict[str, BenchmarkOptimizerConfig] = {
             "seed": 42,
             "infer_output_style": True,
         },
-        optimize_params={
+        optimizer_prompt_params={
             "max_trials": 30,
             "population_size": 10,
             "num_generations": 4,
@@ -335,7 +339,17 @@ OPTIMIZER_CONFIGS: dict[str, BenchmarkOptimizerConfig] = {
             "convergence_threshold": 0.01,
             "seed": 42,
         },
-        optimize_params={
+        optimizer_prompt_params={
+            "max_trials": 30,
+        },
+    ),
+    "parameter": BenchmarkOptimizerConfig(
+        class_name="ParameterOptimizer",
+        params={
+            "n_threads": 4,
+            "seed": 42,
+        },
+        optimizer_prompt_params={
             "max_trials": 30,
         },
     ),
@@ -459,5 +473,13 @@ INITIAL_PROMPTS.update(
         "pupa_train": _PUPA_PROMPT,
         "pupa_validation": _PUPA_PROMPT,
         "pupa_test": _PUPA_PROMPT,
+        "tiny_test": [
+            {"role": "system", "content": "Answer the question briefly and correctly."},
+            {"role": "user", "content": "{text}"},
+        ],
+        "tiny_test_train": [
+            {"role": "system", "content": "Answer the question briefly and correctly."},
+            {"role": "user", "content": "{text}"},
+        ],
     }
 )
