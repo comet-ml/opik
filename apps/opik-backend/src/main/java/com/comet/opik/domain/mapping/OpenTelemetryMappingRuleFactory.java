@@ -7,7 +7,6 @@ import com.comet.opik.domain.mapping.otel.LogfireMappingRules;
 import com.comet.opik.domain.mapping.otel.OpenInferenceMappingRules;
 import com.comet.opik.domain.mapping.otel.PydanticMappingRules;
 import com.comet.opik.domain.mapping.otel.SmolagentsMappingRules;
-
 import lombok.experimental.UtilityClass;
 
 import java.util.List;
