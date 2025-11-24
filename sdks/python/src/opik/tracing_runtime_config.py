@@ -1,10 +1,9 @@
 from __future__ import annotations
 
-import functools
-import inspect
 import threading
-from typing import Any, Callable, Optional, TypeVar
+from typing import Optional
 from . import config
+
 
 class TracingRuntimeConfig:
     def __init__(self) -> None:
@@ -34,16 +33,16 @@ class TracingRuntimeConfig:
         return enabled
 
 
-_runtime_cfg = TracingRuntimeConfig()
+runtime_config = TracingRuntimeConfig()
 
 
 def set_tracing_active(active: bool) -> None:
-    _runtime_cfg.set_tracing_active(active)
+    runtime_config.set_tracing_active(active)
 
 
 def is_tracing_active() -> bool:
-    return _runtime_cfg.is_tracing_active()
+    return runtime_config.is_tracing_active()
 
 
 def reset_tracing_to_config_default() -> None:
-    _runtime_cfg.reset_to_config_default()
+    runtime_config.reset_to_config_default()
