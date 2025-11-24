@@ -557,9 +557,7 @@ class MetaPromptOptimizer(BaseOptimizer):
 
                     # Synthesis creates two prompts
                     # TODO: Set this into a CONST
-                    prompts_this_round = min(
-                        2, max_trials - trials_used
-                    )
+                    prompts_this_round = min(2, max_trials - trials_used)
                 else:
                     # Regular Round
                     generator = candidate_generator or self._generate_candidate_prompts

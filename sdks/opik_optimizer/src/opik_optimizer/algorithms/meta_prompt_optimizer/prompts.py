@@ -88,7 +88,7 @@ def build_candidate_generation_user_prompt(
     analysis_instruction: str,
     metric_focus_instruction: str,
     prompts_per_round: int,
-    pattern_guidance: str = "",  # NEW: Pattern injection support
+    pattern_guidance: str = "",
 ) -> str:
     """Build the user prompt for generating candidate prompt variations.
 
@@ -117,6 +117,13 @@ def build_candidate_generation_user_prompt(
             f"\n{META_PROMPT_SECTIONS['patterns'].format(patterns=pattern_guidance)}\n"
         )
 
+    # Wrap task context with section markers if provided
+    task_context_section = ""
+    if task_context_str:
+        task_context_section = (
+            f"\n{META_PROMPT_SECTIONS['examples'].format(examples=task_context_str)}\n"
+        )
+
     return textwrap.dedent(
         f"""
             {prompt_section}
@@ -125,7 +132,7 @@ def build_candidate_generation_user_prompt(
 
             {META_PROMPT_SECTIONS["history"].format(history=history_context) if history_context else ""}
 
-            {task_context_str}
+            {task_context_section}
 
             {pattern_section}
 
@@ -281,6 +288,98 @@ def build_pattern_extraction_user_prompt(
               "rationale": "Why this helps"
             }}
           ]
+        }}
+        """
+    ).strip()
+
+
+def build_synthesis_prompt(
+    top_prompts_with_scores: list[tuple[list[dict[str, str]], float, str]],
+    task_context_str: str,
+    best_score: float,
+) -> str:
+    """Build a synthesis prompt that combines insights from top performers.
+
+    This is used every N rounds to create comprehensive prompts that combine
+    the best elements from multiple high-performing prompts, preventing convergence
+    to overly terse solutions.
+
+    Args:
+        top_prompts_with_scores: List of (prompt_messages, score, reasoning) tuples
+        task_context_str: Task context with dataset examples
+        best_score: Current best score
+
+    Returns:
+        Synthesis prompt for generating comprehensive combined prompts
+    """
+    # Build showcase of top performers with FULL prompts (no truncation)
+    top_performers = ""
+    for i, (prompt_msg, score, reasoning) in enumerate(top_prompts_with_scores, 1):
+        improvement = ((score / best_score) - 1) * 100 if best_score > 0 else 0
+        top_performers += (
+            f"\n--- Top Performer #{i} | Score: {score:.4f} ({improvement:+.1f}%) ---\n"
+        )
+
+        # Format prompt messages cleanly - show FULL content without truncation
+        top_performers += "Full Prompt Messages:\n"
+        for msg in prompt_msg:
+            role = msg.get("role", "unknown")
+            content = msg.get("content", "")
+            # Show complete content - no truncation for synthesis
+            top_performers += f"  [{role.upper()}]: {content}\n"
+        top_performers += "\n"
+
+        if reasoning:
+            top_performers += f"Why it worked: {reasoning}\n"
+
+    return textwrap.dedent(
+        f"""
+        SYNTHESIS ROUND - Combining Best Elements
+        ==========================================
+
+        You've seen multiple high-performing prompts. Now it's time to synthesize their best elements
+        into comprehensive, well-structured prompts that combine their strengths.
+
+        Current Best Score: {best_score:.4f}
+
+        TOP PERFORMING PROMPTS TO SYNTHESIZE:
+        {top_performers}
+
+        {META_PROMPT_SECTIONS["examples"].format(examples=task_context_str) if task_context_str else ""}
+
+        YOUR TASK:
+        Generate EXACTLY 2 COMPREHENSIVE prompts that:
+
+        1. COMBINE the most effective elements from the top performers above
+        2. CREATE a longer, more detailed prompt that doesn't sacrifice depth for brevity
+        3. SYNTHESIZE their successful patterns into a cohesive whole
+        4. ADD structure and reasoning guidance (consider STOKE: Situation→Task→Objective→Knowledge→Examples)
+        5. BE THOROUGH - don't worry about length, focus on completeness and clarity
+
+        SYNTHESIS STRATEGIES:
+        - First prompt: Combine ALL winning patterns into one comprehensive super-prompt
+        - Second prompt: Take a different synthesis approach (e.g., structured vs narrative, step-by-step vs holistic)
+        - If multiple prompts use numbered steps, combine into a comprehensive step-by-step guide
+        - If some are terse and some verbose, create a version that's verbose where it helps
+        - Take the best constraints from each and combine them
+        - Add reasoning guidance or examples where they appeared effective
+        - Structure the information clearly (use sections, numbering, or frameworks)
+
+        IMPORTANT: This is a SYNTHESIS round, not a diversity round. Focus on:
+        - Creating EXACTLY 2 high-quality comprehensive prompts (REQUIRED)
+        - Depth and thoroughness over brevity
+        - Combining proven elements rather than experimenting with new approaches
+        - Each prompt should be comprehensive and complete, not a variation
+
+        Return a JSON array with EXACTLY 2 comprehensive synthesis prompts:
+        {{
+            "prompts": [
+                {{
+                    "prompt": [{{"role": "system", "content": "...comprehensive combined prompt..."}}, ...],
+                    "improvement_focus": "Synthesis of top performers",
+                    "reasoning": "How this combines the best elements from the top prompts"
+                }}
+            ]
         }}
         """
     ).strip()
