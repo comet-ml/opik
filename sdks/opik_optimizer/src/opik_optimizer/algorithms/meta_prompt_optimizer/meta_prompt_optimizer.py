@@ -65,6 +65,7 @@ class MetaPromptOptimizer(BaseOptimizer):
 
     # --- Constants for Default Configuration ---
     DEFAULT_PROMPTS_PER_ROUND = 4  # Same as DEFAULT_NUM_GENERATIONS
+    DEFAULT_SYNTHESIS_PROMPTS_PER_ROUND = 2
     DEFAULT_NUM_THREADS = 12
     DEFAULT_SEED = 42
     DEFAULT_NUM_TASK_EXAMPLES = 5
@@ -103,6 +104,7 @@ class MetaPromptOptimizer(BaseOptimizer):
             name=name,
         )
         self.prompts_per_round = prompts_per_round
+        self.synthesis_prompts_per_round = self.DEFAULT_SYNTHESIS_PROMPTS_PER_ROUND
         self.n_threads = n_threads
         self.dataset: Dataset | None = None
         self.enable_context = enable_context
@@ -552,9 +554,10 @@ class MetaPromptOptimizer(BaseOptimizer):
                     # Synthesis doesn't use patterns
                     generator_kwargs = {}
 
-                    # Synthesis creates two prompts
-                    # TODO: Set this into a CONST
-                    prompts_this_round = min(2, max_trials - trials_used)
+                    # Synthesis creates a fixed, small number of prompts
+                    prompts_this_round = min(
+                        self.synthesis_prompts_per_round, max_trials - trials_used
+                    )
                 else:
                     # Regular Round
                     generator = candidate_generator or self._generate_candidate_prompts

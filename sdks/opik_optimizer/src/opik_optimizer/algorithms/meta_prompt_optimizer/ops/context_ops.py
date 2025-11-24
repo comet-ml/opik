@@ -20,6 +20,7 @@ logger = logging.getLogger(__name__)
 DEFAULT_MAX_VALUE_LENGTH = 2000  # Initial truncation limit for field values
 MIN_VALUE_LENGTH = 200  # Minimum truncation limit before giving up
 VALUE_LENGTH_REDUCTION_STEP = 200  # How much to reduce truncation by each iteration
+TOP_PROMPTS_PER_RECENT_ROUND = 2  # Number of prompts to show per recent round
 
 # Token counting with litellm
 try:
@@ -255,12 +256,13 @@ def build_history_context(
             if pretty_mode:
                 # Show prompt in pretty formatted style
                 context += "Full Prompt Messages:\n"
+                prompt_lines: list[str] = []
                 for msg in entry.prompt_messages:
                     role = msg.get("role", "unknown")
                     msg_content = msg.get("content", "")
                     # Don't use f-string here - content may have template variables like {question}, {context}
-                    context += "  [" + role.upper() + "]: " + msg_content + "\n"
-                context += "\n"
+                    prompt_lines.append("  [" + role.upper() + "]: " + msg_content)
+                context += "\n".join(prompt_lines) + "\n\n"
             else:
                 # Show prompt in JSON format (same as output format)
                 import json
@@ -300,8 +302,7 @@ def build_history_context(
             )
 
             # Show top prompts per round
-            # TODO: Set this as a CONST
-            for p in sorted_generated[:2]:
+            for p in sorted_generated[:TOP_PROMPTS_PER_RECENT_ROUND]:
                 prompt_data = p.get("prompt", "N/A")
                 score = p.get("score", float("nan"))
                 context += f"- Score {score:.4f}:\n"
@@ -311,21 +312,21 @@ def build_history_context(
                     # It's a list of message dicts - apply pretty mode
                     if pretty_mode:
                         # Pretty formatted style
+                        lines: list[str] = []
                         for msg in prompt_data:
                             role = msg.get("role", "unknown")
                             msg_content = msg.get("content", "")
                             # Don't use f-string here - content may have template variables like {question}, {context}
-                            context += "  [" + role.upper() + "]: " + msg_content + "\n"
+                            lines.append("  [" + role.upper() + "]: " + msg_content)
+                        context += "\n".join(lines) + "\n\n"
                     else:
                         # JSON format
                         import json
 
                         context += json.dumps(prompt_data, indent=2)
-                        context += "\n"
+                        context += "\n\n"
                 else:
                     # It's already a string, just show it
-                    context += f"{prompt_data}\n"
-
-                context += "\n"
+                    context += f"{prompt_data}\n\n"
 
     return context

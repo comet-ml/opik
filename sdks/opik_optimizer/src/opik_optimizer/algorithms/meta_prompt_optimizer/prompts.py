@@ -326,6 +326,7 @@ def build_synthesis_prompt(
     top_prompts_with_scores: list[tuple[list[dict[str, str]], float, str]],
     task_context_str: str,
     best_score: float,
+    num_prompts: int = 2,
 ) -> str:
     """Build a synthesis prompt that combines insights from top performers.
 
@@ -337,6 +338,7 @@ def build_synthesis_prompt(
         top_prompts_with_scores: List of (prompt_messages, score, reasoning) tuples
         task_context_str: Task context with dataset examples
         best_score: Current best score
+        num_prompts: Number of synthesis prompts to request
 
     Returns:
         Synthesis prompt for generating comprehensive combined prompts
@@ -377,7 +379,7 @@ def build_synthesis_prompt(
         {META_PROMPT_SECTIONS["examples"].format(examples=task_context_str) if task_context_str else ""}
 
         YOUR TASK:
-        Generate EXACTLY 2 COMPREHENSIVE prompts that:
+        Generate EXACTLY {num_prompts} COMPREHENSIVE prompts that:
 
         1. COMBINE the most effective elements from the top performers above
         2. CREATE a longer, more detailed prompt that doesn't sacrifice depth for brevity
@@ -395,12 +397,12 @@ def build_synthesis_prompt(
         - Structure the information clearly (use sections, numbering, or frameworks)
 
         IMPORTANT: This is a SYNTHESIS round, not a diversity round. Focus on:
-        - Creating EXACTLY 2 high-quality comprehensive prompts (REQUIRED)
+        - Creating EXACTLY {num_prompts} high-quality comprehensive prompts (REQUIRED)
         - Depth and thoroughness over brevity
         - Combining proven elements rather than experimenting with new approaches
         - Each prompt should be comprehensive and complete, not a variation
 
-        CRITICAL - Return VALID JSON with EXACTLY 2 prompts in this EXACT structure:
+        CRITICAL - Return VALID JSON with EXACTLY {num_prompts} prompts in this EXACT structure:
         {{
             "prompts": [
                 {{

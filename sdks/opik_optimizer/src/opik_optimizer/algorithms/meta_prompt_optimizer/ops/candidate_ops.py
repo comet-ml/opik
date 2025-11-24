@@ -4,6 +4,7 @@ Candidate generation operations for the Meta-Prompt Optimizer.
 This module contains functions for generating and sanitizing candidate prompts.
 """
 
+import ast
 from typing import Any
 from collections.abc import Callable
 import logging
@@ -347,7 +348,8 @@ def generate_candidate_prompts(
                 )
 
             # Sanitize generated prompts to remove data leakage
-            json_result = sanitize_generated_prompts(json_result, metric.__name__)
+            metric_name = getattr(metric, "__name__", str(metric))
+            json_result = sanitize_generated_prompts(json_result, metric_name)
 
             # Extract and log valid prompts
             valid_prompts: list[chat_prompt.ChatPrompt] = []
@@ -589,13 +591,15 @@ def generate_synthesis_prompts(
         project_name: Optional project name
 
     Returns:
-        List of 1-2 comprehensive synthesis prompts
+        List of comprehensive synthesis prompts
     """
     from ..prompts import build_synthesis_prompt
 
+    num_synthesis_prompts = getattr(optimizer, "synthesis_prompts_per_round", 2)
+
     with reporting.display_candidate_generation_report(
-        2,
-        verbose=optimizer.verbose,  # Synthesis generates 1-2 prompts
+        num_synthesis_prompts,
+        verbose=optimizer.verbose,  # Synthesis generates a small number of prompts
     ) as candidate_generation_report:
         # Get top performers from Hall of Fame
         top_prompts_with_scores: list[tuple[list[dict[str, str]], float, str]] = []
@@ -645,8 +649,18 @@ def generate_synthesis_prompts(
                     reasoning = best.get("reasoning", "")
                     # Try to parse as messages
                     try:
-                        messages = eval(prompt_text) if prompt_text else []
-                        top_prompts_with_scores.append((messages, score, reasoning))
+                        if isinstance(prompt_text, list):
+                            messages = prompt_text
+                        elif isinstance(prompt_text, str) and prompt_text:
+                            try:
+                                messages = json.loads(prompt_text)
+                            except json.JSONDecodeError:
+                                messages = ast.literal_eval(prompt_text)
+                        else:
+                            continue
+
+                        if isinstance(messages, list):
+                            top_prompts_with_scores.append((messages, score, reasoning))
                     except Exception:
                         continue
 
@@ -669,6 +683,7 @@ def generate_synthesis_prompts(
             top_prompts_with_scores=top_prompts_with_scores,
             task_context_str=task_context_str,
             best_score=best_score,
+            num_prompts=num_synthesis_prompts,
         )
         synthesis_system_prompt = build_reasoning_system_prompt(
             optimizer.allow_user_prompt_optimization
