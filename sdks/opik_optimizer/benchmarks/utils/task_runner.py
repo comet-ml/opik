@@ -702,7 +702,7 @@ def execute_task(
             initial_prompt = ChatPrompt(
                 messages=messages,  # type: ignore[arg-type]
                 model=getattr(optimizer, "model", model_name),
-                model_parameters=getattr(optimizer, "model_parameters", None),
+                model_parameters=getattr(optimizer, "model_parameters", model_parameters),
             )
 
             initial_evaluation = evaluate_prompt_on_dataset(
