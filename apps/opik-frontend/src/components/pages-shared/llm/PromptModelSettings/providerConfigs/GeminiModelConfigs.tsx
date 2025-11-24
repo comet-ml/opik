@@ -5,13 +5,7 @@ import { LLMGeminiConfigsType, PROVIDER_MODEL_TYPE } from "@/types/providers";
 import { DEFAULT_GEMINI_CONFIGS } from "@/constants/llm";
 import PromptModelConfigsTooltipContent from "@/components/pages-shared/llm/PromptModelSettings/providerConfigs/PromptModelConfigsTooltipContent";
 import isUndefined from "lodash/isUndefined";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import SelectBox from "@/components/shared/SelectBox/SelectBox";
 import { Label } from "@/components/ui/label";
 import ExplainerIcon from "@/components/shared/ExplainerIcon/ExplainerIcon";
 
@@ -26,9 +20,7 @@ const GeminiModelConfigs = ({
   model,
   onChange,
 }: geminiModelConfigsProps) => {
-  const isGemini3Pro =
-    model === PROVIDER_MODEL_TYPE.GEMINI_3_PRO ||
-    model === PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_PRO;
+  const isGemini3Pro = model === PROVIDER_MODEL_TYPE.GEMINI_3_PRO;
 
   return (
     <div className="flex w-72 flex-col gap-6">
@@ -88,20 +80,18 @@ const GeminiModelConfigs = ({
             </Label>
             <ExplainerIcon description="Controls the depth of reasoning the model performs before responding. Higher thinking level may result in more thorough but slower responses." />
           </div>
-          <Select
+          <SelectBox
+            id="thinkingLevel"
             value={configs.thinkingLevel || "low"}
-            onValueChange={(value: "low" | "high") =>
+            onChange={(value: "low" | "high") =>
               onChange({ thinkingLevel: value })
             }
-          >
-            <SelectTrigger>
-              <SelectValue placeholder="Select thinking level" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="low">Low</SelectItem>
-              <SelectItem value="high">High</SelectItem>
-            </SelectContent>
-          </Select>
+            options={[
+              { label: "Low", value: "low" },
+              { label: "High", value: "high" },
+            ]}
+            placeholder="Select thinking level"
+          />
         </div>
       )}
     </div>

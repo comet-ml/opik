@@ -5,13 +5,7 @@ import { LLMVertexAIConfigsType, PROVIDER_MODEL_TYPE } from "@/types/providers";
 import { DEFAULT_VERTEX_AI_CONFIGS } from "@/constants/llm";
 import PromptModelConfigsTooltipContent from "@/components/pages-shared/llm/PromptModelSettings/providerConfigs/PromptModelConfigsTooltipContent";
 import isUndefined from "lodash/isUndefined";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import SelectBox from "@/components/shared/SelectBox/SelectBox";
 import { Label } from "@/components/ui/label";
 import ExplainerIcon from "@/components/shared/ExplainerIcon/ExplainerIcon";
 
@@ -86,20 +80,18 @@ const VertexAIModelConfigs = ({
             </Label>
             <ExplainerIcon description="Controls the depth of reasoning the model performs before responding. Higher thinking level may result in more thorough but slower responses." />
           </div>
-          <Select
+          <SelectBox
+            id="thinkingLevel"
             value={configs.thinkingLevel || "low"}
-            onValueChange={(value: "low" | "high") =>
+            onChange={(value: "low" | "high") =>
               onChange({ thinkingLevel: value })
             }
-          >
-            <SelectTrigger>
-              <SelectValue placeholder="Select thinking level" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="low">Low</SelectItem>
-              <SelectItem value="high">High</SelectItem>
-            </SelectContent>
-          </Select>
+            options={[
+              { label: "Low", value: "low" },
+              { label: "High", value: "high" },
+            ]}
+            placeholder="Select thinking level"
+          />
         </div>
       )}
     </div>
