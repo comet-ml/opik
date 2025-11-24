@@ -10,8 +10,8 @@ from opik_optimizer import ChatPrompt
 
 class DummyOptimizer:
     def __init__(self, model: str, model_parameters: dict[str, Any] | None = None):
-        self.model = model
-        self.model_parameters = model_parameters or {}
+        self.model = f"{model}-from-optimizer"
+        self.model_parameters = {**(model_parameters or {}), "source": "optimizer"}
         self.llm_calls = 0
 
     def optimize_prompt(self, *args: Any, **kwargs: Any) -> Any:
@@ -79,8 +79,10 @@ def test_chatprompt_uses_optimizer_model(monkeypatch: pytest.MonkeyPatch) -> Non
 
     assert isinstance(result, TaskResult)
     assert isinstance(result.initial_prompt, ChatPrompt)
-    assert result.initial_prompt.model == "custom-model"
+    assert result.initial_prompt.model == "custom-model-from-optimizer"
     assert result.initial_prompt.model_kwargs.get("temperature") == 0.7
+    assert result.initial_prompt.model_kwargs.get("source") == "optimizer"
     assert isinstance(result.optimized_prompt, ChatPrompt)
-    assert result.optimized_prompt.model == "custom-model"
+    assert result.optimized_prompt.model == "custom-model-from-optimizer"
     assert result.optimized_prompt.model_kwargs.get("temperature") == 0.7
+    assert result.optimized_prompt.model_kwargs.get("source") == "optimizer"
