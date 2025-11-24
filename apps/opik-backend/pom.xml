@@ -31,8 +31,8 @@
         <uuid.java.generator.version>5.1.0</uuid.java.generator.version>
         <wiremock.version>3.13.1</wiremock.version>
         <redisson.version>3.52.0</redisson.version>
-        <opentelmetry.version>2.21.0</opentelmetry.version>
-        <aws.java.sdk.version>2.38.2</aws.java.sdk.version>
+        <opentelmetry.version>2.22.0</opentelmetry.version>
+        <aws.java.sdk.version>2.39.2</aws.java.sdk.version>
         <json-path.version>2.10.0</json-path.version>
         <mainClass>com.comet.opik.OpikApplication</mainClass>
     </properties>
@@ -421,7 +421,7 @@
                 <plugin>
                     <groupId>org.apache.maven.plugins</groupId>
                     <artifactId>maven-jar-plugin</artifactId>
-                    <version>3.4.2</version>
+                    <version>3.5.0</version>
                 </plugin>
                 <plugin>
                     <groupId>org.apache.maven.plugins</groupId>
@@ -459,7 +459,7 @@
             <plugin>
                 <groupId>com.diffplug.spotless</groupId>
                 <artifactId>spotless-maven-plugin</artifactId>
-                <version>3.0.0</version>
+                <version>3.1.0</version>
                 <executions>
                     <execution>
                         <phase>validate</phase>

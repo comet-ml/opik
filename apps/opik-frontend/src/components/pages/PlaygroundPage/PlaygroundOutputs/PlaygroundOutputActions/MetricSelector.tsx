@@ -161,7 +161,7 @@ const MetricSelector: React.FC<MetricSelectorProps> = ({
 
   const buttonElement = (
     <Button
-      className="group w-[280px] justify-between"
+      className="group w-[200px] justify-between"
       size="sm"
       variant="outline"
       type="button"
@@ -183,7 +183,7 @@ const MetricSelector: React.FC<MetricSelectorProps> = ({
         <TooltipWrapper content={tooltipContent}>
           <PopoverTrigger asChild={!isDisabled} disabled={isDisabled}>
             {isDisabled ? (
-              <span className="inline-block w-[280px]">{buttonElement}</span>
+              <span className="inline-block w-[200px]">{buttonElement}</span>
             ) : (
               buttonElement
             )}
@@ -196,7 +196,7 @@ const MetricSelector: React.FC<MetricSelectorProps> = ({
       )}
       <PopoverContent
         align="end"
-        style={{ width: "280px" }}
+        style={{ width: "200px" }}
         className="relative p-1 pt-12"
         hideWhenDetached
         onCloseAutoFocus={(e) => e.preventDefault()}

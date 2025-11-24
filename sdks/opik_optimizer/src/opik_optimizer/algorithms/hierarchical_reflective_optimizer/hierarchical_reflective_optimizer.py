@@ -302,7 +302,7 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
             Tuple of (improved_prompt, improved_score, improved_experiment_result)
         """
 
-        # Logic on which datset to use for scoring
+        # Logic on which dataset to use for scoring
         evaluation_dataset = (
             validation_dataset if validation_dataset is not None else dataset
         )
@@ -492,8 +492,15 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
                 with reporting.display_root_cause_analysis(
                     verbose=self.verbose
                 ) as analysis_reporter:
+                    train_dataset_experiment_result = self._evaluate_prompt(
+                        prompt=prompt,
+                        dataset=dataset,
+                        metric=metric,
+                        optimization_id="",  # TODO: Hack so that it doesn't appear in the UI
+                        n_samples=n_samples,
+                    )
                     hierarchical_analysis = self._hierarchical_root_cause_analysis(
-                        experiment_result
+                        train_dataset_experiment_result
                     )
                     analysis_reporter.set_completed(
                         total_test_cases=hierarchical_analysis.total_test_cases,

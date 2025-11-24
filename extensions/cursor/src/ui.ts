@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { getOpikApiKey } from './utils';
+import { getOpikApiKey, showDebugChannel } from './utils';
 
 export function updateStatusBar(context: vscode.ExtensionContext) {
     const statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
@@ -34,10 +34,17 @@ export function showInitialApiKeyWarning(context: vscode.ExtensionContext) {
   if (!context.globalState.get<boolean>('hasShownInitialApiKeyWarning', false)) {
     vscode.window.showErrorMessage(
       'To log your chat sessions to Opik you need an API Key. Configure it in VS Code settings or ~/.opik.config file.',
-      'Open Settings'
+      'Open Settings',
+      'Show Debug Logs'
     ).then(selection => {
       if (selection === 'Open Settings') {
         vscode.commands.executeCommand('workbench.action.openSettings', 'opik.apiKey');
+      } else if (selection === 'Show Debug Logs') {
+        // Enable debug logs and show the output channel
+        const config = vscode.workspace.getConfiguration();
+        config.update('opik.enableDebugLogs', true, vscode.ConfigurationTarget.Global);
+        showDebugChannel();
+        vscode.window.showInformationMessage('Debug logging enabled. You can disable it in settings (opik.enableDebugLogs).');
       }
     });
 
