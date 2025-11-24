@@ -165,6 +165,7 @@ def generate_candidate_prompts(
     optimization_id: str | None = None,
     project_name: str | None = None,
     winning_patterns: list[str] | None = None,
+    feedback: dict | None = None,
 ) -> list[chat_prompt.ChatPrompt]:
     """
     Generate candidate prompts using meta-prompting.
@@ -211,16 +212,12 @@ def generate_candidate_prompts(
         task_context_str = ""
         analysis_instruction = ""
         metric_focus_instruction = ""
-        improvement_point_1 = ""
 
         if optimizer.enable_context:
-            task_context_str = get_task_context_fn(metric=metric)
+            task_context_str, _ = get_task_context_fn(metric=metric)
             analysis_instruction = "Analyze the example provided (if any), the metric description (if any), and the history of scores."
             metric_focus_instruction = (
                 "Focus on improving the score for the evaluation metric."
-            )
-            improvement_point_1 = (
-                "1. Be more specific and clear about expectations based on the task."
             )
             logger.debug(
                 "Task context and metric-specific instructions enabled for reasoning prompt."
@@ -230,9 +227,6 @@ def generate_candidate_prompts(
                 "Analyze the history of scores and the current prompt's performance."
             )
             metric_focus_instruction = "Focus on generating diverse and effective prompt variations based on the history."
-            improvement_point_1 = (
-                "1. Be more specific and clear about expectations based on the task."
-            )
             logger.debug(
                 "Task context and metric-specific instructions disabled for reasoning prompt."
             )
@@ -244,9 +238,20 @@ def generate_candidate_prompts(
             task_context_str=task_context_str,
             analysis_instruction=analysis_instruction,
             metric_focus_instruction=metric_focus_instruction,
-            improvement_point_1=improvement_point_1,
             prompts_per_round=optimizer.prompts_per_round,
             pattern_guidance=pattern_guidance,
+            feedback=feedback,
+        )
+
+        # Log the complete meta-reasoning prompt being sent to the model
+        # FIXME: Remove before merging
+        logger.info(
+            f"\n{'=' * 80}\n"
+            f"META-REASONING PROMPT (Round {round_num + 1})\n"
+            f"{'=' * 80}\n"
+            f"System: {build_reasoning_system_prompt()[:200]}...\n\n"
+            f"User Prompt:\n{user_prompt}\n"
+            f"{'=' * 80}\n"
         )
 
         try:
@@ -294,8 +299,14 @@ def generate_candidate_prompts(
                     )
 
             # Validate the parsed JSON structure
-            if isinstance(json_result, list) and len(json_result) == 1:
-                json_result = json_result[0]
+            if isinstance(json_result, list):
+                # Check if it's a wrapped format: [{"prompts": [...]}]
+                if len(json_result) == 1 and isinstance(json_result[0], dict) and "prompts" in json_result[0]:
+                    json_result = json_result[0]
+                # Check if it's unwrapped: [{prompt: ..., improvement_focus: ..., reasoning: ...}, ...]
+                elif all(isinstance(item, dict) and "prompt" in item for item in json_result):
+                    logger.debug("Received unwrapped prompt list, wrapping in 'prompts' key")
+                    json_result = {"prompts": json_result}
 
             if not isinstance(json_result, dict) or "prompts" not in json_result:
                 logger.debug(f"Parsed JSON content: {json_result}")
