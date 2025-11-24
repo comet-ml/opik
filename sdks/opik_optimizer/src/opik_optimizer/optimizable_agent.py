@@ -3,7 +3,7 @@ import json
 import os
 import copy
 
-from opik.opik_context import get_current_span_data
+from opik.opik_context import get_current_span_data, update_current_trace
 
 import litellm
 from litellm.integrations.opik.opik import OpikLogger
@@ -58,6 +58,7 @@ class OptimizableAgent:
         self.project_name = project_name or "Default Project"
         self.init_llm()
         self.init_agent(prompt)
+        self.trace_metadata: dict[str, Any] = {}
 
     def init_llm(self) -> None:
         """Initialize the LLM with the appropriate callbacks."""
@@ -66,6 +67,8 @@ class OptimizableAgent:
             os.environ["OPIK_PROJECT_NAME"] = str(self.project_name)
         self.opik_logger = OpikLogger()
         litellm.callbacks = [self.opik_logger]
+        # Attach default metadata; subclasses may override per-run via start_bundle_trace.
+        self.trace_metadata = {"project_name": self.project_name}
 
     def init_agent(self, prompt: "chat_prompt.ChatPrompt") -> None:
         """Bind the runtime prompt and snapshot its model configuration."""
@@ -129,6 +132,12 @@ class OptimizableAgent:
         if query is not None:
             all_messages.append({"role": "user", "content": query})
 
+        # Push trace metadata for better visibility (tools/LLM logs in Opik)
+        try:
+            update_current_trace(metadata=self.trace_metadata)
+        except Exception:
+            pass
+
         if allow_tool_use and self.prompt.tools:
             # Tool-calling loop
             final_response = "I was unable to find the desired information."
@@ -188,6 +197,31 @@ class OptimizableAgent:
         messages = self.prompt.get_messages(dataset_item)
         return self.invoke(messages)
 
+    def invoke_prompt(
+        self,
+        prompt: "chat_prompt.ChatPrompt",
+        dataset_item: dict[str, Any],
+        allow_tool_use: bool = False,
+        seed: int | None = None,
+    ) -> str:
+        """
+        Invoke a specific ChatPrompt while temporarily binding model/tool context.
+        """
+        original_prompt = self.prompt
+        original_model = self.model
+        original_kwargs = self.model_kwargs
+        try:
+            self.prompt = prompt
+            if getattr(prompt, "model", None) is not None:
+                self.model = prompt.model
+            self.model_kwargs = copy.deepcopy(getattr(prompt, "model_kwargs", {}) or {})
+            messages = prompt.get_messages(dataset_item)
+            return self.invoke(messages=messages, seed=seed)
+        finally:
+            self.prompt = original_prompt
+            self.model = original_model
+            self.model_kwargs = original_kwargs
+
     def invoke(
         self,
         messages: list[dict[str, str]],
@@ -203,6 +237,5 @@ class OptimizableAgent:
         Returns:
             Dict[str, Any]: The agent's response
         """
-        # Replace with agent invocation:
         result = self.llm_invoke(messages=messages, seed=seed, allow_tool_use=True)
         return result

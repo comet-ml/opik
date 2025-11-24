@@ -3,7 +3,6 @@
 import pytest
 
 from opik_optimizer import MetaPromptOptimizer, ChatPrompt
-from opik_optimizer.algorithms.meta_prompt_optimizer.bundle_agent import BundleAgent
 from opik_optimizer.mcp_utils.mcp_workflow import MCPExecutionConfig
 
 
@@ -179,7 +178,7 @@ def test_optimize_prompt_bundle_uses_bundle_agent(monkeypatch):
         prompt=initial_prompts,
         dataset=DummyDataset(),
         metric=lambda item, output, trace=None: 1.0,
-        candidate_generator_kwargs={"bundle_agent_class": BundleAgent},
+        candidate_generator_kwargs={"bundle_agent_class": None},
         max_trials=1,
     )
 
