@@ -19,8 +19,9 @@ def build_reasoning_system_prompt() -> str:
     Returns:
         System prompt string for the reasoning LLM
     """
-    return textwrap.dedent(
-        """You are an expert prompt engineer. Your task is to improve prompts for any type of task.
+    return (
+        textwrap.dedent(
+            """You are an expert prompt engineer. Your task is to improve prompts for any type of task.
 
         Focus on making the prompt more effective by:
         1. Being clear and specific about what is expected
@@ -39,16 +40,17 @@ def build_reasoning_system_prompt() -> str:
         IMPORTANT: Domain terminology is allowed. For coding tasks, terms like 'function', 'class', 'method', 'code', 'test case' are legitimate domain knowledge, not data leakage. For other tasks, use appropriate domain terminology.
 
         Variable Usage:
-        - Use {variable_name} syntax for variables that exist in the original prompt
-        - You MAY add new variables if they improve the prompt's effectiveness and are task-appropriate (e.g., {code}, {language}, {function_name} for coding tasks)
+        - CRITICAL: Check the "Available input variables" section in the task context - you MUST include ALL necessary input variables in your prompts
+        - Use {start}variable_name{end} syntax for variables (e.g., if task context shows {start}context{end}, {start}question{end} are available, USE BOTH)
+        - If the task has multiple input fields (like {start}context{end}, {start}question{end}, {start}code{end}, etc.), ensure your prompt references ALL that are needed for the task
+        - You MAY add new variables if they improve the prompt's effectiveness and are task-appropriate
         - DO NOT add variables that expose dataset-specific field names from evaluation data
         - Variables should represent task inputs/outputs, not internal dataset structure
-        - The prompt should be generalizable to similar tasks
 
         Instructions:
-        1. If there is a system prompt, prioritize adding instructions there if and only if it makes sense.
-        2. You MAY add variables or parameters if they improve prompt effectiveness and are appropriate for the task domain.
-        3. You can reuse variables that already exist in the prompt.
+        1. FIRST: Review "Available input variables" in task context - ensure your prompt uses ALL necessary input variables for the task
+        2. If there is a system prompt, prioritize adding instructions there if and only if it makes sense.
+        3. You MAY add new variables or parameters if they improve prompt effectiveness and are appropriate for the task domain.
         4. Ensure prompts would work on NEW, UNSEEN data of the same task type.
 
         Return a JSON array of prompts with the following structure. Make sure to return a valid
@@ -68,7 +70,11 @@ def build_reasoning_system_prompt() -> str:
                 }
             ]
         }"""
-    ).strip()
+        )
+        .strip()
+        .replace("{start}", START_DELIM)
+        .replace("{end}", END_DELIM)
+    )
 
 
 # Meta-prompt template sections
@@ -124,8 +130,9 @@ def build_candidate_generation_user_prompt(
             f"\n{META_PROMPT_SECTIONS['examples'].format(examples=task_context_str)}\n"
         )
 
-    return textwrap.dedent(
-        f"""
+    return (
+        textwrap.dedent(
+            f"""
             {prompt_section}
 
             Current score: {best_score}
@@ -165,12 +172,19 @@ def build_candidate_generation_user_prompt(
             - Pushing to extremes (ultra-terse vs ultra-detailed)
             - Trying something completely different if the current approach has plateaued
 
-            IMPORTANT: Avoid mentioning specific dataset fields, metric names, or evaluation terminology.
-            Keep prompts generalizable to similar tasks.
+            IMPORTANT REMINDERS:
+            - CHECK THE "Available input variables" section above - your prompts MUST use ALL necessary input variables
+            - If you see variables like {start}context{end}, {start}question{end}, {start}code{end}, etc. listed, INCLUDE THEM in your prompts
+            - Avoid mentioning specific dataset fields, metric names, or evaluation terminology
+            - Keep prompts generalizable to similar tasks
 
             Return a valid JSON array as specified.
             """
-    ).strip()
+        )
+        .strip()
+        .replace("{start}", START_DELIM)
+        .replace("{end}", END_DELIM)
+    )
 
 
 def build_mcp_tool_description_user_prompt(

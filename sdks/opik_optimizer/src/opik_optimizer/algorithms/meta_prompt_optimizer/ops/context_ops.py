@@ -16,6 +16,11 @@ from ..prompts import START_DELIM, END_DELIM
 
 logger = logging.getLogger(__name__)
 
+# Constants for adaptive context fitting
+DEFAULT_MAX_VALUE_LENGTH = 2000  # Initial truncation limit for field values
+MIN_VALUE_LENGTH = 200  # Minimum truncation limit before giving up
+VALUE_LENGTH_REDUCTION_STEP = 200  # How much to reduce truncation by each iteration
+
 # Token counting with litellm
 try:
     from litellm import token_counter
@@ -100,6 +105,7 @@ def get_task_context(
         "target",
         "metadata",
         "response",
+        "supporting_facts",  # This reveals which context parts contain the answer (data leakage)
     }
 
     # Determine which fields to show
@@ -117,9 +123,7 @@ def get_task_context(
         input_fields = all_input_fields
 
     # Build context with adaptive fitting
-    max_value_length = (
-        2000  # Start with very generous truncation limit, will reduce if needed
-    )
+    max_value_length = DEFAULT_MAX_VALUE_LENGTH
     current_num_examples = len(samples)
 
     while current_num_examples > 0:
@@ -158,8 +162,12 @@ def get_task_context(
             context += "\nFocus on producing clear, correct responses that optimize for this metric.\n\n"
         else:
             # Generic evaluation message without metric details
-            context += "Evaluation: Your output will be evaluated for accuracy and quality.\n"
-            context += "Focus on producing clear, correct responses based on the input.\n\n"
+            context += (
+                "Evaluation: Your output will be evaluated for accuracy and quality.\n"
+            )
+            context += (
+                "Focus on producing clear, correct responses based on the input.\n\n"
+            )
 
         # Show multiple sanitized examples
         context += f"Example inputs from dataset ({current_num_examples} samples):\n\n"
@@ -195,9 +203,11 @@ def get_task_context(
             logger.debug(
                 f"Reducing examples to {current_num_examples} (was {token_count} tokens)"
             )
-        elif max_value_length > 200:
+        elif max_value_length > MIN_VALUE_LENGTH:
             # If only 1 example left, reduce truncation limit more gradually
-            max_value_length = max(200, max_value_length - 200)
+            max_value_length = max(
+                MIN_VALUE_LENGTH, max_value_length - VALUE_LENGTH_REDUCTION_STEP
+            )
             logger.debug(
                 f"Reducing truncation to {max_value_length} chars (was {token_count} tokens)"
             )
@@ -248,8 +258,9 @@ def build_history_context(
                 context += "Full Prompt Messages:\n"
                 for msg in entry.prompt_messages:
                     role = msg.get("role", "unknown")
-                    content = msg.get("content", "")
-                    context += f"  [{role.upper()}]: {content}\n"
+                    msg_content = msg.get("content", "")
+                    # Don't use f-string here - content may have template variables like {question}, {context}
+                    context += "  [" + role.upper() + "]: " + msg_content + "\n"
                 context += "\n"
             else:
                 # Show prompt in JSON format (same as output format)
@@ -267,7 +278,17 @@ def build_history_context(
 
     # Also show recent rounds for temporal context (last 3 rounds)
     if previous_rounds:
-        context += "\nRecent Rounds (for context):\n"
+        context += "\nRecent Rounds - What We Just Tried:\n"
+        context += "=" * 80 + "\n"
+        context += (
+            "CRITICAL: These are the prompts we JUST generated in recent rounds.\n"
+        )
+        context += "- If scores are LOWER than Hall of Fame: identify what's missing and avoid repeating these patterns\n"
+        context += "- If scores are declining: we're moving in the wrong direction, course correct\n"
+        context += "- Compare against winners: what did recent attempts lack? What mistakes were made?\n"
+        context += (
+            "- DO NOT generate similar variations of recent low-scoring prompts\n\n"
+        )
         for round_data in reversed(previous_rounds[-3:]):
             context += f"\nRound {round_data.round_number}:\n"
             context += f"Best score this round: {round_data.best_score:.4f}\n"
@@ -293,8 +314,9 @@ def build_history_context(
                         # Pretty formatted style
                         for msg in prompt_data:
                             role = msg.get("role", "unknown")
-                            content = msg.get("content", "")
-                            context += f"  [{role.upper()}]: {content}\n"
+                            msg_content = msg.get("content", "")
+                            # Don't use f-string here - content may have template variables like {question}, {context}
+                            context += "  [" + role.upper() + "]: " + msg_content + "\n"
                     else:
                         # JSON format
                         import json
