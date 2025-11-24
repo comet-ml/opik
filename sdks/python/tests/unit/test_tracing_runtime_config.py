@@ -161,4 +161,3 @@ def test_track_decorator__async_generator_function__respects_runtime_flag():
     ) as mocked_create:
         asyncio.run(_consume_async_gen(2))
         assert mocked_create.called
-
