@@ -7,7 +7,7 @@ import pathlib
 import urllib.parse
 from typing import Any, Dict, Final, List, Literal, Optional, Tuple, Type, Union
 
-import opik.decorator.tracing_runtime_config as tracing_runtime_config
+from opik import tracing_runtime_config
 import pydantic
 import pydantic_settings
 from pydantic_settings import BaseSettings, InitSettingsSource
