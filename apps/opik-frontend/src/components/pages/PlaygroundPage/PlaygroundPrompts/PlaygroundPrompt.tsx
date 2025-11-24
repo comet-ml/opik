@@ -6,8 +6,11 @@ import { LLM_MESSAGE_ROLE, LLMMessage } from "@/types/llm";
 import {
   COMPOSED_PROVIDER_TYPE,
   LLMPromptConfigsType,
+  LLMOpenAIConfigsType,
   PROVIDER_MODEL_TYPE,
+  PROVIDER_TYPE,
 } from "@/types/providers";
+import { parseComposedProviderType } from "@/lib/provider";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 
@@ -15,6 +18,7 @@ import {
   generateDefaultPrompt,
   getDefaultConfigByProvider,
 } from "@/lib/playground";
+import { isReasoningModel } from "@/lib/modelUtils";
 import { PLAYGROUND_LAST_PICKED_MODEL } from "@/constants/llm";
 import { generateDefaultLLMPromptMessage, getNextMessageType } from "@/lib/llm";
 import LLMPromptMessages from "@/components/pages-shared/llm/LLMPromptMessages/LLMPromptMessages";
@@ -129,16 +133,21 @@ const PlaygroundPrompt = ({
 
   const handleUpdateModel = useCallback(
     (newModel: PROVIDER_MODEL_TYPE, newProvider: COMPOSED_PROVIDER_TYPE) => {
+      // Update configs if provider changes OR if switching to/from a reasoning model
+      const shouldUpdateConfigs =
+        newProvider !== provider ||
+        isReasoningModel(newModel) !== isReasoningModel(model);
+      
       updatePrompt(promptId, {
         model: newModel,
         provider: newProvider,
-        ...(newProvider !== provider && {
+        ...(shouldUpdateConfigs && {
           configs: getDefaultConfigByProvider(newProvider, newModel),
         }),
       });
       setLastPickedModel(newModel);
     },
-    [updatePrompt, promptId, provider, setLastPickedModel],
+    [updatePrompt, promptId, provider, model, setLastPickedModel],
   );
 
   const handleAddProvider = useCallback(
@@ -173,6 +182,25 @@ const PlaygroundPrompt = ({
     // initialize a model validation process described in the next useEffect hook, as soon as trigger is triggered
     checkedIfModelIsValidRef.current = false;
   }, [providerValidationTrigger]);
+
+  // Auto-adjust temperature for reasoning models
+  useEffect(() => {
+    const providerType = parseComposedProviderType(provider);
+    if (
+      providerType === PROVIDER_TYPE.OPEN_AI &&
+      isReasoningModel(model) &&
+      configs &&
+      typeof (configs as LLMOpenAIConfigsType).temperature === "number" &&
+      (configs as LLMOpenAIConfigsType).temperature < 1
+    ) {
+      updatePrompt(promptId, {
+        configs: {
+          ...configs,
+          temperature: 1.0,
+        } as LLMPromptConfigsType,
+      });
+    }
+  }, [model, configs, provider, updatePrompt, promptId]);
 
   useEffect(() => {
     // on init, to check if a prompt has a model from valid providers: (f.e., remove a provider after setting a model)
