@@ -44,6 +44,8 @@ bm25 = [ # Extras - pip install opik_optimizer[bm25]
     "bm25s[full]",
     "PyStemmer",
     "huggingface-hub",
+    "ujson",
+    "pyarrow",  # For optimized Parquet format
 ]
 
 [tool.setuptools.packages.find]
