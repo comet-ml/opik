@@ -18,8 +18,10 @@ import logging
 
 from opik_optimizer import ChatPrompt
 from opik_optimizer._llm_calls import call_model
+from opik_optimizer.utils.llm_logger import LLMLogger
 
 logger = logging.getLogger(__name__)
+agent_logger = LLMLogger("hotpot_multihop_agent", agent_name="Hotpot Multi-Hop")
 
 
 class HotpotMultiHopAgent:
@@ -145,7 +147,7 @@ class HotpotMultiHopAgent:
             logger.info(f"Query 1: {context['query_1']}")
 
         # Search
-        passages_1 = self.search_fn(context["query_1"], self.num_passages)
+        passages_1 = self._log_search(context["query_1"], self.num_passages)
         context["passages_1"] = "\n\n".join(passages_1)
 
         if verbose:
@@ -183,7 +185,7 @@ class HotpotMultiHopAgent:
             logger.info(f"Query 2: {context['query_2']}")
 
         # Second search
-        passages_2 = self.search_fn(context["query_2"], self.num_passages)
+        passages_2 = self._log_search(context["query_2"], self.num_passages)
         context["passages_2"] = "\n\n".join(passages_2)
 
         if verbose:
@@ -212,6 +214,7 @@ class HotpotMultiHopAgent:
 
         if verbose:
             logger.info(f"Final answer: {context['answer']}")
+        agent_logger.agent_response(context["answer"])
 
         return context
 
@@ -220,12 +223,15 @@ class HotpotMultiHopAgent:
         prompt = self.prompts[prompt_name]
         # Get formatted messages from prompt
         messages = prompt.get_messages(dataset_item=inputs)
-        # Call the LLM directly
-        return call_model(
-            messages=messages,
-            model=self.model,
-            model_parameters=self.model_parameters,
-        )
+        input_preview = inputs.get("question") or str(inputs)
+        with agent_logger.log_invoke(f"{prompt_name}: {input_preview}") as ctx:
+            response = call_model(
+                messages=messages,
+                model=self.model,
+                model_parameters=self.model_parameters,
+            )
+            ctx["response"] = self._extract_text(response)
+            return response
 
     def _extract_text(self, response: Any) -> str:
         """Extract text from LLM response."""
@@ -270,3 +276,9 @@ class HotpotMultiHopAgent:
             self.prompts[prompt_name] = new_prompt
         else:
             raise ValueError(f"Unknown prompt: {prompt_name}")
+
+    def _log_search(self, query: str, n: int) -> list[str]:
+        """Call the configured search_fn with tool-style logging."""
+        tool_name = getattr(self.search_fn, "__name__", self.search_fn.__class__.__name__)
+        with agent_logger.log_tool(tool_name, query):
+            return self.search_fn(query, n)
