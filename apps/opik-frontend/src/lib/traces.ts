@@ -602,3 +602,22 @@ export const addToolFilterIfNeeded = (
 
   return filters;
 };
+
+/**
+ * Removes the tool span filter from the current filters if it exists.
+ * This is used when clicking "View trace" to show the full unfiltered trace.
+ */
+export const removeToolFilter = (
+  currentFilters: Filter[] | null | undefined,
+): Filter[] => {
+  const filters = currentFilters || [];
+
+  // Remove tool filter if it exists
+  return filters.filter(
+    (filter) =>
+      !(
+        filter.field === SPAN_TYPE_FILTER_COLUMN.id &&
+        filter.value === SPAN_TYPE.tool
+      ),
+  );
+};

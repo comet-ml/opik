@@ -9,7 +9,7 @@ import useTracesList from "@/api/traces/useTracesList";
 import TraceMessages from "@/components/pages-shared/traces/TraceMessages/TraceMessages";
 import { COLUMN_TYPE } from "@/types/shared";
 import TraceDetailsPanel from "@/components/pages-shared/traces/TraceDetailsPanel/TraceDetailsPanel";
-import { addToolFilterIfNeeded } from "@/lib/traces";
+import { addToolFilterIfNeeded, removeToolFilter } from "@/lib/traces";
 
 const MAX_THREAD_TRACES = 1000;
 const STALE_TIME = 5 * 60 * 1000; // 5 minutes
@@ -87,11 +87,13 @@ const ThreadDataViewer: React.FunctionComponent = () => {
 
   const handleOpenTrace = useCallback(
     (id: string, shouldFilterToolCalls?: boolean) => {
-      // For "View tool calls", add the tool filter if it doesn't already exist
       if (shouldFilterToolCalls) {
+        // For "View tool calls", add the tool filter if it doesn't already exist
         setTracePanelFilters(addToolFilterIfNeeded(tracePanelFilters));
+      } else {
+        // For "View trace", remove the tool filter to show full unfiltered trace
+        setTracePanelFilters(removeToolFilter(tracePanelFilters));
       }
-      // For "View trace", don't change filters at all
 
       setTraceId(id);
       setSpanId("");

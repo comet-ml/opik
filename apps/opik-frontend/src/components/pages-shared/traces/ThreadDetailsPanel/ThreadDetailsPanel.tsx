@@ -24,7 +24,7 @@ import { COLUMN_TYPE, OnChangeFn } from "@/types/shared";
 import { Trace } from "@/types/traces";
 import { formatDate, formatDuration } from "@/lib/date";
 import { formatCost } from "@/lib/money";
-import { addToolFilterIfNeeded } from "@/lib/traces";
+import { addToolFilterIfNeeded, removeToolFilter } from "@/lib/traces";
 import useAppStore from "@/store/AppStore";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import Loader from "@/components/shared/Loader/Loader";
@@ -202,11 +202,13 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
 
   const handleOpenTrace = useCallback(
     (id: string, shouldFilterToolCalls?: boolean) => {
-      // For "View tool calls", add the tool filter if it doesn't already exist
       if (shouldFilterToolCalls) {
+        // For "View tool calls", add the tool filter if it doesn't already exist
         setTracePanelFilters(addToolFilterIfNeeded(tracePanelFilters));
+      } else {
+        // For "View trace", remove the tool filter to show full unfiltered trace
+        setTracePanelFilters(removeToolFilter(tracePanelFilters));
       }
-      // For "View trace", don't change filters at all
 
       onClose();
       setTraceId(id);
