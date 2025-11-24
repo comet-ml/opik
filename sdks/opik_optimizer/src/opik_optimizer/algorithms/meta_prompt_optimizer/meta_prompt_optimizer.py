@@ -66,7 +66,6 @@ class MetaPromptOptimizer(BaseOptimizer):
         seed: Random seed for reproducibility
         use_hall_of_fame: Enable Hall of Fame pattern extraction and re-injection
         prettymode_prompt_history: Display prompt history in pretty format (True) or JSON (False)
-        extract_metric_understanding: Extract and display metric name, direction, and description in task context
     """
 
     # --- Constants for Default Configuration ---
@@ -81,6 +80,10 @@ class MetaPromptOptimizer(BaseOptimizer):
     DEFAULT_DATASET_CONTEXT_RATIO = 0.25
     DEFAULT_PRETTYMODE_PROMPT_HISTORY = True
     DEFAULT_EXTRACT_METRIC_UNDERSTANDING = True
+    # TODO: Refactor and make global - this should be a configuration parameter
+    # Other optimizers only optimize system prompts, not user prompts
+    # Setting this to True allows more flexibility
+    DEFAULT_ALLOW_USER_PROMPT_OPTIMIZATION = False
 
     def __init__(
         self,
@@ -96,7 +99,6 @@ class MetaPromptOptimizer(BaseOptimizer):
         name: str | None = None,
         use_hall_of_fame: bool = True,
         prettymode_prompt_history: bool = DEFAULT_PRETTYMODE_PROMPT_HISTORY,
-        extract_metric_understanding: bool = DEFAULT_EXTRACT_METRIC_UNDERSTANDING,
     ) -> None:
         super().__init__(
             model=model,
@@ -119,7 +121,10 @@ class MetaPromptOptimizer(BaseOptimizer):
         # Hall of Fame for pattern mining
         self.use_hall_of_fame = use_hall_of_fame
         self.prettymode_prompt_history = prettymode_prompt_history
-        self.extract_metric_understanding = extract_metric_understanding
+        self.extract_metric_understanding = self.DEFAULT_EXTRACT_METRIC_UNDERSTANDING
+        self.allow_user_prompt_optimization = (
+            self.DEFAULT_ALLOW_USER_PROMPT_OPTIMIZATION
+        )
         self.hall_of_fame_size = self.DEFAULT_HALL_OF_FAME_SIZE
         self.pattern_extraction_interval = self.DEFAULT_PATTERN_EXTRACTION_INTERVAL
         self.pattern_injection_rate = self.DEFAULT_PATTERN_INJECTION_RATE
@@ -592,10 +597,39 @@ class MetaPromptOptimizer(BaseOptimizer):
                 except Exception as e:
                     if isinstance(e, (BadRequestError, StructuredOutputParsingError)):
                         raise
-                    round_reporter.failed_to_generate(prompts_this_round, e)
-                    # Prevent infinite loop when generation fails repeatedly.
-                    trials_used += prompts_this_round
-                    break
+                    round_reporter.failed_to_generate(prompts_this_round, str(e))
+
+                    # If synthesis fails, fall back to regular generation
+                    if is_synthesis_round:
+                        logger.warning(
+                            "Synthesis failed, falling back to regular candidate generation"
+                        )
+                        try:
+                            generator = self._generate_candidate_prompts
+                            generator_kwargs = {}
+                            prompts_this_round = self.prompts_per_round
+                            candidate_prompts = generator(
+                                project_name=self.project_name,
+                                current_prompt=best_prompt,
+                                best_score=best_score,
+                                round_num=round_num,
+                                previous_rounds=rounds,
+                                metric=metric,
+                                optimization_id=optimization_id,
+                                **generator_kwargs,
+                            )
+                            candidate_prompts = candidate_prompts[:prompts_this_round]
+                        except Exception as fallback_e:
+                            # If fallback also fails, break to prevent infinite loop
+                            round_reporter.failed_to_generate(
+                                prompts_this_round, str(fallback_e)
+                            )
+                            trials_used += prompts_this_round
+                            break
+                    else:
+                        # Regular generation failed - break to prevent infinite loop
+                        trials_used += prompts_this_round
+                        break
 
                 # Step 2. Score each candidate prompt
                 prompt_scores: list[tuple[chat_prompt.ChatPrompt, float]] = []
@@ -857,7 +891,6 @@ class MetaPromptOptimizer(BaseOptimizer):
             optimizer=self,
             current_prompt=current_prompt,
             best_score=best_score,
-            round_num=round_num,
             previous_rounds=previous_rounds,
             metric=metric,
             get_task_context_fn=self._get_task_context,
