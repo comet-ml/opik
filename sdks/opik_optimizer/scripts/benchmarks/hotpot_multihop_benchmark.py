@@ -46,11 +46,11 @@ print()
 
 # Dataset splits (matching GEPA paper: 150 train, 300 val, 300 test)
 print("Loading datasets...")
-train_dataset = hotpot(count=150, split="train", dataset_name="hotpot_train")
+train_dataset = hotpot(count=150, split="train", dataset_name="hotpot_train", test_mode=True)
 validation_dataset = hotpot(
-    count=300, split="validation", dataset_name="hotpot_validation"
+    count=300, split="validation", dataset_name="hotpot_validation", test_mode=True
 )
-test_dataset = hotpot(count=300, split="test", dataset_name="hotpot_test")
+test_dataset = hotpot(count=300, split="test", dataset_name="hotpot_test", test_mode=True)
 
 print(f"  - Train: {len(train_dataset.get_items())} samples")
 print(f"  - Validation: {len(validation_dataset.get_items())} samples")
@@ -80,13 +80,13 @@ def wikipedia_search(query: str, n: int = 5) -> list[str]:
     return results[:n] if len(results) >= n else results + [""] * (n - len(results))
 
 
-# BM25 search (for like-for-like comparison with GEPA/Arize)
+# BM25 search (for like-for-like comparison)
 def bm25_wikipedia_search(query: str, n: int = 5) -> list[str]:
     """
-    BM25-based Wikipedia search for fair comparison with GEPA/Arize paper.
+    BM25-based Wikipedia search for fair comparison.
 
     Uses the production Comet/wikipedia-2017-bm25 index:
-    - Same Wikipedia 2017 corpus as GEPA/Arize benchmarks
+    - Same Wikipedia 2017 corpus as benchmarks
     - Optimized Parquet format (1.61 GB, downloads on first run)
     - BM25 parameters: k1=0.9, b=0.4
     - ~100ms query time after initial load
@@ -238,7 +238,8 @@ opt_result = optimizer.optimize_prompt(
         "bundle_agent_class": BundleAgent,
     },
     max_trials=1,  # increase for more meta rounds; watch rollout budget
-    n_samples=None,
+    # n_samples=None,
+    n_samples=5,
 )
 print(f"Optimization best score: {opt_result.score:.4f}")
 # opt_result.prompt holds best messages for single prompt; for bundle, use details if present
