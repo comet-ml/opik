@@ -16,8 +16,8 @@ public class LangFuseMappingRules {
 
     public static List<OpenTelemetryMappingRule> getRules() {
         return List.of(
-            new OpenTelemetryMappingRule("langfuse.observation.completion_start_time", false, "LangFuse", OpenTelemetryMappingRule.Outcome.METADATA,
-                    SpanType.llm)
-            );
+                new OpenTelemetryMappingRule("langfuse.observation.completion_start_time", false, "LangFuse",
+                        OpenTelemetryMappingRule.Outcome.METADATA,
+                        SpanType.llm));
     }
 }
