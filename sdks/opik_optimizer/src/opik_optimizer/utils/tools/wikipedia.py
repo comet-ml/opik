@@ -116,7 +116,7 @@ def search_wikipedia(
             - "api": Wikipedia API (default, fast, always available)
             - "colbert": ColBERTv2 neural search (requires remote server)
             - "bm25": BM25 local retrieval (requires index)
-        k: Number of results to return (default: 3). Industry standard parameter name.
+        k: Number of results to return (default: 3).
         bm25_index_dir: Path to local BM25 index (only for search_type="bm25")
         bm25_hf_repo: HuggingFace repo for BM25 index (only for search_type="bm25")
         use_api: DEPRECATED. Use search_type parameter instead.
