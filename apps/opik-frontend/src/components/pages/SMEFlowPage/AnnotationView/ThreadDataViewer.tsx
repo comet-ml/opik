@@ -86,10 +86,10 @@ const ThreadDataViewer: React.FunctionComponent = () => {
   );
 
   const handleOpenTrace = useCallback(
-    (id: string, shouldFilterToolCalls?: boolean) => {
+    (id: string, shouldFilterToolCalls: boolean) => {
       // Manage tool filter: add if shouldFilterToolCalls is true, remove if false
       setTracePanelFilters(
-        manageToolFilter(tracePanelFilters, shouldFilterToolCalls ?? false),
+        manageToolFilter(tracePanelFilters, shouldFilterToolCalls),
       );
 
       setTraceId(id);

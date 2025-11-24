@@ -6,7 +6,7 @@ import isNumber from "lodash/isNumber";
 type TraceMessagesProps = {
   traces: Trace[];
   traceId?: string;
-  handleOpenTrace?: (id: string, filterToolCalls?: boolean) => void;
+  handleOpenTrace: (id: string, filterToolCalls: boolean) => void;
 };
 
 const TraceMessages: React.FC<TraceMessagesProps> = ({
