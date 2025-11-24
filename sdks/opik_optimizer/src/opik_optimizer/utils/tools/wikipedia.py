@@ -93,10 +93,11 @@ def search_wikipedia(
     # Handle backward compatibility with use_api parameter
     if use_api is not None:
         import warnings
+
         warnings.warn(
             "use_api parameter is deprecated. Use search_type='api' or search_type='colbert' instead.",
             DeprecationWarning,
-            stacklevel=2
+            stacklevel=2,
         )
         search_type = "api" if use_api else "colbert"
 
@@ -110,7 +111,9 @@ def search_wikipedia(
             query, n=n, index_dir=bm25_index_dir, hf_repo=bm25_hf_repo
         )
     else:
-        raise ValueError(f"Invalid search_type: {search_type}. Must be 'api', 'colbert', or 'bm25'")
+        raise ValueError(
+            f"Invalid search_type: {search_type}. Must be 'api', 'colbert', or 'bm25'"
+        )
 
 
 def _search_wikipedia_api(query: str, max_results: int = 3) -> list[str]:
@@ -234,8 +237,11 @@ def _search_wikipedia_bm25(
         # Load BM25 index
         if hf_repo:
             index_path = _download_bm25_index(hf_repo)
-        else:
+        elif index_dir:
             index_path = Path(index_dir)
+        else:
+            # This shouldn't happen due to the check above, but for type safety
+            raise ValueError("Either index_dir or hf_repo must be provided")
 
         if not index_path.exists():
             raise FileNotFoundError(f"Index directory not found: {index_path}")
@@ -247,6 +253,7 @@ def _search_wikipedia_bm25(
         # Initialize stemmer for query tokenization (optional)
         try:
             import Stemmer
+
             stemmer = Stemmer.Stemmer("english")
         except ImportError:
             logger.debug("PyStemmer not available, tokenizing without stemming")
