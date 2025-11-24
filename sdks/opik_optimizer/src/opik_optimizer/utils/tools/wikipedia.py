@@ -35,7 +35,7 @@ Example:
 import logging
 import re
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
 import requests
 
@@ -258,7 +258,10 @@ def _search_wikipedia_bm25(
 
             # Load corpus from Parquet chunks
             try:
-                import pyarrow.parquet as pq  # type: ignore[import-not-found]
+                import importlib
+
+                # Optional dependency; load dynamically to avoid hard dependency on pyarrow
+                pq = cast(Any, importlib.import_module("pyarrow.parquet"))
             except ImportError:
                 logger.warning(
                     "pyarrow not available for Parquet corpus, falling back to API"
