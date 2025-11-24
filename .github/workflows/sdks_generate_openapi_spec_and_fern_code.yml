@@ -4,6 +4,7 @@ on:
   schedule:
     - cron: '0 0 * * 1-5' # Runs at midnight UTC, Monday to Friday
   workflow_dispatch: # Allows manual trigger
+  pull_request: # Test in branch
 
 jobs:
   update-open-api-spec-and-fern-code:
