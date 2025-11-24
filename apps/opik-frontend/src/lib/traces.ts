@@ -580,40 +580,28 @@ const isToolFilter = (filter: Filter): boolean => {
   );
 };
 
-/**
- * Manages the tool span filter based on the shouldFilter parameter.
- * - When shouldFilter is true: adds the tool filter if it doesn't already exist
- * - When shouldFilter is false: removes the tool filter if it exists
- * This is used when clicking "View tool calls" vs "View trace" buttons.
- */
 export const manageToolFilter = (
   currentFilters: Filter[] | null | undefined,
   shouldFilter: boolean,
 ): Filter[] => {
   const filters = currentFilters || [];
-
-  // Check if tool filter already exists
   const hasToolFilter = filters.some(isToolFilter);
 
-  if (shouldFilter) {
-    // Add tool filter if it doesn't exist
-    if (!hasToolFilter) {
-      return [
-        ...filters,
-        createFilter({
-          id: SPAN_TYPE_FILTER_COLUMN.id,
-          field: SPAN_TYPE_FILTER_COLUMN.id,
-          type: SPAN_TYPE_FILTER_COLUMN.type,
-          operator: "=",
-          value: SPAN_TYPE.tool,
-        }),
-      ];
-    }
-  } else {
-    // Remove tool filter if it exists
-    if (hasToolFilter) {
-      return filters.filter((filter) => !isToolFilter(filter));
-    }
+  if (shouldFilter && !hasToolFilter) {
+    return [
+      ...filters,
+      createFilter({
+        id: SPAN_TYPE_FILTER_COLUMN.id,
+        field: SPAN_TYPE_FILTER_COLUMN.id,
+        type: SPAN_TYPE_FILTER_COLUMN.type,
+        operator: "=",
+        value: SPAN_TYPE.tool,
+      }),
+    ];
+  }
+
+  if (!shouldFilter && hasToolFilter) {
+    return filters.filter((filter) => !isToolFilter(filter));
   }
 
   return filters;
