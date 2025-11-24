@@ -298,7 +298,7 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
             <div className="space-y-6">
               <div>
                 <div className="comet-body-s-accented mb-4">
-                  Trace Feedback Scores
+                  {isTrace ? "Trace Feedback Scores" : "Feedback Scores"}
                 </div>
                 <ConfigurableFeedbackScoreTable
                   feedbackScores={data.feedback_scores}
