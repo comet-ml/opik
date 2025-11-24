@@ -122,7 +122,7 @@ def get_task_context(
 
     while current_num_examples > 0:
         # Build context string
-        context = "\nTask Context:\n"
+        context = "Task Context: "
         context += f"Available input variables (use {START_DELIM}variable_name{END_DELIM} syntax): "
         context += ", ".join(
             [f"{START_DELIM}{field}{END_DELIM}" for field in input_fields]

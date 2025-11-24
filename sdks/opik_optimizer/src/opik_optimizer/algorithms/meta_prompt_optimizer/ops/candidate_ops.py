@@ -243,13 +243,10 @@ def generate_candidate_prompts(
 
         # Log the complete meta-reasoning prompt being sent to the model
         # FIXME: Remove before merging
-        logger.info(
-            f"\n{'=' * 80}\n"
-            f"META-REASONING PROMPT (Round {round_num + 1})\n"
-            f"{'=' * 80}\n"
-            f"System: {build_reasoning_system_prompt()[:200]}...\n\n"
-            f"User Prompt:\n{user_prompt}\n"
-            f"{'=' * 80}\n"
+        logger.debug(
+            f"Generated Meta-Reasoning Prompt (Round {round_num + 1})\n"
+            f"System Prompt: {build_reasoning_system_prompt()}\n"
+            f"User Prompt: {user_prompt}\n"
         )
 
         try:
