@@ -94,6 +94,11 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
   const isSpanInputOutputLoading =
     type !== TRACE_TYPE_FOR_TREE && isSpansLazyLoading;
   const entityType = type === TRACE_TYPE_FOR_TREE ? "trace" : "span";
+  const isTrace = type === TRACE_TYPE_FOR_TREE;
+  const traceData = isTrace ? (data as Trace) : undefined;
+  const hasSpanFeedbackScores = Boolean(
+    traceData?.span_feedback_scores?.length,
+  );
 
   const feedbackScoreDeleteMutation = useTraceFeedbackScoreDeleteMutation();
 
@@ -203,6 +208,21 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
                 </div>
               </FeedbackScoreHoverCard>
             )}
+            {isTrace &&
+              traceData &&
+              Boolean(traceData.span_feedback_scores?.length) && (
+                <FeedbackScoreHoverCard
+                  scores={traceData.span_feedback_scores!}
+                >
+                  <div
+                    className="comet-body-xs-accented flex items-center gap-1 text-muted-slate"
+                    data-testid="data-viewer-span-scores"
+                  >
+                    <PenLine className="size-3 shrink-0" />{" "}
+                    {traceData.span_feedback_scores!.length} span scores
+                  </div>
+                </FeedbackScoreHoverCard>
+              )}
             {Boolean(data.comments?.length) && (
               <UserCommentHoverList commentsList={data.comments}>
                 <div
@@ -275,14 +295,35 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
             />
           </TabsContent>
           <TabsContent value="feedback_scores">
-            <ConfigurableFeedbackScoreTable
-              feedbackScores={data.feedback_scores}
-              onDeleteFeedbackScore={onDeleteFeedbackScore}
-              onAddHumanReview={() =>
-                setActiveSection(DetailsActionSection.Annotations)
-              }
-              entityType={entityType}
-            />
+            <div className="space-y-6">
+              <div>
+                <div className="comet-body-s-accented mb-4">
+                  {isTrace ? "Trace Feedback Scores" : "Feedback Scores"}
+                </div>
+                <ConfigurableFeedbackScoreTable
+                  feedbackScores={data.feedback_scores}
+                  onDeleteFeedbackScore={onDeleteFeedbackScore}
+                  onAddHumanReview={() =>
+                    setActiveSection(DetailsActionSection.Annotations)
+                  }
+                  entityType={entityType}
+                />
+              </div>
+              {isTrace && hasSpanFeedbackScores && traceData && (
+                <div>
+                  <div className="comet-body-s-accented mb-4">
+                    Spans Feedback Scores
+                  </div>
+                  <ConfigurableFeedbackScoreTable
+                    feedbackScores={traceData.span_feedback_scores}
+                    onAddHumanReview={() =>
+                      setActiveSection(DetailsActionSection.Annotations)
+                    }
+                    entityType="span"
+                  />
+                </div>
+              )}
+            </div>
           </TabsContent>
           <TabsContent value="metadata">
             <MetadataTab data={data} search={search} />

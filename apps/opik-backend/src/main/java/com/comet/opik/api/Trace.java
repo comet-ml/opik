@@ -53,6 +53,8 @@ public record Trace(
         @JsonView({
                 Trace.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) List<FeedbackScore> feedbackScores,
         @JsonView({
+                Trace.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY, description = "Aggregated feedback scores from all spans in this trace, averaged by score name") List<FeedbackScore> spanFeedbackScores,
+        @JsonView({
                 Trace.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) List<Comment> comments,
         @JsonView({
                 Trace.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) List<GuardrailsValidation> guardrailsValidations,
@@ -100,6 +102,7 @@ public record Trace(
         CREATED_BY("created_by"),
         LAST_UPDATED_BY("last_updated_by"),
         FEEDBACK_SCORES("feedback_scores"),
+        SPAN_FEEDBACK_SCORES("span_feedback_scores"),
         COMMENTS("comments"),
         GUARDRAILS_VALIDATIONS("guardrails_validations"),
         TOTAL_ESTIMATED_COST("total_estimated_cost"),

@@ -19,7 +19,7 @@ import { useFeedbackScoreDeletePreference } from "./hooks/useFeedbackScoreDelete
 import useLocalStorageState from "use-local-storage-state";
 
 export type FeedbackScoreTableProps = {
-  onDeleteFeedbackScore: (name: string, author?: string) => void;
+  onDeleteFeedbackScore?: (name: string, author?: string) => void;
   onAddHumanReview: () => void;
   feedbackScores?: TraceFeedbackScore[];
   entityType: "trace" | "thread" | "span" | "experiment";
@@ -52,6 +52,7 @@ const FeedbackScoreTable: React.FunctionComponent<FeedbackScoreTableProps> = ({
 
   const handleDeleteClick = React.useCallback(
     (row: ExpandingFeedbackScoreRow) => {
+      if (!onDeleteFeedbackScore) return;
       if (dontAskAgain) {
         onDeleteFeedbackScore(row.name, row.author);
       } else {
@@ -62,7 +63,7 @@ const FeedbackScoreTable: React.FunctionComponent<FeedbackScoreTableProps> = ({
   );
 
   const columns = useMemo(() => {
-    return [
+    const baseColumns = [
       ...convertColumnDataToColumn<
         ExpandingFeedbackScoreRow,
         ExpandingFeedbackScoreRow
@@ -71,14 +72,22 @@ const FeedbackScoreTable: React.FunctionComponent<FeedbackScoreTableProps> = ({
         ExpandingFeedbackScoreRow,
         ExpandingFeedbackScoreRow
       >(CONFIGURABLE_COLUMNS, { selectedColumns, columnsOrder }),
-      generateActionsColumDef({
-        cell: ActionsCell,
-        customMeta: {
-          onDelete: handleDeleteClick,
-        },
-      }),
     ];
-  }, [selectedColumns, columnsOrder, handleDeleteClick]);
+
+    // Only add actions column if deletion is enabled
+    if (onDeleteFeedbackScore) {
+      baseColumns.push(
+        generateActionsColumDef({
+          cell: ActionsCell,
+          customMeta: {
+            onDelete: handleDeleteClick,
+          },
+        }),
+      );
+    }
+
+    return baseColumns;
+  }, [selectedColumns, columnsOrder, handleDeleteClick, onDeleteFeedbackScore]);
 
   return (
     <>
@@ -105,13 +114,15 @@ const FeedbackScoreTable: React.FunctionComponent<FeedbackScoreTableProps> = ({
         }
       />
 
-      <DeleteFeedbackScoreValueDialog
-        open={!!rowToDelete}
-        setOpen={(open) => setRowToDelete(open ? rowToDelete : null)}
-        onDeleteFeedbackScore={onDeleteFeedbackScore}
-        row={rowToDelete!}
-        entityType={entityType}
-      />
+      {onDeleteFeedbackScore && (
+        <DeleteFeedbackScoreValueDialog
+          open={!!rowToDelete}
+          setOpen={(open) => setRowToDelete(open ? rowToDelete : null)}
+          onDeleteFeedbackScore={onDeleteFeedbackScore}
+          row={rowToDelete!}
+          entityType={entityType}
+        />
+      )}
     </>
   );
 };
