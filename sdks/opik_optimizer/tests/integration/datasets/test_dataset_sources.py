@@ -101,7 +101,7 @@ def test_hf_sources_resolve_one_record(
     We bypass the Opik client entirely so this test exercises the HF integration only,
     preventing accidental dataset creation in shared environments.
     """
-    # Fixture used for side effects (env + cache); keep lint happy
+    # Ensure fixture side-effect (cache path exists) is exercised to avoid unused warning
     assert ensured_hf_cache.exists()
 
     handle = DatasetHandle(spec)
