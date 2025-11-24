@@ -571,11 +571,14 @@ export const prettifyMessage = (
 };
 
 /**
- * Adds a tool span filter to the current filters if it doesn't already exist.
- * This is used when clicking "View tool calls" to filter the trace tree.
+ * Manages the tool span filter based on the shouldFilter parameter.
+ * - When shouldFilter is true: adds the tool filter if it doesn't already exist
+ * - When shouldFilter is false: removes the tool filter if it exists
+ * This is used when clicking "View tool calls" vs "View trace" buttons.
  */
-export const addToolFilterIfNeeded = (
+export const manageToolFilter = (
   currentFilters: Filter[] | null | undefined,
+  shouldFilter: boolean,
 ): Filter[] => {
   const filters = currentFilters || [];
 
@@ -586,38 +589,32 @@ export const addToolFilterIfNeeded = (
       filter.value === SPAN_TYPE.tool,
   );
 
-  // Only add if it doesn't exist
-  if (!hasToolFilter) {
-    return [
-      ...filters,
-      createFilter({
-        id: SPAN_TYPE_FILTER_COLUMN.id,
-        field: SPAN_TYPE_FILTER_COLUMN.id,
-        type: SPAN_TYPE_FILTER_COLUMN.type,
-        operator: "=",
-        value: SPAN_TYPE.tool,
-      }),
-    ];
+  if (shouldFilter) {
+    // Add tool filter if it doesn't exist
+    if (!hasToolFilter) {
+      return [
+        ...filters,
+        createFilter({
+          id: SPAN_TYPE_FILTER_COLUMN.id,
+          field: SPAN_TYPE_FILTER_COLUMN.id,
+          type: SPAN_TYPE_FILTER_COLUMN.type,
+          operator: "=",
+          value: SPAN_TYPE.tool,
+        }),
+      ];
+    }
+  } else {
+    // Remove tool filter if it exists
+    if (hasToolFilter) {
+      return filters.filter(
+        (filter) =>
+          !(
+            filter.field === SPAN_TYPE_FILTER_COLUMN.id &&
+            filter.value === SPAN_TYPE.tool
+          ),
+      );
+    }
   }
 
   return filters;
-};
-
-/**
- * Removes the tool span filter from the current filters if it exists.
- * This is used when clicking "View trace" to show the full unfiltered trace.
- */
-export const removeToolFilter = (
-  currentFilters: Filter[] | null | undefined,
-): Filter[] => {
-  const filters = currentFilters || [];
-
-  // Remove tool filter if it exists
-  return filters.filter(
-    (filter) =>
-      !(
-        filter.field === SPAN_TYPE_FILTER_COLUMN.id &&
-        filter.value === SPAN_TYPE.tool
-      ),
-  );
 };
