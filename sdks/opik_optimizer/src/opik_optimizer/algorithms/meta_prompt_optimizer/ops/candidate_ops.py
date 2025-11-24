@@ -245,7 +245,7 @@ def generate_candidate_prompts(
         # FIXME: Remove before merging
         logger.debug(
             f"Generated Meta-Reasoning Prompt (Round {round_num + 1})\n"
-            f"System Prompt: {build_reasoning_system_prompt()}\n"
+            f"System Prompt: {build_reasoning_system_prompt(optimizer.allow_user_prompt_optimization)}\n"
             f"User Prompt: {user_prompt}\n"
         )
 
@@ -262,7 +262,12 @@ def generate_candidate_prompts(
 
             content = _llm_calls.call_model(
                 messages=[
-                    {"role": "system", "content": build_reasoning_system_prompt()},
+                    {
+                        "role": "system",
+                        "content": build_reasoning_system_prompt(
+                            optimizer.allow_user_prompt_optimization
+                        ),
+                    },
                     {"role": "user", "content": user_prompt},
                 ],
                 model=optimizer.model,
@@ -334,19 +339,42 @@ def generate_candidate_prompts(
                     and "prompt" in item
                     and isinstance(item["prompt"], list)
                 ):
-                    # NOTE: might be brittle
-                    if current_prompt.user:
-                        user_text = current_prompt.user
-                    else:
-                        if current_prompt.messages is not None:
-                            user_text = current_prompt.messages[-1]["content"]
+                    # Extract system and user prompts from generated messages
+                    system_content = None
+                    user_content = None
+
+                    for msg in item["prompt"]:
+                        if msg.get("role") == "system":
+                            system_content = msg.get("content", "")
+                        elif (
+                            msg.get("role") == "user"
+                            and optimizer.allow_user_prompt_optimization
+                        ):
+                            # Only extract user content if optimization is allowed
+                            user_content = msg.get("content", "")
+
+                    # Always fall back to original user prompt if not extracted
+                    # This happens when: 1) No user message in generated prompt, or
+                    # 2) allow_user_prompt_optimization is False
+                    if user_content is None:
+                        if current_prompt.user:
+                            user_content = current_prompt.user
                         else:
-                            raise Exception("User content not found in chat-prompt!")
+                            if current_prompt.messages is not None:
+                                user_content = current_prompt.messages[-1]["content"]
+                            else:
+                                raise Exception(
+                                    "User content not found in chat-prompt!"
+                                )
+
+                    # Use system from generated prompt, or empty string if not provided
+                    if system_content is None:
+                        system_content = ""
 
                     valid_prompts.append(
                         chat_prompt.ChatPrompt(
-                            system=item["prompt"][0]["content"],
-                            user=user_text,
+                            system=system_content,
+                            user=user_content,
                             tools=current_prompt.tools,
                             function_map=current_prompt.function_map,
                         )
@@ -452,7 +480,12 @@ def generate_mcp_candidate_prompts(
 
             content = _llm_calls.call_model(
                 messages=[
-                    {"role": "system", "content": build_reasoning_system_prompt()},
+                    {
+                        "role": "system",
+                        "content": build_reasoning_system_prompt(
+                            optimizer.allow_user_prompt_optimization
+                        ),
+                    },
                     {"role": "user", "content": instruction},
                 ],
                 model=optimizer.model,
@@ -515,7 +548,6 @@ def generate_synthesis_prompts(
     optimizer: Any,
     current_prompt: chat_prompt.ChatPrompt,
     best_score: float,
-    round_num: int,
     previous_rounds: list[OptimizationRound],
     metric: Callable,
     get_task_context_fn: Callable,
@@ -532,7 +564,6 @@ def generate_synthesis_prompts(
         optimizer: Reference to the optimizer instance
         current_prompt: Current best prompt
         best_score: Current best score
-        round_num: Current round number
         previous_rounds: List of previous optimization rounds
         metric: Metric function
         get_task_context_fn: Function to get task context
@@ -621,7 +652,9 @@ def generate_synthesis_prompts(
             task_context_str=task_context_str,
             best_score=best_score,
         )
-        synthesis_system_prompt = build_reasoning_system_prompt()
+        synthesis_system_prompt = build_reasoning_system_prompt(
+            optimizer.allow_user_prompt_optimization
+        )
 
         try:
             # Prepare metadata for synthesis call
