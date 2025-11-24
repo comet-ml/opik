@@ -274,14 +274,12 @@ const UserMenu = () => {
           </DropdownMenuGroup>
           <DropdownMenuSeparator />
           <DropdownMenuGroup>
-            {!isLLMOnlyOrganization ? (
-              <a href={buildUrl("account-settings", workspaceName)}>
-                <DropdownMenuItem className="cursor-pointer">
-                  <Settings className="mr-2 size-4" />
-                  <span>Account settings</span>
-                </DropdownMenuItem>
-              </a>
-            ) : null}
+            <a href={buildUrl("account-settings", workspaceName)}>
+              <DropdownMenuItem className="cursor-pointer">
+                <Settings className="mr-2 size-4" />
+                <span>Account settings</span>
+              </DropdownMenuItem>
+            </a>
             {isOrganizationAdmin && !isLLMOnlyOrganization ? (
               <a
                 href={buildUrl(
@@ -326,7 +324,7 @@ const UserMenu = () => {
                 </DropdownMenuPortal>
               </DropdownMenuSub>
             ) : null}
-            {inviteMembersURL && !isLLMOnlyOrganization ? (
+            {inviteMembersURL ? (
               <a href={inviteMembersURL}>
                 <DropdownMenuItem className="cursor-pointer">
                   <UserPlus className="mr-2 size-4" />
