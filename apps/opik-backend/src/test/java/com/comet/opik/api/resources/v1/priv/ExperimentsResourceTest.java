@@ -2167,8 +2167,8 @@ class ExperimentsResourceTest {
 
         @ParameterizedTest
         @ValueSource(strings = {"experiment_scores", "experiment_score.invalid", "experiment_scores."})
-        @DisplayName("when sorting by experiment scores with invalid field, then return 400")
-        void whenSortingByExperimentScoresWithInvalidField_thenReturn400(String field) {
+        @DisplayName("when sorting by experiment scores with invalid field, then ignore and return success")
+        void whenSortingByExperimentScoresWithInvalidField_thenIgnoreAndReturnSuccess(String field) {
             var workspaceName = UUID.randomUUID().toString();
             var workspaceId = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();
@@ -2188,7 +2188,7 @@ class ExperimentsResourceTest {
                     null,
                     null,
                     null)) {
-                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
             }
         }
 
