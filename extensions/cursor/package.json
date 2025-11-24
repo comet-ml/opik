@@ -4,7 +4,7 @@
   "description": "Export your chat history from Cursor to Opik.",
   "repository": "https://github.com/comet-ml/opik",
   "publisher": "opik",
-  "version": "0.2.2",
+  "version": "0.3.1",
   "preview": false,
   "engines": {
     "vscode": "^1.90.0"
@@ -18,52 +18,72 @@
   "main": "./out/extension.js",
   "icon": "icon.png",
   "contributes": {
-    "configuration": {
-      "type": "object",
-      "title": "Opik",
-      "properties": {
-        "opik.apiKey": {
-          "type": "string",
-          "default": "",
-          "description": "Opik API Key used to store your chat sessions - Can be found at https://www.comet.com/api/my/settings/"
-        },
-        "opik.projectName": {
-          "type": "string",
-          "default": "cursor",
-          "description": "The name of the Opik project to store Cursor chat sessions in"
-        },
-        "opik.VSCodePath": {
-          "type": "string",
-          "default": "",
-          "description": "Path to the VSCode user data directory. Leave empty to use the default path."
-        },
-        "opik.skipHistoricalConversations": {
-          "type": "boolean",
-          "default": true,
-          "description": "Skip conversations without new messages. When enabled, only conversations with new messages are processed. When disabled, all unsynced conversations are processed."
-        },
-        "opik.apiUrl": {
-          "type": "string",
-          "default": "https://www.comet.com/opik/api",
-          "description": "Opik API URL endpoint for MCP server communication."
-        },
-        "opik.workspace": {
-          "type": "string",
-          "default": "default",
-          "description": "Opik workspace name for MCP server operations."
-        },
-        "opik.mcp.enabled": {
-          "type": "boolean",
-          "default": true,
-          "description": "Enable automatic registration of the Opik MCP server with Cursor for enhanced context in chats."
+    "commands": [
+      {
+        "command": "opik.resetState",
+        "title": "Reset Extension State",
+        "category": "Opik"
+      }
+    ],
+    "configuration": [
+      {
+        "title": "Opik Configuration",
+        "properties": {
+          "opik.apiKey": {
+            "type": "string",
+            "default": "",
+            "markdownDescription": "Opik API Key for authentication. Get your key at [Comet Settings](https://www.comet.com/api/my/settings/). \n\nAlternatively, you can set this in `~/.opik.config` file.",
+            "order": 0
+          },
+          "opik.apiUrl": {
+            "type": "string",
+            "default": "https://www.comet.com/opik/api",
+            "markdownDescription": "API URL for Opik backend. Change this only if you're using a self-hosted instance.",
+            "order": 1
+          },
+          "opik.workspace": {
+            "type": "string",
+            "default": "default",
+            "markdownDescription": "Workspace name where your traces will be stored.",
+            "order": 2
+          },
+          "opik.projectName": {
+            "type": "string",
+            "default": "cursor",
+            "markdownDescription": "Project name for organizing Cursor chat sessions within your workspace.",
+            "order": 3
+          }
+        }
+      },
+      {
+        "title": "MCP Server",
+        "properties": {
+          "opik.mcp.enabled": {
+            "type": "boolean",
+            "default": true,
+            "markdownDescription": "Enable automatic registration of the Opik MCP server with Cursor to provide enhanced context in your chats."
+          }
+        }
+      },
+      {
+        "title": "Advanced",
+        "properties": {
+          "opik.enableDebugLogs": {
+            "type": "boolean",
+            "default": false,
+            "markdownDescription": "Enable detailed debug logging for troubleshooting. Logs will appear in the Output panel under 'Opik Debug'."
+          }
         }
       }
-    }
+    ]
   },
   "scripts": {
-    "vscode:prepublish": "npm run compile",
+    "vscode:prepublish": "npm run esbuild-base -- --minify",
     "build": "vsce pack",
     "compile": "tsc -p ./",
+    "esbuild-base": "esbuild ./src/extension.ts --bundle --outfile=out/extension.js --external:vscode --external:fsevents --format=cjs --platform=node",
+    "esbuild": "npm run esbuild-base -- --sourcemap",
+    "esbuild-watch": "npm run esbuild-base -- --sourcemap --watch",
     "deploy": "vsce publish",
     "watch": "tsc -watch -p ./",
     "pretest": "npm run compile && npm run lint",
@@ -74,12 +94,14 @@
     "@types/mocha": "^10.0.10",
     "@types/node": "20.x",
     "@types/sql.js": "^1.4.5",
+    "@types/uuid": "^10.0.0",
     "@types/vscode": "^1.90.0",
     "@typescript-eslint/eslint-plugin": "^8.28.0",
     "@typescript-eslint/parser": "^8.28.0",
     "@vscode/test-cli": "^0.0.10",
     "@vscode/test-electron": "^2.4.1",
     "@vscode/vsce": "^3.3.2",
+    "esbuild": "^0.24.2",
     "eslint": "^9.23.0",
     "typescript": "^5.8.2"
   },
@@ -88,7 +110,7 @@
     "glob": "^11.0.1",
     "node-fetch": "^3.3.2",
     "opik": "^1.7.2",
-    "posthog-node": "^4.18.0",
-    "sql.js": "^1.10.2"
+    "sql.js": "^1.10.2",
+    "uuid": "^11.0.3"
   }
 }

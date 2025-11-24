@@ -159,6 +159,7 @@ const PromptsSelectBox: React.FC<PromptsSelectBoxProps> = ({
         }}
         actionPanel={actionPanel}
         minWidth={540}
+        showTooltip
       />
 
       {isClearable && (

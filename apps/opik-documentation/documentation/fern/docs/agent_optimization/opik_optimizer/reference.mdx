@@ -182,6 +182,7 @@ optimize_parameter(
     dataset: Dataset,
     metric: Callable,
     parameter_space: opik_optimizer.algorithms.parameter_optimizer.parameter_search_space.ParameterSearchSpace | collections.abc.Mapping[str, typing.Any],
+    validation_dataset: opik.api_objects.dataset.dataset.Dataset | None = None,
     experiment_config: dict | None = None,
     max_trials: int | None = None,
     n_samples: int | None = None,
@@ -202,6 +203,7 @@ optimize_parameter(
 <ParamField path="dataset" type="Dataset">Dataset providing evaluation examples</ParamField>
 <ParamField path="metric" type="Callable">Objective function to maximize</ParamField>
 <ParamField path="parameter_space" type="opik_optimizer.algorithms.parameter_optimizer.parameter_search_space.ParameterSearchSpace | collections.abc.Mapping[str, typing.Any]">Definition of the search space for tunable parameters</ParamField>
+<ParamField path="validation_dataset" type="opik.api_objects.dataset.dataset.Dataset | None" optional={true}>Optional validation dataset. Note: Due to the internal implementation of ParameterOptimizer, this parameter is currently not fully utilized and we recommend not using it for this optimizer.</ParamField>
 <ParamField path="experiment_config" type="dict | None" optional={true}>Optional experiment metadata</ParamField>
 <ParamField path="max_trials" type="int | None" optional={true}>Total number of trials (if None, uses default_n_trials)</ParamField>
 <ParamField path="n_samples" type="int | None" optional={true}>Number of dataset samples to evaluate per trial (None for all)</ParamField>
@@ -300,8 +302,9 @@ optimize_prompt(
     auto_continue: bool = False,
     agent_class: type[opik_optimizer.optimizable_agent.OptimizableAgent] | None = None,
     project_name: str = 'Optimization',
-    max_trials: int = 10,
     optimization_id: str | None = None,
+    validation_dataset: opik.api_objects.dataset.dataset.Dataset | None = None,
+    max_trials: int = 10,
     args: Any,
     kwargs: Any
 )
@@ -318,8 +321,9 @@ optimize_prompt(
 <ParamField path="auto_continue" type="bool" optional={true} default="False">Whether to auto-continue optimization</ParamField>
 <ParamField path="agent_class" type="type[opik_optimizer.optimizable_agent.OptimizableAgent] | None" optional={true}>Optional agent class to use</ParamField>
 <ParamField path="project_name" type="str" optional={true} default="Optimization">Opik project name for logging traces (default: "Optimization")</ParamField>
-<ParamField path="max_trials" type="int" optional={true} default="10">Number of trials for Bayesian Optimization (default: 10)</ParamField>
 <ParamField path="optimization_id" type="str | None" optional={true}>Optional ID for the Opik optimization run; when provided it must be a valid UUIDv7 string.</ParamField>
+<ParamField path="validation_dataset" type="opik.api_objects.dataset.dataset.Dataset | None" optional={true}>Optional validation dataset (not yet supported by this optimizer).</ParamField>
+<ParamField path="max_trials" type="int" optional={true} default="10">Number of trials for Bayesian Optimization (default: 10)</ParamField>
 <ParamField path="args" type="Any" />
 <ParamField path="kwargs" type="Any" />
 
@@ -447,6 +451,7 @@ optimize_prompt(
     agent_class: type[opik_optimizer.optimizable_agent.OptimizableAgent] | None = None,
     project_name: str = 'Optimization',
     optimization_id: str | None = None,
+    validation_dataset: opik.api_objects.dataset.dataset.Dataset | None = None,
     max_trials: int = 10,
     mcp_config: opik_optimizer.mcp_utils.mcp_workflow.MCPExecutionConfig | None = None,
     candidate_generator: collections.abc.Callable[..., list[opik_optimizer.api_objects.chat_prompt.ChatPrompt]] | None = None,
@@ -468,6 +473,7 @@ optimize_prompt(
 <ParamField path="agent_class" type="type[opik_optimizer.optimizable_agent.OptimizableAgent] | None" optional={true}>Custom agent class for prompt execution. If None, uses default LiteLLM-based agent. Must inherit from OptimizableAgent.</ParamField>
 <ParamField path="project_name" type="str" optional={true} default="Optimization">Opik project name for logging traces and experiments. Default: "Optimization"</ParamField>
 <ParamField path="optimization_id" type="str | None" optional={true}>Optional ID to use when creating the Opik optimization run; when provided it must be a valid UUIDv7 string.</ParamField>
+<ParamField path="validation_dataset" type="opik.api_objects.dataset.dataset.Dataset | None" optional={true}>Optional validation dataset for evaluating candidates. When provided, the optimizer uses the training dataset for understanding failure modes and generating improvements, then evaluates candidates on the validation dataset to prevent overfitting.</ParamField>
 <ParamField path="max_trials" type="int" optional={true} default="10">Maximum total number of prompts to evaluate across all rounds. Optimizer stops when this limit is reached.</ParamField>
 <ParamField path="mcp_config" type="opik_optimizer.mcp_utils.mcp_workflow.MCPExecutionConfig | None" optional={true}>Optional MCP (Model Context Protocol) execution configuration for prompts that use external tools. Enables tool-calling workflows. Default: None</ParamField>
 <ParamField path="candidate_generator" type="collections.abc.Callable[..., list[opik_optimizer.api_objects.chat_prompt.ChatPrompt]] | None" optional={true}>Optional custom function to generate candidate prompts. Overrides default meta-reasoning generator. Should return list[ChatPrompt].</ParamField>
@@ -584,6 +590,7 @@ optimize_mcp(
     fallback_invoker: collections.abc.Callable[[dict[str, typing.Any]], str] | None = None,
     fallback_arguments: collections.abc.Callable[[typing.Any], dict[str, typing.Any]] | None = None,
     allow_tool_use_on_second_pass: bool = False,
+    validation_dataset: opik.api_objects.dataset.dataset.Dataset | None = None,
     kwargs: Any
 )
 ```
@@ -603,6 +610,7 @@ optimize_mcp(
 <ParamField path="fallback_invoker" type="collections.abc.Callable[[dict[str, typing.Any]], str] | None" optional={true} />
 <ParamField path="fallback_arguments" type="collections.abc.Callable[[typing.Any], dict[str, typing.Any]] | None" optional={true} />
 <ParamField path="allow_tool_use_on_second_pass" type="bool" optional={true} default="False" />
+<ParamField path="validation_dataset" type="opik.api_objects.dataset.dataset.Dataset | None" optional={true} />
 <ParamField path="kwargs" type="Any" />
 
 #### optimize_prompt
@@ -617,6 +625,7 @@ optimize_prompt(
     agent_class: type[opik_optimizer.optimizable_agent.OptimizableAgent] | None = None,
     project_name: str = 'Optimization',
     optimization_id: str | None = None,
+    validation_dataset: opik.api_objects.dataset.dataset.Dataset | None = None,
     max_trials: int = 10,
     mcp_config: opik_optimizer.mcp_utils.mcp_workflow.MCPExecutionConfig | None = None,
     args: Any,
@@ -636,6 +645,7 @@ optimize_prompt(
 <ParamField path="agent_class" type="type[opik_optimizer.optimizable_agent.OptimizableAgent] | None" optional={true}>Optional agent implementation for executing prompts.</ParamField>
 <ParamField path="project_name" type="str" optional={true} default="Optimization">Opik project name for logging traces (default: "Optimization").</ParamField>
 <ParamField path="optimization_id" type="str | None" optional={true}>Optional ID for the Opik optimization run; when provided it must be a valid UUIDv7 string.</ParamField>
+<ParamField path="validation_dataset" type="opik.api_objects.dataset.dataset.Dataset | None" optional={true}>Optional validation dataset (not yet supported by this optimizer).</ParamField>
 <ParamField path="max_trials" type="int" optional={true} default="10">Maximum number of prompt evaluations allowed.</ParamField>
 <ParamField path="mcp_config" type="opik_optimizer.mcp_utils.mcp_workflow.MCPExecutionConfig | None" optional={true}>MCP tool-calling configuration (default: None).</ParamField>
 <ParamField path="args" type="Any" />
@@ -725,6 +735,7 @@ optimize_prompt(
     agent_class: type[opik_optimizer.optimizable_agent.OptimizableAgent] | None = None,
     project_name: str = 'Optimization',
     optimization_id: str | None = None,
+    validation_dataset: opik.api_objects.dataset.dataset.Dataset | None = None,
     max_trials: int = 10,
     reflection_minibatch_size: int = 3,
     candidate_selection_strategy: str = 'pareto',
@@ -754,6 +765,7 @@ optimize_prompt(
 <ParamField path="agent_class" type="type[opik_optimizer.optimizable_agent.OptimizableAgent] | None" optional={true}>Optional agent class to use</ParamField>
 <ParamField path="project_name" type="str" optional={true} default="Optimization" />
 <ParamField path="optimization_id" type="str | None" optional={true}>Optional ID for the Opik optimization run; when provided it must be a valid UUIDv7 string.</ParamField>
+<ParamField path="validation_dataset" type="opik.api_objects.dataset.dataset.Dataset | None" optional={true}>Optional validation dataset used for Pareto tracking. When provided, helps prevent overfitting by evaluating candidates on unseen data. Falls back to the training dataset when not provided.</ParamField>
 <ParamField path="max_trials" type="int" optional={true} default="10">Maximum number of different prompts to test (default: 10)</ParamField>
 <ParamField path="reflection_minibatch_size" type="int" optional={true} default="3">Size of reflection minibatches (default: 3)</ParamField>
 <ParamField path="candidate_selection_strategy" type="str" optional={true} default="pareto">Strategy for candidate selection (default: "pareto")</ParamField>
@@ -859,6 +871,7 @@ optimize_prompt(
     agent_class: type[opik_optimizer.optimizable_agent.OptimizableAgent] | None = None,
     project_name: str = 'Optimization',
     optimization_id: str | None = None,
+    validation_dataset: opik.api_objects.dataset.dataset.Dataset | None = None,
     max_trials: int = 5,
     max_retries: int = 2,
     args: Any,
@@ -878,6 +891,7 @@ optimize_prompt(
 <ParamField path="agent_class" type="type[opik_optimizer.optimizable_agent.OptimizableAgent] | None" optional={true}>Optional agent implementation to execute prompt evaluations.</ParamField>
 <ParamField path="project_name" type="str" optional={true} default="Optimization">Opik project name for trace logging (default: "Optimization").</ParamField>
 <ParamField path="optimization_id" type="str | None" optional={true}>Optional ID for the Opik optimization run; when provided it must be a valid UUIDv7 string.</ParamField>
+<ParamField path="validation_dataset" type="opik.api_objects.dataset.dataset.Dataset | None" optional={true}>Optional validation dataset for evaluating candidates. When provided, the optimizer uses the training dataset for understanding failure modes and generating improvements, then evaluates candidates on the validation dataset to prevent overfitting.</ParamField>
 <ParamField path="max_trials" type="int" optional={true} default="5">Maximum number of optimization iterations to run.</ParamField>
 <ParamField path="max_retries" type="int" optional={true} default="2">Maximum retries allowed for addressing a failure mode.</ParamField>
 <ParamField path="args" type="Any" />

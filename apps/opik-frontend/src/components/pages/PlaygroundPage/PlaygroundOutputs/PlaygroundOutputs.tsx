@@ -6,6 +6,7 @@ import { usePromptIds, useSetDatasetVariables } from "@/store/PlaygroundStore";
 import useDatasetItemsList from "@/api/datasets/useDatasetItemsList";
 import { DatasetItem, DatasetItemColumn } from "@/types/datasets";
 import { Filters } from "@/types/filters";
+import { keepPreviousData } from "@tanstack/react-query";
 
 interface PlaygroundOutputsProps {
   workspaceName: string;
@@ -24,27 +25,36 @@ const PlaygroundOutputs = ({
   const promptIds = usePromptIds();
   const setDatasetVariables = useSetDatasetVariables();
   const [filters, setFilters] = useState<Filters>([]);
+  const [page, setPage] = useState(1);
+  const [size, setSize] = useState(100);
 
-  const { data: datasetItemsData, isLoading: isLoadingDatasetItems } =
-    useDatasetItemsList(
-      {
-        datasetId: datasetId!,
-        page: 1,
-        size: 1000,
-        truncate: true,
-        filters,
-      },
-      {
-        enabled: !!datasetId,
-      },
-    );
+  const {
+    data: datasetItemsData,
+    isLoading: isLoadingDatasetItems,
+    isPlaceholderData: isPlaceholderDatasetItems,
+    isFetching: isFetchingDatasetItems,
+  } = useDatasetItemsList(
+    {
+      datasetId: datasetId!,
+      page,
+      size,
+      truncate: true,
+      filters,
+    },
+    {
+      enabled: !!datasetId,
+      placeholderData: keepPreviousData,
+    },
+  );
 
   const datasetItems = datasetItemsData?.content || EMPTY_ITEMS;
   const datasetColumns = datasetItemsData?.columns || EMPTY_COLUMNS;
+  const total = datasetItemsData?.total || 0;
 
   const handleChangeDatasetId = useCallback(
     (id: string | null) => {
       setFilters([]);
+      setPage(1);
       onChangeDatasetId(id);
     },
     [onChangeDatasetId],
@@ -59,6 +69,7 @@ const PlaygroundOutputs = ({
             datasetItems={datasetItems}
             datasetColumns={datasetColumns}
             isLoadingDatasetItems={isLoadingDatasetItems}
+            isFetchingData={isFetchingDatasetItems && isPlaceholderDatasetItems}
           />
         </div>
       );
@@ -92,6 +103,11 @@ const PlaygroundOutputs = ({
         loadingDatasetItems={isLoadingDatasetItems}
         filters={filters}
         onFiltersChange={setFilters}
+        page={page}
+        onChangePage={setPage}
+        size={size}
+        onChangeSize={setSize}
+        total={total}
       />
       {renderResult()}
     </div>

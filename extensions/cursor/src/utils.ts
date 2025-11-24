@@ -5,12 +5,19 @@ import * as fs from 'fs';
 import { v4 as uuidv4 } from 'uuid';
 import { captureException } from './sentry';
 
-// Create output channel for logging
+// Create output channels for logging
 let outputChannel: vscode.OutputChannel;
+let debugOutputChannel: vscode.OutputChannel;
 
 export function initializeLogging() {
   outputChannel = vscode.window.createOutputChannel('Cursor DB Finder');
   outputChannel.show(); // This will show the output panel automatically
+}
+
+export function initializeDebugLogging() {
+  if (!debugOutputChannel) {
+    debugOutputChannel = vscode.window.createOutputChannel('Opik Debug');
+  }
 }
 
 export function log(message: string) {
@@ -21,6 +28,38 @@ export function log(message: string) {
   console.log(logMessage);
   if (outputChannel) {
     outputChannel.appendLine(logMessage);
+  }
+}
+
+export function debugLog(message: string, data?: any) {
+  const config = vscode.workspace.getConfiguration();
+  const debugEnabled = config.get<boolean>('opik.enableDebugLogs') ?? false;
+  
+  if (!debugEnabled) {
+    return;
+  }
+  
+  if (!debugOutputChannel) {
+    initializeDebugLogging();
+  }
+  
+  const timestamp = new Date().toISOString();
+  const logMessage = `[${timestamp}] ${message}`;
+  
+  console.log(logMessage, data ? data : '');
+  debugOutputChannel.appendLine(logMessage);
+  
+  if (data !== undefined) {
+    const dataStr = typeof data === 'object' ? JSON.stringify(data, null, 2) : String(data);
+    debugOutputChannel.appendLine(dataStr);
+  }
+  
+  debugOutputChannel.appendLine(''); // Empty line for readability
+}
+
+export function showDebugChannel() {
+  if (debugOutputChannel) {
+    debugOutputChannel.show();
   }
 }
 

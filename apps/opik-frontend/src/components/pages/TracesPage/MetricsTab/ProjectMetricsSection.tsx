@@ -78,6 +78,7 @@ const PROJECT_METRICS_FILTER_COLUMNS: ColumnData<BaseTraceData>[] = [
     id: "tags",
     label: "Tags",
     type: COLUMN_TYPE.list,
+    iconType: "tags",
   },
   {
     id: "thread_id",

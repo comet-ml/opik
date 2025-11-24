@@ -1,0 +1,99 @@
+{
+  "seed": 42,
+  "test_mode": false,
+  "tasks": [],
+  "generators": [
+    {
+      "datasets": [
+        {
+          "dataset": "hotpot",
+          "datasets": {
+            "train": { "loader": "hotpot", "split": "train", "count": 150, "dataset_name": "hotpot_train" },
+            "validation": { "loader": "hotpot", "split": "validation", "count": 300, "dataset_name": "hotpot_validation" },
+            "test": { "loader": "hotpot", "split": "test", "count": 300, "dataset_name": "hotpot_test" }
+          }
+        }
+      ],
+      "optimizers": [
+        { "name": "few_shot", "optimizer_prompt_params": { "max_trials": 6438, "n_samples": 4 } },
+        { "name": "evolutionary_optimizer", "optimizer_prompt_params": { "max_trials": 6438, "population_size": 10, "num_generations": 4 } },
+        { "name": "gepa", "optimizer_prompt_params": { "max_trials": 6438, "n_samples": 4 } },
+        { "name": "hierarchical_reflective", "optimizer_prompt_params": { "max_trials": 6438 } },
+        { "name": "meta_prompt", "optimizer_prompt_params": { "max_trials": 6438 } }
+      ],
+      "models": [
+        { "name": "openai/gpt-4.1-mini", "model_parameters": { "temperature": 1.0 } },
+        { "name": "openrouter/qwen/qwen3-8b", "model_parameters": { "temperature": 0.6, "top_p": 0.95, "top_k": 20 } }
+      ],
+      "metrics": [
+        { "path": "benchmarks.metrics.hotpot.hotpot_f1" }
+      ],
+      "prompt": [
+        { "role": "system", "content": "Answer the question based on the given context." },
+        { "role": "user", "content": "{question}" }
+      ]
+    },
+    {
+      "datasets": [
+        {
+          "dataset": "hover",
+          "datasets": {
+            "train": { "loader": "hover", "split": "train", "count": 150, "dataset_name": "hover_train" },
+            "validation": { "loader": "hover", "split": "validation", "count": 300, "dataset_name": "hover_validation" },
+            "test": { "loader": "hover", "split": "test", "count": 300, "dataset_name": "hover_test" }
+          }
+        }
+      ],
+      "optimizers": [
+        { "name": "few_shot", "optimizer_prompt_params": { "max_trials": 6858, "n_samples": 4 } },
+        { "name": "evolutionary_optimizer", "optimizer_prompt_params": { "max_trials": 6858, "population_size": 10, "num_generations": 4 } },
+        { "name": "gepa", "optimizer_prompt_params": { "max_trials": 6858, "n_samples": 4 } },
+        { "name": "hierarchical_reflective", "optimizer_prompt_params": { "max_trials": 6858 } },
+        { "name": "meta_prompt", "optimizer_prompt_params": { "max_trials": 6858 } }
+      ],
+      "models": [
+        { "name": "openai/gpt-4.1-mini", "model_parameters": { "temperature": 1.0 } },
+        { "name": "openrouter/qwen/qwen3-8b", "model_parameters": { "temperature": 0.6, "top_p": 0.95, "top_k": 20 } }
+      ],
+      "metrics": [
+        { "path": "benchmarks.metrics.hover.hover_label_accuracy" },
+        { "path": "benchmarks.metrics.hover.hover_judge_feedback" }
+      ],
+      "prompt": [
+        { "role": "system", "content": "Classify the claim based on the given context and provide a concise answer." },
+        { "role": "user", "content": "{claim}" }
+      ]
+    },
+    {
+      "datasets": [
+        {
+          "dataset": "pupa",
+          "datasets": {
+            "train": { "loader": "pupa", "split": "train", "count": 111, "dataset_name": "pupa_train" },
+            "validation": { "loader": "pupa", "split": "validation", "count": 111, "dataset_name": "pupa_validation" },
+            "test": { "loader": "pupa", "split": "test", "count": 221, "dataset_name": "pupa_test" }
+          }
+        }
+      ],
+      "optimizers": [
+        { "name": "few_shot", "optimizer_prompt_params": { "max_trials": 2157, "n_samples": 4 } },
+        { "name": "evolutionary_optimizer", "optimizer_prompt_params": { "max_trials": 2157, "population_size": 10, "num_generations": 4 } },
+        { "name": "gepa", "optimizer_prompt_params": { "max_trials": 2157, "n_samples": 4 } },
+        { "name": "hierarchical_reflective", "optimizer_prompt_params": { "max_trials": 2157 } },
+        { "name": "meta_prompt", "optimizer_prompt_params": { "max_trials": 2157 } }
+      ],
+      "models": [
+        { "name": "openai/gpt-4.1-mini" },
+        { "name": "openrouter/qwen/qwen3-8b" }
+      ],
+      "metrics": [
+        { "path": "benchmarks.metrics.pupa.pupa_quality_judge" },
+        { "path": "benchmarks.metrics.pupa.pupa_leakage_ratio" }
+      ],
+      "prompt": [
+        { "role": "system", "content": "Rewrite or answer while avoiding any PII leakage; be concise and respect redaction constraints." },
+        { "role": "user", "content": "{question}" }
+      ]
+    }
+  ]
+}

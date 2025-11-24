@@ -87,6 +87,7 @@ export const DEFAULT_COLUMNS: ColumnData<Prompt>[] = [
     id: "tags",
     label: "Tags",
     type: COLUMN_TYPE.list,
+    iconType: "tags",
     cell: ListCell as never,
   },
   {
@@ -138,6 +139,7 @@ export const FILTER_COLUMNS: ColumnData<Prompt>[] = [
     id: "tags",
     label: "Tags",
     type: COLUMN_TYPE.list,
+    iconType: "tags",
   },
   {
     id: "last_updated_at",
