@@ -14,7 +14,7 @@ class DummyOptimizer:
         self.model_parameters = model_parameters or {}
         self.llm_calls = 0
 
-    def optimize_prompt(self, *args: Any, **kwargs: Any):
+    def optimize_prompt(self, *args: Any, **kwargs: Any) -> Any:
         # Return an object with a prompt attribute and llm_calls to mimic optimizers
         class Result:
             def __init__(self) -> None:
