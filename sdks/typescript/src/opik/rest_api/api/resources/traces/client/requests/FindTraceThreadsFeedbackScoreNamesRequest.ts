@@ -4,10 +4,8 @@
 
 /**
  * @example
- *     {
- *         projectId: "project_id"
- *     }
+ *     {}
  */
 export interface FindTraceThreadsFeedbackScoreNamesRequest {
-    projectId: string;
+    projectId?: string;
 }
