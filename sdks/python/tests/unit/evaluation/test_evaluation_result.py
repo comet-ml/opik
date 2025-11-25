@@ -683,18 +683,20 @@ def test_evaluation_result_on_dict_items__aggregate_evaluation_scores__happyflow
     # Verify accuracy aggregation (0.8, 0.9, 0.7)
     accuracy_stats = aggregated["accuracy"]
     assert accuracy_stats.mean == pytest.approx(0.8, rel=1e-9)  # (0.8 + 0.9 + 0.7) / 3
-    assert accuracy_stats.max == 0.9
-    assert accuracy_stats.min == 0.7
+    assert accuracy_stats.max == pytest.approx(0.9, rel=1e-9)
+    assert accuracy_stats.min == pytest.approx(0.7, rel=1e-9)
     assert accuracy_stats.values == [0.8, 0.9, 0.7]
     assert accuracy_stats.std == pytest.approx(0.1, rel=1e-1)
 
     # Verify precision aggregation (0.9, 0.95)
     precision_stats = aggregated["precision"]
     assert precision_stats.mean == pytest.approx(0.925, rel=1e-9)  # (0.9 + 0.95) / 2
-    assert precision_stats.max == 0.95
-    assert precision_stats.min == 0.9
+    assert precision_stats.max == pytest.approx(0.95, rel=1e-9)
+    assert precision_stats.min == pytest.approx(0.9, rel=1e-9)
     assert precision_stats.values == [0.9, 0.95]
-    assert precision_stats.std == pytest.approx(0.025, rel=1e-2)
+    assert precision_stats.std == pytest.approx(
+        0.03536, rel=1e-2
+    )  # Standard deviation of [0.9, 0.95]
 
 
 def test_evaluation_result_on_dict_items__aggregate_evaluation_scores__empty_results():
