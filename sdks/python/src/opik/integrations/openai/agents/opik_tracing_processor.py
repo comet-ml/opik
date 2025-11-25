@@ -3,12 +3,11 @@ from agents import tracing
 
 import logging
 
+from opik import context_storage, tracing_runtime_config
 from opik.api_objects.span import span_data
 from opik.api_objects.trace import trace_data
 from opik.api_objects import opik_client
 from opik.decorator import span_creation_handler, arguments_helpers
-import opik.decorator.tracing_runtime_config as tracing_runtime_config
-import opik.context_storage as context_storage
 
 from . import span_data_parsers
 

@@ -4,7 +4,7 @@ import pytest
 import opik
 from opik import opik_context
 
-runtime_config = importlib.import_module("opik.decorator.tracing_runtime_config")
+runtime_config = importlib.import_module("opik.tracing_runtime_config")
 
 
 @pytest.fixture(autouse=True)

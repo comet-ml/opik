@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import threading
 from typing import Optional
+from . import config
 
 
 class TracingRuntimeConfig:
@@ -23,9 +24,7 @@ class TracingRuntimeConfig:
                 return self._tracing_active
 
         try:
-            from .. import config as _config_module
-
-            enabled = not _config_module.OpikConfig().track_disable
+            enabled = not config.OpikConfig().track_disable
             self._tracing_active = enabled
 
         except Exception:
@@ -34,16 +33,16 @@ class TracingRuntimeConfig:
         return enabled
 
 
-runtime_cfg = TracingRuntimeConfig()
+runtime_config = TracingRuntimeConfig()
 
 
 def set_tracing_active(active: bool) -> None:
-    runtime_cfg.set_tracing_active(active)
+    runtime_config.set_tracing_active(active)
 
 
 def is_tracing_active() -> bool:
-    return runtime_cfg.is_tracing_active()
+    return runtime_config.is_tracing_active()
 
 
 def reset_tracing_to_config_default() -> None:
-    runtime_cfg.reset_to_config_default()
+    runtime_config.reset_to_config_default()

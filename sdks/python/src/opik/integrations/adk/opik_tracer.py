@@ -7,6 +7,7 @@ from google.adk import models
 from google.adk.tools import base_tool
 from google.adk.tools import tool_context
 
+import opik
 from opik import context_storage
 from opik.api_objects import opik_client, span, trace
 from opik.types import DistributedTraceHeadersDict
@@ -253,7 +254,8 @@ class OpikTracer:
             current_span.init_end_time()
             # We close this span manually because otherwise ADK will close it too late,
             # and it will also add tool spans inside of it, which we want to avoid.
-            self._opik_client.span(**current_span.as_parameters)
+            if opik.is_tracing_active():
+                self._opik_client.span(**current_span.as_parameters)
             self._last_model_output = output
 
         except Exception as e:

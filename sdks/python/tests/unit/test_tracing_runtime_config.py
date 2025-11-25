@@ -1,13 +1,13 @@
 import asyncio
 import importlib
+from typing import Any, Generator
 from unittest import mock
-from typing import Generator
 
 import pytest
 
 import opik
 
-runtime_config = importlib.import_module("opik.decorator.tracing_runtime_config")
+runtime_config = importlib.import_module("opik.tracing_runtime_config")
 
 
 @pytest.fixture(autouse=True)
@@ -17,13 +17,65 @@ def reset_tracing_state() -> Generator[None, None, None]:
     runtime_config.reset_tracing_to_config_default()
 
 
+@pytest.mark.parametrize("first,second", [(False, True), (True, False)])
+def test_set_and_get__both_states__works_correctly(first: bool, second: bool) -> None:
+    opik.set_tracing_active(first)
+    assert opik.is_tracing_active() is first
+
+    opik.set_tracing_active(second)
+    assert opik.is_tracing_active() is second
+
+
+def test_reset_to_config_default__happyflow(monkeypatch: Any) -> None:
+    from opik import config as _config_module
+
+    class DummyConfig(_config_module.OpikConfig):
+        track_disable: bool = True
+
+    monkeypatch.setattr(_config_module, "OpikConfig", DummyConfig, raising=False)
+    importlib.reload(runtime_config)
+
+    assert opik.is_tracing_active() is False
+
+    opik.set_tracing_active(True)
+    assert opik.is_tracing_active() is True
+
+    opik.reset_tracing_to_config_default()
+    assert opik.is_tracing_active() is False
+
+
+@opik.track(name="add_numbers")
+def add_numbers(x: int, y: int) -> int:
+    return x + y
+
+
+def test_track_decorator__sync_function__respects_runtime_flag() -> None:
+    opik.set_tracing_active(False)
+
+    with mock.patch(
+        "opik.decorator.span_creation_handler.create_span_respecting_context"
+    ) as mocked_create:
+        result = add_numbers(1, 2)
+        assert result == 3
+        assert not mocked_create.called
+
+    opik.set_tracing_active(True)
+
+    with mock.patch(
+        "opik.decorator.span_creation_handler.create_span_respecting_context"
+    ) as mocked_create:
+        result = add_numbers(4, 5)
+        assert result == 9
+        assert mocked_create.called
+
+
 @opik.track(name="async_add")
 async def async_add(x: int, y: int) -> int:
     await asyncio.sleep(0.001)
     return x + y
 
 
-def test_track_async_function_respects_runtime_flag():
+def test_track_decorator__async_function__respects_runtime_flag():
     opik.set_tracing_active(False)
     with mock.patch(
         "opik.decorator.span_creation_handler.create_span_respecting_context",
@@ -47,7 +99,7 @@ def gen_numbers(limit: int):
         yield i
 
 
-def test_track_generator_function_respects_runtime_flag():
+def test_track_decorator__generator_function__respects_runtime_flag():
     opik.set_tracing_active(False)
     with mock.patch(
         "opik.decorator.span_creation_handler.create_span_respecting_context",
@@ -78,7 +130,7 @@ async def _consume_async_gen(limit: int):
         pass
 
 
-def test_track_async_generator_function_respects_runtime_flag():
+def test_track_decorator__async_generator_function__respects_runtime_flag():
     opik.set_tracing_active(False)
     with mock.patch(
         "opik.decorator.span_creation_handler.create_span_respecting_context",

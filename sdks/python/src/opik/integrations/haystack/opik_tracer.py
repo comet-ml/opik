@@ -5,10 +5,8 @@ from typing import Any, Dict, Iterator, List, Optional, Union
 
 from haystack import tracing
 
-import opik.url_helpers as url_helpers
-import opik.decorator.tracing_runtime_config as tracing_runtime_config
-import opik.decorator.span_creation_handler as span_creation_handler
-import opik.decorator.arguments_helpers as arguments_helpers
+from opik import tracing_runtime_config, url_helpers
+from opik.decorator import arguments_helpers, span_creation_handler
 from opik.api_objects import opik_client
 from opik.api_objects import span as opik_span
 from opik.api_objects import trace as opik_trace

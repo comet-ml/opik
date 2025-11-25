@@ -4,8 +4,8 @@ from typing import Any, Dict, Optional
 import haystack
 from haystack import tracing
 
-import opik.api_objects.opik_client as opik_client
-import opik.decorator.tracing_runtime_config as tracing_runtime_config
+from opik import tracing_runtime_config
+from opik.api_objects import opik_client
 from . import opik_tracer
 
 LOGGER = logging.getLogger(__name__)

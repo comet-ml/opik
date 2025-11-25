@@ -18,7 +18,7 @@ def track_openai(
     """Adds Opik tracking wrappers to an OpenAI client.
 
     The client is always patched; however every wrapped call checks
-    `opik.decorator.tracing_runtime_config.is_tracing_active()` before emitting
+    `opik.is_tracing_active()` before emitting
     any telemetry. If tracing is disabled at call time, the wrapped function
     executes normally but no span/trace is sent.
 
