@@ -22,7 +22,7 @@ services:
       - "9090:9090"   # MinIO Web UI Console
 
   backend:
-    ports: !override
+    ports:
       - "8080:8080" # Exposing backend HTTP port to host
       - "3003:3003" # Exposing backend OpenAPI specification port to host
 
