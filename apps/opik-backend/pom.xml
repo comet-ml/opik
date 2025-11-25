@@ -25,7 +25,7 @@
         <jakarta.annotation.version>3.0.0</jakarta.annotation.version>
         <liquibase-clickhouse.version>0.7.2</liquibase-clickhouse.version>
         <clickhouse-java.version>0.9.0</clickhouse-java.version>
-        <google-protobuf.version>4.33.0</google-protobuf.version>
+        <google-protobuf.version>4.33.1</google-protobuf.version>
         <org.mapstruct.version>1.6.3</org.mapstruct.version>
         <testcontainers.version>2.0.1</testcontainers.version>
         <uuid.java.generator.version>5.1.0</uuid.java.generator.version>
