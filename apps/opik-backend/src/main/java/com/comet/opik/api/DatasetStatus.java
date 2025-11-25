@@ -10,6 +10,7 @@ import java.util.Arrays;
 @Getter
 @RequiredArgsConstructor
 public enum DatasetStatus {
+    UNKNOWN("unknown"),
     PROCESSING("processing"),
     COMPLETED("completed"),
     FAILED("failed");
@@ -22,6 +23,6 @@ public enum DatasetStatus {
         return Arrays.stream(values())
                 .filter(status -> status.value.equalsIgnoreCase(value))
                 .findFirst()
-                .orElse(COMPLETED);
+                .orElse(UNKNOWN);
     }
 }
