@@ -821,6 +821,7 @@ class MetaPromptOptimizer(BaseOptimizer):
             max_tokens=self.max_context_tokens,
             model=self.model,
             extract_metric_understanding=self.extract_metric_understanding,
+            seed=self.seed,
         )
 
     def _generate_candidate_prompts(
