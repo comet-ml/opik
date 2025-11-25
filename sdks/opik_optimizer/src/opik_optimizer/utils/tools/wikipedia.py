@@ -287,7 +287,7 @@ def _search_wikipedia_bm25(
 
     Args:
         query: Search query (will be sanitized)
-        k: Number of results to return (industry standard parameter name, default: 3)
+        k: Number of results to return (industry standard parameter name)
         index_dir: Path to local BM25 index
         hf_repo: HuggingFace repo ID for BM25 index
 
