@@ -351,6 +351,21 @@ const ExperimentsPage: React.FC = () => {
     ? "There are no experiments yet"
     : "No search results";
 
+  const reasonsAction = useMemo(
+    () => (
+      <Button
+        variant="ghost"
+        size="xs"
+        onClick={() => setShowReasons(!showReasons)}
+        className="h-6 text-xs"
+      >
+        <MessageSquareText className="mr-1 size-3" />
+        {showReasons ? "Collapse reasons" : "Expand reasons"}
+      </Button>
+    ),
+    [showReasons, setShowReasons],
+  );
+
   const {
     columns,
     selectedRows,
@@ -377,6 +392,7 @@ const ExperimentsPage: React.FC = () => {
     sortedColumns,
     setSortedColumns,
     showReasons,
+    reasonsAction,
   });
 
   const handleRowClick = useCallback(
@@ -615,23 +631,6 @@ const ExperimentsPage: React.FC = () => {
               onClick={() => refetch()}
             >
               <RotateCw />
-            </Button>
-          </TooltipWrapper>
-          <TooltipWrapper
-            content={
-              showReasons
-                ? "Hide score reason columns"
-                : "Show score reason columns"
-            }
-          >
-            <Button
-              variant={showReasons ? "default" : "outline"}
-              size="sm"
-              className="shrink-0"
-              onClick={() => setShowReasons(!showReasons)}
-            >
-              <MessageSquareText className="mr-1.5 size-3.5" />
-              Reasons
             </Button>
           </TooltipWrapper>
           <ColumnsButton

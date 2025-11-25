@@ -24,6 +24,7 @@ type ColumnsButtonShared<TColumnData> = {
 
 type ColumnsButtonExtraSection<TColumnData> = {
   title: string;
+  action?: React.ReactNode;
 } & ColumnsButtonShared<TColumnData>;
 
 export type ColumnsButtonProps<TColumnData> = {
@@ -115,9 +116,17 @@ const ColumnsButton = <TColumnData,>({
                 {!(isFirst && filteredColumns.length === 0) && (
                   <DropdownMenuSeparator key={`separator-${section.title}`} />
                 )}
-                <DropdownMenuLabel key={`label-${section.title}`}>
-                  {section.title}
-                </DropdownMenuLabel>
+                <div
+                  key={`label-${section.title}`}
+                  className="flex items-center justify-between gap-2 px-2 py-1.5"
+                >
+                  <DropdownMenuLabel className="p-0">
+                    {section.title}
+                  </DropdownMenuLabel>
+                  {section.action && (
+                    <div className="shrink-0">{section.action}</div>
+                  )}
+                </div>
                 <SortableMenuSection
                   key={`sortable-section-${section.title}`}
                   columns={section.columns}

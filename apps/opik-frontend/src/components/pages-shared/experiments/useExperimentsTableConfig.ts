@@ -56,6 +56,7 @@ export type UseExperimentsTableConfigProps<T> = {
   sortedColumns: ColumnSort[];
   setSortedColumns: OnChangeFn<ColumnSort[]>;
   showReasons?: boolean;
+  reasonsAction?: React.ReactNode;
 };
 
 export const useExperimentsTableConfig = <
@@ -75,6 +76,7 @@ export const useExperimentsTableConfig = <
   sortedColumns,
   setSortedColumns,
   showReasons = false,
+  reasonsAction,
 }: UseExperimentsTableConfigProps<T>) => {
   const [selectedColumns, setSelectedColumns] = useLocalStorageState<string[]>(
     `${storageKeyPrefix}-selected-columns`,
@@ -122,27 +124,27 @@ export const useExperimentsTableConfig = <
 
   const scoresColumnsData = useMemo(() => {
     const scoreColumns = dynamicScoresColumns.map(
-      ({ label, id, columnType }) =>
-        ({
-          id,
-          label,
-          type: columnType,
-          header: FeedbackScoreHeader as never,
-          cell: FeedbackScoreCell as never,
-          aggregatedCell: FeedbackScoreCell.Aggregation as never,
-          accessorFn: (row: T) =>
-            (
-              row as T & { feedback_scores?: Array<{ name: string }> }
-            ).feedback_scores?.find((f) => f.name === label),
-          customMeta: {
-            accessorFn: (aggregation: ExperimentsAggregations) =>
+        ({ label, id, columnType }) =>
+          ({
+            id,
+            label,
+            type: columnType,
+            header: FeedbackScoreHeader as never,
+            cell: FeedbackScoreCell as never,
+            aggregatedCell: FeedbackScoreCell.Aggregation as never,
+            accessorFn: (row: T) =>
               (
-                aggregation as ExperimentsAggregations & {
-                  feedback_scores?: Array<{ name: string }>;
-                }
-              ).feedback_scores?.find((f) => f.name === label)?.value,
-          },
-        }) as ColumnData<T>,
+                row as T & { feedback_scores?: Array<{ name: string }> }
+              ).feedback_scores?.find((f) => f.name === label),
+            customMeta: {
+              accessorFn: (aggregation: ExperimentsAggregations) =>
+                (
+                  aggregation as ExperimentsAggregations & {
+                    feedback_scores?: Array<{ name: string }>;
+                  }
+                ).feedback_scores?.find((f) => f.name === label)?.value,
+            },
+          }) as ColumnData<T>,
     );
 
     const reasonColumns = showReasons
@@ -325,9 +327,10 @@ export const useExperimentsTableConfig = <
         columns: scoresColumnsData,
         order: scoresColumnsOrder,
         onOrderChange: setScoresColumnsOrder,
+        action: reasonsAction,
       },
     ];
-  }, [scoresColumnsData, scoresColumnsOrder, setScoresColumnsOrder]);
+  }, [scoresColumnsData, scoresColumnsOrder, setScoresColumnsOrder, reasonsAction]);
 
   return {
     // State

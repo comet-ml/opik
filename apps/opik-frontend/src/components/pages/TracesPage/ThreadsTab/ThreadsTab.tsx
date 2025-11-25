@@ -602,6 +602,16 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
     [columnsWidth, setColumnsWidth],
   );
 
+  const handleToggleReasons = useCallback(() => {
+    const newShowReasons = !showReasons;
+    setShowReasons(newShowReasons);
+
+    // If expanding reasons and row height is small, change to medium
+    if (newShowReasons && height === ROW_HEIGHT.small) {
+      setHeight(ROW_HEIGHT.medium);
+    }
+  }, [showReasons, setShowReasons, height, setHeight]);
+
   const columnSections = useMemo(() => {
     return [
       {
@@ -609,9 +619,26 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
         columns: scoresColumnsData,
         order: scoresColumnsOrder,
         onOrderChange: setScoresColumnsOrder,
+        action: (
+          <Button
+            variant="ghost"
+            size="xs"
+            onClick={handleToggleReasons}
+            className="h-6 text-xs"
+          >
+            <MessageSquareText className="mr-1 size-3" />
+            {showReasons ? "Collapse reasons" : "Expand reasons"}
+          </Button>
+        ),
       },
     ];
-  }, [scoresColumnsData, scoresColumnsOrder, setScoresColumnsOrder]);
+  }, [
+    scoresColumnsData,
+    scoresColumnsOrder,
+    setScoresColumnsOrder,
+    showReasons,
+    handleToggleReasons,
+  ]);
 
   if (isPending || isFeedbackScoresNamesPending) {
     return <Loader />;
@@ -676,23 +703,6 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
             type={height as ROW_HEIGHT}
             setType={setHeight}
           />
-          <TooltipWrapper
-            content={
-              showReasons
-                ? "Hide score reason columns"
-                : "Show score reason columns"
-            }
-          >
-            <Button
-              variant={showReasons ? "default" : "outline"}
-              size="sm"
-              className="shrink-0"
-              onClick={() => setShowReasons(!showReasons)}
-            >
-              <MessageSquareText className="mr-1.5 size-3.5" />
-              Reasons
-            </Button>
-          </TooltipWrapper>
           <ColumnsButton
             columns={DEFAULT_COLUMNS}
             selectedColumns={selectedColumns}
