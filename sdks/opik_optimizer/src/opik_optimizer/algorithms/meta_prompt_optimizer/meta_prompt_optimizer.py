@@ -1268,7 +1268,7 @@ class MetaPromptOptimizer(BaseOptimizer):
             return float(score_val)
 
         scores_list: list[float] = []
-        n_threads = max(getattr(self, "n_threads", 1) or 1, 1)
+        n_threads = getattr(self, "n_threads", None) or 1
         if n_threads > 1 and len(items) > 1:
             try:
                 with ThreadPoolExecutor(max_workers=n_threads) as executor:
