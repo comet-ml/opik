@@ -85,6 +85,13 @@ class OptimizableAgent:
         tools: list[dict[str, str]] | None,
         seed: int | None = None,
     ) -> Any:
+        optimizer_ref = getattr(self, "optimizer", None)
+        if optimizer_ref is not None and hasattr(optimizer_ref, "_tag_trace"):
+            try:
+                optimizer_ref._tag_trace(phase="Prompt Optimization")
+            except Exception:
+                pass
+
         response = litellm.completion(
             model=self.model,
             messages=messages,
