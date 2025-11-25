@@ -5,12 +5,14 @@ from .dataset_utils import *  # noqa: F401,F403
 from .prompt_segments import *  # noqa: F401,F403
 from .candidate_utils import *  # noqa: F401,F403
 from .llm_logger import *  # noqa: F401,F403
+from .sampling import *  # noqa: F401,F403
 
 from . import core as _core
 from . import dataset_utils as _dataset_utils
 from . import prompt_segments as _prompt_segments
 from . import candidate_utils as _candidate_utils
 from . import llm_logger as _llm_logger
+from . import sampling as _sampling
 
 __all__: list[str] = [
     *getattr(_core, "__all__", []),
@@ -18,4 +20,5 @@ __all__: list[str] = [
     *getattr(_prompt_segments, "__all__", []),
     *getattr(_candidate_utils, "__all__", []),
     *getattr(_llm_logger, "__all__", []),
+    *getattr(_sampling, "__all__", []),
 ]
