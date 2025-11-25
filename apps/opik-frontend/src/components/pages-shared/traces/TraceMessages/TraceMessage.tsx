@@ -10,13 +10,13 @@ import { Separator } from "@/components/ui/separator";
 import { Button } from "@/components/ui/button";
 import { USER_FEEDBACK_NAME } from "@/constants/shared";
 import { prettifyMessage } from "@/lib/traces";
-import { cn, toString } from "@/lib/utils";
+import { toString } from "@/lib/utils";
 import { useJsonViewTheme } from "@/hooks/useJsonViewTheme";
-import isFunction from "lodash/isFunction";
+import { Hammer, ListTree } from "lucide-react";
 
 type TraceMessageProps = {
   trace: Trace;
-  handleOpenTrace?: (id: string) => void;
+  handleOpenTrace: (id: string, filterToolCalls: boolean) => void;
 };
 
 const TraceMessage: React.FC<TraceMessageProps> = ({
@@ -24,7 +24,6 @@ const TraceMessage: React.FC<TraceMessageProps> = ({
   handleOpenTrace,
 }) => {
   const jsonViewTheme = useJsonViewTheme();
-  const withActions = isFunction(handleOpenTrace);
 
   const userFeedback = useMemo(() => {
     return (trace.feedback_scores ?? []).find(
@@ -73,10 +72,7 @@ const TraceMessage: React.FC<TraceMessageProps> = ({
   }, [trace.output, jsonViewTheme]);
 
   return (
-    <div
-      className={cn("pt-4 first:pt-0", withActions && "border-b")}
-      data-trace-message-id={trace.id}
-    >
+    <div className="border-b pt-4 first:pt-0" data-trace-message-id={trace.id}>
       <div key={`${trace.id}_input`} className="mb-4 flex justify-end">
         <div className="relative min-w-[20%] max-w-[90%] rounded-t-xl rounded-bl-xl bg-[var(--message-input-background)] px-4 py-2">
           {input}
@@ -87,19 +83,28 @@ const TraceMessage: React.FC<TraceMessageProps> = ({
           {output}
         </div>
       </div>
-      {withActions && (
-        <div className="mb-2 mt-1 flex items-center gap-0.5 p-0.5">
-          <LikeFeedback state={userFeedback} traceId={trace.id} />
-          <Separator orientation="vertical" className="mx-1 h-3" />
+      <div className="mb-2 mt-1 flex items-center gap-0.5 p-0.5">
+        <LikeFeedback state={userFeedback} traceId={trace.id} />
+        <Separator orientation="vertical" className="mx-1 h-3" />
+        <Button
+          variant="ghost"
+          size="2xs"
+          onClick={() => handleOpenTrace(trace.id, false)}
+        >
+          <ListTree className="mr-1 size-3" />
+          View trace
+        </Button>
+        {trace.has_tool_spans && (
           <Button
             variant="ghost"
             size="2xs"
-            onClick={() => handleOpenTrace(trace.id)}
+            onClick={() => handleOpenTrace(trace.id, true)}
           >
-            View trace
+            <Hammer className="mr-1 size-3" />
+            View tool calls
           </Button>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 };

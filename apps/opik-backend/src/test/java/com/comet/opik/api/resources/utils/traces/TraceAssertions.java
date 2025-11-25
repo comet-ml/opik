@@ -26,7 +26,7 @@ public class TraceAssertions {
 
     public static final String[] IGNORED_FIELDS_TRACES = {"projectId", "projectName", "createdAt",
             "lastUpdatedAt", "feedbackScores", "createdBy", "lastUpdatedBy", "totalEstimatedCost", "spanCount",
-            "llmSpanCount", "duration", "comments", "threadId", "guardrailsValidations",
+            "llmSpanCount", "hasToolSpans", "duration", "comments", "threadId", "guardrailsValidations",
             "providers"};
 
     public static final String[] IGNORED_FIELDS_SCORES = {"createdAt", "lastUpdatedAt", "createdBy", "lastUpdatedBy",
@@ -90,6 +90,7 @@ public class TraceAssertions {
                 it -> it.toBuilder().guardrailsValidations(null).build());
         EXCLUDE_FUNCTIONS.put(Trace.TraceField.SPAN_COUNT, it -> it.toBuilder().spanCount(0).build());
         EXCLUDE_FUNCTIONS.put(Trace.TraceField.LLM_SPAN_COUNT, it -> it.toBuilder().llmSpanCount(0).build());
+        EXCLUDE_FUNCTIONS.put(Trace.TraceField.HAS_TOOL_SPANS, it -> it.toBuilder().hasToolSpans(false).build());
         EXCLUDE_FUNCTIONS.put(Trace.TraceField.TOTAL_ESTIMATED_COST,
                 it -> it.toBuilder().totalEstimatedCost(null).build());
         EXCLUDE_FUNCTIONS.put(Trace.TraceField.THREAD_ID, it -> it.toBuilder().threadId(null).build());
