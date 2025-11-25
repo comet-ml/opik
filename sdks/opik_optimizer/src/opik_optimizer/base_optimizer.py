@@ -48,6 +48,16 @@ class OptimizationRound(BaseModel):
 
 
 class BaseOptimizer(ABC):
+    # Mapping of optimizer class names to short names for tagging
+    _OPTIMIZER_SHORT_NAMES = {
+        "GepaOptimizer": "GEPA",
+        "EvolutionaryOptimizer": "EVGO",
+        "FewShotBayesianOptimizer": "FSBO",
+        "HierarchicalReflectiveOptimizer": "HAPO",
+        "MetaPromptOptimizer": "MEPO",
+        "ParameterOptimizer": "PARAM",
+    }
+
     def __init__(
         self,
         model: str,
