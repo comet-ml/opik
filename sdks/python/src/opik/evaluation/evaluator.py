@@ -770,8 +770,8 @@ def evaluate_items(
 
 
 def _wrap_scoring_functions(
-    scoring_metrics: Optional[List[base_metric.BaseMetric]],
     scoring_functions: Optional[List[scorer_function.ScorerFunction]],
+    scoring_metrics: Optional[List[base_metric.BaseMetric]],
     project_name: Optional[str],
 ) -> List[base_metric.BaseMetric]:
     if scoring_functions:
