@@ -13,7 +13,6 @@ from . import reporting
 from .prompts import BATCH_ANALYSIS_PROMPT, SYNTHESIS_PROMPT
 from ...reporting_utils import get_console
 from ... import _llm_calls
-from ...utils import rng as rng_utils
 
 logger = logging.getLogger(__name__)
 
