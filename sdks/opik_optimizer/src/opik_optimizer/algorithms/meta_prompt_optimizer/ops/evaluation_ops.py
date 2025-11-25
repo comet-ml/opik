@@ -7,7 +7,6 @@ This module contains functions for evaluating prompts and managing dataset subse
 from typing import Any
 from collections.abc import Callable
 import logging
-import random
 
 import opik
 from opik import opik_context
@@ -15,6 +14,7 @@ from opik import opik_context
 from ....api_objects import chat_prompt
 from .... import task_evaluator, helpers
 from ....mcp_utils.mcp_workflow import MCPExecutionConfig
+from ....utils import rng as rng_utils
 
 logger = logging.getLogger(__name__)
 
@@ -50,33 +50,36 @@ def evaluate_prompt(
     Returns:
         float: The evaluation score
     """
-    # Calculate subset size for trials
-    if not use_full_dataset:
+    phase = "final" if use_full_dataset else "trial"
+    default_cap = None
+    total_items = None
+    try:
         total_items = len(dataset.get_items())
-        if n_samples is not None:
-            if n_samples > total_items:
-                logger.warning(
-                    f"Requested n_samples ({n_samples}) is larger than dataset size ({total_items}). Using full dataset."
-                )
-                subset_size = None
-            else:
-                subset_size = n_samples
-                logger.debug(f"Using specified n_samples: {subset_size} items")
-        else:
-            # FIXME: This is a hack to ensure we don't evaluate on too many items
-            # This should be a configuration parameter and centralised
-            #
-            # Calculate 20% of total, but no more than 100 items and no more than total items
-            DEFAULT_EVALUATION_SUBSET_SIZE = min(
-                total_items, max(100, int(total_items * 0.2))
-            )
-            subset_size = DEFAULT_EVALUATION_SUBSET_SIZE
-            logger.debug(
-                f"Using automatic subset size calculation: {subset_size} items (20% of {total_items} total items)"
-            )
-    else:
-        subset_size = None  # Use all items for final checks
+    except Exception:
+        total_items = None
+
+    if not use_full_dataset and n_samples is None and total_items is not None:
+        default_cap = min(total_items, max(100, int(total_items * 0.2)))
+
+    sampling_plan = optimizer._prepare_sampling_plan(
+        dataset=dataset,
+        n_samples=n_samples if not use_full_dataset else "full",
+        dataset_item_ids=dataset_item_ids,
+        phase=phase,
+        default_cap=default_cap,
+    )
+    subset_size = (
+        None if sampling_plan.dataset_item_ids is not None else sampling_plan.nb_samples
+    )
+    dataset_item_ids = sampling_plan.dataset_item_ids
+    if subset_size is None and sampling_plan.nb_samples is None:
         logger.debug("Using full dataset for evaluation")
+    else:
+        logger.debug(
+            "Using %s items for evaluation (mode=%s)",
+            subset_size if subset_size is not None else len(dataset_item_ids or []),
+            sampling_plan.mode,
+        )
 
     configuration_updates = helpers.drop_none(
         {
@@ -203,13 +206,18 @@ def evaluate_prompt(
         experiment_config=experiment_config,
         optimization_id=optimization_id,
         verbose=optimizer.verbose,
+        # FIXME(opik-sdk): when opik.evaluate_on_dict_items is available end-to-end,
+        # add a switch here for trial/minibatch scoring to avoid experiment setup.
     )
     logger.debug(f"Evaluation score: {score:.4f}")
     return score
 
 
 def get_evaluation_subset(
-    dataset: opik.Dataset, min_size: int = 20, max_size: int = 100
+    dataset: opik.Dataset,
+    min_size: int = 20,
+    max_size: int = 100,
+    seed: int | None = None,
 ) -> list[dict[str, Any]]:
     """
     Get a random subset of the dataset for evaluation.
@@ -233,7 +241,8 @@ def get_evaluation_subset(
         subset_size = min(max(min_size, int(total_size * 0.2)), max_size)
 
         # Get random subset of items
-        return random.sample(all_items, subset_size)
+        rng = rng_utils.make_rng(seed, "evaluation_subset")
+        return rng.sample(all_items, subset_size)
 
     except Exception as e:
         logger.warning(f"Could not create evaluation subset: {e}")
