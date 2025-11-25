@@ -7,6 +7,7 @@ import {
   Clock,
   Coins,
   Copy,
+  Download,
   Hash,
   MessageCircleMore,
   MessageCircleOff,
@@ -16,11 +17,20 @@ import {
   Trash,
 } from "lucide-react";
 import copy from "clipboard-copy";
+import FileSaver from "file-saver";
+import { json2csv } from "json-2-csv";
+import get from "lodash/get";
 import isBoolean from "lodash/isBoolean";
 import isFunction from "lodash/isFunction";
 import isUndefined from "lodash/isUndefined";
+import uniq from "lodash/uniq";
 
-import { COLUMN_TYPE, OnChangeFn } from "@/types/shared";
+import {
+  COLUMN_FEEDBACK_SCORES_ID,
+  COLUMN_TYPE,
+  OnChangeFn,
+} from "@/types/shared";
+import { mapRowDataForExport } from "@/lib/traces/exportUtils";
 import { Trace } from "@/types/traces";
 import { formatDate, formatDuration } from "@/lib/date";
 import { formatCost } from "@/lib/money";
@@ -82,6 +92,7 @@ type ThreadDetailsPanelProps = {
   open: boolean;
   onClose: () => void;
   onRowChange?: (shift: number) => void;
+  columnsToExport: string[];
 };
 
 const DEFAULT_TAB = "messages";
@@ -97,6 +108,7 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
   open,
   onClose,
   onRowChange,
+  columnsToExport,
 }) => {
   const navigate = useNavigate();
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
@@ -216,6 +228,83 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
       author,
     });
   };
+
+  const exportColumns = useMemo(() => {
+    const feedbackScoreNames = uniq(
+      (thread?.feedback_scores ?? []).map(
+        (score) => `${COLUMN_FEEDBACK_SCORES_ID}.${score.name}`,
+      ),
+    );
+
+    return [...columnsToExport, ...feedbackScoreNames];
+  }, [thread, columnsToExport]);
+
+  const handleExportCSV = useCallback(async () => {
+    try {
+      if (!thread) return;
+
+      const mappedData = await mapRowDataForExport([thread], exportColumns);
+
+      const dataWithConversationHistory = [
+        {
+          ...mappedData[0],
+          conversation_history: JSON.stringify(traces),
+        },
+      ];
+
+      const csv = json2csv(dataWithConversationHistory);
+      const fileName = `${threadId}-thread.csv`;
+      const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+      FileSaver.saveAs(blob, fileName);
+
+      toast({
+        title: "Export successful",
+        description: "Exported thread to CSV",
+      });
+    } catch (error) {
+      toast({
+        title: "Export failed",
+        description: get(error, "message", "Failed to export"),
+        variant: "destructive",
+      });
+    }
+  }, [thread, threadId, exportColumns, traces]);
+
+  const handleExportJSON = useCallback(async () => {
+    try {
+      if (!thread) return;
+
+      const mappedThreadData = await mapRowDataForExport(
+        [thread],
+        exportColumns,
+      );
+
+      const dataWithConversationHistory = {
+        ...mappedThreadData[0],
+        conversation_history: traces,
+      };
+
+      const fileName = `${threadId}-thread.json`;
+      const blob = new Blob(
+        [JSON.stringify(dataWithConversationHistory, null, 2)],
+        {
+          type: "application/json;charset=utf-8",
+        },
+      );
+      FileSaver.saveAs(blob, fileName);
+
+      toast({
+        title: "Export successful",
+        description: "Exported thread to JSON",
+      });
+    } catch (error) {
+      toast({
+        title: "Export failed",
+        description: get(error, "message", "Failed to export"),
+        variant: "destructive",
+      });
+    }
+  }, [thread, threadId, exportColumns, traces]);
 
   const horizontalNavigation = useMemo(
     () =>
@@ -558,6 +647,15 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
                   Copy thread ID
                 </DropdownMenuItem>
               </TooltipWrapper>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={handleExportCSV}>
+                <Download className="mr-2 size-4" />
+                Export as CSV
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={handleExportJSON}>
+                <Download className="mr-2 size-4" />
+                Export as JSON
+              </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem onClick={() => setPopupOpen(true)}>
                 <Trash className="mr-2 size-4" />
