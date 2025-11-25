@@ -13,7 +13,7 @@ import optuna.samplers
 import optuna.pruners
 
 import opik
-from opik import Dataset, opik_context
+from opik import Dataset
 from pydantic import BaseModel
 
 from ... import base_optimizer, _llm_calls, helpers
