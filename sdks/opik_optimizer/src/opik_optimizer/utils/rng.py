@@ -13,6 +13,9 @@ T = TypeVar("T")
 
 def _hash_seed(seed: int | None, *parts: object) -> int | None:
     """Derive a deterministic seed from a base seed and contextual tags."""
+    # Preserve tag-only derivations: if tags exist but seed is None we still hash
+    # the namespace (including the string "None") so callers can get a deterministic
+    # child RNG without a base seed.
     if seed is None and not parts:
         return None
     namespace = "|".join(str(part) for part in (seed, *parts))

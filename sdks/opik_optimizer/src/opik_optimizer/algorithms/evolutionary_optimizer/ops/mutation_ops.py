@@ -60,25 +60,28 @@ def _modify_phrase(phrase: str, model: str, model_parameters: dict[str, Any]) ->
 
 
 def _word_level_mutation(
-    msg_content: str, model: str, model_parameters: dict[str, Any]
+    msg_content: str,
+    model: str,
+    model_parameters: dict[str, Any],
+    rng: random.Random,
 ) -> str:
     """Perform word-level mutation."""
     words = msg_content.split()
     if len(words) <= 1:
         return msg_content
 
-    mutation_type = random.random()
+    mutation_type = rng.random()
     if mutation_type < 0.3:
-        idx = random.randint(0, len(words) - 1)
+        idx = rng.randint(0, len(words) - 1)
         words[idx] = _get_synonym(
             word=words[idx], model=model, model_parameters=model_parameters
         )
     elif mutation_type < 0.6:
         if len(words) > 2:
-            i, j = random.sample(range(len(words)), 2)
+            i, j = rng.sample(range(len(words)), 2)
             words[i], words[j] = words[j], words[i]
     else:
-        idx = random.randint(0, len(words) - 1)
+        idx = rng.randint(0, len(words) - 1)
         words[idx] = _modify_phrase(
             phrase=words[idx], model=model, model_parameters=model_parameters
         )
@@ -87,7 +90,10 @@ def _word_level_mutation(
 
 
 def _word_level_mutation_prompt(
-    prompt: chat_prompt.ChatPrompt, model: str, model_parameters: dict[str, Any]
+    prompt: chat_prompt.ChatPrompt,
+    model: str,
+    model_parameters: dict[str, Any],
+    rng: random.Random,
 ) -> chat_prompt.ChatPrompt:
     mutated_messages: list[dict[str, str]] = []
     for message in prompt.get_messages():
@@ -98,6 +104,7 @@ def _word_level_mutation_prompt(
                     msg_content=message["content"],
                     model=model,
                     model_parameters=model_parameters,
+                    rng=rng,
                 ),
             }
         )
@@ -112,6 +119,7 @@ def _structural_mutation(
     prompt: chat_prompt.ChatPrompt,
     model: str,
     model_parameters: dict[str, Any],
+    rng: random.Random,
 ) -> chat_prompt.ChatPrompt:
     """Perform structural mutation (reordering, combining, splitting)."""
     mutated_messages: list[dict[str, str]] = []
@@ -134,16 +142,16 @@ def _structural_mutation(
             )
             continue
 
-        mutation_type = random.random()
+        mutation_type = rng.random()
         if mutation_type < 0.3:
-            random.shuffle(sentences)
+            rng.shuffle(sentences)
             mutated_messages.append(
                 {"role": role, "content": ". ".join(sentences) + "."}
             )
             continue
         elif mutation_type < 0.6:
             if len(sentences) >= 2:
-                idx = random.randint(0, len(sentences) - 2)
+                idx = rng.randint(0, len(sentences) - 2)
                 combined = sentences[idx] + " and " + sentences[idx + 1]
                 sentences[idx : idx + 2] = [combined]
                 mutated_messages.append(
@@ -151,10 +159,10 @@ def _structural_mutation(
                 )
                 continue
         else:
-            idx = random.randint(0, len(sentences) - 1)
+            idx = rng.randint(0, len(sentences) - 1)
             words = sentences[idx].split()
             if len(words) > 3:
-                split_point = random.randint(2, len(words) - 2)
+                split_point = rng.randint(2, len(words) - 2)
                 sentences[idx : idx + 1] = [
                     " ".join(words[:split_point]),
                     " ".join(words[split_point:]),
@@ -180,11 +188,12 @@ def _semantic_mutation(
     model_parameters: dict[str, Any],
     verbose: int,
     output_style_guidance: str,
+    rng: random.Random,
 ) -> chat_prompt.ChatPrompt:
     """Enhanced semantic mutation with multiple strategies."""
     current_output_style_guidance = output_style_guidance
 
-    if random.random() < 0.1:
+    if rng.random() < 0.1:
         return _radical_innovation_mutation(
             prompt=prompt,
             initial_prompt=initial_prompt,
@@ -194,7 +203,7 @@ def _semantic_mutation(
         )
 
     try:
-        strategy = random.choice(
+        strategy = rng.choice(
             [
                 "rephrase",
                 "simplify",
@@ -315,8 +324,10 @@ def deap_mutation(
     mcp_context: mcp.EvolutionaryMCPContext | None,
     optimization_id: str | None,
     verbose: int,
+    rng: random.Random | None = None,
 ) -> Any:
     """Enhanced mutation operation with multiple strategies."""
+    rng = rng or random.Random()
     prompt = chat_prompt.ChatPrompt(
         messages=individual,
         tools=initial_prompt.tools,
@@ -352,11 +363,11 @@ def deap_mutation(
         semantic_threshold = 0.4
         structural_threshold = 0.7  # semantic_threshold + 0.3
 
-    mutation_choice = random.random()
+    mutation_choice = rng.random()
 
     if mutation_choice > structural_threshold:
         mutated_prompt = _word_level_mutation_prompt(
-            prompt=prompt, model=model, model_parameters=model_parameters
+            prompt=prompt, model=model, model_parameters=model_parameters, rng=rng
         )
         reporting.display_success(
             "      Mutation successful, prompt has been edited by randomizing words (word-level mutation).",
@@ -368,6 +379,7 @@ def deap_mutation(
             prompt=prompt,
             model=model,
             model_parameters=model_parameters,
+            rng=rng,
         )
         reporting.display_success(
             "      Mutation successful, prompt has been edited by reordering, combining, or splitting sentences (structural mutation).",
@@ -382,6 +394,7 @@ def deap_mutation(
             model_parameters=model_parameters,
             verbose=verbose,
             output_style_guidance=output_style_guidance,
+            rng=rng,
         )
         reporting.display_success(
             "      Mutation successful, prompt has been edited using an LLM (semantic mutation).",

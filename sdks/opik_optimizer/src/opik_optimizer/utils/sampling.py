@@ -64,15 +64,6 @@ def resolve_sampling(
             dataset_size=dataset_size,
         )
 
-    if normalized is not None:
-        effective = normalized
-    else:
-        # Default cap when nothing specified; prefer dataset size if known
-        if dataset_size is None:
-            effective = default_cap
-        else:
-            effective = min(default_cap, dataset_size)
-
     if normalized is None:
         # None -> full dataset
         return SamplingPlan(
@@ -81,6 +72,8 @@ def resolve_sampling(
             mode=f"{phase}:full",
             dataset_size=dataset_size,
         )
+
+    effective = normalized
 
     if dataset_size is not None and effective > dataset_size:
         effective = dataset_size

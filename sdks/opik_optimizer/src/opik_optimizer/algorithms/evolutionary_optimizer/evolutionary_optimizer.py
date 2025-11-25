@@ -266,8 +266,8 @@ class EvolutionaryOptimizer(BaseOptimizer):
         """Execute mating, mutation, evaluation and HoF update."""
         best_gen_score = 0.0
         gen_rng = self._derive_rng("generation", generation_idx)
-        crossover_ops.random = rng_utils.derive_rng(gen_rng, "crossover")  # type: ignore[assignment]
-        mutation_ops.random = rng_utils.derive_rng(gen_rng, "mutation")  # type: ignore[assignment]
+        crossover_rng = rng_utils.derive_rng(gen_rng, "crossover")
+        mutation_rng = rng_utils.derive_rng(gen_rng, "mutation")
 
         # --- selection -------------------------------------------------
         if self.enable_moo:
@@ -302,6 +302,7 @@ class EvolutionaryOptimizer(BaseOptimizer):
                         c1_new, c2_new = crossover_ops.deap_crossover(
                             c1,
                             c2,
+                            rng=crossover_rng,
                             verbose=self.verbose,
                         )
                     offspring[i], offspring[i + 1] = c1_new, c2_new
@@ -328,6 +329,7 @@ class EvolutionaryOptimizer(BaseOptimizer):
                     mcp_context=self._mcp_context,
                     optimization_id=self.current_optimization_id,
                     verbose=self.verbose,
+                    rng=mutation_rng,
                 )
                 offspring[i] = new_ind
                 del offspring[i].fitness.values
