@@ -24,18 +24,18 @@ from collections.abc import Generator
 __all__ = ["LLMLogger"]
 
 
-def _sanitize_log_text(text: str) -> str:
+def _sanitize_log_text(text: str | None) -> str:
     """
     Sanitize text for clean logging by removing newlines and tabs.
 
     Args:
-        text: Text to sanitize
+        text: Text to sanitize (can be None)
 
     Returns:
-        Text with newlines and tabs replaced with spaces, normalized whitespace
+        Text with newlines and tabs replaced with spaces, normalized whitespace. Returns empty string if input is None or empty.
     """
     if not text:
-        return text
+        return ""
     # Replace newlines and tabs with spaces, then normalize whitespace
     return " ".join(text.replace("\n", " ").replace("\t", " ").split())
 
