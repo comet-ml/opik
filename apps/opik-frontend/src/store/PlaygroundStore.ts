@@ -3,6 +3,7 @@ import { persist } from "zustand/middleware";
 import pick from "lodash/pick";
 
 import { LogExperiment, PlaygroundPromptType } from "@/types/playground";
+import { Filters } from "@/types/filters";
 import isUndefined from "lodash/isUndefined";
 import get from "lodash/get";
 import lodashSet from "lodash/set";
@@ -93,6 +94,9 @@ export type PlaygroundStore = {
   selectedRuleIds: string[] | null;
   createdExperiments: LogExperiment[];
   isRunning: boolean;
+  datasetFilters: Filters;
+  datasetPage: number;
+  datasetSize: number;
 
   setPromptMap: (
     promptIds: string[],
@@ -121,6 +125,10 @@ export type PlaygroundStore = {
   setCreatedExperiments: (experiments: LogExperiment[]) => void;
   clearCreatedExperiments: () => void;
   setIsRunning: (isRunning: boolean) => void;
+  setDatasetFilters: (filters: Filters) => void;
+  setDatasetPage: (page: number) => void;
+  setDatasetSize: (size: number) => void;
+  resetDatasetFilters: () => void;
 };
 
 const usePlaygroundStore = create<PlaygroundStore>()(
@@ -134,6 +142,9 @@ const usePlaygroundStore = create<PlaygroundStore>()(
       selectedRuleIds: null,
       createdExperiments: [],
       isRunning: false,
+      datasetFilters: [],
+      datasetPage: 1,
+      datasetSize: 100,
 
       updatePrompt: (promptId, changes) => {
         set((state) => {
@@ -296,6 +307,40 @@ const usePlaygroundStore = create<PlaygroundStore>()(
           };
         });
       },
+      setDatasetFilters: (filters) => {
+        set((state) => {
+          return {
+            ...state,
+            datasetFilters: filters,
+          };
+        });
+      },
+      setDatasetPage: (page) => {
+        set((state) => {
+          return {
+            ...state,
+            datasetPage: page,
+          };
+        });
+      },
+      setDatasetSize: (size) => {
+        set((state) => {
+          return {
+            ...state,
+            datasetSize: size,
+          };
+        });
+      },
+      resetDatasetFilters: () => {
+        set((state) => {
+          return {
+            ...state,
+            datasetFilters: [],
+            datasetPage: 1,
+            datasetSize: 100,
+          };
+        });
+      },
     }),
     {
       name: "PLAYGROUND_STATE",
@@ -424,5 +469,26 @@ export const useIsRunning = () =>
 
 export const useSetIsRunning = () =>
   usePlaygroundStore((state) => state.setIsRunning);
+
+export const useDatasetFilters = () =>
+  usePlaygroundStore((state) => state.datasetFilters);
+
+export const useSetDatasetFilters = () =>
+  usePlaygroundStore((state) => state.setDatasetFilters);
+
+export const useDatasetPage = () =>
+  usePlaygroundStore((state) => state.datasetPage);
+
+export const useSetDatasetPage = () =>
+  usePlaygroundStore((state) => state.setDatasetPage);
+
+export const useDatasetSize = () =>
+  usePlaygroundStore((state) => state.datasetSize);
+
+export const useSetDatasetSize = () =>
+  usePlaygroundStore((state) => state.setDatasetSize);
+
+export const useResetDatasetFilters = () =>
+  usePlaygroundStore((state) => state.resetDatasetFilters);
 
 export default usePlaygroundStore;
