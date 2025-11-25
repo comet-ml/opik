@@ -77,7 +77,7 @@ const PromptsSelectBox: React.FC<PromptsSelectBoxProps> = ({
     if (
       value &&
       selectedPromptData &&
-      !options.some((o) => o.value === value)
+      !valueExistsInOptions
     ) {
       options.unshift({
         label: selectedPromptData.name,
