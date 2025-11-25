@@ -216,6 +216,9 @@ class OptimizableAgent:
                 self.model = prompt.model
             self.model_kwargs = copy.deepcopy(getattr(prompt, "model_kwargs", {}) or {})
             messages = prompt.get_messages(dataset_item)
+            prompt_invoker = getattr(prompt, "invoke", None)
+            if callable(prompt_invoker):
+                return prompt_invoker(messages)
             return self.invoke(messages=messages, seed=seed)
         finally:
             self.prompt = original_prompt

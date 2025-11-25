@@ -219,7 +219,7 @@ class TestDownloadBM25Index:
 
     @patch("pathlib.Path.mkdir")
     @patch("pathlib.Path.home")
-    def test_download_with_default_cache(self, mock_home: Mock) -> None:
+    def test_download_with_default_cache(self, mock_home: Mock, mock_mkdir: Mock) -> None:
         """Test downloading index with default cache directory."""
         # Mock home directory
         mock_home.return_value = Path("/home/user")
