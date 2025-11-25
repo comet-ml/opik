@@ -56,7 +56,7 @@ class OptimizableAgent:
             project_name: Optional project name for Opik tracking
         """
         self.project_name = project_name or "Default Project"
-        self.trace_phase: str | None = "Prompt Optimization"
+        self.trace_phase: str = "Prompt Optimization"
         self.init_llm()
         self.init_agent(prompt)
 
