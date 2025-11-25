@@ -74,11 +74,7 @@ const PromptsSelectBox: React.FC<PromptsSelectBoxProps> = ({
     }));
 
     // If we have a selected prompt that's not in the options, add it
-    if (
-      value &&
-      selectedPromptData &&
-      !valueExistsInOptions
-    ) {
+    if (value && selectedPromptData && !valueExistsInOptions) {
       options.unshift({
         label: selectedPromptData.name,
         value: selectedPromptData.id,
