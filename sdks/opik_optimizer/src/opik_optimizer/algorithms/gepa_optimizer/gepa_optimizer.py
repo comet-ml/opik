@@ -626,15 +626,7 @@ class GepaOptimizer(BaseOptimizer):
                     def final_llm_task(dataset_item: dict[str, Any]) -> dict[str, str]:
                         messages = final_prompt.get_messages(dataset_item)
                         raw = final_llm_agent.invoke(messages)
-                        if self.current_optimization_id:
-                            optimizer_short_name = self._get_optimizer_short_name()
-                            opik_context.update_current_trace(
-                                tags=[
-                                    optimizer_short_name,
-                                    self.current_optimization_id,
-                                    "Evaluation",
-                                ]
-                            )
+                        self._tag_trace()
                         return {"llm_output": raw.strip()}
 
                     metric_class = _create_metric_class(metric)
@@ -904,15 +896,7 @@ class GepaOptimizer(BaseOptimizer):
             raw = agent.invoke(messages)
 
             # Add tags to trace for optimization tracking
-            if self.current_optimization_id:
-                optimizer_short_name = self._get_optimizer_short_name()
-                opik_context.update_current_trace(
-                    tags=[
-                        optimizer_short_name,
-                        self.current_optimization_id,
-                        "Evaluation",
-                    ]
-                )
+            self._tag_trace()
 
             return {"llm_output": raw.strip()}
 
