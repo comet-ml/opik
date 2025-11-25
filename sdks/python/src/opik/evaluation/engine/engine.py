@@ -178,9 +178,9 @@ class EvaluationEngine:
             ]
 
             test_results += evaluation_tasks_executor.execute(
-                evaluation_tasks,
-                self._workers,
-                self._verbose,
+                evaluation_tasks=evaluation_tasks,
+                workers=self._workers,
+                verbose=self._verbose,
                 desc=f"{description} trial {trial_id}"
                 if trial_count > 1
                 else description,
@@ -262,9 +262,9 @@ class EvaluationEngine:
         ]
 
         evaluation_tasks_executor.execute(
-            span_evaluation_tasks,
-            self._workers,
-            self._verbose,
+            evaluation_tasks=span_evaluation_tasks,
+            workers=self._workers,
+            verbose=self._verbose,
             desc="LLM task spans evaluation",
         )
 
@@ -292,7 +292,11 @@ class EvaluationEngine:
 
         if not self._metrics_evaluator.has_task_span_metrics:
             return self._compute_test_results_for_llm_task(
-                dataset_items, task, experiment_, trial_count, "Evaluation"
+                dataset_items=dataset_items,
+                task=task,
+                experiment_=experiment_,
+                trial_count=trial_count,
+                description="Evaluation",
             )
 
         LOGGER.debug(
@@ -300,11 +304,18 @@ class EvaluationEngine:
             len(self._metrics_evaluator.task_span_metrics),
         )
 
-        with local_recording.record_traces_locally() as recording:
+        with local_recording.record_traces_locally(client=self._client) as recording:
             test_results = self._compute_test_results_for_llm_task(
-                dataset_items, task, experiment_, trial_count, "Evaluation"
+                dataset_items=dataset_items,
+                task=task,
+                experiment_=experiment_,
+                trial_count=trial_count,
+                description="Evaluation",
             )
-            self._update_test_results_with_task_span_metrics(test_results, recording)
+            self._update_test_results_with_task_span_metrics(
+                test_results=test_results,
+                recording=recording,
+            )
 
         return test_results
 
@@ -338,7 +349,11 @@ class EvaluationEngine:
 
         if not self._metrics_evaluator.has_task_span_metrics:
             return self._compute_test_results_for_llm_task(
-                dataset_items, task, None, 1, "Items evaluation"
+                dataset_items=dataset_items,
+                task=task,
+                experiment_=None,
+                trial_count=1,
+                description="Items evaluation",
             )
 
         LOGGER.debug(
@@ -346,11 +361,18 @@ class EvaluationEngine:
             len(self._metrics_evaluator.task_span_metrics),
         )
 
-        with local_recording.record_traces_locally() as recording:
+        with local_recording.record_traces_locally(client=self._client) as recording:
             test_results = self._compute_test_results_for_llm_task(
-                dataset_items, task, None, 1, "Items evaluation"
+                dataset_items=dataset_items,
+                task=task,
+                experiment_=None,
+                trial_count=1,
+                description="Items evaluation",
             )
-            self._update_test_results_with_task_span_metrics(test_results, recording)
+            self._update_test_results_with_task_span_metrics(
+                test_results=test_results,
+                recording=recording,
+            )
 
         return test_results
 
@@ -367,7 +389,9 @@ class EvaluationEngine:
         ]
 
         test_results = evaluation_tasks_executor.execute(
-            evaluation_tasks, self._workers, self._verbose
+            evaluation_tasks=evaluation_tasks,
+            workers=self._workers,
+            verbose=self._verbose,
         )
 
         return test_results
