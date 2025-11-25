@@ -241,7 +241,6 @@ const ExportAnnotatedDataButton: React.FC<ExportAnnotatedDataButtonProps> = ({
     async (
       exportFn: (data: Array<ExportTraceData | ExportThreadData>) => void,
     ) => {
-      if (disabled || !isExportEnabled) return;
       setLoading(true);
       try {
         const data = await getData();
@@ -271,11 +270,10 @@ const ExportAnnotatedDataButton: React.FC<ExportAnnotatedDataButtonProps> = ({
         setLoading(false);
       }
     },
-    [getData, toast, disabled, isExportEnabled],
+    [getData, toast],
   );
 
   const exportCSVHandler = useCallback(() => {
-    if (disabled || !isExportEnabled) return;
     handleExport((data) => {
       const processedData = data.map((row) => {
         return {
@@ -305,17 +303,16 @@ const ExportAnnotatedDataButton: React.FC<ExportAnnotatedDataButtonProps> = ({
       );
       saveAs(blob, generateFileName("csv"));
     });
-  }, [handleExport, generateFileName, disabled, isExportEnabled]);
+  }, [handleExport, generateFileName]);
 
   const exportJSONHandler = useCallback(() => {
-    if (disabled || !isExportEnabled) return;
     handleExport((data) => {
       const blob = new Blob([JSON.stringify(data, null, 2)], {
         type: "application/json;charset=utf-8;",
       });
       saveAs(blob, generateFileName("json"));
     });
-  }, [handleExport, generateFileName, disabled, isExportEnabled]);
+  }, [handleExport, generateFileName]);
 
   const handleOpenChange = useCallback(
     (newOpen: boolean) => {

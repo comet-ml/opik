@@ -32,7 +32,6 @@ const ExportToButton: React.FC<ExportToButtonProps> = ({
 
   const handleExport = useCallback(
     async (exportFn: (data: Array<object>) => void) => {
-      if (disabled) return;
       setLoading(true);
       try {
         const mappedRows = await Promise.resolve(getData());
@@ -53,11 +52,10 @@ const ExportToButton: React.FC<ExportToButtonProps> = ({
         setLoading(false);
       }
     },
-    [getData, toast, disabled],
+    [getData, toast],
   );
 
   const exportCSVHandler = useCallback(() => {
-    if (disabled) return;
     handleExport((mappedRows: Array<object>) => {
       const fileName = generateFileName("csv");
 
@@ -76,10 +74,9 @@ const ExportToButton: React.FC<ExportToButtonProps> = ({
         fileName,
       );
     });
-  }, [handleExport, generateFileName, disabled]);
+  }, [handleExport, generateFileName]);
 
   const exportJSONHandler = useCallback(() => {
-    if (disabled) return;
     handleExport((mappedRows: Array<object>) => {
       const fileName = generateFileName("json");
 
@@ -90,7 +87,7 @@ const ExportToButton: React.FC<ExportToButtonProps> = ({
         fileName,
       );
     });
-  }, [handleExport, generateFileName, disabled]);
+  }, [handleExport, generateFileName]);
   const handleOpenChange = useCallback(
     (newOpen: boolean) => {
       if (disabled && newOpen) return;
