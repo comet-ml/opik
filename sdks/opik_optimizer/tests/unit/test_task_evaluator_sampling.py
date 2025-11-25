@@ -24,7 +24,19 @@ def test_evaluate_passes_ids_and_samples(monkeypatch: Any) -> None:
 
     class _EvalResult:
         def __init__(self) -> None:
-            self.test_results: list[Any] = [{"dummy": True}]
+            class _ScoreResult:
+                def __init__(self) -> None:
+                    self.name = _dummy_metric.__name__
+                    self.value = 1.0
+                    self.scoring_failed = False
+                    self.metadata: dict[str, Any] = {}
+                    self.reason = None
+
+            class _TestResult:
+                def __init__(self) -> None:
+                    self.score_results = [_ScoreResult()]
+
+            self.test_results: list[Any] = [_TestResult()]
 
     def _fake_evaluate(**kwargs: Any) -> _EvalResult:
         captured["dataset_item_ids"] = kwargs.get("dataset_item_ids")
