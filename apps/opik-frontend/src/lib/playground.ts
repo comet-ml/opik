@@ -84,7 +84,8 @@ export const getDefaultConfigByProvider = (
       timeout: DEFAULT_OPEN_ROUTER_CONFIGS.TIMEOUT,
       backoffExponent: DEFAULT_OPEN_ROUTER_CONFIGS.BACKOFF_EXPONENT,
       throttling: DEFAULT_OPEN_ROUTER_CONFIGS.THROTTLING,
-      maxConcurrentRequests: DEFAULT_OPEN_ROUTER_CONFIGS.MAX_CONCURRENT_REQUESTS,
+      maxConcurrentRequests:
+        DEFAULT_OPEN_ROUTER_CONFIGS.MAX_CONCURRENT_REQUESTS,
     } as LLMOpenRouterConfigsType;
   }
 

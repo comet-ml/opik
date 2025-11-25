@@ -183,7 +183,10 @@ const OpenRouterModelConfigs = ({
         }
       />
       <SliderInputControl
-        value={configs.backoffExponent ?? DEFAULT_OPEN_ROUTER_CONFIGS.BACKOFF_EXPONENT}
+        value={
+          configs.backoffExponent ??
+          DEFAULT_OPEN_ROUTER_CONFIGS.BACKOFF_EXPONENT
+        }
         onChange={(v) => onChange({ backoffExponent: v })}
         id="backoffExponent"
         min={1}
@@ -209,7 +212,10 @@ const OpenRouterModelConfigs = ({
         }
       />
       <SliderInputControl
-        value={configs.maxConcurrentRequests ?? DEFAULT_OPEN_ROUTER_CONFIGS.MAX_CONCURRENT_REQUESTS}
+        value={
+          configs.maxConcurrentRequests ??
+          DEFAULT_OPEN_ROUTER_CONFIGS.MAX_CONCURRENT_REQUESTS
+        }
         onChange={(v) => onChange({ maxConcurrentRequests: v })}
         id="maxConcurrentRequests"
         min={1}

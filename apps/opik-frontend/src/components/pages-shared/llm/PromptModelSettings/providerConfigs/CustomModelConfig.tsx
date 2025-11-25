@@ -147,7 +147,9 @@ const CustomModelConfig = ({ configs, onChange }: CustomModelConfigProps) => {
       />
 
       <SliderInputControl
-        value={configs.backoffExponent ?? DEFAULT_CUSTOM_CONFIGS.BACKOFF_EXPONENT}
+        value={
+          configs.backoffExponent ?? DEFAULT_CUSTOM_CONFIGS.BACKOFF_EXPONENT
+        }
         onChange={(v) => onChange({ backoffExponent: v })}
         id="backoffExponent"
         min={1}
@@ -175,7 +177,10 @@ const CustomModelConfig = ({ configs, onChange }: CustomModelConfigProps) => {
       />
 
       <SliderInputControl
-        value={configs.maxConcurrentRequests ?? DEFAULT_CUSTOM_CONFIGS.MAX_CONCURRENT_REQUESTS}
+        value={
+          configs.maxConcurrentRequests ??
+          DEFAULT_CUSTOM_CONFIGS.MAX_CONCURRENT_REQUESTS
+        }
         onChange={(v) => onChange({ maxConcurrentRequests: v })}
         id="maxConcurrentRequests"
         min={1}

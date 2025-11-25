@@ -257,7 +257,10 @@ const AnthropicModelConfigs = ({
       />
 
       <SliderInputControl
-        value={configs.maxConcurrentRequests ?? DEFAULT_ANTHROPIC_CONFIGS.MAX_CONCURRENT_REQUESTS}
+        value={
+          configs.maxConcurrentRequests ??
+          DEFAULT_ANTHROPIC_CONFIGS.MAX_CONCURRENT_REQUESTS
+        }
         onChange={(v) => onChange({ maxConcurrentRequests: v })}
         id="maxConcurrentRequests"
         min={1}

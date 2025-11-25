@@ -94,7 +94,9 @@ const VertexAIModelConfigs = ({
       />
 
       <SliderInputControl
-        value={configs.backoffExponent ?? DEFAULT_VERTEX_AI_CONFIGS.BACKOFF_EXPONENT}
+        value={
+          configs.backoffExponent ?? DEFAULT_VERTEX_AI_CONFIGS.BACKOFF_EXPONENT
+        }
         onChange={(v) => onChange({ backoffExponent: v })}
         id="backoffExponent"
         min={1}
@@ -122,7 +124,10 @@ const VertexAIModelConfigs = ({
       />
 
       <SliderInputControl
-        value={configs.maxConcurrentRequests ?? DEFAULT_VERTEX_AI_CONFIGS.MAX_CONCURRENT_REQUESTS}
+        value={
+          configs.maxConcurrentRequests ??
+          DEFAULT_VERTEX_AI_CONFIGS.MAX_CONCURRENT_REQUESTS
+        }
         onChange={(v) => onChange({ maxConcurrentRequests: v })}
         id="maxConcurrentRequests"
         min={1}

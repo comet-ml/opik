@@ -66,13 +66,13 @@ const useActionButtonActions = ({
   const maxConcurrentRequests = useMemo(() => {
     const prompts = Object.values(promptMap);
     if (prompts.length === 0) return DEFAULT_MAX_CONCURRENT_REQUESTS;
-    
+
     const concurrencyValues = prompts
-      .map(p => p.configs.maxConcurrentRequests)
-      .filter(val => val !== undefined && val !== null) as number[];
-    
+      .map((p) => p.configs.maxConcurrentRequests)
+      .filter((val) => val !== undefined && val !== null) as number[];
+
     if (concurrencyValues.length === 0) return DEFAULT_MAX_CONCURRENT_REQUESTS;
-    
+
     // Use the minimum value across all prompts (most conservative)
     return Math.min(...concurrencyValues);
   }, [promptMap]);
