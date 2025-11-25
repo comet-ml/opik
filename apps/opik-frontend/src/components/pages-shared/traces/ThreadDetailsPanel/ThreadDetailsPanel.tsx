@@ -22,6 +22,7 @@ import isUndefined from "lodash/isUndefined";
 
 import { COLUMN_TYPE, OnChangeFn } from "@/types/shared";
 import { Trace } from "@/types/traces";
+import { Filter } from "@/types/filters";
 import { formatDate, formatDuration } from "@/lib/date";
 import { formatCost } from "@/lib/money";
 import { manageToolFilter } from "@/lib/traces";
@@ -126,7 +127,7 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
     },
   );
 
-  const [tracePanelFilters, setTracePanelFilters] = useQueryParam(
+  const [, setTracePanelFilters] = useQueryParam(
     `trace_panel_filters`,
     JsonParam,
     {
@@ -202,15 +203,14 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
 
   const handleOpenTrace = useCallback(
     (id: string, shouldFilterToolCalls: boolean) => {
-      // Manage tool filter: add if shouldFilterToolCalls is true, remove if false
-      setTracePanelFilters(
-        manageToolFilter(tracePanelFilters, shouldFilterToolCalls),
+      setTracePanelFilters((previousFilters: Filter[] | null | undefined) =>
+        manageToolFilter(previousFilters, shouldFilterToolCalls),
       );
 
       onClose();
       setTraceId(id);
     },
-    [tracePanelFilters, setTracePanelFilters, setTraceId, onClose],
+    [setTracePanelFilters, setTraceId, onClose],
   );
 
   const handleThreadDelete = useCallback(() => {

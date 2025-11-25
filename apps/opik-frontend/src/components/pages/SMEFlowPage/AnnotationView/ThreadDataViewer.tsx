@@ -1,9 +1,10 @@
-import React, { useCallback, useMemo, useState } from "react";
+import React, { useCallback, useMemo } from "react";
 import { keepPreviousData } from "@tanstack/react-query";
-import { JsonParam, useQueryParam } from "use-query-params";
+import { JsonParam, StringParam, useQueryParam } from "use-query-params";
 import { Loader2 } from "lucide-react";
 import last from "lodash/last";
 import { Thread } from "@/types/traces";
+import { Filter } from "@/types/filters";
 import { useSMEFlow } from "../SMEFlowContext";
 import useTracesList from "@/api/traces/useTracesList";
 import TraceMessages from "@/components/pages-shared/traces/TraceMessages/TraceMessages";
@@ -20,10 +21,15 @@ const ThreadDataViewer: React.FunctionComponent = () => {
   const thread = currentItem as Thread;
   const nextThread = nextItem as Thread | undefined;
 
-  const [traceId, setTraceId] = useState<string>("");
-  const [spanId, setSpanId] = useState<string>("");
+  const [traceId = "", setTraceId] = useQueryParam("trace", StringParam, {
+    updateType: "replaceIn",
+  });
 
-  const [tracePanelFilters, setTracePanelFilters] = useQueryParam(
+  const [spanId = "", setSpanId] = useQueryParam("span", StringParam, {
+    updateType: "replaceIn",
+  });
+
+  const [, setTracePanelFilters] = useQueryParam(
     `trace_panel_filters`,
     JsonParam,
     {
@@ -87,42 +93,20 @@ const ThreadDataViewer: React.FunctionComponent = () => {
 
   const handleOpenTrace = useCallback(
     (id: string, shouldFilterToolCalls: boolean) => {
-      // Manage tool filter: add if shouldFilterToolCalls is true, remove if false
-      setTracePanelFilters(
-        manageToolFilter(tracePanelFilters, shouldFilterToolCalls),
+      setTracePanelFilters((previousFilters: Filter[] | null | undefined) =>
+        manageToolFilter(previousFilters, shouldFilterToolCalls),
       );
 
       setTraceId(id);
       setSpanId("");
     },
-    [tracePanelFilters, setTracePanelFilters],
+    [setTracePanelFilters, setTraceId, setSpanId],
   );
 
   const handleClose = useCallback(() => {
     setTraceId("");
     setSpanId("");
-    // Don't reset filters on close - maintain filter state
-  }, []);
-
-  const handleSetSpanId = useCallback(
-    (
-      updaterOrValue:
-        | string
-        | null
-        | undefined
-        | ((prev: string | null | undefined) => string | null | undefined),
-    ) => {
-      if (typeof updaterOrValue === "function") {
-        setSpanId((prev) => {
-          const newValue = updaterOrValue(prev);
-          return newValue ?? "";
-        });
-      } else {
-        setSpanId(updaterOrValue ?? "");
-      }
-    },
-    [],
-  );
+  }, [setTraceId, setSpanId]);
 
   return (
     <>
@@ -140,9 +124,9 @@ const ThreadDataViewer: React.FunctionComponent = () => {
       </div>
       <TraceDetailsPanel
         projectId={thread?.project_id || ""}
-        traceId={traceId}
-        spanId={spanId}
-        setSpanId={handleSetSpanId}
+        traceId={traceId ?? ""}
+        spanId={spanId ?? ""}
+        setSpanId={setSpanId}
         open={Boolean(traceId)}
         onClose={handleClose}
       />
