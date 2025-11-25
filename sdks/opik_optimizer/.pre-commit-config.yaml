@@ -63,3 +63,10 @@ repos:
         files: ^sdks/opik_optimizer
         exclude: '(\.ipynb$)|(\.json$)|(\.jsonl$)|(benchmark_results/)'
         args: ['--skip=*.ipynb,*.json,*.jsonl','--write-changes']
+
+  - repo: https://github.com/jendrikseipp/vulture
+    rev: v2.13
+    hooks:
+      - id: vulture
+        files: ^sdks/opik_optimizer
+        args: ['sdks/opik_optimizer/src', 'sdks/opik_optimizer/tests', 'sdks/opik_optimizer/scripts', 'sdks/opik_optimizer/benchmarks', '--min-confidence=80']
