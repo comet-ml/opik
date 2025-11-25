@@ -7,7 +7,7 @@ CREATE TABLE IF NOT EXISTS dataset_versions (
     dataset_id CHAR(36) NOT NULL,
     version_hash VARCHAR(64) NOT NULL,
     workspace_id VARCHAR(150) NOT NULL,
-    items_count INT DEFAULT 0,
+    items_total INT DEFAULT 0,
     items_added INT DEFAULT 0,
     items_modified INT DEFAULT 0,
     items_deleted INT DEFAULT 0,

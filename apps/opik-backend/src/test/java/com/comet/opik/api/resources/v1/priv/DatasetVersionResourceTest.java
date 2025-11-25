@@ -209,7 +209,7 @@ class DatasetVersionResourceTest {
             assertThat(version.createdBy()).isEqualTo(USER);
             assertThat(version.createdAt()).isNotNull();
             // TODO OPIK-3015: Assert on actual item counts once snapshot creation is implemented
-            assertThat(version.itemsCount()).isEqualTo(0);
+            assertThat(version.itemsTotal()).isEqualTo(0);
             assertThat(version.itemsAdded()).isEqualTo(0);
             assertThat(version.itemsModified()).isEqualTo(0);
             assertThat(version.itemsDeleted()).isEqualTo(0);

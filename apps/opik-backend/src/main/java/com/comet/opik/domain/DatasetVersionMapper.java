@@ -17,7 +17,7 @@ interface DatasetVersionMapper {
     @Mapping(target = "datasetId", source = "datasetId")
     @Mapping(target = "versionHash", source = "versionHash")
     @Mapping(target = "tags", ignore = true)
-    @Mapping(target = "itemsCount", source = "itemsCount")
+    @Mapping(target = "itemsTotal", source = "itemsTotal")
     @Mapping(target = "itemsAdded", source = "itemsAdded")
     @Mapping(target = "itemsModified", source = "itemsModified")
     @Mapping(target = "itemsDeleted", source = "itemsDeleted")
@@ -31,7 +31,7 @@ interface DatasetVersionMapper {
             UUID versionId,
             UUID datasetId,
             String versionHash,
-            int itemsCount,
+            int itemsTotal,
             int itemsAdded,
             int itemsModified,
             int itemsDeleted,

@@ -10,6 +10,7 @@ import lombok.Builder;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.util.SequencedSet;
 import java.util.UUID;
 
 @Builder(toBuilder = true)
@@ -19,8 +20,8 @@ public record DatasetVersion(
         @JsonView(DatasetVersion.View.Public.class) @Schema(accessMode = Schema.AccessMode.READ_ONLY) UUID id,
         @JsonView(DatasetVersion.View.Public.class) @Schema(accessMode = Schema.AccessMode.READ_ONLY) UUID datasetId,
         @JsonView(DatasetVersion.View.Public.class) @Schema(accessMode = Schema.AccessMode.READ_ONLY) String versionHash,
-        @JsonView(DatasetVersion.View.Public.class) @Schema(accessMode = Schema.AccessMode.READ_ONLY) List<String> tags,
-        @JsonView(DatasetVersion.View.Public.class) @Schema(accessMode = Schema.AccessMode.READ_ONLY, description = "Total number of items in this version") Integer itemsCount,
+        @JsonView(DatasetVersion.View.Public.class) @Schema(accessMode = Schema.AccessMode.READ_ONLY) SequencedSet<String> tags,
+        @JsonView(DatasetVersion.View.Public.class) @Schema(accessMode = Schema.AccessMode.READ_ONLY, description = "Total number of items in this version") Integer itemsTotal,
         @JsonView(DatasetVersion.View.Public.class) @Schema(accessMode = Schema.AccessMode.READ_ONLY, description = "Number of items added since last version") Integer itemsAdded,
         @JsonView(DatasetVersion.View.Public.class) @Schema(accessMode = Schema.AccessMode.READ_ONLY, description = "Number of items modified since last version") Integer itemsModified,
         @JsonView(DatasetVersion.View.Public.class) @Schema(accessMode = Schema.AccessMode.READ_ONLY, description = "Number of items deleted since last version") Integer itemsDeleted,

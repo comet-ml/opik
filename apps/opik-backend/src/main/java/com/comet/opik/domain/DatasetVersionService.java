@@ -154,25 +154,26 @@ class DatasetVersionServiceImpl implements DatasetVersionService {
         String workspaceId = requestContext.get().getWorkspaceId();
         String userName = requestContext.get().getUserName();
 
-        // TODO OPIK-3015: Calculate hash based on actual dataset items from ClickHouse
-        // For now, use timestamp-based hash as placeholder
-        String versionHash = DatabaseUtils.calculatePlaceholderVersionHash(datasetId);
-
         return template.inTransaction(WRITE, handle -> {
             var datasetVersionDAO = handle.attach(DatasetVersionDAO.class);
 
             // TODO OPIK-3015: Get actual item count and calculate diff stats from ClickHouse
             // For now, use placeholder values for metadata-only testing
-            int itemsCount = 0;
+            int itemsTotal = 0;
             int itemsAdded = 0;
             int itemsModified = 0;
             int itemsDeleted = 0;
+
+            // TODO OPIK-3015: Calculate hash based on actual dataset items from ClickHouse
+            // For now, use payload + counters + timestamp-based hash as placeholder
+            String versionHash = DatabaseUtils.calculatePlaceholderVersionHash(
+                    datasetId, request, itemsTotal, itemsAdded, itemsModified, itemsDeleted);
 
             // Create new version
             var versionId = idGenerator.generateId();
             var version = DatasetVersionMapper.INSTANCE.toDatasetVersion(
                     versionId, datasetId, versionHash,
-                    itemsCount, itemsAdded, itemsModified, itemsDeleted,
+                    itemsTotal, itemsAdded, itemsModified, itemsDeleted,
                     request, userName);
 
             EntityConstraintHandler.handle(() -> {
@@ -257,7 +258,7 @@ class DatasetVersionServiceImpl implements DatasetVersionService {
     @Override
     public void createTag(@NonNull UUID datasetId, @NonNull String versionHash,
             @NonNull DatasetVersionTag tagRequest) {
-        log.info("Creating tag '{}' for version '{}' of dataset: '{}'", tagRequest.tag(), versionHash, datasetId);
+        log.info("Creating tag, tag='{}', version='{}', dataset='{}'", tagRequest.tag(), versionHash, datasetId);
 
         String workspaceId = requestContext.get().getWorkspaceId();
         String userName = requestContext.get().getUserName();
@@ -280,12 +281,12 @@ class DatasetVersionServiceImpl implements DatasetVersionService {
             return null;
         });
 
-        log.info("Created tag '{}' for version '{}' of dataset: '{}'", tagRequest.tag(), versionHash, datasetId);
+        log.info("Created tag, tag='{}', version='{}', dataset='{}'", tagRequest.tag(), versionHash, datasetId);
     }
 
     @Override
     public void deleteTag(@NonNull UUID datasetId, @NonNull String tag) {
-        log.info("Deleting tag '{}' from dataset: '{}'", tag, datasetId);
+        log.info("Deleting tag, tag='{}', dataset='{}'", tag, datasetId);
 
         // Prevent deletion of 'latest' tag - it's managed automatically
         if (LATEST_TAG.equals(tag)) {
@@ -304,12 +305,12 @@ class DatasetVersionServiceImpl implements DatasetVersionService {
             return null;
         });
 
-        log.info("Deleted tag '{}' from dataset: '{}'", tag, datasetId);
+        log.info("Deleted tag, tag='{}', dataset='{}'", tag, datasetId);
     }
 
     @Override
     public UUID resolveVersionId(@NonNull UUID datasetId, @NonNull String hashOrTag) {
-        log.info("Resolving version ID for dataset: '{}', hashOrTag: '{}'", datasetId, hashOrTag);
+        log.info("Resolving version ID, hashOrTag='{}', dataset='{}'", hashOrTag, datasetId);
 
         String workspaceId = requestContext.get().getWorkspaceId();
 

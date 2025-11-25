@@ -1,5 +1,6 @@
 package com.comet.opik.infrastructure;
 
+import com.comet.opik.api.DatasetVersionCreate;
 import io.dropwizard.db.DataSourceFactory;
 import lombok.experimental.UtilityClass;
 import lombok.extern.slf4j.Slf4j;
@@ -35,12 +36,24 @@ public class DatabaseUtils {
      * TODO OPIK-3015: Replace with actual content-based hash from dataset items.
      *
      * @param datasetId the dataset identifier
+     * @param request the version creation request containing metadata
+     * @param itemsTotal total number of items in the version
+     * @param itemsAdded number of items added
+     * @param itemsModified number of items modified
+     * @param itemsDeleted number of items deleted
      * @return a hex string hash (first 16 characters of SHA-256)
      */
-    public static String calculatePlaceholderVersionHash(UUID datasetId) {
+    public static String calculatePlaceholderVersionHash(UUID datasetId, DatasetVersionCreate request,
+            int itemsTotal, int itemsAdded, int itemsModified, int itemsDeleted) {
         try {
-            // Use timestamp + dataset ID for unique hash per commit
-            String input = datasetId.toString() + ":" + System.currentTimeMillis();
+            // Use dataset ID + request payload + counters + timestamp for unique hash per commit
+            // This prevents unexpected collisions until we have actual content-based hashing
+            String input = datasetId.toString() + ":" +
+                    (request.tag() != null ? request.tag() : "") + ":" +
+                    (request.changeDescription() != null ? request.changeDescription() : "") + ":" +
+                    (request.metadata() != null ? request.metadata().toString() : "") + ":" +
+                    itemsTotal + ":" + itemsAdded + ":" + itemsModified + ":" + itemsDeleted + ":" +
+                    System.currentTimeMillis();
             MessageDigest digest = MessageDigest.getInstance("SHA-256");
             byte[] hashBytes = digest.digest(input.getBytes(StandardCharsets.UTF_8));
 
