@@ -1,5 +1,5 @@
 --liquibase formatted sql
---changeset idoberko2:000032_add_dataset_versions_tables
+--changeset idoberko2:000036_add_dataset_versions_tables
 --comment: Create dataset_versions and dataset_version_tags tables for Git-like versioning
 
 CREATE TABLE IF NOT EXISTS dataset_versions (
