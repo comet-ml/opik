@@ -241,6 +241,7 @@ const ExportAnnotatedDataButton: React.FC<ExportAnnotatedDataButtonProps> = ({
     async (
       exportFn: (data: Array<ExportTraceData | ExportThreadData>) => void,
     ) => {
+      if (disabled || !isExportEnabled) return;
       setLoading(true);
       try {
         const data = await getData();
@@ -270,7 +271,7 @@ const ExportAnnotatedDataButton: React.FC<ExportAnnotatedDataButtonProps> = ({
         setLoading(false);
       }
     },
-    [getData, toast],
+    [getData, toast, disabled, isExportEnabled],
   );
 
   const exportCSVHandler = useCallback(() => {
