@@ -115,7 +115,14 @@ class BaseOptimizer(ABC):
     def _tag_trace(
         self, phase: str | None = "Evaluation", extra_tags: Sequence[str] | None = None
     ) -> None:
-        """Update the active trace with standard optimizer tags when available."""
+        """
+        Update the active trace with standard optimizer tags when available.
+
+        Args:
+            phase: The current phase of the optimization (e.g., "Evaluation"). Optional.
+            extra_tags: Additional tags to add to the trace. Should be a sequence of strings,
+                or None. These tags will be appended to the standard optimizer tags.
+        """
         if not self.current_optimization_id:
             return
 
