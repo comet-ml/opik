@@ -5,27 +5,28 @@ This module contains functions for generating and sanitizing candidate prompts.
 """
 
 import ast
-from typing import Any
-from collections.abc import Callable
-import logging
 import json
-import random
+import logging
+from collections.abc import Callable
+from typing import Any
 
-from ....api_objects import chat_prompt
+from litellm.exceptions import BadRequestError
+
 from .... import _llm_calls
+from ...._llm_calls import StructuredOutputParsingError
+from ....api_objects import chat_prompt
 from ....base_optimizer import OptimizationRound
+from ....utils import rng as rng_utils
 from ....utils.prompt_segments import (
-    extract_prompt_segments,
     apply_segment_updates,
-)
-from ..prompts import (
-    build_reasoning_system_prompt,
-    build_candidate_generation_user_prompt,
-    build_mcp_tool_description_user_prompt,
+    extract_prompt_segments,
 )
 from .. import reporting
-from litellm.exceptions import BadRequestError
-from ...._llm_calls import StructuredOutputParsingError
+from ..prompts import (
+    build_candidate_generation_user_prompt,
+    build_mcp_tool_description_user_prompt,
+    build_reasoning_system_prompt,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -212,8 +213,9 @@ def generate_candidate_prompts(
         logger.debug(f"Current best score: {best_score:.4f}")
 
         # Prepare pattern injection guidance
+        candidate_rng = optimizer._derive_rng("candidate_generation", round_num)
         pattern_guidance = ""
-        if winning_patterns and random.random() < optimizer.pattern_injection_rate:
+        if winning_patterns and candidate_rng.random() < optimizer.pattern_injection_rate:
             pattern_guidance = "WINNING PATTERNS TO CONSIDER:\n"
             pattern_guidance += (
                 "The following patterns have been successful in high-scoring prompts:\n"
