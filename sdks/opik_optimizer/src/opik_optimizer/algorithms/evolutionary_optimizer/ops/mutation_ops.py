@@ -137,6 +137,7 @@ def _structural_mutation(
                         msg_content=content,
                         model=model,
                         model_parameters=model_parameters,
+                        rng=rng,
                     ),
                 }
             )
