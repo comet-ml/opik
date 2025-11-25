@@ -1,5 +1,6 @@
 from typing import Any
 from collections.abc import Callable
+from dataclasses import dataclass
 
 import copy
 import json
@@ -30,6 +31,26 @@ class FewShotPromptTemplate(BaseModel):
     example_template: str
 
 
+@dataclass(frozen=True)
+class ColumnarSearchSpace:
+    columns: list[str]
+    combo_labels: list[str]
+    combo_to_indices: dict[str, list[int]]
+    max_group_size: int
+
+    @property
+    def is_enabled(self) -> bool:
+        return bool(self.combo_labels)
+
+    def select_index(self, combo_label: str, member_index: int) -> int:
+        indices = self.combo_to_indices.get(combo_label)
+        if not indices:
+            raise ValueError(f"Unknown combo label requested: {combo_label}")
+        if len(indices) == 1:
+            return indices[0]
+        return indices[member_index % len(indices)]
+
+
 class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
     """
     Few-Shot Bayesian Optimizer that adds few-shot examples to prompts using Bayesian optimization.
@@ -52,7 +73,12 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         n_threads: Number of threads for parallel evaluation
         verbose: Controls internal logging/progress bars (0=off, 1=on)
         seed: Random seed for reproducibility
+        enable_columnar_selection: Toggle column-aware example grouping (categorical Optuna params)
     """
+
+    _MAX_UNIQUE_COLUMN_VALUES = 25
+    _MAX_COLUMN_VALUE_LENGTH = 120
+    _MISSING_VALUE_SENTINEL = "<missing>"
 
     def __init__(
         self,
@@ -64,6 +90,8 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         verbose: int = 1,
         seed: int = 42,
         name: str | None = None,
+        enable_columnar_selection: bool = True,
+        enable_diversity: bool = True,
     ) -> None:
         super().__init__(
             model, verbose, seed=seed, model_parameters=model_parameters, name=name
@@ -72,6 +100,8 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         self.max_examples = max_examples
         self.seed = seed
         self.n_threads = n_threads
+        self.enable_columnar_selection = enable_columnar_selection
+        self.enable_diversity = enable_diversity
         if self.verbose == 0:
             logger.setLevel(logging.WARNING)
         elif self.verbose == 1:
@@ -85,6 +115,8 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         return {
             "min_examples": self.min_examples,
             "max_examples": self.max_examples,
+            "enable_columnar_selection": self.enable_columnar_selection,
+            "enable_diversity": self.enable_diversity,
         }
 
     def _split_dataset(
@@ -170,6 +202,165 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             )
             raise
 
+    def _stringify_column_value(self, value: Any) -> str | None:
+        """Convert a dataset value to a string suitable for column grouping."""
+        if value is None:
+            return self._MISSING_VALUE_SENTINEL
+        if isinstance(value, (list, dict)):
+            return None
+        text = str(value)
+        if len(text) > self._MAX_COLUMN_VALUE_LENGTH:
+            return None
+        return text
+
+    def _build_columnar_search_space(
+        self, dataset_items: list[dict[str, Any]]
+    ) -> ColumnarSearchSpace:
+        """
+        Infer a lightweight columnar index so Optuna can learn over categorical fields.
+
+        We only keep columns that repeat across rows (avoid high-cardinality text) and
+        cap unique values to keep the search space manageable.
+        """
+        if not dataset_items:
+            return ColumnarSearchSpace([], [], {}, 0)
+
+        candidate_columns: list[str] = []
+        for key in dataset_items[0]:
+            if key == "id":
+                continue
+
+            unique_values: set[str] = set()
+            skip_column = False
+            for item in dataset_items:
+                if key not in item:
+                    skip_column = True
+                    break
+                str_value = self._stringify_column_value(item.get(key))
+                if str_value is None:
+                    skip_column = True
+                    break
+                unique_values.add(str_value)
+                if len(unique_values) > self._MAX_UNIQUE_COLUMN_VALUES:
+                    skip_column = True
+                    break
+
+            if skip_column:
+                continue
+
+            if len(unique_values) < 2 or len(unique_values) >= len(dataset_items):
+                continue
+
+            candidate_columns.append(key)
+
+        if not candidate_columns:
+            return ColumnarSearchSpace([], [], {}, 0)
+
+        combo_to_indices: dict[str, list[int]] = {}
+        for idx, item in enumerate(dataset_items):
+            combo_parts: list[str] = []
+            skip_example = False
+            for column in candidate_columns:
+                str_value = self._stringify_column_value(item.get(column))
+                if str_value is None:
+                    skip_example = True
+                    break
+                combo_parts.append(f"{column}={str_value}")
+
+            if skip_example:
+                continue
+
+            combo_label = "|".join(combo_parts)
+            combo_to_indices.setdefault(combo_label, []).append(idx)
+
+        if not combo_to_indices:
+            return ColumnarSearchSpace([], [], {}, 0)
+
+        max_group_size = max(len(indices) for indices in combo_to_indices.values())
+        combo_labels = sorted(combo_to_indices.keys())
+        return ColumnarSearchSpace(
+            columns=candidate_columns,
+            combo_labels=combo_labels,
+            combo_to_indices=combo_to_indices,
+            max_group_size=max_group_size,
+        )
+
+    def _suggest_example_index(
+        self,
+        trial: optuna.Trial,
+        example_position: int,
+        dataset_size: int,
+        columnar_space: ColumnarSearchSpace,
+        selected_indices: set[int],
+    ) -> tuple[int, dict[str, Any] | None]:
+        """
+        Suggest an example index for the given trial, optionally using column-aware combos.
+        """
+        if not columnar_space.is_enabled:
+            index = trial.suggest_categorical(
+                f"example_{example_position}", list(range(dataset_size))
+            )
+            adjusted_index = self._apply_diversity_adjustment(
+                resolved_index=index,
+                selected_indices=selected_indices,
+                dataset_size=dataset_size,
+                combo_candidates=None,
+            )
+            return adjusted_index, None
+
+        combo_label = trial.suggest_categorical(
+            f"example_{example_position}_combo", columnar_space.combo_labels
+        )
+        member_upper_bound = max(columnar_space.max_group_size - 1, 0)
+        member_index = trial.suggest_int(
+            f"example_{example_position}_member", 0, member_upper_bound
+        )
+        resolved_index = columnar_space.select_index(combo_label, member_index)
+        adjusted_index = self._apply_diversity_adjustment(
+            resolved_index=resolved_index,
+            selected_indices=selected_indices,
+            dataset_size=dataset_size,
+            combo_candidates=columnar_space.combo_to_indices.get(combo_label, []),
+            start_offset=member_index,
+        )
+        diversity_adjusted = adjusted_index != resolved_index
+        return adjusted_index, {
+            "combo": combo_label,
+            "member_index": member_index,
+            "resolved_index": adjusted_index,
+            "diversity_adjusted": diversity_adjusted,
+        }
+
+    def _apply_diversity_adjustment(
+        self,
+        *,
+        resolved_index: int,
+        selected_indices: set[int],
+        dataset_size: int,
+        combo_candidates: list[int] | None = None,
+        start_offset: int = 0,
+    ) -> int:
+        """
+        Encourage within-trial diversity by steering away from already selected indices.
+        """
+        if not self.enable_diversity or resolved_index not in selected_indices:
+            return resolved_index
+
+        if combo_candidates:
+            for offset in range(len(combo_candidates)):
+                candidate = combo_candidates[
+                    (start_offset + offset) % len(combo_candidates)
+                ]
+                if candidate not in selected_indices:
+                    return candidate
+
+        for offset in range(dataset_size):
+            candidate = (resolved_index + offset) % dataset_size
+            if candidate not in selected_indices:
+                return candidate
+
+        return resolved_index
+
     def _run_optimization(
         self,
         prompt: chat_prompt.ChatPrompt,
@@ -193,6 +384,16 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         )
 
         dataset_items = dataset.get_items()
+        columnar_search_space = (
+            self._build_columnar_search_space(dataset_items)
+            if self.enable_columnar_selection
+            else ColumnarSearchSpace([], [], {}, 0)
+        )
+        if columnar_search_space.is_enabled:
+            logger.debug(
+                "Column-aware search enabled with columns: %s",
+                columnar_search_space.columns,
+            )
 
         eval_dataset_items = evaluation_dataset.get_items()
         eval_dataset_item_ids = [item["id"] for item in eval_dataset_items]
@@ -220,13 +421,24 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             n_examples = trial.suggest_int(
                 "n_examples", self.min_examples, self.max_examples
             )
-            example_indices = [
-                trial.suggest_categorical(
-                    f"example_{i}", list(range(len(dataset_items)))
+            example_indices: list[int] = []
+            columnar_choices: list[dict[str, Any]] = []
+            selected_indices: set[int] = set()
+            for i in range(n_examples):
+                selected_index, column_choice = self._suggest_example_index(
+                    trial=trial,
+                    example_position=i,
+                    dataset_size=len(dataset_items),
+                    columnar_space=columnar_search_space,
+                    selected_indices=selected_indices,
                 )
-                for i in range(n_examples)
-            ]
+                example_indices.append(selected_index)
+                selected_indices.add(selected_index)
+                if column_choice:
+                    columnar_choices.append(column_choice)
             trial.set_user_attr("example_indices", example_indices)
+            if columnar_choices:
+                trial.set_user_attr("columnar_choices", columnar_choices)
 
             # Process few shot examples
             demo_examples = [dataset_items[idx] for idx in example_indices]
@@ -307,6 +519,8 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
                 "message_list_with_placeholder": fewshot_prompt_template.message_list_with_placeholder,
                 "message_list": messages_for_reporting,
             }
+            if columnar_choices:
+                trial_config["columnar_choices"] = columnar_choices
             trial.set_user_attr("score", score)
             trial.set_user_attr("config", trial_config)
             return score
@@ -589,7 +803,9 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
 
             all_ids = [dataset_item["id"] for dataset_item in dataset.get_items()]
             n_samples = min(n_samples, len(all_ids))
-            dataset_item_ids = random.sample(all_ids, n_samples)
+            # FIXME: Use a centralized RNG function with seed and sampler across all optimizers
+            rng = random.Random(self.seed)
+            dataset_item_ids = rng.sample(all_ids, n_samples)
 
         configuration_updates = helpers.drop_none(
             {
@@ -657,8 +873,13 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
 
             # Add tags to trace for optimization tracking
             if self.current_optimization_id:
+                optimizer_short_name = self._get_optimizer_short_name()
                 opik_context.update_current_trace(
-                    tags=[self.current_optimization_id, "Evaluation"]
+                    tags=[
+                        optimizer_short_name,
+                        self.current_optimization_id,
+                        "Evaluation",
+                    ]
                 )
 
             return {"llm_output": result}
