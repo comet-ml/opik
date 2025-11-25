@@ -19,14 +19,14 @@ repos:
       - id: check-case-conflict
 
   - repo: https://github.com/asottile/pyupgrade
-    rev: v3.21.1
+    rev: v3.21.2
     hooks:
       - id: pyupgrade
         args: [--py310-plus]
         files: ^sdks/opik_optimizer
 
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.14.5
+    rev: v0.14.6
     hooks:
       - id: ruff
         args: [ --fix, --show-fixes]
@@ -44,20 +44,20 @@ repos:
         additional_dependencies: [types-requests, pytest, pyrate_limiter, modal]
 
   - repo: https://github.com/kynan/nbstripout
-    rev: 0.6.1
+    rev: 0.8.2
     hooks:
       - id: nbstripout
         files: ^sdks/opik_optimizer/.*\.ipynb$
 
   - repo: https://github.com/igorshubovych/markdownlint-cli
-    rev: v0.38.0
+    rev: v0.46.0
     hooks:
       - id: markdownlint
         files: ^sdks/opik_optimizer/.*\.md$
         args: ['--disable=MD013', '--disable=MD033']
 
   - repo: https://github.com/codespell-project/codespell
-    rev: v2.2.6
+    rev: v2.4.1
     hooks:
       - id: codespell
         files: ^sdks/opik_optimizer
@@ -65,7 +65,7 @@ repos:
         args: ['--skip=*.ipynb,*.json,*.jsonl','--write-changes']
 
   - repo: https://github.com/jendrikseipp/vulture
-    rev: v2.13
+    rev: v2.14
     hooks:
       - id: vulture
         files: ^sdks/opik_optimizer
