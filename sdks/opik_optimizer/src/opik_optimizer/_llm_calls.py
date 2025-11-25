@@ -128,8 +128,22 @@ def _prepare_model_params(
     # Merge optimizer's model_parameters with call-time overrides
     merged_params = {**model_parameters, **call_time_params}
 
-    # Add Opik monitoring wrapper
-    final_params = opik_litellm_monitor.try_add_opik_monitoring_to_params(merged_params)
+    # Add Opik monitoring wrapper unless tracing is disabled or API key is missing.
+    # FIXME: Tracing without a valid API key is not supported by Opik; we skip attaching
+    # the monitor to avoid 401/402s. To enable tracing locally, set OPIK_API_KEY (and
+    # OPIK_BASE_URL/OPIK_WORKSPACE if using a non-default host). Otherwise set
+    # OPIK_TRACK_DISABLE=true to silence tracing.
+    tracing_disabled = os.getenv("OPIK_TRACK_DISABLE", "false").lower() == "true"
+    api_key_present = bool(os.getenv("OPIK_API_KEY"))
+    if tracing_disabled or not api_key_present:
+        final_params = merged_params.copy()
+    else:
+        try:
+            final_params = opik_litellm_monitor.try_add_opik_monitoring_to_params(
+                merged_params
+            )
+        except Exception:
+            final_params = merged_params.copy()
 
     # Add reasoning metadata if applicable
     if is_reasoning and "metadata" in final_params:
