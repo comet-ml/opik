@@ -39,6 +39,7 @@ class InlineExecutor:
     def shutdown(
         self, wait: bool = True, _cancel_futures: bool = False
     ) -> None:  # pragma: no cover - trivial
+        _ = _cancel_futures
         return None
 
 

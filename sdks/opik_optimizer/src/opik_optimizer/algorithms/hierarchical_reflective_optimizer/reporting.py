@@ -548,7 +548,7 @@ def display_batch_synthesis(num_batches: int, verbose: int = 1) -> Iterator[Any]
         )
 
     class Reporter:
-        def set_completed(self, num_unified_modes: int) -> None:
+        def set_completed(self, _num_unified_modes: int) -> None:
             # No completion message needed - failure modes will be displayed next
             pass
 

@@ -10,7 +10,7 @@ from opik import opik_context
 import copy
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
-    from .. import evolutionary_optimizer
+    from .. import evolutionary_optimizer  # noqa: F401
 
 
 def evaluate_prompt(

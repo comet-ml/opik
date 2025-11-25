@@ -171,7 +171,10 @@ def test_fewshot_optimizer_metadata_exposes_bounds() -> None:
         max_examples=7,
     )
     metadata = optimizer.get_optimizer_metadata()
-    assert metadata == {"min_examples": 2, "max_examples": 7}
+    assert metadata == {
+        "min_examples": 2,
+        "max_examples": 7,
+    }
 
 
 def test_evolutionary_optimizer_metadata_includes_core_params() -> None:

@@ -34,6 +34,7 @@ class InlineExecutor:
         return fut
 
     def shutdown(self, wait: bool = True, _cancel_futures: bool = False) -> None:
+        _ = _cancel_futures
         return None
 
 
