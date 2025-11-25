@@ -948,11 +948,22 @@ class MetaPromptOptimizer(BaseOptimizer):
         improvement_this_round: float,
     ) -> OptimizationRound:
         """Create an OptimizationRound object with the current round's data (delegates to ops)."""
+        # For bundles, use a representative ChatPrompt to keep validation happy.
+        current_prompt_repr = (
+            next(iter(current_best_prompt.values()))
+            if isinstance(current_best_prompt, dict) and current_best_prompt
+            else current_best_prompt
+        )
+        best_prompt_repr = (
+            next(iter(best_prompt_overall.values()))
+            if isinstance(best_prompt_overall, dict) and best_prompt_overall
+            else best_prompt_overall
+        )
         return result_ops.create_round_data(
             round_num=round_num,
-            current_best_prompt=current_best_prompt,
+            current_best_prompt=current_prompt_repr,
             current_best_score=current_best_score,
-            best_prompt_overall=best_prompt_overall,
+            best_prompt_overall=best_prompt_repr,
             evaluated_candidates=evaluated_candidates,
             previous_best_score=previous_best_score,
             improvement_this_round=improvement_this_round,
