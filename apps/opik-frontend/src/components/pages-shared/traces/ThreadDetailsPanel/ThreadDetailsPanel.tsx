@@ -258,7 +258,15 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
       if (!thread) return;
 
       const mappedData = await mapRowDataForExport([thread], exportColumns);
-      const csv = json2csv(mappedData);
+
+      const dataWithConversationHistory = [
+        {
+          ...mappedData[0],
+          conversation_history: JSON.stringify(traces),
+        },
+      ];
+
+      const csv = json2csv(dataWithConversationHistory);
       const fileName = `${threadId}-thread.csv`;
       const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
       FileSaver.saveAs(blob, fileName);
@@ -274,17 +282,29 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
         variant: "destructive",
       });
     }
-  }, [thread, threadId, exportColumns]);
+  }, [thread, threadId, exportColumns, traces]);
 
   const handleExportJSON = useCallback(async () => {
     try {
       if (!thread) return;
 
-      const mappedData = await mapRowDataForExport([thread], exportColumns);
+      const mappedThreadData = await mapRowDataForExport(
+        [thread],
+        exportColumns,
+      );
+
+      const dataWithConversationHistory = {
+        ...mappedThreadData[0],
+        conversation_history: traces,
+      };
+
       const fileName = `${threadId}-thread.json`;
-      const blob = new Blob([JSON.stringify(mappedData[0], null, 2)], {
-        type: "application/json;charset=utf-8",
-      });
+      const blob = new Blob(
+        [JSON.stringify(dataWithConversationHistory, null, 2)],
+        {
+          type: "application/json;charset=utf-8",
+        },
+      );
       FileSaver.saveAs(blob, fileName);
 
       toast({
@@ -298,7 +318,7 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
         variant: "destructive",
       });
     }
-  }, [thread, threadId, exportColumns]);
+  }, [thread, threadId, exportColumns, traces]);
 
   const horizontalNavigation = useMemo(
     () =>
