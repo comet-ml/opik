@@ -1,7 +1,7 @@
 """
-HotpotQA Multi-Hop Benchmark (GEPA-style)
+HotpotQA Multi-Hop Benchmark
 
-Implements the compound AI system approach for apples-to-apples comparison with GEPA/Arize:
+Implements the compound AI system approach for apples-to-apples comparison with academia:
 - Multi-hop retrieval with Wikipedia search
 - Multiple optimizable prompts in pipeline
 - Matches the complexity of the GEPA paper's HotpotQA setup
