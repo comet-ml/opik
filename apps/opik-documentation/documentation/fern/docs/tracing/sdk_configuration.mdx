@@ -112,7 +112,9 @@ Both SDKs support environment variables for configuration. Here's a comparison o
 | TLS Certificate  | `OPIK_CHECK_TLS_CERTIFICATE` | N/A                     | Check TLS certificates (Python only)           |
 | Batch Delay      | N/A                          | `OPIK_BATCH_DELAY_MS`   | Batching delay in ms (TypeScript only)         |
 | Hold Until Flush | N/A                          | `OPIK_HOLD_UNTIL_FLUSH` | Hold data until manual flush (TypeScript only) |
-| Log Level        | `OPIK_FILE_LOGGING_LEVEL`    | `OPIK_LOG_LEVEL`        | Logging level                                  |
+| Console Log Level| `OPIK_CONSOLE_LOGGING_LEVEL` | N/A                     | Console log level (Python only)                |
+| File Log Level   | `OPIK_FILE_LOGGING_LEVEL`    | N/A                     | File log level (Python only)                   |
+| Log Level        | N/A                          | `OPIK_LOG_LEVEL`        | Logging level (TypeScript only)                |
 
 ### Using .env Files
 
@@ -138,9 +140,10 @@ OPIK_WORKSPACE="your-workspace-name"
 # LLM Provider API Keys (if needed)
 OPENAI_API_KEY="YOUR_OPENAI_API_KEY"
 
-# Debug Mode (see Debug Mode section below)
-OPIK_FILE_LOGGING_LEVEL="DEBUG"  # Python
-OPIK_LOG_LEVEL="DEBUG"           # TypeScript
+# Logging Configuration (see Debug Mode and Logging section below)
+OPIK_CONSOLE_LOGGING_LEVEL="WARNING"  # Python: Control console output (DEBUG, INFO, WARNING, ERROR, CRITICAL)
+OPIK_FILE_LOGGING_LEVEL="DEBUG"       # Python: Enable file logging
+OPIK_LOG_LEVEL="DEBUG"                # TypeScript: Control log level
 ```
 
 **Python usage with .env file:**
@@ -237,9 +240,46 @@ project_name = <Project Name>
 
 Both SDKs provide debug capabilities for troubleshooting integration issues.
 
-### Python SDK Debug Mode
+### Python SDK Logging
 
-To enable debug mode for the Python SDK, set these environment variables _before_ importing `opik`:
+The Python SDK provides two separate logging channels that can be configured independently:
+
+- **Console Logging**: Controls log output to the console (stdout/stderr)
+- **File Logging**: Controls log output to a file
+
+Both channels support the following log levels: `DEBUG`, `INFO` (default), `WARNING`, `ERROR`, `CRITICAL`
+
+#### Controlling Console Logging
+
+To control the console log level, set the `OPIK_CONSOLE_LOGGING_LEVEL` environment variable _before_ importing `opik`:
+
+```shell
+# Reduce console output to warnings and errors only
+export OPIK_CONSOLE_LOGGING_LEVEL="WARNING"
+```
+
+**Available log levels for console:**
+
+- `DEBUG`: Show all debug information
+- `INFO`: Show informational messages (default)
+- `WARNING`: Show only warnings and errors
+- `ERROR`: Show only errors and critical messages
+- `CRITICAL`: Show only critical errors
+
+**Using with .env file:**
+
+```dotenv
+# Console Logging (reduce noise)
+OPIK_CONSOLE_LOGGING_LEVEL="WARNING"
+```
+
+<Note>
+  The Opik SDK manages its own logging configuration. Setting log levels through Python's standard `logging.getLogger("opik").setLevel()` will not work. Always use the `OPIK_CONSOLE_LOGGING_LEVEL` environment variable to control console output.
+</Note>
+
+#### Enabling File Logging for Debug
+
+To enable debug mode with file logging, set these environment variables _before_ importing `opik`:
 
 ```shell
 export OPIK_FILE_LOGGING_LEVEL="DEBUG"
@@ -249,7 +289,20 @@ export OPIK_LOGGING_FILE=".tmp/opik-debug-$(date +%Y%m%d).log"
 **Using with .env file:**
 
 ```dotenv
-# Debug Mode
+# File Logging (for debug)
+OPIK_FILE_LOGGING_LEVEL="DEBUG"
+OPIK_LOGGING_FILE=".tmp/opik-debug.log"
+```
+
+**Example combining both console and file logging:**
+
+```dotenv
+# Opik Logging Configuration
+
+# Console: Show only warnings and errors
+OPIK_CONSOLE_LOGGING_LEVEL="WARNING"
+
+# File: Log everything for debugging
 OPIK_FILE_LOGGING_LEVEL="DEBUG"
 OPIK_LOGGING_FILE=".tmp/opik-debug.log"
 ```
@@ -263,7 +316,7 @@ load_dotenv()  # Load before importing opik
 
 import opik
 
-# Your Opik code here
+# Your Opik code here - console will be quiet, debug logs go to file
 ```
 
 ### TypeScript SDK Debug Mode
