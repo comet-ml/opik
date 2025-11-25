@@ -1124,14 +1124,14 @@ class RawTracesClient:
         raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
 
     def find_trace_threads_feedback_score_names(
-        self, *, project_id: str, request_options: typing.Optional[RequestOptions] = None
+        self, *, project_id: typing.Optional[str] = None, request_options: typing.Optional[RequestOptions] = None
     ) -> HttpResponse[typing.List[str]]:
         """
         Find Trace Threads Feedback Score names
 
         Parameters
         ----------
-        project_id : str
+        project_id : typing.Optional[str]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -3115,14 +3115,14 @@ class AsyncRawTracesClient:
         raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
 
     async def find_trace_threads_feedback_score_names(
-        self, *, project_id: str, request_options: typing.Optional[RequestOptions] = None
+        self, *, project_id: typing.Optional[str] = None, request_options: typing.Optional[RequestOptions] = None
     ) -> AsyncHttpResponse[typing.List[str]]:
         """
         Find Trace Threads Feedback Score names
 
         Parameters
         ----------
-        project_id : str
+        project_id : typing.Optional[str]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.

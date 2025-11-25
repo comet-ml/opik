@@ -1679,24 +1679,25 @@ export class Traces {
      * @param {Traces.RequestOptions} requestOptions - Request-specific configuration.
      *
      * @example
-     *     await client.traces.findTraceThreadsFeedbackScoreNames({
-     *         projectId: "project_id"
-     *     })
+     *     await client.traces.findTraceThreadsFeedbackScoreNames()
      */
     public findTraceThreadsFeedbackScoreNames(
-        request: OpikApi.FindTraceThreadsFeedbackScoreNamesRequest,
+        request: OpikApi.FindTraceThreadsFeedbackScoreNamesRequest = {},
         requestOptions?: Traces.RequestOptions,
     ): core.HttpResponsePromise<string[]> {
         return core.HttpResponsePromise.fromPromise(this.__findTraceThreadsFeedbackScoreNames(request, requestOptions));
     }
 
     private async __findTraceThreadsFeedbackScoreNames(
-        request: OpikApi.FindTraceThreadsFeedbackScoreNamesRequest,
+        request: OpikApi.FindTraceThreadsFeedbackScoreNamesRequest = {},
         requestOptions?: Traces.RequestOptions,
     ): Promise<core.WithRawResponse<string[]>> {
         const { projectId } = request;
         const _queryParams: Record<string, string | string[] | object | object[] | null> = {};
-        _queryParams["project_id"] = projectId;
+        if (projectId != null) {
+            _queryParams["project_id"] = projectId;
+        }
+
         const _response = await core.fetcher({
             url: urlJoin(
                 (await core.Supplier.get(this._options.baseUrl)) ??
