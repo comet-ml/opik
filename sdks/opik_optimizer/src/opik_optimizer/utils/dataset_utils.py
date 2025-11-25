@@ -327,12 +327,10 @@ def resolve_slice_request(
     """Resolve a user request into a concrete HF slice definition."""
     normalized_split = (requested_split or default_source_split).lower()
     normalized_split = _SPLIT_ALIASES.get(normalized_split, normalized_split)
-    preset = presets.get(normalized_split)
-    if requested_split is None and not prefer_presets:
-        preset = None
+    preset = presets.get(normalized_split) if prefer_presets else None
 
     source_split = _resolve_slice_field(
-        explicit=None if prefer_presets else requested_split,
+        explicit=requested_split,
         preset=preset,
         preset_key="source_split",
         default=default_source_split,
@@ -440,7 +438,12 @@ def load_hf_dataset_slice(
     ensuring callers can deterministically reproduce any slice by setting a
     global env var or passing ``seed=...`` explicitly.
     """
-    use_presets = prefer_presets if prefer_presets is not None else True
+    overrides_provided = any(
+        value is not None for value in (requested_split, start, count, dataset_name)
+    )
+    use_presets = (
+        prefer_presets if prefer_presets is not None else not overrides_provided
+    )
     effective_count = resolve_test_mode_count(test_mode_count) if test_mode else count
     slice_request = resolve_slice_request(
         base_name=base_name,
@@ -554,7 +557,14 @@ class DatasetHandle:
         so callers can fully reproduce slices by passing ``seed`` all the way
         through the public API.
         """
-        pref = self.spec.prefer_presets if prefer_presets is None else prefer_presets
+        overrides_provided = any(
+            value is not None for value in (split, start, count, dataset_name)
+        )
+        if prefer_presets is not None:
+            pref = prefer_presets
+        else:
+            # Only lean on spec preference when caller didn't pass overrides.
+            pref = self.spec.prefer_presets if not overrides_provided else None
 
         return load_hf_dataset_slice(
             base_name=self.spec.name,
