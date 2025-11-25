@@ -145,6 +145,9 @@ class BaseOptimizer(ABC):
             import opik
 
             self._opik_client = opik.Opik()
+            logger.debug(
+                f"Opik client initialized with project name: {self.project_name}"
+            )
         return self._opik_client
 
     def _validate_optimization_inputs(
