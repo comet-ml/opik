@@ -10,7 +10,6 @@ import logging
 import random
 
 import opik
-from opik import opik_context
 
 from ....api_objects import chat_prompt
 from .... import task_evaluator, helpers
@@ -175,13 +174,7 @@ def evaluate_prompt(
             cleaned_model_output = raw_model_output.strip()
 
         # Add tags to trace for optimization tracking
-        if optimizer.current_optimization_id:
-            opik_context.update_current_trace(
-                tags=[
-                    optimizer.current_optimization_id,
-                    "Evaluation",
-                ]
-            )
+        optimizer._tag_trace()
 
         result = {
             "llm_output": cleaned_model_output,
