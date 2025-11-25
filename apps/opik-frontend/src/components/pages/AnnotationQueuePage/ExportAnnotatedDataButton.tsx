@@ -329,39 +329,49 @@ const ExportAnnotatedDataButton: React.FC<ExportAnnotatedDataButtonProps> = ({
     ? "Export functionality is disabled for this installation"
     : "Export annotated data";
 
+  const isButtonDisabled = disabled || loading || !isExportEnabled;
+
+  const buttonElement = (
+    <Button variant="outline" size="sm" disabled={isButtonDisabled}>
+      {loading ? (
+        <Loader2 className="mr-1.5 size-3.5 animate-spin" />
+      ) : (
+        <Download className="mr-1.5 size-3.5" />
+      )}
+      Export queue
+    </Button>
+  );
+
   return (
-    <TooltipWrapper content={tooltipContent}>
-      <DropdownMenu open={open} onOpenChange={handleOpenChange}>
-        <DropdownMenuTrigger asChild>
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={disabled || loading || !isExportEnabled}
-          >
-            {loading ? (
-              <Loader2 className="mr-1.5 size-3.5 animate-spin" />
-            ) : (
-              <Download className="mr-1.5 size-3.5" />
-            )}
-            Export queue
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" className="w-52">
-          <DropdownMenuItem
-            onClick={exportCSVHandler}
-            disabled={disabled || loading || !isExportEnabled}
-          >
-            As CSV
-          </DropdownMenuItem>
-          <DropdownMenuItem
-            onClick={exportJSONHandler}
-            disabled={disabled || loading || !isExportEnabled}
-          >
-            As JSON
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
-    </TooltipWrapper>
+    <DropdownMenu open={open} onOpenChange={handleOpenChange}>
+      {isButtonDisabled && !isExportEnabled ? (
+        <TooltipWrapper content={tooltipContent}>
+          <DropdownMenuTrigger asChild>
+            <span className="inline-block cursor-not-allowed">
+              {buttonElement}
+            </span>
+          </DropdownMenuTrigger>
+        </TooltipWrapper>
+      ) : (
+        <TooltipWrapper content={tooltipContent}>
+          <DropdownMenuTrigger asChild>{buttonElement}</DropdownMenuTrigger>
+        </TooltipWrapper>
+      )}
+      <DropdownMenuContent align="end" className="w-52">
+        <DropdownMenuItem
+          onClick={exportCSVHandler}
+          disabled={disabled || loading || !isExportEnabled}
+        >
+          As CSV
+        </DropdownMenuItem>
+        <DropdownMenuItem
+          onClick={exportJSONHandler}
+          disabled={disabled || loading || !isExportEnabled}
+        >
+          As JSON
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 };
 

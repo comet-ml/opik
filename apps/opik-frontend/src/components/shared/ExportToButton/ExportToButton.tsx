@@ -99,13 +99,25 @@ const ExportToButton: React.FC<ExportToButtonProps> = ({
     [disabled],
   );
 
-  const button = (
+  const buttonElement = (
+    <Button variant="outline" size="icon-sm" disabled={disabled || loading}>
+      {loading ? <Loader2 className="animate-spin" /> : <Download />}
+    </Button>
+  );
+
+  return (
     <DropdownMenu open={open} onOpenChange={handleOpenChange}>
-      <DropdownMenuTrigger asChild>
-        <Button variant="outline" size="icon-sm" disabled={disabled || loading}>
-          {loading ? <Loader2 className="animate-spin" /> : <Download />}
-        </Button>
-      </DropdownMenuTrigger>
+      {disabled && tooltipContent ? (
+        <TooltipWrapper content={tooltipContent}>
+          <DropdownMenuTrigger asChild>
+            <span className="inline-block cursor-not-allowed">
+              {buttonElement}
+            </span>
+          </DropdownMenuTrigger>
+        </TooltipWrapper>
+      ) : (
+        <DropdownMenuTrigger asChild>{buttonElement}</DropdownMenuTrigger>
+      )}
       <DropdownMenuContent align="end" className="w-52">
         <DropdownMenuItem
           onClick={exportCSVHandler}
@@ -122,12 +134,6 @@ const ExportToButton: React.FC<ExportToButtonProps> = ({
       </DropdownMenuContent>
     </DropdownMenu>
   );
-
-  if (tooltipContent) {
-    return <TooltipWrapper content={tooltipContent}>{button}</TooltipWrapper>;
-  }
-
-  return button;
 };
 
 export default ExportToButton;
