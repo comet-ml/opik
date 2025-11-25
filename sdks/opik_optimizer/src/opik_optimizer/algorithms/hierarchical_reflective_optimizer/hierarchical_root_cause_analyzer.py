@@ -13,6 +13,7 @@ from . import reporting
 from .prompts import BATCH_ANALYSIS_PROMPT, SYNTHESIS_PROMPT
 from ...reporting_utils import get_console
 from ... import _llm_calls
+from ...utils import rng as rng_utils
 
 logger = logging.getLogger(__name__)
 
@@ -273,9 +274,19 @@ Scores:
 
         # Prepare batch tasks
         batch_tasks = []
-        batch_number = 1
-        for batch_start in range(0, num_test_results, self.batch_size):
-            batch_end = min(batch_start + self.batch_size, num_test_results)
+        batch_rng = rng_utils.make_rng(self.seed, "hierarchical_batches")
+        batches = list(
+            rng_utils.batched(
+                list(range(num_test_results)),
+                self.batch_size,
+                rng=batch_rng,
+                drop_last=False,
+            )
+        )
+        for batch in batches:
+            batch_start = batch.items[0]
+            batch_end = batch.items[-1] + 1
+            batch_number = batch.index + 1
             task = self._analyze_batch_async(
                 evaluation_result=evaluation_result,
                 batch_number=batch_number,
@@ -284,7 +295,6 @@ Scores:
                 project_name=project_name,
             )
             batch_tasks.append((batch_number, task))
-            batch_number += 1
 
         # Process batches with semaphore to limit concurrency
         logger.info(
