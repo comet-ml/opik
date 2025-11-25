@@ -47,6 +47,7 @@ public enum OpenaiModelName implements StructuredOutputSupported {
     GPT_5_MINI("gpt-5-mini", true),
     GPT_5_NANO("gpt-5-nano", true),
     GPT_5_CHAT_LATEST("gpt-5-chat-latest", false),
+    GPT_5_1("gpt-5.1", true),
     ;
 
     private static final String WARNING_UNKNOWN_MODEL = "could not find OpenaiModelName with value '{}'";

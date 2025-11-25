@@ -30,7 +30,7 @@ export const PROVIDERS: PROVIDERS_TYPE = {
     icon: OpenAIIcon,
     apiKeyName: "OPENAI_API_KEY",
     apiKeyURL: "https://platform.openai.com/account/api-keys",
-    defaultModel: PROVIDER_MODEL_TYPE.GPT_5,
+    defaultModel: PROVIDER_MODEL_TYPE.GPT_5_1,
   },
   [PROVIDER_TYPE.ANTHROPIC]: {
     label: "Anthropic",
@@ -54,7 +54,7 @@ export const PROVIDERS: PROVIDERS_TYPE = {
     icon: GeminiIcon,
     apiKeyName: "GEMINI_API_KEY",
     apiKeyURL: "https://aistudio.google.com/apikey",
-    defaultModel: PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH,
+    defaultModel: PROVIDER_MODEL_TYPE.GEMINI_3_PRO,
   },
   [PROVIDER_TYPE.VERTEX_AI]: {
     label: "Vertex AI",

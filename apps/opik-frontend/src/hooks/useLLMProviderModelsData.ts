@@ -25,6 +25,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
   [PROVIDER_TYPE.OPEN_AI]: [
     // GPT-5 Models
     {
+      value: PROVIDER_MODEL_TYPE.GPT_5_1,
+      label: "GPT 5.1",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.GPT_5,
       label: "GPT 5",
     },
@@ -189,14 +193,6 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
 
   [PROVIDER_TYPE.OPEN_ROUTER]: [
     {
-      value: PROVIDER_MODEL_TYPE.AGENTICA_ORG_DEEPCODER_14B_PREVIEW,
-      label: "agentica-org/deepcoder-14b-preview",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.AGENTICA_ORG_DEEPCODER_14B_PREVIEW_FREE,
-      label: "agentica-org/deepcoder-14b-preview:free",
-    },
-    {
       value: PROVIDER_MODEL_TYPE.AI21_JAMBA_LARGE_1_7,
       label: "ai21/jamba-large-1.7",
     },
@@ -229,10 +225,6 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "alibaba/tongyi-deepresearch-30b-a3b:free",
     },
     {
-      value: PROVIDER_MODEL_TYPE.ALLENAI_MOLMO_7B_D,
-      label: "allenai/molmo-7b-d",
-    },
-    {
       value: PROVIDER_MODEL_TYPE.ALLENAI_OLMO_2_0325_32B_INSTRUCT,
       label: "allenai/olmo-2-0325-32b-instruct",
     },
@@ -251,10 +243,6 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.AMAZON_NOVA_PRO_V1,
       label: "amazon/nova-pro-v1",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.ANTHRACITE_ORG_MAGNUM_V2_72B,
-      label: "anthracite-org/magnum-v2-72b",
     },
     {
       value: PROVIDER_MODEL_TYPE.ANTHRACITE_ORG_MAGNUM_V4_72B,
@@ -283,10 +271,6 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_3_5_SONNET,
       label: "anthropic/claude-3.5-sonnet",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_3_5_SONNET_20240620,
-      label: "anthropic/claude-3.5-sonnet-20240620",
     },
     {
       value: PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_3_7_SONNET,
@@ -357,10 +341,6 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "baidu/ernie-4.5-vl-424b-a47b",
     },
     {
-      value: PROVIDER_MODEL_TYPE.BYTEDANCE_SEED_OSS_36B_INSTRUCT,
-      label: "bytedance/seed-oss-36b-instruct",
-    },
-    {
       value: PROVIDER_MODEL_TYPE.BYTEDANCE_UI_TARS_1_5_7B,
       label: "bytedance/ui-tars-1.5-7b",
     },
@@ -368,25 +348,6 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       value:
         PROVIDER_MODEL_TYPE.COGNITIVECOMPUTATIONS_DOLPHIN_MISTRAL_24B_VENICE_EDITION_FREE,
       label: "cognitivecomputations/dolphin-mistral-24b-venice-edition:free",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.COGNITIVECOMPUTATIONS_DOLPHIN3_0_MISTRAL_24B,
-      label: "cognitivecomputations/dolphin3.0-mistral-24b",
-    },
-    {
-      value:
-        PROVIDER_MODEL_TYPE.COGNITIVECOMPUTATIONS_DOLPHIN3_0_MISTRAL_24B_FREE,
-      label: "cognitivecomputations/dolphin3.0-mistral-24b:free",
-    },
-    {
-      value:
-        PROVIDER_MODEL_TYPE.COGNITIVECOMPUTATIONS_DOLPHIN3_0_R1_MISTRAL_24B,
-      label: "cognitivecomputations/dolphin3.0-r1-mistral-24b",
-    },
-    {
-      value:
-        PROVIDER_MODEL_TYPE.COGNITIVECOMPUTATIONS_DOLPHIN3_0_R1_MISTRAL_24B_FREE,
-      label: "cognitivecomputations/dolphin3.0-r1-mistral-24b:free",
     },
     {
       value: PROVIDER_MODEL_TYPE.COHERE_COMMAND_A,
@@ -429,10 +390,6 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "deepseek/deepseek-chat-v3.1",
     },
     {
-      value: PROVIDER_MODEL_TYPE.DEEPSEEK_DEEPSEEK_CHAT_V3_1_FREE,
-      label: "deepseek/deepseek-chat-v3.1:free",
-    },
-    {
       value: PROVIDER_MODEL_TYPE.DEEPSEEK_DEEPSEEK_PROVER_V2,
       label: "deepseek/deepseek-prover-v2",
     },
@@ -465,10 +422,6 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "deepseek/deepseek-r1-distill-llama-70b:free",
     },
     {
-      value: PROVIDER_MODEL_TYPE.DEEPSEEK_DEEPSEEK_R1_DISTILL_LLAMA_8B,
-      label: "deepseek/deepseek-r1-distill-llama-8b",
-    },
-    {
       value: PROVIDER_MODEL_TYPE.DEEPSEEK_DEEPSEEK_R1_DISTILL_QWEN_14B,
       label: "deepseek/deepseek-r1-distill-qwen-14b",
     },
@@ -479,10 +432,6 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.DEEPSEEK_DEEPSEEK_R1_FREE,
       label: "deepseek/deepseek-r1:free",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.DEEPSEEK_DEEPSEEK_V3_1_BASE,
-      label: "deepseek/deepseek-v3.1-base",
     },
     {
       value: PROVIDER_MODEL_TYPE.DEEPSEEK_DEEPSEEK_V3_1_TERMINUS,
@@ -521,10 +470,6 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "google/gemini-2.5-flash-lite",
     },
     {
-      value: PROVIDER_MODEL_TYPE.GOOGLE_GEMINI_2_5_FLASH_LITE_PREVIEW_06_17,
-      label: "google/gemini-2.5-flash-lite-preview-06-17",
-    },
-    {
       value: PROVIDER_MODEL_TYPE.GOOGLE_GEMINI_2_5_FLASH_LITE_PREVIEW_09_2025,
       label: "google/gemini-2.5-flash-lite-preview-09-2025",
     },
@@ -551,10 +496,6 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.GOOGLE_GEMMA_2_9B_IT,
       label: "google/gemma-2-9b-it",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.GOOGLE_GEMMA_2_9B_IT_FREE,
-      label: "google/gemma-2-9b-it:free",
     },
     {
       value: PROVIDER_MODEL_TYPE.GOOGLE_GEMMA_3_12B_IT,
@@ -611,14 +552,6 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.INFLECTION_INFLECTION_3_PRODUCTIVITY,
       label: "inflection/inflection-3-productivity",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.LIQUID_LFM_3B,
-      label: "liquid/lfm-3b",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.LIQUID_LFM_7B,
-      label: "liquid/lfm-7b",
     },
     {
       value: PROVIDER_MODEL_TYPE.MANCER_WEAVER,
@@ -685,24 +618,12 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "meta-llama/llama-3.3-70b-instruct:free",
     },
     {
-      value: PROVIDER_MODEL_TYPE.META_LLAMA_LLAMA_3_3_8B_INSTRUCT_FREE,
-      label: "meta-llama/llama-3.3-8b-instruct:free",
-    },
-    {
       value: PROVIDER_MODEL_TYPE.META_LLAMA_LLAMA_4_MAVERICK,
       label: "meta-llama/llama-4-maverick",
     },
     {
-      value: PROVIDER_MODEL_TYPE.META_LLAMA_LLAMA_4_MAVERICK_FREE,
-      label: "meta-llama/llama-4-maverick:free",
-    },
-    {
       value: PROVIDER_MODEL_TYPE.META_LLAMA_LLAMA_4_SCOUT,
       label: "meta-llama/llama-4-scout",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.META_LLAMA_LLAMA_4_SCOUT_FREE,
-      label: "meta-llama/llama-4-scout:free",
     },
     {
       value: PROVIDER_MODEL_TYPE.META_LLAMA_LLAMA_GUARD_2_8B,
@@ -779,10 +700,6 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.MISTRALAI_DEVSTRAL_SMALL_2505,
       label: "mistralai/devstral-small-2505",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.MISTRALAI_DEVSTRAL_SMALL_2505_FREE,
-      label: "mistralai/devstral-small-2505:free",
     },
     {
       value: PROVIDER_MODEL_TYPE.MISTRALAI_MAGISTRAL_MEDIUM_2506,
@@ -905,10 +822,6 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "moonshotai/kimi-dev-72b",
     },
     {
-      value: PROVIDER_MODEL_TYPE.MOONSHOTAI_KIMI_DEV_72B_FREE,
-      label: "moonshotai/kimi-dev-72b:free",
-    },
-    {
       value: PROVIDER_MODEL_TYPE.MOONSHOTAI_KIMI_K2,
       label: "moonshotai/kimi-k2",
     },
@@ -921,14 +834,6 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "moonshotai/kimi-k2:free",
     },
     {
-      value: PROVIDER_MODEL_TYPE.MOONSHOTAI_KIMI_VL_A3B_THINKING,
-      label: "moonshotai/kimi-vl-a3b-thinking",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.MOONSHOTAI_KIMI_VL_A3B_THINKING_FREE,
-      label: "moonshotai/kimi-vl-a3b-thinking:free",
-    },
-    {
       value: PROVIDER_MODEL_TYPE.MORPH_MORPH_V3_FAST,
       label: "morph/morph-v3-fast",
     },
@@ -937,25 +842,12 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "morph/morph-v3-large",
     },
     {
-      value: PROVIDER_MODEL_TYPE.NEVERSLEEP_LLAMA_3_LUMIMAID_70B,
-      label: "neversleep/llama-3-lumimaid-70b",
-    },
-    {
       value: PROVIDER_MODEL_TYPE.NEVERSLEEP_LLAMA_3_1_LUMIMAID_8B,
       label: "neversleep/llama-3.1-lumimaid-8b",
     },
     {
       value: PROVIDER_MODEL_TYPE.NEVERSLEEP_NOROMAID_20B,
       label: "neversleep/noromaid-20b",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.NOUSRESEARCH_DEEPHERMES_3_LLAMA_3_8B_PREVIEW,
-      label: "nousresearch/deephermes-3-llama-3-8b-preview",
-    },
-    {
-      value:
-        PROVIDER_MODEL_TYPE.NOUSRESEARCH_DEEPHERMES_3_LLAMA_3_8B_PREVIEW_FREE,
-      label: "nousresearch/deephermes-3-llama-3-8b-preview:free",
     },
     {
       value: PROVIDER_MODEL_TYPE.NOUSRESEARCH_DEEPHERMES_3_MISTRAL_24B_PREVIEW,
@@ -1118,10 +1010,6 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "openai/gpt-oss-120b",
     },
     {
-      value: PROVIDER_MODEL_TYPE.OPENAI_GPT_OSS_120B_FREE,
-      label: "openai/gpt-oss-120b:free",
-    },
-    {
       value: PROVIDER_MODEL_TYPE.OPENAI_GPT_OSS_20B,
       label: "openai/gpt-oss-20b",
     },
@@ -1132,14 +1020,6 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.OPENAI_O1,
       label: "openai/o1",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.OPENAI_O1_MINI,
-      label: "openai/o1-mini",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.OPENAI_O1_MINI_2024_09_12,
-      label: "openai/o1-mini-2024-09-12",
     },
     {
       value: PROVIDER_MODEL_TYPE.OPENAI_O1_PRO,
@@ -1176,10 +1056,6 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.OPENROUTER_AUTO,
       label: "openrouter/auto",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.PERPLEXITY_R1_1776,
-      label: "perplexity/r1-1776",
     },
     {
       value: PROVIDER_MODEL_TYPE.PERPLEXITY_SONAR,
@@ -1266,10 +1142,6 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "qwen/qwen2.5-vl-72b-instruct",
     },
     {
-      value: PROVIDER_MODEL_TYPE.QWEN_QWEN2_5_VL_72B_INSTRUCT_FREE,
-      label: "qwen/qwen2.5-vl-72b-instruct:free",
-    },
-    {
       value: PROVIDER_MODEL_TYPE.QWEN_QWEN3_14B,
       label: "qwen/qwen3-14b",
     },
@@ -1320,10 +1192,6 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.QWEN_QWEN3_8B,
       label: "qwen/qwen3-8b",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.QWEN_QWEN3_8B_FREE,
-      label: "qwen/qwen3-8b:free",
     },
     {
       value: PROVIDER_MODEL_TYPE.QWEN_QWEN3_CODER,
@@ -1394,14 +1262,6 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "sao10k/l3.3-euryale-70b",
     },
     {
-      value: PROVIDER_MODEL_TYPE.SHISA_AI_SHISA_V2_LLAMA3_3_70B,
-      label: "shisa-ai/shisa-v2-llama3.3-70b",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.SHISA_AI_SHISA_V2_LLAMA3_3_70B_FREE,
-      label: "shisa-ai/shisa-v2-llama3.3-70b:free",
-    },
-    {
       value: PROVIDER_MODEL_TYPE.STEPFUN_AI_STEP3,
       label: "stepfun-ai/step3",
     },
@@ -1412,10 +1272,6 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.TENCENT_HUNYUAN_A13B_INSTRUCT,
       label: "tencent/hunyuan-a13b-instruct",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.TENCENT_HUNYUAN_A13B_INSTRUCT_FREE,
-      label: "tencent/hunyuan-a13b-instruct:free",
     },
     {
       value: PROVIDER_MODEL_TYPE.THEDRUMMER_ANUBIS_70B_V1_1,
@@ -1440,10 +1296,6 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.THUDM_GLM_4_1V_9B_THINKING,
       label: "thudm/glm-4.1v-9b-thinking",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.THUDM_GLM_Z1_32B,
-      label: "thudm/glm-z1-32b",
     },
     {
       value: PROVIDER_MODEL_TYPE.TNGTECH_DEEPSEEK_R1T_CHIMERA,
@@ -1490,10 +1342,6 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "x-ai/grok-4-fast",
     },
     {
-      value: PROVIDER_MODEL_TYPE.X_AI_GROK_4_FAST_FREE,
-      label: "x-ai/grok-4-fast:free",
-    },
-    {
       value: PROVIDER_MODEL_TYPE.X_AI_GROK_CODE_FAST_1,
       label: "x-ai/grok-code-fast-1",
     },
@@ -1524,6 +1372,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
   ],
 
   [PROVIDER_TYPE.GEMINI]: [
+    {
+      value: PROVIDER_MODEL_TYPE.GEMINI_3_PRO,
+      label: "Gemini 3 Pro",
+    },
     {
       value: PROVIDER_MODEL_TYPE.GEMINI_2_5_PRO,
       label: "Gemini 2.5 Pro",
@@ -1559,6 +1411,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
   ],
 
   [PROVIDER_TYPE.VERTEX_AI]: [
+    {
+      value: PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_3_PRO,
+      label: "Gemini 3 Pro",
+    },
     {
       value: PROVIDER_MODEL_TYPE.VERTEX_AI_GEMINI_2_5_PRO_PREVIEW_04_17,
       label: "Gemini 2.5 Pro Preview 04.17",
