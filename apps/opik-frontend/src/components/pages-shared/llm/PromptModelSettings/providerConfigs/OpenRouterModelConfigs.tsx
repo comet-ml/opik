@@ -156,6 +156,71 @@ const OpenRouterModelConfigs = ({
           }
         />
       )}
+      <SliderInputControl
+        value={configs.maxRetries ?? DEFAULT_OPEN_ROUTER_CONFIGS.MAX_RETRIES}
+        onChange={(v) => onChange({ maxRetries: v })}
+        id="maxRetries"
+        min={0}
+        max={10}
+        step={1}
+        defaultValue={DEFAULT_OPEN_ROUTER_CONFIGS.MAX_RETRIES}
+        label="Max retries"
+        tooltip={
+          <PromptModelConfigsTooltipContent text="Maximum number of retry attempts for failed requests" />
+        }
+      />
+      <SliderInputControl
+        value={configs.timeout ?? DEFAULT_OPEN_ROUTER_CONFIGS.TIMEOUT}
+        onChange={(v) => onChange({ timeout: v })}
+        id="timeout"
+        min={1}
+        max={300}
+        step={1}
+        defaultValue={DEFAULT_OPEN_ROUTER_CONFIGS.TIMEOUT}
+        label="Timeout (seconds)"
+        tooltip={
+          <PromptModelConfigsTooltipContent text="Maximum time in seconds to wait for a response before timing out" />
+        }
+      />
+      <SliderInputControl
+        value={configs.backoffExponent ?? DEFAULT_OPEN_ROUTER_CONFIGS.BACKOFF_EXPONENT}
+        onChange={(v) => onChange({ backoffExponent: v })}
+        id="backoffExponent"
+        min={1}
+        max={5}
+        step={0.1}
+        defaultValue={DEFAULT_OPEN_ROUTER_CONFIGS.BACKOFF_EXPONENT}
+        label="Backoff exponent"
+        tooltip={
+          <PromptModelConfigsTooltipContent text="Exponential backoff multiplier for retry delays. Higher values result in longer wait times between retries" />
+        }
+      />
+      <SliderInputControl
+        value={configs.throttling ?? DEFAULT_OPEN_ROUTER_CONFIGS.THROTTLING}
+        onChange={(v) => onChange({ throttling: v })}
+        id="throttling"
+        min={0}
+        max={10}
+        step={0.1}
+        defaultValue={DEFAULT_OPEN_ROUTER_CONFIGS.THROTTLING}
+        label="Throttling (seconds)"
+        tooltip={
+          <PromptModelConfigsTooltipContent text="Minimum time in seconds between consecutive requests to avoid rate limiting" />
+        }
+      />
+      <SliderInputControl
+        value={configs.maxConcurrentRequests ?? DEFAULT_OPEN_ROUTER_CONFIGS.MAX_CONCURRENT_REQUESTS}
+        onChange={(v) => onChange({ maxConcurrentRequests: v })}
+        id="maxConcurrentRequests"
+        min={1}
+        max={20}
+        step={1}
+        defaultValue={DEFAULT_OPEN_ROUTER_CONFIGS.MAX_CONCURRENT_REQUESTS}
+        label="Max concurrent requests"
+        tooltip={
+          <PromptModelConfigsTooltipContent text="Maximum number of requests that can run simultaneously. Set to 1 for sequential execution, higher values for parallel processing" />
+        }
+      />
     </div>
   );
 };

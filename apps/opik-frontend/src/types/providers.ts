@@ -470,6 +470,11 @@ export interface LLMOpenAIConfigsType {
   presencePenalty: number;
   reasoningEffort?: ReasoningEffort;
   seed?: number | null;
+  maxRetries?: number;
+  timeout?: number;
+  backoffExponent?: number;
+  throttling?: number;
+  maxConcurrentRequests?: number;
 }
 
 export interface LLMAnthropicConfigsType {
@@ -477,6 +482,11 @@ export interface LLMAnthropicConfigsType {
   maxCompletionTokens: number;
   topP?: number;
   seed?: number | null;
+  maxRetries?: number;
+  timeout?: number;
+  backoffExponent?: number;
+  throttling?: number;
+  maxConcurrentRequests?: number;
 }
 
 export interface LLMOpenRouterConfigsType {
@@ -490,6 +500,11 @@ export interface LLMOpenRouterConfigsType {
   minP: number;
   topA: number;
   seed?: number | null;
+  maxRetries?: number;
+  timeout?: number;
+  backoffExponent?: number;
+  throttling?: number;
+  maxConcurrentRequests?: number;
 }
 
 export interface LLMGeminiConfigsType {
@@ -497,6 +512,11 @@ export interface LLMGeminiConfigsType {
   maxCompletionTokens: number;
   topP: number;
   seed?: number | null;
+  maxRetries?: number;
+  timeout?: number;
+  backoffExponent?: number;
+  throttling?: number;
+  maxConcurrentRequests?: number;
 }
 
 export interface LLMVertexAIConfigsType {
@@ -504,6 +524,11 @@ export interface LLMVertexAIConfigsType {
   maxCompletionTokens: number;
   topP: number;
   seed?: number | null;
+  maxRetries?: number;
+  timeout?: number;
+  backoffExponent?: number;
+  throttling?: number;
+  maxConcurrentRequests?: number;
 }
 
 export interface LLMCustomConfigsType {
@@ -514,6 +539,11 @@ export interface LLMCustomConfigsType {
   presencePenalty: number;
   seed?: number | null;
   custom_parameters?: Record<string, unknown> | null;
+  maxRetries?: number;
+  timeout?: number;
+  backoffExponent?: number;
+  throttling?: number;
+  maxConcurrentRequests?: number;
 }
 
 export type LLMPromptConfigsType =
