@@ -39,6 +39,7 @@ on:
 
 env:
   DOCKER_REGISTRY: "ghcr.io/comet-ml/opik"
+  DOCKER_BUILD_SUMMARY: "false"
 
 jobs:
   generate-matrix:
