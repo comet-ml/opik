@@ -251,14 +251,7 @@ class DatasetVersionServiceImpl implements DatasetVersionService {
 
     @Override
     public Optional<DatasetVersion> getLatestVersion(@NonNull UUID datasetId) {
-        log.info("Getting latest version for dataset: '{}'", datasetId);
-
-        String workspaceId = requestContext.get().getWorkspaceId();
-
-        return template.inTransaction(READ_ONLY, handle -> {
-            var dao = handle.attach(DatasetVersionDAO.class);
-            return dao.findByTag(datasetId, LATEST_TAG, workspaceId);
-        });
+        return getVersionByTag(datasetId, LATEST_TAG);
     }
 
     @Override

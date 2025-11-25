@@ -46,7 +46,7 @@ public class DatabaseUtils {
 
             // Convert to hex string (first 16 chars for display)
             StringBuilder hexString = new StringBuilder();
-            for (int i = 0; i < 8; i++) {
+            for (int i = 0; i < 8 && i < hashBytes.length; i++) {
                 String hex = Integer.toHexString(0xff & hashBytes[i]);
                 if (hex.length() == 1) {
                     hexString.append('0');
@@ -56,7 +56,7 @@ public class DatabaseUtils {
 
             return hexString.toString();
         } catch (NoSuchAlgorithmException e) {
-            throw new RuntimeException("SHA-256 algorithm not available", e);
+            throw new IllegalStateException("SHA-256 algorithm not available", e);
         }
     }
 }
