@@ -82,7 +82,7 @@ const PromptsSelectBox: React.FC<PromptsSelectBoxProps> = ({
     }
 
     return options;
-  }, [prompts, value, selectedPromptData]);
+  }, [prompts, value, selectedPromptData, valueExistsInOptions]);
 
   const promptsTotal = promptsData?.total ?? 0;
 
