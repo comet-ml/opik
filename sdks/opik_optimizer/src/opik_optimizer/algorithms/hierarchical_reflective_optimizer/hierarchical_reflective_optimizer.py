@@ -2,7 +2,6 @@ import logging
 from typing import cast
 
 import opik
-from opik import opik_context
 from opik.evaluation.evaluation_result import EvaluationResult
 from opik.evaluation import evaluator as opik_evaluator
 
@@ -178,15 +177,7 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
             cleaned_model_output = raw_model_output.strip()
 
             # Add tags to trace for optimization tracking
-            if self.current_optimization_id:
-                optimizer_short_name = self._get_optimizer_short_name()
-                opik_context.update_current_trace(
-                    tags=[
-                        optimizer_short_name,
-                        self.current_optimization_id,
-                        "Evaluation",
-                    ]
-                )
+            self._tag_trace()
 
             result = {
                 "llm_output": cleaned_model_output,
