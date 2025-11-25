@@ -11,6 +11,7 @@ A Helm chart for Comet Opik
 - kubectl - https://kubernetes.io/docs/tasks/tools/#kubectl
 
 - Helm - https://helm.sh/docs/intro/install/
+requires Helm 3.10+
 
 - minikube - https://minikube.sigs.k8s.io/docs/start
 
