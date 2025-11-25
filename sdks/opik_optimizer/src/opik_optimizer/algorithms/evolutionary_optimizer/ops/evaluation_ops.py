@@ -116,18 +116,7 @@ def evaluate_prompt(
             final_response = raw_model_output
 
         # Add tags to trace for optimization tracking
-        if (
-            hasattr(optimizer, "current_optimization_id")
-            and optimizer.current_optimization_id
-        ):
-            optimizer_short_name = optimizer._get_optimizer_short_name()
-            opik_context.update_current_trace(
-                tags=[
-                    optimizer_short_name,
-                    optimizer.current_optimization_id,
-                    "Evaluation",
-                ]
-            )
+        optimizer._tag_trace()
 
         return {"llm_output": final_response.strip()}
 
