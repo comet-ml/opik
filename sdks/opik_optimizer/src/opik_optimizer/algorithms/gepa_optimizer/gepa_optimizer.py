@@ -268,9 +268,7 @@ class GepaOptimizer(BaseOptimizer):
                 ids = [item.get("id") for item in items if item.get("id") is not None]
                 if ids:
                     local_rng = self._derive_rng(phase_tag, plan.nb_samples or 0)
-                    selected_ids = rng_utils.sample_ids(
-                        local_rng, ids, plan.nb_samples
-                    )
+                    selected_ids = rng_utils.sample_ids(local_rng, ids, plan.nb_samples)
                     selected_set = set(selected_ids)
                     return [item for item in items if item.get("id") in selected_set]
                 return items[: plan.nb_samples]
