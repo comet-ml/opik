@@ -1,4 +1,5 @@
 from typing import Any
+from collections.abc import Sequence
 from pydantic import BaseModel, ValidationError as PydanticValidationError
 import json
 import logging
@@ -61,6 +62,34 @@ def _get_optimizer_short_name_from_stack() -> str | None:
         frame = frame.f_back
 
     return None
+
+
+def _tag_trace_from_stack(
+    phase: str | None = "Prompt Optimization",
+    extra_tags: Sequence[str] | None = None,
+) -> None:
+    """
+    Walk up the call stack and tag the current trace using the optimizer helper.
+    """
+    try:
+        from .base_optimizer import BaseOptimizer
+    except Exception:
+        return
+
+    try:
+        frame: FrameType | None = sys._getframe()
+    except ValueError:
+        return
+
+    while frame is not None:
+        optimizer_candidate = frame.f_locals.get("self")
+        if isinstance(optimizer_candidate, BaseOptimizer):
+            try:
+                optimizer_candidate._tag_trace(phase=phase, extra_tags=extra_tags)
+            except Exception:
+                pass
+            break
+        frame = frame.f_back
 
 
 def _build_call_time_params(
@@ -303,6 +332,7 @@ def call_model(
         Otherwise, returns the raw string response.
     """
     _increment_llm_counter_if_needed()
+    _tag_trace_from_stack()
 
     # Build dict of call-time LiteLLM parameter overrides (non-None only)
     call_time_params = _build_call_time_params(
@@ -380,6 +410,7 @@ async def call_model_async(
         Otherwise, returns the raw string response.
     """
     _increment_llm_counter_if_needed()
+    _tag_trace_from_stack()
 
     # Build dict of call-time LiteLLM parameter overrides (non-None only)
     call_time_params = _build_call_time_params(
