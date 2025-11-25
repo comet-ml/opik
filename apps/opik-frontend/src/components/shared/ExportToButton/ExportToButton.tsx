@@ -32,6 +32,7 @@ const ExportToButton: React.FC<ExportToButtonProps> = ({
 
   const handleExport = useCallback(
     async (exportFn: (data: Array<object>) => void) => {
+      if (disabled) return;
       setLoading(true);
       try {
         const mappedRows = await Promise.resolve(getData());
@@ -52,7 +53,7 @@ const ExportToButton: React.FC<ExportToButtonProps> = ({
         setLoading(false);
       }
     },
-    [getData, toast],
+    [getData, toast, disabled],
   );
 
   const exportCSVHandler = useCallback(() => {
