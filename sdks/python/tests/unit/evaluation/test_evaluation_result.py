@@ -16,7 +16,7 @@ def test_group_by_dataset_item_view__happyflow():
         test_case_obj = test_case.TestCase(
             trace_id=f"trace{trial_id}",
             dataset_item_id="item1",
-            scoring_inputs={"input": "test"},
+            mapped_scoring_inputs={"input": "test"},
             task_output={"output": f"result{trial_id}"},
         )
         test_result_obj = test_result.TestResult(
@@ -65,7 +65,7 @@ def test_group_by_dataset_item_view__multiple_metrics_and_items():
     test_case1 = test_case.TestCase(
         trace_id="trace1",
         dataset_item_id="item1",
-        scoring_inputs={"input": "test1"},
+        mapped_scoring_inputs={"input": "test1"},
         task_output={"output": "result1"},
     )
     test_result1 = test_result.TestResult(
@@ -82,7 +82,7 @@ def test_group_by_dataset_item_view__multiple_metrics_and_items():
     test_case2 = test_case.TestCase(
         trace_id="trace2",
         dataset_item_id="item2",
-        scoring_inputs={"input": "test2"},
+        mapped_scoring_inputs={"input": "test2"},
         task_output={"output": "result2"},
     )
     test_result2 = test_result.TestResult(
@@ -139,7 +139,7 @@ def test_group_by_dataset_item_view__failed_and_invalid_scores():
     test_case_obj = test_case.TestCase(
         trace_id="trace1",
         dataset_item_id="item1",
-        scoring_inputs={"input": "test"},
+        mapped_scoring_inputs={"input": "test"},
         task_output={"output": "result"},
     )
 
@@ -204,7 +204,7 @@ def test_group_by_dataset_item_view__standard_deviation():
         test_case_obj = test_case.TestCase(
             trace_id=f"trace{trial_id}",
             dataset_item_id="item1",
-            scoring_inputs={"input": "test"},
+            mapped_scoring_inputs={"input": "test"},
             task_output={"output": f"result{trial_id}"},
         )
         test_result_obj = test_result.TestResult(
@@ -236,7 +236,7 @@ def test_group_by_dataset_item_view__standard_deviation():
     single_test_case = test_case.TestCase(
         trace_id="single_trace",
         dataset_item_id="item2",
-        scoring_inputs={"input": "test"},
+        mapped_scoring_inputs={"input": "test"},
         task_output={"output": "result"},
     )
     single_test_result = test_result.TestResult(
@@ -271,7 +271,7 @@ def test_aggregate_evaluation_scores__single_metric_multiple_results():
         test_case_obj = test_case.TestCase(
             trace_id=f"trace{trial_id}",
             dataset_item_id=f"item{trial_id}",
-            scoring_inputs={"input": "test"},
+            mapped_scoring_inputs={"input": "test"},
             task_output={"output": f"result{trial_id}"},
         )
         test_result_obj = test_result.TestResult(
@@ -321,7 +321,7 @@ def test_aggregate_evaluation_scores__multiple_metrics():
     test_case1 = test_case.TestCase(
         trace_id="trace1",
         dataset_item_id="item1",
-        scoring_inputs={"input": "test1"},
+        mapped_scoring_inputs={"input": "test1"},
         task_output={"output": "result1"},
     )
     test_result1 = test_result.TestResult(
@@ -335,7 +335,7 @@ def test_aggregate_evaluation_scores__multiple_metrics():
     test_case2 = test_case.TestCase(
         trace_id="trace2",
         dataset_item_id="item2",
-        scoring_inputs={"input": "test2"},
+        mapped_scoring_inputs={"input": "test2"},
         task_output={"output": "result2"},
     )
     test_result2 = test_result.TestResult(
@@ -349,7 +349,7 @@ def test_aggregate_evaluation_scores__multiple_metrics():
     test_case3 = test_case.TestCase(
         trace_id="trace3",
         dataset_item_id="item3",
-        scoring_inputs={"input": "test3"},
+        mapped_scoring_inputs={"input": "test3"},
         task_output={"output": "result3"},
     )
     test_result3 = test_result.TestResult(
@@ -422,7 +422,7 @@ def test_aggregate_evaluation_scores__failed_and_invalid_scores():
     test_case_obj = test_case.TestCase(
         trace_id="trace1",
         dataset_item_id="item1",
-        scoring_inputs={"input": "test"},
+        mapped_scoring_inputs={"input": "test"},
         task_output={"output": "result"},
     )
 
@@ -492,7 +492,7 @@ def test_aggregate_evaluation_scores__single_value_no_std():
     test_case_obj = test_case.TestCase(
         trace_id="trace1",
         dataset_item_id="item1",
-        scoring_inputs={"input": "test"},
+        mapped_scoring_inputs={"input": "test"},
         task_output={"output": "result"},
     )
     test_result_obj = test_result.TestResult(
@@ -534,7 +534,7 @@ def test_aggregate_evaluation_scores__zero_and_negative_values():
         test_case_obj = test_case.TestCase(
             trace_id=f"trace{trial_id}",
             dataset_item_id=f"item{trial_id}",
-            scoring_inputs={"input": "test"},
+            mapped_scoring_inputs={"input": "test"},
             task_output={"output": f"result{trial_id}"},
         )
         test_result_obj = test_result.TestResult(
@@ -580,7 +580,7 @@ def test_aggregate_evaluation_scores__all_scores_filtered_out():
     test_case_obj = test_case.TestCase(
         trace_id="trace1",
         dataset_item_id="item1",
-        scoring_inputs={"input": "test"},
+        mapped_scoring_inputs={"input": "test"},
         task_output={"output": "result"},
     )
 
@@ -604,3 +604,143 @@ def test_aggregate_evaluation_scores__all_scores_filtered_out():
 
     # Should have no aggregated scores since all were filtered out
     assert len(aggregated_view.aggregated_scores) == 0
+
+
+def test_evaluation_result_on_dict_items__aggregate_evaluation_scores__happyflow():
+    """Test EvaluationResultOnDictItems.aggregate_evaluation_scores with multiple items and metrics."""
+    # Create test results with multiple metrics
+    test_results_list = []
+
+    # Item 1: accuracy=0.8, precision=0.9
+    score1_accuracy = score_result.ScoreResult(
+        name="accuracy", value=0.8, reason="Good accuracy"
+    )
+    score1_precision = score_result.ScoreResult(
+        name="precision", value=0.9, reason="High precision"
+    )
+    test_case1 = test_case.TestCase(
+        trace_id="trace1",
+        dataset_item_id="item1",
+        mapped_scoring_inputs={"input": "test1"},
+        task_output={"output": "result1"},
+    )
+    test_result1 = test_result.TestResult(
+        test_case=test_case1,
+        score_results=[score1_accuracy, score1_precision],
+        trial_id=0,
+    )
+    test_results_list.append(test_result1)
+
+    # Item 2: accuracy=0.9, precision=0.95
+    score2_accuracy = score_result.ScoreResult(
+        name="accuracy", value=0.9, reason="Excellent accuracy"
+    )
+    score2_precision = score_result.ScoreResult(
+        name="precision", value=0.95, reason="Excellent precision"
+    )
+    test_case2 = test_case.TestCase(
+        trace_id="trace2",
+        dataset_item_id="item2",
+        mapped_scoring_inputs={"input": "test2"},
+        task_output={"output": "result2"},
+    )
+    test_result2 = test_result.TestResult(
+        test_case=test_case2,
+        score_results=[score2_accuracy, score2_precision],
+        trial_id=0,
+    )
+    test_results_list.append(test_result2)
+
+    # Item 3: accuracy=0.7 (only one metric)
+    score3_accuracy = score_result.ScoreResult(
+        name="accuracy", value=0.7, reason="Moderate accuracy"
+    )
+    test_case3 = test_case.TestCase(
+        trace_id="trace3",
+        dataset_item_id="item3",
+        mapped_scoring_inputs={"input": "test3"},
+        task_output={"output": "result3"},
+    )
+    test_result3 = test_result.TestResult(
+        test_case=test_case3,
+        score_results=[score3_accuracy],
+        trial_id=0,
+    )
+    test_results_list.append(test_result3)
+
+    eval_result = evaluation_result.EvaluationResultOnDictItems(
+        test_results=test_results_list
+    )
+
+    # Test aggregation
+    aggregated = eval_result.aggregate_evaluation_scores()
+
+    # Verify structure
+    assert len(aggregated) == 2  # accuracy and precision
+    assert "accuracy" in aggregated
+    assert "precision" in aggregated
+
+    # Verify accuracy aggregation (0.8, 0.9, 0.7)
+    accuracy_stats = aggregated["accuracy"]
+    assert accuracy_stats.mean == pytest.approx(0.8, rel=1e-9)  # (0.8 + 0.9 + 0.7) / 3
+    assert accuracy_stats.max == pytest.approx(0.9, rel=1e-9)
+    assert accuracy_stats.min == pytest.approx(0.7, rel=1e-9)
+    assert accuracy_stats.values == [0.8, 0.9, 0.7]
+    assert accuracy_stats.std == pytest.approx(0.1, rel=1e-1)
+
+    # Verify precision aggregation (0.9, 0.95)
+    precision_stats = aggregated["precision"]
+    assert precision_stats.mean == pytest.approx(0.925, rel=1e-9)  # (0.9 + 0.95) / 2
+    assert precision_stats.max == pytest.approx(0.95, rel=1e-9)
+    assert precision_stats.min == pytest.approx(0.9, rel=1e-9)
+    assert precision_stats.values == [0.9, 0.95]
+    assert precision_stats.std == pytest.approx(
+        0.03536, rel=1e-2
+    )  # Standard deviation of [0.9, 0.95]
+
+
+def test_evaluation_result_on_dict_items__aggregate_evaluation_scores__empty_results():
+    """Test EvaluationResultOnDictItems.aggregate_evaluation_scores with empty test results."""
+    eval_result = evaluation_result.EvaluationResultOnDictItems(test_results=[])
+
+    # Test aggregation
+    aggregated = eval_result.aggregate_evaluation_scores()
+
+    # Should have no aggregated scores
+    assert len(aggregated) == 0
+
+
+def test_evaluation_result_on_dict_items__aggregate_evaluation_scores__single_item():
+    """Test EvaluationResultOnDictItems.aggregate_evaluation_scores with single item."""
+    # Create test result with single metric
+    score = score_result.ScoreResult(name="f1_score", value=0.85, reason="Good F1")
+    test_case_obj = test_case.TestCase(
+        trace_id="trace1",
+        dataset_item_id="item1",
+        mapped_scoring_inputs={"input": "test"},
+        task_output={"output": "result"},
+    )
+    test_result_obj = test_result.TestResult(
+        test_case=test_case_obj,
+        score_results=[score],
+        trial_id=0,
+    )
+
+    eval_result = evaluation_result.EvaluationResultOnDictItems(
+        test_results=[test_result_obj]
+    )
+
+    # Test aggregation
+    aggregated = eval_result.aggregate_evaluation_scores()
+
+    # Verify structure
+    assert len(aggregated) == 1
+    assert "f1_score" in aggregated
+
+    # Verify statistics for single value
+    f1_stats = aggregated["f1_score"]
+    assert f1_stats.mean == 0.85
+    assert f1_stats.max == 0.85
+    assert f1_stats.min == 0.85
+    assert f1_stats.values == [0.85]
+    assert f1_stats.std is None  # std is None for single value
