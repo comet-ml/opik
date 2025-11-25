@@ -158,7 +158,7 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
             messages = new_prompt.get_messages(dataset_item)
             new_prompt.set_messages(messages)
             agent = self._instantiate_agent(prompt=new_prompt)
-            self._set_agent_trace_phase(agent, "Evaluation")
+            self._set_agent_trace_phase(agent, "Evaluation")  # type: ignore[attr-defined]
 
             try:
                 logger.debug(

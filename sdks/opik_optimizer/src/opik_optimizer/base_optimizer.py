@@ -236,12 +236,26 @@ class BaseOptimizer(ABC):
         """Attach this optimizer to the agent instance without mutating the class."""
         try:
             agent.optimizer = self  # type: ignore[attr-defined]
+            if getattr(agent, "trace_phase", None) is None:
+                agent.trace_phase = "Prompt Optimization"  # type: ignore[attr-defined]
         except Exception:  # pragma: no cover - custom agents may forbid new attrs
             logger.debug(
                 "Unable to record optimizer on agent instance of %s",
                 agent.__class__.__name__,
             )
         return agent
+
+    def _set_agent_trace_phase(
+        self, agent: OptimizableAgent, phase: str | None
+    ) -> None:
+        """Best-effort setter for agent trace tagging phase."""
+        try:
+            agent.trace_phase = phase  # type: ignore[attr-defined]
+        except Exception:  # pragma: no cover - defensive for custom agents
+            logger.debug(
+                "Unable to set trace_phase on agent instance of %s",
+                agent.__class__.__name__,
+            )
 
     def _instantiate_agent(
         self,
@@ -599,6 +613,7 @@ class BaseOptimizer(ABC):
             self.agent_class = agent_class
 
         agent = self._instantiate_agent(prompt)
+        self._set_agent_trace_phase(agent, "Evaluation")
 
         def llm_task(dataset_item: dict[str, Any]) -> dict[str, str]:
             messages = prompt.get_messages(dataset_item)

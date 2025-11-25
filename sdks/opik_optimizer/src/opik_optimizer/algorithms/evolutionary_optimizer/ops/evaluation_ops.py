@@ -62,7 +62,7 @@ def evaluate_prompt(
     )
     try:
         agent = optimizer._instantiate_agent(new_prompt)
-        optimizer._set_agent_trace_phase(agent, "Evaluation")
+        optimizer._set_agent_trace_phase(agent, "Evaluation")  # type: ignore[attr-defined]
     except Exception:
         return 0.0
 

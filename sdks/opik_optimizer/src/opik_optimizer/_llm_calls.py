@@ -162,7 +162,12 @@ def _prepare_model_params(
     # the monitor to avoid 401/402s. To enable tracing locally, set OPIK_API_KEY (and
     # OPIK_BASE_URL/OPIK_WORKSPACE if using a non-default host). Otherwise set
     # OPIK_TRACK_DISABLE=true to silence tracing.
-    tracing_disabled = os.getenv("OPIK_TRACK_DISABLE", "false").lower() in ("true", "1", "yes", "on")
+    tracing_disabled = os.getenv("OPIK_TRACK_DISABLE", "false").lower() in (
+        "true",
+        "1",
+        "yes",
+        "on",
+    )
     api_key_present = bool(os.getenv("OPIK_API_KEY"))
     if tracing_disabled or not api_key_present:
         final_params = merged_params.copy()

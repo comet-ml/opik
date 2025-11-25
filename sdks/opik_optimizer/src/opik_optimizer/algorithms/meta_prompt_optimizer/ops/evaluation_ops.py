@@ -103,7 +103,7 @@ def evaluate_prompt(
         messages = new_prompt.get_messages(dataset_item)
         new_prompt.set_messages(messages)
         agent = optimizer._instantiate_agent(new_prompt)
-        optimizer._set_agent_trace_phase(agent, "Evaluation")
+        optimizer._set_agent_trace_phase(agent, "Evaluation")  # type: ignore[attr-defined]
 
         if mcp_config is not None:
             coordinator = mcp_config.coordinator

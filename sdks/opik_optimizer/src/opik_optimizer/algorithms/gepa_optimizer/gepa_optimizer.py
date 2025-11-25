@@ -622,7 +622,7 @@ class GepaOptimizer(BaseOptimizer):
                     final_llm_agent = self._create_agent_for_prompt(
                         final_prompt, project_name=analysis_project_name
                     )
-                    self._set_agent_trace_phase(final_llm_agent, "Evaluation")
+                    self._set_agent_trace_phase(final_llm_agent, "Evaluation")  # type: ignore[attr-defined]
 
                     def final_llm_task(dataset_item: dict[str, Any]) -> dict[str, str]:
                         messages = final_prompt.get_messages(dataset_item)
@@ -667,7 +667,7 @@ class GepaOptimizer(BaseOptimizer):
             agent = self._create_agent_for_prompt(
                 analysis_prompt, project_name=analysis_project_name
             )
-            self._set_agent_trace_phase(agent, "Evaluation")
+            self._set_agent_trace_phase(agent, "Evaluation")  # type: ignore[attr-defined]
             for item in train_items:
                 messages = analysis_prompt.get_messages(item)
                 output_text = agent.invoke(messages).strip()
@@ -891,7 +891,7 @@ class GepaOptimizer(BaseOptimizer):
             prompt.model_kwargs = self.model_parameters
 
         agent = self._create_agent_for_prompt(prompt)
-        self._set_agent_trace_phase(agent, "Evaluation")
+        self._set_agent_trace_phase(agent, "Evaluation")  # type: ignore[attr-defined]
 
         def llm_task(dataset_item: dict[str, Any]) -> dict[str, str]:
             messages = prompt.get_messages(dataset_item)
