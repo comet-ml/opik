@@ -45,7 +45,6 @@ import java.util.UUID;
 @Consumes(MediaType.APPLICATION_JSON)
 @RequiredArgsConstructor(onConstructor_ = @Inject)
 public class DatasetVersionsResource {
-
     private final @NonNull UUID datasetId;
     private final @NonNull DatasetVersionService versionService;
     private final @NonNull Provider<RequestContext> requestContext;
@@ -55,7 +54,6 @@ public class DatasetVersionsResource {
             @ApiResponse(responseCode = "201", description = "Created", headers = {
                     @Header(name = "Location", required = true, example = "${basePath}/v1/private/datasets/{datasetId}/versions", schema = @Schema(implementation = String.class))}),
             @ApiResponse(responseCode = "400", description = "Bad Request", content = @Content(schema = @Schema(implementation = io.dropwizard.jersey.errors.ErrorMessage.class))),
-            @ApiResponse(responseCode = "404", description = "Not Found", content = @Content(schema = @Schema(implementation = io.dropwizard.jersey.errors.ErrorMessage.class))),
             @ApiResponse(responseCode = "409", description = "Conflict - Tag already exists", content = @Content(schema = @Schema(implementation = io.dropwizard.jersey.errors.ErrorMessage.class)))
     })
     @RateLimited
@@ -76,7 +74,6 @@ public class DatasetVersionsResource {
     @Operation(operationId = "listDatasetVersions", summary = "List dataset versions", description = "Get paginated list of versions for a dataset, ordered by creation time (newest first)", responses = {
             @ApiResponse(responseCode = "200", description = "Dataset versions", content = @Content(schema = @Schema(implementation = DatasetVersionPage.class))),
             @ApiResponse(responseCode = "400", description = "Bad Request", content = @Content(schema = @Schema(implementation = io.dropwizard.jersey.errors.ErrorMessage.class))),
-            @ApiResponse(responseCode = "404", description = "Not Found", content = @Content(schema = @Schema(implementation = io.dropwizard.jersey.errors.ErrorMessage.class)))
     })
     @JsonView(DatasetVersion.View.Public.class)
     public Response listVersions(
@@ -95,7 +92,7 @@ public class DatasetVersionsResource {
     }
 
     @POST
-    @Path("/{versionHash}/tags")
+    @Path("/hash/{versionHash}/tags")
     @Operation(operationId = "createVersionTag", summary = "Create version tag", description = "Add a tag to a specific dataset version for easy reference (e.g., 'baseline', 'v1.0', 'production')", responses = {
             @ApiResponse(responseCode = "204", description = "Tag created successfully"),
             @ApiResponse(responseCode = "400", description = "Bad Request", content = @Content(schema = @Schema(implementation = io.dropwizard.jersey.errors.ErrorMessage.class))),
@@ -122,7 +119,6 @@ public class DatasetVersionsResource {
     @Path("/{versionHash}/tags/{tag}")
     @Operation(operationId = "deleteVersionTag", summary = "Delete version tag", description = "Remove a tag from a dataset version. The version itself is not deleted, only the tag reference.", responses = {
             @ApiResponse(responseCode = "204", description = "Tag deleted successfully"),
-            @ApiResponse(responseCode = "404", description = "Not Found - Tag not found", content = @Content(schema = @Schema(implementation = io.dropwizard.jersey.errors.ErrorMessage.class)))
     })
     @RateLimited
     public Response deleteTag(

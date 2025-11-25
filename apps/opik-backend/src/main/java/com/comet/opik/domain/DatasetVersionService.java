@@ -35,12 +35,11 @@ public interface DatasetVersionService {
     String LATEST_TAG = "latest";
 
     // Error message templates
-    String ERROR_VERSION_HASH_EXISTS = "Version with hash '%s' already exists for dataset '%s'";
-    String ERROR_TAG_EXISTS = "Tag '%s' already exists for this dataset";
+    String ERROR_VERSION_HASH_EXISTS = "Version already exists for dataset hash='%s' datasetId='%s'";
+    String ERROR_TAG_EXISTS = "Tag already exists for this dataset, tag='%s'";
     String ERROR_CANNOT_DELETE_LATEST_TAG = "Cannot delete '%s' tag - it is automatically managed";
-    String ERROR_VERSION_HASH_NOT_FOUND = "Version with hash '%s' not found for dataset '%s'";
-    String ERROR_TAG_NOT_FOUND = "Tag '%s' not found for dataset '%s'";
-    String ERROR_VERSION_NOT_FOUND = "Version not found for dataset '%s' with hash or tag '%s'";
+    String ERROR_VERSION_HASH_NOT_FOUND = "Version with hash not found hash='%s' datasetId='%s'";
+    String ERROR_VERSION_NOT_FOUND = "Version not found for dataset hash='%s' datasetId='%s'";
 
     /**
      * Commits a new version for the specified dataset with metadata and optional tag.
@@ -329,7 +328,7 @@ class DatasetVersionServiceImpl implements DatasetVersionService {
                 return versionByTag.get().id();
             }
 
-            throw new NotFoundException(ERROR_VERSION_NOT_FOUND.formatted(datasetId, hashOrTag));
+            throw new NotFoundException(ERROR_VERSION_NOT_FOUND.formatted(hashOrTag, datasetId));
         });
     }
 }

@@ -385,16 +385,8 @@ public class DatasetResourceClient {
 
     public void createVersionTag(UUID datasetId, String versionHash, DatasetVersionTag tag, String apiKey,
             String workspaceName) {
-        try (var response = client.target(RESOURCE_PATH.formatted(baseURI))
-                .path(datasetId.toString())
-                .path("versions")
-                .path(versionHash)
-                .path("tags")
-                .request()
-                .header(HttpHeaders.AUTHORIZATION, apiKey)
-                .header(WORKSPACE_HEADER, workspaceName)
-                .post(Entity.json(tag))) {
 
+        try (var response = callCreateVersionTag(datasetId, versionHash, tag, apiKey, workspaceName)) {
             assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_NO_CONTENT);
         }
     }
@@ -431,6 +423,7 @@ public class DatasetResourceClient {
         return client.target(RESOURCE_PATH.formatted(baseURI))
                 .path(datasetId.toString())
                 .path("versions")
+                .path("hash")
                 .path(versionHash)
                 .path("tags")
                 .request()
