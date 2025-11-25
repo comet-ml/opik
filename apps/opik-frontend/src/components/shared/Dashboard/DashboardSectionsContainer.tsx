@@ -108,22 +108,28 @@ const DashboardSectionsContainer: React.FunctionComponent<
 
   const handleAddSectionAbove = useCallback(
     (sectionId: string) => {
-      const index = sectionIds.findIndex((id) => id === sectionId);
+      const currentSectionIds = useDashboardStore
+        .getState()
+        .sections.map((s) => s.id);
+      const index = currentSectionIds.findIndex((id) => id === sectionId);
       if (index !== -1) {
         addSectionAtPosition(index);
       }
     },
-    [sectionIds, addSectionAtPosition],
+    [addSectionAtPosition],
   );
 
   const handleAddSectionBelow = useCallback(
     (sectionId: string) => {
-      const index = sectionIds.findIndex((id) => id === sectionId);
+      const currentSectionIds = useDashboardStore
+        .getState()
+        .sections.map((s) => s.id);
+      const index = currentSectionIds.findIndex((id) => id === sectionId);
       if (index !== -1) {
         addSectionAtPosition(index + 1);
       }
     },
-    [sectionIds, addSectionAtPosition],
+    [addSectionAtPosition],
   );
 
   return (

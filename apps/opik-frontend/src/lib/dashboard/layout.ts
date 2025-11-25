@@ -6,7 +6,7 @@ import {
 import isEmpty from "lodash/isEmpty";
 
 export const GRID_COLUMNS = 6;
-export const ROW_HEIGHT = 100;
+export const ROW_HEIGHT = 155;
 export const GRID_MARGIN: [number, number] = [16, 16];
 export const MAX_WIDGET_HEIGHT = 6;
 export const MIN_WIDGET_WIDTH = 1;
@@ -17,15 +17,15 @@ export const getDefaultWidgetSize = (
 ): { w: number; h: number } => {
   switch (type) {
     case "chart":
-      return { w: 3, h: 2 };
+      return { w: 2, h: 2 };
     case "metric":
       return { w: 2, h: 1 };
     case "table":
       return { w: 6, h: 3 };
     case "text":
-      return { w: 3, h: 1 };
+      return { w: 2, h: 1 };
     default:
-      return { w: 3, h: 2 };
+      return { w: 2, h: 2 };
   }
 };
 
