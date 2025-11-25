@@ -4,7 +4,9 @@ from typing import Any
 import pytest
 
 from opik_optimizer import ChatPrompt, FewShotBayesianOptimizer
-from opik_optimizer.algorithms.few_shot_bayesian_optimizer import few_shot_bayesian_optimizer
+from opik_optimizer.algorithms.few_shot_bayesian_optimizer import (
+    few_shot_bayesian_optimizer,
+)
 
 
 class _StubAgent:
@@ -32,7 +34,9 @@ def _dummy_metric(dataset_item: dict[str, Any], llm_output: str) -> float:
     return 0.0
 
 
-def test_evaluate_prompt_sampling_is_seeded(monkeypatch: pytest.MonkeyPatch, dummy_prompt: ChatPrompt) -> None:
+def test_evaluate_prompt_sampling_is_seeded(
+    monkeypatch: pytest.MonkeyPatch, dummy_prompt: ChatPrompt
+) -> None:
     items = [{"id": f"id-{i}", "question": f"q-{i}"} for i in range(10)]
     dataset = _DummyDataset(items)
     optimizer = FewShotBayesianOptimizer(model="openai/gpt-4o-mini", seed=123)
@@ -51,7 +55,9 @@ def test_evaluate_prompt_sampling_is_seeded(monkeypatch: pytest.MonkeyPatch, dum
         captured_ids.append(dataset_item_ids or [])
         return 0.0
 
-    monkeypatch.setattr(few_shot_bayesian_optimizer.task_evaluator, "evaluate", fake_evaluate)
+    monkeypatch.setattr(
+        few_shot_bayesian_optimizer.task_evaluator, "evaluate", fake_evaluate
+    )
 
     optimizer._evaluate_prompt(
         prompt=dummy_prompt,

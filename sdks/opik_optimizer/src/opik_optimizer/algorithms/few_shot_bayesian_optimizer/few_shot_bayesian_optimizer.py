@@ -1,6 +1,5 @@
 from typing import Any
 from collections.abc import Callable
-from dataclasses import dataclass
 
 import copy
 import json
@@ -20,6 +19,7 @@ from ...api_objects import chat_prompt
 from ...optimizable_agent import OptimizableAgent
 from ... import _throttle, optimization_result, task_evaluator, utils
 from . import reporting, prompts
+from .columnar_search_space import ColumnarSearchSpace
 
 _limiter = _throttle.get_rate_limiter_for_current_opik_installation()
 
@@ -29,26 +29,6 @@ logger = logging.getLogger(__name__)
 class FewShotPromptTemplate(BaseModel):
     message_list_with_placeholder: list[dict[str, str]]
     example_template: str
-
-
-@dataclass(frozen=True)
-class ColumnarSearchSpace:
-    columns: list[str]
-    combo_labels: list[str]
-    combo_to_indices: dict[str, list[int]]
-    max_group_size: int
-
-    @property
-    def is_enabled(self) -> bool:
-        return bool(self.combo_labels)
-
-    def select_index(self, combo_label: str, member_index: int) -> int:
-        indices = self.combo_to_indices.get(combo_label)
-        if not indices:
-            raise ValueError(f"Unknown combo label requested: {combo_label}")
-        if len(indices) == 1:
-            return indices[0]
-        return indices[member_index % len(indices)]
 
 
 class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
@@ -223,7 +203,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         cap unique values to keep the search space manageable.
         """
         if not dataset_items:
-            return ColumnarSearchSpace([], [], {}, 0)
+            return ColumnarSearchSpace.empty()
 
         candidate_columns: list[str] = []
         for key in dataset_items[0]:
@@ -254,7 +234,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             candidate_columns.append(key)
 
         if not candidate_columns:
-            return ColumnarSearchSpace([], [], {}, 0)
+            return ColumnarSearchSpace.empty()
 
         combo_to_indices: dict[str, list[int]] = {}
         for idx, item in enumerate(dataset_items):
@@ -274,7 +254,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             combo_to_indices.setdefault(combo_label, []).append(idx)
 
         if not combo_to_indices:
-            return ColumnarSearchSpace([], [], {}, 0)
+            return ColumnarSearchSpace.empty()
 
         max_group_size = max(len(indices) for indices in combo_to_indices.values())
         combo_labels = sorted(combo_to_indices.keys())
@@ -387,7 +367,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         columnar_search_space = (
             self._build_columnar_search_space(dataset_items)
             if self.enable_columnar_selection
-            else ColumnarSearchSpace([], [], {}, 0)
+            else ColumnarSearchSpace.empty()
         )
         if columnar_search_space.is_enabled:
             logger.debug(

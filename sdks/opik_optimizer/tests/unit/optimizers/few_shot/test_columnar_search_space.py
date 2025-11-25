@@ -128,7 +128,7 @@ def test_columnar_selection_can_be_disabled() -> None:
     columnar_space = (
         optimizer._build_columnar_search_space(records)
         if optimizer.enable_columnar_selection
-        else ColumnarSearchSpace([], [], {}, 0)
+        else ColumnarSearchSpace.empty()
     )
     trial = optuna.trial.FixedTrial({"example_0": 1})
 
