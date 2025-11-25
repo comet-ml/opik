@@ -345,6 +345,7 @@ export const generateDataRowCellDef = <
           metadata={context.column.columnDef.meta}
           tableMetadata={context.table.options.meta}
           className="gap-2"
+          stopClickPropagation
         >
           <Checkbox
             style={{
@@ -388,6 +389,7 @@ export const generateGroupedRowCellDef = <TData, TValue>(
         <div
           className="flex size-full h-11 items-center pr-2"
           data-cell-wrapper="true"
+          onClick={(event) => event.stopPropagation()}
         >
           <div
             className="flex max-w-full items-center overflow-hidden"
