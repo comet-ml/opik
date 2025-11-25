@@ -1,6 +1,6 @@
 import contextlib
 from typing import Iterator, List
-
+from typing import Optional
 from . import opik_client
 from ..message_processing import message_processors_chain
 from ..message_processing.emulation import local_emulator_message_processor, models
@@ -33,9 +33,13 @@ class _LocalRecordingHandle:
 
 
 @contextlib.contextmanager
-def record_traces_locally() -> Iterator[_LocalRecordingHandle]:
+def record_traces_locally(
+    client: Optional[opik_client.Opik] = None,
+) -> Iterator[_LocalRecordingHandle]:
     """Enable local recording of traces/spans within the context.
 
+    Args:
+        client: Optional Opik client to use for recording. If not provided, the default session client will be used.
     Usage:
         with opik.record_traces_locally() as storage:
             # your code that creates traces/spans
@@ -44,7 +48,8 @@ def record_traces_locally() -> Iterator[_LocalRecordingHandle]:
     Yields a handle with `span_trees` and `trace_trees` properties that flush
     the client before reading, ensuring all events are captured.
     """
-    client = opik_client.get_client_cached()
+    if client is None:
+        client = opik_client.get_client_cached()
 
     # Disallow nested/local concurrent recordings in the same process
     existing_local = message_processors_chain.get_local_emulator_message_processor(
