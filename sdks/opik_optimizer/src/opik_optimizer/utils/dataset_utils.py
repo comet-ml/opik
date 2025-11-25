@@ -561,10 +561,11 @@ class DatasetHandle:
             value is not None for value in (split, start, count, dataset_name)
         )
         if prefer_presets is not None:
-            pref = prefer_presets
+            pref: bool = prefer_presets
+        elif overrides_provided:
+            pref = False
         else:
-            # Only lean on spec preference when caller didn't pass overrides.
-            pref = self.spec.prefer_presets if not overrides_provided else None
+            pref = self.spec.prefer_presets
 
         return load_hf_dataset_slice(
             base_name=self.spec.name,
