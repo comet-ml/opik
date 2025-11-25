@@ -107,6 +107,11 @@ class BaseOptimizer(ABC):
         """Increment the tool call counter."""
         self.tool_call_counter += 1
 
+    def _get_optimizer_short_name(self) -> str:
+        """Get the short name for this optimizer class for use in tags."""
+        class_name = self.__class__.__name__
+        return self._OPTIMIZER_SHORT_NAMES.get(class_name, class_name)
+
     def cleanup(self) -> None:
         """
         Clean up resources and perform memory management.
