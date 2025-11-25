@@ -85,6 +85,7 @@ import uk.co.jemos.podam.api.PodamFactory;
 import uk.co.jemos.podam.api.PodamUtils;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
@@ -3090,6 +3091,443 @@ class GetTracesByProjectResourceTest {
                             (Function<List<Trace>, List<Trace>>) traces -> traces.subList(1, traces.size()),
                             (Function<List<Trace>, List<Trace>>) traces -> List.of(traces.getFirst()),
                             traceStreamTestAssertion));
+        }
+
+        private BigDecimal toScoreValue(int randomVal) {
+            return BigDecimal.valueOf(randomVal)
+                    .divide(BigDecimal.valueOf(100), 9, RoundingMode.HALF_UP);
+        }
+
+        private BigDecimal calculateAggregatedAverage(List<BigDecimal> values) {
+            return values.stream()
+                    .reduce(BigDecimal.ZERO, BigDecimal::add)
+                    .divide(BigDecimal.valueOf(values.size()), 9, RoundingMode.HALF_UP);
+        }
+
+        private String formatFilterValue(BigDecimal value) {
+            return value.setScale(9, RoundingMode.HALF_UP).toString();
+        }
+
+        private List<Span> createSpansForTrace(Trace trace, String projectName) {
+            return List.of(
+                    factory.manufacturePojo(Span.class).toBuilder()
+                            .projectName(projectName)
+                            .traceId(trace.id())
+                            .totalEstimatedCost(null)
+                            .feedbackScores(null)
+                            .comments(null)
+                            .usage(null)
+                            .build(),
+                    factory.manufacturePojo(Span.class).toBuilder()
+                            .projectName(projectName)
+                            .traceId(trace.id())
+                            .totalEstimatedCost(null)
+                            .feedbackScores(null)
+                            .comments(null)
+                            .usage(null)
+                            .build());
+        }
+
+        private FeedbackScore createFeedbackScore(FeedbackScoreBatchItem templateScore, BigDecimal value) {
+            return factory.manufacturePojo(FeedbackScore.class).toBuilder()
+                    .name(templateScore.name())
+                    .value(value)
+                    .categoryName(templateScore.categoryName())
+                    .reason(templateScore.reason())
+                    .source(templateScore.source())
+                    .build();
+        }
+
+        private void processTraceWithFeedbackScores(Trace trace, String projectName, String apiKey,
+                String workspaceName, FeedbackScoreBatchItem templateScore, int scoreMin, int scoreMax,
+                Map<UUID, List<Span>> traceIdToSpansMap,
+                Map<UUID, FeedbackScore> traceIdToSpanFeedbackScoresMap) {
+            var spans = createSpansForTrace(trace, projectName);
+            spanResourceClient.batchCreateSpans(spans, apiKey, workspaceName);
+            traceIdToSpansMap.put(trace.id(), spans);
+
+            var spanValues = new ArrayList<BigDecimal>();
+            var batchScores = new ArrayList<FeedbackScoreBatchItem>();
+            for (var span : spans) {
+                var value = toScoreValue(randomNumber(scoreMin, scoreMax));
+                spanValues.add(value);
+                batchScores.add(templateScore.toBuilder()
+                        .id(span.id())
+                        .projectName(projectName)
+                        .value(value)
+                        .build());
+            }
+
+            spanResourceClient.feedbackScores(batchScores, apiKey, workspaceName);
+            var aggregatedAvg = calculateAggregatedAverage(spanValues);
+            traceIdToSpanFeedbackScoresMap.put(trace.id(),
+                    createFeedbackScore(templateScore, aggregatedAvg));
+        }
+
+        @ParameterizedTest
+        @MethodSource("getFeedbackScoresArgs")
+        void whenFilterSpanFeedbackScoresEqual__thenReturnTracesFiltered(String endpoint,
+                Operator operator,
+                Function<List<Trace>, List<Trace>> getExpectedTraces,
+                Function<List<Trace>, List<Trace>> getUnexpectedTraces,
+                TracePageTestAssertion testAssertion) {
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
+                    .stream()
+                    .limit(4) // Ensure exactly 4 traces for the test (PodamFactoryUtils always creates 5)
+                    .map(trace -> trace.toBuilder()
+                            .projectId(null)
+                            .projectName(projectName)
+                            .usage(null)
+                            .threadId(null)
+                            .totalEstimatedCost(null)
+                            .feedbackScores(null)
+                            .spanFeedbackScores(null)
+                            .guardrailsValidations(null)
+                            .comments(null)
+                            .llmSpanCount(0)
+                            .spanCount(0)
+                            .build())
+                    .collect(Collectors.toCollection(ArrayList::new));
+
+            traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
+
+            var traceIdToSpanFeedbackScoresMap = new HashMap<UUID, FeedbackScore>();
+            var traceIdToSpansMap = new HashMap<UUID, List<Span>>();
+            var templateScore = initFeedbackScoreItem().build();
+
+            // Create spans and feedback scores for all traces
+            // Trace 0: values in [81, 90] range -> will be used for EQUAL filter
+            // Trace 1: has NO span feedback scores (won't match EQUAL or NOT_EQUAL)
+            // Traces 2 and 3: values in [70, 80] range -> will match NOT_EQUAL filter
+
+            // First, process trace 0 to get its aggregated average
+            var trace0 = traces.getFirst();
+            processTraceWithFeedbackScores(trace0, projectName, apiKey, workspaceName, templateScore, 81, 90,
+                    traceIdToSpansMap, traceIdToSpanFeedbackScoresMap);
+
+            // Now process trace 1: create spans but NO feedback scores
+            // This ensures trace 1 won't match EQUAL (no scores) and won't match NOT_EQUAL (no scores to compare)
+            var trace1 = traces.get(1);
+            var trace1Spans = createSpansForTrace(trace1, projectName);
+            spanResourceClient.batchCreateSpans(trace1Spans, apiKey, workspaceName);
+            traceIdToSpansMap.put(trace1.id(), trace1Spans);
+            // Trace 1 has no span feedback scores, so it won't match any filter
+            traceIdToSpanFeedbackScoresMap.put(trace1.id(),
+                    createFeedbackScore(templateScore, BigDecimal.ZERO)); // Placeholder, won't be used
+
+            // Now process traces 2 and 3: generate random values in [70, 80] range
+            for (int i = 2; i < traces.size(); i++) {
+                processTraceWithFeedbackScores(traces.get(i), projectName, apiKey, workspaceName, templateScore, 70, 80,
+                        traceIdToSpansMap, traceIdToSpanFeedbackScoresMap);
+            }
+
+            // Trace 0: has aggregated average (used for EQUAL filter)
+            // Trace 1: has NO span feedback scores (won't match EQUAL or NOT_EQUAL)
+            // Traces 2 and 3: have aggregated averages in [70, 80] range (will match NOT_EQUAL filter)
+            var trace0Score = traceIdToSpanFeedbackScoresMap.get(traces.getFirst().id());
+            var filterValue = formatFilterValue(trace0Score.value());
+
+            var filters = List.of(
+                    TraceFilter.builder()
+                            .field(TraceField.SPAN_FEEDBACK_SCORES)
+                            .operator(operator)
+                            .key(trace0Score.name().toUpperCase())
+                            .value(filterValue)
+                            .build());
+
+            var trace1Id = traces.get(1).id();
+            traces = traces.stream()
+                    .map(trace -> {
+                        var score = traceIdToSpanFeedbackScoresMap.get(trace.id());
+                        // Trace 1 has no span feedback scores, so set to null
+                        var spanFeedbackScores = (trace.id().equals(trace1Id)
+                                && score != null && score.value().equals(BigDecimal.ZERO))
+                                        ? null
+                                        : (score != null ? List.of(score) : null);
+                        var spans = traceIdToSpansMap.get(trace.id());
+                        var spanCount = spans != null ? spans.size() : 0;
+                        var llmSpanCount = spans != null
+                                ? (int) spans.stream()
+                                        .filter(s -> SpanType.llm.equals(s.type()))
+                                        .count()
+                                : 0;
+                        return trace.toBuilder()
+                                .spanFeedbackScores(spanFeedbackScores)
+                                .spanCount(spanCount)
+                                .llmSpanCount(llmSpanCount)
+                                .duration(DurationUtils.getDurationInMillisWithSubMilliPrecision(trace.startTime(),
+                                        trace.endTime()))
+                                .build();
+                    })
+                    .collect(Collectors.toCollection(ArrayList::new));
+
+            // Use the provided functions to get expected/unexpected traces
+            // These functions use list indices, so traces must be in original order
+            var expectedTraces = getExpectedTraces.apply(traces);
+            var unexpectedTraces = getUnexpectedTraces.apply(traces);
+
+            var values = testAssertion.transformTestParams(traces, expectedTraces.reversed(), unexpectedTraces);
+
+            testAssertion.assertTest(projectName, null, apiKey, workspaceName, values.expected(), values.unexpected(),
+                    values.all(), filters, Map.of());
+        }
+
+        @ParameterizedTest
+        @MethodSource("getFilterTestArguments")
+        void whenFilterSpanFeedbackScoresGreaterThan__thenReturnTracesFiltered(String endpoint,
+                TracePageTestAssertion testAssertion) {
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
+                    .stream()
+                    .limit(2)
+                    .map(trace -> trace.toBuilder()
+                            .projectId(null)
+                            .projectName(projectName)
+                            .usage(null)
+                            .threadId(null)
+                            .totalEstimatedCost(null)
+                            .feedbackScores(null)
+                            .spanFeedbackScores(null)
+                            .guardrailsValidations(null)
+                            .comments(null)
+                            .llmSpanCount(0)
+                            .spanCount(0)
+                            .build())
+                    .collect(Collectors.toCollection(ArrayList::new));
+
+            traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
+
+            var traceIdToSpanFeedbackScoresMap = new HashMap<UUID, FeedbackScore>();
+            var traceIdToSpansMap = new HashMap<UUID, List<Span>>();
+            var templateScore = initFeedbackScoreItem().build();
+
+            // Trace 0: aggregated average > threshold (will match GREATER_THAN filter)
+            // Trace 1: aggregated average < threshold (won't match GREATER_THAN filter)
+            var trace0 = traces.get(0);
+            processTraceWithFeedbackScores(trace0, projectName, apiKey, workspaceName, templateScore, 85, 95,
+                    traceIdToSpansMap, traceIdToSpanFeedbackScoresMap);
+
+            var trace1 = traces.get(1);
+            processTraceWithFeedbackScores(trace1, projectName, apiKey, workspaceName, templateScore, 70, 80,
+                    traceIdToSpansMap, traceIdToSpanFeedbackScoresMap);
+
+            var trace0Score = traceIdToSpanFeedbackScoresMap.get(trace0.id());
+            var thresholdValue = formatFilterValue(trace0Score.value().subtract(BigDecimal.valueOf(0.1)));
+
+            var filters = List.of(
+                    TraceFilter.builder()
+                            .field(TraceField.SPAN_FEEDBACK_SCORES)
+                            .operator(Operator.GREATER_THAN)
+                            .key(trace0Score.name().toUpperCase())
+                            .value(thresholdValue)
+                            .build());
+
+            traces = enrichTracesWithSpanData(traces, traceIdToSpanFeedbackScoresMap, traceIdToSpansMap);
+            var expectedTraces = List.of(traces.get(0));
+            var unexpectedTraces = List.of(traces.get(1));
+
+            var values = testAssertion.transformTestParams(traces, expectedTraces, unexpectedTraces);
+            testAssertion.assertTest(projectName, null, apiKey, workspaceName, values.expected(), values.unexpected(),
+                    values.all(), filters, Map.of());
+        }
+
+        @ParameterizedTest
+        @MethodSource("getFilterTestArguments")
+        void whenFilterSpanFeedbackScoresLessThanEqual__thenReturnTracesFiltered(String endpoint,
+                TracePageTestAssertion testAssertion) {
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
+                    .stream()
+                    .limit(2)
+                    .map(trace -> trace.toBuilder()
+                            .projectId(null)
+                            .projectName(projectName)
+                            .usage(null)
+                            .threadId(null)
+                            .totalEstimatedCost(null)
+                            .feedbackScores(null)
+                            .spanFeedbackScores(null)
+                            .guardrailsValidations(null)
+                            .comments(null)
+                            .llmSpanCount(0)
+                            .spanCount(0)
+                            .build())
+                    .collect(Collectors.toCollection(ArrayList::new));
+
+            traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
+
+            var traceIdToSpanFeedbackScoresMap = new HashMap<UUID, FeedbackScore>();
+            var traceIdToSpansMap = new HashMap<UUID, List<Span>>();
+            var templateScore = initFeedbackScoreItem().build();
+
+            // Trace 0: aggregated average <= threshold (will match LESS_THAN_EQUAL filter)
+            // Trace 1: aggregated average > threshold (won't match LESS_THAN_EQUAL filter)
+            var trace0 = traces.get(0);
+            processTraceWithFeedbackScores(trace0, projectName, apiKey, workspaceName, templateScore, 70, 80,
+                    traceIdToSpansMap, traceIdToSpanFeedbackScoresMap);
+
+            var trace1 = traces.get(1);
+            processTraceWithFeedbackScores(trace1, projectName, apiKey, workspaceName, templateScore, 85, 95,
+                    traceIdToSpansMap, traceIdToSpanFeedbackScoresMap);
+
+            var trace0Score = traceIdToSpanFeedbackScoresMap.get(trace0.id());
+            var thresholdValue = formatFilterValue(trace0Score.value());
+
+            var filters = List.of(
+                    TraceFilter.builder()
+                            .field(TraceField.SPAN_FEEDBACK_SCORES)
+                            .operator(Operator.LESS_THAN_EQUAL)
+                            .key(trace0Score.name().toUpperCase())
+                            .value(thresholdValue)
+                            .build());
+
+            traces = enrichTracesWithSpanData(traces, traceIdToSpanFeedbackScoresMap, traceIdToSpansMap);
+            var expectedTraces = List.of(traces.get(0));
+            var unexpectedTraces = List.of(traces.get(1));
+
+            var values = testAssertion.transformTestParams(traces, expectedTraces, unexpectedTraces);
+            testAssertion.assertTest(projectName, null, apiKey, workspaceName, values.expected(), values.unexpected(),
+                    values.all(), filters, Map.of());
+        }
+
+        private Stream<Arguments> getTracesByProject__whenFilterSpanFeedbackScoresIsEmpty__thenReturnTracesFiltered() {
+            return Stream.of(
+                    Arguments.of(Operator.IS_NOT_EMPTY,
+                            (Function<List<Trace>, List<Trace>>) traces -> List.of(traces.getFirst()),
+                            (Function<List<Trace>, List<Trace>>) traces -> traces.subList(1, traces.size()),
+                            traceTestAssertion),
+                    Arguments.of(Operator.IS_EMPTY,
+                            (Function<List<Trace>, List<Trace>>) traces -> traces.subList(1, traces.size()),
+                            (Function<List<Trace>, List<Trace>>) traces -> List.of(traces.getFirst()),
+                            traceTestAssertion),
+                    Arguments.of(Operator.IS_NOT_EMPTY,
+                            (Function<List<Trace>, List<Trace>>) traces -> List.of(traces.getFirst()),
+                            (Function<List<Trace>, List<Trace>>) traces -> traces.subList(1, traces.size()),
+                            traceStatsAssertion),
+                    Arguments.of(Operator.IS_EMPTY,
+                            (Function<List<Trace>, List<Trace>>) traces -> traces.subList(1, traces.size()),
+                            (Function<List<Trace>, List<Trace>>) traces -> List.of(traces.getFirst()),
+                            traceStatsAssertion),
+                    Arguments.of(Operator.IS_NOT_EMPTY,
+                            (Function<List<Trace>, List<Trace>>) traces -> List.of(traces.getFirst()),
+                            (Function<List<Trace>, List<Trace>>) traces -> traces.subList(1, traces.size()),
+                            traceStreamTestAssertion),
+                    Arguments.of(Operator.IS_EMPTY,
+                            (Function<List<Trace>, List<Trace>>) traces -> traces.subList(1, traces.size()),
+                            (Function<List<Trace>, List<Trace>>) traces -> List.of(traces.getFirst()),
+                            traceStreamTestAssertion));
+        }
+
+        @ParameterizedTest
+        @MethodSource("getTracesByProject__whenFilterSpanFeedbackScoresIsEmpty__thenReturnTracesFiltered")
+        void getTracesByProject__whenFilterSpanFeedbackScoresIsEmpty__thenReturnTracesFiltered(
+                Operator operator,
+                Function<List<Trace>, List<Trace>> getExpectedTraces,
+                Function<List<Trace>, List<Trace>> getUnexpectedTraces,
+                TracePageTestAssertion testAssertion) {
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
+                    .stream()
+                    .limit(2)
+                    .map(trace -> trace.toBuilder()
+                            .projectId(null)
+                            .projectName(projectName)
+                            .usage(null)
+                            .threadId(null)
+                            .totalEstimatedCost(null)
+                            .feedbackScores(null)
+                            .spanFeedbackScores(null)
+                            .guardrailsValidations(null)
+                            .comments(null)
+                            .llmSpanCount(0)
+                            .spanCount(0)
+                            .build())
+                    .collect(Collectors.toCollection(ArrayList::new));
+
+            traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
+
+            var traceIdToSpanFeedbackScoresMap = new HashMap<UUID, FeedbackScore>();
+            var traceIdToSpansMap = new HashMap<UUID, List<Span>>();
+            var templateScore = initFeedbackScoreItem().build();
+
+            // Trace 0: has span feedback scores (will match IS_NOT_EMPTY, won't match IS_EMPTY)
+            // Trace 1: has NO span feedback scores (will match IS_EMPTY, won't match IS_NOT_EMPTY)
+            var trace0 = traces.get(0);
+            processTraceWithFeedbackScores(trace0, projectName, apiKey, workspaceName, templateScore, 70, 80,
+                    traceIdToSpansMap, traceIdToSpanFeedbackScoresMap);
+
+            var trace1 = traces.get(1);
+            var trace1Spans = createSpansForTrace(trace1, projectName);
+            spanResourceClient.batchCreateSpans(trace1Spans, apiKey, workspaceName);
+            traceIdToSpansMap.put(trace1.id(), trace1Spans);
+            // Trace 1 has no span feedback scores - don't add to map, so it will be null
+
+            var trace0Score = traceIdToSpanFeedbackScoresMap.get(trace0.id());
+            var filters = List.of(
+                    TraceFilter.builder()
+                            .field(TraceField.SPAN_FEEDBACK_SCORES)
+                            .operator(operator)
+                            .key(trace0Score.name().toUpperCase())
+                            .value("")
+                            .build());
+
+            traces = enrichTracesWithSpanData(traces, traceIdToSpanFeedbackScoresMap, traceIdToSpansMap);
+            var expectedTraces = getExpectedTraces.apply(traces);
+            var unexpectedTraces = getUnexpectedTraces.apply(traces);
+
+            var values = testAssertion.transformTestParams(traces, expectedTraces.reversed(), unexpectedTraces);
+            testAssertion.assertTest(projectName, null, apiKey, workspaceName, values.expected(), values.unexpected(),
+                    values.all(), filters, Map.of());
+        }
+
+        private ArrayList<Trace> enrichTracesWithSpanData(List<Trace> traces,
+                Map<UUID, FeedbackScore> traceIdToSpanFeedbackScoresMap,
+                Map<UUID, List<Span>> traceIdToSpansMap) {
+            return traces.stream()
+                    .map(trace -> {
+                        var score = traceIdToSpanFeedbackScoresMap.get(trace.id());
+                        var spanFeedbackScores = score != null ? List.of(score) : null;
+                        var spans = traceIdToSpansMap.get(trace.id());
+                        var spanCount = spans != null ? spans.size() : 0;
+                        var llmSpanCount = spans != null
+                                ? (int) spans.stream()
+                                        .filter(s -> SpanType.llm.equals(s.type()))
+                                        .count()
+                                : 0;
+                        return trace.toBuilder()
+                                .spanFeedbackScores(spanFeedbackScores)
+                                .spanCount(spanCount)
+                                .llmSpanCount(llmSpanCount)
+                                .duration(DurationUtils.getDurationInMillisWithSubMilliPrecision(trace.startTime(),
+                                        trace.endTime()))
+                                .build();
+                    })
+                    .collect(Collectors.toCollection(ArrayList::new));
         }
 
         @ParameterizedTest

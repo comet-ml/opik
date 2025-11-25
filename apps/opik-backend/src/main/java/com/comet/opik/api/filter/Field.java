@@ -23,6 +23,7 @@ public interface Field {
     String USAGE_PROMPT_TOKENS_QUERY_PARAM = "usage.prompt_tokens";
     String USAGE_TOTAL_TOKEN_QUERY_PARAMS = "usage.total_tokens";
     String FEEDBACK_SCORES_QUERY_PARAM = "feedback_scores";
+    String SPAN_FEEDBACK_SCORES_QUERY_PARAM = "span_feedback_scores";
     String DURATION_QUERY_PARAM = "duration";
     String THREAD_ID_QUERY_PARAM = "thread_id";
     String DATASET_ID_QUERY_PARAM = "dataset_id";

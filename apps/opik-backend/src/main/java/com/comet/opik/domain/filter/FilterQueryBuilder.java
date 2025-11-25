@@ -82,6 +82,7 @@ public class FilterQueryBuilder {
     private static final String INSTRUCTIONS_DB = "instructions";
     private static final String NUMBER_OF_MESSAGES_ANALYTICS_DB = "number_of_messages";
     private static final String FEEDBACK_SCORE_COUNT_DB = "fsc.feedback_scores_count";
+    private static final String SPAN_FEEDBACK_SCORE_COUNT_DB = "sfsc.span_feedback_scores_count";
     private static final String GUARDRAILS_RESULT_DB = "gagg.guardrails_result";
     private static final String VISIBILITY_MODE_DB = "visibility_mode";
     private static final String ERROR_INFO_DB = "error_info";
@@ -216,6 +217,7 @@ public class FilterQueryBuilder {
                     .put(TraceField.USAGE_PROMPT_TOKENS, USAGE_PROMPT_TOKENS_ANALYTICS_DB)
                     .put(TraceField.USAGE_TOTAL_TOKENS, USAGE_TOTAL_TOKENS_ANALYTICS_DB)
                     .put(TraceField.FEEDBACK_SCORES, VALUE_ANALYTICS_DB)
+                    .put(TraceField.SPAN_FEEDBACK_SCORES, VALUE_ANALYTICS_DB)
                     .put(TraceField.DURATION, DURATION_ANALYTICS_DB)
                     .put(TraceField.THREAD_ID, THREAD_ID_ANALYTICS_DB)
                     .put(TraceField.GUARDRAILS, GUARDRAILS_RESULT_DB)
@@ -440,6 +442,8 @@ public class FilterQueryBuilder {
                 SpanField.FEEDBACK_SCORES,
                 ExperimentsComparisonValidKnownField.FEEDBACK_SCORES,
                 TraceThreadField.FEEDBACK_SCORES));
+        
+        map.put(FilterStrategy.SPAN_FEEDBACK_SCORES, Set.of(TraceField.SPAN_FEEDBACK_SCORES));
 
         map.put(FilterStrategy.EXPERIMENT_ITEM, Set.of(
                 ExperimentsComparisonValidKnownField.OUTPUT,
@@ -598,21 +602,21 @@ public class FilterQueryBuilder {
         // we want to apply the is empty filter only in the case below
         if (filter.operator() == Operator.IS_EMPTY && filterStrategy == FilterStrategy.FEEDBACK_SCORES_IS_EMPTY) {
             return Optional.of(FILTER_STRATEGY_MAP.get(FilterStrategy.FEEDBACK_SCORES));
-        } else
-            if (filter.operator() == Operator.IS_NOT_EMPTY
-                    && filterStrategy == FilterStrategy.FEEDBACK_SCORES_IS_EMPTY) {
-                        return Optional.empty();
-                    } else
-                if (filter.operator() == Operator.IS_EMPTY && isFeedBackScore(filter)) {
-                    return Optional.empty();
-                }
+        } else if (filter.operator() == Operator.IS_EMPTY && filterStrategy == FilterStrategy.SPAN_FEEDBACK_SCORES_IS_EMPTY) {
+            return Optional.of(FILTER_STRATEGY_MAP.get(FilterStrategy.SPAN_FEEDBACK_SCORES));
+        } else if (filter.operator() == Operator.IS_NOT_EMPTY && Set.of(FilterStrategy.FEEDBACK_SCORES_IS_EMPTY, FilterStrategy.SPAN_FEEDBACK_SCORES_IS_EMPTY).contains(filterStrategy)) {
+            return Optional.empty();
+        } else if (filter.operator() == Operator.IS_EMPTY && isFeedBackScore(filter)) {
+            return Optional.empty();
+        }
 
         return Optional.ofNullable(FILTER_STRATEGY_MAP.get(filterStrategy));
     }
 
     private static boolean isFeedBackScore(Filter filter) {
-        Set<Field> feedbackScoreFields = Set.of(TraceField.FEEDBACK_SCORES, SpanField.FEEDBACK_SCORES,
-                TraceThreadField.FEEDBACK_SCORES, ExperimentsComparisonValidKnownField.FEEDBACK_SCORES);
+        Set<Field> feedbackScoreFields = Set.of(TraceField.FEEDBACK_SCORES, TraceField.SPAN_FEEDBACK_SCORES,
+                SpanField.FEEDBACK_SCORES, TraceThreadField.FEEDBACK_SCORES,
+                ExperimentsComparisonValidKnownField.FEEDBACK_SCORES);
         return feedbackScoreFields.contains(filter.field());
     }
 
@@ -626,6 +630,10 @@ public class FilterQueryBuilder {
         // this is a special case where the DB field is determined by the filter strategy rather than the filter field
         if (filterStrategy == FilterStrategy.FEEDBACK_SCORES_IS_EMPTY) {
             return FEEDBACK_SCORE_COUNT_DB;
+        }
+
+        if (filterStrategy == FilterStrategy.SPAN_FEEDBACK_SCORES_IS_EMPTY) {
+            return SPAN_FEEDBACK_SCORE_COUNT_DB;
         }
 
         return switch (field) {
