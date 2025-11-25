@@ -9,6 +9,7 @@ import { Separator } from "@/components/ui/separator";
 import LoadableSelectBox from "@/components/shared/LoadableSelectBox/LoadableSelectBox";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import usePromptsList from "@/api/prompts/usePromptsList";
+import usePromptById from "@/api/prompts/usePromptById";
 
 const DEFAULT_LOADED_PROMPTS = 1000;
 const MAX_LOADED_PROMPTS = 10000;
@@ -52,12 +53,36 @@ const PromptsSelectBox: React.FC<PromptsSelectBoxProps> = ({
     [promptsData?.content],
   );
 
+  // Check if the current value (promptId) exists in the loaded prompts
+  const valueExistsInOptions = useMemo(
+    () => value && prompts.some((p) => p.id === value),
+    [value, prompts],
+  );
+
+  // Fetch the specific prompt if value is provided but not in the options list
+  const { data: selectedPromptData } = usePromptById(
+    { promptId: value ?? "" },
+    {
+      enabled: Boolean(value && !valueExistsInOptions),
+    },
+  );
+
   const promptsOptions = useMemo(() => {
-    return prompts.map(({ name, id }) => ({
+    const options = prompts.map(({ name, id }) => ({
       label: name,
       value: id,
     }));
-  }, [prompts]);
+
+    // If we have a selected prompt that's not in the options, add it
+    if (value && selectedPromptData && !valueExistsInOptions) {
+      options.unshift({
+        label: selectedPromptData.name,
+        value: selectedPromptData.id,
+      });
+    }
+
+    return options;
+  }, [prompts, value, selectedPromptData]);
 
   const promptsTotal = promptsData?.total ?? 0;
 
