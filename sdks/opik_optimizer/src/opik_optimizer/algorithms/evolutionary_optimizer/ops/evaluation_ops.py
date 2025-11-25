@@ -62,6 +62,7 @@ def evaluate_prompt(
     )
     try:
         agent = optimizer._instantiate_agent(new_prompt)
+        optimizer._set_agent_trace_phase(agent, "Evaluation")
     except Exception:
         return 0.0
 
@@ -72,10 +73,6 @@ def evaluate_prompt(
 
         if mcp_execution_config is None:
             model_output = agent.invoke(messages)
-
-            # Add tags to trace for optimization tracking
-            optimizer._tag_trace()
-
             return {"llm_output": model_output}
 
         coordinator = mcp_execution_config.coordinator
@@ -113,9 +110,6 @@ def evaluate_prompt(
             )
         else:
             final_response = raw_model_output
-
-        # Add tags to trace for optimization tracking
-        optimizer._tag_trace()
 
         return {"llm_output": final_response.strip()}
 

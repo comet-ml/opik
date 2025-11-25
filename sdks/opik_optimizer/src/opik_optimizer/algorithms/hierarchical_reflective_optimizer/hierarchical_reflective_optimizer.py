@@ -158,6 +158,7 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
             messages = new_prompt.get_messages(dataset_item)
             new_prompt.set_messages(messages)
             agent = self._instantiate_agent(prompt=new_prompt)
+            self._set_agent_trace_phase(agent, "Evaluation")
 
             try:
                 logger.debug(
@@ -175,9 +176,6 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
                 raise
 
             cleaned_model_output = raw_model_output.strip()
-
-            # Add tags to trace for optimization tracking
-            self._tag_trace()
 
             result = {
                 "llm_output": cleaned_model_output,

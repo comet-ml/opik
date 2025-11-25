@@ -103,6 +103,7 @@ def evaluate_prompt(
         messages = new_prompt.get_messages(dataset_item)
         new_prompt.set_messages(messages)
         agent = optimizer._instantiate_agent(new_prompt)
+        optimizer._set_agent_trace_phase(agent, "Evaluation")
 
         if mcp_config is not None:
             coordinator = mcp_config.coordinator
@@ -172,9 +173,6 @@ def evaluate_prompt(
                 raise
 
             cleaned_model_output = raw_model_output.strip()
-
-        # Add tags to trace for optimization tracking
-        optimizer._tag_trace()
 
         result = {
             "llm_output": cleaned_model_output,

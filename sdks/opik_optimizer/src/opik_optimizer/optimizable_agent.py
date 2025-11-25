@@ -56,6 +56,7 @@ class OptimizableAgent:
             project_name: Optional project name for Opik tracking
         """
         self.project_name = project_name or "Default Project"
+        self.trace_phase: str | None = "Prompt Optimization"
         self.init_llm()
         self.init_agent(prompt)
 
@@ -86,9 +87,10 @@ class OptimizableAgent:
         seed: int | None = None,
     ) -> Any:
         optimizer_ref = getattr(self, "optimizer", None)
+        phase = getattr(self, "trace_phase", None) or "Prompt Optimization"
         if optimizer_ref is not None and hasattr(optimizer_ref, "_tag_trace"):
             try:
-                optimizer_ref._tag_trace(phase="Prompt Optimization")
+                optimizer_ref._tag_trace(phase=phase)
             except Exception:
                 pass
 
