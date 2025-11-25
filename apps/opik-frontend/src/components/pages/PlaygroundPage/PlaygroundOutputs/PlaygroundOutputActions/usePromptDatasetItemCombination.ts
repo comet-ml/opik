@@ -131,6 +131,7 @@ interface UsePromptDatasetItemCombinationArgs {
   selectedRuleIds: string[] | null;
   addAbortController: (key: string, value: AbortController) => void;
   deleteAbortController: (key: string) => void;
+  throttlingSeconds: number;
 }
 
 const usePromptDatasetItemCombination = ({
@@ -141,6 +142,7 @@ const usePromptDatasetItemCombination = ({
   selectedRuleIds,
   addAbortController,
   deleteAbortController,
+  throttlingSeconds,
 }: UsePromptDatasetItemCombinationArgs) => {
   const updateOutput = useUpdateOutput();
   const hydrateDatasetItemData = useHydrateDatasetItemData();
@@ -248,6 +250,13 @@ const usePromptDatasetItemCombination = ({
         });
       } finally {
         deleteAbortController(key);
+
+        // Apply throttling delay if configured
+        if (throttlingSeconds > 0 && !isToStopRef.current) {
+          await new Promise((resolve) =>
+            setTimeout(resolve, throttlingSeconds * 1000),
+          );
+        }
       }
     },
 
@@ -260,6 +269,7 @@ const usePromptDatasetItemCombination = ({
       datasetName,
       deleteAbortController,
       selectedRuleIds,
+      throttlingSeconds,
     ],
   );
 
