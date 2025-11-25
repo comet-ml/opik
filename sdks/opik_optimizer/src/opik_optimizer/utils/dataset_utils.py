@@ -20,6 +20,7 @@ from opik_optimizer.api_objects.types import DatasetSpec
 
 
 logger = logging.getLogger(__name__)
+_REPLACED_DATASETS: set[str] = set()
 
 
 @lru_cache(maxsize=None)
@@ -92,19 +93,70 @@ def create_dataset_from_records(
     expected_size: int,
     test_mode: bool,
 ) -> opik.Dataset:
-    """Create or reuse an Opik dataset with the provided records and size checks."""
+    """Create or reuse an Opik dataset with the provided records and size checks.
+
+    To keep benchmark runs resilient when datasets were already materialized with
+    a different size, set ``OPIK_DATASET_SKIP_EXISTING=1`` in the environment.
+    In that mode we will reuse the existing dataset even if the size differs.
+    Otherwise we attempt a single delete/recreate when a size mismatch is
+    detected, then reuse the existing dataset on subsequent loads.
+    """
     full_name = dataset_name_for_mode(dataset_name, test_mode)
     client = opik.Opik()
     dataset = client.get_or_create_dataset(full_name)
     existing = dataset.get_items()
 
     if existing:
-        if len(existing) != expected_size:
-            raise ValueError(
-                f"Dataset {full_name} contains {len(existing)} items, expected {expected_size}. "
-                "Delete it to recreate."
+        existing_len = len(existing)
+        skip_existing = (
+            os.getenv("OPIK_DATASET_SKIP_EXISTING", "false").lower() == "true"
+        )
+        if existing_len == expected_size or skip_existing:
+            if existing_len != expected_size:
+                logger.warning(
+                    "Dataset %s exists with %s items (expected %s); reusing because OPIK_DATASET_SKIP_EXISTING is set.",
+                    full_name,
+                    existing_len,
+                    expected_size,
+                )
+            return dataset
+
+        if full_name not in _REPLACED_DATASETS:
+            logger.warning(
+                "Dataset %s exists with %s items (expected %s). Deleting and recreating once for this run.",
+                full_name,
+                existing_len,
+                expected_size,
             )
-        return dataset
+            try:
+                client.delete_dataset(full_name)
+            except Exception as exc:  # pragma: no cover - defensive fallback
+                logger.warning(
+                    "Failed to delete dataset %s (%s); reusing existing dataset.",
+                    full_name,
+                    exc,
+                )
+                _REPLACED_DATASETS.add(full_name)
+                return dataset
+
+            _REPLACED_DATASETS.add(full_name)
+            dataset = client.get_or_create_dataset(full_name)
+            existing = dataset.get_items()
+            if existing:
+                logger.warning(
+                    "Dataset %s still has %s items after recreate; reusing existing copy.",
+                    full_name,
+                    len(existing),
+                )
+                return dataset
+        else:
+            logger.warning(
+                "Dataset %s size mismatch (%s vs %s) but recreate already attempted; reusing existing copy.",
+                full_name,
+                existing_len,
+                expected_size,
+            )
+            return dataset
 
     records_with_ids = attach_uuids(records)
     dataset.insert(records_with_ids)
@@ -280,7 +332,7 @@ def resolve_slice_request(
         preset = None
 
     source_split = _resolve_slice_field(
-        explicit=requested_split,
+        explicit=None if prefer_presets else requested_split,
         preset=preset,
         preset_key="source_split",
         default=default_source_split,
@@ -388,9 +440,7 @@ def load_hf_dataset_slice(
     ensuring callers can deterministically reproduce any slice by setting a
     global env var or passing ``seed=...`` explicitly.
     """
-    use_presets = (
-        prefer_presets if prefer_presets is not None else requested_split is not None
-    )
+    use_presets = prefer_presets if prefer_presets is not None else True
     effective_count = resolve_test_mode_count(test_mode_count) if test_mode else count
     slice_request = resolve_slice_request(
         base_name=base_name,
@@ -418,6 +468,26 @@ def load_hf_dataset_slice(
         os.getenv("OPIK_USE_HF_STREAMING", "true"),
         resolved_seed,
     )
+
+    # Early check: if OPIK_DATASET_SKIP_EXISTING is set, check if dataset exists
+    # and return early to avoid HuggingFace download
+    skip_existing = os.getenv("OPIK_DATASET_SKIP_EXISTING", "false").lower() == "true"
+    if skip_existing:
+        full_name = dataset_name_for_mode(slice_request.dataset_name, test_mode)
+        client = opik.Opik()
+        dataset = client.get_or_create_dataset(full_name)
+        existing = dataset.get_items()
+
+        if existing:
+            existing_len = len(existing)
+            logger.info(
+                "Dataset %s exists with %s items; skipping HuggingFace download because OPIK_DATASET_SKIP_EXISTING is set.",
+                full_name,
+                existing_len,
+            )
+            # Return the existing dataset directly - create_dataset_from_records
+            # would just return it anyway when skip_existing is set
+            return dataset
 
     records = fetch_records_for_slice(
         slice_request=slice_request,
@@ -484,16 +554,7 @@ class DatasetHandle:
         so callers can fully reproduce slices by passing ``seed`` all the way
         through the public API.
         """
-        if prefer_presets is None:
-            no_overrides = (
-                split is None
-                and start is None
-                and count is None
-                and dataset_name is None
-            )
-            pref = self.spec.prefer_presets and no_overrides
-        else:
-            pref = prefer_presets
+        pref = self.spec.prefer_presets if prefer_presets is None else prefer_presets
 
         return load_hf_dataset_slice(
             base_name=self.spec.name,
