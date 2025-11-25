@@ -38,25 +38,28 @@ export const getDefaultTemperatureForModel = (
  * have their temperature set to at least 1.0, as they don't support temperature < 1
  *
  * @param currentConfig - The current provider config (can be LLMPromptConfigsType or a more specific config type)
- * @param model - The model type
- * @param provider - The composed provider type
+ * @param params - Configuration object containing model and provider
+ * @param params.model - The model type
+ * @param params.provider - The composed provider type
  * @returns Updated config with temperature adjusted if needed, or the original config
  */
 export const updateProviderConfig = <T extends { temperature?: number }>(
   currentConfig: T | undefined,
-  model: PROVIDER_MODEL_TYPE | "",
-  provider: COMPOSED_PROVIDER_TYPE,
+  params: {
+    model: PROVIDER_MODEL_TYPE | "";
+    provider: COMPOSED_PROVIDER_TYPE;
+  },
 ): T | undefined => {
   if (!currentConfig) {
     return currentConfig;
   }
 
-  const providerType = parseComposedProviderType(provider);
+  const providerType = parseComposedProviderType(params.provider);
 
   // Only adjust temperature for OpenAI reasoning models
   if (
     providerType === PROVIDER_TYPE.OPEN_AI &&
-    isReasoningModel(model) &&
+    isReasoningModel(params.model) &&
     typeof currentConfig.temperature === "number" &&
     currentConfig.temperature < 1
   ) {

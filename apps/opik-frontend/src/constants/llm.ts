@@ -86,6 +86,15 @@ export const REASONING_MODELS = [
   PROVIDER_MODEL_TYPE.GPT_O4_MINI,
 ] as const;
 
+// Thinking level options for Gemini 3 Pro models
+export const THINKING_LEVEL_OPTIONS: Array<{
+  label: string;
+  value: "low" | "high";
+}> = [
+  { label: "Low", value: "low" },
+  { label: "High", value: "high" },
+];
+
 export const LLM_PROMPT_CUSTOM_TRACE_TEMPLATE: LLMPromptTemplate = {
   label: "Custom LLM-as-judge",
   description:

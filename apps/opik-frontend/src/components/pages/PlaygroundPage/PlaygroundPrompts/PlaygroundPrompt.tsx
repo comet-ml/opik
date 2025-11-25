@@ -15,7 +15,7 @@ import {
   generateDefaultPrompt,
   getDefaultConfigByProvider,
 } from "@/lib/playground";
-import { isReasoningModel, updateProviderConfig } from "@/lib/modelUtils";
+import { updateProviderConfig } from "@/lib/modelUtils";
 import { PLAYGROUND_LAST_PICKED_MODEL } from "@/constants/llm";
 import { generateDefaultLLMPromptMessage, getNextMessageType } from "@/lib/llm";
 import LLMPromptMessages from "@/components/pages-shared/llm/LLMPromptMessages/LLMPromptMessages";
@@ -130,32 +130,28 @@ const PlaygroundPrompt = ({
 
   const handleUpdateModel = useCallback(
     (newModel: PROVIDER_MODEL_TYPE, newProvider: COMPOSED_PROVIDER_TYPE) => {
-      // Update configs if provider changes OR if switching to/from a reasoning model
-      const shouldUpdateConfigs =
-        newProvider !== provider ||
-        isReasoningModel(newModel) !== isReasoningModel(model);
+      let newConfigs: LLMPromptConfigsType;
 
-      const newConfigs = shouldUpdateConfigs
-        ? getDefaultConfigByProvider(newProvider, newModel)
-        : configs;
-
-      // Ensure reasoning models have temperature >= 1.0
-      const adjustedConfigs = updateProviderConfig(
-        newConfigs,
-        newModel,
-        newProvider,
-      );
+      if (newProvider !== provider) {
+        // Provider changed: Reset to default configs for the new provider
+        newConfigs = getDefaultConfigByProvider(newProvider, newModel);
+      } else {
+        // Model changed within same provider: Adjust existing configs if needed
+        const adjustedConfigs = updateProviderConfig(configs, {
+          model: newModel,
+          provider: newProvider,
+        });
+        newConfigs = adjustedConfigs || configs;
+      }
 
       updatePrompt(promptId, {
         model: newModel,
         provider: newProvider,
-        ...(shouldUpdateConfigs && {
-          configs: adjustedConfigs || newConfigs,
-        }),
+        configs: newConfigs,
       });
       setLastPickedModel(newModel);
     },
-    [updatePrompt, promptId, provider, model, configs, setLastPickedModel],
+    [updatePrompt, promptId, provider, configs, setLastPickedModel],
   );
 
   const handleAddProvider = useCallback(

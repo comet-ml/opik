@@ -2,7 +2,10 @@ import React from "react";
 
 import SliderInputControl from "@/components/shared/SliderInputControl/SliderInputControl";
 import { LLMGeminiConfigsType, PROVIDER_MODEL_TYPE } from "@/types/providers";
-import { DEFAULT_GEMINI_CONFIGS } from "@/constants/llm";
+import {
+  DEFAULT_GEMINI_CONFIGS,
+  THINKING_LEVEL_OPTIONS,
+} from "@/constants/llm";
 import PromptModelConfigsTooltipContent from "@/components/pages-shared/llm/PromptModelSettings/providerConfigs/PromptModelConfigsTooltipContent";
 import isUndefined from "lodash/isUndefined";
 import SelectBox from "@/components/shared/SelectBox/SelectBox";
@@ -86,10 +89,7 @@ const GeminiModelConfigs = ({
             onChange={(value: "low" | "high") =>
               onChange({ thinkingLevel: value })
             }
-            options={[
-              { label: "Low", value: "low" },
-              { label: "High", value: "high" },
-            ]}
+            options={THINKING_LEVEL_OPTIONS}
             placeholder="Select thinking level"
           />
         </div>

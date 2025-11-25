@@ -179,8 +179,7 @@ const LLMJudgeRuleDetails: React.FC<LLMJudgeRuleDetailsProps> = ({
                         );
                         const adjustedConfig = updateProviderConfig(
                           currentConfig,
-                          m,
-                          newProvider,
+                          { model: m, provider: newProvider },
                         );
                         if (
                           adjustedConfig &&
