@@ -62,6 +62,7 @@ test:
 	HF_HUB_DISABLE_TELEMETRY=1 \
 	PYTHONPATH=src \
 	LITELLM_CACHE_TYPE=memory \
+	LITELLM_LOGGING_DISABLED=1 \
 	$(PYTHON) -m pytest \
 		-n auto \
 		--dist loadfile \
@@ -74,7 +75,14 @@ test:
 
 profile:
 	$(call warn_if_no_venv)
-	HF_HUB_OFFLINE=1 HF_DATASETS_OFFLINE=1 HF_HUB_ENABLE_PROGRESS_BARS=0 HF_HUB_DISABLE_TELEMETRY=1 PYTHONPATH=src LITELLM_CACHE_TYPE=memory $(PYTHON) -m pytest -n auto --dist loadfile tests/unit -vv -rA --profile --maxfail=1
+	HF_HUB_OFFLINE=1 \
+	HF_DATASETS_OFFLINE=1 \
+	HF_HUB_ENABLE_PROGRESS_BARS=0 \
+	HF_HUB_DISABLE_TELEMETRY=1 \
+	PYTHONPATH=src \
+	LITELLM_CACHE_TYPE=memory \
+	LITELLM_LOGGING_DISABLED=1 \
+	$(PYTHON) -m pytest -n auto --dist loadfile tests/unit -vv -rA --profile --maxfail=1
 
 precommit:
 	$(call warn_if_no_venv)
