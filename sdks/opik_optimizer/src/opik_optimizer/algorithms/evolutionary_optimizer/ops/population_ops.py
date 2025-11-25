@@ -7,7 +7,7 @@ from deap import tools
 from deap import creator as _creator
 
 from .. import prompts as evo_prompts
-from .. import reporting, helpers, mcp, evolutionary_optimizer
+from .. import reporting, helpers, mcp
 from ..mcp import initialize_population_mcp
 from ....api_objects import chat_prompt
 from .... import utils, _llm_calls
