@@ -105,3 +105,19 @@ omit = ["opik_optimizer/tests/*"]
 [tool.coverage.report]
 show_missing = true
 skip_covered = true
+
+[tool.ruff]
+extend-exclude = ["external"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I"]  # Enable pycodestyle (E), pyflakes (F), and isort (I)
+ignore = ["E402"]  # Ignore module level import not at top of file
+
+[tool.ruff.lint.isort]
+known-first-party = ["opik_optimizer"]
+combine-as-imports = true
+
+[tool.vulture]
+min_confidence = 60
+paths = ["src", "tests", "scripts", "benchmarks"]
+ignore_names = ["return_value", "side_effect"]
