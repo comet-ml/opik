@@ -6,7 +6,6 @@ import inspect
 import logging
 import time
 from abc import ABC, abstractmethod
-import random
 import importlib.metadata
 
 
@@ -21,6 +20,9 @@ from .api_objects import chat_prompt
 from .optimizable_agent import OptimizableAgent
 from .utils import create_litellm_agent_class
 from . import task_evaluator, helpers
+from .utils import rng as rng_utils
+from .utils import sampling
+from .utils.rng import batched as make_batched
 
 # Don't use unsupported params:
 litellm.drop_params = True
@@ -83,6 +85,7 @@ class BaseOptimizer(ABC):
         self._opik_client = None  # Lazy initialization
         self.current_optimization_id: str | None = None  # Track current optimization
         self.project_name: str = "Optimization"  # Default project name
+        self._rng = rng_utils.make_rng(seed)
 
     def _reset_counters(self) -> None:
         """Reset all call counters for a new optimization run."""
@@ -271,6 +274,77 @@ class BaseOptimizer(ABC):
                 if isinstance(tool, dict):
                     serialized_tools.append({k: v for k, v in tool.items() if k})
             return serialized_tools
+
+    # ------------------------------------------------------------------
+    # Sampling helpers
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _resolve_n_samples(dataset: Any, n_samples: int | str | None) -> int | None:
+        """Normalize n_samples across optimizers (deprecated wrapper)."""
+        plan = sampling.resolve_sampling(dataset, n_samples)
+        return plan.nb_samples
+
+    def _get_root_rng(self) -> Any:
+        """Return the optimizer-scoped RNG."""
+        return self._rng
+
+    def _derive_rng(self, *tags: object) -> Any:
+        """Derive a deterministic RNG for a sub-phase."""
+        return rng_utils.derive_rng(self._get_root_rng(), *tags)
+
+    def _prepare_sampling_plan(
+        self,
+        dataset: Any,
+        n_samples: int | str | None,
+        dataset_item_ids: list[str] | None = None,
+        *,
+        phase: str = "eval",
+        seed_override: int | None = None,
+        default_cap: int | None = None,
+    ) -> sampling.SamplingPlan:
+        """Build a sampling plan and attach deterministic ids when sampling."""
+        if dataset_item_ids is not None and n_samples is not None:
+            raise Exception("Can't use n_samples and dataset_item_ids")
+
+        rng = rng_utils.make_rng(
+            seed_override if seed_override is not None else self.seed, phase
+        )
+        plan = sampling.resolve_sampling(
+            dataset,
+            n_samples,
+            dataset_item_ids,
+            phase=phase,
+            default_cap=default_cap if default_cap is not None else sampling.DEFAULT_CAP,
+        )
+        if plan.dataset_item_ids is None and plan.nb_samples is not None:
+            try:
+                all_ids = [item["id"] for item in dataset.get_items()]
+            except Exception:
+                return plan
+
+            selected_ids = rng_utils.sample_ids(rng, all_ids, plan.nb_samples)
+            plan = sampling.with_ids(plan, selected_ids)
+        return plan
+
+    def _make_batches(
+        self,
+        items: list[Any],
+        batch_size: int,
+        *,
+        phase: str = "batch",
+        shuffle: bool = False,
+    ) -> list[rng_utils.Batch[Any]]:
+        """Create deterministic batches for a phase (e.g., reflection, retries)."""
+        rng = self._derive_rng(phase, batch_size) if shuffle else None
+        return list(
+            make_batched(
+                items,
+                batch_size,
+                rng=rng,
+                drop_last=False,
+            )
+        )
 
     @staticmethod
     def _describe_annotation(annotation: Any) -> str | None:
@@ -546,7 +620,7 @@ class BaseOptimizer(ABC):
         seed: int | None = None,
         agent_class: type[OptimizableAgent] | None = None,
     ) -> float:
-        random.seed(seed)
+        sampling_seed = seed if seed is not None else self.seed
 
         self.agent_class: type[OptimizableAgent]
 
@@ -573,30 +647,41 @@ class BaseOptimizer(ABC):
             }
             return result
 
-        experiment_config = self._prepare_experiment_config(
-            prompt=prompt,
+        sampling_plan = self._prepare_sampling_plan(
             dataset=dataset,
-            metric=metric,
-            experiment_config=experiment_config,
+            n_samples=n_samples,
+            dataset_item_ids=dataset_item_ids,
+            phase="eval",
+            seed_override=sampling_seed,
         )
 
-        if n_samples is not None:
-            if dataset_item_ids is not None:
-                raise Exception("Can't use n_samples and dataset_item_ids")
-
-            all_ids = [dataset_item["id"] for dataset_item in dataset.get_items()]
-            n_samples = min(n_samples, len(all_ids))
-            dataset_item_ids = random.sample(all_ids, n_samples)
+        resolved_ids = sampling_plan.dataset_item_ids
+        resolved_n_samples = None if resolved_ids is not None else sampling_plan.nb_samples
 
         score = task_evaluator.evaluate(
             dataset=dataset,
-            dataset_item_ids=dataset_item_ids,
+            dataset_item_ids=resolved_ids,
             metric=metric,
             evaluated_task=llm_task,
             num_threads=n_threads,
             project_name=self.project_name,
-            experiment_config=experiment_config,
+            experiment_config=self._prepare_experiment_config(
+                prompt=prompt,
+                dataset=dataset,
+                metric=metric,
+                experiment_config=experiment_config,
+                configuration_updates=helpers.drop_none(
+                    {
+                        "n_samples": sampling_plan.nb_samples,
+                        "sampling_mode": sampling_plan.mode,
+                    }
+                ),
+            ),
             optimization_id=self.current_optimization_id,
             verbose=verbose,
+            n_samples=resolved_n_samples,
+            # FIXME(opik-sdk): when evaluate_on_dict_items is fully available,
+            # add a flag to route minibatch-only scoring through the lightweight path
+            # to skip experiment setup for inner loops.
         )
         return score
