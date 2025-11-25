@@ -62,6 +62,7 @@ def test_resolve_sampling_with_ids_overrides() -> None:
 
 def test_default_cap_when_unknown_size() -> None:
     """Unknown dataset size defaults to full (nb_samples=None)."""
+
     class _NoLenDataset:
         def get_items(self) -> list[dict[str, str]]:
             return [{"id": "x"}]
