@@ -16,7 +16,6 @@ from .... import _llm_calls
 from ...._llm_calls import StructuredOutputParsingError
 from ....api_objects import chat_prompt
 from ....base_optimizer import OptimizationRound
-from ....utils import rng as rng_utils
 from ....utils.prompt_segments import (
     apply_segment_updates,
     extract_prompt_segments,
@@ -215,7 +214,10 @@ def generate_candidate_prompts(
         # Prepare pattern injection guidance
         candidate_rng = optimizer._derive_rng("candidate_generation", round_num)
         pattern_guidance = ""
-        if winning_patterns and candidate_rng.random() < optimizer.pattern_injection_rate:
+        if (
+            winning_patterns
+            and candidate_rng.random() < optimizer.pattern_injection_rate
+        ):
             pattern_guidance = "WINNING PATTERNS TO CONSIDER:\n"
             pattern_guidance += (
                 "The following patterns have been successful in high-scoring prompts:\n"

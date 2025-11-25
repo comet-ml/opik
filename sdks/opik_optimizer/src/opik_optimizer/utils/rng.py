@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import hashlib
 import random
-from collections.abc import Iterable, Iterator, Sequence
+from collections.abc import Iterator, Sequence
 from dataclasses import dataclass
-from typing import TypeVar
+from typing import Generic, TypeVar
 
 T = TypeVar("T")
 
@@ -51,7 +51,7 @@ def shuffle(rng: random.Random, seq: Sequence[T]) -> list[T]:
 
 
 @dataclass(frozen=True)
-class Batch:
+class Batch(Generic[T]):
     """Represents a batch slice."""
 
     index: int
@@ -80,4 +80,3 @@ def batched(
             break
         yield Batch(index=batch_index, items=batch)
         batch_index += 1
-

@@ -25,7 +25,9 @@ def _normalize_n_samples(n_samples: int | str | None) -> int | None:
         try:
             parsed = int(n_samples)
         except ValueError as exc:
-            raise ValueError("n_samples must be an int, 'full', 'all', or None") from exc
+            raise ValueError(
+                "n_samples must be an int, 'full', 'all', or None"
+            ) from exc
         if parsed <= 0:
             raise ValueError("n_samples must be > 0 when provided as int")
         return parsed
@@ -98,4 +100,3 @@ def with_ids(plan: SamplingPlan, dataset_item_ids: list[str]) -> SamplingPlan:
         dataset_item_ids=list(dataset_item_ids),
         nb_samples=len(dataset_item_ids),
     )
-

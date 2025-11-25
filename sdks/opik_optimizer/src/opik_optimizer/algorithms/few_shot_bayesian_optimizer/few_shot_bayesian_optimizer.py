@@ -2,10 +2,8 @@ from typing import Any
 from collections.abc import Callable
 
 import copy
-import hashlib
 import json
 import logging
-import random
 from datetime import datetime
 
 import optuna
@@ -20,6 +18,7 @@ from ... import base_optimizer, _llm_calls, helpers
 from ...api_objects import chat_prompt
 from ...optimizable_agent import OptimizableAgent
 from ... import _throttle, optimization_result, task_evaluator, utils
+from ...utils import rng as rng_utils
 from . import reporting, prompts
 from .columnar_search_space import ColumnarSearchSpace
 

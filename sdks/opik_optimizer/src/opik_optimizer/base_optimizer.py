@@ -315,7 +315,9 @@ class BaseOptimizer(ABC):
             n_samples,
             dataset_item_ids,
             phase=phase,
-            default_cap=default_cap if default_cap is not None else sampling.DEFAULT_CAP,
+            default_cap=default_cap
+            if default_cap is not None
+            else sampling.DEFAULT_CAP,
         )
         if plan.dataset_item_ids is None and plan.nb_samples is not None:
             try:
@@ -334,7 +336,7 @@ class BaseOptimizer(ABC):
         *,
         phase: str = "batch",
         shuffle: bool = False,
-    ) -> list[rng_utils.Batch[Any]]:
+    ) -> list[rng_utils.Batch]:
         """Create deterministic batches for a phase (e.g., reflection, retries)."""
         rng = self._derive_rng(phase, batch_size) if shuffle else None
         return list(
@@ -656,7 +658,9 @@ class BaseOptimizer(ABC):
         )
 
         resolved_ids = sampling_plan.dataset_item_ids
-        resolved_n_samples = None if resolved_ids is not None else sampling_plan.nb_samples
+        resolved_n_samples = (
+            None if resolved_ids is not None else sampling_plan.nb_samples
+        )
 
         score = task_evaluator.evaluate(
             dataset=dataset,

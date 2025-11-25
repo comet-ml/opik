@@ -6,7 +6,6 @@ from collections.abc import Callable
 import sys
 import warnings
 
-import numpy as np
 import opik
 
 # DEAP imports
