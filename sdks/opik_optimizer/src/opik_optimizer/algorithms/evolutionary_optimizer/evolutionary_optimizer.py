@@ -1,7 +1,6 @@
 import copy
 import json
 import logging
-import random
 from typing import Any, cast
 from collections.abc import Callable
 import sys
@@ -33,6 +32,7 @@ from . import reporting
 from .ops import crossover_ops, mutation_ops, style_ops, population_ops, evaluation_ops
 from . import helpers
 from . import prompts as evo_prompts
+from ...utils import rng as rng_utils
 
 logger = logging.getLogger(__name__)
 tqdm = get_tqdm_for_current_environment()
@@ -163,13 +163,6 @@ class EvolutionaryOptimizer(BaseOptimizer):
         self._best_primary_score_history: list[float] = []
         self._gens_since_pop_improvement: int = 0
 
-        if self.seed is not None:
-            random.seed(self.seed)
-            np.random.seed(self.seed)
-            logger.info(f"Global random seed set to: {self.seed}")
-            # Note: DEAP tools generally respect random.seed().
-            # TODO investigate if specific DEAP components require separate seeding
-
         if self.enable_moo:
             if not hasattr(creator, "FitnessMulti"):
                 creator.create(
@@ -273,6 +266,9 @@ class EvolutionaryOptimizer(BaseOptimizer):
     ) -> tuple[list[Any], int]:
         """Execute mating, mutation, evaluation and HoF update."""
         best_gen_score = 0.0
+        gen_rng = self._derive_rng("generation", generation_idx)
+        crossover_ops.random = rng_utils.derive_rng(gen_rng, "crossover")  # type: ignore[assignment]
+        mutation_ops.random = rng_utils.derive_rng(gen_rng, "mutation")  # type: ignore[assignment]
 
         # --- selection -------------------------------------------------
         if self.enable_moo:
@@ -293,7 +289,7 @@ class EvolutionaryOptimizer(BaseOptimizer):
         for i in range(0, len(offspring), 2):
             if i + 1 < len(offspring):
                 c1, c2 = offspring[i], offspring[i + 1]
-                if random.random() < self.crossover_rate:
+                if gen_rng.random() < self.crossover_rate:
                     if self.enable_llm_crossover:
                         c1_new, c2_new = crossover_ops.llm_deap_crossover(
                             c1,
@@ -321,7 +317,7 @@ class EvolutionaryOptimizer(BaseOptimizer):
         mut_rate = self._get_adaptive_mutation_rate()
         n_mutations = 0
         for i, ind in enumerate(offspring):
-            if random.random() < mut_rate:
+            if gen_rng.random() < mut_rate:
                 new_ind = mutation_ops.deap_mutation(
                     individual=ind,
                     current_population=self._current_population,
