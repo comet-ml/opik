@@ -389,7 +389,7 @@ export const generateGroupedRowCellDef = <TData, TValue>(
         <CellWrapper
           metadata={context.column.columnDef.meta}
           tableMetadata={context.table.options.meta}
-          className="h-11 items-center pr-2 py-0 px-0"
+          className="h-11 items-center p-0 pr-2"
           stopClickPropagation
         >
           <div
