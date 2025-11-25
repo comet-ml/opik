@@ -442,7 +442,7 @@ public class FilterQueryBuilder {
                 SpanField.FEEDBACK_SCORES,
                 ExperimentsComparisonValidKnownField.FEEDBACK_SCORES,
                 TraceThreadField.FEEDBACK_SCORES));
-        
+
         map.put(FilterStrategy.SPAN_FEEDBACK_SCORES, Set.of(TraceField.SPAN_FEEDBACK_SCORES));
 
         map.put(FilterStrategy.EXPERIMENT_ITEM, Set.of(
@@ -602,9 +602,12 @@ public class FilterQueryBuilder {
         // we want to apply the is empty filter only in the case below
         if (filter.operator() == Operator.IS_EMPTY && filterStrategy == FilterStrategy.FEEDBACK_SCORES_IS_EMPTY) {
             return Optional.of(FILTER_STRATEGY_MAP.get(FilterStrategy.FEEDBACK_SCORES));
-        } else if (filter.operator() == Operator.IS_EMPTY && filterStrategy == FilterStrategy.SPAN_FEEDBACK_SCORES_IS_EMPTY) {
+        } else if (filter.operator() == Operator.IS_EMPTY
+                && filterStrategy == FilterStrategy.SPAN_FEEDBACK_SCORES_IS_EMPTY) {
             return Optional.of(FILTER_STRATEGY_MAP.get(FilterStrategy.SPAN_FEEDBACK_SCORES));
-        } else if (filter.operator() == Operator.IS_NOT_EMPTY && Set.of(FilterStrategy.FEEDBACK_SCORES_IS_EMPTY, FilterStrategy.SPAN_FEEDBACK_SCORES_IS_EMPTY).contains(filterStrategy)) {
+        } else if (filter.operator() == Operator.IS_NOT_EMPTY
+                && Set.of(FilterStrategy.FEEDBACK_SCORES_IS_EMPTY, FilterStrategy.SPAN_FEEDBACK_SCORES_IS_EMPTY)
+                        .contains(filterStrategy)) {
             return Optional.empty();
         } else if (filter.operator() == Operator.IS_EMPTY && isFeedBackScore(filter)) {
             return Optional.empty();

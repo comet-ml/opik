@@ -3676,6 +3676,7 @@ class TraceDAOImpl implements TraceDAO {
                     filterQueryBuilder.bind(statement, filters, FilterStrategy.TRACE);
                     filterQueryBuilder.bind(statement, filters, FilterStrategy.TRACE_AGGREGATION);
                     filterQueryBuilder.bind(statement, filters, FilterStrategy.FEEDBACK_SCORES);
+                    filterQueryBuilder.bind(statement, filters, FilterStrategy.SPAN_FEEDBACK_SCORES);
                     filterQueryBuilder.bind(statement, filters, FilterStrategy.ANNOTATION_AGGREGATION);
                     filterQueryBuilder.bind(statement, filters, FilterStrategy.TRACE_THREAD);
                     filterQueryBuilder.bind(statement, filters, FilterStrategy.FEEDBACK_SCORES_IS_EMPTY);
