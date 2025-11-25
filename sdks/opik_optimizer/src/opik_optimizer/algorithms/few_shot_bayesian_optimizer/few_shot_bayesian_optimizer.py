@@ -870,8 +870,13 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
 
             # Add tags to trace for optimization tracking
             if self.current_optimization_id:
+                optimizer_short_name = self._get_optimizer_short_name()
                 opik_context.update_current_trace(
-                    tags=[self.current_optimization_id, "Evaluation"]
+                    tags=[
+                        optimizer_short_name,
+                        self.current_optimization_id,
+                        "Evaluation",
+                    ]
                 )
 
             return {"llm_output": result}
