@@ -14,9 +14,6 @@ import com.comet.opik.api.DatasetItemBatchUpdate;
 import com.comet.opik.api.DatasetItemStreamRequest;
 import com.comet.opik.api.DatasetItemsDelete;
 import com.comet.opik.api.DatasetUpdate;
-import com.comet.opik.api.DatasetVersion;
-import com.comet.opik.api.DatasetVersionCreate;
-import com.comet.opik.api.DatasetVersionTag;
 import com.comet.opik.api.ExperimentItem;
 import com.comet.opik.api.PageColumns;
 import com.comet.opik.api.Visibility;
@@ -89,7 +86,6 @@ import java.util.UUID;
 import java.util.function.Predicate;
 
 import static com.comet.opik.api.Dataset.DatasetPage;
-import static com.comet.opik.api.DatasetVersion.DatasetVersionPage;
 import static com.comet.opik.utils.AsyncUtils.setRequestContext;
 import static org.apache.commons.collections4.CollectionUtils.emptyIfNull;
 
@@ -692,102 +688,15 @@ public class DatasetsResource {
         return Response.ok(columns).build();
     }
 
-    // Dataset Version Resources
-
-    @POST
+    /**
+     * Sub-resource locator for dataset version operations.
+     * Delegates all requests under /{id}/versions to DatasetVersionsResource.
+     *
+     * @param datasetId the dataset ID from the path parameter
+     * @return a new instance of DatasetVersionsResource configured for this dataset
+     */
     @Path("/{id}/versions")
-    @Operation(operationId = "createDatasetVersion", summary = "Create dataset version", description = "Create a new immutable version of the dataset by snapshotting the current state", responses = {
-            @ApiResponse(responseCode = "201", description = "Created", headers = {
-                    @Header(name = "Location", required = true, example = "${basePath}/v1/private/datasets/{datasetId}/versions", schema = @Schema(implementation = String.class))}),
-            @ApiResponse(responseCode = "400", description = "Bad Request", content = @Content(schema = @Schema(implementation = io.dropwizard.jersey.errors.ErrorMessage.class))),
-            @ApiResponse(responseCode = "404", description = "Not Found", content = @Content(schema = @Schema(implementation = io.dropwizard.jersey.errors.ErrorMessage.class))),
-            @ApiResponse(responseCode = "409", description = "Conflict - Tag already exists", content = @Content(schema = @Schema(implementation = io.dropwizard.jersey.errors.ErrorMessage.class)))
-    })
-    @RateLimited
-    @JsonView(DatasetVersion.View.Public.class)
-    public Response createVersion(
-            @PathParam("id") UUID datasetId,
-            @RequestBody(content = @Content(schema = @Schema(implementation = DatasetVersionCreate.class))) @Valid @NotNull DatasetVersionCreate request,
-            @Context UriInfo uriInfo) {
-
-        String workspaceId = requestContext.get().getWorkspaceId();
-
-        log.info("Creating version for dataset '{}' on workspace '{}'", datasetId, workspaceId);
-        DatasetVersion version = versionService.commitVersion(datasetId, request);
-        log.info("Created version '{}' for dataset '{}' on workspace '{}'", version.id(), datasetId, workspaceId);
-
-        return Response.ok(version).build();
-    }
-
-    @GET
-    @Path("/{id}/versions")
-    @Operation(operationId = "listDatasetVersions", summary = "List dataset versions", description = "Get paginated list of versions for a dataset, ordered by creation time (newest first)", responses = {
-            @ApiResponse(responseCode = "200", description = "Dataset versions", content = @Content(schema = @Schema(implementation = DatasetVersionPage.class))),
-            @ApiResponse(responseCode = "400", description = "Bad Request", content = @Content(schema = @Schema(implementation = io.dropwizard.jersey.errors.ErrorMessage.class))),
-            @ApiResponse(responseCode = "404", description = "Not Found", content = @Content(schema = @Schema(implementation = io.dropwizard.jersey.errors.ErrorMessage.class)))
-    })
-    @JsonView(DatasetVersion.View.Public.class)
-    public Response listVersions(
-            @PathParam("id") UUID datasetId,
-            @QueryParam("page") @Min(1) @DefaultValue("1") int page,
-            @QueryParam("size") @Min(1) @DefaultValue("10") int size) {
-
-        String workspaceId = requestContext.get().getWorkspaceId();
-
-        log.info("Listing versions for dataset '{}', page '{}', size '{}' on workspace '{}'", datasetId, page, size,
-                workspaceId);
-        DatasetVersionPage versionPage = versionService.getVersions(datasetId, page, size);
-        log.info("Found '{}' versions for dataset '{}' on workspace '{}'", versionPage.total(), datasetId,
-                workspaceId);
-
-        return Response.ok(versionPage).build();
-    }
-
-    @POST
-    @Path("/{id}/versions/{versionHash}/tags")
-    @Operation(operationId = "createVersionTag", summary = "Create version tag", description = "Add a tag to a specific dataset version for easy reference (e.g., 'baseline', 'v1.0', 'production')", responses = {
-            @ApiResponse(responseCode = "204", description = "Tag created successfully"),
-            @ApiResponse(responseCode = "400", description = "Bad Request", content = @Content(schema = @Schema(implementation = io.dropwizard.jersey.errors.ErrorMessage.class))),
-            @ApiResponse(responseCode = "404", description = "Not Found - Version not found", content = @Content(schema = @Schema(implementation = io.dropwizard.jersey.errors.ErrorMessage.class))),
-            @ApiResponse(responseCode = "409", description = "Conflict - Tag already exists", content = @Content(schema = @Schema(implementation = io.dropwizard.jersey.errors.ErrorMessage.class)))
-    })
-    @RateLimited
-    public Response createTag(
-            @PathParam("id") UUID datasetId,
-            @PathParam("versionHash") String versionHash,
-            @RequestBody(content = @Content(schema = @Schema(implementation = DatasetVersionTag.class))) @Valid @NotNull DatasetVersionTag tag) {
-
-        String workspaceId = requestContext.get().getWorkspaceId();
-
-        log.info("Creating tag '{}' for version '{}' of dataset '{}' on workspace '{}'", tag.tag(), versionHash,
-                datasetId, workspaceId);
-        versionService.createTag(datasetId, versionHash, tag);
-        log.info("Created tag '{}' for version '{}' of dataset '{}' on workspace '{}'", tag.tag(), versionHash,
-                datasetId, workspaceId);
-
-        return Response.noContent().build();
-    }
-
-    @DELETE
-    @Path("/{id}/versions/{versionHash}/tags/{tag}")
-    @Operation(operationId = "deleteVersionTag", summary = "Delete version tag", description = "Remove a tag from a dataset version. The version itself is not deleted, only the tag reference.", responses = {
-            @ApiResponse(responseCode = "204", description = "Tag deleted successfully"),
-            @ApiResponse(responseCode = "404", description = "Not Found - Tag not found", content = @Content(schema = @Schema(implementation = io.dropwizard.jersey.errors.ErrorMessage.class)))
-    })
-    @RateLimited
-    public Response deleteTag(
-            @PathParam("id") UUID datasetId,
-            @PathParam("versionHash") String versionHash,
-            @PathParam("tag") String tag) {
-
-        String workspaceId = requestContext.get().getWorkspaceId();
-
-        log.info("Deleting tag '{}' for version '{}' from dataset '{}' on workspace '{}'", tag, versionHash, datasetId,
-                workspaceId);
-        versionService.deleteTag(datasetId, tag);
-        log.info("Deleted tag '{}' for version '{}' from dataset '{}' on workspace '{}'", tag, versionHash, datasetId,
-                workspaceId);
-
-        return Response.noContent().build();
+    public DatasetVersionsResource versions(@PathParam("id") UUID datasetId) {
+        return new DatasetVersionsResource(datasetId, versionService, requestContext);
     }
 }
