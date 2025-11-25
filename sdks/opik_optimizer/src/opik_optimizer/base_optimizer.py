@@ -1,5 +1,5 @@
 from typing import Any, cast
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 
 import copy
 import inspect
@@ -111,6 +111,24 @@ class BaseOptimizer(ABC):
         """Get the short name for this optimizer class for use in tags."""
         class_name = self.__class__.__name__
         return self._OPTIMIZER_SHORT_NAMES.get(class_name, class_name)
+
+    def _tag_trace(
+        self, phase: str | None = "Evaluation", extra_tags: Sequence[str] | None = None
+    ) -> None:
+        """Update the active trace with standard optimizer tags when available."""
+        if not self.current_optimization_id:
+            return
+
+        tags: list[str] = [
+            self._get_optimizer_short_name(),
+            self.current_optimization_id,
+        ]
+        if phase:
+            tags.append(phase)
+        if extra_tags:
+            tags.extend(list(extra_tags))
+
+        opik_context.update_current_trace(tags=tags)
 
     def cleanup(self) -> None:
         """
