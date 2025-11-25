@@ -245,9 +245,7 @@ class BaseOptimizer(ABC):
             )
         return agent
 
-    def _set_agent_trace_phase(
-        self, agent: OptimizableAgent, phase: str | None
-    ) -> None:
+    def _set_agent_trace_phase(self, agent: OptimizableAgent, phase: str) -> None:
         """Best-effort setter for agent trace tagging phase."""
         try:
             agent.trace_phase = phase  # type: ignore[attr-defined]
