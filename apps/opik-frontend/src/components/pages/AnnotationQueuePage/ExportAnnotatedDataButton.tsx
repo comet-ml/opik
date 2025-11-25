@@ -274,6 +274,7 @@ const ExportAnnotatedDataButton: React.FC<ExportAnnotatedDataButtonProps> = ({
   );
 
   const exportCSVHandler = useCallback(() => {
+    if (disabled || !isExportEnabled) return;
     handleExport((data) => {
       const processedData = data.map((row) => {
         return {
@@ -303,20 +304,29 @@ const ExportAnnotatedDataButton: React.FC<ExportAnnotatedDataButtonProps> = ({
       );
       saveAs(blob, generateFileName("csv"));
     });
-  }, [handleExport, generateFileName]);
+  }, [handleExport, generateFileName, disabled, isExportEnabled]);
 
   const exportJSONHandler = useCallback(() => {
+    if (disabled || !isExportEnabled) return;
     handleExport((data) => {
       const blob = new Blob([JSON.stringify(data, null, 2)], {
         type: "application/json;charset=utf-8;",
       });
       saveAs(blob, generateFileName("json"));
     });
-  }, [handleExport, generateFileName]);
+  }, [handleExport, generateFileName, disabled, isExportEnabled]);
+
+  const handleOpenChange = useCallback(
+    (newOpen: boolean) => {
+      if ((disabled || !isExportEnabled) && newOpen) return;
+      setOpen(newOpen);
+    },
+    [disabled, isExportEnabled],
+  );
 
   return (
     <TooltipWrapper content="Export annotated data">
-      <DropdownMenu open={open} onOpenChange={setOpen}>
+      <DropdownMenu open={open} onOpenChange={handleOpenChange}>
         <DropdownMenuTrigger asChild>
           <Button
             variant="outline"
@@ -332,10 +342,16 @@ const ExportAnnotatedDataButton: React.FC<ExportAnnotatedDataButtonProps> = ({
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-52">
-          <DropdownMenuItem onClick={exportCSVHandler} disabled={loading}>
+          <DropdownMenuItem
+            onClick={exportCSVHandler}
+            disabled={disabled || loading || !isExportEnabled}
+          >
             As CSV
           </DropdownMenuItem>
-          <DropdownMenuItem onClick={exportJSONHandler} disabled={loading}>
+          <DropdownMenuItem
+            onClick={exportJSONHandler}
+            disabled={disabled || loading || !isExportEnabled}
+          >
             As JSON
           </DropdownMenuItem>
         </DropdownMenuContent>

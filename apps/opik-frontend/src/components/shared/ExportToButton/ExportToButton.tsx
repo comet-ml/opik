@@ -53,6 +53,7 @@ const ExportToButton: React.FC<ExportToButtonProps> = ({
   );
 
   const exportCSVHandler = useCallback(() => {
+    if (disabled) return;
     handleExport((mappedRows: Array<object>) => {
       const fileName = generateFileName("csv");
 
@@ -71,9 +72,10 @@ const ExportToButton: React.FC<ExportToButtonProps> = ({
         fileName,
       );
     });
-  }, [handleExport, generateFileName]);
+  }, [handleExport, generateFileName, disabled]);
 
   const exportJSONHandler = useCallback(() => {
+    if (disabled) return;
     handleExport((mappedRows: Array<object>) => {
       const fileName = generateFileName("json");
 
@@ -84,19 +86,33 @@ const ExportToButton: React.FC<ExportToButtonProps> = ({
         fileName,
       );
     });
-  }, [handleExport, generateFileName]);
+  }, [handleExport, generateFileName, disabled]);
+  const handleOpenChange = useCallback(
+    (newOpen: boolean) => {
+      if (disabled && newOpen) return;
+      setOpen(newOpen);
+    },
+    [disabled],
+  );
+
   return (
-    <DropdownMenu open={open} onOpenChange={setOpen}>
+    <DropdownMenu open={open} onOpenChange={handleOpenChange}>
       <DropdownMenuTrigger asChild>
         <Button variant="outline" size="icon-sm" disabled={disabled || loading}>
           {loading ? <Loader2 className="animate-spin" /> : <Download />}
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-52">
-        <DropdownMenuItem onClick={exportCSVHandler} disabled={loading}>
+        <DropdownMenuItem
+          onClick={exportCSVHandler}
+          disabled={disabled || loading}
+        >
           Export as CSV
         </DropdownMenuItem>
-        <DropdownMenuItem onClick={exportJSONHandler} disabled={loading}>
+        <DropdownMenuItem
+          onClick={exportJSONHandler}
+          disabled={disabled || loading}
+        >
           Export as JSON
         </DropdownMenuItem>
       </DropdownMenuContent>
