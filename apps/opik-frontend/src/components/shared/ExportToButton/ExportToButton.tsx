@@ -11,17 +11,20 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useToast } from "@/components/ui/use-toast";
+import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 
 type ExportToButtonProps = {
   generateFileName: (extension: string) => string;
   getData: () => Array<object> | Promise<Array<object>>;
   disabled: boolean;
+  tooltipContent?: string;
 };
 
 const ExportToButton: React.FC<ExportToButtonProps> = ({
   generateFileName,
   getData,
   disabled,
+  tooltipContent,
 }) => {
   const [open, setOpen] = useState<boolean>(false);
   const [loading, setLoading] = useState<boolean>(false);
@@ -95,7 +98,7 @@ const ExportToButton: React.FC<ExportToButtonProps> = ({
     [disabled],
   );
 
-  return (
+  const button = (
     <DropdownMenu open={open} onOpenChange={handleOpenChange}>
       <DropdownMenuTrigger asChild>
         <Button variant="outline" size="icon-sm" disabled={disabled || loading}>
@@ -118,6 +121,12 @@ const ExportToButton: React.FC<ExportToButtonProps> = ({
       </DropdownMenuContent>
     </DropdownMenu>
   );
+
+  if (tooltipContent) {
+    return <TooltipWrapper content={tooltipContent}>{button}</TooltipWrapper>;
+  }
+
+  return button;
 };
 
 export default ExportToButton;

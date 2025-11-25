@@ -324,8 +324,12 @@ const ExportAnnotatedDataButton: React.FC<ExportAnnotatedDataButtonProps> = ({
     [disabled, isExportEnabled],
   );
 
+  const tooltipContent = !isExportEnabled
+    ? "Export functionality is disabled for this installation"
+    : "Export annotated data";
+
   return (
-    <TooltipWrapper content="Export annotated data">
+    <TooltipWrapper content={tooltipContent}>
       <DropdownMenu open={open} onOpenChange={handleOpenChange}>
         <DropdownMenuTrigger asChild>
           <Button
