@@ -1027,7 +1027,7 @@ class Opik:
 
         return experiment.Experiment(
             id=experiment_public.id,
-            name=name,
+            name=experiment_public.name,
             dataset_name=experiment_public.dataset_name,
             rest_client=self._rest_client,
             streamer=self._streamer,
@@ -1036,10 +1036,11 @@ class Opik:
 
     def get_experiments_by_name(self, name: str) -> List[experiment.Experiment]:
         """
-        Returns a list of existing experiments by its name.
+        Returns a list of existing experiments containing the given string in their name.
+        Search is case-insensitive.
 
         Args:
-            name: The name of the experiment(s).
+            name: The string to search for in the experiment names.
 
         Returns:
             List[experiment.Experiment]: List of existing experiments.
@@ -1052,7 +1053,7 @@ class Opik:
         for public_experiment in experiments_public:
             experiment_ = experiment.Experiment(
                 id=public_experiment.id,
-                name=name,
+                name=public_experiment.name,
                 dataset_name=public_experiment.dataset_name,
                 rest_client=self._rest_client,
                 streamer=self._streamer,
