@@ -174,6 +174,10 @@ def test_fewshot_optimizer_metadata_exposes_bounds() -> None:
     assert metadata == {
         "min_examples": 2,
         "max_examples": 7,
+        "enable_columnar_selection": True,
+        "enable_diversity": True,
+        "enable_multivariate_tpe": True,
+        "enable_optuna_pruning": True,
     }
 
 
