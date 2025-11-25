@@ -2,6 +2,7 @@ from typing import Any
 from pydantic import BaseModel, ValidationError as PydanticValidationError
 import json
 import logging
+import os
 import sys
 from types import FrameType
 
@@ -37,6 +38,29 @@ def _increment_llm_counter_if_needed() -> None:
             optimizer_candidate._increment_llm_counter()
             break
         frame = frame.f_back
+
+
+def _get_optimizer_short_name_from_stack() -> str | None:
+    """
+    Walk up the call stack to find the optimizer and return its short name.
+    """
+    try:
+        from .base_optimizer import BaseOptimizer
+    except Exception:
+        return None
+
+    try:
+        frame: FrameType | None = sys._getframe()
+    except ValueError:
+        return None
+
+    while frame is not None:
+        optimizer_candidate = frame.f_locals.get("self")
+        if isinstance(optimizer_candidate, BaseOptimizer):
+            return optimizer_candidate._get_optimizer_short_name()
+        frame = frame.f_back
+
+    return None
 
 
 def _build_call_time_params(
