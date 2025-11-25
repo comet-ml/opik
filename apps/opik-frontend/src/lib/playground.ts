@@ -42,6 +42,11 @@ export const getDefaultConfigByProvider = (
       topP: DEFAULT_OPEN_AI_CONFIGS.TOP_P,
       frequencyPenalty: DEFAULT_OPEN_AI_CONFIGS.FREQUENCY_PENALTY,
       presencePenalty: DEFAULT_OPEN_AI_CONFIGS.PRESENCE_PENALTY,
+      maxRetries: DEFAULT_OPEN_AI_CONFIGS.MAX_RETRIES,
+      timeout: DEFAULT_OPEN_AI_CONFIGS.TIMEOUT,
+      backoffExponent: DEFAULT_OPEN_AI_CONFIGS.BACKOFF_EXPONENT,
+      throttling: DEFAULT_OPEN_AI_CONFIGS.THROTTLING,
+      maxConcurrentRequests: DEFAULT_OPEN_AI_CONFIGS.MAX_CONCURRENT_REQUESTS,
     } as LLMOpenAIConfigsType;
   }
 
@@ -56,6 +61,11 @@ export const getDefaultConfigByProvider = (
       temperature: DEFAULT_ANTHROPIC_CONFIGS.TEMPERATURE,
       maxCompletionTokens: DEFAULT_ANTHROPIC_CONFIGS.MAX_COMPLETION_TOKENS,
       topP: isExclusive ? undefined : DEFAULT_ANTHROPIC_CONFIGS.TOP_P,
+      maxRetries: DEFAULT_ANTHROPIC_CONFIGS.MAX_RETRIES,
+      timeout: DEFAULT_ANTHROPIC_CONFIGS.TIMEOUT,
+      backoffExponent: DEFAULT_ANTHROPIC_CONFIGS.BACKOFF_EXPONENT,
+      throttling: DEFAULT_ANTHROPIC_CONFIGS.THROTTLING,
+      maxConcurrentRequests: DEFAULT_ANTHROPIC_CONFIGS.MAX_CONCURRENT_REQUESTS,
     } as LLMAnthropicConfigsType;
   }
 
@@ -70,6 +80,12 @@ export const getDefaultConfigByProvider = (
       repetitionPenalty: DEFAULT_OPEN_ROUTER_CONFIGS.REPETITION_PENALTY,
       minP: DEFAULT_OPEN_ROUTER_CONFIGS.MIN_P,
       topA: DEFAULT_OPEN_ROUTER_CONFIGS.TOP_A,
+      maxRetries: DEFAULT_OPEN_ROUTER_CONFIGS.MAX_RETRIES,
+      timeout: DEFAULT_OPEN_ROUTER_CONFIGS.TIMEOUT,
+      backoffExponent: DEFAULT_OPEN_ROUTER_CONFIGS.BACKOFF_EXPONENT,
+      throttling: DEFAULT_OPEN_ROUTER_CONFIGS.THROTTLING,
+      maxConcurrentRequests:
+        DEFAULT_OPEN_ROUTER_CONFIGS.MAX_CONCURRENT_REQUESTS,
     } as LLMOpenRouterConfigsType;
   }
 
@@ -78,6 +94,11 @@ export const getDefaultConfigByProvider = (
       temperature: DEFAULT_GEMINI_CONFIGS.TEMPERATURE,
       maxCompletionTokens: DEFAULT_GEMINI_CONFIGS.MAX_COMPLETION_TOKENS,
       topP: DEFAULT_GEMINI_CONFIGS.TOP_P,
+      maxRetries: DEFAULT_GEMINI_CONFIGS.MAX_RETRIES,
+      timeout: DEFAULT_GEMINI_CONFIGS.TIMEOUT,
+      backoffExponent: DEFAULT_GEMINI_CONFIGS.BACKOFF_EXPONENT,
+      throttling: DEFAULT_GEMINI_CONFIGS.THROTTLING,
+      maxConcurrentRequests: DEFAULT_GEMINI_CONFIGS.MAX_CONCURRENT_REQUESTS,
     } as LLMGeminiConfigsType;
   }
 
@@ -86,6 +107,11 @@ export const getDefaultConfigByProvider = (
       temperature: DEFAULT_VERTEX_AI_CONFIGS.TEMPERATURE,
       maxCompletionTokens: DEFAULT_VERTEX_AI_CONFIGS.MAX_COMPLETION_TOKENS,
       topP: DEFAULT_VERTEX_AI_CONFIGS.TOP_P,
+      maxRetries: DEFAULT_VERTEX_AI_CONFIGS.MAX_RETRIES,
+      timeout: DEFAULT_VERTEX_AI_CONFIGS.TIMEOUT,
+      backoffExponent: DEFAULT_VERTEX_AI_CONFIGS.BACKOFF_EXPONENT,
+      throttling: DEFAULT_VERTEX_AI_CONFIGS.THROTTLING,
+      maxConcurrentRequests: DEFAULT_VERTEX_AI_CONFIGS.MAX_CONCURRENT_REQUESTS,
     } as LLMVertexAIConfigsType;
   }
 
@@ -97,6 +123,11 @@ export const getDefaultConfigByProvider = (
       frequencyPenalty: DEFAULT_CUSTOM_CONFIGS.FREQUENCY_PENALTY,
       presencePenalty: DEFAULT_CUSTOM_CONFIGS.PRESENCE_PENALTY,
       custom_parameters: DEFAULT_CUSTOM_CONFIGS.CUSTOM_PARAMETERS,
+      maxRetries: DEFAULT_CUSTOM_CONFIGS.MAX_RETRIES,
+      timeout: DEFAULT_CUSTOM_CONFIGS.TIMEOUT,
+      backoffExponent: DEFAULT_CUSTOM_CONFIGS.BACKOFF_EXPONENT,
+      throttling: DEFAULT_CUSTOM_CONFIGS.THROTTLING,
+      maxConcurrentRequests: DEFAULT_CUSTOM_CONFIGS.MAX_CONCURRENT_REQUESTS,
     } as LLMCustomConfigsType;
   }
 

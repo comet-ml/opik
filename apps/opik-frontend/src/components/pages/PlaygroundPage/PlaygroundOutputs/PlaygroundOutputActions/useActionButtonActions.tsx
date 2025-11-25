@@ -7,6 +7,7 @@ import { DatasetItem } from "@/types/datasets";
 import { LogExperiment, PlaygroundPromptType } from "@/types/playground";
 import {
   usePromptIds,
+  usePromptMap,
   useResetOutputMap,
   useSelectedRuleIds,
   useCreatedExperiments,
@@ -25,7 +26,7 @@ import usePromptDatasetItemCombination from "@/components/pages/PlaygroundPage/P
 import { useNavigateToExperiment } from "@/hooks/useNavigateToExperiment";
 import { useUpdateOutputTraceId } from "@/store/PlaygroundStore";
 
-const LIMIT_STREAMING_CALLS = 5;
+const DEFAULT_MAX_CONCURRENT_REQUESTS = 5;
 
 interface DatasetItemPromptCombination {
   datasetItem?: DatasetItem;
@@ -57,8 +58,24 @@ const useActionButtonActions = ({
   const setCreatedExperiments = useSetCreatedExperiments();
   const clearCreatedExperiments = useClearCreatedExperiments();
   const promptIds = usePromptIds();
+  const promptMap = usePromptMap();
   const selectedRuleIds = useSelectedRuleIds();
   const abortControllersRef = useRef(new Map<string, AbortController>());
+
+  // Get the minimum maxConcurrentRequests from all prompts
+  const maxConcurrentRequests = useMemo(() => {
+    const prompts = Object.values(promptMap);
+    if (prompts.length === 0) return DEFAULT_MAX_CONCURRENT_REQUESTS;
+
+    const concurrencyValues = prompts
+      .map((p) => p.configs.maxConcurrentRequests)
+      .filter((val) => val !== undefined && val !== null) as number[];
+
+    if (concurrencyValues.length === 0) return DEFAULT_MAX_CONCURRENT_REQUESTS;
+
+    // Use the minimum value across all prompts (most conservative)
+    return Math.min(...concurrencyValues);
+  }, [promptMap]);
 
   const resetOutputMap = useResetOutputMap();
   const updateOutputTraceId = useUpdateOutputTraceId();
@@ -170,7 +187,7 @@ const useActionButtonActions = ({
 
     asyncLib.mapLimit(
       combinations,
-      LIMIT_STREAMING_CALLS,
+      maxConcurrentRequests,
       async (combination: DatasetItemPromptCombination) =>
         processCombination(combination, logProcessor),
       () => {
@@ -189,6 +206,7 @@ const useActionButtonActions = ({
     createCombinations,
     processCombination,
     logProcessorHandlers,
+    maxConcurrentRequests,
   ]);
 
   const navigateToExperiments = useCallback(() => {
