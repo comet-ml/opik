@@ -29,6 +29,8 @@ import {
 import { prettifyMessage } from "@/lib/traces";
 import { JsonNode } from "@/types/shared";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
+import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
+import { FeatureToggleKeys } from "@/types/feature-toggles";
 
 const MAX_EXPORT_ITEMS = 15000;
 const MESSAGES_KEYS = ["input", "output", "first_message", "last_message"];
@@ -65,6 +67,7 @@ const ExportAnnotatedDataButton: React.FC<ExportAnnotatedDataButtonProps> = ({
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const { toast } = useToast();
+  const isExportEnabled = useIsFeatureEnabled(FeatureToggleKeys.EXPORT_ENABLED);
 
   const reviewers = useMemo(
     () => annotationQueue.reviewers?.map((r) => r.username) ?? [],
@@ -238,6 +241,7 @@ const ExportAnnotatedDataButton: React.FC<ExportAnnotatedDataButtonProps> = ({
     async (
       exportFn: (data: Array<ExportTraceData | ExportThreadData>) => void,
     ) => {
+      if (disabled || !isExportEnabled) return;
       setLoading(true);
       try {
         const data = await getData();
@@ -267,10 +271,11 @@ const ExportAnnotatedDataButton: React.FC<ExportAnnotatedDataButtonProps> = ({
         setLoading(false);
       }
     },
-    [getData, toast],
+    [getData, toast, disabled, isExportEnabled],
   );
 
   const exportCSVHandler = useCallback(() => {
+    if (disabled || !isExportEnabled) return;
     handleExport((data) => {
       const processedData = data.map((row) => {
         return {
@@ -300,40 +305,73 @@ const ExportAnnotatedDataButton: React.FC<ExportAnnotatedDataButtonProps> = ({
       );
       saveAs(blob, generateFileName("csv"));
     });
-  }, [handleExport, generateFileName]);
+  }, [handleExport, generateFileName, disabled, isExportEnabled]);
 
   const exportJSONHandler = useCallback(() => {
+    if (disabled || !isExportEnabled) return;
     handleExport((data) => {
       const blob = new Blob([JSON.stringify(data, null, 2)], {
         type: "application/json;charset=utf-8;",
       });
       saveAs(blob, generateFileName("json"));
     });
-  }, [handleExport, generateFileName]);
+  }, [handleExport, generateFileName, disabled, isExportEnabled]);
+
+  const handleOpenChange = useCallback(
+    (newOpen: boolean) => {
+      if ((disabled || !isExportEnabled) && newOpen) return;
+      setOpen(newOpen);
+    },
+    [disabled, isExportEnabled],
+  );
+
+  const tooltipContent = !isExportEnabled
+    ? "Export functionality is disabled for this installation"
+    : "Export annotated data";
+
+  const isButtonDisabled = disabled || loading || !isExportEnabled;
+
+  const buttonElement = (
+    <Button variant="outline" size="sm" disabled={isButtonDisabled}>
+      {loading ? (
+        <Loader2 className="mr-1.5 size-3.5 animate-spin" />
+      ) : (
+        <Download className="mr-1.5 size-3.5" />
+      )}
+      Export queue
+    </Button>
+  );
 
   return (
-    <TooltipWrapper content="Export annotated data">
-      <DropdownMenu open={open} onOpenChange={setOpen}>
-        <DropdownMenuTrigger asChild>
-          <Button variant="outline" size="sm" disabled={disabled || loading}>
-            {loading ? (
-              <Loader2 className="mr-1.5 size-3.5 animate-spin" />
-            ) : (
-              <Download className="mr-1.5 size-3.5" />
-            )}
-            Export queue
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" className="w-52">
-          <DropdownMenuItem onClick={exportCSVHandler} disabled={loading}>
-            As CSV
-          </DropdownMenuItem>
-          <DropdownMenuItem onClick={exportJSONHandler} disabled={loading}>
-            As JSON
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
-    </TooltipWrapper>
+    <DropdownMenu open={open} onOpenChange={handleOpenChange}>
+      {isButtonDisabled && !isExportEnabled ? (
+        <TooltipWrapper content={tooltipContent}>
+          <DropdownMenuTrigger asChild>
+            <span className="inline-block cursor-not-allowed">
+              {buttonElement}
+            </span>
+          </DropdownMenuTrigger>
+        </TooltipWrapper>
+      ) : (
+        <TooltipWrapper content={tooltipContent}>
+          <DropdownMenuTrigger asChild>{buttonElement}</DropdownMenuTrigger>
+        </TooltipWrapper>
+      )}
+      <DropdownMenuContent align="end" className="w-52">
+        <DropdownMenuItem
+          onClick={exportCSVHandler}
+          disabled={disabled || loading || !isExportEnabled}
+        >
+          As CSV
+        </DropdownMenuItem>
+        <DropdownMenuItem
+          onClick={exportJSONHandler}
+          disabled={disabled || loading || !isExportEnabled}
+        >
+          As JSON
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 };
 
