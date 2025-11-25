@@ -345,6 +345,7 @@ export const generateDataRowCellDef = <
           metadata={context.column.columnDef.meta}
           tableMetadata={context.table.options.meta}
           className="gap-2"
+          stopClickPropagation
         >
           <Checkbox
             style={{
@@ -385,9 +386,11 @@ export const generateGroupedRowCellDef = <TData, TValue>(
     cell: (context: CellContext<TData, TValue>) => {
       const { row, cell } = context;
       return (
-        <div
-          className="flex size-full h-11 items-center pr-2"
-          data-cell-wrapper="true"
+        <CellWrapper
+          metadata={context.column.columnDef.meta}
+          tableMetadata={context.table.options.meta}
+          className="h-11 items-center p-0 pr-2"
+          stopClickPropagation
         >
           <div
             className="flex max-w-full items-center overflow-hidden"
@@ -430,7 +433,7 @@ export const generateGroupedRowCellDef = <TData, TValue>(
           <div className="min-w-4 flex-1">
             {flexRender(columDataFields.cell as never, cell.getContext())}
           </div>
-        </div>
+        </CellWrapper>
       );
     },
     size: 1,
