@@ -44,26 +44,26 @@ export const useDashboardAutosave = ({
   const { mutateAsync: updateDashboard, isPending } =
     useDashboardUpdateMutation();
 
-  const performSave = useCallback(
-    async (config: DashboardState) => {
-      if (!isConfigChanged(config, lastSavedConfigRef.current)) return;
+  const performSave = useCallback(async () => {
+    // Get the LATEST state from the store, not the debounced state
+    const currentConfig = useDashboardStore.getState().getDashboardConfig();
 
-      try {
-        await updateDashboard({
-          dashboard: {
-            id: dashboardId,
-            config,
-          },
-        });
+    if (!isConfigChanged(currentConfig, lastSavedConfigRef.current)) return;
 
-        lastSavedConfigRef.current = config;
-        setHasUnsavedChanges(false);
-      } catch (error) {
-        console.error("Failed to autosave dashboard:", error);
-      }
-    },
-    [dashboardId, updateDashboard],
-  );
+    try {
+      await updateDashboard({
+        dashboard: {
+          id: dashboardId,
+          config: currentConfig,
+        },
+      });
+
+      lastSavedConfigRef.current = currentConfig;
+      setHasUnsavedChanges(false);
+    } catch (error) {
+      console.error("Failed to autosave dashboard:", error);
+    }
+  }, [dashboardId, updateDashboard]);
 
   const debouncedSave = useMemo(
     () => debounce(performSave, AUTOSAVE_DEBOUNCE_MS),
@@ -84,7 +84,7 @@ export const useDashboardAutosave = ({
 
       if (isConfigChanged(config, lastSavedConfigRef.current)) {
         setHasUnsavedChanges(true);
-        debouncedSave(config);
+        debouncedSave();
       }
     });
 

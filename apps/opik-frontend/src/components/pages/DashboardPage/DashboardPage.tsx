@@ -10,6 +10,7 @@ import {
   selectSetSearch,
   selectClearConfig,
   selectSetOnAddWidgetCallback,
+  selectSetWidgetResolver,
 } from "@/store/DashboardStore";
 import { METRIC_NAME_TYPE } from "@/api/projects/useProjectMetric";
 import useProjectsList from "@/api/projects/useProjectsList";
@@ -20,12 +21,13 @@ import { useMetricDateRangeWithQuery } from "@/components/pages-shared/traces/Me
 import MetricDateRangeSelect from "@/components/pages-shared/traces/MetricDateRangeSelect/MetricDateRangeSelect";
 import DashboardSectionsContainer from "@/components/shared/Dashboard/DashboardSectionsContainer";
 import AddSectionButton from "@/components/shared/Dashboard/AddSectionButton";
-import AddWidgetDialog from "@/components/shared/Dashboard/AddWidgetDialog";
+import AddWidgetDialog from "@/components/pages/DashboardPage/AddWidgetDialog";
 import Loader from "@/components/shared/Loader/Loader";
 import { useDashboardAutosave } from "./useDashboardAutosave";
 import { CheckCircle2, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ProjectDashboardConfig } from "@/types/dashboard";
+import { createProjectWidgetResolver } from "./widgetRegistry";
 
 const DashboardPage: React.FunctionComponent = () => {
   const { dashboardId } = useParams({ strict: false }) as {
@@ -53,6 +55,7 @@ const DashboardPage: React.FunctionComponent = () => {
   const setOnAddWidgetCallback = useDashboardStore(
     selectSetOnAddWidgetCallback,
   );
+  const setWidgetResolver = useDashboardStore(selectSetWidgetResolver);
 
   useEffect(() => {
     if (dashboard?.config) {
@@ -135,11 +138,17 @@ const DashboardPage: React.FunctionComponent = () => {
   }, [handleOpenAddWidgetDialog, setOnAddWidgetCallback]);
 
   useEffect(() => {
+    const resolver = createProjectWidgetResolver();
+    setWidgetResolver(resolver);
+  }, [setWidgetResolver]);
+
+  useEffect(() => {
     return () => {
       clearConfig();
       setOnAddWidgetCallback(null);
+      setWidgetResolver(null);
     };
-  }, [clearConfig, setOnAddWidgetCallback]);
+  }, [clearConfig, setOnAddWidgetCallback, setWidgetResolver]);
 
   if (isPending) {
     return <Loader />;

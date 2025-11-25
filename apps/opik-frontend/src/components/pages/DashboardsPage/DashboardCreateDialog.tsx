@@ -4,6 +4,7 @@ import {
   Dialog,
   DialogClose,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -100,6 +101,13 @@ const DashboardCreateDialog: React.FC<DashboardCreateDialogProps> = ({
       <DialogContent className="max-w-lg sm:max-w-[560px]">
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
+          {!isEdit && (
+            <DialogDescription>
+              Build a dashboard to track performance, cost, or other key
+              metrics. You&apos;ll be able to add widgets and visualizations
+              after creation.
+            </DialogDescription>
+          )}
         </DialogHeader>
         <div className="flex flex-col gap-2 pb-4">
           <Label htmlFor="dashboardName">Name</Label>
