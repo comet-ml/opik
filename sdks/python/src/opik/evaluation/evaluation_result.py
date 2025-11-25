@@ -149,19 +149,27 @@ class EvaluationResult:
 
 
 @dataclasses.dataclass
-class TestResultForItemsEvaluation:
+class EvaluationResultOnDictItems:
     """
-    Lightweight result type for items evaluation that doesn't require experiments.
+    Evaluation result for dict items evaluation without experiment tracking.
 
-    This is used by evaluate_items() to return scoring results for dataset items
-    without the overhead of experiment tracking or dataset management.
+    This class provides a similar interface to EvaluationResult but is designed
+    for lightweight evaluations that don't require experiment or dataset management.
+    It can aggregate scores across test results just like the regular evaluation.
 
     Attributes:
-        dataset_item_content: The original dataset item content that was evaluated.
-        task_output: The task output that was scored.
-        score_results: List of score results from the evaluation metrics.
+        test_results: Collection of test results from the evaluation.
     """
 
-    dataset_item_content: Dict[str, Any]
-    task_output: Dict[str, Any]
-    score_results: List["score_result.ScoreResult"]
+    test_results: List[test_result.TestResult]
+
+    def aggregate_evaluation_scores(
+        self,
+    ) -> Dict[str, score_statistics.ScoreStatistics]:
+        """
+        Aggregates evaluation scores from test results.
+
+        Returns:
+            Dictionary mapping score names to their aggregated statistics.
+        """
+        return score_statistics.calculate_aggregated_statistics(self.test_results)

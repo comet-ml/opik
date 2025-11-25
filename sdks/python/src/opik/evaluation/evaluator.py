@@ -653,7 +653,7 @@ def evaluate_optimization_trial(
     )
 
 
-def evaluate_items(
+def evaluate_on_dict_items(
     items: List[Dict[str, Any]],
     task: LLMTask,
     scoring_metrics: Optional[List[base_metric.BaseMetric]] = None,
@@ -662,9 +662,9 @@ def evaluate_items(
     verbose: int = 0,
     scoring_key_mapping: Optional[ScoringKeyMappingType] = None,
     scoring_threads: int = 16,
-) -> List[evaluation_result.TestResultForItemsEvaluation]:
+) -> evaluation_result.EvaluationResultOnDictItems:
     """
-    Lightweight evaluation function that evaluates a task on dataset items
+    Lightweight evaluation function that evaluates a task on dataset items (as dictionaries)
     without requiring a Dataset object or creating an experiment.
 
     This function is useful for optimization scenarios where you need to evaluate many
@@ -697,7 +697,8 @@ def evaluate_items(
         scoring_threads: Number of thread workers to run scoring metrics.
 
     Returns:
-        List of TestResultForItemsEvaluation objects containing the scores for each item.
+        EvaluationResultOnDictItems object containing test results and providing methods
+        to aggregate scores, similar to the regular evaluation result.
 
     Example:
         ```python
@@ -715,15 +716,20 @@ def evaluate_items(
             # ... call model ...
             return {"output": model_output}
 
-        results = opik.evaluate_items(
+        result = opik.evaluate_on_dict_items(
             items=items,
             task=my_task,
             scoring_metrics=[Equals()],
-            scoring_key_mapping={"output": "output"},
+            scoring_key_mapping={"reference": "expected_output"},
         )
 
-        for result in results:
-            print(f"Score: {result.score_results[0].value}")
+        # Access individual test results
+        for test_result in result.test_results:
+            print(f"Score: {test_result.score_results[0].value}")
+
+        # Get aggregated statistics
+        aggregated = result.aggregate_evaluation_scores()
+        print(f"Mean equals score: {aggregated['equals_metric'].mean}")
         ```
     """
     # Wrap scoring functions if any
@@ -735,7 +741,7 @@ def evaluate_items(
 
     if not scoring_metrics:
         LOGGER.warning("No scoring metrics provided for items evaluation")
-        return []
+        return evaluation_result.EvaluationResultOnDictItems(test_results=[])
 
     client = opik_client.get_client_cached()
 
@@ -756,17 +762,9 @@ def evaluate_items(
             task=task,
         )
 
-    # Convert TestResult to TestResultForItemsEvaluation
-    results = [
-        evaluation_result.TestResultForItemsEvaluation(
-            dataset_item_content=test_result.test_case.dataset_item_content,
-            task_output=test_result.test_case.task_output,
-            score_results=test_result.score_results,
-        )
-        for test_result in test_results
-    ]
-
-    return results
+    return evaluation_result.EvaluationResultOnDictItems(
+        test_results=test_results,
+    )
 
 
 def _wrap_scoring_functions(
