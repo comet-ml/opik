@@ -1027,7 +1027,7 @@ class Opik:
 
         return experiment.Experiment(
             id=experiment_public.id,
-            name=name,
+            name=experiment_public.name,
             dataset_name=experiment_public.dataset_name,
             rest_client=self._rest_client,
             streamer=self._streamer,
