@@ -11,7 +11,7 @@ class ColumnarSearchSpace:
     max_group_size: int
 
     @classmethod
-    def empty(cls) -> "ColumnarSearchSpace":
+    def empty(cls) -> ColumnarSearchSpace:
         return cls([], [], {}, 0)
 
     @property
