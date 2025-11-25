@@ -97,6 +97,9 @@ export type PlaygroundStore = {
   datasetFilters: Filters;
   datasetPage: number;
   datasetSize: number;
+  progressTotal: number;
+  progressCompleted: number;
+  isThrottlingActive: boolean;
 
   setPromptMap: (
     promptIds: string[],
@@ -129,6 +132,9 @@ export type PlaygroundStore = {
   setDatasetPage: (page: number) => void;
   setDatasetSize: (size: number) => void;
   resetDatasetFilters: () => void;
+  setProgress: (completed: number, total: number) => void;
+  resetProgress: () => void;
+  setThrottlingActive: (isActive: boolean) => void;
 };
 
 const usePlaygroundStore = create<PlaygroundStore>()(
@@ -145,6 +151,9 @@ const usePlaygroundStore = create<PlaygroundStore>()(
       datasetFilters: [],
       datasetPage: 1,
       datasetSize: 100,
+      progressTotal: 0,
+      progressCompleted: 0,
+      isThrottlingActive: false,
 
       updatePrompt: (promptId, changes) => {
         set((state) => {
@@ -341,6 +350,33 @@ const usePlaygroundStore = create<PlaygroundStore>()(
           };
         });
       },
+      setProgress: (completed, total) => {
+        set((state) => {
+          return {
+            ...state,
+            progressCompleted: completed,
+            progressTotal: total,
+          };
+        });
+      },
+      resetProgress: () => {
+        set((state) => {
+          return {
+            ...state,
+            progressCompleted: 0,
+            progressTotal: 0,
+            isThrottlingActive: false,
+          };
+        });
+      },
+      setThrottlingActive: (isActive) => {
+        set((state) => {
+          return {
+            ...state,
+            isThrottlingActive: isActive,
+          };
+        });
+      },
     }),
     {
       name: "PLAYGROUND_STATE",
@@ -490,5 +526,23 @@ export const useSetDatasetSize = () =>
 
 export const useResetDatasetFilters = () =>
   usePlaygroundStore((state) => state.resetDatasetFilters);
+
+export const useProgressTotal = () =>
+  usePlaygroundStore((state) => state.progressTotal);
+
+export const useProgressCompleted = () =>
+  usePlaygroundStore((state) => state.progressCompleted);
+
+export const useSetProgress = () =>
+  usePlaygroundStore((state) => state.setProgress);
+
+export const useResetProgress = () =>
+  usePlaygroundStore((state) => state.resetProgress);
+
+export const useIsThrottlingActive = () =>
+  usePlaygroundStore((state) => state.isThrottlingActive);
+
+export const useSetThrottlingActive = () =>
+  usePlaygroundStore((state) => state.setThrottlingActive);
 
 export default usePlaygroundStore;
