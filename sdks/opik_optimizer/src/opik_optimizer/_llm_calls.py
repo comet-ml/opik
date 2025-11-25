@@ -146,10 +146,18 @@ def _prepare_model_params(
 
     # Add tags if optimization_id is available
     if optimization_id:
-        opik_metadata["tags"] = [
-            optimization_id,
-            "Prompt Optimization",
-        ]
+        tags = []
+        # Add optimizer short name if available
+        optimizer_short_name = _get_optimizer_short_name_from_stack()
+        if optimizer_short_name:
+            tags.append(optimizer_short_name)
+        tags.extend(
+            [
+                optimization_id,
+                "Prompt Optimization",
+            ]
+        )
+        opik_metadata["tags"] = tags
 
     # Add structured output support
     if response_model is not None:
