@@ -4,7 +4,7 @@ from typing import Any, Literal, overload
 from collections.abc import Callable
 
 import opik
-from opik import Dataset, opik_context
+from opik import Dataset
 from opik.evaluation import evaluator as opik_evaluator
 from opik.evaluation.metrics.score_result import ScoreResult
 
