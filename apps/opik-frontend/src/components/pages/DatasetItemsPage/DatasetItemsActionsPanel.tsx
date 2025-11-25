@@ -14,6 +14,8 @@ import GeneratedSamplesDialog from "./GeneratedSamplesDialog";
 import AddTagDialog from "./AddTagDialog";
 import { DATASET_ITEM_DATA_PREFIX } from "@/constants/datasets";
 import { stripColumnPrefix } from "@/lib/utils";
+import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
+import { FeatureToggleKeys } from "@/types/feature-toggles";
 
 type DatasetItemsActionsPanelProps = {
   getDataForExport: () => Promise<DatasetItem[]>;
@@ -45,6 +47,7 @@ const DatasetItemsActionsPanel: React.FunctionComponent<
   const disabled = !selectedDatasetItems?.length;
 
   const { mutate } = useDatasetItemBatchDeleteMutation();
+  const isExportEnabled = useIsFeatureEnabled(FeatureToggleKeys.EXPORT_ENABLED);
 
   const deleteDatasetItemsHandler = useCallback(() => {
     mutate({
@@ -154,9 +157,14 @@ const DatasetItemsActionsPanel: React.FunctionComponent<
       </TooltipWrapper>
 
       <ExportToButton
-        disabled={disabled || columnsToExport.length === 0}
+        disabled={disabled || columnsToExport.length === 0 || !isExportEnabled}
         getData={mapRowData}
         generateFileName={generateFileName}
+        tooltipContent={
+          !isExportEnabled
+            ? "Export functionality is disabled for this installation"
+            : undefined
+        }
       />
       <TooltipWrapper content="Delete">
         <Button

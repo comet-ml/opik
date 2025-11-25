@@ -21,6 +21,7 @@ const DEFAULT_STATE: FeatureToggles = {
   [FeatureToggleKeys.TOGGLE_ALERTS_ENABLED]: false,
   [FeatureToggleKeys.WELCOME_WIZARD_ENABLED]: false,
   [FeatureToggleKeys.CSV_UPLOAD_ENABLED]: false,
+  [FeatureToggleKeys.EXPORT_ENABLED]: true,
 };
 
 const initialState: FeatureTogglesState = {

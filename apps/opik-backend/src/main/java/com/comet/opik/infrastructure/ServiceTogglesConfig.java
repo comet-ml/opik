@@ -21,4 +21,6 @@ public class ServiceTogglesConfig {
     @NotNull boolean welcomeWizardEnabled;
     @JsonProperty
     @NotNull boolean csvUploadEnabled;
+    @JsonProperty
+    @NotNull boolean exportEnabled;
 }

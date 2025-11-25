@@ -11,17 +11,20 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useToast } from "@/components/ui/use-toast";
+import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 
 type ExportToButtonProps = {
   generateFileName: (extension: string) => string;
   getData: () => Array<object> | Promise<Array<object>>;
   disabled: boolean;
+  tooltipContent?: string;
 };
 
 const ExportToButton: React.FC<ExportToButtonProps> = ({
   generateFileName,
   getData,
   disabled,
+  tooltipContent,
 }) => {
   const [open, setOpen] = useState<boolean>(false);
   const [loading, setLoading] = useState<boolean>(false);
@@ -85,18 +88,44 @@ const ExportToButton: React.FC<ExportToButtonProps> = ({
       );
     });
   }, [handleExport, generateFileName]);
+  const handleOpenChange = useCallback(
+    (newOpen: boolean) => {
+      if (disabled && newOpen) return;
+      setOpen(newOpen);
+    },
+    [disabled],
+  );
+
+  const buttonElement = (
+    <Button variant="outline" size="icon-sm" disabled={disabled || loading}>
+      {loading ? <Loader2 className="animate-spin" /> : <Download />}
+    </Button>
+  );
+
   return (
-    <DropdownMenu open={open} onOpenChange={setOpen}>
-      <DropdownMenuTrigger asChild>
-        <Button variant="outline" size="icon-sm" disabled={disabled || loading}>
-          {loading ? <Loader2 className="animate-spin" /> : <Download />}
-        </Button>
-      </DropdownMenuTrigger>
+    <DropdownMenu open={open} onOpenChange={handleOpenChange}>
+      {disabled && tooltipContent ? (
+        <TooltipWrapper content={tooltipContent}>
+          <DropdownMenuTrigger asChild>
+            <span className="inline-block cursor-not-allowed">
+              {buttonElement}
+            </span>
+          </DropdownMenuTrigger>
+        </TooltipWrapper>
+      ) : (
+        <DropdownMenuTrigger asChild>{buttonElement}</DropdownMenuTrigger>
+      )}
       <DropdownMenuContent align="end" className="w-52">
-        <DropdownMenuItem onClick={exportCSVHandler} disabled={loading}>
+        <DropdownMenuItem
+          onClick={exportCSVHandler}
+          disabled={disabled || loading}
+        >
           Export as CSV
         </DropdownMenuItem>
-        <DropdownMenuItem onClick={exportJSONHandler} disabled={loading}>
+        <DropdownMenuItem
+          onClick={exportJSONHandler}
+          disabled={disabled || loading}
+        >
           Export as JSON
         </DropdownMenuItem>
       </DropdownMenuContent>

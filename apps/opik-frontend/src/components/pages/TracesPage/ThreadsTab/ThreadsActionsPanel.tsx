@@ -16,6 +16,8 @@ import RunEvaluationDialog from "@/components/pages-shared/automations/RunEvalua
 import AddTagDialog, {
   TAG_ENTITY_TYPE,
 } from "@/components/pages-shared/traces/AddTagDialog/AddTagDialog";
+import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
+import { FeatureToggleKeys } from "@/types/feature-toggles";
 
 type ThreadsActionsPanelProps = {
   getDataForExport: () => Promise<Thread[]>;
@@ -39,6 +41,7 @@ const ThreadsActionsPanel: React.FunctionComponent<
 
   const { mutate } = useThreadBatchDeleteMutation();
   const disabled = !selectedRows?.length;
+  const isExportEnabled = useIsFeatureEnabled(FeatureToggleKeys.EXPORT_ENABLED);
 
   const deleteThreadsHandler = useCallback(() => {
     mutate({
@@ -144,9 +147,14 @@ const ThreadsActionsPanel: React.FunctionComponent<
         </Button>
       </TooltipWrapper>
       <ExportToButton
-        disabled={disabled || columnsToExport.length === 0}
+        disabled={disabled || columnsToExport.length === 0 || !isExportEnabled}
         getData={mapRowData}
         generateFileName={generateFileName}
+        tooltipContent={
+          !isExportEnabled
+            ? "Export functionality is disabled for this installation"
+            : undefined
+        }
       />
       <TooltipWrapper content="Delete">
         <Button
