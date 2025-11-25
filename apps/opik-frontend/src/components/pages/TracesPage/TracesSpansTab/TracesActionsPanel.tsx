@@ -15,6 +15,8 @@ import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import ExportToButton from "@/components/shared/ExportToButton/ExportToButton";
 import AddTagDialog from "@/components/pages-shared/traces/AddTagDialog/AddTagDialog";
 import RunEvaluationDialog from "@/components/pages-shared/automations/RunEvaluationDialog/RunEvaluationDialog";
+import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
+import { FeatureToggleKeys } from "@/types/feature-toggles";
 
 type TracesActionsPanelProps = {
   type: TRACE_DATA_TYPE;
@@ -38,6 +40,7 @@ const TracesActionsPanel: React.FunctionComponent<TracesActionsPanelProps> = ({
 
   const { mutate } = useTracesBatchDeleteMutation();
   const disabled = !selectedRows?.length;
+  const isExportEnabled = useIsFeatureEnabled(FeatureToggleKeys.EXPORT_ENABLED);
 
   const deleteTracesHandler = useCallback(() => {
     mutate({
@@ -149,7 +152,7 @@ const TracesActionsPanel: React.FunctionComponent<TracesActionsPanelProps> = ({
         </TooltipWrapper>
       )}
       <ExportToButton
-        disabled={disabled || columnsToExport.length === 0}
+        disabled={disabled || columnsToExport.length === 0 || !isExportEnabled}
         getData={mapRowData}
         generateFileName={generateFileName}
       />

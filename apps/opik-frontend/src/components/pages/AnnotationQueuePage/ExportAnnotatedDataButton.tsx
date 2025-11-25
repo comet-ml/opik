@@ -29,6 +29,8 @@ import {
 import { prettifyMessage } from "@/lib/traces";
 import { JsonNode } from "@/types/shared";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
+import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
+import { FeatureToggleKeys } from "@/types/feature-toggles";
 
 const MAX_EXPORT_ITEMS = 15000;
 const MESSAGES_KEYS = ["input", "output", "first_message", "last_message"];
@@ -65,6 +67,7 @@ const ExportAnnotatedDataButton: React.FC<ExportAnnotatedDataButtonProps> = ({
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const { toast } = useToast();
+  const isExportEnabled = useIsFeatureEnabled(FeatureToggleKeys.EXPORT_ENABLED);
 
   const reviewers = useMemo(
     () => annotationQueue.reviewers?.map((r) => r.username) ?? [],
@@ -315,7 +318,11 @@ const ExportAnnotatedDataButton: React.FC<ExportAnnotatedDataButtonProps> = ({
     <TooltipWrapper content="Export annotated data">
       <DropdownMenu open={open} onOpenChange={setOpen}>
         <DropdownMenuTrigger asChild>
-          <Button variant="outline" size="sm" disabled={disabled || loading}>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={disabled || loading || !isExportEnabled}
+          >
             {loading ? (
               <Loader2 className="mr-1.5 size-3.5 animate-spin" />
             ) : (
