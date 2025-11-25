@@ -74,6 +74,7 @@ export const DEFAULT_CUSTOM_CONFIGS = {
 export const REASONING_MODELS = [
   // GPT-5 family
   PROVIDER_MODEL_TYPE.GPT_5,
+  PROVIDER_MODEL_TYPE.GPT_5_1,
   PROVIDER_MODEL_TYPE.GPT_5_MINI,
   PROVIDER_MODEL_TYPE.GPT_5_NANO,
   PROVIDER_MODEL_TYPE.GPT_5_CHAT_LATEST,
@@ -84,6 +85,15 @@ export const REASONING_MODELS = [
   PROVIDER_MODEL_TYPE.GPT_O3_MINI,
   PROVIDER_MODEL_TYPE.GPT_O4_MINI,
 ] as const;
+
+// Thinking level options for Gemini 3 Pro models
+export const THINKING_LEVEL_OPTIONS: Array<{
+  label: string;
+  value: "low" | "high";
+}> = [
+  { label: "Low", value: "low" },
+  { label: "High", value: "high" },
+];
 
 export const LLM_PROMPT_CUSTOM_TRACE_TEMPLATE: LLMPromptTemplate = {
   label: "Custom LLM-as-judge",
