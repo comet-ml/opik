@@ -599,15 +599,7 @@ class BaseOptimizer(ABC):
             cleaned_model_output = raw_model_output.strip()
 
             # Add tags to trace for optimization tracking
-            if self.current_optimization_id:
-                optimizer_short_name = self._get_optimizer_short_name()
-                opik_context.update_current_trace(
-                    tags=[
-                        optimizer_short_name,
-                        self.current_optimization_id,
-                        "Evaluation",
-                    ]
-                )
+            self._tag_trace()
 
             result = {
                 "llm_output": cleaned_model_output,
