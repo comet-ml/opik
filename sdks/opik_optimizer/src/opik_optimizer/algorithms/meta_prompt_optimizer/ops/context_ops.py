@@ -7,12 +7,12 @@ This module contains functions for building task context and history context.
 from collections.abc import Callable
 from typing import Any
 import logging
-import random
 import re
 
 import opik
 from ....base_optimizer import OptimizationRound
 from ..prompts import START_DELIM, END_DELIM
+from ....utils import rng as rng_utils
 
 logger = logging.getLogger(__name__)
 
@@ -58,6 +58,7 @@ def get_task_context(
     max_tokens: int = 2000,
     model: str = "gpt-4",
     extract_metric_understanding: bool = True,
+    seed: int | None = None,
 ) -> tuple[str, int]:
     """
     Get task-specific context from the dataset and metric configuration.
@@ -85,7 +86,8 @@ def get_task_context(
         items = dataset.get_items()
         # Randomly sample to show diverse examples across rounds
         num_to_sample = min(num_examples, len(items))
-        samples = random.sample(items, num_to_sample) if len(items) > 0 else []
+        rng = rng_utils.make_rng(seed, "task_context")
+        samples = rng.sample(items, num_to_sample) if len(items) > 0 else []
     except Exception as e:
         logger.warning(f"Could not get samples from dataset: {e}")
         return "", 0
