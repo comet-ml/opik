@@ -34,7 +34,7 @@ class AnswerCorrectnessMetric(base_metric.BaseMetric):
         self.llm_client = models.LiteLLMChatModel(model_name=model)
 
     def score(
-        self, output: str, reference: str, **ignored_kwargs: Any
+        self, output: str, reference: str, **_ignored_kwargs: Any
     ) -> score_result.ScoreResult:
         """
         Evaluate whether the answer is correct.

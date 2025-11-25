@@ -335,10 +335,14 @@ MetaPromptOptimizer(
     model_parameters: dict[str, typing.Any] | None = None,
     prompts_per_round: int = 4,
     enable_context: bool = True,
+    num_task_examples: int = 5,
+    task_context_columns: list[str] | None = None,
     n_threads: int = 12,
     verbose: int = 1,
     seed: int = 42,
-    name: str | None = None
+    name: str | None = None,
+    use_hall_of_fame: bool = True,
+    prettymode_prompt_history: bool = True
 )
 ```
 
@@ -349,10 +353,14 @@ MetaPromptOptimizer(
 <ParamField path="model_parameters" type="dict[str, typing.Any] | None" optional={true}>Optional dict of LiteLLM parameters for optimizer's internal LLM calls. Common params: temperature, max_tokens, max_completion_tokens, top_p.</ParamField>
 <ParamField path="prompts_per_round" type="int" optional={true} default="4">Number of candidate prompts to generate per optimization round</ParamField>
 <ParamField path="enable_context" type="bool" optional={true} default="True">Whether to include task-specific context when reasoning about improvements</ParamField>
+<ParamField path="num_task_examples" type="int" optional={true} default="5">Number of dataset examples to show in task context (default: 10)</ParamField>
+<ParamField path="task_context_columns" type="list[str] | None" optional={true}>Specific dataset columns to include in context (None = all input columns)</ParamField>
 <ParamField path="n_threads" type="int" optional={true} default="12">Number of parallel threads for prompt evaluation</ParamField>
 <ParamField path="verbose" type="int" optional={true} default="1">Controls internal logging/progress bars (0=off, 1=on)</ParamField>
 <ParamField path="seed" type="int" optional={true} default="42">Random seed for reproducibility</ParamField>
 <ParamField path="name" type="str | None" optional={true} />
+<ParamField path="use_hall_of_fame" type="bool" optional={true} default="True">Enable Hall of Fame pattern extraction and re-injection</ParamField>
+<ParamField path="prettymode_prompt_history" type="bool" optional={true} default="True">Display prompt history in pretty format (True) or JSON (False)</ParamField>
 
 ### Methods
 #### cleanup
