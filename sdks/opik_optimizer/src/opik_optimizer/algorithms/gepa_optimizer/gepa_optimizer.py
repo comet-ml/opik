@@ -24,6 +24,7 @@ from ...utils import (
     enable_experiment_reporting,
     unique_ordered_by_key,
 )
+from ...utils import rng as rng_utils
 from ...task_evaluator import _create_metric_class
 from ... import task_evaluator, helpers
 from . import reporting as gepa_reporting
@@ -239,14 +240,45 @@ class GepaOptimizer(BaseOptimizer):
         seed_prompt_text = self._extract_system_text(prompt)
         input_key, output_key = self._infer_dataset_keys(dataset)
 
-        train_items = dataset.get_items()
-        if n_samples and 0 < n_samples < len(train_items):
-            train_items = train_items[:n_samples]
-
+        train_plan = self._prepare_sampling_plan(
+            dataset=dataset,
+            n_samples=n_samples,
+            phase="train",
+            seed_override=seed,
+        )
         val_source = validation_dataset or dataset
-        val_items = val_source.get_items()
-        if n_samples and 0 < n_samples < len(val_items):
-            val_items = val_items[:n_samples]
+        val_plan = self._prepare_sampling_plan(
+            dataset=val_source,
+            n_samples=n_samples,
+            phase="val",
+            seed_override=seed,
+        )
+
+        def _apply_plan(
+            items: list[dict[str, Any]], plan: Any, phase_tag: str
+        ) -> list[dict[str, Any]]:
+            if not items or plan is None:
+                return items
+
+            if plan.dataset_item_ids:
+                id_set = set(plan.dataset_item_ids)
+                return [item for item in items if item.get("id") in id_set]
+
+            if plan.nb_samples is not None and plan.nb_samples < len(items):
+                ids = [item.get("id") for item in items if item.get("id") is not None]
+                if ids:
+                    local_rng = self._derive_rng(phase_tag, plan.nb_samples or 0)
+                    selected_ids = rng_utils.sample_ids(
+                        local_rng, ids, plan.nb_samples
+                    )
+                    selected_set = set(selected_ids)
+                    return [item for item in items if item.get("id") in selected_set]
+                return items[: plan.nb_samples]
+
+            return items
+
+        train_items = _apply_plan(dataset.get_items(), train_plan, "gepa_train")
+        val_items = _apply_plan(val_source.get_items(), val_plan, "gepa_val")
 
         # Calculate max_metric_calls from max_trials and effective samples
         effective_n_samples = len(train_items)
@@ -417,6 +449,9 @@ class GepaOptimizer(BaseOptimizer):
                     "seed": seed,
                     "raise_on_exception": raise_on_exception,
                     "logger": logger_instance,
+                    # FIXME(opik-sdk): once evaluate_on_dict_items is fully wired,
+                    # allow GEPA's reflection/minibatch scoring to use the lightweight
+                    # path instead of full experiments for inner loops.
                 }
 
                 optimize_sig = None
