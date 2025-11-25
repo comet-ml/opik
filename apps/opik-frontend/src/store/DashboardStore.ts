@@ -10,6 +10,7 @@ import {
   DashboardSections,
   DashboardState,
   DashboardWidget,
+  DashboardWidgetComponentProps,
 } from "@/types/dashboard";
 import {
   generateEmptyDashboard,
@@ -46,6 +47,9 @@ interface DashboardStoreState<TConfig = BaseDashboardConfig> {
   config: TConfig | null;
   search: string;
   onAddWidgetCallback: ((sectionId: string) => void) | null;
+  widgetResolver:
+    | ((type: string) => React.ComponentType<DashboardWidgetComponentProps>)
+    | null;
 }
 
 /**
@@ -78,6 +82,11 @@ interface DashboardActions<TConfig = BaseDashboardConfig> {
     widgetId: string,
     updates: Partial<DashboardWidget>,
   ) => void;
+  moveWidget: (
+    sourceSectionId: string,
+    targetSectionId: string,
+    widgetId: string,
+  ) => void;
   updateLayout: (sectionId: string, layout: DashboardLayout) => void;
 
   // Config operations
@@ -94,6 +103,16 @@ interface DashboardActions<TConfig = BaseDashboardConfig> {
     callback: ((sectionId: string) => void) | null,
   ) => void;
   getOnAddWidgetCallback: () => ((sectionId: string) => void) | null;
+
+  // Widget resolver operations
+  setWidgetResolver: (
+    resolver:
+      | ((type: string) => React.ComponentType<DashboardWidgetComponentProps>)
+      | null,
+  ) => void;
+  getWidgetResolver: () =>
+    | ((type: string) => React.ComponentType<DashboardWidgetComponentProps>)
+    | null;
 
   // Utility operations
   clearDashboard: () => void;
@@ -140,6 +159,7 @@ export const useDashboardStore = create<DashboardStore<BaseDashboardConfig>>()(
         config: null,
         search: "",
         onAddWidgetCallback: null,
+        widgetResolver: null,
 
         // Section Actions
         addSection: (title?: string) => {
@@ -324,6 +344,64 @@ export const useDashboardStore = create<DashboardStore<BaseDashboardConfig>>()(
           );
         },
 
+        moveWidget: (
+          sourceSectionId: string,
+          targetSectionId: string,
+          widgetId: string,
+        ) => {
+          const state = get();
+          const sourceSection = getSectionById(state.sections, sourceSectionId);
+          const targetSection = getSectionById(state.sections, targetSectionId);
+
+          if (
+            !sourceSection ||
+            !targetSection ||
+            sourceSectionId === targetSectionId
+          ) {
+            return;
+          }
+
+          const widget = sourceSection.widgets.find((w) => w.id === widgetId);
+          if (!widget) return;
+
+          const updatedSourceWidgets = sourceSection.widgets.filter(
+            (w) => w.id !== widgetId,
+          );
+          const updatedSourceLayout = removeWidgetFromLayout(
+            sourceSection.layout,
+            widgetId,
+          );
+          const updatedTargetLayout = calculateLayoutForAddingWidget(
+            targetSection.layout,
+            widget,
+          );
+
+          set(
+            (state) => ({
+              sections: state.sections.map((s) => {
+                if (s.id === sourceSectionId) {
+                  return {
+                    ...s,
+                    widgets: updatedSourceWidgets,
+                    layout: updatedSourceLayout,
+                  };
+                }
+                if (s.id === targetSectionId) {
+                  return {
+                    ...s,
+                    widgets: [...s.widgets, widget],
+                    layout: updatedTargetLayout,
+                  };
+                }
+                return s;
+              }),
+              lastModified: Date.now(),
+            }),
+            false,
+            "moveWidget",
+          );
+        },
+
         updateLayout: (sectionId: string, layout: DashboardLayout) => {
           const normalizedLayout = normalizeLayout(layout);
           set(
@@ -371,6 +449,15 @@ export const useDashboardStore = create<DashboardStore<BaseDashboardConfig>>()(
 
         getOnAddWidgetCallback: () => {
           return get().onAddWidgetCallback;
+        },
+
+        // Widget Resolver Actions
+        setWidgetResolver: (resolver) => {
+          set({ widgetResolver: resolver }, false, "setWidgetResolver");
+        },
+
+        getWidgetResolver: () => {
+          return get().widgetResolver;
         },
 
         // Utility Actions
@@ -504,6 +591,7 @@ export const selectReorderSections = (state: DashboardStore) =>
 export const selectAddWidget = (state: DashboardStore) => state.addWidget;
 export const selectDeleteWidget = (state: DashboardStore) => state.deleteWidget;
 export const selectUpdateWidget = (state: DashboardStore) => state.updateWidget;
+export const selectMoveWidget = (state: DashboardStore) => state.moveWidget;
 export const selectUpdateLayout = (state: DashboardStore) => state.updateLayout;
 
 export const selectConfig = <TConfig = BaseDashboardConfig>(
@@ -527,3 +615,11 @@ export const selectOnAddWidgetCallback = (
 export const selectSetOnAddWidgetCallback = (
   state: DashboardStore<BaseDashboardConfig>,
 ) => state.setOnAddWidgetCallback;
+
+// Widget resolver selectors
+export const selectWidgetResolver = (
+  state: DashboardStore<BaseDashboardConfig>,
+) => state.widgetResolver;
+export const selectSetWidgetResolver = (
+  state: DashboardStore<BaseDashboardConfig>,
+) => state.setWidgetResolver;

@@ -2,6 +2,7 @@ export interface DashboardWidget {
   id: string;
   type: string;
   title: string;
+  subtitle?: string;
   metricType?: string;
   config: Record<string, unknown>;
 }
@@ -66,4 +67,9 @@ export interface ProjectDashboardConfig extends BaseDashboardConfig {
   interval: string;
   intervalStart?: string;
   intervalEnd?: string;
+}
+
+export interface DashboardWidgetComponentProps {
+  sectionId: string;
+  widgetId: string;
 }

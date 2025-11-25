@@ -9,7 +9,7 @@ const AddSectionButton: React.FunctionComponent<AddSectionButtonProps> = ({
   onAddSection,
 }) => {
   return (
-    <div className="flex h-14 w-full items-center justify-center border-y">
+    <div className="flex h-14 w-full items-center justify-center border-t">
       <button
         onClick={() => onAddSection()}
         className="flex h-8 items-center gap-1.5 rounded-md px-3 py-1.5 hover:bg-muted"

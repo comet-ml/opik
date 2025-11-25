@@ -15,8 +15,6 @@ export const WIDGET_TYPES = {
   COST_SUMMARY: "cost_summary",
 } as const;
 
-export type WidgetType = (typeof WIDGET_TYPES)[keyof typeof WIDGET_TYPES];
-
 export const generateId = (): string => {
   return Math.random().toString(36).substring(2, 9);
 };
@@ -25,11 +23,13 @@ export const generateEmptyWidget = (
   type = "chart",
   title?: string,
   metricType?: string,
+  subtitle?: string,
 ): DashboardWidget => {
   return {
     id: generateId(),
     type,
     title: title || DEFAULT_WIDGET_TITLE,
+    subtitle,
     metricType,
     config: {},
   };
@@ -62,19 +62,4 @@ export const getSectionById = (
   id: string,
 ): DashboardSection | undefined => {
   return sections.find((section) => section.id === id);
-};
-
-export const calculateWidgetsCount = (sections: DashboardSections): number => {
-  return sections.reduce((acc, section) => acc + section.widgets.length, 0);
-};
-
-export const getWidgetById = (
-  sections: DashboardSections,
-  widgetId: string,
-): DashboardWidget | undefined => {
-  for (const section of sections) {
-    const widget = section.widgets.find((w) => w.id === widgetId);
-    if (widget) return widget;
-  }
-  return undefined;
 };
