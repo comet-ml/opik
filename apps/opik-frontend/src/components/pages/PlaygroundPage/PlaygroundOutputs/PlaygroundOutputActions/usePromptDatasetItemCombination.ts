@@ -5,6 +5,7 @@ import { PlaygroundPromptType } from "@/types/playground";
 import {
   usePromptIds,
   usePromptMap,
+  useSetThrottlingActive,
   useUpdateOutput,
 } from "@/store/PlaygroundStore";
 import useCompletionProxyStreaming from "@/api/playground/useCompletionProxyStreaming";
@@ -146,6 +147,7 @@ const usePromptDatasetItemCombination = ({
 }: UsePromptDatasetItemCombinationArgs) => {
   const updateOutput = useUpdateOutput();
   const hydrateDatasetItemData = useHydrateDatasetItemData();
+  const setThrottlingActive = useSetThrottlingActive();
 
   const runStreaming = useCompletionProxyStreaming({
     workspaceName,
@@ -253,9 +255,15 @@ const usePromptDatasetItemCombination = ({
 
         // Apply throttling delay if configured
         if (throttlingSeconds > 0 && !isToStopRef.current) {
+          // Show global throttling indicator
+          setThrottlingActive(true);
+
           await new Promise((resolve) =>
             setTimeout(resolve, throttlingSeconds * 1000),
           );
+
+          // Clear throttling indicator
+          setThrottlingActive(false);
         }
       }
     },
@@ -270,6 +278,7 @@ const usePromptDatasetItemCombination = ({
       deleteAbortController,
       selectedRuleIds,
       throttlingSeconds,
+      setThrottlingActive,
     ],
   );
 
