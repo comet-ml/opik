@@ -150,6 +150,11 @@ const ThreadsActionsPanel: React.FunctionComponent<
         disabled={disabled || columnsToExport.length === 0 || !isExportEnabled}
         getData={mapRowData}
         generateFileName={generateFileName}
+        tooltipContent={
+          !isExportEnabled
+            ? "Export functionality is disabled for this installation"
+            : undefined
+        }
       />
       <TooltipWrapper content="Delete">
         <Button

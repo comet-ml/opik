@@ -207,11 +207,18 @@ const CompareExperimentsActionsPanel: React.FC<
         />
         <Separator orientation="vertical" className="mx-2 h-4" />
       </div>
-      {columnsToExport && isExportEnabled && (
+      {columnsToExport && (
         <ExportToButton
-          disabled={disabled || columnsToExport.length === 0}
+          disabled={
+            disabled || columnsToExport.length === 0 || !isExportEnabled
+          }
           getData={mapRowData}
           generateFileName={generateFileName}
+          tooltipContent={
+            !isExportEnabled
+              ? "Export functionality is disabled for this installation"
+              : undefined
+          }
         />
       )}
     </div>
