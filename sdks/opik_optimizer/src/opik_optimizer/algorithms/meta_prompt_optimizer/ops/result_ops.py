@@ -53,6 +53,18 @@ def create_round_data(
     Returns:
         OptimizationRound object
     """
+    # For bundle prompts (dict), keep a representative prompt for logging/validation.
+    current_prompt_repr = (
+        next(iter(current_best_prompt.values()))
+        if isinstance(current_best_prompt, dict) and current_best_prompt
+        else current_best_prompt
+    )
+    best_prompt_repr = (
+        next(iter(best_prompt_overall.values()))
+        if isinstance(best_prompt_overall, dict) and best_prompt_overall
+        else best_prompt_overall
+    )
+
     generated_prompts_log: list[dict[str, Any]] = []
     for prompt, score in evaluated_candidates:
         improvement_vs_prev = calculate_improvement(score, previous_best_score)
@@ -76,10 +88,10 @@ def create_round_data(
 
     return OptimizationRound(
         round_number=round_num + 1,
-        current_prompt=current_best_prompt,
+        current_prompt=current_prompt_repr,
         current_score=current_best_score,
         generated_prompts=generated_prompts_log,
-        best_prompt=best_prompt_overall,
+        best_prompt=best_prompt_repr,
         best_score=current_best_score,
         improvement=improvement_this_round,
     )
