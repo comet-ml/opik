@@ -611,6 +611,7 @@ const TrialItemsTab: React.FC<TrialItemsTabProps> = ({
           setTraceId("");
           setSpanId("");
         }}
+        columnsToExport={dynamicColumnsIds}
       />
     </>
   );

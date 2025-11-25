@@ -916,6 +916,7 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
           setTraceId("");
           setSpanId("");
         }}
+        columnsToExport={dynamicColumnsIds}
       />
     </>
   );
