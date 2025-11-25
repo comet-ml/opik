@@ -54,7 +54,7 @@ repos:
     hooks:
       - id: markdownlint
         files: ^sdks/opik_optimizer/.*\.md$
-        args: ['--disable=MD013', '--disable=MD033']
+        args: ['--disable=MD013', '--disable=MD033', '--disable=MD060']
 
   - repo: https://github.com/codespell-project/codespell
     rev: v2.4.1
