@@ -1728,7 +1728,6 @@ def test_evaluate_on_dict_items__happyflow(fake_backend):
     assert result.test_results[1].test_case.task_output == {"output": "6"}
     assert result.test_results[1].score_results[0].value == 1.0
     assert result.test_results[1].score_results[0].name == "equals_metric"
-    
 
     # Test aggregation
     aggregated = result.aggregate_evaluation_scores()

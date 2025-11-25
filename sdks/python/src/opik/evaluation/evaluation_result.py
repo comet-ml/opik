@@ -1,4 +1,4 @@
-from typing import List, Optional, Dict, Any, TYPE_CHECKING
+from typing import List, Optional, Dict, TYPE_CHECKING
 from collections import defaultdict
 import logging
 
@@ -7,7 +7,7 @@ import dataclasses
 from . import score_statistics, test_result
 
 if TYPE_CHECKING:
-    from .metrics import score_result
+    pass
 
 LOGGER = logging.getLogger(__name__)
 
