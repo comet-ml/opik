@@ -12,11 +12,9 @@ import {
 } from "@/lib/dashboard/layout";
 import {
   useDashboardStore,
-  selectDeleteWidget,
-  selectUpdateWidget,
   selectUpdateLayout,
+  selectWidgetResolver,
 } from "@/store/DashboardStore";
-import DashboardWidget from "@/components/pages/DashboardPage/DashboardWidget";
 import DashboardWidgetGridEmpty from "./DashboardWidgetGridEmpty";
 import isEmpty from "lodash/isEmpty";
 
@@ -34,9 +32,14 @@ const DashboardWidgetGrid: React.FunctionComponent<
   const onAddWidgetCallback = useDashboardStore(
     (state) => state.onAddWidgetCallback,
   );
-  const deleteWidget = useDashboardStore(selectDeleteWidget);
-  const updateWidget = useDashboardStore(selectUpdateWidget);
+  const widgetResolver = useDashboardStore(selectWidgetResolver);
+  const sections = useDashboardStore((state) => state.sections);
   const updateLayout = useDashboardStore(selectUpdateLayout);
+
+  const getWidget = (widgetId: string) => {
+    const section = sections.find((s) => s.id === sectionId);
+    return section?.widgets.find((w) => w.id === widgetId);
+  };
 
   const handleAddWidget = () => {
     onAddWidgetCallback?.(sectionId);
@@ -85,16 +88,18 @@ const DashboardWidgetGrid: React.FunctionComponent<
       maxRows={Infinity}
       autoSize={true}
     >
-      {widgetIds.map((widgetId) => (
-        <div key={widgetId}>
-          <DashboardWidget
-            sectionId={sectionId}
-            widgetId={widgetId}
-            onDelete={() => deleteWidget(sectionId, widgetId)}
-            onUpdate={(updates) => updateWidget(sectionId, widgetId, updates)}
-          />
-        </div>
-      ))}
+      {widgetIds.map((widgetId) => {
+        const widget = getWidget(widgetId);
+        const WidgetComponent = widgetResolver?.(widget?.type || "chart");
+
+        if (!WidgetComponent) return null;
+
+        return (
+          <div key={widgetId}>
+            <WidgetComponent sectionId={sectionId} widgetId={widgetId} />
+          </div>
+        );
+      })}
     </ResponsiveGridLayout>
   );
 };

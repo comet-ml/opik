@@ -110,7 +110,7 @@ const DashboardSectionTitle: React.FunctionComponent<
           <Button
             variant="ghost"
             size="icon"
-            className="size-6 opacity-0 transition-opacity group-hover/title:opacity-100"
+            className="size-6 opacity-0 transition-opacity group-hover/title:opacity-100 group-hover:opacity-100"
             onClick={handleStartEdit}
           >
             <Pencil className="size-3.5 text-muted-slate" />

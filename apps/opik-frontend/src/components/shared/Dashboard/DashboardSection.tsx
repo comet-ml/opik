@@ -8,7 +8,7 @@ import {
   Accordion,
   AccordionContent,
   AccordionItem,
-  AccordionTrigger,
+  CustomAccordionTrigger,
 } from "@/components/ui/accordion";
 import { selectSearch, useDashboardStore } from "@/store/DashboardStore";
 import { cn } from "@/lib/utils";
@@ -42,31 +42,19 @@ const DashboardSection: React.FunctionComponent<DashboardSectionProps> = ({
 }) => {
   const search = useDashboardStore(selectSearch);
   const isSearchMode = Boolean(search);
-  // Selective subscriptions from store
-  const sectionTitle = useDashboardStore(
-    (state) =>
-      state.sections.find((s) => s.id === sectionId)?.title ??
-      "Untitled Section",
-  );
 
-  const sectionExpanded = useDashboardStore(
-    (state) =>
-      state.sections.find((s) => s.id === sectionId)?.expanded ?? false,
-  );
-
-  const widgetIds = useDashboardStore(
-    useShallow((state) => {
-      const section = state.sections.find((s) => s.id === sectionId);
-      return get(section, "widgets", []).map((w) => w.id);
-    }),
-  );
-
-  const layout = useDashboardStore(
-    useShallow((state) => {
-      const section = state.sections.find((s) => s.id === sectionId);
-      return get(section, "layout", []);
-    }),
-  );
+  const { sectionTitle, sectionExpanded, widgetIds, layout } =
+    useDashboardStore(
+      useShallow((state) => {
+        const section = state.sections.find((s) => s.id === sectionId);
+        return {
+          sectionTitle: section?.title ?? "Untitled Section",
+          sectionExpanded: section?.expanded ?? false,
+          widgetIds: get(section, "widgets", []).map((w) => w.id),
+          layout: get(section, "layout", []),
+        };
+      }),
+    );
 
   const filteredWidgets = useMemo(() => {
     if (!widgetFilterMap) return widgetIds;
@@ -97,12 +85,12 @@ const DashboardSection: React.FunctionComponent<DashboardSectionProps> = ({
     opacity: isDragging ? 0.5 : 1,
   };
 
-  const handleToggleExpanded = useCallback(
-    (e: React.MouseEvent) => {
-      e.stopPropagation();
-      onUpdateSection(sectionId, { expanded: !sectionExpanded });
+  const handleValueChange = useCallback(
+    (value: string) => {
+      const newExpanded = value === sectionId;
+      onUpdateSection(sectionId, { expanded: newExpanded });
     },
-    [sectionId, sectionExpanded, onUpdateSection],
+    [sectionId, onUpdateSection],
   );
 
   const handleUpdateTitle = useCallback(
@@ -144,14 +132,15 @@ const DashboardSection: React.FunctionComponent<DashboardSectionProps> = ({
       <Accordion
         type="single"
         collapsible
-        value={sectionExpanded ? sectionId : undefined}
+        value={sectionExpanded ? sectionId : ""}
+        onValueChange={handleValueChange}
         className="w-full"
       >
-        <AccordionItem value={sectionId} className="border-y">
-          <AccordionTrigger
-            className="h-14 px-3 py-4 hover:no-underline [&>svg]:hidden"
-            onClick={handleToggleExpanded}
-          >
+        <AccordionItem
+          value={sectionId}
+          className="border-t border-b-transparent"
+        >
+          <CustomAccordionTrigger className="group h-14 px-3 py-4">
             <DashboardSectionHeader
               sectionId={sectionId}
               title={sectionTitle}
@@ -164,7 +153,7 @@ const DashboardSection: React.FunctionComponent<DashboardSectionProps> = ({
               onAddSectionAbove={handleAddSectionAbove}
               onAddSectionBelow={handleAddSectionBelow}
             />
-          </AccordionTrigger>
+          </CustomAccordionTrigger>
           {!isSorting && !isDragPreview && (
             <AccordionContent className="px-3 pb-3 pt-0">
               <DashboardWidgetGrid

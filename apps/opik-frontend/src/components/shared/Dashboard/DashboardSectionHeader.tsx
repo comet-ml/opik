@@ -73,10 +73,7 @@ const DashboardSectionHeader: React.FunctionComponent<
   );
 
   return (
-    <div
-      className="flex w-full items-center gap-1"
-      onClick={(e) => e.stopPropagation()}
-    >
+    <div className="flex size-full items-center gap-1">
       <div className="flex items-center">
         {expanded ? (
           <ChevronDown className="size-4 text-light-slate" />
@@ -91,69 +88,81 @@ const DashboardSectionHeader: React.FunctionComponent<
         onChange={onUpdateTitle}
       />
 
-      {expanded && (
-        <div className="flex items-center gap-2">
-          <Button
-            onClick={handleAddWidget}
-            className="h-8 gap-1.5 rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-white hover:bg-primary/90"
-          >
-            Add widget
-          </Button>
+      <div
+        className={
+          expanded
+            ? "flex items-center gap-2"
+            : "hidden items-center gap-2 group-hover:flex"
+        }
+      >
+        <Button
+          onClick={(e) => {
+            e.stopPropagation();
+            handleAddWidget(e);
+          }}
+          className="h-8 gap-1.5 rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-white hover:bg-primary/90"
+        >
+          Add widget
+        </Button>
 
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button
-                variant="outline"
-                size="icon"
-                className="size-8 rounded-md border-muted bg-primary-100"
-                onClick={(e) => e.stopPropagation()}
-              >
-                <MoreVertical className="size-3.5" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onAddSectionAbove();
-                }}
-              >
-                <ArrowUp className="mr-2 size-4" />
-                Insert section above
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onAddSectionBelow();
-                }}
-              >
-                <ArrowDown className="mr-2 size-4" />
-                Insert section below
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem
-                onClick={handleDeleteClick}
-                disabled={isLastSection}
-                className="text-destructive focus:text-destructive disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                <Trash2 className="mr-2 size-4" />
-                Delete section
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              variant="outline"
+              size="icon"
+              className="size-8 rounded-md border-muted bg-primary-100"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <MoreVertical className="size-3.5" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem
+              onClick={(e) => {
+                e.stopPropagation();
+                onAddSectionAbove();
+              }}
+            >
+              <ArrowUp className="mr-2 size-4" />
+              Insert section above
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onClick={(e) => {
+                e.stopPropagation();
+                onAddSectionBelow();
+              }}
+            >
+              <ArrowDown className="mr-2 size-4" />
+              Insert section below
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              onClick={handleDeleteClick}
+              disabled={isLastSection}
+              className="text-destructive focus:text-destructive disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <Trash2 className="mr-2 size-4" />
+              Delete section
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
 
-          <div className="flex h-full items-center px-1">
-            <div className="h-6 w-px bg-muted" />
-          </div>
-
-          <div
-            {...dragHandleProps}
-            className="flex size-8 cursor-grab items-center justify-center rounded-md border border-muted bg-background text-foreground transition-colors hover:bg-muted active:cursor-grabbing"
-          >
-            <GripHorizontal className="size-3.5" />
-          </div>
+        <div className="flex h-full items-center px-1">
+          <div className="h-6 w-px bg-muted" />
         </div>
-      )}
+      </div>
+
+      <div
+        {...dragHandleProps}
+        onClick={(e) => e.stopPropagation()}
+        className={
+          expanded
+            ? "flex size-8 cursor-grab items-center justify-center rounded-md border border-muted bg-background text-foreground transition-colors hover:bg-muted active:cursor-grabbing"
+            : "hidden size-8 cursor-grab items-center justify-center rounded-md border border-muted bg-background text-foreground transition-colors hover:bg-muted active:cursor-grabbing group-hover:flex"
+        }
+      >
+        <GripHorizontal className="size-3.5" />
+      </div>
 
       <ConfirmDialog
         open={showDeleteDialog}
