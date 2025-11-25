@@ -39,6 +39,9 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.lifecycle.Startables;
@@ -53,6 +56,7 @@ import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.List;
 import java.util.UUID;
+import java.util.stream.Stream;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.api.resources.utils.WireMockUtils.WireMockRuntime;
@@ -280,6 +284,66 @@ class DatasetsCsvUploadResourceTest {
                             .orElseThrow();
                     assertThat(item2.data().get("output").asText()).isEqualTo("Response: \"Hi\"");
                 });
+    }
+
+    @ParameterizedTest
+    @DisplayName("Upload CSV file with invalid headers - should return 400 Bad Request")
+    @MethodSource("provideInvalidCsvHeaders")
+    void uploadCsvFile__invalidHeaders(String csvContent, String testDescription) {
+        // Given: Create a dataset
+        Dataset dataset = factory.manufacturePojo(Dataset.class).toBuilder()
+                .id(null)
+                .createdBy(null)
+                .lastUpdatedBy(null)
+                .build();
+
+        UUID createdDatasetId = datasetResourceClient.createDataset(dataset, API_KEY, TEST_WORKSPACE);
+
+        // When: Upload CSV file with invalid header
+        try (var response = uploadCsvFile(createdDatasetId, csvContent)) {
+            // Then: Should return 400 Bad Request
+            assertThat(response.getStatus())
+                    .as("Test case: %s", testDescription)
+                    .isEqualTo(HttpStatus.SC_BAD_REQUEST);
+
+            // Verify error response contains message with appropriate error description
+            String errorResponse = response.readEntity(String.class);
+            assertThat(errorResponse)
+                    .as("Test case: %s - should contain message field", testDescription)
+                    .contains("\"message\"");
+            assertThat(errorResponse)
+                    .as("Test case: %s - should mention empty header names", testDescription)
+                    .contains("empty header names");
+        }
+
+        // Verify no items were created
+        var items = getDatasetItems(createdDatasetId);
+        assertThat(items)
+                .as("Test case: %s - no items should be created", testDescription)
+                .isEmpty();
+    }
+
+    private static Stream<Arguments> provideInvalidCsvHeaders() {
+        return Stream.of(
+                Arguments.of(
+                        """
+                                input,,expected_output
+                                "What is 2+2?","4","4"
+                                "What is the capital of France?","Paris","Paris"
+                                """,
+                        "Empty header in middle position"),
+                Arguments.of(
+                        """
+                                input,   ,expected_output
+                                "What is 2+2?","4","4"
+                                """,
+                        "Blank header with spaces"),
+                Arguments.of(
+                        """
+                                ,output,expected_output
+                                "What is 2+2?","4","4"
+                                """,
+                        "Empty first header"));
     }
 
     private Response uploadCsvFile(UUID datasetId, String csvContent) {
