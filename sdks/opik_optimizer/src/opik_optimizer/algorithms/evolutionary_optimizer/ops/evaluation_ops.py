@@ -6,7 +6,6 @@ from .... import task_evaluator, helpers
 from ....api_objects import chat_prompt
 from ....mcp_utils.mcp_workflow import MCPExecutionConfig
 import opik
-from opik import opik_context
 import copy
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
