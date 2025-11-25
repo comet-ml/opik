@@ -391,7 +391,6 @@ const ExperimentsPage: React.FC = () => {
     actionsCell: ExperimentRowActionsCell,
     sortedColumns,
     setSortedColumns,
-    showReasons,
     reasonsAction,
   });
 
@@ -668,6 +667,9 @@ const ExperimentsPage: React.FC = () => {
         groupingConfig={groupingConfig}
         getRowId={getRowId}
         columnPinning={columnPinningConfig}
+        meta={{
+          showReasons,
+        }}
         noData={
           <DataTableNoData title={noDataText}>
             {noData && (

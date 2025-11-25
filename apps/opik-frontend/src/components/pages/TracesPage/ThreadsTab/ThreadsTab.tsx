@@ -68,7 +68,6 @@ import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 import ThreadStatusCell from "@/components/shared/DataTableCells/ThreadStatusCell";
 import FeedbackScoreHeader from "@/components/shared/DataTableHeaders/FeedbackScoreHeader";
 import FeedbackScoreCell from "@/components/shared/DataTableCells/FeedbackScoreCell";
-import FeedbackScoreReasonCell from "@/components/shared/DataTableCells/FeedbackScoreReasonCell";
 import useThreadsFeedbackScoresNames from "@/api/traces/useThreadsFeedbackScoresNames";
 import ThreadsFeedbackScoresSelect from "@/components/pages-shared/traces/TracesOrSpansFeedbackScoresSelect/ThreadsFeedbackScoresSelect";
 import CommentsCell from "@/components/shared/DataTableCells/CommentsCell";
@@ -419,7 +418,7 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
 
     const allScoreColumns = [userFeedbackColumn, ...otherDynamicColumns];
 
-    const scoreColumns = allScoreColumns.map(
+    return allScoreColumns.map(
       ({ label, id, columnType }) =>
         ({
           id,
@@ -432,23 +431,7 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
           statisticKey: `${COLUMN_FEEDBACK_SCORES_ID}.${label}`,
         }) as ColumnData<Thread>,
     );
-
-    const reasonColumns = showReasons
-      ? allScoreColumns.map(
-          ({ label, id }) =>
-            ({
-              id: `${id}_reason`,
-              label: `${label} (reason)`,
-              type: COLUMN_TYPE.string,
-              cell: FeedbackScoreReasonCell as never,
-              accessorFn: (row) =>
-                row.feedback_scores?.find((f) => f.name === label),
-            }) as ColumnData<Thread>,
-        )
-      : [];
-
-    return [...scoreColumns, ...reasonColumns];
-  }, [dynamicScoresColumns, showReasons]);
+  }, [dynamicScoresColumns]);
 
   const rows: Thread[] = useMemo(() => data?.content ?? [], [data]);
 
@@ -518,8 +501,9 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
       projectId,
       projectName,
       enableUserFeedbackEditing: true,
+      showReasons,
     }),
-    [projectId, projectName],
+    [projectId, projectName, showReasons],
   );
 
   const columns = useMemo(() => {

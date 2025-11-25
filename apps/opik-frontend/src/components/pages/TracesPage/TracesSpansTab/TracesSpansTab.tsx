@@ -70,7 +70,6 @@ import CostCell from "@/components/shared/DataTableCells/CostCell";
 import ErrorCell from "@/components/shared/DataTableCells/ErrorCell";
 import DurationCell from "@/components/shared/DataTableCells/DurationCell";
 import FeedbackScoreCell from "@/components/shared/DataTableCells/FeedbackScoreCell";
-import FeedbackScoreReasonCell from "@/components/shared/DataTableCells/FeedbackScoreReasonCell";
 import PrettyCell from "@/components/shared/DataTableCells/PrettyCell";
 import CommentsCell from "@/components/shared/DataTableCells/CommentsCell";
 import FeedbackScoreHeader from "@/components/shared/DataTableHeaders/FeedbackScoreHeader";
@@ -556,8 +555,6 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
   }, [feedbackScoresData?.scores]);
 
   const dynamicColumnsIds = useMemo(() => {
-    // Only manage score column IDs in dynamic columns cache
-    // Reason columns are controlled by the global toggle, not individual column settings
     return dynamicScoresColumns.map((c) => c.id);
   }, [dynamicScoresColumns]);
 
@@ -582,7 +579,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
 
     const allScoreColumns = [userFeedbackColumn, ...otherDynamicColumns];
 
-    const scoreColumns = allScoreColumns.map(
+    return allScoreColumns.map(
       ({ label, id, columnType }) =>
         ({
           id,
@@ -595,23 +592,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
           statisticKey: `${COLUMN_FEEDBACK_SCORES_ID}.${label}`,
         }) as ColumnData<BaseTraceData>,
     );
-
-    const reasonColumns = showReasons
-      ? allScoreColumns.map(
-          ({ label, id }) =>
-            ({
-              id: `${id}_reason`,
-              label: `${label} (reason)`,
-              type: COLUMN_TYPE.string,
-              cell: FeedbackScoreReasonCell as never,
-              accessorFn: (row) =>
-                row.feedback_scores?.find((f) => f.name === label),
-            }) as ColumnData<BaseTraceData>,
-        )
-      : [];
-
-    return [...scoreColumns, ...reasonColumns];
-  }, [dynamicScoresColumns, showReasons]);
+  }, [dynamicScoresColumns]);
 
   const selectedRows: Array<Trace | Span> = useMemo(() => {
     return rows.filter((row) => rowSelection[row.id]);
@@ -660,8 +641,9 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
         handleRowClick(row, DetailsActionSection.Comments);
       },
       enableUserFeedbackEditing: true,
+      showReasons,
     }),
-    [handleRowClick],
+    [handleRowClick, showReasons],
   );
 
   const handleThreadIdClick = useCallback(

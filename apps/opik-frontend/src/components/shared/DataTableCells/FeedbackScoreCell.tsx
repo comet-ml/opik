@@ -17,19 +17,28 @@ import { BaseTraceData } from "@/types/traces";
 import useFeedbackScoreInlineEdit from "@/hooks/useFeedbackScoreInlineEdit";
 import { isObjectSpan, isObjectThread } from "@/lib/traces";
 import { ThreadStatus } from "@/types/thread";
+import { ROW_HEIGHT } from "@/types/shared";
 
 const FeedbackScoreCell = (context: CellContext<unknown, unknown>) => {
   const feedbackScore = context.getValue() as TraceFeedbackScore | undefined;
   const reason = feedbackScore?.reason;
   const row = context.row.original as BaseTraceData | Thread | Span;
 
-  // Get projectId and projectName from table meta
-  const projectId = (
-    context.table.options.meta as { projectId?: string } | undefined
-  )?.projectId;
-  const projectName = (
-    context.table.options.meta as { projectName?: string } | undefined
-  )?.projectName;
+  // Get projectId, projectName, showReasons, and rowHeight from table meta
+  const tableMeta = context.table.options.meta as
+    | {
+        projectId?: string;
+        projectName?: string;
+        showReasons?: boolean;
+        rowHeight?: ROW_HEIGHT;
+        enableUserFeedbackEditing?: boolean;
+      }
+    | undefined;
+
+  const projectId = tableMeta?.projectId;
+  const projectName = tableMeta?.projectName;
+  const showReasons = tableMeta?.showReasons ?? false;
+  const rowHeight = tableMeta?.rowHeight ?? ROW_HEIGHT.small;
 
   const { handleValueChange } = useFeedbackScoreInlineEdit({
     id: row.id,
@@ -63,17 +72,27 @@ const FeedbackScoreCell = (context: CellContext<unknown, unknown>) => {
 
   const enableUserFeedbackEditing =
     ((!isObjectThread(row) || row.status === ThreadStatus.INACTIVE) &&
-      context.table.options.meta?.enableUserFeedbackEditing) ??
+      tableMeta?.enableUserFeedbackEditing) ??
     false;
   const isUserFeedbackColumn =
     enableUserFeedbackEditing &&
     context.column.id === "feedback_scores_User feedback";
 
+  // Check if we should show reasons inline (when showReasons is true and row height is Medium or Large)
+  const shouldShowInlineReasons =
+    showReasons &&
+    (rowHeight === ROW_HEIGHT.medium || rowHeight === ROW_HEIGHT.large) &&
+    reasons.length > 0;
+
   return (
     <CellWrapper
       metadata={context.column.columnDef.meta}
       tableMetadata={context.table.options.meta}
-      className={cn("gap-1", isUserFeedbackColumn && "group")}
+      className={cn(
+        "gap-1",
+        isUserFeedbackColumn && "group",
+        shouldShowInlineReasons && "flex-col items-start",
+      )}
     >
       <FeedbackScoreCellValue
         feedbackScore={feedbackScore}
@@ -81,12 +100,18 @@ const FeedbackScoreCell = (context: CellContext<unknown, unknown>) => {
         onValueChange={handleValueChange}
       />
 
-      {reasons.length > 0 && (
-        <FeedbackScoreReasonTooltip reasons={reasons}>
-          <div className="flex h-[20px] items-center">
-            <MessageSquareMore className="mt-0.5 size-3.5 shrink-0 text-light-slate" />
-          </div>
-        </FeedbackScoreReasonTooltip>
+      {shouldShowInlineReasons ? (
+        <span className="text-xs text-muted-foreground">
+          {reasons.map((r) => r.reason).join(", ")}
+        </span>
+      ) : (
+        reasons.length > 0 && (
+          <FeedbackScoreReasonTooltip reasons={reasons}>
+            <div className="flex h-[20px] items-center">
+              <MessageSquareMore className="mt-0.5 size-3.5 shrink-0 text-light-slate" />
+            </div>
+          </FeedbackScoreReasonTooltip>
+        )
       )}
     </CellWrapper>
   );

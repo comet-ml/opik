@@ -28,7 +28,6 @@ import {
 } from "@/lib/groups";
 import FeedbackScoreHeader from "@/components/shared/DataTableHeaders/FeedbackScoreHeader";
 import FeedbackScoreCell from "@/components/shared/DataTableCells/FeedbackScoreCell";
-import FeedbackScoreReasonCell from "@/components/shared/DataTableCells/FeedbackScoreReasonCell";
 import ResourceCell from "@/components/shared/DataTableCells/ResourceCell";
 import TextCell from "@/components/shared/DataTableCells/TextCell";
 import { RESOURCE_TYPE } from "@/components/shared/ResourceLink/ResourceLink";
@@ -55,7 +54,6 @@ export type UseExperimentsTableConfigProps<T> = {
   actionsCell?: ColumnDefTemplate<CellContext<T, unknown>>;
   sortedColumns: ColumnSort[];
   setSortedColumns: OnChangeFn<ColumnSort[]>;
-  showReasons?: boolean;
   reasonsAction?: React.ReactNode;
 };
 
@@ -75,7 +73,6 @@ export const useExperimentsTableConfig = <
   actionsCell,
   sortedColumns,
   setSortedColumns,
-  showReasons = false,
   reasonsAction,
 }: UseExperimentsTableConfigProps<T>) => {
   const [selectedColumns, setSelectedColumns] = useLocalStorageState<string[]>(
@@ -123,48 +120,30 @@ export const useExperimentsTableConfig = <
   }, []);
 
   const scoresColumnsData = useMemo(() => {
-    const scoreColumns = dynamicScoresColumns.map(
-        ({ label, id, columnType }) =>
-          ({
-            id,
-            label,
-            type: columnType,
-            header: FeedbackScoreHeader as never,
-            cell: FeedbackScoreCell as never,
-            aggregatedCell: FeedbackScoreCell.Aggregation as never,
-            accessorFn: (row: T) =>
+    return dynamicScoresColumns.map(
+      ({ label, id, columnType }) =>
+        ({
+          id,
+          label,
+          type: columnType,
+          header: FeedbackScoreHeader as never,
+          cell: FeedbackScoreCell as never,
+          aggregatedCell: FeedbackScoreCell.Aggregation as never,
+          accessorFn: (row: T) =>
+            (
+              row as T & { feedback_scores?: Array<{ name: string }> }
+            ).feedback_scores?.find((f) => f.name === label),
+          customMeta: {
+            accessorFn: (aggregation: ExperimentsAggregations) =>
               (
-                row as T & { feedback_scores?: Array<{ name: string }> }
-              ).feedback_scores?.find((f) => f.name === label),
-            customMeta: {
-              accessorFn: (aggregation: ExperimentsAggregations) =>
-                (
-                  aggregation as ExperimentsAggregations & {
-                    feedback_scores?: Array<{ name: string }>;
-                  }
-                ).feedback_scores?.find((f) => f.name === label)?.value,
-            },
-          }) as ColumnData<T>,
+                aggregation as ExperimentsAggregations & {
+                  feedback_scores?: Array<{ name: string }>;
+                }
+              ).feedback_scores?.find((f) => f.name === label)?.value,
+          },
+        }) as ColumnData<T>,
     );
-
-    const reasonColumns = showReasons
-      ? dynamicScoresColumns.map(
-          ({ label, id }) =>
-            ({
-              id: `${id}_reason`,
-              label: `${label} (reason)`,
-              type: COLUMN_TYPE.string,
-              cell: FeedbackScoreReasonCell as never,
-              accessorFn: (row: T) =>
-                (
-                  row as T & { feedback_scores?: Array<{ name: string }> }
-                ).feedback_scores?.find((f) => f.name === label),
-            }) as ColumnData<T>,
-        )
-      : [];
-
-    return [...scoreColumns, ...reasonColumns];
-  }, [dynamicScoresColumns, showReasons]);
+  }, [dynamicScoresColumns]);
 
   const selectedRows = useMemo(() => {
     return experiments.filter(
@@ -330,7 +309,12 @@ export const useExperimentsTableConfig = <
         action: reasonsAction,
       },
     ];
-  }, [scoresColumnsData, scoresColumnsOrder, setScoresColumnsOrder, reasonsAction]);
+  }, [
+    scoresColumnsData,
+    scoresColumnsOrder,
+    setScoresColumnsOrder,
+    reasonsAction,
+  ]);
 
   return {
     // State
