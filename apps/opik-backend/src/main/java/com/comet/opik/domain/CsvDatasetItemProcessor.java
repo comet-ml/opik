@@ -82,7 +82,7 @@ public class CsvDatasetItemProcessor {
             tempFile = bufferToTempFile(inputStream);
         } catch (IOException e) {
             log.error("Failed to buffer CSV file to temp storage for dataset '{}'", datasetId, e);
-            throw new InternalServerErrorException("Failed to process CSV file: " + e.getMessage());
+            throw new InternalServerErrorException("Failed to process CSV file");
         }
 
         // Validate CSV headers synchronously BEFORE starting async processing
@@ -166,10 +166,10 @@ public class CsvDatasetItemProcessor {
             if (message != null && message.contains("header name is missing")) {
                 throw new BadRequestException("CSV contains empty header names. All column headers must have a name.");
             }
-            throw new BadRequestException("Invalid CSV format: " + message);
+            throw new BadRequestException("Invalid CSV format");
         } catch (IOException e) {
             log.error("Failed to validate CSV headers", e);
-            throw new BadRequestException("Failed to read CSV file: " + e.getMessage());
+            throw new BadRequestException("Failed to read CSV file");
         }
     }
 
@@ -291,7 +291,7 @@ public class CsvDatasetItemProcessor {
                 return totalProcessed;
             } catch (IOException e) {
                 log.warn("Failed to process CSV file for dataset '{}'", datasetId, e);
-                throw new BadRequestException("Failed to read CSV file: " + e.getMessage());
+                throw new BadRequestException("Failed to read CSV file");
             }
         }).subscribeOn(Schedulers.boundedElastic());
     }

@@ -306,11 +306,11 @@ class DatasetsCsvUploadResourceTest {
                     .as("Test case: %s", testDescription)
                     .isEqualTo(HttpStatus.SC_BAD_REQUEST);
 
-            // Verify error response contains errors array with appropriate message
+            // Verify error response contains message with appropriate error description
             String errorResponse = response.readEntity(String.class);
             assertThat(errorResponse)
-                    .as("Test case: %s - should contain errors field", testDescription)
-                    .contains("\"errors\"");
+                    .as("Test case: %s - should contain message field", testDescription)
+                    .contains("\"message\"");
             assertThat(errorResponse)
                     .as("Test case: %s - should mention empty header names", testDescription)
                     .contains("empty header names");

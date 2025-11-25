@@ -54,7 +54,6 @@ import jakarta.inject.Provider;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
-import jakarta.ws.rs.BadRequestException;
 import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.DELETE;
 import jakarta.ws.rs.DefaultValue;
@@ -505,8 +504,8 @@ public class DatasetsResource {
     @Consumes(MediaType.MULTIPART_FORM_DATA)
     @Operation(operationId = "createDatasetItemsFromCsv", summary = "Create dataset items from CSV file", description = "Create dataset items from uploaded CSV file. CSV should have headers in the first row. Processing happens asynchronously in batches.", responses = {
             @ApiResponse(responseCode = "202", description = "Accepted - CSV processing started"),
-            @ApiResponse(responseCode = "400", description = "Bad Request", content = @Content(schema = @Schema(implementation = com.comet.opik.api.error.ErrorMessage.class))),
-            @ApiResponse(responseCode = "404", description = "Not Found - CSV upload feature is disabled", content = @Content(schema = @Schema(implementation = com.comet.opik.api.error.ErrorMessage.class))),
+            @ApiResponse(responseCode = "400", description = "Bad Request", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
+            @ApiResponse(responseCode = "404", description = "Not Found - CSV upload feature is disabled", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
     })
     @RateLimited
     public Response createDatasetItemsFromCsv(
@@ -524,14 +523,7 @@ public class DatasetsResource {
 
         log.info("CSV upload request for dataset '{}' on workspaceId '{}'", datasetId, workspaceId);
 
-        try {
-            csvProcessor.processUploadedCsv(fileInputStream, datasetId, workspaceId, userName, visibility);
-        } catch (BadRequestException exception) {
-            log.warn("CSV validation failed for dataset '{}': '{}'", datasetId, exception.getMessage());
-            return Response.status(Response.Status.BAD_REQUEST)
-                    .entity(new com.comet.opik.api.error.ErrorMessage(List.of(exception.getMessage())))
-                    .build();
-        }
+        csvProcessor.processUploadedCsv(fileInputStream, datasetId, workspaceId, userName, visibility);
 
         log.info("CSV upload accepted for dataset '{}' on workspaceId '{}', processing asynchronously", datasetId,
                 workspaceId);
