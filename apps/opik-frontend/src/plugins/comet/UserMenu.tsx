@@ -180,6 +180,10 @@ const UserMenu = () => {
   };
 
   const renderAppSelector = () => {
+    if (isLLMOnlyOrganization) {
+      return null;
+    }
+
     return (
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
@@ -191,17 +195,15 @@ const UserMenu = () => {
           <DropdownMenuLabel>Your apps</DropdownMenuLabel>
 
           <DropdownMenuGroup>
-            {!isLLMOnlyOrganization ? (
-              <DropdownMenuItem
-                className="flex cursor-pointer flex-row gap-3"
-                onClick={handleSwitchToEM}
-              >
-                <span className="flex size-6 items-center justify-center rounded-[6px] bg-[var(--feature-experiment-management)] text-[8px] font-medium text-white">
-                  EM
-                </span>
-                <span>Experiment management</span>
-              </DropdownMenuItem>
-            ) : null}
+            <DropdownMenuItem
+              className="flex cursor-pointer flex-row gap-3"
+              onClick={handleSwitchToEM}
+            >
+              <span className="flex size-6 items-center justify-center rounded-[6px] bg-[var(--feature-experiment-management)] text-[8px] font-medium text-white">
+                EM
+              </span>
+              <span>Experiment management</span>
+            </DropdownMenuItem>
 
             <DropdownMenuItem className="flex cursor-pointer flex-row gap-3">
               <span className="flex size-6 items-center justify-center rounded-[6px] bg-[var(--feature-llm)] text-[8px] font-medium text-white">
