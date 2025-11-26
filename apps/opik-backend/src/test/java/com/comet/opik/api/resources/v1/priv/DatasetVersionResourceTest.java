@@ -873,6 +873,10 @@ class DatasetVersionResourceTest {
 
             datasetResourceClient.createDatasetItems(batch1, TEST_WORKSPACE, API_KEY);
 
+            // Fetch created items to get their IDs
+            var createdItems = datasetResourceClient.getDatasetItems(datasetId, 1, 10, null, API_KEY, TEST_WORKSPACE)
+                    .content();
+
             // Commit first version
             var versionCreate1 = DatasetVersionCreate.builder()
                     .tag("v1")
@@ -881,31 +885,21 @@ class DatasetVersionResourceTest {
             datasetResourceClient.commitVersion(datasetId, versionCreate1, API_KEY, TEST_WORKSPACE);
 
             // Modify items: delete 1, modify 1, add 2
-            var modifiedItem = originalItems.get(0).toBuilder()
+            var itemToDelete = createdItems.get(0);
+            var itemToModify = createdItems.get(1);
+
+            // Delete one item
+            datasetResourceClient.deleteDatasetItems(List.of(itemToDelete.id()), API_KEY, TEST_WORKSPACE);
+
+            // Modify one item
+            var modifiedItem = itemToModify.toBuilder()
                     .data(Map.of("modified", JsonUtils.getJsonNodeFromString("true")))
                     .build();
 
-            var newItems = generateDatasetItems(2);
-
-            var batch2 = DatasetItemBatch.builder()
-                    .datasetId(datasetId)
-                    .items(List.of(modifiedItem))
-                    .build();
-
-            datasetResourceClient.createDatasetItems(batch2, TEST_WORKSPACE, API_KEY);
-
-            // Delete one item
-            try (var response = client.target(baseURI)
-                    .path("/v1/private/datasets/%s/items/%s".formatted(datasetId, originalItems.get(1).id()))
-                    .request()
-                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
-                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
-                    .delete()) {
-
-                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NO_CONTENT);
-            }
+            datasetResourceClient.patchDatasetItem(itemToModify.id(), modifiedItem, API_KEY, TEST_WORKSPACE);
 
             // Add new items
+            var newItems = generateDatasetItems(2);
             var batch3 = DatasetItemBatch.builder()
                     .datasetId(datasetId)
                     .items(newItems)
@@ -924,16 +918,19 @@ class DatasetVersionResourceTest {
             var diff = datasetResourceClient.compareVersions(datasetId, "v1", "v2", API_KEY, TEST_WORKSPACE);
 
             // Then - Verify diff statistics
+            // v1: 3 items (item0, item1, item2)
+            // v2: 4 items (item1-modified, item2, newItem1, newItem2)
+            // Expected: 2 added, 1 modified, 1 deleted, 1 unchanged
             assertThat(diff.fromVersion()).isEqualTo("v1");
             assertThat(diff.toVersion()).isEqualTo("v2");
             assertThat(diff.statistics().itemsAdded()).isEqualTo(2)
                     .as("2 new items were added");
             assertThat(diff.statistics().itemsModified()).isEqualTo(1)
-                    .as("1 item was modified");
+                    .as("1 item was modified (item1)");
             assertThat(diff.statistics().itemsDeleted()).isEqualTo(1)
-                    .as("1 item was deleted");
+                    .as("1 item was deleted (item0)");
             assertThat(diff.statistics().itemsUnchanged()).isEqualTo(1)
-                    .as("1 item remained unchanged");
+                    .as("1 item remained unchanged (item2)");
         }
 
         @Test

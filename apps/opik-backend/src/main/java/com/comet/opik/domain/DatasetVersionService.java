@@ -15,7 +15,6 @@ import jakarta.inject.Inject;
 import jakarta.inject.Provider;
 import jakarta.inject.Singleton;
 import jakarta.ws.rs.ClientErrorException;
-import jakarta.ws.rs.InternalServerErrorException;
 import jakarta.ws.rs.NotFoundException;
 import jakarta.ws.rs.core.Response;
 import lombok.NonNull;
@@ -190,31 +189,51 @@ class DatasetVersionServiceImpl implements DatasetVersionService {
             // Get previous version for diff calculation
             var previousVersion = datasetVersionDAO.findByTag(datasetId, LATEST_TAG, workspaceId);
 
-            // Calculate diff statistics
-            DiffStatistics diffStats;
+            // Create immutable snapshot in ClickHouse dataset_item_versions table FIRST
+            // (needed for ClickHouse-based diff calculation)
+            if (!currentItems.isEmpty()) {
+                datasetItemDAO.saveVersionSnapshot(versionId, datasetId, currentItems)
+                        .contextWrite(ctx -> ctx
+                                .put(RequestContext.USER_NAME, userName)
+                                .put(RequestContext.WORKSPACE_ID, workspaceId))
+                        .block();
+                log.info("Saved version snapshot with '{}' items for version '{}'", currentItems.size(), versionId);
+            }
+
+            // Calculate diff statistics by comparing IDs and hashes in service layer
+            DatasetVersionDiffStats diffStats;
             if (previousVersion.isPresent()) {
-                var previousItems = datasetItemDAO.getAllVersionedItems(datasetId, previousVersion.get().id())
+                var previousItems = datasetItemDAO.getVersionItemIdsAndHashes(datasetId, previousVersion.get().id())
                         .contextWrite(ctx -> ctx
                                 .put(RequestContext.USER_NAME, userName)
                                 .put(RequestContext.WORKSPACE_ID, workspaceId))
                         .collectList()
                         .block();
 
-                diffStats = calculateDiffStatistics(
-                        previousItems != null ? previousItems : List.of(),
-                        currentItems);
+                var currentVersionItems = datasetItemDAO.getVersionItemIdsAndHashes(datasetId, versionId)
+                        .contextWrite(ctx -> ctx
+                                .put(RequestContext.USER_NAME, userName)
+                                .put(RequestContext.WORKSPACE_ID, workspaceId))
+                        .collectList()
+                        .block();
+
+                diffStats = calculateDiffStatistics(previousItems, currentVersionItems);
             } else {
                 // First version - all items are new
-                diffStats = new DiffStatistics(currentItems.size(), currentItems.size(), 0, 0);
+                diffStats = new DatasetVersionDiffStats(currentItems.size(), 0, 0, currentItems.size());
             }
 
-            log.info("Diff statistics for dataset '{}': added='{}', modified='{}', deleted='{}'",
-                    datasetId, diffStats.itemsAdded, diffStats.itemsModified, diffStats.itemsDeleted);
+            log.info("Diff statistics for dataset '{}': added='{}', modified='{}', deleted='{}', unchanged='{}'",
+                    datasetId, diffStats.itemsAdded(), diffStats.itemsModified(),
+                    diffStats.itemsDeleted(), diffStats.itemsUnchanged());
 
-            // Create new version (versionId and versionHash already generated above)
+            // Create a new version with calculated diff statistics
             var version = DatasetVersionMapper.INSTANCE.toDatasetVersion(
                     versionId, datasetId, versionHash,
-                    diffStats.itemsCount, diffStats.itemsAdded, diffStats.itemsModified, diffStats.itemsDeleted,
+                    currentItems.size(),
+                    (int) diffStats.itemsAdded(),
+                    (int) diffStats.itemsModified(),
+                    (int) diffStats.itemsDeleted(),
                     request, userName);
 
             EntityConstraintHandler.handle(() -> {
@@ -239,16 +258,6 @@ class DatasetVersionServiceImpl implements DatasetVersionService {
                     return null;
                 }).withError(() -> new EntityAlreadyExistsException(
                         new ErrorMessage(List.of(ERROR_TAG_EXISTS.formatted(request.tag())))));
-            }
-
-            // Create immutable snapshot in ClickHouse dataset_item_versions table
-            if (!currentItems.isEmpty()) {
-                datasetItemDAO.saveVersionSnapshot(versionId, datasetId, currentItems)
-                        .contextWrite(ctx -> ctx
-                                .put(RequestContext.USER_NAME, userName)
-                                .put(RequestContext.WORKSPACE_ID, workspaceId))
-                        .block();
-                log.info("Saved version snapshot with '{}' items for version '{}'", currentItems.size(), versionId);
             }
 
             return datasetVersionDAO.findById(versionId, workspaceId).orElseThrow();
@@ -382,63 +391,6 @@ class DatasetVersionServiceImpl implements DatasetVersionService {
         });
     }
 
-    /**
-     * Calculate diff statistics between previous and current dataset versions.
-     */
-    private DiffStatistics calculateDiffStatistics(List<DatasetItem> previousItems, List<DatasetItem> currentItems) {
-        // Build maps for efficient lookup
-        // For versioned items, use draftItemId (which links to original draft item)
-        // For draft items, use id
-        var previousMap = previousItems.stream()
-                .collect(Collectors.toMap(DatasetVersionServiceImpl::getIdForComparison, item -> item));
-
-        var currentMap = currentItems.stream()
-                .collect(Collectors.toMap(DatasetVersionServiceImpl::getIdForComparison, item -> item));
-
-        // Calculate added items (in current but not in previous)
-        var addedIds = new java.util.HashSet<>(currentMap.keySet());
-        addedIds.removeAll(previousMap.keySet());
-
-        // Calculate deleted items (in previous but not in current)
-        var deletedIds = new java.util.HashSet<>(previousMap.keySet());
-        deletedIds.removeAll(currentMap.keySet());
-
-        // Calculate modified items (in both but with different data)
-        var commonIds = new java.util.HashSet<>(currentMap.keySet());
-        commonIds.retainAll(previousMap.keySet());
-
-        int modifiedCount = 0;
-        for (UUID id : commonIds) {
-            var prevItem = previousMap.get(id);
-            var currItem = currentMap.get(id);
-
-            // Compare data maps
-            if (!java.util.Objects.equals(prevItem.data(), currItem.data())) {
-                modifiedCount++;
-            }
-        }
-
-        return new DiffStatistics(
-                currentItems.size(),
-                addedIds.size(),
-                modifiedCount,
-                deletedIds.size());
-    }
-
-    private static UUID getIdForComparison(DatasetItem item) {
-        return item.draftItemId() != null ? item.draftItemId() : item.id();
-    }
-
-    /**
-     * Internal record to hold diff statistics.
-     */
-    private record DiffStatistics(
-            int itemsCount,
-            int itemsAdded,
-            int itemsModified,
-            int itemsDeleted) {
-    }
-
     @Override
     public DatasetVersionDiff compareVersions(@NonNull UUID datasetId, @NonNull String fromHashOrTag,
             String toHashOrTag) {
@@ -448,25 +400,46 @@ class DatasetVersionServiceImpl implements DatasetVersionService {
         // Resolve 'from' version identifier to version ID
         UUID fromVersionId = resolveVersionId(datasetId, fromHashOrTag);
 
+        String workspaceId = requestContext.get().getWorkspaceId();
+        String userName = requestContext.get().getUserName();
+
         DatasetVersionDiffStats stats;
         String toVersionLabel;
+
+        // Fetch 'from' version items
+        var fromItems = datasetItemDAO.getVersionItemIdsAndHashes(datasetId, fromVersionId)
+                .contextWrite(ctx -> ctx
+                        .put(RequestContext.USER_NAME, userName)
+                        .put(RequestContext.WORKSPACE_ID, workspaceId))
+                .collectList()
+                .block();
 
         if (toHashOrTag == null) {
             // Compare version with current draft
             log.info("Comparing version='{}' with draft for dataset='{}'", fromHashOrTag, datasetId);
-            stats = datasetItemDAO.computeDiffStatsWithDraft(datasetId, fromVersionId).block();
+
+            var draftItems = datasetItemDAO.getDraftItemIdsAndHashes(datasetId)
+                    .contextWrite(ctx -> ctx
+                            .put(RequestContext.USER_NAME, userName)
+                            .put(RequestContext.WORKSPACE_ID, workspaceId))
+                    .collectList()
+                    .block();
+
+            stats = calculateDiffStatistics(fromItems, draftItems);
             toVersionLabel = "draft";
         } else {
             // Compare two versions
             UUID toVersionId = resolveVersionId(datasetId, toHashOrTag);
-            stats = datasetItemDAO.computeDiffStats(datasetId, fromVersionId, toVersionId).block();
-            toVersionLabel = toHashOrTag;
-        }
 
-        if (stats == null) {
-            log.error("Failed to compute diff statistics for dataset='{}', from='{}', to='{}'",
-                    datasetId, fromHashOrTag, toHashOrTag);
-            throw new InternalServerErrorException("Failed to compute diff statistics");
+            var toItems = datasetItemDAO.getVersionItemIdsAndHashes(datasetId, toVersionId)
+                    .contextWrite(ctx -> ctx
+                            .put(RequestContext.USER_NAME, userName)
+                            .put(RequestContext.WORKSPACE_ID, workspaceId))
+                    .collectList()
+                    .block();
+
+            stats = calculateDiffStatistics(fromItems, toItems);
+            toVersionLabel = toHashOrTag;
         }
 
         log.info("Computed diff: from='{}', to='{}', added='{}', modified='{}', deleted='{}', unchanged='{}'",
@@ -479,5 +452,55 @@ class DatasetVersionServiceImpl implements DatasetVersionService {
                 .toVersion(toVersionLabel)
                 .statistics(DatasetVersionDiffMapper.INSTANCE.toApiDiffStatistics(stats))
                 .build();
+    }
+
+    /**
+     * Calculate diff statistics between two lists of items (identified by ID and hash).
+     * Compares items by itemId and detects additions, deletions, modifications, and unchanged items.
+     */
+    private DatasetVersionDiffStats calculateDiffStatistics(List<DatasetItemIdAndHash> fromItems,
+            List<DatasetItemIdAndHash> toItems) {
+
+        log.debug("Calculating diff: fromItems count='{}', toItems count='{}'", fromItems.size(), toItems.size());
+
+        // Build maps for efficient lookup by itemId
+        var fromMap = fromItems.stream()
+                .collect(Collectors.toMap(DatasetItemIdAndHash::itemId, item -> item));
+
+        var toMap = toItems.stream()
+                .collect(Collectors.toMap(DatasetItemIdAndHash::itemId, item -> item));
+
+        // Calculate added items (in 'to' but not in 'from')
+        long added = toMap.keySet().stream()
+                .filter(id -> !fromMap.containsKey(id))
+                .count();
+
+        // Calculate deleted items (in 'from' but not in 'to')
+        long deleted = fromMap.keySet().stream()
+                .filter(id -> !toMap.containsKey(id))
+                .count();
+
+        // Calculate modified and unchanged items (in both)
+        long modified = 0;
+        long unchanged = 0;
+
+        for (var entry : fromMap.entrySet()) {
+            UUID itemId = entry.getKey();
+            if (toMap.containsKey(itemId)) {
+                var fromItem = entry.getValue();
+                var toItem = toMap.get(itemId);
+
+                if (fromItem.dataHash() != toItem.dataHash()) {
+                    modified++;
+                } else {
+                    unchanged++;
+                }
+            }
+        }
+
+        log.info("Diff calculated: added='{}', modified='{}', deleted='{}', unchanged='{}'",
+                added, modified, deleted, unchanged);
+
+        return new DatasetVersionDiffStats(added, modified, deleted, unchanged);
     }
 }

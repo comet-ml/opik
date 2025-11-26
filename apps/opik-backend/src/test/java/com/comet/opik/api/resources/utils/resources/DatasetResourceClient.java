@@ -531,4 +531,21 @@ public class DatasetResourceClient {
                 .header(WORKSPACE_HEADER, workspaceName)
                 .get();
     }
+
+    public void deleteDatasetItems(List<UUID> itemIds, String apiKey, String workspaceName) {
+        try (var response = callDeleteDatasetItems(itemIds, apiKey, workspaceName)) {
+            assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_NO_CONTENT);
+        }
+    }
+
+    public Response callDeleteDatasetItems(List<UUID> itemIds, String apiKey, String workspaceName) {
+        var deleteRequest = new com.comet.opik.api.DatasetItemsDelete(itemIds);
+        return client.target(RESOURCE_PATH.formatted(baseURI))
+                .path("items")
+                .path("delete")
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .post(Entity.json(deleteRequest));
+    }
 }

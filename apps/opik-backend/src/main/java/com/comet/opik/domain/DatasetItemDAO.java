@@ -80,9 +80,9 @@ public interface DatasetItemDAO {
     Mono<DatasetItemPage> getVersionedItems(DatasetItemSearchCriteria datasetItemSearchCriteria, int page, int size,
             UUID versionId);
 
-    Mono<DatasetVersionDiffStats> computeDiffStats(UUID datasetId, UUID fromVersionId, UUID toVersionId);
+    Flux<DatasetItemIdAndHash> getVersionItemIdsAndHashes(UUID datasetId, UUID versionId);
 
-    Mono<DatasetVersionDiffStats> computeDiffStatsWithDraft(UUID datasetId, UUID versionId);
+    Flux<DatasetItemIdAndHash> getDraftItemIdsAndHashes(UUID datasetId);
 }
 
 @Singleton
@@ -112,6 +112,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                 data,
                 tags,
                 created_at,
+                last_updated_at,
                 workspace_id,
                 created_by,
                 last_updated_by
@@ -126,6 +127,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                          :spanId<item.index>,
                          :data<item.index>,
                          :tags<item.index>,
+                         now64(9),
                          now64(9),
                          :workspace_id,
                          :createdBy<item.index>,
@@ -947,6 +949,17 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
             <if(dataset_item_filters)> AND (<dataset_item_filters>) <endif>
             ORDER BY (s.workspace_id, s.dataset_id, s.source, s.trace_id, s.span_id, s.id) DESC, s.last_updated_at DESC
             LIMIT 1 BY s.id;
+            """;
+
+    private static final String SELECT_ITEM_IDS_AND_HASHES = """
+            SELECT
+                <if(version)>draft_item_id<else>id<endif> as id,
+                data_hash
+            FROM <if(version)>dataset_item_versions<else>dataset_items<endif> FINAL
+            WHERE dataset_id = :datasetId
+            <if(version)>AND version_id = :versionId<endif>
+            AND workspace_id = :workspace_id
+            LIMIT 1 BY id
             """;
 
     private static final String SELECT_DATASET_ITEMS_WITH_EXPERIMENT_ITEMS_STATS = String.format(
@@ -1855,166 +1868,48 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
 
     @Override
     @WithSpan
-    public Mono<DatasetVersionDiffStats> computeDiffStats(@NonNull UUID datasetId, @NonNull UUID fromVersionId,
-            @NonNull UUID toVersionId) {
+    public Flux<DatasetItemIdAndHash> getVersionItemIdsAndHashes(@NonNull UUID datasetId, @NonNull UUID versionId) {
 
-        log.info("Computing diff stats between versions: from='{}', to='{}', dataset='{}'",
-                fromVersionId, toVersionId, datasetId);
+        log.info("Fetching item IDs and hashes for version='{}', dataset='{}'", versionId, datasetId);
 
-        String sql = """
-                WITH from_items AS (
-                    SELECT id, draft_item_id, data_hash
-                    FROM dataset_item_versions FINAL
-                    WHERE dataset_id = :datasetId
-                    AND version_id = :fromVersionId
-                    AND workspace_id = :workspace_id
-                ),
-                to_items AS (
-                    SELECT id, draft_item_id, data_hash
-                    FROM dataset_item_versions FINAL
-                    WHERE dataset_id = :datasetId
-                    AND version_id = :toVersionId
-                    AND workspace_id = :workspace_id
-                ),
-                -- Use draft_item_id for matching (links items across versions)
-                from_by_draft AS (
-                    SELECT draft_item_id, data_hash FROM from_items
-                ),
-                to_by_draft AS (
-                    SELECT draft_item_id, data_hash FROM to_items
-                ),
-                added AS (
-                    SELECT count() as cnt
-                    FROM to_by_draft
-                    WHERE draft_item_id NOT IN (SELECT draft_item_id FROM from_by_draft)
-                ),
-                deleted AS (
-                    SELECT count() as cnt
-                    FROM from_by_draft
-                    WHERE draft_item_id NOT IN (SELECT draft_item_id FROM to_by_draft)
-                ),
-                common_items AS (
-                    SELECT
-                        f.draft_item_id,
-                        f.data_hash as from_hash,
-                        t.data_hash as to_hash
-                    FROM from_by_draft f
-                    INNER JOIN to_by_draft t ON f.draft_item_id = t.draft_item_id
-                ),
-                modified AS (
-                    SELECT count() as cnt
-                    FROM common_items
-                    WHERE from_hash != to_hash
-                ),
-                unchanged AS (
-                    SELECT count() as cnt
-                    FROM common_items
-                    WHERE from_hash = to_hash
-                )
-                SELECT
-                    (SELECT cnt FROM added) as items_added,
-                    (SELECT cnt FROM modified) as items_modified,
-                    (SELECT cnt FROM deleted) as items_deleted,
-                    (SELECT cnt FROM unchanged) as items_unchanged
-                """;
+        var template = TemplateUtils.newST(SELECT_ITEM_IDS_AND_HASHES)
+                .add("version", true);
 
-        Segment segment = startSegment(DATASET_ITEMS, CLICKHOUSE, "compute_diff_stats_versions");
+        Segment segment = startSegment(DATASET_ITEMS, CLICKHOUSE, "get_version_item_ids_and_hashes");
 
-        return asyncTemplate.nonTransaction(connection -> {
-            var statement = connection.createStatement(sql)
+        return asyncTemplate.stream(connection -> {
+            var statement = connection.createStatement(template.render())
                     .bind("datasetId", datasetId.toString())
-                    .bind("fromVersionId", fromVersionId.toString())
-                    .bind("toVersionId", toVersionId.toString());
+                    .bind("versionId", versionId.toString());
 
-            return makeMonoContextAware(bindWorkspaceIdToMono(statement))
-                    .flatMap(result -> Mono.from(result.map((row, metadata) -> new DatasetVersionDiffStats(
-                            row.get("items_added", Long.class),
-                            row.get("items_modified", Long.class),
-                            row.get("items_deleted", Long.class),
-                            row.get("items_unchanged", Long.class)))))
-                    .doFinally(signalType -> endSegment(segment));
-        });
+            return makeFluxContextAware(bindWorkspaceIdToFlux(statement))
+                    .flatMap(result -> result.map((row, metadata) -> DatasetItemIdAndHash.builder()
+                            .itemId(UUID.fromString(row.get("id", String.class)))
+                            .dataHash(row.get("data_hash", Long.class))
+                            .build()));
+        }).doFinally(signalType -> endSegment(segment));
     }
 
     @Override
     @WithSpan
-    public Mono<DatasetVersionDiffStats> computeDiffStatsWithDraft(@NonNull UUID datasetId,
-            @NonNull UUID versionId) {
+    public Flux<DatasetItemIdAndHash> getDraftItemIdsAndHashes(@NonNull UUID datasetId) {
 
-        log.info("Computing diff stats between version='{}' and draft for dataset='{}'", versionId, datasetId);
+        log.info("Fetching draft item IDs and hashes for dataset='{}'", datasetId);
 
-        String sql = """
-                WITH version_items AS (
-                    SELECT id, draft_item_id, data_hash
-                    FROM dataset_item_versions FINAL
-                    WHERE dataset_id = :datasetId
-                    AND version_id = :versionId
-                    AND workspace_id = :workspace_id
-                ),
-                draft_items AS (
-                    SELECT id, data_hash
-                    FROM dataset_items FINAL
-                    WHERE dataset_id = :datasetId
-                    AND workspace_id = :workspace_id
-                    ORDER BY id DESC, last_updated_at DESC
-                    LIMIT 1 BY id
-                ),
-                -- For draft items, id is the key; for version items, draft_item_id links back
-                version_by_id AS (
-                    SELECT draft_item_id as item_id, data_hash FROM version_items
-                ),
-                draft_by_id AS (
-                    SELECT id as item_id, data_hash FROM draft_items
-                ),
-                added AS (
-                    SELECT count() as cnt
-                    FROM draft_by_id
-                    WHERE item_id NOT IN (SELECT item_id FROM version_by_id)
-                ),
-                deleted AS (
-                    SELECT count() as cnt
-                    FROM version_by_id
-                    WHERE item_id NOT IN (SELECT item_id FROM draft_by_id)
-                ),
-                common_items AS (
-                    SELECT
-                        v.item_id,
-                        v.data_hash as version_hash,
-                        d.data_hash as draft_hash
-                    FROM version_by_id v
-                    INNER JOIN draft_by_id d ON v.item_id = d.item_id
-                ),
-                modified AS (
-                    SELECT count() as cnt
-                    FROM common_items
-                    WHERE version_hash != draft_hash
-                ),
-                unchanged AS (
-                    SELECT count() as cnt
-                    FROM common_items
-                    WHERE version_hash = draft_hash
-                )
-                SELECT
-                    (SELECT cnt FROM added) as items_added,
-                    (SELECT cnt FROM modified) as items_modified,
-                    (SELECT cnt FROM deleted) as items_deleted,
-                    (SELECT cnt FROM unchanged) as items_unchanged
-                """;
+        var template = TemplateUtils.newST(SELECT_ITEM_IDS_AND_HASHES)
+                .add("version", false);
 
-        Segment segment = startSegment(DATASET_ITEMS, CLICKHOUSE, "compute_diff_stats_with_draft");
+        Segment segment = startSegment(DATASET_ITEMS, CLICKHOUSE, "get_draft_item_ids_and_hashes");
 
-        return asyncTemplate.nonTransaction(connection -> {
-            var statement = connection.createStatement(sql)
-                    .bind("datasetId", datasetId.toString())
-                    .bind("versionId", versionId.toString());
+        return asyncTemplate.stream(connection -> {
+            var statement = connection.createStatement(template.render())
+                    .bind("datasetId", datasetId.toString());
 
-            return makeMonoContextAware(bindWorkspaceIdToMono(statement))
-                    .flatMap(result -> Mono.from(result.map((row, metadata) -> new DatasetVersionDiffStats(
-                            row.get("items_added", Long.class),
-                            row.get("items_modified", Long.class),
-                            row.get("items_deleted", Long.class),
-                            row.get("items_unchanged", Long.class)))))
-                    .doFinally(signalType -> endSegment(segment));
-        });
+            return makeFluxContextAware(bindWorkspaceIdToFlux(statement))
+                    .flatMap(result -> result.map((row, metadata) -> DatasetItemIdAndHash.builder()
+                            .itemId(UUID.fromString(row.get("id", String.class)))
+                            .dataHash(row.get("data_hash", Long.class))
+                            .build()));
+        }).doFinally(signalType -> endSegment(segment));
     }
 }
