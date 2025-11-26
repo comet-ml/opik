@@ -14,7 +14,7 @@ const WidgetConfigDialogEditStep: React.FunctionComponent<
 > = ({ widgetData, onChange, editorComponent }) => {
   return (
     <div className="grid h-[600px] grid-cols-[3fr_2fr] gap-4">
-      <div className="overflow-hidden rounded-md border border-border">
+      <div className="overflow-hidden">
         <WidgetConfigForm
           widgetData={widgetData}
           onChange={onChange}

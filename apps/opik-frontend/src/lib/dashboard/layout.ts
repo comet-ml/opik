@@ -98,7 +98,7 @@ export const calculateLayoutForAddingWidget = (
 
 export const normalizeLayout = (layout: DashboardLayout): DashboardLayout => {
   return layout.map((item) => ({
-    ...item,
+    i: item.i,
     x: Math.max(0, Math.min(item.x, GRID_COLUMNS - item.w)),
     y: Math.max(0, item.y),
     w: Math.max(MIN_WIDGET_WIDTH, Math.min(item.w, GRID_COLUMNS)),
@@ -115,4 +115,25 @@ export const removeWidgetFromLayout = (
   widgetId: string,
 ): DashboardLayout => {
   return layout.filter((item) => item.i !== widgetId);
+};
+
+export const areLayoutsEqual = (
+  prev: DashboardLayout,
+  next: DashboardLayout,
+): boolean => {
+  if (prev.length !== next.length) return false;
+
+  const sortedPrev = [...prev].sort((a, b) => a.i.localeCompare(b.i));
+  const sortedNext = [...next].sort((a, b) => a.i.localeCompare(b.i));
+
+  return sortedPrev.every((prevItem, i) => {
+    const nextItem = sortedNext[i];
+    return (
+      prevItem.i === nextItem.i &&
+      prevItem.x === nextItem.x &&
+      prevItem.y === nextItem.y &&
+      prevItem.w === nextItem.w &&
+      prevItem.h === nextItem.h
+    );
+  });
 };

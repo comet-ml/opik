@@ -1,5 +1,4 @@
-import React, { useEffect, useMemo, useState, useCallback } from "react";
-import { keepPreviousData } from "@tanstack/react-query";
+import React, { useEffect, useState, useCallback } from "react";
 import { useParams } from "@tanstack/react-router";
 
 import {
@@ -9,12 +8,11 @@ import {
   selectSetConfig,
   selectSetSearch,
   selectClearConfig,
+  selectClearDashboard,
   selectSetOnAddWidgetCallback,
   selectSetWidgetResolver,
 } from "@/store/DashboardStore";
-import useProjectsList from "@/api/projects/useProjectsList";
 import useDashboardById from "@/api/dashboards/useDashboardById";
-import useAppStore from "@/store/AppStore";
 import useBreadcrumbsStore from "@/store/BreadcrumbsStore";
 import { useMetricDateRangeWithQuery } from "@/components/pages-shared/traces/MetricDateRangeSelect/useMetricDateRangeWithQuery";
 import MetricDateRangeSelect from "@/components/pages-shared/traces/MetricDateRangeSelect/MetricDateRangeSelect";
@@ -22,9 +20,9 @@ import DashboardSectionsContainer from "@/components/shared/Dashboard/Dashboard"
 import AddSectionButton from "@/components/shared/Dashboard/DashboardSection/AddSectionButton";
 import { WidgetConfigDialog } from "@/components/shared/Dashboard/WidgetConfigDialog";
 import Loader from "@/components/shared/Loader/Loader";
-import { useDashboardAutosave } from "./useDashboardAutosave";
-import { CheckCircle2, Loader2 } from "lucide-react";
-import { cn } from "@/lib/utils";
+import useNavigationBlocker from "@/hooks/useNavigationBlocker";
+import { useDashboardSave } from "./useDashboardSave";
+import DashboardSaveActions from "./DashboardSaveActions";
 import {
   ProjectDashboardConfig,
   DashboardWidget,
@@ -37,7 +35,6 @@ const DashboardPage: React.FunctionComponent = () => {
   const { dashboardId } = useParams({ strict: false }) as {
     dashboardId: string;
   };
-  const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const setBreadcrumbParam = useBreadcrumbsStore((state) => state.setParam);
   const [search] = useState("");
   const [addWidgetDialogOpen, setAddWidgetDialogOpen] = useState(false);
@@ -56,6 +53,7 @@ const DashboardPage: React.FunctionComponent = () => {
   const setConfig = useDashboardStore(selectSetConfig);
   const setSearch = useDashboardStore(selectSetSearch);
   const clearConfig = useDashboardStore(selectClearConfig);
+  const clearDashboard = useDashboardStore(selectClearDashboard);
   const setOnAddWidgetCallback = useDashboardStore(
     selectSetOnAddWidgetCallback,
   );
@@ -67,9 +65,18 @@ const DashboardPage: React.FunctionComponent = () => {
     }
   }, [dashboard, loadDashboardFromBackend]);
 
-  const { isSaving, hasUnsavedChanges } = useDashboardAutosave({
+  const { hasUnsavedChanges, save, discard } = useDashboardSave({
     dashboardId,
     enabled: Boolean(dashboardId && dashboard),
+  });
+
+  const { DialogComponent } = useNavigationBlocker({
+    condition: hasUnsavedChanges,
+    title: "You have unsaved changes",
+    description:
+      "If you leave now, your changes will be lost. Are you sure you want to continue?",
+    confirmText: "Leave without saving",
+    cancelText: "Stay on page",
   });
 
   useEffect(() => {
@@ -90,28 +97,6 @@ const DashboardPage: React.FunctionComponent = () => {
     key: "dashboard_date_range",
   });
 
-  const { data: projectsData } = useProjectsList(
-    {
-      workspaceName,
-      sorting: [
-        {
-          desc: true,
-          id: "last_updated_trace_at",
-        },
-      ],
-      page: 1,
-      size: 1,
-    },
-    {
-      placeholderData: keepPreviousData,
-    },
-  );
-
-  const defaultProject = useMemo(
-    () => projectsData?.content?.[0],
-    [projectsData],
-  );
-
   const handleOpenAddWidgetDialog = useCallback((sectionId: string) => {
     setTargetSectionId(sectionId);
     setAddWidgetDialogOpen(true);
@@ -130,13 +115,13 @@ const DashboardPage: React.FunctionComponent = () => {
 
   useEffect(() => {
     const config: ProjectDashboardConfig = {
-      projectId: defaultProject?.id || "",
+      projectId: "",
       interval,
       intervalStart,
       intervalEnd,
     };
     setConfig(config);
-  }, [defaultProject?.id, interval, intervalStart, intervalEnd, setConfig]);
+  }, [interval, intervalStart, intervalEnd, setConfig]);
 
   useEffect(() => {
     setSearch(search);
@@ -153,11 +138,12 @@ const DashboardPage: React.FunctionComponent = () => {
 
   useEffect(() => {
     return () => {
+      clearDashboard();
       clearConfig();
       setOnAddWidgetCallback(null);
       setWidgetResolver(null);
     };
-  }, [clearConfig, setOnAddWidgetCallback, setWidgetResolver]);
+  }, [clearDashboard, clearConfig, setOnAddWidgetCallback, setWidgetResolver]);
 
   if (isPending) {
     return <Loader />;
@@ -185,24 +171,11 @@ const DashboardPage: React.FunctionComponent = () => {
           )}
         </div>
         <div className="flex items-center gap-2">
-          <div
-            className={cn(
-              "flex items-center gap-1.5 text-sm transition-opacity",
-              !isSaving && !hasUnsavedChanges && "opacity-0",
-            )}
-          >
-            {isSaving ? (
-              <>
-                <Loader2 className="size-4 animate-spin text-muted-foreground" />
-                <span className="text-muted-foreground">Saving...</span>
-              </>
-            ) : (
-              <>
-                <CheckCircle2 className="size-4 text-green-600" />
-                <span className="text-muted-foreground">Saved</span>
-              </>
-            )}
-          </div>
+          <DashboardSaveActions
+            hasUnsavedChanges={hasUnsavedChanges}
+            onSave={save}
+            onDiscard={discard}
+          />
           <MetricDateRangeSelect
             value={dateRange}
             onChangeValue={handleDateRangeChange}
@@ -226,6 +199,8 @@ const DashboardPage: React.FunctionComponent = () => {
           onSave={handleSaveWidget}
         />
       </div>
+
+      {DialogComponent}
     </div>
   );
 };

@@ -24,7 +24,7 @@ const WidgetConfigForm: React.FunctionComponent<WidgetConfigFormProps> = ({
   }
 
   return (
-    <div className="h-full overflow-auto p-4">
+    <div className="size-full overflow-auto">
       <EditorComponent {...widgetData} onChange={onChange} />
     </div>
   );

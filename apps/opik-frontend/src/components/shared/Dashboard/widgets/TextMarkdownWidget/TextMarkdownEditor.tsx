@@ -37,45 +37,43 @@ const TextMarkdownEditor: React.FC<TextMarkdownEditorProps> = ({
   };
 
   return (
-    <div className="flex h-full flex-col gap-4 overflow-auto p-4">
-      <div className="space-y-4">
-        <div className="space-y-2">
-          <Label htmlFor="widget-title">Widget title</Label>
-          <Input
-            id="widget-title"
-            placeholder="Enter widget title"
-            value={title}
-            onChange={handleTitleChange}
-          />
-        </div>
+    <div className="space-y-4">
+      <div className="space-y-2">
+        <Label htmlFor="widget-title">Widget title</Label>
+        <Input
+          id="widget-title"
+          placeholder="Enter widget title"
+          value={title}
+          onChange={handleTitleChange}
+        />
+      </div>
 
-        <div className="space-y-2">
-          <Label htmlFor="widget-subtitle">Widget subtitle (optional)</Label>
-          <Input
-            id="widget-subtitle"
-            placeholder="Enter widget subtitle"
-            value={subtitle || ""}
-            onChange={handleSubtitleChange}
-          />
-        </div>
+      <div className="space-y-2">
+        <Label htmlFor="widget-subtitle">Widget subtitle (optional)</Label>
+        <Input
+          id="widget-subtitle"
+          placeholder="Enter widget subtitle"
+          value={subtitle || ""}
+          onChange={handleSubtitleChange}
+        />
+      </div>
 
-        <div className="space-y-2">
-          <Label htmlFor="markdown-content">Markdown content</Label>
-          <div className="overflow-hidden rounded-md border border-border">
-            <CodeMirror
-              value={content}
-              onChange={handleContentChange}
-              theme={codemirrorTheme}
-              basicSetup={{
-                lineNumbers: true,
-                foldGutter: true,
-                highlightActiveLineGutter: true,
-                highlightActiveLine: true,
-              }}
-              minHeight="200px"
-              maxHeight="300px"
-            />
-          </div>
+      <div className="space-y-2">
+        <Label htmlFor="markdown-content">Markdown content</Label>
+        <div className="overflow-hidden rounded-md border border-border">
+          <CodeMirror
+            value={content}
+            onChange={handleContentChange}
+            theme={codemirrorTheme}
+            basicSetup={{
+              lineNumbers: true,
+              foldGutter: true,
+              highlightActiveLineGutter: true,
+              highlightActiveLine: true,
+            }}
+            minHeight="200px"
+            maxHeight="300px"
+          />
         </div>
       </div>
     </div>
