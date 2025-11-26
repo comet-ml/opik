@@ -125,9 +125,9 @@ const ChatPromptRawView: React.FC<ChatPromptRawViewProps> = ({
       </div>
       <Description>
         Edit the raw JSON representation of chat messages. Must be a valid JSON
-        array with at least one object. Each object must have a
-        &quot;role&quot; field (system/user/assistant) and a
-        &quot;content&quot; field (string or array of objects).
+        array with at least one object. Each object must have a &quot;role&quot;
+        field (system/user/assistant) and a &quot;content&quot; field (string or
+        array of objects).
       </Description>
     </>
   );

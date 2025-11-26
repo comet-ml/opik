@@ -11,7 +11,7 @@ import isUndefined from "lodash/isUndefined";
 import isEqual from "fast-deep-equal";
 
 import { OnChangeFn } from "@/types/shared";
-import { LLMMessage, LLM_MESSAGE_ROLE, MessageContent } from "@/types/llm";
+import { LLMMessage, MessageContent } from "@/types/llm";
 import { PromptVersion, PROMPT_TEMPLATE_STRUCTURE } from "@/types/prompts";
 import { PLAYGROUND_SELECTED_DATASET_KEY } from "@/constants/llm";
 import { Separator } from "@/components/ui/separator";
@@ -278,11 +278,7 @@ const LLMPromptMessageActions: React.FC<LLMPromptLibraryActionsProps> = ({
         });
 
         if (newMessages.length > 0) {
-          onReplaceWithChatPrompt(
-            newMessages,
-            promptData.id,
-            versionId || "",
-          );
+          onReplaceWithChatPrompt(newMessages, promptData.id, versionId || "");
           setIsLoading(false);
           return;
         }
