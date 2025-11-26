@@ -287,9 +287,7 @@ services:
       backend:
         condition: service_healthy
       otel-collector:
-        condition: service_started
-      fluent-bit:
-        condition: service_started
+        condition: service_healthy
     healthcheck:
       test: [ "CMD-SHELL", "curl -f http://localhost:$${NGINX_PORT:-8080}/health || exit 1" ]
       interval: 1s
@@ -302,8 +300,9 @@ services:
       OTEL_COLLECTOR_HOST: ${OTEL_COLLECTOR_HOST:-otel-collector}
       OTEL_COLLECTOR_PORT: ${OTEL_COLLECTOR_PORT:-4317}
       NGINX_PORT: ${NGINX_PORT:-8080}
-      FLUENT_BIT_HOST: ${FLUENT_BIT_HOST:-fluent-bit}
-      FLUENT_BIT_PORT: ${FLUENT_BIT_PORT:-5140}
+      # Direct logs to OTEL collector's syslog receiver
+      SYSLOG_SERVER_HOST: ${OTEL_COLLECTOR_HOST:-otel-collector}
+      SYSLOG_SERVER_PORT: 5140
 
   # OpenTelemetry Collector - receives logs, traces, and metrics via OTLP
   otel-collector:
@@ -319,6 +318,7 @@ services:
       - "4317:4317" # OTLP gRPC receiver
       - "4318:4318" # OTLP HTTP receiver
       - "13133:13133" # Health check endpoint
+      - "5140:5140/udp" # Syslog UDP receiver
     command: ["--config=/etc/otelcol/config.yaml"]
     healthcheck:
       # Use the OpenTelemetry collector's health check endpoint on port 13133
@@ -328,38 +328,6 @@ services:
       timeout: 5s
       retries: 3
       start_period: 10s
-
-
-  # Fluent Bit sidecar for log shipping to OTEL collector
-  # Shares nginx logs via volume and runs as separate container
-  fluent-bit:
-    image: fluent/fluent-bit:2.2.3
-    pull_policy: always
-    profiles:
-      - opik
-      - local-be
-    hostname: fluent-bit
-    volumes:
-      - ./fluent-bit.conf:/fluent-bit/etc/fluent-bit.conf:ro
-      - ./parsers.conf:/fluent-bit/etc/parsers.conf:ro
-      - fluent-bit-data:/var/lib/fluent-bit
-    ports:
-      - "5140:5140/udp" # UDP syslog receiver for nginx logs
-      - "2020:2020" # HTTP server for metrics and health checks
-    depends_on:
-      otel-collector:
-        condition: service_healthy
-    environment:
-      OTEL_COLLECTOR_HOST: ${OTEL_COLLECTOR_HOST:-otel-collector}
-      OTEL_COLLECTOR_PORT: ${OTEL_COLLECTOR_PORT:-4318}
-    command: ["/fluent-bit/bin/fluent-bit", "-c", "/fluent-bit/etc/fluent-bit.conf"]
-    # Healthcheck: verify fluent-bit process is running
-    healthcheck:
-      test: [ "CMD-SHELL", "pgrep -f fluent-bit || exit 1" ]
-      interval: 10s
-      timeout: 3s
-      retries: 3
-      start_period: 5s
 
 networks:
   default:
@@ -372,4 +340,3 @@ volumes:
   zookeeper:
   redis-data:
   minio-data:
-  fluent-bit-data:

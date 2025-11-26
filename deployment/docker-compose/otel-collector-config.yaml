@@ -17,6 +17,17 @@ receivers:
       http:
         endpoint: 0.0.0.0:4318
 
+  # Receiver for syslog messages (UDP)
+  syslog:
+    udp:
+      listen_address: "0.0.0.0:5140"
+    protocol: rfc3164
+    operators:
+      - type: move
+        from: body
+        to: attributes.message
+
+
   # Collect own metrics
   prometheus:
     config:
@@ -62,7 +73,7 @@ service:
       exporters: [debug]
 
     logs:
-      receivers: [otlp]
+      receivers: [otlp, syslog]
       processors: [batch]
       exporters: [debug]
 
