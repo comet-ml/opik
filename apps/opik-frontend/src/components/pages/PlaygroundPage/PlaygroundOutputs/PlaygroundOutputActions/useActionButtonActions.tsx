@@ -15,6 +15,8 @@ import {
   useClearCreatedExperiments,
   useIsRunning,
   useSetIsRunning,
+  useSetProgress,
+  useResetProgress,
 } from "@/store/PlaygroundStore";
 
 import { useToast } from "@/components/ui/use-toast";
@@ -94,13 +96,16 @@ const useActionButtonActions = ({
 
   const resetOutputMap = useResetOutputMap();
   const updateOutputTraceId = useUpdateOutputTraceId();
+  const setProgress = useSetProgress();
+  const resetProgress = useResetProgress();
 
   const resetState = useCallback(() => {
     resetOutputMap();
     abortControllersRef.current.clear();
     setIsRunning(false);
     clearCreatedExperiments();
-  }, [resetOutputMap, clearCreatedExperiments, setIsRunning]);
+    resetProgress();
+  }, [resetOutputMap, clearCreatedExperiments, setIsRunning, resetProgress]);
 
   const stopAll = useCallback(() => {
     setIsRunning(false);
@@ -200,12 +205,23 @@ const useActionButtonActions = ({
     const logProcessor = createLogPlaygroundProcessor(logProcessorHandlers);
 
     const combinations = createCombinations();
+    const totalCombinations = combinations.length;
+
+    // Initialize progress tracking
+    setProgress(0, totalCombinations);
+
+    let completedCount = 0;
 
     asyncLib.mapLimit(
       combinations,
       maxConcurrentRequests,
-      async (combination: DatasetItemPromptCombination) =>
-        processCombination(combination, logProcessor),
+      async (combination: DatasetItemPromptCombination) => {
+        await processCombination(combination, logProcessor);
+
+        // Update progress after each combination completes
+        completedCount += 1;
+        setProgress(completedCount, totalCombinations);
+      },
       () => {
         // Signal that all logs have been sent
         logProcessor.finishLogging();
@@ -223,6 +239,7 @@ const useActionButtonActions = ({
     processCombination,
     logProcessorHandlers,
     maxConcurrentRequests,
+    setProgress,
   ]);
 
   const navigateToExperiments = useCallback(() => {
