@@ -9,6 +9,8 @@ import { Button } from "@/components/ui/button";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import CompareExperimentsDialog from "@/components/pages/CompareExperimentsPage/CompareExperimentsDialog";
 import ExportToButton from "@/components/shared/ExportToButton/ExportToButton";
+import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
+import { FeatureToggleKeys } from "@/types/feature-toggles";
 import {
   Experiment,
   ExperimentItem,
@@ -94,6 +96,7 @@ const CompareExperimentsActionsPanel: React.FC<
   const resetKeyRef = useRef(0);
   const [open, setOpen] = useState<boolean>(false);
   const disabled = !selectedRows?.length;
+  const isExportEnabled = useIsFeatureEnabled(FeatureToggleKeys.EXPORT_ENABLED);
 
   const mapRowData = useCallback(async () => {
     if (!columnsToExport || !getDataForExport) return [];
@@ -206,9 +209,16 @@ const CompareExperimentsActionsPanel: React.FC<
       </div>
       {columnsToExport && (
         <ExportToButton
-          disabled={disabled || columnsToExport.length === 0}
+          disabled={
+            disabled || columnsToExport.length === 0 || !isExportEnabled
+          }
           getData={mapRowData}
           generateFileName={generateFileName}
+          tooltipContent={
+            !isExportEnabled
+              ? "Export functionality is disabled for this installation"
+              : undefined
+          }
         />
       )}
     </div>

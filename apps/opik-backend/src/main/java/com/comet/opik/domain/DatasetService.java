@@ -5,6 +5,7 @@ import com.comet.opik.api.Dataset;
 import com.comet.opik.api.DatasetIdentifier;
 import com.comet.opik.api.DatasetLastExperimentCreated;
 import com.comet.opik.api.DatasetLastOptimizationCreated;
+import com.comet.opik.api.DatasetStatus;
 import com.comet.opik.api.DatasetUpdate;
 import com.comet.opik.api.ExperimentType;
 import com.comet.opik.api.Visibility;
@@ -94,6 +95,8 @@ public interface DatasetService {
     Set<UUID> exists(Set<UUID> datasetIds, String workspaceId);
 
     long getDailyCreatedCount();
+
+    void updateStatus(UUID id, String workspaceId, DatasetStatus status);
 }
 
 @Singleton
@@ -647,6 +650,26 @@ class DatasetServiceImpl implements DatasetService {
                     .stream()
                     .mapToLong(BiInformationResponse.BiInformation::count)
                     .sum();
+        });
+    }
+
+    @Override
+    @WithSpan
+    public void updateStatus(@NonNull UUID id, @NonNull String workspaceId,
+            @NonNull DatasetStatus status) {
+        log.info("Updating status for dataset '{}' on workspaceId '{}' to '{}'", id, workspaceId, status);
+        template.inTransaction(WRITE, handle -> {
+            var dao = handle.attach(DatasetDAO.class);
+            int result = dao.updateStatus(workspaceId, id, status);
+
+            if (result == 0) {
+                log.warn("Dataset '{}' not found on workspaceId '{}' - status update skipped", id, workspaceId);
+                return null;
+            }
+
+            log.info("Successfully updated status for dataset '{}' on workspaceId '{}' to '{}'", id,
+                    workspaceId, status);
+            return null;
         });
     }
 

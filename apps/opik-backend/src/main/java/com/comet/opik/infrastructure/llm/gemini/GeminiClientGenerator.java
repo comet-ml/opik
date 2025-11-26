@@ -1,6 +1,7 @@
 package com.comet.opik.infrastructure.llm.gemini;
 
 import com.comet.opik.api.evaluators.LlmAsJudgeModelParameters;
+import com.comet.opik.domain.llm.langchain4j.OpikGeminiChatModel;
 import com.comet.opik.infrastructure.LlmProviderClientConfig;
 import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
 import com.comet.opik.infrastructure.llm.LlmProviderClientGenerator;
@@ -55,6 +56,9 @@ public class GeminiClientGenerator implements LlmProviderClientGenerator<GoogleA
         Optional.ofNullable(modelParameters.temperature()).ifPresent(modelBuilder::temperature);
         Optional.ofNullable(modelParameters.seed()).ifPresent(modelBuilder::seed);
 
-        return modelBuilder.build();
+        GoogleAiGeminiChatModel geminiModel = modelBuilder.build();
+
+        // Wrap in OpikGeminiChatModel to convert VideoContent -> ImageContent
+        return new OpikGeminiChatModel(geminiModel);
     }
 }
