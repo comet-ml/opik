@@ -119,31 +119,31 @@ export const useExperimentsTableConfig = <
   }, []);
 
   const scoresColumnsData = useMemo(() => {
-    const scoreColumns = dynamicScoresColumns.map(
-      ({ label, id, columnType }) =>
-        ({
-          id,
-          label,
-          type: columnType,
-          header: FeedbackScoreHeader as never,
-          cell: FeedbackScoreCell as never,
-          aggregatedCell: FeedbackScoreCell.Aggregation as never,
-          accessorFn: (row: T) =>
-            (
-              row as T & { feedback_scores?: Array<{ name: string }> }
-            ).feedback_scores?.find((f) => f.name === label),
-          customMeta: {
-            accessorFn: (aggregation: ExperimentsAggregations) =>
+    return [
+      ...dynamicScoresColumns.map(
+        ({ label, id, columnType }) =>
+          ({
+            id,
+            label,
+            type: columnType,
+            header: FeedbackScoreHeader as never,
+            cell: FeedbackScoreCell as never,
+            aggregatedCell: FeedbackScoreCell.Aggregation as never,
+            accessorFn: (row: T) =>
               (
-                aggregation as ExperimentsAggregations & {
-                  feedback_scores?: Array<{ name: string }>;
-                }
-              ).feedback_scores?.find((f) => f.name === label)?.value,
-          },
-        }) as ColumnData<T>,
-    );
-
-    return scoreColumns;
+                row as T & { feedback_scores?: Array<{ name: string }> }
+              ).feedback_scores?.find((f) => f.name === label),
+            customMeta: {
+              accessorFn: (aggregation: ExperimentsAggregations) =>
+                (
+                  aggregation as ExperimentsAggregations & {
+                    feedback_scores?: Array<{ name: string }>;
+                  }
+                ).feedback_scores?.find((f) => f.name === label)?.value,
+            },
+          }) as ColumnData<T>,
+      ),
+    ];
   }, [dynamicScoresColumns]);
 
   const selectedRows = useMemo(() => {
