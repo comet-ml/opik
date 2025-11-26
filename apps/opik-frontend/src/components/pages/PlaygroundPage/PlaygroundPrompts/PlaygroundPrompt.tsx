@@ -273,10 +273,8 @@ const PlaygroundPrompt = ({
 
   // Handler for importing chat prompt
   const handleImportChatPrompt = useCallback(
-    (loadedPromptId?: string) => {
-      if (loadedPromptId) {
-        updatePrompt(promptId, { loadedChatPromptId: loadedPromptId });
-      }
+    (loadedPromptId: string) => {
+      updatePrompt(promptId, { loadedChatPromptId: loadedPromptId });
     },
     [promptId, updatePrompt],
   );
@@ -373,7 +371,7 @@ const PlaygroundPrompt = ({
             <div className="flex h-full min-w-40 max-w-60 flex-auto flex-nowrap">
               <PromptsSelectBox
                 value={selectedChatPromptId}
-                onValueChange={handleImportChatPrompt}
+                onValueChange={(value) => value && handleImportChatPrompt(value)}
                 clearable={false}
                 filterByTemplateStructure={PROMPT_TEMPLATE_STRUCTURE.CHAT}
               />
