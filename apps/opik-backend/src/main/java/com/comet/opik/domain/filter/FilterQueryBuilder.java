@@ -602,18 +602,27 @@ public class FilterQueryBuilder {
         // we want to apply the is empty filter only in the case below
         if (filter.operator() == Operator.IS_EMPTY && filterStrategy == FilterStrategy.FEEDBACK_SCORES_IS_EMPTY) {
             return Optional.of(FILTER_STRATEGY_MAP.get(FilterStrategy.FEEDBACK_SCORES));
-        } else if (filter.operator() == Operator.IS_EMPTY
-                && filterStrategy == FilterStrategy.SPAN_FEEDBACK_SCORES_IS_EMPTY) {
+        }
+
+        if (filter.operator() == Operator.IS_EMPTY && filterStrategy == FilterStrategy.SPAN_FEEDBACK_SCORES_IS_EMPTY) {
             return Optional.of(FILTER_STRATEGY_MAP.get(FilterStrategy.SPAN_FEEDBACK_SCORES));
-        } else if (filter.operator() == Operator.IS_NOT_EMPTY
-                && Set.of(FilterStrategy.FEEDBACK_SCORES_IS_EMPTY, FilterStrategy.SPAN_FEEDBACK_SCORES_IS_EMPTY)
-                        .contains(filterStrategy)) {
-                        return Optional.empty();
-        } else if (filter.operator() == Operator.IS_EMPTY && isFeedbackScore(filter)) {
-                    return Optional.empty();
-                }
+        }
+
+        if (isNotEmptyScoresFilter(filterStrategy, filter)) {
+            return Optional.empty();
+        }
+
+        if (filter.operator() == Operator.IS_EMPTY && isFeedbackScore(filter)) {
+            return Optional.empty();
+        }
 
         return Optional.ofNullable(FILTER_STRATEGY_MAP.get(filterStrategy));
+    }
+
+    private static boolean isNotEmptyScoresFilter(FilterStrategy filterStrategy, Filter filter) {
+        return filter.operator() == Operator.IS_NOT_EMPTY
+                && Set.of(FilterStrategy.FEEDBACK_SCORES_IS_EMPTY, FilterStrategy.SPAN_FEEDBACK_SCORES_IS_EMPTY)
+                        .contains(filterStrategy);
     }
 
     private static boolean isFeedbackScore(Filter filter) {

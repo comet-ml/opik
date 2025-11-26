@@ -116,7 +116,7 @@ class StatsMapperTest {
         values.put("span_count_avg", 3.0);
         values.put("total_estimated_cost_avg", new BigDecimal("1.25"));
         values.put("total_estimated_cost_sum", new BigDecimal("2.50"));
-        
+
         // Add span feedback scores map
         Map<String, BigDecimal> spanFeedbackScores = new HashMap<>();
         spanFeedbackScores.put("accuracy", new BigDecimal("0.85"));
@@ -148,7 +148,7 @@ class StatsMapperTest {
         values.put("tags", 0.0);
         values.put("total_estimated_cost_avg", new BigDecimal("1.25"));
         values.put("total_estimated_cost_sum", new BigDecimal("2.50"));
-        
+
         // Add span feedback scores map (should be ignored for spans)
         Map<String, BigDecimal> spanFeedbackScores = new HashMap<>();
         spanFeedbackScores.put("accuracy", new BigDecimal("0.85"));
