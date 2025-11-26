@@ -1015,7 +1015,6 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
         open={Boolean(traceId) && !threadId}
         onClose={handleClose}
         onRowChange={handleRowChange}
-        columnsToExport={allColumnsToExport}
       />
       <ThreadDetailsPanel
         projectId={projectId}
@@ -1025,7 +1024,6 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
         threadId={threadId!}
         open={Boolean(threadId)}
         onClose={handleClose}
-        columnsToExport={allColumnsToExport}
       />
     </>
   );

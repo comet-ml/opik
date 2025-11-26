@@ -714,7 +714,6 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
         setThreadId={setThreadId}
         open={Boolean(traceId) && !threadId}
         onClose={handleClose}
-        columnsToExport={allColumnsToExport}
       />
       <ThreadDetailsPanel
         projectId={projectId}
@@ -727,7 +726,6 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
         hasPreviousRow={hasPrevious}
         hasNextRow={hasNext}
         onRowChange={handleRowChange}
-        columnsToExport={allColumnsToExport}
       />
     </>
   );

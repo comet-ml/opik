@@ -44,7 +44,6 @@ type TraceDetailsPanelProps = {
   open: boolean;
   onClose: () => void;
   onRowChange?: (shift: number) => void;
-  columnsToExport: string[];
 };
 
 const TraceDetailsPanel: React.FunctionComponent<TraceDetailsPanelProps> = ({
@@ -58,7 +57,6 @@ const TraceDetailsPanel: React.FunctionComponent<TraceDetailsPanelProps> = ({
   onClose,
   open,
   onRowChange,
-  columnsToExport,
 }) => {
   const [activeSection, setActiveSection] =
     useDetailsActionSectionState("lastSection");
@@ -276,7 +274,6 @@ const TraceDetailsPanel: React.FunctionComponent<TraceDetailsPanelProps> = ({
           setGraph={setGraph}
           hasAgentGraph={hasAgentGraph}
           setActiveSection={setActiveSection}
-          columnsToExport={columnsToExport}
         />
       }
       onClose={onClose}
