@@ -59,7 +59,7 @@ const useLoadPlayground = () => {
   }, [promptMap]);
 
   const providerKeys = useMemo(() => {
-    return providerKeysData?.content?.map((c) => c.provider) || [];
+    return providerKeysData?.content?.map((c) => c.ui_composed_provider) || [];
   }, [providerKeysData]);
 
   const loadPlayground = useCallback(
