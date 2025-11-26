@@ -4666,9 +4666,10 @@ class TracesResourceTest {
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
     class GetFeedbackScoreNames {
 
-        @Test
+        @ParameterizedTest
+        @ValueSource(booleans = {true, false})
         @DisplayName("when get feedback score names, then return feedback score names")
-        void getFeedbackScoreNames__whenGetFeedbackScoreNames__thenReturnFeedbackScoreNames() {
+        void getFeedbackScoreNames__whenGetFeedbackScoreNames__thenReturnFeedbackScoreNames(boolean useProjectId) {
 
             // given
             var apiKey = UUID.randomUUID().toString();
@@ -4698,7 +4699,11 @@ class TracesResourceTest {
 
             traceResourceClient.createMultiValueScores(otherNames, unexpectedProject, apiKey, workspaceName);
 
-            fetchAndAssertResponse(names, projectId, apiKey, workspaceName);
+            List<String> allNames = new ArrayList<>(names);
+            allNames.addAll(otherNames);
+
+            fetchAndAssertResponse(useProjectId ? names : allNames, useProjectId ? projectId : null, apiKey,
+                    workspaceName);
         }
     }
 
@@ -4707,9 +4712,11 @@ class TracesResourceTest {
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
     class GetTraceThreadsFeedbackScoreNames {
 
-        @Test
+        @ParameterizedTest
+        @ValueSource(booleans = {true, false})
         @DisplayName("when get trace threads feedback score names, then return feedback score names")
-        void getTraceThreadsFeedbackScoreNames__whenGetTraceThreadsFeedbackScoreNames__thenReturnFeedbackScoreNames() {
+        void getTraceThreadsFeedbackScoreNames__whenGetTraceThreadsFeedbackScoreNames__thenReturnFeedbackScoreNames(
+                boolean useProjectId) {
 
             // given
             var apiKey = UUID.randomUUID().toString();
@@ -4742,11 +4749,15 @@ class TracesResourceTest {
             createMultiValueTraceThreadScores(otherNames, unexpectedProject, apiKey, workspaceName);
 
             // when
-            FeedbackScoreNames actualNames = traceResourceClient.getTraceThreadsFeedbackScoreNames(projectId, apiKey,
+            FeedbackScoreNames actualNames = traceResourceClient.getTraceThreadsFeedbackScoreNames(
+                    useProjectId ? projectId : null, apiKey,
                     workspaceName);
 
+            List<String> allNames = new ArrayList<>(names);
+            allNames.addAll(otherNames);
+
             // then
-            assertFeedbackScoreNames(actualNames, names);
+            assertFeedbackScoreNames(actualNames, useProjectId ? names : allNames);
         }
     }
 
@@ -6196,6 +6207,73 @@ class TracesResourceTest {
                 var thread3 = traceResourceClient.getTraceThread(threadId3, projectId, API_KEY, TEST_WORKSPACE);
                 assertThat(thread3.tags()).containsExactlyInAnyOrder("new-tag-1", "new-tag-2");
             }
+        }
+
+        @Test
+        @DisplayName("when batch updating threads multiple times, then latest values are preserved")
+        void batchUpdate__whenMultiplePartialUpdates__thenLatestValuesPreserved() {
+            var projectName = "project-" + RandomStringUtils.secure().nextAlphanumeric(32);
+            projectResourceClient.createProject(projectName, API_KEY, TEST_WORKSPACE);
+            var projectId = projectResourceClient.getByName(projectName, API_KEY, TEST_WORKSPACE).id();
+
+            // Create a thread by creating a trace
+            var threadId = UUID.randomUUID().toString();
+            create(createTrace().toBuilder()
+                    .projectName(projectName)
+                    .threadId(threadId)
+                    .build(),
+                    API_KEY, TEST_WORKSPACE);
+
+            // Wait for thread to be created
+            Awaitility.await()
+                    .atMost(5, TimeUnit.SECONDS)
+                    .untilAsserted(() -> {
+                        var threads = traceResourceClient.getTraceThreads(
+                                projectId, null, API_KEY, TEST_WORKSPACE, null, null, null);
+                        assertThat(threads.content()).hasSize(1);
+                    });
+
+            var threads = traceResourceClient.getTraceThreads(
+                    projectId, null, API_KEY, TEST_WORKSPACE, null, null, null);
+            var threadModelId = threads.content().getFirst().threadModelId();
+
+            // First batch update: Set original tags
+            var originalTags = Set.of("tag-" + RandomStringUtils.secure().nextAlphanumeric(8));
+            var firstBatchUpdate = TraceThreadBatchUpdate.builder()
+                    .ids(Set.of(threadModelId))
+                    .update(TraceThreadUpdate.builder()
+                            .tags(originalTags)
+                            .build())
+                    .mergeTags(false)
+                    .build();
+            traceResourceClient.batchUpdateThreads(firstBatchUpdate, API_KEY, TEST_WORKSPACE);
+
+            // Second batch update: Update with new tags
+            var secondTags = Set.of("updated-" + RandomStringUtils.secure().nextAlphanumeric(8));
+            var secondBatchUpdate = TraceThreadBatchUpdate.builder()
+                    .ids(Set.of(threadModelId))
+                    .update(TraceThreadUpdate.builder()
+                            .tags(secondTags)
+                            .build())
+                    .mergeTags(false)
+                    .build();
+            traceResourceClient.batchUpdateThreads(secondBatchUpdate, API_KEY, TEST_WORKSPACE);
+
+            // Third batch update: Update with final tags
+            var thirdTags = Set.of("final-" + RandomStringUtils.secure().nextAlphanumeric(8));
+            var thirdBatchUpdate = TraceThreadBatchUpdate.builder()
+                    .ids(Set.of(threadModelId))
+                    .update(TraceThreadUpdate.builder()
+                            .tags(thirdTags)
+                            .build())
+                    .mergeTags(false)
+                    .build();
+            traceResourceClient.batchUpdateThreads(thirdBatchUpdate, API_KEY, TEST_WORKSPACE);
+
+            // Verify that thread has the latest tags (not from first or second update)
+            var finalThread = traceResourceClient.getTraceThread(
+                    threadId, projectId, API_KEY, TEST_WORKSPACE);
+            assertThat(finalThread.tags()).containsExactlyInAnyOrderElementsOf(thirdTags);
         }
 
         @Test

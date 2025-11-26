@@ -1800,6 +1800,70 @@ class GetTracesByProjectResourceTest {
         }
 
         @ParameterizedTest
+        @MethodSource("getFilterTestArguments")
+        void whenTracesHaveToolSpans__thenHasToolSpansIsCorrect(String endpoint, TracePageTestAssertion testAssertion) {
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
+                    .stream()
+                    .map(trace -> trace.toBuilder()
+                            .projectId(null)
+                            .projectName(projectName)
+                            .usage(null)
+                            .feedbackScores(null)
+                            .threadId(null)
+                            .totalEstimatedCost(null)
+                            .guardrailsValidations(null)
+                            .hasToolSpans(false)
+                            .spanCount(0)
+                            .llmSpanCount(0)
+                            .build())
+                    .toList();
+
+            traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
+
+            // Create spans: first trace has tool spans, others don't
+            var spans = traces.stream()
+                    .flatMap(trace -> {
+                        var isFirstTrace = trace.equals(traces.getFirst());
+                        return IntStream.range(0, 3)
+                                .mapToObj(i -> factory.manufacturePojo(Span.class).toBuilder()
+                                        .usage(null)
+                                        .totalEstimatedCost(null)
+                                        .projectName(projectName)
+                                        .traceId(trace.id())
+                                        .type(isFirstTrace && i == 0 ? SpanType.tool : SpanType.general)
+                                        .build());
+                    })
+                    .toList();
+
+            spanResourceClient.batchCreateSpans(spans, apiKey, workspaceName);
+
+            // Update traces with expected hasToolSpans values
+            var firstTraceId = traces.getFirst().id();
+            var updatedTraces = traces.stream()
+                    .map(trace -> {
+                        var hasToolSpans = trace.id().equals(firstTraceId);
+                        return trace.toBuilder()
+                                .hasToolSpans(hasToolSpans)
+                                .spanCount(3)
+                                .llmSpanCount(0)
+                                .build();
+                    })
+                    .toList();
+
+            var values = testAssertion.transformTestParams(traces, updatedTraces.reversed(), List.of());
+
+            testAssertion.assertTest(projectName, null, apiKey, workspaceName, values.expected(), values.unexpected(),
+                    values.all(), List.of(), Map.of());
+        }
+
+        @ParameterizedTest
         @MethodSource("equalAndNotEqualFilters")
         void whenFilterMetadataEqualString__thenReturnTracesFiltered(String endpoint,
                 Operator operator,

@@ -55,6 +55,11 @@ Opik provides three destination types for alerts:
    - Click "Add trigger" to select event types
    - Choose one or more event types from the list
    - Configure project scope for observability events (optional)
+   - For threshold-based alerts (errors, cost, latency, feedback scores):
+     - **Threshold**: Set the threshold value that triggers the alert
+     - **Operator**: Choose comparison operator (`>`, `<`) for feedback score alerts
+     - **Window**: Configure the time window in seconds for metric aggregation
+     - **Feedback Score Name**: Select which feedback score to monitor (for feedback score alerts only)
 
 6. **Test your configuration**
    - Click "Test connection" to send a sample webhook
@@ -296,19 +301,21 @@ Opik supports ten types of alert events:
 - **Payload**: Metrics alert payload with error count details
 - **Use case**: Proactive error monitoring, detect error spikes, prevent system degradation
 
-**New score added to trace**
+**Trace feedback score threshold exceeded**
 - **Event type**: `trace:feedback_score`
-- **Triggered when**: A feedback score is added to a trace
+- **Triggered when**: Average trace feedback score meets the specified threshold criteria within a time window
 - **Project scope**: Can be configured to specific projects
-- **Payload**: Array of feedback score objects
-- **Use case**: Track model performance, monitor user satisfaction
+- **Configuration**: Requires feedback score name, threshold value, operator (`>`, `<`), and time window
+- **Payload**: Metrics alert payload with average feedback score details
+- **Use case**: Track model performance, monitor user satisfaction, detect quality degradation
 
-**New score added to thread**
+**Thread feedback score threshold exceeded**
 - **Event type**: `trace_thread:feedback_score`
-- **Triggered when**: A feedback score is added to a conversation thread
+- **Triggered when**: Average thread feedback score meets the specified threshold criteria within a time window
 - **Project scope**: Can be configured to specific projects
-- **Payload**: Array of thread feedback score objects
-- **Use case**: Monitor conversation quality, track multi-turn interactions
+- **Configuration**: Requires feedback score name, threshold value, operator (`>`, `<`), and time window
+- **Payload**: Metrics alert payload with average feedback score details
+- **Use case**: Monitor conversation quality, track multi-turn interactions, detect thread satisfaction issues
 
 **Guardrails triggered**
 - **Event type**: `trace:guardrails_triggered`
@@ -453,39 +460,35 @@ All webhook events follow a consistent payload structure:
 }
 ```
 
-### Feedback score payload
+### Trace feedback score threshold exceeded payload
 
 ```json
 {
-  "metadata": [
-    {
-      "id": "score-uuid",
-      "name": "score-name",
-      "value": 0.85,
-      "reason": "Explanation of the score",
-      "category_name": "quality",
-      "source": "sdk",
-      "author": "user@example.com"
-    }
-  ]
+  "metadata": {
+    "event_type": "TRACE_FEEDBACK_SCORE",
+    "metric_name": "trace:feedback_score",
+    "metric_value": "0.7500",
+    "threshold": "0.8000",
+    "window_seconds": "3600",
+    "project_ids": "0198ec68-6e06-7253-a20b-d35c9252b9ba,0198ec68-6e06-7253-a20b-d35c9252b9bb",
+    "project_names": "Demo Project,Default Project"
+  }
 }
 ```
 
-### Thread feedback score payload
+### Thread feedback score threshold exceeded payload
 
 ```json
 {
-  "metadata": [
-    {
-      "thread_id": "thread-uuid",
-      "name": "score-name",
-      "value": 0.90,
-      "reason": "Explanation of the score",
-      "category_name": "satisfaction",
-      "source": "sdk",
-      "author": "user@example.com"
-    }
-  ]
+  "metadata": {
+    "event_type": "TRACE_THREAD_FEEDBACK_SCORE",
+    "metric_name": "trace_thread:feedback_score",
+    "metric_value": "0.7500",
+    "threshold": "0.8000",
+    "window_seconds": "3600",
+    "project_ids": "0198ec68-6e06-7253-a20b-d35c9252b9ba,0198ec68-6e06-7253-a20b-d35c9252b9bb",
+    "project_names": "Demo Project,Default Project"
+  }
 }
 ```
 
@@ -821,8 +824,8 @@ Understanding Opik's alert architecture can help with troubleshooting and optimi
 
 The Opik Alerts system monitors your workspace for specific events and sends consolidated webhook notifications to your configured endpoints. Here's the flow:
 
-1. **Event occurs**: An event happens in your workspace (e.g., a trace error, new feedback score)
-2. **Alert evaluation**: The system checks if any enabled alerts match this event type
+1. **Event occurs**: An event happens in your workspace (e.g., a trace error, prompt creation, guardrail trigger, new feedback score)
+2. **Alert evaluation**: The system checks if any enabled alerts match this event type and evaluates threshold conditions (for metrics-based alerts like errors, cost, latency, and feedback scores)
 3. **Event aggregation**: Multiple events are aggregated over a short time window (debouncing)
 4. **Webhook delivery**: A consolidated HTTP POST request is sent to your webhook URL
 5. **Retry handling**: Failed requests are automatically retried with exponential backoff

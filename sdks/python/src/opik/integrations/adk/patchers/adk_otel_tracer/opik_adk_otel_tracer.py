@@ -2,6 +2,7 @@ import logging
 from typing import Iterator, Optional, Tuple
 
 import opentelemetry.trace
+import opik
 import opik.context_storage
 from opik.api_objects import trace, span
 from opik.decorator import (
@@ -100,7 +101,8 @@ class OpikADKOtelTracer(opentelemetry.trace.NoOpTracer):
             # so we manually finalize it here to avoid incorrect span nesting.
             opik.context_storage.pop_span_data(ensure_id=current_span_data.id)
             current_span_data.init_end_time()
-            self.opik_client.span(**current_span_data.as_parameters)
+            if opik.is_tracing_active():
+                self.opik_client.span(**current_span_data.as_parameters)
             current_span_data = opik.context_storage.top_span_data()
 
         try:
@@ -145,7 +147,8 @@ class OpikADKOtelTracer(opentelemetry.trace.NoOpTracer):
         trace_data = opik.context_storage.pop_trace_data(ensure_id=trace_id)
         if trace_data is not None:
             trace_data.init_end_time()
-            self.opik_client.trace(**trace_data.as_parameters)
+            if opik.is_tracing_active():
+                self.opik_client.trace(**trace_data.as_parameters)
 
     def _ensure_span_is_finalized(self, span_id: str) -> None:
         opik.context_storage.trim_span_data_stack_to_certain_span(span_id)
@@ -153,7 +156,8 @@ class OpikADKOtelTracer(opentelemetry.trace.NoOpTracer):
         span_data = opik.context_storage.pop_span_data(ensure_id=span_id)
         if span_data is not None:
             span_data.init_end_time()
-            self.opik_client.span(**span_data.as_parameters)
+            if opik.is_tracing_active():
+                self.opik_client.span(**span_data.as_parameters)
 
 
 def _prepare_trace_and_span_to_be_finalized(
