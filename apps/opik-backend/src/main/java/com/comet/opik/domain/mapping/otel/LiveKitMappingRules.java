@@ -2,85 +2,86 @@ package com.comet.opik.domain.mapping.otel;
 
 import com.comet.opik.domain.SpanType;
 import com.comet.opik.domain.mapping.OpenTelemetryMappingRule;
+import lombok.experimental.UtilityClass;
 
 import java.util.List;
 
 /**
  * Mapping rules for LiveKit integration.
  */
+@UtilityClass
 public final class LiveKitMappingRules {
 
-    private LiveKitMappingRules() {
-        // Utility class
-    }
+    public static final String SOURCE = "LiveKit";
 
     public static List<OpenTelemetryMappingRule> getRules() {
         return List.of(
                 // Session & Agent Metadata
-                new OpenTelemetryMappingRule("livekit.session.id", false, "LiveKit",
-                        OpenTelemetryMappingRule.Outcome.METADATA),
-                new OpenTelemetryMappingRule("lk.agent_label", false, "LiveKit",
-                        OpenTelemetryMappingRule.Outcome.METADATA),
-                new OpenTelemetryMappingRule("lk.speech_id", false, "LiveKit",
-                        OpenTelemetryMappingRule.Outcome.METADATA),
-                new OpenTelemetryMappingRule("lk.interrupted", false, "LiveKit",
-                        OpenTelemetryMappingRule.Outcome.METADATA),
-                new OpenTelemetryMappingRule("lk.retry_count", false, "LiveKit",
-                        OpenTelemetryMappingRule.Outcome.METADATA),
+                OpenTelemetryMappingRule.builder()
+                        .rule("livekit.session.id").source(SOURCE).outcome(OpenTelemetryMappingRule.Outcome.METADATA).build(),
+                OpenTelemetryMappingRule.builder()
+                        .rule("lk.agent_label").source(SOURCE).outcome(OpenTelemetryMappingRule.Outcome.METADATA).build(),
+                OpenTelemetryMappingRule.builder()
+                        .rule("lk.speech_id").source(SOURCE).outcome(OpenTelemetryMappingRule.Outcome.METADATA).build(),
+                OpenTelemetryMappingRule.builder()
+                        .rule("lk.interrupted").source(SOURCE).outcome(OpenTelemetryMappingRule.Outcome.METADATA).build(),
+                OpenTelemetryMappingRule.builder()
+                        .rule("lk.retry_count").source(SOURCE).outcome(OpenTelemetryMappingRule.Outcome.METADATA).build(),
 
                 // LLM & TTS Metrics
-                new OpenTelemetryMappingRule("lk.llm_metrics", false, "LiveKit",
-                        OpenTelemetryMappingRule.Outcome.METADATA),
-                new OpenTelemetryMappingRule("lk.tts_metrics", false, "LiveKit",
-                        OpenTelemetryMappingRule.Outcome.METADATA),
-                new OpenTelemetryMappingRule("lk.tts.streaming", false, "LiveKit",
-                        OpenTelemetryMappingRule.Outcome.METADATA),
-                new OpenTelemetryMappingRule("lk.tts.label", false, "LiveKit",
-                        OpenTelemetryMappingRule.Outcome.METADATA),
+                OpenTelemetryMappingRule.builder()
+                        .rule("lk.llm_metrics").source(SOURCE).outcome(OpenTelemetryMappingRule.Outcome.METADATA).build(),
+                OpenTelemetryMappingRule.builder()
+                        .rule("lk.tts_metrics").source(SOURCE).outcome(OpenTelemetryMappingRule.Outcome.METADATA).build(),
+                OpenTelemetryMappingRule.builder()
+                        .rule("lk.tts.streaming").source(SOURCE).outcome(OpenTelemetryMappingRule.Outcome.METADATA).build(),
+                OpenTelemetryMappingRule.builder()
+                        .rule("lk.tts.label").source(SOURCE).outcome(OpenTelemetryMappingRule.Outcome.METADATA).build(),
 
                 // Input Attributes
-                new OpenTelemetryMappingRule("lk.input_text", false, "LiveKit", OpenTelemetryMappingRule.Outcome.INPUT),
-                new OpenTelemetryMappingRule("lk.chat_ctx", false, "LiveKit", OpenTelemetryMappingRule.Outcome.INPUT),
-                new OpenTelemetryMappingRule("lk.function_tools", false, "LiveKit",
-                        OpenTelemetryMappingRule.Outcome.INPUT),
-                new OpenTelemetryMappingRule("lk.user_input", false, "LiveKit", OpenTelemetryMappingRule.Outcome.INPUT),
-                new OpenTelemetryMappingRule("lk.user_transcript", false, "LiveKit",
-                        OpenTelemetryMappingRule.Outcome.INPUT),
+                OpenTelemetryMappingRule.builder()
+                        .rule("lk.input_text").source(SOURCE).outcome(OpenTelemetryMappingRule.Outcome.INPUT).build(),
+                OpenTelemetryMappingRule.builder()
+                        .rule("lk.chat_ctx").source(SOURCE).outcome(OpenTelemetryMappingRule.Outcome.INPUT).build(),
+                OpenTelemetryMappingRule.builder()
+                        .rule("lk.function_tools").source(SOURCE).outcome(OpenTelemetryMappingRule.Outcome.INPUT).build(),
+                OpenTelemetryMappingRule.builder()
+                        .rule("lk.user_input").source(SOURCE).outcome(OpenTelemetryMappingRule.Outcome.INPUT).build(),
+                OpenTelemetryMappingRule.builder()
+                        .rule("lk.user_transcript").source(SOURCE).outcome(OpenTelemetryMappingRule.Outcome.INPUT).build(),
 
                 // Output Attributes
-                new OpenTelemetryMappingRule("lk.response.text", false, "LiveKit",
-                        OpenTelemetryMappingRule.Outcome.OUTPUT),
-                new OpenTelemetryMappingRule("lk.response.function_calls", false, "LiveKit",
-                        OpenTelemetryMappingRule.Outcome.OUTPUT),
+                OpenTelemetryMappingRule.builder()
+                        .rule("lk.response.text").source(SOURCE).outcome(OpenTelemetryMappingRule.Outcome.OUTPUT).build(),
+                OpenTelemetryMappingRule.builder()
+                        .rule("lk.response.function_calls").source(SOURCE).outcome(OpenTelemetryMappingRule.Outcome.OUTPUT).build(),
 
                 // Transcription Metadata
-                new OpenTelemetryMappingRule("lk.transcript_confidence", false, "LiveKit",
-                        OpenTelemetryMappingRule.Outcome.METADATA),
-                new OpenTelemetryMappingRule("lk.transcription_delay", false, "LiveKit",
-                        OpenTelemetryMappingRule.Outcome.METADATA),
-                new OpenTelemetryMappingRule("lk.end_of_turn_delay", false, "LiveKit",
-                        OpenTelemetryMappingRule.Outcome.METADATA),
+                OpenTelemetryMappingRule.builder()
+                        .rule("lk.transcript_confidence").source(SOURCE).outcome(OpenTelemetryMappingRule.Outcome.METADATA).build(),
+                OpenTelemetryMappingRule.builder()
+                        .rule("lk.transcription_delay").source(SOURCE).outcome(OpenTelemetryMappingRule.Outcome.METADATA).build(),
+                OpenTelemetryMappingRule.builder()
+                        .rule("lk.end_of_turn_delay").source(SOURCE).outcome(OpenTelemetryMappingRule.Outcome.METADATA).build(),
 
                 // Function Tool Attributes (with tool span type)
-                new OpenTelemetryMappingRule("lk.function_tool.name", false, "LiveKit",
-                        OpenTelemetryMappingRule.Outcome.METADATA, SpanType.tool),
-                new OpenTelemetryMappingRule("lk.function_tool.arguments", false, "LiveKit",
-                        OpenTelemetryMappingRule.Outcome.INPUT,
-                        SpanType.tool),
-                new OpenTelemetryMappingRule("lk.function_tool.output", false, "LiveKit",
-                        OpenTelemetryMappingRule.Outcome.OUTPUT, SpanType.tool),
-                new OpenTelemetryMappingRule("lk.function_tool.is_error", false, "LiveKit",
-                        OpenTelemetryMappingRule.Outcome.METADATA,
-                        SpanType.tool),
+                OpenTelemetryMappingRule.builder()
+                        .rule("lk.function_tool.name").source(SOURCE).outcome(OpenTelemetryMappingRule.Outcome.METADATA).spanType(SpanType.tool).build(),
+                OpenTelemetryMappingRule.builder()
+                        .rule("lk.function_tool.arguments").source(SOURCE).outcome(OpenTelemetryMappingRule.Outcome.INPUT).spanType(SpanType.tool).build(),
+                OpenTelemetryMappingRule.builder()
+                        .rule("lk.function_tool.output").source(SOURCE).outcome(OpenTelemetryMappingRule.Outcome.OUTPUT).spanType(SpanType.tool).build(),
+                OpenTelemetryMappingRule.builder()
+                        .rule("lk.function_tool.is_error").source(SOURCE).outcome(OpenTelemetryMappingRule.Outcome.METADATA).spanType(SpanType.tool).build(),
 
                 // EOU (End of Utterance) Detection
-                new OpenTelemetryMappingRule("lk.eou.probability", false, "LiveKit",
-                        OpenTelemetryMappingRule.Outcome.METADATA),
-                new OpenTelemetryMappingRule("lk.eou.unlikely_threshold", false, "LiveKit",
-                        OpenTelemetryMappingRule.Outcome.METADATA),
-                new OpenTelemetryMappingRule("lk.eou.endpointing_delay", false, "LiveKit",
-                        OpenTelemetryMappingRule.Outcome.METADATA),
-                new OpenTelemetryMappingRule("lk.eou.language", false, "LiveKit",
-                        OpenTelemetryMappingRule.Outcome.METADATA));
+                OpenTelemetryMappingRule.builder()
+                        .rule("lk.eou.probability").source(SOURCE).outcome(OpenTelemetryMappingRule.Outcome.METADATA).build(),
+                OpenTelemetryMappingRule.builder()
+                        .rule("lk.eou.unlikely_threshold").source(SOURCE).outcome(OpenTelemetryMappingRule.Outcome.METADATA).build(),
+                OpenTelemetryMappingRule.builder()
+                        .rule("lk.eou.endpointing_delay").source(SOURCE).outcome(OpenTelemetryMappingRule.Outcome.METADATA).build(),
+                OpenTelemetryMappingRule.builder()
+                        .rule("lk.eou.language").source(SOURCE).outcome(OpenTelemetryMappingRule.Outcome.METADATA).build());
     }
 }

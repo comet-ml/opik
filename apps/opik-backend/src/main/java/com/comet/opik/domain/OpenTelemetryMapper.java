@@ -103,9 +103,9 @@ public class OpenTelemetryMapper {
             var value = attribute.getValue();
 
             OpenTelemetryMappingRuleFactory.findRule(key).ifPresentOrElse(rule -> {
-                Optional.ofNullable(rule.spanType()).ifPresent(spanBuilder::type);
+                Optional.ofNullable(rule.getSpanType()).ifPresent(spanBuilder::type);
 
-                switch (rule.outcome()) {
+                switch (rule.getOutcome()) {
                     case MODEL :
                         spanBuilder.model(value.getStringValue());
                         break;
@@ -122,7 +122,7 @@ public class OpenTelemetryMapper {
                     case OUTPUT :
                     case METADATA :
                         ObjectNode node;
-                        node = switch (rule.outcome()) {
+                        node = switch (rule.getOutcome()) {
                             case INPUT -> input;
                             case OUTPUT -> output;
                             default -> metadata;
@@ -162,7 +162,7 @@ public class OpenTelemetryMapper {
             AnyValue value) {
         // usage might appear as single int values or an json object
         if (value.hasIntValue()) {
-            var actualKey = key.substring(rule.rule().length());
+            var actualKey = key.substring(rule.getRule().length());
             usage.put(USAGE_KEYS_MAPPING.getOrDefault(actualKey, actualKey), (int) value.getIntValue());
         } else {
             try {

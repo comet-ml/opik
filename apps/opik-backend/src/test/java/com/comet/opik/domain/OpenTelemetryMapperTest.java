@@ -9,8 +9,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.assertj.core.api.Assertions.assertThat;
 
 class OpenTelemetryMapperTest {
 
@@ -34,7 +33,7 @@ class OpenTelemetryMapperTest {
         var span = spanBuilder.build();
 
         // Verify thread_id is stored in metadata
-        assertTrue(span.metadata().has("thread_id"));
-        assertEquals("test-thread-123", span.metadata().get("thread_id").asText());
+        assertThat(span.metadata().has("thread_id")).isTrue();
+        assertThat(span.metadata().get("thread_id").asText()).isEqualTo("test-thread-123");
     }
 }

@@ -7,9 +7,9 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import static com.comet.opik.domain.mapping.OpenTelemetryMappingUtils.extractToJsonColumn;
-import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
+import static org.assertj.core.data.Offset.offset;
 
 public class OpenTelemetryMappingUtilsTest {
     private ObjectNode testNode;
@@ -27,24 +27,22 @@ public class OpenTelemetryMappingUtilsTest {
 
         extractToJsonColumn(testNode, "testKey", anyValue);
 
-        assertTrue(testNode.has("testKey"));
-        assertTrue(testNode.get("testKey").isObject());
-        assertEquals("value", testNode.get("testKey").get("key").asText());
+        assertThat(testNode.has("testKey")).isTrue();
+        assertThat(testNode.get("testKey").isObject()).isTrue();
+        assertThat(testNode.get("testKey").get("key").asText()).isEqualTo("value");
     }
 
     @Test
     void testExtractToJsonColumn_InvalidJsonString() {
-        // Test with invalid JSON string that starts with { but is malformed
+        // Test with an invalid JSON string that starts with { but is malformed
         String invalidJson = "Analyze this text";
         AnyValue anyValue = AnyValue.newBuilder().setStringValue(invalidJson).build();
 
         // Should not throw exception, should store as plain text
-        assertDoesNotThrow(() -> {
-            extractToJsonColumn(testNode, "testKey", anyValue);
-        });
+        assertThatCode(() -> extractToJsonColumn(testNode, "testKey", anyValue)).doesNotThrowAnyException();
 
-        assertTrue(testNode.has("testKey"));
-        assertEquals("Analyze this text", testNode.get("testKey").asText());
+        assertThat(testNode.has("testKey")).isTrue();
+        assertThat(testNode.get("testKey").asText()).isEqualTo("Analyze this text");
     }
 
     @Test
@@ -55,8 +53,8 @@ public class OpenTelemetryMappingUtilsTest {
 
         extractToJsonColumn(testNode, "testKey", anyValue);
 
-        assertTrue(testNode.has("testKey"));
-        assertEquals("This is a plain string", testNode.get("testKey").asText());
+        assertThat(testNode.has("testKey")).isTrue();
+        assertThat(testNode.get("testKey").asText()).isEqualTo("This is a plain string");
     }
 
     @Test
@@ -65,8 +63,8 @@ public class OpenTelemetryMappingUtilsTest {
 
         extractToJsonColumn(testNode, "testKey", anyValue);
 
-        assertTrue(testNode.has("testKey"));
-        assertEquals(42, testNode.get("testKey").asInt());
+        assertThat(testNode.has("testKey")).isTrue();
+        assertThat(testNode.get("testKey").asInt()).isEqualTo(42);
     }
 
     @Test
@@ -75,8 +73,8 @@ public class OpenTelemetryMappingUtilsTest {
 
         extractToJsonColumn(testNode, "testKey", anyValue);
 
-        assertTrue(testNode.has("testKey"));
-        assertEquals(3.14, testNode.get("testKey").asDouble(), 0.001);
+        assertThat(testNode.has("testKey")).isTrue();
+        assertThat(testNode.get("testKey").asDouble()).isEqualTo(3.14, offset(0.001));
     }
 
     @Test
@@ -85,8 +83,8 @@ public class OpenTelemetryMappingUtilsTest {
 
         extractToJsonColumn(testNode, "testKey", anyValue);
 
-        assertTrue(testNode.has("testKey"));
-        assertTrue(testNode.get("testKey").asBoolean());
+        assertThat(testNode.has("testKey")).isTrue();
+        assertThat(testNode.get("testKey").asBoolean()).isTrue();
     }
 
     @Test
@@ -99,11 +97,11 @@ public class OpenTelemetryMappingUtilsTest {
 
         extractToJsonColumn(testNode, "testKey", anyValue);
 
-        assertTrue(testNode.has("testKey"));
-        assertTrue(testNode.get("testKey").isArray());
-        assertEquals(2, testNode.get("testKey").size());
-        assertEquals("item1", testNode.get("testKey").get(0).asText());
-        assertEquals("item2", testNode.get("testKey").get(1).asText());
+        assertThat(testNode.has("testKey")).isTrue();
+        assertThat(testNode.get("testKey").isArray()).isTrue();
+        assertThat(testNode.get("testKey").size()).isEqualTo(2);
+        assertThat(testNode.get("testKey").get(0).asText()).isEqualTo("item1");
+        assertThat(testNode.get("testKey").get(1).asText()).isEqualTo("item2");
     }
 
     @Test
@@ -113,12 +111,10 @@ public class OpenTelemetryMappingUtilsTest {
         AnyValue anyValue = AnyValue.newBuilder().setStringValue(invalidJson).build();
 
         // Should not throw exception, should store as plain text
-        assertDoesNotThrow(() -> {
-            extractToJsonColumn(testNode, "testKey", anyValue);
-        });
+        assertThatCode(() -> extractToJsonColumn(testNode, "testKey", anyValue)).doesNotThrowAnyException();
 
-        assertTrue(testNode.has("testKey"));
-        assertEquals("{Analyze this text}", testNode.get("testKey").asText());
+        assertThat(testNode.has("testKey")).isTrue();
+        assertThat(testNode.get("testKey").asText()).isEqualTo("{Analyze this text}");
     }
 
     @Test
@@ -128,12 +124,10 @@ public class OpenTelemetryMappingUtilsTest {
         AnyValue anyValue = AnyValue.newBuilder().setStringValue(invalidJson).build();
 
         // Should not throw exception, should store as plain text
-        assertDoesNotThrow(() -> {
-            extractToJsonColumn(testNode, "testKey", anyValue);
-        });
+        assertThatCode(() -> extractToJsonColumn(testNode, "testKey", anyValue)).doesNotThrowAnyException();
 
-        assertTrue(testNode.has("testKey"));
-        assertEquals("[Analyze this text]", testNode.get("testKey").asText());
+        assertThat(testNode.has("testKey")).isTrue();
+        assertThat(testNode.get("testKey").asText()).isEqualTo("[Analyze this text]");
     }
 
     @Test
@@ -144,12 +138,10 @@ public class OpenTelemetryMappingUtilsTest {
         AnyValue anyValue = AnyValue.newBuilder().setStringValue(invalidJson).build();
 
         // Should not throw exception, should store as plain text
-        assertDoesNotThrow(() -> {
-            extractToJsonColumn(testNode, "testKey", anyValue);
-        });
+        assertThatCode(() -> extractToJsonColumn(testNode, "testKey", anyValue)).doesNotThrowAnyException();
 
-        assertTrue(testNode.has("testKey"));
-        assertEquals("Analyze", testNode.get("testKey").asText());
+        assertThat(testNode.has("testKey")).isTrue();
+        assertThat(testNode.get("testKey").asText()).isEqualTo("Analyze");
     }
 
     @Test
@@ -159,12 +151,10 @@ public class OpenTelemetryMappingUtilsTest {
         AnyValue anyValue = AnyValue.newBuilder().setStringValue(invalidJson).build();
 
         // Should not throw exception, should store as plain text
-        assertDoesNotThrow(() -> {
-            extractToJsonColumn(testNode, "testKey", anyValue);
-        });
+        assertThatCode(() -> extractToJsonColumn(testNode, "testKey", anyValue)).doesNotThrowAnyException();
 
-        assertTrue(testNode.has("testKey"));
-        assertEquals("Analyze this content", testNode.get("testKey").asText());
+        assertThat(testNode.has("testKey")).isTrue();
+        assertThat(testNode.get("testKey").asText()).isEqualTo("Analyze this content");
     }
 
     @Test
@@ -174,11 +164,9 @@ public class OpenTelemetryMappingUtilsTest {
         AnyValue anyValue = AnyValue.newBuilder().setStringValue(invalidJson).build();
 
         // Should not throw exception, should store as plain text
-        assertDoesNotThrow(() -> {
-            extractToJsonColumn(testNode, "testKey", anyValue);
-        });
+        assertThatCode(() -> extractToJsonColumn(testNode, "testKey", anyValue)).doesNotThrowAnyException();
 
-        assertTrue(testNode.has("testKey"));
-        assertEquals("{Analyze: \"value\"}", testNode.get("testKey").asText());
+        assertThat(testNode.has("testKey")).isTrue();
+        assertThat(testNode.get("testKey").asText()).isEqualTo("{Analyze: \"value\"}");
     }
 }

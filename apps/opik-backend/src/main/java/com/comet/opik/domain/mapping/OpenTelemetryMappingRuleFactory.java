@@ -11,8 +11,10 @@ import com.comet.opik.domain.mapping.otel.SmolagentsMappingRules;
 import lombok.experimental.UtilityClass;
 
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.stream.Stream;
 
 /**
  * Factory that provides access to all OpenTelemetry mapping rules organized by integration.
@@ -21,7 +23,7 @@ import java.util.Set;
 @UtilityClass
 public class OpenTelemetryMappingRuleFactory {
 
-    private static final List<OpenTelemetryMappingRule> ALL_RULES = java.util.stream.Stream.of(
+    private static final List<OpenTelemetryMappingRule> ALL_RULES = Stream.of(
             LogfireMappingRules.getRules(),
             GenAIMappingRules.getRules(),
             OpenInferenceMappingRules.getRules(),
@@ -54,17 +56,8 @@ public class OpenTelemetryMappingRuleFactory {
      */
     public static List<OpenTelemetryMappingRule> getRulesForIntegration(String integrationName) {
         return ALL_RULES.stream()
-                .filter(rule -> rule.source().equals(integrationName))
+                .filter(rule -> rule.getSource().equals(integrationName))
                 .toList();
-    }
-
-    /**
-     * Gets all registered rules.
-     *
-     * @return a list of all rules
-     */
-    public static List<OpenTelemetryMappingRule> getAllRules() {
-        return ALL_RULES;
     }
 
     /**
@@ -76,7 +69,10 @@ public class OpenTelemetryMappingRuleFactory {
      * @return true if the instrumentation is valid (not in the ignore list), false otherwise
      */
     public static boolean isValidInstrumentation(String name) {
-        Set<String> INTEGRATIONS_TO_IGNORE = Set.of("logfire");
+        if (Objects.isNull(name)) {
+            return false;
+        }
+        Set<String> INTEGRATIONS_TO_IGNORE = Set.of(LogfireMappingRules.SOURCE.toLowerCase());
         return !INTEGRATIONS_TO_IGNORE.contains(name.toLowerCase());
     }
 }

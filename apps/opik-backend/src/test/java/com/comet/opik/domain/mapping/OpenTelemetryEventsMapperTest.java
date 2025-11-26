@@ -12,9 +12,7 @@ import java.util.List;
 import static com.comet.opik.domain.mapping.OpenTelemetryEventsMapper.EVENT_ATTRIBUTES_KEY;
 import static com.comet.opik.domain.mapping.OpenTelemetryEventsMapper.METADATA_EVENTS_KEY;
 import static com.comet.opik.domain.mapping.OpenTelemetryEventsMapper.processEvents;
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.assertj.core.api.Assertions.assertThat;
 
 public class OpenTelemetryEventsMapperTest {
 
@@ -31,7 +29,7 @@ public class OpenTelemetryEventsMapperTest {
         processEvents(null, testNode);
 
         // Should not add events to metadata
-        assertFalse(testNode.has(METADATA_EVENTS_KEY));
+        assertThat(testNode.has(METADATA_EVENTS_KEY)).isFalse();
     }
 
     @Test
@@ -40,7 +38,7 @@ public class OpenTelemetryEventsMapperTest {
         processEvents(List.of(), testNode);
 
         // Should not add events to metadata
-        assertFalse(testNode.has(METADATA_EVENTS_KEY));
+        assertThat(testNode.has(METADATA_EVENTS_KEY)).isFalse();
     }
 
     @Test
@@ -54,15 +52,15 @@ public class OpenTelemetryEventsMapperTest {
         processEvents(List.of(event), testNode);
 
         // Verify events array was added
-        assertTrue(testNode.has(METADATA_EVENTS_KEY));
-        assertTrue(testNode.get(METADATA_EVENTS_KEY).isArray());
-        assertEquals(1, testNode.get(METADATA_EVENTS_KEY).size());
+        assertThat(testNode.has(METADATA_EVENTS_KEY)).isTrue();
+        assertThat(testNode.get(METADATA_EVENTS_KEY).isArray()).isTrue();
+        assertThat(testNode.get(METADATA_EVENTS_KEY).size()).isEqualTo(1);
 
         // Verify event structure
         var eventNode = testNode.get(METADATA_EVENTS_KEY).get(0);
-        assertEquals("test-event", eventNode.get(OpenTelemetryEventsMapper.EVENT_NAME_KEY).asText());
-        assertEquals(1234567890000000L, eventNode.get(OpenTelemetryEventsMapper.EVENT_TIME_UNIX_NANO_KEY).asLong());
-        assertFalse(eventNode.has(EVENT_ATTRIBUTES_KEY));
+        assertThat(eventNode.get(OpenTelemetryEventsMapper.EVENT_NAME_KEY).asText()).isEqualTo("test-event");
+        assertThat(eventNode.get(OpenTelemetryEventsMapper.EVENT_TIME_UNIX_NANO_KEY).asLong()).isEqualTo(1234567890000000L);
+        assertThat(eventNode.has(EVENT_ATTRIBUTES_KEY)).isFalse();
     }
 
     @Test
@@ -84,19 +82,19 @@ public class OpenTelemetryEventsMapperTest {
         processEvents(List.of(event), testNode);
 
         // Verify events array was added
-        assertTrue(testNode.has(METADATA_EVENTS_KEY));
-        assertEquals(1, testNode.get(METADATA_EVENTS_KEY).size());
+        assertThat(testNode.has(METADATA_EVENTS_KEY)).isTrue();
+        assertThat(testNode.get(METADATA_EVENTS_KEY).size()).isEqualTo(1);
 
         // Verify event structure
         var eventNode = testNode.get(METADATA_EVENTS_KEY).get(0);
-        assertEquals("test-event", eventNode.get(OpenTelemetryEventsMapper.EVENT_NAME_KEY).asText());
-        assertEquals(1234567890000000L, eventNode.get(OpenTelemetryEventsMapper.EVENT_TIME_UNIX_NANO_KEY).asLong());
+        assertThat(eventNode.get(OpenTelemetryEventsMapper.EVENT_NAME_KEY).asText()).isEqualTo("test-event");
+        assertThat(eventNode.get(OpenTelemetryEventsMapper.EVENT_TIME_UNIX_NANO_KEY).asLong()).isEqualTo(1234567890000000L);
 
         // Verify attributes
-        assertTrue(eventNode.has(EVENT_ATTRIBUTES_KEY));
+        assertThat(eventNode.has(EVENT_ATTRIBUTES_KEY)).isTrue();
         var attributes = eventNode.get(EVENT_ATTRIBUTES_KEY);
-        assertEquals("value1", attributes.get("attr1").asText());
-        assertEquals(42, attributes.get("attr2").asInt());
+        assertThat(attributes.get("attr1").asText()).isEqualTo("value1");
+        assertThat(attributes.get("attr2").asInt()).isEqualTo(42);
     }
 
     @Test
@@ -128,26 +126,26 @@ public class OpenTelemetryEventsMapperTest {
         processEvents(List.of(event1, event2, event3), testNode);
 
         // Verify events array was added
-        assertTrue(testNode.has(METADATA_EVENTS_KEY));
-        assertEquals(3, testNode.get(METADATA_EVENTS_KEY).size());
+        assertThat(testNode.has(METADATA_EVENTS_KEY)).isTrue();
+        assertThat(testNode.get(METADATA_EVENTS_KEY).size()).isEqualTo(3);
 
         // Verify first event
         var eventNode1 = testNode.get(METADATA_EVENTS_KEY).get(0);
-        assertEquals("event-1", eventNode1.get(OpenTelemetryEventsMapper.EVENT_NAME_KEY).asText());
-        assertEquals(1000000000L, eventNode1.get(OpenTelemetryEventsMapper.EVENT_TIME_UNIX_NANO_KEY).asLong());
-        assertEquals("value1", eventNode1.get(EVENT_ATTRIBUTES_KEY).get("key1").asText());
+        assertThat(eventNode1.get(OpenTelemetryEventsMapper.EVENT_NAME_KEY).asText()).isEqualTo("event-1");
+        assertThat(eventNode1.get(OpenTelemetryEventsMapper.EVENT_TIME_UNIX_NANO_KEY).asLong()).isEqualTo(1000000000L);
+        assertThat(eventNode1.get(EVENT_ATTRIBUTES_KEY).get("key1").asText()).isEqualTo("value1");
 
         // Verify second event (no attributes)
         var eventNode2 = testNode.get(METADATA_EVENTS_KEY).get(1);
-        assertEquals("event-2", eventNode2.get(OpenTelemetryEventsMapper.EVENT_NAME_KEY).asText());
-        assertEquals(2000000000L, eventNode2.get(OpenTelemetryEventsMapper.EVENT_TIME_UNIX_NANO_KEY).asLong());
-        assertFalse(eventNode2.has(EVENT_ATTRIBUTES_KEY));
+        assertThat(eventNode2.get(OpenTelemetryEventsMapper.EVENT_NAME_KEY).asText()).isEqualTo("event-2");
+        assertThat(eventNode2.get(OpenTelemetryEventsMapper.EVENT_TIME_UNIX_NANO_KEY).asLong()).isEqualTo(2000000000L);
+        assertThat(eventNode2.has(EVENT_ATTRIBUTES_KEY)).isFalse();
 
         // Verify third event
         var eventNode3 = testNode.get(METADATA_EVENTS_KEY).get(2);
-        assertEquals("event-3", eventNode3.get(OpenTelemetryEventsMapper.EVENT_NAME_KEY).asText());
-        assertEquals(3000000000L, eventNode3.get(OpenTelemetryEventsMapper.EVENT_TIME_UNIX_NANO_KEY).asLong());
-        assertEquals(123, eventNode3.get(EVENT_ATTRIBUTES_KEY).get("key3").asInt());
+        assertThat(eventNode3.get(OpenTelemetryEventsMapper.EVENT_NAME_KEY).asText()).isEqualTo("event-3");
+        assertThat(eventNode3.get(OpenTelemetryEventsMapper.EVENT_TIME_UNIX_NANO_KEY).asLong()).isEqualTo(3000000000L);
+        assertThat(eventNode3.get(EVENT_ATTRIBUTES_KEY).get("key3").asInt()).isEqualTo(123);
     }
 
     @Test
@@ -180,10 +178,10 @@ public class OpenTelemetryEventsMapperTest {
         var eventNode = testNode.get(METADATA_EVENTS_KEY).get(0);
         var attributes = eventNode.get(EVENT_ATTRIBUTES_KEY);
 
-        assertEquals("test-string", attributes.get("string_attr").asText());
-        assertEquals(42, attributes.get("int_attr").asInt());
-        assertEquals(3.14, attributes.get("double_attr").asDouble(), 0.001);
-        assertTrue(attributes.get("bool_attr").asBoolean());
+        assertThat(attributes.get("string_attr").asText()).isEqualTo("test-string");
+        assertThat(attributes.get("int_attr").asInt()).isEqualTo(42);
+        assertThat(attributes.get("double_attr").asDouble()).isEqualTo(3.14, org.assertj.core.data.Offset.offset(0.001));
+        assertThat(attributes.get("bool_attr").asBoolean()).isTrue();
     }
 
     @Test
@@ -203,8 +201,8 @@ public class OpenTelemetryEventsMapperTest {
         // Verify JSON attribute is parsed correctly
         var eventNode = testNode.get(METADATA_EVENTS_KEY).get(0);
         var attributes = eventNode.get(EVENT_ATTRIBUTES_KEY);
-        assertTrue(attributes.get("json_attr").isObject());
-        assertEquals("value", attributes.get("json_attr").get("nested").asText());
+        assertThat(attributes.get("json_attr").isObject()).isTrue();
+        assertThat(attributes.get("json_attr").get("nested").asText()).isEqualTo("value");
     }
 
     @Test
@@ -220,8 +218,8 @@ public class OpenTelemetryEventsMapperTest {
         processEvents(List.of(event), testNode);
 
         // Verify existing metadata is preserved
-        assertEquals("existing_value", testNode.get("existing_key").asText());
+        assertThat(testNode.get("existing_key").asText()).isEqualTo("existing_value");
         // Verify events were added
-        assertTrue(testNode.has(METADATA_EVENTS_KEY));
+        assertThat(testNode.has(METADATA_EVENTS_KEY)).isTrue();
     }
 }

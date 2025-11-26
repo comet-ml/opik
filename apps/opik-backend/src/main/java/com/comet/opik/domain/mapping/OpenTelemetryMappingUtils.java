@@ -3,6 +3,7 @@ package com.comet.opik.domain.mapping;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import io.opentelemetry.proto.common.v1.AnyValue;
+import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 
 import java.io.UncheckedIOException;
@@ -10,7 +11,7 @@ import java.io.UncheckedIOException;
 @Slf4j
 public class OpenTelemetryMappingUtils {
 
-    public static void extractToJsonColumn(ObjectNode node, String key, AnyValue value) {
+    public static void extractToJsonColumn(ObjectNode node, String key, @NonNull AnyValue value) {
         switch (value.getValueCase()) {
             case STRING_VALUE -> {
                 var stringValue = value.getStringValue();

@@ -1,22 +1,25 @@
 package com.comet.opik.domain.mapping.otel;
 
 import com.comet.opik.domain.mapping.OpenTelemetryMappingRule;
+import lombok.experimental.UtilityClass;
 
 import java.util.List;
 
 /**
  * Mapping rules for general/common attributes.
  */
+@UtilityClass
 public final class GeneralMappingRules {
 
-    private GeneralMappingRules() {
-        // Utility class
-    }
+    public static final String SOURCE = "General";
 
     public static List<OpenTelemetryMappingRule> getRules() {
         return List.of(
-                new OpenTelemetryMappingRule("input", true, "General", OpenTelemetryMappingRule.Outcome.INPUT),
-                new OpenTelemetryMappingRule("output", true, "General", OpenTelemetryMappingRule.Outcome.OUTPUT),
-                new OpenTelemetryMappingRule("thread_id", false, "General", OpenTelemetryMappingRule.Outcome.METADATA));
+                OpenTelemetryMappingRule.builder()
+                        .rule("input").isPrefix(true).source(SOURCE).outcome(OpenTelemetryMappingRule.Outcome.INPUT).build(),
+                OpenTelemetryMappingRule.builder()
+                        .rule("output").isPrefix(true).source(SOURCE).outcome(OpenTelemetryMappingRule.Outcome.OUTPUT).build(),
+                OpenTelemetryMappingRule.builder()
+                        .rule("thread_id").source(SOURCE).outcome(OpenTelemetryMappingRule.Outcome.METADATA).build());
     }
 }

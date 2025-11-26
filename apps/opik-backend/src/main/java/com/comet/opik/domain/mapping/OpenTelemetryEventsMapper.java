@@ -4,8 +4,10 @@ import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import io.opentelemetry.proto.trace.v1.Span;
 import lombok.experimental.UtilityClass;
+import org.apache.commons.collections4.CollectionUtils;
 
 import java.util.List;
+import java.util.Objects;
 
 /**
  * Mapper for processing OpenTelemetry span events and adding them to metadata.
@@ -41,9 +43,10 @@ public class OpenTelemetryEventsMapper {
      * @param metadata the metadata object where events will be added
      */
     public static void processEvents(List<Span.Event> events, ObjectNode metadata) {
-        if (events == null || events.isEmpty()) {
+        if (CollectionUtils.isEmpty(events)) {
             return;
         }
+        Objects.requireNonNull(metadata);
 
         var eventsArray = JsonUtils.createArrayNode();
         events.forEach(event -> {
@@ -52,12 +55,10 @@ public class OpenTelemetryEventsMapper {
             eventNode.put(EVENT_TIME_UNIX_NANO_KEY, event.getTimeUnixNano());
 
             // Process event attributes
-            if (!event.getAttributesList().isEmpty()) {
+            if (!CollectionUtils.isEmpty(event.getAttributesList())) {
                 var eventAttributes = JsonUtils.createObjectNode();
-                event.getAttributesList().forEach(attribute -> {
-                    OpenTelemetryMappingUtils.extractToJsonColumn(
-                            eventAttributes, attribute.getKey(), attribute.getValue());
-                });
+                event.getAttributesList().forEach(attribute -> OpenTelemetryMappingUtils.extractToJsonColumn(
+                        eventAttributes, attribute.getKey(), attribute.getValue()));
                 eventNode.set(EVENT_ATTRIBUTES_KEY, eventAttributes);
             }
 
