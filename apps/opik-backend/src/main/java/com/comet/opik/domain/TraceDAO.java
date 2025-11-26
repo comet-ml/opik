@@ -3346,6 +3346,21 @@ class TraceDAOImpl implements TraceDAO {
                 .singleOrEmpty();
     }
 
+    /**
+     * Retrieves a value from a database row, handling cases where columns may be absent.
+     * 
+     * <p>Some queries (e.g., count queries, filtered queries) may not include all columns
+     * in their result sets. This method safely handles missing columns by returning null
+     * when a column is excluded or doesn't exist in the result set metadata.
+     * 
+     * @param exclude Set of fields to exclude from retrieval (returns null if field is excluded)
+     * @param field The trace field being retrieved
+     * @param row The database row containing the data
+     * @param fieldName The database column name
+     * @param clazz The expected return type
+     * @param <T> The type of value to retrieve
+     * @return The value from the row, or null if the field is excluded or column doesn't exist
+     */
     private <T> T getValue(Set<Trace.TraceField> exclude, Trace.TraceField field, Row row, String fieldName,
             Class<T> clazz) {
         if (exclude.contains(field)) {

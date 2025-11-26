@@ -608,15 +608,15 @@ public class FilterQueryBuilder {
         } else if (filter.operator() == Operator.IS_NOT_EMPTY
                 && Set.of(FilterStrategy.FEEDBACK_SCORES_IS_EMPTY, FilterStrategy.SPAN_FEEDBACK_SCORES_IS_EMPTY)
                         .contains(filterStrategy)) {
-            return Optional.empty();
-        } else if (filter.operator() == Operator.IS_EMPTY && isFeedBackScore(filter)) {
-            return Optional.empty();
-        }
+                        return Optional.empty();
+        } else if (filter.operator() == Operator.IS_EMPTY && isFeedbackScore(filter)) {
+                    return Optional.empty();
+                }
 
         return Optional.ofNullable(FILTER_STRATEGY_MAP.get(filterStrategy));
     }
 
-    private static boolean isFeedBackScore(Filter filter) {
+    private static boolean isFeedbackScore(Filter filter) {
         Set<Field> feedbackScoreFields = Set.of(TraceField.FEEDBACK_SCORES, TraceField.SPAN_FEEDBACK_SCORES,
                 SpanField.FEEDBACK_SCORES, TraceThreadField.FEEDBACK_SCORES,
                 ExperimentsComparisonValidKnownField.FEEDBACK_SCORES);
