@@ -14,7 +14,7 @@ from typing import (
     NamedTuple,
 )
 
-from .. import context_storage, logging_messages
+from .. import context_storage, logging_messages, tracing_runtime_config
 from ..api_objects import opik_client, span, trace
 from ..types import DistributedTraceHeadersDict, ErrorInfoDict, SpanType
 from . import (
@@ -24,7 +24,6 @@ from . import (
     inspect_helpers,
     opik_args,
     span_creation_handler,
-    tracing_runtime_config,
 )
 
 LOGGER = logging.getLogger(__name__)
