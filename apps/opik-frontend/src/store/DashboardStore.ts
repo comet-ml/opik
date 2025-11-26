@@ -28,6 +28,8 @@ import {
 import { createWidgetFilterMap } from "@/lib/dashboard/search";
 import { migrateDashboardConfig } from "@/lib/dashboard/migrations";
 
+const EMPTY_CONFIG: BaseDashboardConfig = {};
+
 /**
  * Filtered widgets map type for search functionality
  */
@@ -150,7 +152,7 @@ export const useDashboardStore = create<DashboardStore<BaseDashboardConfig>>()(
         sections: initialDashboard.sections,
         version: initialDashboard.version,
         lastModified: initialDashboard.lastModified,
-        config: null,
+        config: EMPTY_CONFIG,
         search: "",
         onAddWidgetCallback: null,
         widgetResolver: null,
@@ -510,6 +512,7 @@ export const useDashboardStore = create<DashboardStore<BaseDashboardConfig>>()(
               sections: migratedDashboard.sections,
               version: migratedDashboard.version,
               lastModified: migratedDashboard.lastModified,
+              config: migratedDashboard.config,
             },
             false,
             "loadDashboardFromBackend",
@@ -522,6 +525,7 @@ export const useDashboardStore = create<DashboardStore<BaseDashboardConfig>>()(
             sections: state.sections,
             version: state.version,
             lastModified: state.lastModified,
+            config: state.config ?? EMPTY_CONFIG,
           };
         },
 
@@ -616,6 +620,9 @@ export const selectSetConfig = (state: DashboardStore<BaseDashboardConfig>) =>
   state.setConfig;
 export const selectClearConfig = (state: DashboardStore<BaseDashboardConfig>) =>
   state.clearConfig;
+export const selectClearDashboard = (
+  state: DashboardStore<BaseDashboardConfig>,
+) => state.clearDashboard;
 
 // Search selectors
 export const selectSearch = (state: DashboardStore<BaseDashboardConfig>) =>

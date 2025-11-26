@@ -54,30 +54,15 @@ const TextMarkdownWidget: React.FunctionComponent<
         title={widget.title}
         subtitle={widget.subtitle}
         actions={
-          <DashboardWidget.Actions>
-            <DashboardWidget.DeleteAction
-              sectionId={sectionId!}
-              widgetId={widgetId!}
-              widgetTitle={widget.title}
-            />
-            <DashboardWidget.EditAction
-              sectionId={sectionId!}
-              widgetId={widgetId!}
-            />
-            <DashboardWidget.DuplicateAction
-              sectionId={sectionId!}
-              widgetType={widget.type}
-              widgetTitle={widget.title}
-              widgetConfig={widget.config}
-            />
-            <DashboardWidget.MoveAction
-              sectionId={sectionId!}
-              widgetId={widgetId!}
-            />
-            <div className="h-4 w-px bg-border" />
-            <DashboardWidget.DragHandle />
-          </DashboardWidget.Actions>
+          <DashboardWidget.ActionsMenu
+            sectionId={sectionId!}
+            widgetId={widgetId!}
+            widgetType={widget.type}
+            widgetTitle={widget.title}
+            widgetConfig={widget.config}
+          />
         }
+        dragHandle={<DashboardWidget.DragHandle />}
       />
       <DashboardWidget.Content>{renderContent()}</DashboardWidget.Content>
     </DashboardWidget>

@@ -43,18 +43,19 @@ const DashboardSection: React.FunctionComponent<DashboardSectionProps> = ({
   const search = useDashboardStore(selectSearch);
   const isSearchMode = Boolean(search);
 
-  const { sectionTitle, sectionExpanded, widgetIds, layout } =
-    useDashboardStore(
-      useShallow((state) => {
-        const section = state.sections.find((s) => s.id === sectionId);
-        return {
-          sectionTitle: section?.title ?? "Untitled Section",
-          sectionExpanded: section?.expanded ?? false,
-          widgetIds: get(section, "widgets", []).map((w) => w.id),
-          layout: get(section, "layout", []),
-        };
-      }),
-    );
+  const { sectionTitle, sectionExpanded, widgets, layout } = useDashboardStore(
+    useShallow((state) => {
+      const section = state.sections.find((s) => s.id === sectionId);
+      return {
+        sectionTitle: section?.title ?? "Untitled Section",
+        sectionExpanded: section?.expanded ?? false,
+        widgets: get(section, "widgets", []),
+        layout: get(section, "layout", []),
+      };
+    }),
+  );
+
+  const widgetIds = useMemo(() => widgets.map((w) => w.id), [widgets]);
 
   const filteredWidgets = useMemo(() => {
     if (!widgetFilterMap) return widgetIds;
@@ -158,7 +159,7 @@ const DashboardSection: React.FunctionComponent<DashboardSectionProps> = ({
             <AccordionContent className="px-3 pb-3 pt-0">
               <DashboardWidgetGrid
                 sectionId={sectionId}
-                widgetIds={filteredWidgets}
+                widgets={widgets.filter((w) => filteredWidgets.includes(w.id))}
                 layout={layout}
               />
             </AccordionContent>

@@ -5,7 +5,6 @@ import { Plus } from "lucide-react";
 import { AddWidgetConfig, ChartMetricWidget } from "@/types/dashboard";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
-import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
 import {
   Accordion,
@@ -34,8 +33,6 @@ import { CUSTOM_FILTER_VALIDATION_REGEXP } from "@/constants/filters";
 import { useDashboardStore } from "@/store/DashboardStore";
 import { ProjectDashboardConfig } from "@/types/dashboard";
 import ProjectsSelectBox from "@/components/pages-shared/automations/ProjectsSelectBox";
-import MetricDateRangeSelect from "@/components/pages-shared/traces/MetricDateRangeSelect/MetricDateRangeSelect";
-import { DateRangeValue } from "@/components/shared/DateRangeSelect";
 
 type ProjectMetricsEditorProps = AddWidgetConfig & {
   onChange: (data: Partial<AddWidgetConfig>) => void;
@@ -157,11 +154,16 @@ const ProjectMetricsEditor: React.FC<ProjectMetricsEditorProps> = ({
   const widgetConfig = config as ChartMetricWidget["config"];
   const metricType = widgetConfig?.metricType || "";
   const chartType = widgetConfig?.chartType || "line";
-  const useGlobalDateRange = widgetConfig?.useGlobalDateRange ?? true;
   const localProjectId = widgetConfig?.projectId;
-  const localDateRange = widgetConfig?.dateRange;
-  const traceFilters = widgetConfig?.traceFilters || [];
-  const threadFilters = widgetConfig?.threadFilters || [];
+
+  const traceFilters = useMemo(
+    () => widgetConfig?.traceFilters || [],
+    [widgetConfig?.traceFilters],
+  );
+  const threadFilters = useMemo(
+    () => widgetConfig?.threadFilters || [],
+    [widgetConfig?.threadFilters],
+  );
 
   const projectConfig = useDashboardStore(
     (state) => state.config as ProjectDashboardConfig | null,
@@ -261,29 +263,11 @@ const ProjectMetricsEditor: React.FC<ProjectMetricsEditorProps> = ({
     });
   };
 
-  const handleUseGlobalDateRangeChange = (checked: boolean) => {
-    onChange({
-      config: {
-        ...config,
-        useGlobalDateRange: checked,
-      },
-    });
-  };
-
   const handleProjectChange = (projectId: string) => {
     onChange({
       config: {
         ...config,
         projectId,
-      },
-    });
-  };
-
-  const handleDateRangeChange = (dateRange: DateRangeValue) => {
-    onChange({
-      config: {
-        ...config,
-        dateRange,
       },
     });
   };
@@ -317,7 +301,7 @@ const ProjectMetricsEditor: React.FC<ProjectMetricsEditorProps> = ({
   }, [setFilters]);
 
   return (
-    <div className="flex h-full flex-col gap-4 overflow-auto p-4">
+    <>
       <div className="space-y-4">
         <div className="space-y-2">
           <Label htmlFor="widget-title">Widget title</Label>
@@ -368,34 +352,6 @@ const ProjectMetricsEditor: React.FC<ProjectMetricsEditorProps> = ({
             placeholder="Select chart type"
           />
         </div>
-
-        <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <div className="space-y-0.5">
-              <Label htmlFor="use-global-date-range">
-                Use dashboard date range
-              </Label>
-              <p className="text-xs text-muted-foreground">
-                Use global dashboard time settings
-              </p>
-            </div>
-            <Switch
-              id="use-global-date-range"
-              checked={useGlobalDateRange}
-              onCheckedChange={handleUseGlobalDateRangeChange}
-            />
-          </div>
-        </div>
-
-        {!useGlobalDateRange && (
-          <div className="space-y-2">
-            <Label htmlFor="date-range">Date range</Label>
-            <MetricDateRangeSelect
-              value={localDateRange || { from: new Date(), to: new Date() }}
-              onChangeValue={handleDateRangeChange}
-            />
-          </div>
-        )}
       </div>
 
       {metricType && (isTraceMetric || isThreadMetric) && (
@@ -434,7 +390,7 @@ const ProjectMetricsEditor: React.FC<ProjectMetricsEditorProps> = ({
           </AccordionItem>
         </Accordion>
       )}
-    </div>
+    </>
   );
 };
 
