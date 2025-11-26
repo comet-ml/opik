@@ -37,7 +37,8 @@ public class SlackWebhookPayloadMapper {
     public static final String BASE_URL_METADATA_KEY = "base_url";
     private static final String DEFAULT_BASE_URL = "http://localhost:5173";
 
-    private static final String METRICS_ALERT_DETAILS_TEMPLATE = "• *Current <type>:* <valuePrefix><metricValue><valueSuffix>\n" +
+    private static final String METRICS_ALERT_DETAILS_TEMPLATE = "• *Current <type>:* <valuePrefix><metricValue><valueSuffix>\n"
+            +
             "  *Threshold:* <valuePrefix><threshold><valueSuffix>\n" +
             "  *Time Window:* <windowDuration>\n" +
             "<if(feedbackScoreName)>  *Feedback Score:* `<feedbackScoreName>`\n<endif>" +
