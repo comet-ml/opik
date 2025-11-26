@@ -1,5 +1,5 @@
 import React from "react";
-import { CellContext } from "@tanstack/react-table";
+import { CellContext, TableMeta } from "@tanstack/react-table";
 
 import { ExperimentItem, ExperimentsCompare } from "@/types/datasets";
 import VerticallySplitCellWrapper, {
@@ -38,22 +38,17 @@ const CompareExperimentsFeedbackScoreCell: React.FC<
     feedbackScore,
   });
 
-  const tableMeta = context.table.options.meta as
-    | {
-        enableUserFeedbackEditing?: boolean;
-        showReasons?: boolean;
-        rowHeight?: ROW_HEIGHT;
-      }
-    | undefined;
+  const {
+    enableUserFeedbackEditing = false,
+    showReasons = false,
+    rowHeight = ROW_HEIGHT.small,
+  } = (context.table.options.meta ?? {}) as TableMeta<ExperimentsCompare>;
 
-  const enableUserFeedbackEditing =
+  const isEditingEnabled =
     experimentCompare.experiment_items.length === 1 &&
-    (tableMeta?.enableUserFeedbackEditing ?? false);
+    enableUserFeedbackEditing;
   const isUserFeedbackColumn =
-    enableUserFeedbackEditing &&
-    context.column.id === "feedback_scores_User feedback";
-  const showReasons = tableMeta?.showReasons ?? false;
-  const rowHeight = tableMeta?.rowHeight ?? ROW_HEIGHT.small;
+    isEditingEnabled && context.column.id === "feedback_scores_User feedback";
 
   const renderContent = (item: ExperimentItem | undefined) => {
     const feedbackScore = item?.feedback_scores?.find(
@@ -90,7 +85,6 @@ const CompareExperimentsFeedbackScoreCell: React.FC<
 
     const color = feedbackKey && colorMap ? colorMap[feedbackKey] : undefined;
 
-    // Check if we should show reasons inline
     const shouldShowInlineReasons =
       showReasons &&
       (rowHeight === ROW_HEIGHT.medium || rowHeight === ROW_HEIGHT.large) &&

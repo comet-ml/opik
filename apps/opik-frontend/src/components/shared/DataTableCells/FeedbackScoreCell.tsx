@@ -1,5 +1,5 @@
 import React, { useMemo } from "react";
-import { CellContext } from "@tanstack/react-table";
+import { CellContext, TableMeta } from "@tanstack/react-table";
 import { MessageSquareMore } from "lucide-react";
 import isNumber from "lodash/isNumber";
 import isFunction from "lodash/isFunction";
@@ -24,21 +24,13 @@ const FeedbackScoreCell = (context: CellContext<unknown, unknown>) => {
   const reason = feedbackScore?.reason;
   const row = context.row.original as BaseTraceData | Thread | Span;
 
-  // Get projectId, projectName, showReasons, and rowHeight from table meta
-  const tableMeta = context.table.options.meta as
-    | {
-        projectId?: string;
-        projectName?: string;
-        showReasons?: boolean;
-        rowHeight?: ROW_HEIGHT;
-        enableUserFeedbackEditing?: boolean;
-      }
-    | undefined;
-
-  const projectId = tableMeta?.projectId;
-  const projectName = tableMeta?.projectName;
-  const showReasons = tableMeta?.showReasons ?? false;
-  const rowHeight = tableMeta?.rowHeight ?? ROW_HEIGHT.small;
+  const {
+    projectId,
+    projectName,
+    showReasons = false,
+    rowHeight = ROW_HEIGHT.small,
+    enableUserFeedbackEditing = false,
+  } = (context.table.options.meta ?? {}) as TableMeta<unknown>;
 
   const { handleValueChange } = useFeedbackScoreInlineEdit({
     id: row.id,
@@ -70,13 +62,11 @@ const FeedbackScoreCell = (context: CellContext<unknown, unknown>) => {
     feedbackScore?.last_updated_at,
   ]);
 
-  const enableUserFeedbackEditing =
-    ((!isObjectThread(row) || row.status === ThreadStatus.INACTIVE) &&
-      tableMeta?.enableUserFeedbackEditing) ??
-    false;
+  const isEditingEnabled =
+    (!isObjectThread(row) || row.status === ThreadStatus.INACTIVE) &&
+    enableUserFeedbackEditing;
   const isUserFeedbackColumn =
-    enableUserFeedbackEditing &&
-    context.column.id === "feedback_scores_User feedback";
+    isEditingEnabled && context.column.id === "feedback_scores_User feedback";
 
   // Check if we should show reasons inline (when showReasons is true and row height is Medium or Large)
   const shouldShowInlineReasons =

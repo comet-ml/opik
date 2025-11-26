@@ -20,7 +20,6 @@ const FeedbackScoreReasonToggle: React.FC<FeedbackScoreReasonToggleProps> = ({
     const newShowReasons = !showReasons;
     setShowReasons(newShowReasons);
 
-    // If expanding reasons and row height is small, change to medium
     if (setHeight && newShowReasons && height === ROW_HEIGHT.small) {
       setHeight(ROW_HEIGHT.medium);
     }
@@ -34,7 +33,7 @@ const FeedbackScoreReasonToggle: React.FC<FeedbackScoreReasonToggleProps> = ({
       className="h-auto whitespace-nowrap p-0 text-sm leading-none hover:bg-transparent"
     >
       <MessageSquareText className="mr-1.5 size-3.5" />
-      {showReasons ? "Collapse reasons" : "Expand reasons"}
+      {`${showReasons ? "Collapse" : "Expand"} reasons`}
     </Button>
   );
 };

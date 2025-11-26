@@ -555,9 +555,10 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
       }));
   }, [feedbackScoresData?.scores]);
 
-  const dynamicColumnsIds = useMemo(() => {
-    return dynamicScoresColumns.map((c) => c.id);
-  }, [dynamicScoresColumns]);
+  const dynamicColumnsIds = useMemo(
+    () => dynamicScoresColumns.map((c) => c.id),
+    [dynamicScoresColumns],
+  );
 
   useDynamicColumnsCache({
     dynamicColumnsKey: DYNAMIC_COLUMNS_KEY,
@@ -578,9 +579,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
       (col) => col.id !== USER_FEEDBACK_COLUMN_ID,
     );
 
-    const allScoreColumns = [userFeedbackColumn, ...otherDynamicColumns];
-
-    return allScoreColumns.map(
+    return [userFeedbackColumn, ...otherDynamicColumns].map(
       ({ label, id, columnType }) =>
         ({
           id,
