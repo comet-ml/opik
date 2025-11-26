@@ -19,6 +19,8 @@ export OTEL_TRACE="${OTEL_TRACE:-off}"
 echo "Processing nginx.conf..."
 if [ -f /etc/nginx/nginx.conf ]; then
     TMP_FILE=$(mktemp)
-    envsubst < /etc/nginx/nginx.conf > "$TMP_FILE" && cat "$TMP_FILE" > /etc/nginx/nginx.conf
+    # Only substitute specific variables to avoid clobbering Nginx variables like $remote_addr
+    VARS='$NGINX_PID $FLUENT_BIT_HOST $FLUENT_BIT_PORT $OTEL_TRACE $OTEL_COLLECTOR_HOST $OTEL_COLLECTOR_PORT $OTEL_MODULE_LOAD'
+    envsubst "$VARS" < /etc/nginx/nginx.conf > "$TMP_FILE" && cat "$TMP_FILE" > /etc/nginx/nginx.conf
     rm "$TMP_FILE"
 fi
