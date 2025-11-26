@@ -41,6 +41,8 @@ class HotpotMultiHopAgent(SequencedOptimizableAgent):
         step_handlers = {
             "create_query_1": self._handle_search_1,
             "create_query_2": self._handle_search_2,
+            "summarize_1": self._handle_summarize_1,
+            "summarize_2": self._handle_summarize_2,
         }
 
         super().__init__(
@@ -71,7 +73,7 @@ class HotpotMultiHopAgent(SequencedOptimizableAgent):
                 ),
                 user=(
                     "Question: {question}\n\n"
-                    "Retrieved passages:\n{passages}\n\n"
+                    "Retrieved passages from first search:\n{passages_1}\n\n"
                     "Provide:\n"
                     "1. Summary: Key facts from passages\n"
                     "2. Gaps: What's still missing to answer the question"
@@ -97,7 +99,7 @@ class HotpotMultiHopAgent(SequencedOptimizableAgent):
                 user=(
                     "Question: {question}\n\n"
                     "First summary: {summary_1}\n\n"
-                    "New passages from second search:\n{passages}\n\n"
+                    "New passages from second search:\n{passages_2}\n\n"
                     "Provide an updated comprehensive summary."
                 ),
             ),
