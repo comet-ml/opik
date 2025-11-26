@@ -542,10 +542,6 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
       );
   }, [columns, selectedColumns]);
 
-  const allColumnsToExport = useMemo(() => {
-    return DEFAULT_COLUMNS.map((c) => c.id);
-  }, []);
-
   const activeRowId = threadId;
   const rowIndex = findIndex(rows, (row) => activeRowId === row.id);
 

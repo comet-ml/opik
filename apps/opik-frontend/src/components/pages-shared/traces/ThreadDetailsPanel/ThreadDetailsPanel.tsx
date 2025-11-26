@@ -30,7 +30,11 @@ import {
   COLUMN_TYPE,
   OnChangeFn,
 } from "@/types/shared";
-import { mapRowDataForExport } from "@/lib/traces/exportUtils";
+import {
+  mapRowDataForExport,
+  TRACE_EXPORT_COLUMNS,
+  THREAD_EXPORT_COLUMNS,
+} from "@/lib/traces/exportUtils";
 import { Trace } from "@/types/traces";
 import { Filter } from "@/types/filters";
 import { formatDate, formatDuration } from "@/lib/date";
@@ -242,39 +246,43 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
   };
 
   const exportColumns = useMemo(() => {
-    const baseColumns = [
-      "id",
-      "thread_model_id",
-      "name",
-      "start_time",
-      "end_time",
-      "duration",
-      "number_of_messages",
-      "total_estimated_cost",
-      "metadata",
-      "tags",
-      "status",
-    ];
-
     const feedbackScoreNames = uniq(
       (thread?.feedback_scores ?? []).map(
         (score) => `${COLUMN_FEEDBACK_SCORES_ID}.${score.name}`,
       ),
     );
 
-    return [...baseColumns, ...feedbackScoreNames];
+    return [...THREAD_EXPORT_COLUMNS, ...feedbackScoreNames];
   }, [thread]);
+
+  const traceExportColumns = useMemo(() => {
+    const feedbackScoreNames = uniq(
+      traces.reduce<string[]>((acc, trace) => {
+        return acc.concat(
+          (trace.feedback_scores ?? []).map(
+            (score) => `${COLUMN_FEEDBACK_SCORES_ID}.${score.name}`,
+          ),
+        );
+      }, []),
+    );
+
+    return [...TRACE_EXPORT_COLUMNS, ...feedbackScoreNames];
+  }, [traces]);
 
   const handleExportCSV = useCallback(async () => {
     try {
       if (!thread) return;
 
       const mappedData = await mapRowDataForExport([thread], exportColumns);
+      const mappedTraces = await mapRowDataForExport(
+        traces,
+        traceExportColumns,
+      );
 
       const dataWithConversationHistory = [
         {
           ...mappedData[0],
-          conversation_history: JSON.stringify(traces),
+          conversation_history: JSON.stringify(mappedTraces),
         },
       ];
 
@@ -294,7 +302,7 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
         variant: "destructive",
       });
     }
-  }, [thread, threadId, exportColumns, traces]);
+  }, [thread, threadId, exportColumns, traces, traceExportColumns]);
 
   const handleExportJSON = useCallback(async () => {
     try {
@@ -304,10 +312,14 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
         [thread],
         exportColumns,
       );
+      const mappedTraces = await mapRowDataForExport(
+        traces,
+        traceExportColumns,
+      );
 
       const dataWithConversationHistory = {
         ...mappedThreadData[0],
-        conversation_history: traces,
+        conversation_history: mappedTraces,
       };
 
       const fileName = `${threadId}-thread.json`;
@@ -330,7 +342,7 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
         variant: "destructive",
       });
     }
-  }, [thread, threadId, exportColumns, traces]);
+  }, [thread, threadId, exportColumns, traces, traceExportColumns]);
 
   const horizontalNavigation = useMemo(
     () =>

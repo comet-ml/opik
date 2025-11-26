@@ -3,6 +3,39 @@ import get from "lodash/get";
 import { Trace, Span, Thread } from "@/types/traces";
 import { COLUMN_FEEDBACK_SCORES_ID } from "@/types/shared";
 
+export const TRACE_EXPORT_COLUMNS = [
+  "id",
+  "name",
+  "type",
+  "start_time",
+  "end_time",
+  "duration",
+  "input",
+  "output",
+  "metadata",
+  "tags",
+  "error_info",
+  "usage",
+  "provider",
+  "model",
+  "total_estimated_cost",
+  "thread_id",
+] as const;
+
+export const THREAD_EXPORT_COLUMNS = [
+  "id",
+  "thread_model_id",
+  "name",
+  "start_time",
+  "end_time",
+  "duration",
+  "number_of_messages",
+  "total_estimated_cost",
+  "metadata",
+  "tags",
+  "status",
+] as const;
+
 export async function mapRowDataForExport(
   rows: Array<Trace | Span | Thread>,
   columnsToExport: string[],

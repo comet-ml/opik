@@ -831,10 +831,6 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
       );
   }, [columns, selectedColumns]);
 
-  const allColumnsToExport = useMemo(() => {
-    return columnData.map((c) => c.id);
-  }, [columnData]);
-
   const activeRowId = type === TRACE_DATA_TYPE.traces ? traceId : spanId;
   const rowIndex = findIndex(rows, (row) => activeRowId === row.id);
 

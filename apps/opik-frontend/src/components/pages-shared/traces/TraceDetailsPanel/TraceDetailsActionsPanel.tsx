@@ -216,7 +216,7 @@ const TraceDetailsActionsPanel: React.FunctionComponent<
       "provider",
       "model",
       "total_estimated_cost",
-      "thread_id"
+      "thread_id",
     ];
 
     const feedbackScoreNames = uniq(
