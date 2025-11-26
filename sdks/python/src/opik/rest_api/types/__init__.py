@@ -177,7 +177,11 @@ from .dataset_item_write import DatasetItemWrite
 from .dataset_item_write_source import DatasetItemWriteSource
 from .dataset_page_public import DatasetPagePublic
 from .dataset_public import DatasetPublic
+from .dataset_public_status import DatasetPublicStatus
 from .dataset_public_visibility import DatasetPublicVisibility
+from .dataset_status import DatasetStatus
+from .dataset_version_page_public import DatasetVersionPagePublic
+from .dataset_version_public import DatasetVersionPublic
 from .dataset_visibility import DatasetVisibility
 from .delete_attachments_request import DeleteAttachmentsRequest
 from .delete_attachments_request_entity_type import DeleteAttachmentsRequestEntityType
@@ -357,19 +361,25 @@ from .project_stats_summary_item import ProjectStatsSummaryItem
 from .project_visibility import ProjectVisibility
 from .prompt import Prompt
 from .prompt_detail import PromptDetail
+from .prompt_detail_template_structure import PromptDetailTemplateStructure
 from .prompt_page_public import PromptPagePublic
 from .prompt_public import PromptPublic
+from .prompt_public_template_structure import PromptPublicTemplateStructure
+from .prompt_template_structure import PromptTemplateStructure
 from .prompt_tokens_details import PromptTokensDetails
 from .prompt_type import PromptType
 from .prompt_version import PromptVersion
 from .prompt_version_detail import PromptVersionDetail
+from .prompt_version_detail_template_structure import PromptVersionDetailTemplateStructure
 from .prompt_version_detail_type import PromptVersionDetailType
 from .prompt_version_link import PromptVersionLink
 from .prompt_version_link_public import PromptVersionLinkPublic
 from .prompt_version_link_write import PromptVersionLinkWrite
 from .prompt_version_page_public import PromptVersionPagePublic
 from .prompt_version_public import PromptVersionPublic
+from .prompt_version_public_template_structure import PromptVersionPublicTemplateStructure
 from .prompt_version_public_type import PromptVersionPublicType
+from .prompt_version_template_structure import PromptVersionTemplateStructure
 from .prompt_version_type import PromptVersionType
 from .provider_api_key import ProviderApiKey
 from .provider_api_key_page_public import ProviderApiKeyPagePublic
@@ -613,7 +623,11 @@ __all__ = [
     "DatasetItemWriteSource",
     "DatasetPagePublic",
     "DatasetPublic",
+    "DatasetPublicStatus",
     "DatasetPublicVisibility",
+    "DatasetStatus",
+    "DatasetVersionPagePublic",
+    "DatasetVersionPublic",
     "DatasetVisibility",
     "DeleteAttachmentsRequest",
     "DeleteAttachmentsRequestEntityType",
@@ -784,19 +798,25 @@ __all__ = [
     "ProjectVisibility",
     "Prompt",
     "PromptDetail",
+    "PromptDetailTemplateStructure",
     "PromptPagePublic",
     "PromptPublic",
+    "PromptPublicTemplateStructure",
+    "PromptTemplateStructure",
     "PromptTokensDetails",
     "PromptType",
     "PromptVersion",
     "PromptVersionDetail",
+    "PromptVersionDetailTemplateStructure",
     "PromptVersionDetailType",
     "PromptVersionLink",
     "PromptVersionLinkPublic",
     "PromptVersionLinkWrite",
     "PromptVersionPagePublic",
     "PromptVersionPublic",
+    "PromptVersionPublicTemplateStructure",
     "PromptVersionPublicType",
+    "PromptVersionTemplateStructure",
     "PromptVersionType",
     "ProviderApiKey",
     "ProviderApiKeyPagePublic",

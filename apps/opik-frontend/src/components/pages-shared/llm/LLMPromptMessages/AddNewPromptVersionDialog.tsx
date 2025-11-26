@@ -32,7 +32,11 @@ import PromptsSelectBox from "@/components/pages-shared/llm/PromptsSelectBox/Pro
 import { useBooleanTimeoutState } from "@/hooks/useBooleanTimeoutState";
 import { useCodemirrorTheme } from "@/hooks/useCodemirrorTheme";
 import { isValidJsonObject, safelyParseJSON } from "@/lib/utils";
-import { PromptVersion, PromptWithLatestVersion } from "@/types/prompts";
+import {
+  PromptVersion,
+  PromptWithLatestVersion,
+  PROMPT_TEMPLATE_STRUCTURE,
+} from "@/types/prompts";
 import usePromptById from "@/api/prompts/usePromptById";
 import usePromptCreateMutation from "@/api/prompts/usePromptCreateMutation";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
@@ -48,6 +52,8 @@ type AddNewPromptVersionDialogProps = {
   setOpen: (open: boolean) => void;
   prompt?: PromptWithLatestVersion;
   template: string;
+  templateStructure?: PROMPT_TEMPLATE_STRUCTURE;
+  defaultName?: string;
   metadata?: object;
   onSave: (version: PromptVersion) => void;
 };
@@ -57,6 +63,8 @@ const AddNewPromptVersionDialog: React.FC<AddNewPromptVersionDialogProps> = ({
   setOpen,
   prompt,
   template,
+  templateStructure = PROMPT_TEMPLATE_STRUCTURE.TEXT,
+  defaultName = "",
   metadata: providedMetadata,
   onSave,
 }) => {
@@ -66,7 +74,7 @@ const AddNewPromptVersionDialog: React.FC<AddNewPromptVersionDialogProps> = ({
 
   const [metadata, setMetadata] = useState(extractMetadata(prompt));
   const [description, setDescription] = useState("");
-  const [name, setName] = useState("");
+  const [name, setName] = useState(defaultName);
   const [changeDescription, setChangeDescription] = useState("");
 
   const [showInvalidJSON, setShowInvalidJSON] = useBooleanTimeoutState({});
@@ -85,6 +93,13 @@ const AddNewPromptVersionDialog: React.FC<AddNewPromptVersionDialogProps> = ({
   useEffect(() => {
     setPromptId(prompt?.id);
   }, [prompt?.id]);
+
+  useEffect(() => {
+    // Reset name to defaultName when dialog opens
+    if (open) {
+      setName(defaultName);
+    }
+  }, [open, defaultName]);
 
   const selectedPrompt = useMemo(() => {
     return !promptId
@@ -124,6 +139,7 @@ const AddNewPromptVersionDialog: React.FC<AddNewPromptVersionDialogProps> = ({
           template,
           changeDescription,
           ...(finalMetadata && { metadata: finalMetadata }),
+          ...(templateStructure && { templateStructure }),
           onSuccess: (data) => onSave(data),
         });
 
@@ -135,6 +151,7 @@ const AddNewPromptVersionDialog: React.FC<AddNewPromptVersionDialogProps> = ({
           prompt: {
             name,
             template,
+            template_structure: templateStructure,
             ...(finalMetadata && { metadata: finalMetadata }),
             ...(description && { description }),
           },
@@ -165,6 +182,7 @@ const AddNewPromptVersionDialog: React.FC<AddNewPromptVersionDialogProps> = ({
               clearable={false}
               refetchOnMount={true}
               asNewOption={true}
+              filterByTemplateStructure={templateStructure}
             />
             {isEdit ? (
               <Description>

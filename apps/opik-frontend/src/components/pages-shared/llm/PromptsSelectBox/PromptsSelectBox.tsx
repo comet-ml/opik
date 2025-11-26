@@ -1,5 +1,5 @@
 import React, { useCallback, useMemo, useState } from "react";
-import { Database, FileTerminal, Plus, X } from "lucide-react";
+import { Database, Plus, X } from "lucide-react";
 import isFunction from "lodash/isFunction";
 
 import useAppStore from "@/store/AppStore";
@@ -9,6 +9,7 @@ import { Separator } from "@/components/ui/separator";
 import LoadableSelectBox from "@/components/shared/LoadableSelectBox/LoadableSelectBox";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import usePromptsList from "@/api/prompts/usePromptsList";
+import { PROMPT_TEMPLATE_STRUCTURE } from "@/types/prompts";
 
 const DEFAULT_LOADED_PROMPTS = 1000;
 const MAX_LOADED_PROMPTS = 10000;
@@ -21,6 +22,7 @@ interface PromptsSelectBoxProps {
   clearable?: boolean;
   refetchOnMount?: boolean;
   asNewOption?: boolean;
+  filterByTemplateStructure?: PROMPT_TEMPLATE_STRUCTURE;
 }
 
 const PromptsSelectBox: React.FC<PromptsSelectBoxProps> = ({
@@ -30,6 +32,7 @@ const PromptsSelectBox: React.FC<PromptsSelectBoxProps> = ({
   clearable = true,
   refetchOnMount = false,
   asNewOption = false,
+  filterByTemplateStructure,
 }) => {
   const [open, setOpen] = useState(false);
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
@@ -53,11 +56,17 @@ const PromptsSelectBox: React.FC<PromptsSelectBoxProps> = ({
   );
 
   const promptsOptions = useMemo(() => {
-    return prompts.map(({ name, id }) => ({
+    const filteredPrompts = filterByTemplateStructure
+      ? prompts.filter(
+          (p) => p.template_structure === filterByTemplateStructure,
+        )
+      : prompts;
+
+    return filteredPrompts.map(({ name, id }) => ({
       label: name,
       value: id,
     }));
-  }, [prompts]);
+  }, [prompts, filterByTemplateStructure]);
 
   const promptsTotal = promptsData?.total ?? 0;
 
@@ -82,12 +91,23 @@ const PromptsSelectBox: React.FC<PromptsSelectBoxProps> = ({
         </div>
       ) : (
         <div className="flex w-full items-center text-light-slate">
-          <FileTerminal className="mr-2 size-4" />
-          <span className="truncate font-normal">Load a prompt</span>
+          <Database className="mr-2 size-4" />
+          <span className="truncate font-normal">
+            {filterByTemplateStructure === PROMPT_TEMPLATE_STRUCTURE.CHAT
+              ? "Load chat prompt"
+              : "Load a prompt"}
+          </span>
         </div>
       ),
-    [asNewOption],
+    [asNewOption, filterByTemplateStructure],
   );
+
+  let searchPlaceholder = "Search";
+  if (filterByTemplateStructure === PROMPT_TEMPLATE_STRUCTURE.CHAT) {
+    searchPlaceholder = "Search chat prompt";
+  } else if (filterByTemplateStructure === PROMPT_TEMPLATE_STRUCTURE.TEXT) {
+    searchPlaceholder = "Search text prompt";
+  }
 
   const actionPanel = useMemo(() => {
     return asNewOption ? (
@@ -113,6 +133,7 @@ const PromptsSelectBox: React.FC<PromptsSelectBoxProps> = ({
         options={promptsOptions}
         value={value ?? (asNewOption ? NEW_PROMPT_VALUE : "")}
         placeholder={placeholder}
+        searchPlaceholder={searchPlaceholder}
         onChange={onValueChange}
         open={open}
         onOpenChange={onOpenChangeHandler}

@@ -12,7 +12,7 @@ import isEqual from "fast-deep-equal";
 
 import { OnChangeFn } from "@/types/shared";
 import { LLMMessage, MessageContent } from "@/types/llm";
-import { PromptVersion } from "@/types/prompts";
+import { PromptVersion, PROMPT_TEMPLATE_STRUCTURE } from "@/types/prompts";
 import { PLAYGROUND_SELECTED_DATASET_KEY } from "@/constants/llm";
 import { Separator } from "@/components/ui/separator";
 import { Button } from "@/components/ui/button";
@@ -31,6 +31,7 @@ import {
   getTextFromMessageContent,
   convertMessageToMessagesJson,
   parsePromptVersionContent,
+  parseChatTemplateToLLMMessages,
 } from "@/lib/llm";
 
 type ConfirmType = "load" | "reset" | "save";
@@ -46,6 +47,12 @@ export interface ImprovePromptConfig {
 type LLMPromptLibraryActionsProps = {
   message: LLMMessage;
   onChangeMessage: (changes: Partial<LLMMessage>) => void;
+  onReplaceWithChatPrompt?: (
+    messages: LLMMessage[],
+    promptId: string,
+    promptVersionId: string,
+  ) => void;
+  onClearOtherPromptLinks?: () => void;
   setIsLoading: OnChangeFn<boolean>;
   setIsHoldActionsVisible: OnChangeFn<boolean>;
   improvePromptConfig?: ImprovePromptConfig;
@@ -54,6 +61,8 @@ type LLMPromptLibraryActionsProps = {
 const LLMPromptMessageActions: React.FC<LLMPromptLibraryActionsProps> = ({
   message,
   onChangeMessage,
+  onReplaceWithChatPrompt,
+  onClearOtherPromptLinks,
   setIsLoading,
   setIsHoldActionsVisible,
   improvePromptConfig,
@@ -254,13 +263,47 @@ const LLMPromptMessageActions: React.FC<LLMPromptLibraryActionsProps> = ({
       selectedPromptIdRef.current === promptData?.id
     ) {
       selectedPromptIdRef.current = undefined;
+
+      const template = promptData.latest_version?.template ?? "";
+      const versionId = promptData.latest_version?.id;
+      const isChatPrompt =
+        promptData.template_structure === PROMPT_TEMPLATE_STRUCTURE.CHAT;
+
+      // If it's a chat prompt and we have the callback, replace all messages
+      if (isChatPrompt && onReplaceWithChatPrompt && template) {
+        const newMessages = parseChatTemplateToLLMMessages(template, {
+          promptId: promptData.id,
+          promptVersionId: versionId,
+          useTimestamp: true,
+        });
+
+        if (newMessages.length > 0) {
+          onReplaceWithChatPrompt(newMessages, promptData.id, versionId || "");
+          setIsLoading(false);
+          return;
+        }
+      }
+
+      // For string prompts or if chat prompt parsing failed, update just this message
+      // and clear prompt links from other messages
+      if (onClearOtherPromptLinks) {
+        onClearOtherPromptLinks();
+      }
       onChangeMessage({
         content: parsePromptVersionContent(promptData.latest_version),
         promptVersionId: promptData.latest_version?.id,
+        promptId: promptData.id,
       });
       setIsLoading(false);
     }
-  }, [onChangeMessage, promptData, promptId, setIsLoading]);
+  }, [
+    onChangeMessage,
+    promptData,
+    promptId,
+    setIsLoading,
+    onReplaceWithChatPrompt,
+    onClearOtherPromptLinks,
+  ]);
 
   return (
     <>
@@ -312,6 +355,7 @@ const LLMPromptMessageActions: React.FC<LLMPromptLibraryActionsProps> = ({
               }
             }}
             onOpenChange={onPromptSelectBoxOpenChange}
+            filterByTemplateStructure={PROMPT_TEMPLATE_STRUCTURE.TEXT}
           />
         </div>
         <TooltipWrapper content="Discard changes">
