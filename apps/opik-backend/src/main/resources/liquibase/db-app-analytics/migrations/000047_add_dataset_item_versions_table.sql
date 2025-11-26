@@ -2,7 +2,7 @@
 --changeset idoberko2:000047_add_dataset_item_versions_table
 --comment: Create dataset_item_versions table for immutable dataset version snapshots
 
-CREATE TABLE IF NOT EXISTS ${ANALYTICS_DB_DATABASE_NAME}.dataset_item_versions
+CREATE TABLE IF NOT EXISTS ${ANALYTICS_DB_DATABASE_NAME}.dataset_item_versions ON CLUSTER '{cluster}'
 (
     id                  FixedString(36),
     draft_item_id       FixedString(36),
@@ -25,14 +25,10 @@ ENGINE = ReplicatedReplacingMergeTree('/clickhouse/tables/{shard}/${ANALYTICS_DB
 ORDER BY (workspace_id, dataset_id, version_id, id)
 SETTINGS index_granularity = 8192;
 
---rollback DROP TABLE IF EXISTS ${ANALYTICS_DB_DATABASE_NAME}.dataset_item_versions;
-
---changeset idoberko2:000047_add_data_hash_to_dataset_items
---comment: Add materialized data_hash column to dataset_items for efficient diff comparison with draft
-
 -- Add data_hash to dataset_items (draft items) for version comparison
 ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.dataset_items ON CLUSTER '{cluster}'
     ADD COLUMN data_hash UInt64 MATERIALIZED xxHash64(toString(data));
 
+--rollback DROP TABLE IF EXISTS ${ANALYTICS_DB_DATABASE_NAME}.dataset_item_versions ON CLUSTER '{cluster}';
 --rollback ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.dataset_items ON CLUSTER '{cluster}' DROP COLUMN data_hash;
 
