@@ -35,10 +35,26 @@ type FeedbackScoresEditorFooterProps = {
   entityCopy: string;
 };
 
-const FeedbackScoresEditorHeader: React.FC = () => {
+type FeedbackScoresEditorHeaderProps = {
+  isTrace?: boolean;
+  isThread?: boolean;
+};
+
+const FeedbackScoresEditorHeader: React.FC<FeedbackScoresEditorHeaderProps> = ({
+  isTrace = false,
+  isThread = false,
+}) => {
+  let title = "Your scores";
+  if (isThread) {
+    title = "Your thread scores";
+  } else if (isTrace) {
+    title = "Your trace scores";
+  } else {
+    title = "Your span scores";
+  }
   return (
     <div className="flex items-center gap-1 pb-2">
-      <span className="comet-body-s-accented truncate">Your scores</span>
+      <span className="comet-body-s-accented truncate">{title}</span>
       <ExplainerIcon {...EXPLAINERS_MAP[EXPLAINER_ID.what_is_human_review]} />
     </div>
   );
