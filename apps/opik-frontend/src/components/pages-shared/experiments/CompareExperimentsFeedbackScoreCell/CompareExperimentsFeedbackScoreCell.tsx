@@ -93,7 +93,7 @@ const CompareExperimentsFeedbackScoreCell: React.FC<
     return (
       <div
         className={cn(
-          "flex h-4 w-full items-center justify-end gap-1 flex-wrap",
+          "flex h-4 w-full items-center justify-end gap-1 flex-wrap overflow-hidden",
           isUserFeedbackColumn && "group",
         )}
       >
@@ -104,7 +104,7 @@ const CompareExperimentsFeedbackScoreCell: React.FC<
           onValueChange={handleValueChange}
         />
         {shouldShowInlineReasons ? (
-          <span className="break-words text-xs text-muted-foreground">
+          <span className="line-clamp-3 break-words text-xs text-muted-foreground">
             {reasons.map((r) => r.reason).join(", ")}
           </span>
         ) : (

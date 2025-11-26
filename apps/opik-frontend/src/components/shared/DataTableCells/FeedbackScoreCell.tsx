@@ -77,7 +77,10 @@ const FeedbackScoreCell = (context: CellContext<unknown, unknown>) => {
     <CellWrapper
       metadata={context.column.columnDef.meta}
       tableMetadata={context.table.options.meta}
-      className={cn("gap-1 flex-wrap", isUserFeedbackColumn && "group")}
+      className={cn(
+        "gap-1 flex-wrap overflow-hidden",
+        isUserFeedbackColumn && "group",
+      )}
     >
       <FeedbackScoreCellValue
         feedbackScore={feedbackScore}
@@ -86,7 +89,7 @@ const FeedbackScoreCell = (context: CellContext<unknown, unknown>) => {
       />
 
       {shouldShowInlineReasons ? (
-        <span className="break-words text-xs text-muted-foreground">
+        <span className="line-clamp-3 break-words text-xs text-muted-foreground">
           {reasons.map((r) => r.reason).join(", ")}
         </span>
       ) : (
