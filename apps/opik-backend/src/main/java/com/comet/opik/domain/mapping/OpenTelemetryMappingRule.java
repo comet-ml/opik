@@ -11,7 +11,7 @@ import lombok.NonNull;
  */
 @Data
 @Builder
-public class OpenTelemetryMappingRule{
+public class OpenTelemetryMappingRule {
     @NonNull String rule;
     /** true if the rule matches by prefix, false for exact match */
     boolean isPrefix;

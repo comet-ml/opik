@@ -16,6 +16,7 @@ public final class SmolagentsMappingRules {
     public static List<OpenTelemetryMappingRule> getRules() {
         return List.of(
                 OpenTelemetryMappingRule.builder()
-                        .rule("smolagents.").isPrefix(true).source(SOURCE).outcome(OpenTelemetryMappingRule.Outcome.METADATA).build());
+                        .rule("smolagents.").isPrefix(true).source(SOURCE)
+                        .outcome(OpenTelemetryMappingRule.Outcome.METADATA).build());
     }
 }

@@ -16,9 +16,11 @@ public final class GeneralMappingRules {
     public static List<OpenTelemetryMappingRule> getRules() {
         return List.of(
                 OpenTelemetryMappingRule.builder()
-                        .rule("input").isPrefix(true).source(SOURCE).outcome(OpenTelemetryMappingRule.Outcome.INPUT).build(),
+                        .rule("input").isPrefix(true).source(SOURCE).outcome(OpenTelemetryMappingRule.Outcome.INPUT)
+                        .build(),
                 OpenTelemetryMappingRule.builder()
-                        .rule("output").isPrefix(true).source(SOURCE).outcome(OpenTelemetryMappingRule.Outcome.OUTPUT).build(),
+                        .rule("output").isPrefix(true).source(SOURCE).outcome(OpenTelemetryMappingRule.Outcome.OUTPUT)
+                        .build(),
                 OpenTelemetryMappingRule.builder()
                         .rule("thread_id").source(SOURCE).outcome(OpenTelemetryMappingRule.Outcome.METADATA).build());
     }

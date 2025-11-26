@@ -19,22 +19,31 @@ public final class GenAIMappingRules {
                 OpenTelemetryMappingRule.builder()
                         .rule("gen_ai.prompt").source(SOURCE).outcome(OpenTelemetryMappingRule.Outcome.INPUT).build(),
                 OpenTelemetryMappingRule.builder()
-                        .rule("gen_ai.completion").source(SOURCE).outcome(OpenTelemetryMappingRule.Outcome.OUTPUT).build(),
+                        .rule("gen_ai.completion").source(SOURCE).outcome(OpenTelemetryMappingRule.Outcome.OUTPUT)
+                        .build(),
                 OpenTelemetryMappingRule.builder()
-                        .rule("gen_ai.request_model").source(SOURCE).outcome(OpenTelemetryMappingRule.Outcome.MODEL).spanType(SpanType.llm).build(),
+                        .rule("gen_ai.request_model").source(SOURCE).outcome(OpenTelemetryMappingRule.Outcome.MODEL)
+                        .spanType(SpanType.llm).build(),
                 OpenTelemetryMappingRule.builder()
-                        .rule("gen_ai.response_model").source(SOURCE).outcome(OpenTelemetryMappingRule.Outcome.MODEL).spanType(SpanType.llm).build(),
+                        .rule("gen_ai.response_model").source(SOURCE).outcome(OpenTelemetryMappingRule.Outcome.MODEL)
+                        .spanType(SpanType.llm).build(),
                 OpenTelemetryMappingRule.builder()
-                        .rule("gen_ai.request.model").source(SOURCE).outcome(OpenTelemetryMappingRule.Outcome.MODEL).spanType(SpanType.llm).build(),
+                        .rule("gen_ai.request.model").source(SOURCE).outcome(OpenTelemetryMappingRule.Outcome.MODEL)
+                        .spanType(SpanType.llm).build(),
                 OpenTelemetryMappingRule.builder()
-                        .rule("gen_ai.response.model").source(SOURCE).outcome(OpenTelemetryMappingRule.Outcome.MODEL).spanType(SpanType.llm).build(),
+                        .rule("gen_ai.response.model").source(SOURCE).outcome(OpenTelemetryMappingRule.Outcome.MODEL)
+                        .spanType(SpanType.llm).build(),
                 OpenTelemetryMappingRule.builder()
-                        .rule("gen_ai.system").source(SOURCE).outcome(OpenTelemetryMappingRule.Outcome.PROVIDER).spanType(SpanType.llm).build(),
+                        .rule("gen_ai.system").source(SOURCE).outcome(OpenTelemetryMappingRule.Outcome.PROVIDER)
+                        .spanType(SpanType.llm).build(),
                 OpenTelemetryMappingRule.builder()
-                        .rule("gen_ai.usage.").isPrefix(true).source(SOURCE).outcome(OpenTelemetryMappingRule.Outcome.USAGE).spanType(SpanType.llm).build(),
+                        .rule("gen_ai.usage.").isPrefix(true).source(SOURCE)
+                        .outcome(OpenTelemetryMappingRule.Outcome.USAGE).spanType(SpanType.llm).build(),
                 OpenTelemetryMappingRule.builder()
-                        .rule("gen_ai.request.").isPrefix(true).source(SOURCE).outcome(OpenTelemetryMappingRule.Outcome.INPUT).build(),
+                        .rule("gen_ai.request.").isPrefix(true).source(SOURCE)
+                        .outcome(OpenTelemetryMappingRule.Outcome.INPUT).build(),
                 OpenTelemetryMappingRule.builder()
-                        .rule("gen_ai.response").isPrefix(true).source(SOURCE).outcome(OpenTelemetryMappingRule.Outcome.OUTPUT).build());
+                        .rule("gen_ai.response").isPrefix(true).source(SOURCE)
+                        .outcome(OpenTelemetryMappingRule.Outcome.OUTPUT).build());
     }
 }

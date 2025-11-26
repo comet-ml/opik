@@ -13,6 +13,7 @@ import static com.comet.opik.domain.mapping.OpenTelemetryEventsMapper.EVENT_ATTR
 import static com.comet.opik.domain.mapping.OpenTelemetryEventsMapper.METADATA_EVENTS_KEY;
 import static com.comet.opik.domain.mapping.OpenTelemetryEventsMapper.processEvents;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.offset;
 
 public class OpenTelemetryEventsMapperTest {
 
@@ -59,7 +60,8 @@ public class OpenTelemetryEventsMapperTest {
         // Verify event structure
         var eventNode = testNode.get(METADATA_EVENTS_KEY).get(0);
         assertThat(eventNode.get(OpenTelemetryEventsMapper.EVENT_NAME_KEY).asText()).isEqualTo("test-event");
-        assertThat(eventNode.get(OpenTelemetryEventsMapper.EVENT_TIME_UNIX_NANO_KEY).asLong()).isEqualTo(1234567890000000L);
+        assertThat(eventNode.get(OpenTelemetryEventsMapper.EVENT_TIME_UNIX_NANO_KEY).asLong())
+                .isEqualTo(1234567890000000L);
         assertThat(eventNode.has(EVENT_ATTRIBUTES_KEY)).isFalse();
     }
 
@@ -88,7 +90,8 @@ public class OpenTelemetryEventsMapperTest {
         // Verify event structure
         var eventNode = testNode.get(METADATA_EVENTS_KEY).get(0);
         assertThat(eventNode.get(OpenTelemetryEventsMapper.EVENT_NAME_KEY).asText()).isEqualTo("test-event");
-        assertThat(eventNode.get(OpenTelemetryEventsMapper.EVENT_TIME_UNIX_NANO_KEY).asLong()).isEqualTo(1234567890000000L);
+        assertThat(eventNode.get(OpenTelemetryEventsMapper.EVENT_TIME_UNIX_NANO_KEY).asLong())
+                .isEqualTo(1234567890000000L);
 
         // Verify attributes
         assertThat(eventNode.has(EVENT_ATTRIBUTES_KEY)).isTrue();
@@ -180,7 +183,7 @@ public class OpenTelemetryEventsMapperTest {
 
         assertThat(attributes.get("string_attr").asText()).isEqualTo("test-string");
         assertThat(attributes.get("int_attr").asInt()).isEqualTo(42);
-        assertThat(attributes.get("double_attr").asDouble()).isEqualTo(3.14, org.assertj.core.data.Offset.offset(0.001));
+        assertThat(attributes.get("double_attr").asDouble()).isEqualTo(3.14, offset(0.001));
         assertThat(attributes.get("bool_attr").asBoolean()).isTrue();
     }
 
