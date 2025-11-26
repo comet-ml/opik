@@ -77,7 +77,6 @@ import { ChartData } from "@/components/pages-shared/experiments/FeedbackScoresC
 import GroupsButton from "@/components/shared/GroupsButton/GroupsButton";
 import useQueryParamAndLocalStorageState from "@/hooks/useQueryParamAndLocalStorageState";
 import TextCell from "@/components/shared/DataTableCells/TextCell";
-import FeedbackScoreReasonToggle from "@/components/shared/FeedbackScoreReasonToggle/FeedbackScoreReasonToggle";
 
 const STORAGE_KEY_PREFIX = "experiments";
 const PAGINATION_SIZE_KEY = "experiments-pagination-size";
@@ -359,13 +358,12 @@ const ExperimentsPage: React.FC = () => {
     resizeConfig,
     columnPinningConfig,
     groupingConfig,
-    buildColumnSections,
+    columnSections,
     selectedColumns,
     setSelectedColumns,
     columnsOrder,
     setColumnsOrder,
     groupFieldNames,
-    scoresColumnsData,
   } = useExperimentsTableConfig({
     storageKeyPrefix: STORAGE_KEY_PREFIX,
     defaultColumns: DEFAULT_COLUMNS,
@@ -378,24 +376,9 @@ const ExperimentsPage: React.FC = () => {
     actionsCell: ExperimentRowActionsCell,
     sortedColumns,
     setSortedColumns,
+    showReasons,
+    setShowReasons,
   });
-
-  const reasonsAction = useMemo(
-    () => (
-      <FeedbackScoreReasonToggle
-        showReasons={showReasons}
-        setShowReasons={setShowReasons}
-        scoresColumnsData={scoresColumnsData}
-        selectedColumns={selectedColumns}
-      />
-    ),
-    [showReasons, setShowReasons, scoresColumnsData, selectedColumns],
-  );
-
-  const columnSections = useMemo(
-    () => buildColumnSections(reasonsAction),
-    [buildColumnSections, reasonsAction],
-  );
 
   const handleRowClick = useCallback(
     (row: GroupedExperiment) => {

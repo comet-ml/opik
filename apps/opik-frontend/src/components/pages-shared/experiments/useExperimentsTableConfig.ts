@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import React, { useMemo } from "react";
 import {
   ColumnSort,
   RowSelectionState,
@@ -18,7 +18,9 @@ import {
   COLUMN_TYPE,
   COLUMN_DATASET_ID,
   COLUMN_METADATA_ID,
+  ROW_HEIGHT,
 } from "@/types/shared";
+import FeedbackScoreReasonToggle from "@/components/shared/FeedbackScoreReasonToggle/FeedbackScoreReasonToggle";
 import { convertColumnDataToColumn, isColumnSortable } from "@/lib/table";
 import {
   buildGroupFieldName,
@@ -54,6 +56,10 @@ export type UseExperimentsTableConfigProps<T> = {
   actionsCell?: ColumnDefTemplate<CellContext<T, unknown>>;
   sortedColumns: ColumnSort[];
   setSortedColumns: OnChangeFn<ColumnSort[]>;
+  showReasons?: boolean;
+  setShowReasons?: (show: boolean) => void;
+  height?: ROW_HEIGHT | string | null | undefined;
+  setHeight?: (height: ROW_HEIGHT) => void;
 };
 
 export const useExperimentsTableConfig = <
@@ -72,6 +78,10 @@ export const useExperimentsTableConfig = <
   actionsCell,
   sortedColumns,
   setSortedColumns,
+  showReasons,
+  setShowReasons,
+  height,
+  setHeight,
 }: UseExperimentsTableConfigProps<T>) => {
   const [selectedColumns, setSelectedColumns] = useLocalStorageState<string[]>(
     `${storageKeyPrefix}-selected-columns`,
@@ -298,17 +308,36 @@ export const useExperimentsTableConfig = <
     };
   }, [groupFieldNames]);
 
-  const buildColumnSections = useMemo(
-    () => (reasonsAction?: React.ReactNode) => [
+  const columnSections = useMemo(
+    () => [
       {
         title: "Feedback scores",
         columns: scoresColumnsData,
         order: scoresColumnsOrder,
         onOrderChange: setScoresColumnsOrder,
-        action: reasonsAction,
+        action:
+          showReasons !== undefined && setShowReasons
+            ? React.createElement(FeedbackScoreReasonToggle, {
+                showReasons,
+                setShowReasons,
+                height,
+                setHeight,
+                scoresColumnsData,
+                selectedColumns,
+              })
+            : undefined,
       },
     ],
-    [scoresColumnsData, scoresColumnsOrder, setScoresColumnsOrder],
+    [
+      scoresColumnsData,
+      scoresColumnsOrder,
+      setScoresColumnsOrder,
+      showReasons,
+      setShowReasons,
+      height,
+      setHeight,
+      selectedColumns,
+    ],
   );
 
   return {
@@ -334,6 +363,6 @@ export const useExperimentsTableConfig = <
     resizeConfig,
     columnPinningConfig,
     groupingConfig,
-    buildColumnSections,
+    columnSections,
   };
 };
