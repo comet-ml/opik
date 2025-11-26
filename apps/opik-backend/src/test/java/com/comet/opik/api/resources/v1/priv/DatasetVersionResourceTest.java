@@ -241,7 +241,7 @@ class DatasetVersionResourceTest {
             assertThat(version.changeDescription()).isEqualTo(versionCreate.changeDescription());
             assertThat(version.createdBy()).isEqualTo(USER);
             assertThat(version.createdAt()).isNotNull();
-            assertThat(version.itemsCount()).isEqualTo(3);
+            assertThat(version.itemsTotal()).isEqualTo(3);
             assertThat(version.itemsAdded()).isEqualTo(3);
             assertThat(version.itemsModified()).isEqualTo(0);
             assertThat(version.itemsDeleted()).isEqualTo(0);
@@ -612,7 +612,7 @@ class DatasetVersionResourceTest {
             var version = datasetResourceClient.commitVersion(datasetId, versionCreate, API_KEY, TEST_WORKSPACE);
 
             // Then - Verify version was created with correct statistics
-            assertThat(version.itemsCount()).isEqualTo(3);
+            assertThat(version.itemsTotal()).isEqualTo(3);
             assertThat(version.itemsAdded()).isEqualTo(3); // First version, all items are new
             assertThat(version.itemsModified()).isEqualTo(0);
             assertThat(version.itemsDeleted()).isEqualTo(0);
@@ -680,7 +680,7 @@ class DatasetVersionResourceTest {
                     API_KEY,
                     TEST_WORKSPACE);
 
-            assertThat(version1.itemsCount()).isEqualTo(3);
+            assertThat(version1.itemsTotal()).isEqualTo(3);
             assertThat(version1.itemsAdded()).isEqualTo(3);
 
             // Get created items to obtain their IDs
@@ -708,7 +708,7 @@ class DatasetVersionResourceTest {
                     TEST_WORKSPACE);
 
             // Then - Verify diff statistics
-            assertThat(version2.itemsCount()).isEqualTo(4); // 3 - 1 + 2 = 4 items
+            assertThat(version2.itemsTotal()).isEqualTo(4); // 3 - 1 + 2 = 4 items
             assertThat(version2.itemsAdded()).isEqualTo(2);
             assertThat(version2.itemsDeleted()).isEqualTo(1);
 

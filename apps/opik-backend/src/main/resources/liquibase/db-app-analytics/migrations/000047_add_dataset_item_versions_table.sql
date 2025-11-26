@@ -1,5 +1,5 @@
 --liquibase formatted sql
---changeset idoberko2:add_dataset_item_versions_table
+--changeset idoberko2:000047_add_dataset_item_versions_table
 --comment: Create dataset_item_versions table for immutable dataset version snapshots
 
 CREATE TABLE IF NOT EXISTS ${ANALYTICS_DB_DATABASE_NAME}.dataset_item_versions
@@ -12,6 +12,7 @@ CREATE TABLE IF NOT EXISTS ${ANALYTICS_DB_DATABASE_NAME}.dataset_item_versions
     source              Enum8('unknown' = 0, 'sdk' = 1, 'manual' = 2, 'span' = 3, 'trace' = 4),
     trace_id            String DEFAULT '',
     span_id             String DEFAULT '',
+    tags                Array(String) DEFAULT [],
     created_at          DateTime64(9, 'UTC') DEFAULT now64(9),
     version_created_at  DateTime64(9, 'UTC') DEFAULT now64(9),
     last_updated_at     DateTime64(9, 'UTC') DEFAULT now64(9),

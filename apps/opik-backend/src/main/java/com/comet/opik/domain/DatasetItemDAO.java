@@ -792,6 +792,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                 source,
                 trace_id,
                 span_id,
+                tags,
                 created_at,
                 version_created_at,
                 workspace_id,
@@ -809,6 +810,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                          :source<item.index>,
                          :traceId<item.index>,
                          :spanId<item.index>,
+                         :tags<item.index>,
                          parseDateTime64BestEffort(:createdAt<item.index>, 9),
                          now64(9),
                          :workspace_id,
@@ -832,6 +834,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                 source,
                 trace_id,
                 span_id,
+                tags,
                 created_at,
                 last_updated_at,
                 created_by,
@@ -1691,8 +1694,8 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
             var statement = connection.createStatement(sql);
 
             return makeMonoContextAware((userName, workspaceId) -> {
-                statement.bind("datasetId", datasetId);
-                statement.bind("versionId", versionId);
+                statement.bind("datasetId", datasetId.toString());
+                statement.bind("versionId", versionId.toString());
                 statement.bind("workspace_id", workspaceId);
 
                 for (int i = 0; i < items.size(); i++) {
@@ -1702,12 +1705,15 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                     // Generate new UUID for versioned item (immutable snapshot gets fresh ID)
                     UUID versionedItemId = idGenerator.generateId();
 
-                    statement.bind("id" + i, versionedItemId);
-                    statement.bind("draftItemId" + i, item.id()); // Store original draft item ID
+                    statement.bind("id" + i, versionedItemId.toString());
+                    statement.bind("draftItemId" + i, item.id().toString()); // Store original draft item ID
                     statement.bind("source" + i, item.source().getValue());
                     statement.bind("traceId" + i, DatasetItemResultMapper.getOrDefault(item.traceId()));
                     statement.bind("spanId" + i, DatasetItemResultMapper.getOrDefault(item.spanId()));
                     statement.bind("data" + i, DatasetItemResultMapper.getOrDefault(data));
+                    statement.bind("tags" + i, Optional.ofNullable(item.tags())
+                            .map(tags -> tags.toArray(String[]::new))
+                            .orElse(new String[0]));
                     statement.bind("createdAt" + i, item.createdAt().toString());
                     statement.bind("createdBy" + i, Optional.ofNullable(item.createdBy()).orElse(userName));
                     statement.bind("lastUpdatedBy" + i, Optional.ofNullable(item.lastUpdatedBy()).orElse(userName));
@@ -1732,8 +1738,8 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
 
         return asyncTemplate.stream(connection -> {
             var statement = connection.createStatement(SELECT_ALL_VERSIONED_ITEMS)
-                    .bind("versionId", versionId)
-                    .bind("datasetId", datasetId);
+                    .bind("versionId", versionId.toString())
+                    .bind("datasetId", datasetId.toString());
 
             Segment segment = startSegment(DATASET_ITEMS, CLICKHOUSE, "select_all_versioned_items");
 
@@ -1788,8 +1794,8 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                     }
 
                     var selectStatement = connection.createStatement(selectTemplate.render())
-                            .bind("datasetId", datasetItemSearchCriteria.datasetId())
-                            .bind("versionId", versionId)
+                            .bind("datasetId", datasetItemSearchCriteria.datasetId().toString())
+                            .bind("versionId", versionId.toString())
                             .bind("limit", size)
                             .bind("offset", (page - 1) * size);
 
@@ -1827,8 +1833,8 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
             }
 
             var statement = connection.createStatement(countTemplate.render())
-                    .bind("datasetId", datasetId)
-                    .bind("versionId", versionId);
+                    .bind("datasetId", datasetId.toString())
+                    .bind("versionId", versionId.toString());
 
             // Bind filter parameters if present
             if (CollectionUtils.isNotEmpty(filters)) {
