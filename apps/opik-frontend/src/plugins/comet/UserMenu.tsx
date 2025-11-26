@@ -121,6 +121,9 @@ const UserMenu = () => {
 
   const isAcademic = organization?.academic;
 
+  const isLLMOnlyOrganization =
+    organization?.role === ORGANIZATION_ROLE_TYPE.opik;
+
   const handleChangeOrganization = (newOrganization: Organization) => {
     const newOrganizationWorkspaces = userInvitedWorkspaces.filter(
       (workspace) => workspace.organizationId === newOrganization.id,
@@ -177,6 +180,10 @@ const UserMenu = () => {
   };
 
   const renderAppSelector = () => {
+    if (isLLMOnlyOrganization) {
+      return null;
+    }
+
     return (
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
