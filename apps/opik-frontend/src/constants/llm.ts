@@ -28,18 +28,24 @@ export const DEFAULT_OPEN_AI_CONFIGS = {
   TOP_P: 1,
   FREQUENCY_PENALTY: 0,
   PRESENCE_PENALTY: 0,
+  THROTTLING: 0,
+  MAX_CONCURRENT_REQUESTS: 5,
 };
 
 export const DEFAULT_ANTHROPIC_CONFIGS = {
   TEMPERATURE: 0,
   MAX_COMPLETION_TOKENS: 4000,
   TOP_P: 1,
+  THROTTLING: 0,
+  MAX_CONCURRENT_REQUESTS: 5,
 };
 
 export const DEFAULT_GEMINI_CONFIGS = {
   TEMPERATURE: 0,
   MAX_COMPLETION_TOKENS: 4000,
   TOP_P: 1,
+  THROTTLING: 0,
+  MAX_CONCURRENT_REQUESTS: 5,
 };
 
 export const DEFAULT_OPEN_ROUTER_CONFIGS = {
@@ -52,12 +58,16 @@ export const DEFAULT_OPEN_ROUTER_CONFIGS = {
   REPETITION_PENALTY: 1,
   MIN_P: 0,
   TOP_A: 0,
+  THROTTLING: 0,
+  MAX_CONCURRENT_REQUESTS: 5,
 };
 
 export const DEFAULT_VERTEX_AI_CONFIGS = {
   TEMPERATURE: 0,
   MAX_COMPLETION_TOKENS: 1024,
   TOP_P: 1,
+  THROTTLING: 0,
+  MAX_CONCURRENT_REQUESTS: 5,
 };
 
 export const DEFAULT_CUSTOM_CONFIGS = {
@@ -67,6 +77,8 @@ export const DEFAULT_CUSTOM_CONFIGS = {
   FREQUENCY_PENALTY: 0,
   PRESENCE_PENALTY: 0,
   CUSTOM_PARAMETERS: null,
+  THROTTLING: 0,
+  MAX_CONCURRENT_REQUESTS: 5,
 };
 
 // Reasoning models that require temperature = 1.0
@@ -74,6 +86,7 @@ export const DEFAULT_CUSTOM_CONFIGS = {
 export const REASONING_MODELS = [
   // GPT-5 family
   PROVIDER_MODEL_TYPE.GPT_5,
+  PROVIDER_MODEL_TYPE.GPT_5_1,
   PROVIDER_MODEL_TYPE.GPT_5_MINI,
   PROVIDER_MODEL_TYPE.GPT_5_NANO,
   PROVIDER_MODEL_TYPE.GPT_5_CHAT_LATEST,
@@ -84,6 +97,15 @@ export const REASONING_MODELS = [
   PROVIDER_MODEL_TYPE.GPT_O3_MINI,
   PROVIDER_MODEL_TYPE.GPT_O4_MINI,
 ] as const;
+
+// Thinking level options for Gemini 3 Pro models
+export const THINKING_LEVEL_OPTIONS: Array<{
+  label: string;
+  value: "low" | "high";
+}> = [
+  { label: "Low", value: "low" },
+  { label: "High", value: "high" },
+];
 
 export const LLM_PROMPT_CUSTOM_TRACE_TEMPLATE: LLMPromptTemplate = {
   label: "Custom LLM-as-judge",

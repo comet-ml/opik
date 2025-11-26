@@ -378,7 +378,6 @@ class GepaOptimizer(BaseOptimizer):
 
             try:
                 import gepa
-                import inspect
             except Exception as exc:  # pragma: no cover
                 raise ImportError("gepa package is required for GepaOptimizer") from exc
 
@@ -419,14 +418,8 @@ class GepaOptimizer(BaseOptimizer):
                     "logger": logger_instance,
                 }
 
-                optimize_sig = None
-                try:
-                    optimize_sig = inspect.signature(gepa.optimize)
-                except Exception:
-                    optimize_sig = None
-
-                if optimize_sig and "stop_callbacks" not in optimize_sig.parameters:
-                    kwargs_gepa["max_metric_calls"] = max_metric_calls
+                # Always pass max_metric_calls so external GEPA respects our budget.
+                kwargs_gepa["max_metric_calls"] = max_metric_calls
 
                 gepa_result = gepa.optimize(**kwargs_gepa)
 

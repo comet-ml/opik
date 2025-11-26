@@ -51,7 +51,6 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
         seed: Random seed for reproducibility
     """
 
-    DEFAULT_ROUNDS = 10
     DEFAULT_MAX_ITERATIONS = 5
     DEFAULT_CONVERGENCE_THRESHOLD = 0.01  # Stop if improvement is less than 1%
 
