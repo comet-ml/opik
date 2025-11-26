@@ -27,6 +27,8 @@ export type FeedbackScoreValueByAuthorMap = Record<
     category_name?: string;
     source: FEEDBACK_SCORE_TYPE;
     last_updated_at: string;
+    span_type?: string;
+    span_id?: string;
   }
 >;
 
@@ -76,6 +78,7 @@ export interface Trace extends BaseTraceData {
   project_id: string;
   workspace_name?: string;
   visibility_mode?: TRACE_VISIBILITY_MODE;
+  span_feedback_scores?: TraceFeedbackScore[];
 }
 
 export enum SPAN_TYPE {

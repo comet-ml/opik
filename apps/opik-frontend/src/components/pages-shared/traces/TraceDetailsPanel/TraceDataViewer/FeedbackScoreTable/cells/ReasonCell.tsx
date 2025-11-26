@@ -24,9 +24,14 @@ const ReasonCell = (
         },
       ];
 
-  const reasonsList = reasons.map((reason) => reason.reason).join(", ");
+  // Filter out empty reasons and "<no reason>" placeholders
+  const filteredReasons = reasons.filter(
+    (r) => r.reason && r.reason.trim() && r.reason !== "<no reason>",
+  );
 
-  if (reasons.length === 0) {
+  const reasonsList = filteredReasons.map((reason) => reason.reason).join(", ");
+
+  if (filteredReasons.length === 0) {
     return null;
   }
 
