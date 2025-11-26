@@ -21,4 +21,5 @@ export interface DatasetPublic {
     lastCreatedExperimentAt?: Date;
     mostRecentOptimizationAt?: Date;
     lastCreatedOptimizationAt?: Date;
+    status?: OpikApi.DatasetPublicStatus;
 }
