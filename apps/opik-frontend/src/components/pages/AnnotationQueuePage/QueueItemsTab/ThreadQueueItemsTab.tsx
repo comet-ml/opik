@@ -14,6 +14,7 @@ import {
   RowSelectionState,
 } from "@tanstack/react-table";
 import isNumber from "lodash/isNumber";
+import { MessageSquareText } from "lucide-react";
 
 import {
   COLUMN_COMMENTS_ID,
@@ -44,6 +45,7 @@ import Loader from "@/components/shared/Loader/Loader";
 import SearchInput from "@/components/shared/SearchInput/SearchInput";
 import FiltersButton from "@/components/shared/FiltersButton/FiltersButton";
 import { Separator } from "@/components/ui/separator";
+import { Button } from "@/components/ui/button";
 import DataTableRowHeightSelector from "@/components/shared/DataTableRowHeightSelector/DataTableRowHeightSelector";
 import ColumnsButton from "@/components/shared/ColumnsButton/ColumnsButton";
 import DataTable from "@/components/shared/DataTable/DataTable";
@@ -249,6 +251,13 @@ const ThreadQueueItemsTab: React.FunctionComponent<
     queryParamConfig: StringParam,
     syncQueryWithLocalStorageOnInit: true,
   });
+
+  const [showReasons, setShowReasons] = useLocalStorageState<boolean>(
+    "queue-thread-show-reasons",
+    {
+      defaultValue: false,
+    },
+  );
 
   const [filters = [], setFilters] = useQueryParam(
     "thread_filters",
@@ -472,6 +481,16 @@ const ThreadQueueItemsTab: React.FunctionComponent<
     [columnsWidth, setColumnsWidth],
   );
 
+  const handleToggleReasons = useCallback(() => {
+    const newShowReasons = !showReasons;
+    setShowReasons(newShowReasons);
+
+    // If expanding reasons and row height is small, change to medium
+    if (newShowReasons && height === ROW_HEIGHT.small) {
+      setHeight(ROW_HEIGHT.medium);
+    }
+  }, [showReasons, setShowReasons, height, setHeight]);
+
   const columnSections = useMemo(() => {
     return [
       {
@@ -479,9 +498,26 @@ const ThreadQueueItemsTab: React.FunctionComponent<
         columns: scoresColumnsData,
         order: scoresColumnsOrder,
         onOrderChange: setScoresColumnsOrder,
+        action: (
+          <Button
+            variant="ghost"
+            size="xs"
+            onClick={handleToggleReasons}
+            className="h-6 text-xs"
+          >
+            <MessageSquareText className="mr-1 size-3" />
+            {showReasons ? "Collapse reasons" : "Expand reasons"}
+          </Button>
+        ),
       },
     ];
-  }, [scoresColumnsData, scoresColumnsOrder, setScoresColumnsOrder]);
+  }, [
+    scoresColumnsData,
+    scoresColumnsOrder,
+    setScoresColumnsOrder,
+    showReasons,
+    handleToggleReasons,
+  ]);
 
   if (isPending) {
     return <Loader />;
@@ -554,6 +590,9 @@ const ThreadQueueItemsTab: React.FunctionComponent<
         getRowId={getRowId}
         rowHeight={height as ROW_HEIGHT}
         columnPinning={DEFAULT_COLUMN_PINNING}
+        meta={{
+          showReasons,
+        }}
         noData={<DataTableNoData title={noDataText} />}
         TableWrapper={PageBodyStickyTableWrapper}
         stickyHeader

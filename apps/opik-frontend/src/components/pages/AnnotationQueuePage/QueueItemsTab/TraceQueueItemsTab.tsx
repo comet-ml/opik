@@ -16,6 +16,7 @@ import {
 import isObject from "lodash/isObject";
 import isNumber from "lodash/isNumber";
 import get from "lodash/get";
+import { MessageSquareText } from "lucide-react";
 
 import {
   COLUMN_COMMENTS_ID,
@@ -46,6 +47,7 @@ import Loader from "@/components/shared/Loader/Loader";
 import SearchInput from "@/components/shared/SearchInput/SearchInput";
 import FiltersButton from "@/components/shared/FiltersButton/FiltersButton";
 import { Separator } from "@/components/ui/separator";
+import { Button } from "@/components/ui/button";
 import DataTableRowHeightSelector from "@/components/shared/DataTableRowHeightSelector/DataTableRowHeightSelector";
 import ColumnsButton from "@/components/shared/ColumnsButton/ColumnsButton";
 import DataTable from "@/components/shared/DataTable/DataTable";
@@ -280,6 +282,13 @@ const TraceQueueItemsTab: React.FC<TraceQueueItemsTabProps> = ({
     queryParamConfig: StringParam,
     syncQueryWithLocalStorageOnInit: true,
   });
+
+  const [showReasons, setShowReasons] = useLocalStorageState<boolean>(
+    "queue-trace-show-reasons",
+    {
+      defaultValue: false,
+    },
+  );
 
   const [filters = [], setFilters] = useQueryParam("trace_filters", JsonParam, {
     updateType: "replaceIn",
@@ -517,6 +526,16 @@ const TraceQueueItemsTab: React.FC<TraceQueueItemsTabProps> = ({
     [columnsWidth, setColumnsWidth],
   );
 
+  const handleToggleReasons = useCallback(() => {
+    const newShowReasons = !showReasons;
+    setShowReasons(newShowReasons);
+
+    // If expanding reasons and row height is small, change to medium
+    if (newShowReasons && height === ROW_HEIGHT.small) {
+      setHeight(ROW_HEIGHT.medium);
+    }
+  }, [showReasons, setShowReasons, height, setHeight]);
+
   const columnSections = useMemo(() => {
     return [
       {
@@ -524,9 +543,26 @@ const TraceQueueItemsTab: React.FC<TraceQueueItemsTabProps> = ({
         columns: scoresColumnsData,
         order: scoresColumnsOrder,
         onOrderChange: setScoresColumnsOrder,
+        action: (
+          <Button
+            variant="ghost"
+            size="xs"
+            onClick={handleToggleReasons}
+            className="h-6 text-xs"
+          >
+            <MessageSquareText className="mr-1 size-3" />
+            {showReasons ? "Collapse reasons" : "Expand reasons"}
+          </Button>
+        ),
       },
     ];
-  }, [scoresColumnsData, scoresColumnsOrder, setScoresColumnsOrder]);
+  }, [
+    scoresColumnsData,
+    scoresColumnsOrder,
+    setScoresColumnsOrder,
+    showReasons,
+    handleToggleReasons,
+  ]);
 
   if (isPending) {
     return <Loader />;
@@ -600,6 +636,9 @@ const TraceQueueItemsTab: React.FC<TraceQueueItemsTabProps> = ({
         getRowId={getRowId}
         rowHeight={height as ROW_HEIGHT}
         columnPinning={DEFAULT_COLUMN_PINNING}
+        meta={{
+          showReasons,
+        }}
         noData={<DataTableNoData title={noDataText} />}
         TableWrapper={PageBodyStickyTableWrapper}
         stickyHeader

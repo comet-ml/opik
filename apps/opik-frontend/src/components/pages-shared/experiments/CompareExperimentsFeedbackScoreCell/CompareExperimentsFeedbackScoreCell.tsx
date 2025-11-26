@@ -16,6 +16,7 @@ import { FeedbackScoreCustomMeta } from "@/types/feedback-scores";
 import useFeedbackScoreInlineEdit from "@/hooks/useFeedbackScoreInlineEdit";
 import { cn } from "@/lib/utils";
 import FeedbackScoreEditDropdown from "@/components/shared/DataTableCells/FeedbackScoreEditDropdown";
+import { ROW_HEIGHT } from "@/types/shared";
 
 const CompareExperimentsFeedbackScoreCell: React.FC<
   CellContext<ExperimentsCompare, unknown>
@@ -37,12 +38,22 @@ const CompareExperimentsFeedbackScoreCell: React.FC<
     feedbackScore,
   });
 
+  const tableMeta = context.table.options.meta as
+    | {
+        enableUserFeedbackEditing?: boolean;
+        showReasons?: boolean;
+        rowHeight?: ROW_HEIGHT;
+      }
+    | undefined;
+
   const enableUserFeedbackEditing =
     experimentCompare.experiment_items.length === 1 &&
-    (context.table.options.meta?.enableUserFeedbackEditing ?? false);
+    (tableMeta?.enableUserFeedbackEditing ?? false);
   const isUserFeedbackColumn =
     enableUserFeedbackEditing &&
     context.column.id === "feedback_scores_User feedback";
+  const showReasons = tableMeta?.showReasons ?? false;
+  const rowHeight = tableMeta?.rowHeight ?? ROW_HEIGHT.small;
 
   const renderContent = (item: ExperimentItem | undefined) => {
     const feedbackScore = item?.feedback_scores?.find(
@@ -79,10 +90,16 @@ const CompareExperimentsFeedbackScoreCell: React.FC<
 
     const color = feedbackKey && colorMap ? colorMap[feedbackKey] : undefined;
 
+    // Check if we should show reasons inline
+    const shouldShowInlineReasons =
+      showReasons &&
+      (rowHeight === ROW_HEIGHT.medium || rowHeight === ROW_HEIGHT.large) &&
+      reasons.length > 0;
+
     return (
       <div
         className={cn(
-          "flex h-4 w-full items-center justify-end gap-1",
+          "flex h-4 w-full items-center justify-end gap-1 flex-wrap",
           isUserFeedbackColumn && "group",
         )}
       >
@@ -92,10 +109,16 @@ const CompareExperimentsFeedbackScoreCell: React.FC<
           isUserFeedbackColumn={isUserFeedbackColumn}
           onValueChange={handleValueChange}
         />
-        {reasons.length > 0 && (
-          <FeedbackScoreReasonTooltip reasons={reasons}>
-            <MessageSquareMore className="size-3.5 shrink-0 text-light-slate" />
-          </FeedbackScoreReasonTooltip>
+        {shouldShowInlineReasons ? (
+          <span className="whitespace-nowrap text-xs text-muted-foreground">
+            {reasons.map((r) => r.reason).join(", ")}
+          </span>
+        ) : (
+          reasons.length > 0 && (
+            <FeedbackScoreReasonTooltip reasons={reasons}>
+              <MessageSquareMore className="size-3.5 shrink-0 text-light-slate" />
+            </FeedbackScoreReasonTooltip>
+          )
         )}
       </div>
     );
