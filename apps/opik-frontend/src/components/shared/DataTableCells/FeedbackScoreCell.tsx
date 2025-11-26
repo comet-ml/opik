@@ -89,9 +89,11 @@ const FeedbackScoreCell = (context: CellContext<unknown, unknown>) => {
       />
 
       {shouldShowInlineReasons ? (
-        <span className="line-clamp-3 break-words text-xs text-muted-foreground">
-          {reasons.map((r) => r.reason).join(", ")}
-        </span>
+        <FeedbackScoreReasonTooltip reasons={reasons}>
+          <span className="line-clamp-3 break-words text-xs text-muted-foreground">
+            {reasons.map((r) => r.reason).join(", ")}
+          </span>
+        </FeedbackScoreReasonTooltip>
       ) : (
         reasons.length > 0 && (
           <FeedbackScoreReasonTooltip reasons={reasons}>
