@@ -102,8 +102,6 @@ export const useExperimentsTableConfig = <
   });
 
   const dynamicColumnsIds = useMemo(() => {
-    // Only manage score column IDs in dynamic columns cache
-    // Reason columns are controlled by the global toggle, not individual column settings
     return dynamicScoresColumns.map((c) => c.id);
   }, [dynamicScoresColumns]);
 
