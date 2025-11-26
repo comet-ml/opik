@@ -24,9 +24,9 @@ public class LlmProviderGemini implements LlmProviderService {
 
     @Override
     public ChatCompletionResponse generate(@NonNull ChatCompletionRequest request, @NonNull String workspaceId) {
-        var mapper = LlmProviderLangChainMapper.INSTANCE;
-        var response = llmProviderClientGenerator.generate(config, request).chat(mapper.mapMessages(request));
-        return mapper.toChatCompletionResponse(request, response);
+        var mappedMessages = GeminiLangChainMapper.INSTANCE.mapMessagesForGemini(request);
+        var response = llmProviderClientGenerator.generate(config, request).chat(mappedMessages);
+        return LlmProviderLangChainMapper.INSTANCE.toChatCompletionResponse(request, response);
     }
 
     @Override
@@ -41,9 +41,11 @@ public class LlmProviderGemini implements LlmProviderService {
                                 config.apiKey(),
                                 request);
 
+                        var mappedMessages = GeminiLangChainMapper.INSTANCE.mapMessagesForGemini(request);
+
                         streamingChatLanguageModel
                                 .chat(
-                                        LlmProviderLangChainMapper.INSTANCE.mapMessages(request),
+                                        mappedMessages,
                                         new ChunkedResponseHandler(handleMessage, handleClose, handleError,
                                                 request.model()));
                     } catch (Exception e) {

@@ -10,4 +10,5 @@ export interface ServiceTogglesConfig {
     alertsEnabled: boolean;
     welcomeWizardEnabled: boolean;
     csvUploadEnabled: boolean;
+    exportEnabled: boolean;
 }

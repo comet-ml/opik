@@ -1,19 +1,93 @@
 """Core optimization logic for Modal workers (without Modal decorators)."""
 
+import os
 import time
 import traceback
 from typing import Any
 
-import benchmark_config
-import opik_optimizer
-import opik_optimizer.datasets
-from benchmark_task import (
-    TaskEvaluationResult,
-    TaskResult,
-    TASK_STATUS_FAILED,
-    TASK_STATUS_SUCCESS,
-)
-from opik_optimizer import BaseOptimizer, reporting_utils, ChatPrompt
+import opik
+from benchmarks.core.benchmark_task import TaskResult, TASK_STATUS_FAILED
+from benchmarks.utils.task_runner import execute_task
+
+
+def _dump_opik_configuration() -> None:
+    """Dump Opik configuration for debugging."""
+    print("=" * 80)
+    print("OPIK CONFIGURATION (Worker)")
+    print("=" * 80)
+
+    # Environment variables
+    print("\nEnvironment Variables:")
+    env_vars = {
+        "OPIK_API_KEY": os.getenv("OPIK_API_KEY"),
+        "OPIK_URL_OVERRIDE": os.getenv("OPIK_URL_OVERRIDE"),
+        "OPIK_WORKSPACE": os.getenv("OPIK_WORKSPACE"),
+        "OPIK_PROJECT_NAME": os.getenv("OPIK_PROJECT_NAME"),
+    }
+    for key, value in env_vars.items():
+        if value:
+            if key == "OPIK_API_KEY":
+                masked = value[:8] + "..." + value[-4:] if len(value) > 12 else "***"
+                print(f"  {key}: {masked}")
+            else:
+                print(f"  {key}: {value}")
+        else:
+            print(f"  {key}: NOT SET")
+
+    # Opik SDK config
+    print("\nOpik SDK Configuration:")
+    try:
+        from opik.config import OpikConfig
+
+        config = OpikConfig()
+        print(f"  API Key present: {'YES' if config.api_key else 'NO'}")
+        print(
+            f"  Base URL: {config.url_override or 'DEFAULT (https://www.comet.com/opik/api)'}"
+        )
+        print(f"  Workspace: {config.workspace or 'NOT SET'}")
+    except Exception as e:
+        print(f"  Failed to load config: {e}")
+
+    print("=" * 80)
+    print()
+
+
+def _ensure_opik_credentials() -> None:
+    api_key = os.getenv("OPIK_API_KEY", "").strip()
+    # Check URL override environment variable
+    host = os.getenv("OPIK_URL_OVERRIDE")
+
+    # Determine if this is a self-hosted instance
+    is_self_hosted = bool(host and host != "https://www.comet.com/opik/api")
+
+    print(f"Opik instance type: {'Self-hosted' if is_self_hosted else 'Comet Cloud'}")
+    print(f"API key required: {'NO' if is_self_hosted else 'YES'}")
+    print(f"API key present: {'YES' if api_key else 'NO'}")
+
+    # API key is only required for Comet Cloud
+    if not is_self_hosted and not api_key:
+        raise RuntimeError(
+            "OPIK_API_KEY is missing or empty for Comet Cloud. "
+            "Ensure the `opik-benchmarks` secret includes OPIK_API_KEY. "
+            "For self-hosted instances, set OPIK_BASE_URL or OPIK_HOST and omit OPIK_API_KEY."
+        )
+
+    # Optional lightweight ping to fail fast on bad keys
+    print("Testing Opik client connection...")
+    try:
+        client = opik.Opik()
+        # `get_current_workspace` is a cheap way to validate the key (if method exists)
+        if hasattr(client, "get_current_workspace"):
+            client.get_current_workspace()  # type: ignore[attr-defined]
+        print("✓ Opik client connection successful")
+    except Exception as exc:
+        # Only raise for Comet Cloud or if we have an API key
+        if not is_self_hosted or api_key:
+            raise RuntimeError(
+                f"Opik credential check failed (host={host or 'default'}): {exc}"
+            ) from exc
+        # For self-hosted without API key, just warn but continue
+        print(f"⚠ Opik connection check failed (self-hosted, no API key): {exc}")
 
 
 def run_optimization_task(
@@ -21,9 +95,13 @@ def run_optimization_task(
     dataset_name: str,
     optimizer_name: str,
     model_name: str,
+    model_parameters: dict[str, Any] | None,
     test_mode: bool,
     optimizer_params_override: dict[str, Any] | None = None,
     optimizer_prompt_params_override: dict[str, Any] | None = None,
+    datasets: dict[str, Any] | None = None,
+    metrics: list[str | dict[str, Any]] | None = None,
+    prompt_messages: list[dict[str, Any]] | None = None,
 ) -> TaskResult:
     """
     Run a single optimization task on Modal infrastructure.
@@ -50,129 +128,50 @@ def run_optimization_task(
     Returns:
         TaskResult object containing the optimization results
     """
+    # Disable tracing for benchmark jobs to avoid Opik span volume by default
+    os.environ.setdefault("OPIK_TRACK_DISABLE", "true")
+    os.environ.setdefault("OPIK_DATASET_SKIP_EXISTING", "true")
+    try:
+        opik.set_tracing_active(False)
+    except Exception:
+        pass
+
+    # Dump configuration for debugging
+    _dump_opik_configuration()
+
+    # Ensure credentials are valid
+    _ensure_opik_credentials()
+
     timestamp_start = time.time()
-    initial_prompt = None
-    optimized_prompt = None
-
     print(f"[{task_id}] Starting optimization...")
-
-    with reporting_utils.suppress_opik_logs():
-        try:
-            # Initialize the dataset, optimizer, metrics and initial_prompt
-            dataset_config = benchmark_config.DATASET_CONFIG[dataset_name]
-            dataset = getattr(opik_optimizer.datasets, dataset_name)(
-                test_mode=test_mode
-            )
-
-            optimizer_config = benchmark_config.OPTIMIZER_CONFIGS[optimizer_name]
-            constructor_kwargs = dict(optimizer_config.params)
-            if optimizer_params_override:
-                constructor_kwargs.update(optimizer_params_override)
-            optimizer: BaseOptimizer = getattr(
-                opik_optimizer, optimizer_config.class_name
-            )(model=model_name, **constructor_kwargs)
-
-            messages = benchmark_config.INITIAL_PROMPTS[dataset_name]
-            initial_prompt = ChatPrompt(messages=messages)  # type: ignore
-
-            # Run initial evaluation
-            print(f"[{task_id}] Running initial evaluation...")
-            start_time_initial_eval = time.time()
-            initial_evaluation = []
-            for metric_ in dataset_config.metrics:
-                result = optimizer.evaluate_prompt(
-                    prompt=initial_prompt, dataset=dataset, metric=metric_, n_threads=4
-                )
-                initial_evaluation.append(
-                    {
-                        "metric_name": metric_.__name__,
-                        "score": result,
-                        "timestamp": time.time(),
-                    }
-                )
-            initial_evaluation_duration = time.time() - start_time_initial_eval
-            print(
-                f"[{task_id}] Initial evaluation complete in {initial_evaluation_duration:.2f}s"
-            )
-
-            # Run optimization
-            print(f"[{task_id}] Running optimization...")
-            optimize_kwargs = dict(optimizer_config.optimize_params)
-            if optimizer_prompt_params_override:
-                optimize_kwargs.update(optimizer_prompt_params_override)
-            optimization_results = optimizer.optimize_prompt(
-                prompt=initial_prompt,
-                dataset=dataset,
-                metric=dataset_config.metrics[0],
-                **optimize_kwargs,
-            )
-            optimized_prompt = ChatPrompt(messages=optimization_results.prompt)
-
-            # Run final evaluation
-            print(f"[{task_id}] Running final evaluation...")
-            start_time_final_eval = time.time()
-            optimized_evaluation = []
-            for metric_ in dataset_config.metrics:
-                result = optimizer.evaluate_prompt(
-                    prompt=optimized_prompt,
-                    dataset=dataset,
-                    metric=metric_,
-                    n_threads=4,
-                )
-                optimized_evaluation.append(
-                    {
-                        "metric_name": metric_.__name__,
-                        "score": result,
-                        "timestamp": time.time(),
-                    }
-                )
-            optimized_evaluation_duration = time.time() - start_time_final_eval
-            print(
-                f"[{task_id}] Final evaluation complete in {optimized_evaluation_duration:.2f}s"
-            )
-
-            # Create result object
-            result = TaskResult(
-                id=task_id,
-                dataset_name=dataset_name,
-                optimizer_name=optimizer_name,
-                model_name=model_name,
-                status=TASK_STATUS_SUCCESS,
-                timestamp_start=timestamp_start,
-                initial_prompt=initial_prompt,
-                initial_evaluation=TaskEvaluationResult(
-                    metrics=initial_evaluation,  # type: ignore
-                    duration_seconds=initial_evaluation_duration,
-                ),
-                optimized_prompt=optimized_prompt,
-                optimized_evaluation=TaskEvaluationResult(
-                    metrics=optimized_evaluation,  # type: ignore
-                    duration_seconds=optimized_evaluation_duration,
-                ),
-                error_message=None,
-                llm_calls_total_optimization=optimization_results.llm_calls,
-                optimization_raw_result=optimization_results,
-                timestamp_end=time.time(),
-            )
-
-            print(
-                f"[{task_id}] Completed successfully in {time.time() - timestamp_start:.2f}s"
-            )
-            return result
-
-        except Exception as e:
-            print(f"[{task_id}] Failed with error: {str(e)}")
-
-            result = TaskResult(
-                id=task_id,
-                dataset_name=dataset_name,
-                optimizer_name=optimizer_name,
-                model_name=model_name,
-                status=TASK_STATUS_FAILED,
-                timestamp_start=timestamp_start,
-                initial_prompt=initial_prompt,
-                error_message=traceback.format_exc(),
-                timestamp_end=time.time(),
-            )
-
-            return result
+    try:
+        result = execute_task(
+            task_id=task_id,
+            dataset_name=dataset_name,
+            optimizer_name=optimizer_name,
+            model_name=model_name,
+            model_parameters=model_parameters,
+            test_mode=test_mode,
+            optimizer_params_override=optimizer_params_override,
+            optimizer_prompt_params_override=optimizer_prompt_params_override,
+            datasets=datasets,
+            metrics=metrics,
+            prompt_messages=prompt_messages,
+        )
+        result.timestamp_start = timestamp_start
+        print(
+            f"[{task_id}] Completed successfully in {time.time() - timestamp_start:.2f}s"
+        )
+        return result
+    except Exception as e:
+        print(f"[{task_id}] Failed with error: {str(e)}")
+        return TaskResult(
+            id=task_id,
+            dataset_name=dataset_name,
+            optimizer_name=optimizer_name,
+            model_name=model_name,
+            status=TASK_STATUS_FAILED,
+            timestamp_start=timestamp_start,
+            error_message=traceback.format_exc(),
+            timestamp_end=time.time(),
+        )

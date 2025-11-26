@@ -6,10 +6,8 @@ import uuid
 from llama_index.core.callbacks import schema as llama_index_schema
 from llama_index.core.callbacks import base_handler
 
-import opik.context_storage as context_storage
-import opik.decorator.tracing_runtime_config as tracing_runtime_config
-import opik.decorator.arguments_helpers as arguments_helpers
-import opik.decorator.span_creation_handler as span_creation_handler
+from opik import context_storage, tracing_runtime_config
+from opik.decorator import arguments_helpers, span_creation_handler
 from opik.api_objects import opik_client, span, trace
 
 from . import event_parsing_utils

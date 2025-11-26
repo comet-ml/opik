@@ -50,15 +50,15 @@ export const TRIGGER_CONFIG: Record<ALERT_EVENT_TYPE, TriggerConfig> = {
     hasScope: true,
   },
   [ALERT_EVENT_TYPE.trace_feedback_score]: {
-    title: "New score added to trace",
+    title: "Trace feedback score threshold",
     description:
-      "Triggered when a new feedback score is added to a trace in the selected projects.",
+      "Triggered when the average feedback score for traces exceeds the specified threshold in selected projects.",
     hasScope: true,
   },
   [ALERT_EVENT_TYPE.trace_thread_feedback_score]: {
-    title: "New score added to thread",
+    title: "Thread feedback score threshold",
     description:
-      "Triggered when a new feedback score is added to a thread in the selected projects.",
+      "Triggered when the average feedback score for threads exceeds the specified threshold in selected projects.",
     hasScope: true,
   },
   [ALERT_EVENT_TYPE.prompt_created]: {
@@ -125,7 +125,12 @@ const getProjectIdsFromTriggerConfigs = (
 const getThresholdFromTriggerConfigs = (
   configType: ALERT_TRIGGER_CONFIG_TYPE,
   triggerConfigs?: AlertTriggerConfig[],
-): { threshold?: string; window?: string } => {
+): {
+  threshold?: string;
+  window?: string;
+  name?: string;
+  operator?: string;
+} => {
   const thresholdConfig = triggerConfigs?.find(
     (config) => config.type === configType,
   );
@@ -134,6 +139,8 @@ const getThresholdFromTriggerConfigs = (
     return {
       threshold: thresholdConfig.config_value.threshold,
       window: thresholdConfig.config_value.window,
+      name: thresholdConfig.config_value.name,
+      operator: thresholdConfig.config_value.operator,
     };
   }
 
@@ -159,16 +166,28 @@ const createThresholdTriggerConfig = (
   configType: ALERT_TRIGGER_CONFIG_TYPE,
   threshold?: string,
   window?: string,
+  name?: string,
+  operator?: string,
 ): AlertTriggerConfig[] => {
   if (!threshold || !window) return [];
+
+  const config_value: Record<string, string> = {
+    threshold,
+    window,
+  };
+
+  // Add name and operator for feedback score triggers
+  if (name) {
+    config_value.name = name;
+  }
+  if (operator) {
+    config_value.operator = operator;
+  }
 
   return [
     {
       type: configType,
-      config_value: {
-        threshold,
-        window,
-      },
+      config_value,
     },
   ];
 };
@@ -184,7 +203,7 @@ export const alertTriggersToFormTriggers = (
       trigger.trigger_configs,
     );
 
-    // Extract threshold and window for cost/latency/errors triggers
+    // Extract threshold and window for cost/latency/errors/feedback score triggers
     let thresholdData = {};
     if (trigger.event_type === ALERT_EVENT_TYPE.trace_cost) {
       thresholdData = getThresholdFromTriggerConfigs(
@@ -199,6 +218,14 @@ export const alertTriggersToFormTriggers = (
     } else if (trigger.event_type === ALERT_EVENT_TYPE.trace_errors) {
       thresholdData = getThresholdFromTriggerConfigs(
         ALERT_TRIGGER_CONFIG_TYPE["threshold:errors"],
+        trigger.trigger_configs,
+      );
+    } else if (
+      trigger.event_type === ALERT_EVENT_TYPE.trace_feedback_score ||
+      trigger.event_type === ALERT_EVENT_TYPE.trace_thread_feedback_score
+    ) {
+      thresholdData = getThresholdFromTriggerConfigs(
+        ALERT_TRIGGER_CONFIG_TYPE["threshold:feedback_score"],
         trigger.trigger_configs,
       );
     }
@@ -224,7 +251,7 @@ export const formTriggersToAlertTriggers = (
       configs.push(...createProjectScopeTriggerConfig(trigger.projectIds));
     }
 
-    // Add threshold config for cost/latency/errors triggers
+    // Add threshold config for cost/latency/errors/feedback score triggers
     if (trigger.eventType === ALERT_EVENT_TYPE.trace_cost) {
       configs.push(
         ...createThresholdTriggerConfig(
@@ -247,6 +274,19 @@ export const formTriggersToAlertTriggers = (
           ALERT_TRIGGER_CONFIG_TYPE["threshold:errors"],
           trigger.threshold,
           trigger.window,
+        ),
+      );
+    } else if (
+      trigger.eventType === ALERT_EVENT_TYPE.trace_feedback_score ||
+      trigger.eventType === ALERT_EVENT_TYPE.trace_thread_feedback_score
+    ) {
+      configs.push(
+        ...createThresholdTriggerConfig(
+          ALERT_TRIGGER_CONFIG_TYPE["threshold:feedback_score"],
+          trigger.threshold,
+          trigger.window,
+          trigger.name,
+          trigger.operator,
         ),
       );
     }

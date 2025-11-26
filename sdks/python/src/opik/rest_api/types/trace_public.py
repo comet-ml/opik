@@ -42,6 +42,7 @@ class TracePublic(UniversalBaseModel):
     thread_id: typing.Optional[str] = None
     visibility_mode: typing.Optional[TracePublicVisibilityMode] = None
     llm_span_count: typing.Optional[int] = None
+    has_tool_spans: typing.Optional[bool] = None
     providers: typing.Optional[typing.List[str]] = pydantic.Field(default=None)
     """
     List of unique provider names from all spans in this trace, sorted alphabetically

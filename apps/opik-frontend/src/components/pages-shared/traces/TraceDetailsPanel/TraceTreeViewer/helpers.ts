@@ -27,12 +27,14 @@ import {
   ColumnData,
 } from "@/types/shared";
 
+export const SPAN_TYPE_FILTER_COLUMN: ColumnData<Span> = {
+  id: "type",
+  label: "Span type",
+  type: COLUMN_TYPE.category,
+};
+
 export const TREE_FILTER_COLUMNS: ColumnData<Span>[] = [
-  {
-    id: "type",
-    label: "Span type",
-    type: COLUMN_TYPE.category,
-  },
+  SPAN_TYPE_FILTER_COLUMN,
   {
     id: "name",
     label: "Name",
@@ -62,6 +64,7 @@ export const TREE_FILTER_COLUMNS: ColumnData<Span>[] = [
     id: "tags",
     label: "Tags",
     type: COLUMN_TYPE.list,
+    iconType: "tags",
   },
   {
     id: "usage.total_tokens",
