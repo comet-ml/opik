@@ -37,6 +37,13 @@ public class SlackWebhookPayloadMapper {
     public static final String BASE_URL_METADATA_KEY = "base_url";
     private static final String DEFAULT_BASE_URL = "http://localhost:5173";
 
+    private static final String METRICS_ALERT_DETAILS_TEMPLATE = "• *Current <type>:* <valuePrefix><metricValue><valueSuffix>\n" +
+            "  *Threshold:* <valuePrefix><threshold><valueSuffix>\n" +
+            "  *Time Window:* <windowDuration>\n" +
+            "<if(feedbackScoreName)>  *Feedback Score:* `<feedbackScoreName>`\n<endif>" +
+            "  *Scope:* <scope>";
+    private static final String PROJECTS_TEMPLATE = "*Projects:* `<projectNames>`";
+
     /**
      * Converts a webhook event to Slack webhook payload.
      *
@@ -291,7 +298,7 @@ public class SlackWebhookPayloadMapper {
             // Build scope description
             String scope = (payload.projectIds() == null || payload.projectIds().isEmpty())
                     ? "*Workspace-wide*"
-                    : TemplateUtils.newST("*Projects:* `<projectNames>`")
+                    : TemplateUtils.newST(PROJECTS_TEMPLATE)
                             .add("projectNames", payload.projectNames())
                             .render();
 
@@ -299,14 +306,7 @@ public class SlackWebhookPayloadMapper {
             String valuePrefix = type.equals("Cost") ? "$" : "";
             String valueSuffix = type.equals("Latency") ? " s" : "";
 
-            // Build the template with conditional feedback score name
-            String template = "• *Current <type>:* <valuePrefix><metricValue><valueSuffix>\n" +
-                    "  *Threshold:* <valuePrefix><threshold><valueSuffix>\n" +
-                    "  *Time Window:* <windowDuration>\n" +
-                    "<if(feedbackScoreName)>  *Feedback Score:* `<feedbackScoreName>`\n<endif>" +
-                    "  *Scope:* <scope>";
-
-            var st = TemplateUtils.newST(template);
+            var st = TemplateUtils.newST(METRICS_ALERT_DETAILS_TEMPLATE);
             st.add("type", type);
             st.add("valuePrefix", valuePrefix);
             st.add("metricValue", payload.metricValue());
