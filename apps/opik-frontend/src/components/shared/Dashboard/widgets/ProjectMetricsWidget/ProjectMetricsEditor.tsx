@@ -160,8 +160,15 @@ const ProjectMetricsEditor: React.FC<ProjectMetricsEditorProps> = ({
   const useGlobalDateRange = widgetConfig?.useGlobalDateRange ?? true;
   const localProjectId = widgetConfig?.projectId;
   const localDateRange = widgetConfig?.dateRange;
-  const traceFilters = widgetConfig?.traceFilters || [];
-  const threadFilters = widgetConfig?.threadFilters || [];
+
+  const traceFilters = useMemo(
+    () => widgetConfig?.traceFilters || [],
+    [widgetConfig?.traceFilters],
+  );
+  const threadFilters = useMemo(
+    () => widgetConfig?.threadFilters || [],
+    [widgetConfig?.threadFilters],
+  );
 
   const projectConfig = useDashboardStore(
     (state) => state.config as ProjectDashboardConfig | null,

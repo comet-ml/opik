@@ -44,10 +44,6 @@ const ProjectMetricsWidget: React.FunctionComponent<
   const previewWidget = useDashboardStore(selectPreviewWidget);
   const widget = preview ? previewWidget : storeWidget;
 
-  if (!widget) {
-    return null;
-  }
-
   const widgetProjectId = widget?.config?.projectId as string | undefined;
   const useGlobalDateRange = widget?.config?.useGlobalDateRange ?? true;
   const localDateRange = widget?.config?.dateRange as
@@ -94,6 +90,10 @@ const ProjectMetricsWidget: React.FunctionComponent<
     globalConfig.intervalStart,
     globalConfig.intervalEnd,
   ]);
+
+  if (!widget) {
+    return null;
+  }
 
   const renderChartContent = () => {
     const metricType = widget?.config?.metricType as string | undefined;
