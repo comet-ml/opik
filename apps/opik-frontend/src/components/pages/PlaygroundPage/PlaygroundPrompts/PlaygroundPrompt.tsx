@@ -71,6 +71,7 @@ const PlaygroundPrompt = ({
   scrollToPromptRef,
 }: PlaygroundPromptProps) => {
   const checkedIfModelIsValidRef = useRef(false);
+  const loadedChatPromptRef = useRef<string | null>(null);
   const queryClient = useQueryClient();
 
   const prompt = usePromptById(promptId);
@@ -269,13 +270,24 @@ const PlaygroundPrompt = ({
 
   // Effect to populate messages when chat prompt data is loaded
   useEffect(() => {
+    // Create a unique key for this chat prompt load (prompt ID + version ID)
+    const chatPromptKey =
+      selectedChatPromptId && chatPromptVersionData
+        ? `${selectedChatPromptId}-${chatPromptVersionData.id}`
+        : null;
+
     if (
       chatPromptVersionData?.template &&
       selectedChatPromptId &&
       chatPromptData &&
-      chatPromptVersionDataLoaded
+      chatPromptVersionDataLoaded &&
+      chatPromptKey &&
+      loadedChatPromptRef.current !== chatPromptKey // Prevent duplicate loads
     ) {
       try {
+        // Mark this chat prompt as loaded to prevent race conditions
+        loadedChatPromptRef.current = chatPromptKey;
+
         // Parse the JSON string from template
         const parsedMessages = JSON.parse(chatPromptVersionData.template);
 
@@ -296,6 +308,11 @@ const PlaygroundPrompt = ({
       } catch (error) {
         console.error("Failed to parse chat prompt:", error);
       }
+    }
+
+    // Reset the ref when chat prompt is deselected
+    if (!selectedChatPromptId) {
+      loadedChatPromptRef.current = null;
     }
   }, [
     chatPromptVersionData,
