@@ -233,9 +233,7 @@ const TraceDetailsActionsPanel: React.FunctionComponent<
 
       toast({
         title: "Export successful",
-        description: `Exported ${dataToExport.length} ${
-          dataToExport.length === 1 ? "item" : "items"
-        } to CSV`,
+        description: `Exported ${fileSuffix} to CSV`,
       });
     } catch (error) {
       toast({
@@ -261,9 +259,7 @@ const TraceDetailsActionsPanel: React.FunctionComponent<
 
       toast({
         title: "Export successful",
-        description: `Exported ${dataToExport.length} ${
-          dataToExport.length === 1 ? "item" : "items"
-        } to JSON`,
+        description: `Exported ${fileSuffix} to JSON`,
       });
     } catch (error) {
       toast({
