@@ -2,6 +2,7 @@ package com.comet.opik.domain;
 
 import com.comet.opik.api.DatasetItem;
 import com.comet.opik.api.DatasetItemSource;
+import com.comet.opik.api.DatasetStatus;
 import com.comet.opik.api.Visibility;
 import com.comet.opik.infrastructure.BatchOperationsConfig;
 import com.comet.opik.utils.JsonUtils;
@@ -94,16 +95,21 @@ public class CsvDatasetItemProcessor {
             throw e;
         }
 
+        // Set status to PROCESSING before starting async processing
+        datasetService.updateStatus(datasetId, workspaceId, DatasetStatus.PROCESSING);
+
         // Now process asynchronously with automatic cleanup
         log.info("Starting asynchronous CSV processing for dataset '{}' on workspaceId '{}'", datasetId, workspaceId);
         validateAndProcessCsvFromFile(tempFile, datasetId, workspaceId, userName, visibility)
                 .doOnError(error -> {
                     log.error("CSV processing failed for dataset '{}'", datasetId, error);
+                    datasetService.updateStatus(datasetId, workspaceId, DatasetStatus.FAILED);
                     deleteTempFile(tempFile);
                 })
                 .doOnSuccess(totalItems -> {
                     log.info("CSV processing completed for dataset '{}', total items: '{}'",
                             datasetId, totalItems);
+                    datasetService.updateStatus(datasetId, workspaceId, DatasetStatus.COMPLETED);
                     deleteTempFile(tempFile);
                 })
                 .subscribe(null, error -> log.error("Subscription error during CSV processing for dataset '{}'",
