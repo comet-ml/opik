@@ -29,12 +29,20 @@ FROM nginx:1.29.3-alpine-otel AS nginx
 ARG BUILD_MODE=production
 LABEL build.mode="${BUILD_MODE}"
 
+# Upgrade system packages to fix vulnerabilities
+RUN apk upgrade --no-cache
+
+# Copy custom Nginx configuration
 COPY --chown=nginx:nginx --chmod=0755 nginx /etc/nginx
+
+# Copy entrypoint script to the docker-entrypoint.d directory so it runs automatically
 COPY --chmod=0755 entrypoint.sh /docker-entrypoint.d/05-opik-frontend-entrypoint.sh
 
+# Fix permissions
 RUN chown -R nginx:nginx /var/log/nginx /var/cache/nginx /run /etc/nginx/conf.d \
  && rm -f /var/log/nginx/access.log /var/log/nginx/error.log
 
+# Copy the built files from the builder stage
 COPY --from=builder /opt/frontend/dist /usr/share/nginx/html
 
 EXPOSE 8080
