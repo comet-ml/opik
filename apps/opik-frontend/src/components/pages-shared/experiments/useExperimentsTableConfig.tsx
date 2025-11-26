@@ -1,4 +1,4 @@
-import React, { useMemo } from "react";
+import { useMemo } from "react";
 import {
   ColumnSort,
   RowSelectionState,
@@ -308,8 +308,8 @@ export const useExperimentsTableConfig = <
     };
   }, [groupFieldNames]);
 
-  const columnSections = useMemo(
-    () => [
+  const columnSections = useMemo(() => {
+    return [
       {
         title: "Feedback scores",
         columns: scoresColumnsData,
@@ -326,18 +326,17 @@ export const useExperimentsTableConfig = <
           />
         ),
       },
-    ],
-    [
-      scoresColumnsData,
-      scoresColumnsOrder,
-      setScoresColumnsOrder,
-      showReasons,
-      setShowReasons,
-      height,
-      setHeight,
-      selectedColumns,
-    ],
-  );
+    ];
+  }, [
+    scoresColumnsData,
+    scoresColumnsOrder,
+    setScoresColumnsOrder,
+    showReasons,
+    setShowReasons,
+    height,
+    setHeight,
+    selectedColumns,
+  ]);
 
   return {
     // State
