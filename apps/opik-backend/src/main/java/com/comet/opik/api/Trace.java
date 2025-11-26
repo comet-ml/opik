@@ -70,6 +70,8 @@ public record Trace(
         @JsonView({
                 Trace.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) int llmSpanCount,
         @JsonView({
+                Trace.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) boolean hasToolSpans,
+        @JsonView({
                 Trace.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY, description = "List of unique provider names from all spans in this trace, sorted alphabetically") List<String> providers){
 
     @Builder(toBuilder = true)
@@ -108,6 +110,7 @@ public record Trace(
         TOTAL_ESTIMATED_COST("total_estimated_cost"),
         SPAN_COUNT("span_count"),
         LLM_SPAN_COUNT("llm_span_count"),
+        HAS_TOOL_SPANS("has_tool_spans"),
         DURATION("duration"),
         THREAD_ID("thread_id"),
         VISIBILITY_MODE("visibility_mode"),

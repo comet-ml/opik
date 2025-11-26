@@ -543,6 +543,9 @@ serviceToggles:
   # Default: false
   # Description: Whether or not CSV upload feature is enabled for dataset items
   csvUploadEnabled: ${TOGGLE_CSV_UPLOAD_ENABLED:-"false"}
+  # Default: true
+  # Description: Whether or not export/download functionality is enabled
+  exportEnabled: ${TOGGLE_EXPORT_ENABLED:-"true"}
 
 # Trace Thread configuration
 traceThreadConfig:
