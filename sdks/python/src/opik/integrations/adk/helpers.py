@@ -11,6 +11,7 @@ import pydantic
 
 LOGGER = logging.getLogger(__name__)
 
+
 def convert_adk_base_model_to_dict(value: pydantic.BaseModel) -> Dict[str, Any]:
     """Most ADK objects are Pydantic Base Models"""
     return value.model_dump(mode="json", exclude_unset=True, fallback=str)
@@ -32,9 +33,8 @@ def has_empty_text_part_content(llm_response: LlmResponse) -> bool:
     try:
         if llm_response.content is None:
             return True
-        
+
         if not llm_response.content.parts:
-            LOGGER.debug("No parts in llm_response content")
             return True
 
         # to filter out something like this: {"candidates":[{"content":{"parts":[{"text":""}],"role":"model"}}],...}}
@@ -42,6 +42,7 @@ def has_empty_text_part_content(llm_response: LlmResponse) -> bool:
             part = llm_response.content.parts[0]
             if part.text is not None and len(part.text) == 0:
                 return True
+        return False
     except Exception as e:
-        LOGGER.warning(f"Exception in has_empty_text_part_content {e}")
-    return False
+        LOGGER.warning(f"Exception in has_empty_text_part_content {e}", exc_info=True)
+        return True
