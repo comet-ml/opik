@@ -27,6 +27,8 @@ export type FeedbackScoreValueByAuthorMap = Record<
     category_name?: string;
     source: FEEDBACK_SCORE_TYPE;
     last_updated_at: string;
+    span_type?: string;
+    span_id?: string;
   }
 >;
 

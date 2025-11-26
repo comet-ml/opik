@@ -44,6 +44,34 @@ export function hasValuesByAuthor(
   );
 }
 
+/**
+ * Finds a value in value_by_author by userName, handling both regular keys (userName)
+ * and composite keys (userName_spanId) used for span feedback scores.
+ */
+export function findValueByAuthor(
+  value_by_author: FeedbackScoreValueByAuthorMap | undefined,
+  userName: string,
+): FeedbackScoreValueByAuthorMap[string] | undefined {
+  if (!value_by_author || !userName) {
+    return undefined;
+  }
+
+  // First try exact match
+  if (value_by_author[userName]) {
+    return value_by_author[userName];
+  }
+
+  // Then try composite keys (userName_spanId)
+  const matchingKey = Object.keys(value_by_author).find((key) =>
+    key.startsWith(`${userName}_`),
+  );
+  if (matchingKey) {
+    return value_by_author[matchingKey];
+  }
+
+  return undefined;
+}
+
 export const setExperimentsCompareCache = async (
   queryClient: QueryClient,
   params: { traceId: string },
@@ -187,6 +215,86 @@ export const setTraceCache = async (
   });
 };
 
+export const setTraceSpanFeedbackScoresCache = async (
+  queryClient: QueryClient,
+  params: { traceId: string; spanId: string; name: string; author: string },
+) => {
+  const { queryKey } =
+    queryClient.getQueryCache().find({
+      exact: false,
+      type: "active",
+      queryKey: [TRACE_KEY, { traceId: params.traceId }],
+    }) ?? {};
+
+  if (!queryKey) return;
+
+  await queryClient.cancelQueries({ queryKey });
+
+  queryClient.setQueryData(queryKey, (originalData: Trace) => {
+    if (!originalData.span_feedback_scores) {
+      return originalData;
+    }
+
+    // Update span_feedback_scores by removing the deleted span's entry
+    const updatedSpanFeedbackScores = originalData.span_feedback_scores
+      .map((score) => {
+        if (score.name !== params.name) {
+          return score;
+        }
+
+        if (!hasValuesByAuthor(score)) {
+          return null;
+        }
+
+        // Find and remove the entry with matching author and spanId
+        // The backend uses composite keys: author_spanId (e.g., "username_1_span-id-123")
+        const updatedValueByAuthor = { ...score.value_by_author };
+        const compositeKey = `${params.author}_${params.spanId}`;
+        
+        // Try to delete by composite key (backend format)
+        if (updatedValueByAuthor[compositeKey]) {
+          delete updatedValueByAuthor[compositeKey];
+        } else {
+          // Fallback: check all keys to find matching author and spanId
+          // This handles cases where the key format might differ
+          Object.keys(updatedValueByAuthor).forEach((key) => {
+            const entry = updatedValueByAuthor[key];
+            // Match by author and spanId
+            if (
+              (key === params.author || key.startsWith(`${params.author}_`)) &&
+              entry.span_id === params.spanId
+            ) {
+              delete updatedValueByAuthor[key];
+            }
+          });
+        }
+
+        // If no entries left, remove the score
+        if (Object.keys(updatedValueByAuthor).length === 0) {
+          return null;
+        }
+
+        // Recalculate aggregated values
+        const aggregated = aggregateMultiAuthorFeedbackScore(updatedValueByAuthor);
+
+        return {
+          ...score,
+          ...aggregated,
+          value_by_author: updatedValueByAuthor,
+          last_updated_at: new Date().toISOString(),
+        };
+      })
+      .filter(
+        (score): score is TraceFeedbackScore => score !== null,
+      );
+
+    return {
+      ...originalData,
+      span_feedback_scores: updatedSpanFeedbackScores,
+    };
+  });
+};
+
 export const generateUpdateMutation =
   (score: TraceFeedbackScore, author?: string) =>
   (feedbackScores?: TraceFeedbackScore[]) => {
@@ -304,7 +412,12 @@ export const extractReasonsFromValueByAuthor = (
       lastUpdatedAt: last_updated_at,
       value,
     }))
-    .filter((v) => v.reason.trim());
+    .filter(
+      (v) =>
+        v.reason.trim() &&
+        v.reason !== "<no reason>" &&
+        v.reason.toLowerCase() !== "<no reason>",
+    );
 };
 
 export const aggregateMultiAuthorFeedbackScore = (

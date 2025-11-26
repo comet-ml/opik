@@ -16,7 +16,7 @@ import { Label } from "@/components/ui/label";
 type SetInactiveConfirmDialogProps = {
   open: boolean;
   setOpen: (open: boolean) => void;
-  onDeleteFeedbackScore: (name: string, author?: string) => void;
+  onDeleteFeedbackScore: (name: string, author?: string, spanId?: string) => void;
   entityType: "trace" | "thread" | "span" | "experiment";
   row: ExpandingFeedbackScoreRow;
 };
@@ -34,7 +34,7 @@ const DeleteFeedbackScoreValueDialog: React.FunctionComponent<
   const [dontAskAgain, setDontAskAgain] = useFeedbackScoreDeletePreference();
 
   const onConfirm = () => {
-    onDeleteFeedbackScore(row.name, row.author);
+    onDeleteFeedbackScore(row.name, row.author, row.span_id);
   };
 
   return (

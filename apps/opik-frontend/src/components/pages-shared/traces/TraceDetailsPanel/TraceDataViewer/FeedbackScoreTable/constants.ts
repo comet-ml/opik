@@ -5,6 +5,7 @@ import NameCell from "./cells/NameCell";
 import ValueCell from "./cells/ValueCell";
 import ReasonCell from "./cells/ReasonCell";
 import AuthorCell from "./cells/AuthorCell";
+import TypeCell from "./cells/TypeCell";
 
 export enum FeedbackScoreTableColumns {
   SOURCE = "source",
@@ -12,6 +13,7 @@ export enum FeedbackScoreTableColumns {
   VALUE = "value",
   REASON = "reason",
   CREATED_BY = "created_by",
+  TYPE = "type",
 }
 
 export const DEFAULT_SELECTED_COLUMNS = [
@@ -84,6 +86,13 @@ export const CONFIGURABLE_COLUMNS: ColumnData<ExpandingFeedbackScoreRow>[] = [
     type: COLUMN_TYPE.string,
     size: 100,
     cell: SourceCell as never,
+  },
+  {
+    id: FeedbackScoreTableColumns.TYPE,
+    label: "Type",
+    type: COLUMN_TYPE.string,
+    size: 100,
+    cell: TypeCell as never,
   },
   {
     id: FeedbackScoreTableColumns.VALUE,

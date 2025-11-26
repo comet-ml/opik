@@ -206,7 +206,6 @@ const VirtualizedTreeViewer: React.FC<VirtualizedTreeViewerProps> = ({
       model,
       provider,
       feedback_scores: feedbackScores,
-      span_feedback_scores: spanFeedbackScores,
       total_estimated_cost: estimatedCost,
       type,
     } = node.data;
@@ -296,16 +295,6 @@ const VirtualizedTreeViewer: React.FC<VirtualizedTreeViewerProps> = ({
             <FeedbackScoreHoverCard scores={feedbackScores!}>
               <div className="comet-body-xs-accented flex items-center gap-1 text-muted-slate">
                 <PenLine className="size-3 shrink-0" /> {feedbackScores!.length}
-              </div>
-            </FeedbackScoreHoverCard>
-          )}
-        {config[TREE_DATABLOCK_TYPE.NUMBER_OF_SCORES] &&
-          isTrace &&
-          Boolean(spanFeedbackScores?.length) && (
-            <FeedbackScoreHoverCard scores={spanFeedbackScores!}>
-              <div className="comet-body-xs-accented flex items-center gap-1 text-muted-slate">
-                <PenLine className="size-3 shrink-0" />{" "}
-                {spanFeedbackScores!.length} span
               </div>
             </FeedbackScoreHoverCard>
           )}

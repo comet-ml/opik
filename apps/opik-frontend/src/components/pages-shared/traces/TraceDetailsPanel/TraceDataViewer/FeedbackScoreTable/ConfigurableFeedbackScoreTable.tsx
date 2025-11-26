@@ -10,12 +10,14 @@ import FeedbackScoreTable, {
   FeedbackScoreTableProps,
 } from "./FeedbackScoreTable";
 
-export type ConfigurableFeedbackScoreTableProps = FeedbackScoreTableProps;
+export type ConfigurableFeedbackScoreTableProps = FeedbackScoreTableProps & {
+  title?: string;
+};
 
 const ConfigurableFeedbackScoreTable: React.FunctionComponent<
   ConfigurableFeedbackScoreTableProps
 > = (tableProps) => {
-  const { entityType } = tableProps;
+  const { entityType, title } = tableProps;
 
   const storageKeys = ENTITY_TYPE_TO_STORAGE_KEYS[entityType];
 
@@ -35,15 +37,29 @@ const ConfigurableFeedbackScoreTable: React.FunctionComponent<
 
   return (
     <>
-      <div className="mb-4 flex justify-end">
-        <ColumnsButton
-          columns={CONFIGURABLE_COLUMNS}
-          selectedColumns={selectedColumns}
-          onSelectionChange={setSelectedColumns}
-          order={columnsOrder}
-          onOrderChange={setColumnsOrder}
-        ></ColumnsButton>
-      </div>
+      {title && (
+        <div className="mb-4 flex items-center justify-between">
+          <div className="comet-body-s-accented">{title}</div>
+          <ColumnsButton
+            columns={CONFIGURABLE_COLUMNS}
+            selectedColumns={selectedColumns}
+            onSelectionChange={setSelectedColumns}
+            order={columnsOrder}
+            onOrderChange={setColumnsOrder}
+          ></ColumnsButton>
+        </div>
+      )}
+      {!title && (
+        <div className="mb-4 flex justify-end">
+          <ColumnsButton
+            columns={CONFIGURABLE_COLUMNS}
+            selectedColumns={selectedColumns}
+            onSelectionChange={setSelectedColumns}
+            order={columnsOrder}
+            onOrderChange={setColumnsOrder}
+          ></ColumnsButton>
+        </div>
+      )}
 
       <FeedbackScoreTable
         {...tableProps}

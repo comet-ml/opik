@@ -103,13 +103,24 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
   const feedbackScoreDeleteMutation = useTraceFeedbackScoreDeleteMutation();
 
   const onDeleteFeedbackScore = useCallback(
-    (name: string, author?: string) => {
-      feedbackScoreDeleteMutation.mutate({
-        traceId,
-        spanId,
-        name,
-        author,
-      });
+    (name: string, author?: string, spanIdToDelete?: string) => {
+      // If spanIdToDelete is provided (child row grouped by type), delete for that specific span
+      if (spanIdToDelete) {
+        feedbackScoreDeleteMutation.mutate({
+          traceId,
+          spanId: spanIdToDelete,
+          name,
+          author,
+        });
+      } else {
+        // Regular deletion (trace or single span)
+        feedbackScoreDeleteMutation.mutate({
+          traceId,
+          spanId,
+          name,
+          author,
+        });
+      }
     },
     [traceId, spanId, feedbackScoreDeleteMutation],
   );
@@ -208,21 +219,6 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
                 </div>
               </FeedbackScoreHoverCard>
             )}
-            {isTrace &&
-              traceData &&
-              Boolean(traceData.span_feedback_scores?.length) && (
-                <FeedbackScoreHoverCard
-                  scores={traceData.span_feedback_scores!}
-                >
-                  <div
-                    className="comet-body-xs-accented flex items-center gap-1 text-muted-slate"
-                    data-testid="data-viewer-span-scores"
-                  >
-                    <PenLine className="size-3 shrink-0" />{" "}
-                    {traceData.span_feedback_scores!.length} span scores
-                  </div>
-                </FeedbackScoreHoverCard>
-              )}
             {Boolean(data.comments?.length) && (
               <UserCommentHoverList commentsList={data.comments}>
                 <div
@@ -297,10 +293,8 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
           <TabsContent value="feedback_scores">
             <div className="space-y-6">
               <div>
-                <div className="comet-body-s-accented mb-4">
-                  {isTrace ? "Trace Feedback Scores" : "Feedback Scores"}
-                </div>
                 <ConfigurableFeedbackScoreTable
+                  title={isTrace ? "Trace scores" : "Span scores"}
                   feedbackScores={data.feedback_scores}
                   onDeleteFeedbackScore={onDeleteFeedbackScore}
                   onAddHumanReview={() =>
@@ -311,11 +305,10 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
               </div>
               {isTrace && hasSpanFeedbackScores && traceData && (
                 <div>
-                  <div className="comet-body-s-accented mb-4">
-                    Spans Feedback Scores
-                  </div>
                   <ConfigurableFeedbackScoreTable
+                    title="Span scores"
                     feedbackScores={traceData.span_feedback_scores}
+                    onDeleteFeedbackScore={onDeleteFeedbackScore}
                     onAddHumanReview={() =>
                       setActiveSection(DetailsActionSection.Annotations)
                     }

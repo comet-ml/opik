@@ -513,6 +513,7 @@ class TraceDAOImpl implements TraceDAO {
                 SELECT workspace_id,
                        project_id,
                        s.trace_id,
+                       s.id AS span_id,
                        name,
                        category_name,
                        value,
@@ -522,10 +523,11 @@ class TraceDAOImpl implements TraceDAO {
                        last_updated_by,
                        created_at,
                        last_updated_at,
-                       author
+                       author,
+                       s.type AS span_type
                 FROM span_feedback_scores_combined sfs
                 INNER JOIN (
-                    SELECT id, trace_id
+                    SELECT id, trace_id, type
                     FROM spans FINAL
                     WHERE workspace_id = :workspace_id
                       AND trace_id IN :ids
@@ -546,7 +548,9 @@ class TraceDAOImpl implements TraceDAO {
                     groupArray(created_by) AS created_bies,
                     groupArray(last_updated_by) AS updated_bies,
                     groupArray(created_at) AS created_ats,
-                    groupArray(last_updated_at) AS last_updated_ats
+                    groupArray(last_updated_at) AS last_updated_ats,
+                    groupArray(span_type) AS span_types,
+                    groupArray(span_id) AS span_ids
                 FROM span_feedback_scores_with_trace_id
                 GROUP BY workspace_id, project_id, trace_id, name
             ), span_feedback_scores_final AS (
@@ -557,12 +561,18 @@ class TraceDAOImpl implements TraceDAO {
                     name,
                     arrayStringConcat(categories, ', ') AS category_name,
                     IF(length(values) = 1, arrayElement(values, 1), toDecimal64(arrayAvg(values), 9)) AS value,
-                    IF(length(reasons) = 1, arrayElement(reasons, 1), arrayStringConcat(arrayMap(x -> if(x = '', '<no reason>', x), reasons), ', ')) AS reason,
+                    IF(length(reasons) = 1,
+                        arrayElement(reasons, 1),
+                        arrayStringConcat(
+                            arrayFilter(x -> x != '' AND x != '<no reason>', reasons),
+                            ', '
+                        )
+                    ) AS reason,
                     arrayElement(sources, 1) AS source,
                     mapFromArrays(
-                            authors,
+                            arrayMap(i -> if(span_ids[i] IS NULL OR span_ids[i] = '', authors[i], concat(authors[i], '_', toString(span_ids[i]))), arrayEnumerate(authors)),
                             arrayMap(
-                                    i -> tuple(values[i], reasons[i], categories[i], sources[i], last_updated_ats[i]),
+                                    i -> tuple(values[i], reasons[i], categories[i], sources[i], last_updated_ats[i], span_types[i], span_ids[i]),
                                     arrayEnumerate(values)
                             )
                     ) AS value_by_author,
