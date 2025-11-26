@@ -513,7 +513,6 @@ class MetaPromptOptimizer(BaseOptimizer):
             validation_dataset if validation_dataset is not None else dataset
         )
 
-        current_prompt: Any = prompt
         with reporting.display_evaluation(verbose=self.verbose) as baseline_reporter:
             if validation_dataset is not None:
                 experiment_config = experiment_config or {}
@@ -560,7 +559,8 @@ class MetaPromptOptimizer(BaseOptimizer):
                     mcp_config=mcp_config,
                 )
             best_score = initial_score
-            best_prompt: Any = current_prompt
+            best_prompt: chat_prompt.ChatPrompt | dict[str, chat_prompt.ChatPrompt]
+            best_prompt = prompt
             rounds: list[OptimizationRound] = []
 
             baseline_reporter.set_score(initial_score)
@@ -798,8 +798,7 @@ class MetaPromptOptimizer(BaseOptimizer):
                                 )
 
                             eval_report.set_final_score(best_score, prompt_score)
-                            if not is_bundle:
-                                trials_used += 1
+                            trials_used += 1
                         except Exception as exc:
                             logger.warning(
                                 "Failed evaluating agent; continuing...", exc_info=exc
@@ -863,8 +862,6 @@ class MetaPromptOptimizer(BaseOptimizer):
                     best_prompt = best_candidate_this_round
 
                 # Increment counters
-                if is_bundle:
-                    trials_used += 1
                 round_num += 1
 
         if tool_panel_style and (not is_bundle) and getattr(best_prompt, "tools", None):
