@@ -133,10 +133,11 @@ def build_reasoning_system_prompt(
 
 # Meta-prompt template sections
 META_PROMPT_SECTIONS = {
-    "baseline_prompt": "###### START prompt ######\n{prompt}\n###### END prompt ######\n",
-    "examples": "###### START example-data ######\n{examples}\n###### END example-data ######\n",
-    "history": "###### START history ######\n{history}\n###### END history ######\n",
-    "patterns": "###### START winning-patterns ######\n{patterns}\n###### END winning-patterns ######\n",
+    "baseline_prompt": "<prompt>\n{prompt}\n</prompt>\n",
+    "examples": "<example-data>\n{examples}\n</example-data>\n",
+    "history": "<history>\n{history}\n</history>\n",
+    "patterns": "<winning-patterns>\n{patterns}\n</winning-patterns>\n",
+    "agents": "<agents>\n{agents}\n</agents>\n",
 }
 
 
@@ -169,9 +170,7 @@ def build_candidate_generation_user_prompt(
     """
     # Use structured sections for clarity
     if mode == "bundle" and agent_blocks is not None:
-        prompt_section = (
-            f"###### START agents ######\n{agent_blocks}\n###### END agents ######\n"
-        )
+        prompt_section = META_PROMPT_SECTIONS["agents"].format(agents=agent_blocks)
     else:
         prompt_section = META_PROMPT_SECTIONS["baseline_prompt"].format(
             prompt=current_prompt_messages
