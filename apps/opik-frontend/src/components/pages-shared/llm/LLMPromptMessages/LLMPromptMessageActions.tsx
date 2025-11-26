@@ -312,6 +312,7 @@ const LLMPromptMessageActions: React.FC<LLMPromptLibraryActionsProps> = ({
               }
             }}
             onOpenChange={onPromptSelectBoxOpenChange}
+            refetchOnMount
           />
         </div>
         <TooltipWrapper content="Discard changes">
