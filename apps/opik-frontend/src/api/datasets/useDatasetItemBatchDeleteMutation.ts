@@ -18,6 +18,15 @@ const useDatasetItemBatchDeleteMutation = () => {
       });
       return data;
     },
+    onSuccess: (_, { ids }) => {
+      const isSingle = ids.length === 1;
+      toast({
+        title: isSingle ? "Dataset item removed" : "Dataset items removed",
+        description: isSingle
+          ? "The dataset item has been removed. Don't forget to save your changes to create a new version."
+          : "The dataset items have been removed. Don't forget to save your changes to create a new version.",
+      });
+    },
     onError: (error) => {
       const message = get(
         error,
