@@ -130,6 +130,8 @@ const AddEditPromptDialog: React.FC<AddPromptDialogProps> = ({
             role: m.role,
             content: m.content,
           })),
+          null,
+          2,
         )
       : template;
 
