@@ -2032,6 +2032,10 @@ class TraceDAOImpl implements TraceDAO {
             ), span_feedback_scores_agg AS (
                 SELECT
                     trace_id,
+                    mapFromArrays(
+                            groupArray(name),
+                            groupArray(value)
+                    ) AS span_feedback_scores,
                     groupArray(tuple(
                         name,
                         category_name,
@@ -2188,6 +2192,7 @@ class TraceDAOImpl implements TraceDAO {
                 avg(tags_length) AS tags,
                 avgMap(s.usage) as usage,
                 avgMap(f.feedback_scores) AS feedback_scores,
+                avgMap(sfs.span_feedback_scores) AS span_feedback_scores,
                 avg(s.llm_span_count) AS llm_span_count_avg,
                 avg(s.span_count) AS span_count_avg,
                 avgIf(s.total_estimated_cost, s.total_estimated_cost > 0) AS total_estimated_cost_,
@@ -2204,6 +2209,7 @@ class TraceDAOImpl implements TraceDAO {
             FROM trace_final t
             LEFT JOIN spans_agg AS s ON t.id = s.trace_id
             LEFT JOIN feedback_scores_agg as f ON t.id = f.entity_id
+            LEFT JOIN span_feedback_scores_agg as sfs ON t.id = sfs.trace_id
             LEFT JOIN guardrails_agg as g ON t.id = g.entity_id
             <if(project_stats)>
             LEFT JOIN error_count_current ec ON t.project_id = ec.project_id
@@ -3351,11 +3357,11 @@ class TraceDAOImpl implements TraceDAO {
 
     /**
      * Retrieves a value from a database row, handling cases where columns may be absent.
-     * 
+     *
      * <p>Some queries (e.g., count queries, filtered queries) may not include all columns
      * in their result sets. This method safely handles missing columns by returning null
      * when a column is excluded or doesn't exist in the result set metadata.
-     * 
+     *
      * @param exclude Set of fields to exclude from retrieval (returns null if field is excluded)
      * @param field The trace field being retrieved
      * @param row The database row containing the data
