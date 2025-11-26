@@ -14,11 +14,6 @@ import {
 import { Filter } from "@/types/filters";
 import MetricContainerChart from "@/components/pages/TracesPage/MetricsTab/MetricChart/MetricChartContainer";
 import { INTERVAL_DESCRIPTIONS } from "@/components/pages/TracesPage/MetricsTab/utils";
-import {
-  calculateIntervalType,
-  calculateIntervalStartAndEnd,
-} from "@/components/pages-shared/traces/MetricDateRangeSelect/utils";
-import { DateRangeValue } from "@/components/shared/DateRangeSelect";
 
 const ProjectMetricsWidget: React.FunctionComponent<
   DashboardWidgetComponentProps
@@ -44,40 +39,10 @@ const ProjectMetricsWidget: React.FunctionComponent<
   const previewWidget = useDashboardStore(selectPreviewWidget);
   const widget = preview ? previewWidget : storeWidget;
 
-  if (!widget) {
-    return null;
-  }
-
   const widgetProjectId = widget?.config?.projectId as string | undefined;
-  const useGlobalDateRange = widget?.config?.useGlobalDateRange ?? true;
-  const localDateRange = widget?.config?.dateRange as
-    | DateRangeValue
-    | undefined;
 
   const { projectId, interval, intervalStart, intervalEnd } = useMemo(() => {
     const finalProjectId = widgetProjectId || globalConfig.projectId;
-
-    if (useGlobalDateRange) {
-      return {
-        projectId: finalProjectId,
-        interval: globalConfig.interval,
-        intervalStart: globalConfig.intervalStart,
-        intervalEnd: globalConfig.intervalEnd,
-      };
-    }
-
-    if (localDateRange) {
-      const localInterval = calculateIntervalType(localDateRange);
-      const { intervalStart: localStart, intervalEnd: localEnd } =
-        calculateIntervalStartAndEnd(localDateRange);
-
-      return {
-        projectId: finalProjectId,
-        interval: localInterval,
-        intervalStart: localStart,
-        intervalEnd: localEnd,
-      };
-    }
 
     return {
       projectId: finalProjectId,
@@ -87,13 +52,15 @@ const ProjectMetricsWidget: React.FunctionComponent<
     };
   }, [
     widgetProjectId,
-    useGlobalDateRange,
-    localDateRange,
     globalConfig.projectId,
     globalConfig.interval,
     globalConfig.intervalStart,
     globalConfig.intervalEnd,
   ]);
+
+  if (!widget) {
+    return null;
+  }
 
   const renderChartContent = () => {
     const metricType = widget?.config?.metricType as string | undefined;
@@ -154,30 +121,15 @@ const ProjectMetricsWidget: React.FunctionComponent<
         title={widget.title}
         subtitle={widget.subtitle}
         actions={
-          <DashboardWidget.Actions>
-            <DashboardWidget.DeleteAction
-              sectionId={sectionId!}
-              widgetId={widgetId!}
-              widgetTitle={widget.title}
-            />
-            <DashboardWidget.EditAction
-              sectionId={sectionId!}
-              widgetId={widgetId!}
-            />
-            <DashboardWidget.DuplicateAction
-              sectionId={sectionId!}
-              widgetType={widget.type}
-              widgetTitle={widget.title}
-              widgetConfig={widget.config}
-            />
-            <DashboardWidget.MoveAction
-              sectionId={sectionId!}
-              widgetId={widgetId!}
-            />
-            <div className="h-4 w-px bg-border" />
-            <DashboardWidget.DragHandle />
-          </DashboardWidget.Actions>
+          <DashboardWidget.ActionsMenu
+            sectionId={sectionId!}
+            widgetId={widgetId!}
+            widgetType={widget.type}
+            widgetTitle={widget.title}
+            widgetConfig={widget.config}
+          />
         }
+        dragHandle={<DashboardWidget.DragHandle />}
       />
       <DashboardWidget.Content>{renderChartContent()}</DashboardWidget.Content>
     </DashboardWidget>

@@ -1,76 +1,50 @@
 import { DashboardState } from "@/types/dashboard";
-import { generateEmptyDashboard } from "@/lib/dashboard/utils";
-import isArray from "lodash/isArray";
-import isNumber from "lodash/isNumber";
+import {
+  generateEmptyDashboard,
+  DASHBOARD_VERSION,
+} from "@/lib/dashboard/utils";
 import isObject from "lodash/isObject";
 
-export const DASHBOARD_VERSION = 1;
+type MigrationFunction = (dashboard: DashboardState) => DashboardState;
 
-export const migrateDashboardV1toV2 = (
-  dashboard: DashboardState,
+const migrations: Record<number, MigrationFunction> = {};
+
+export const migrateDashboardConfig = (
+  config: DashboardState,
 ): DashboardState => {
-  return {
-    ...dashboard,
-    version: 2,
-  };
-};
-
-export const migrateDashboardConfig = (config: unknown): DashboardState => {
   if (!isObject(config)) {
+    console.error("Dashboard config is not an object");
     return generateEmptyDashboard();
   }
 
-  const dashboard = config as Partial<DashboardState>;
+  const currentVersion = config.version || 0;
+  let current = { ...config };
 
-  if (!dashboard.version) {
-    return {
-      sections: dashboard.sections || [],
-      version: 1,
-      lastModified: dashboard.lastModified || Date.now(),
-    };
+  for (
+    let version = currentVersion + 1;
+    version <= DASHBOARD_VERSION;
+    version++
+  ) {
+    const migrationFn = migrations[version];
+    if (migrationFn) {
+      current = migrationFn(current);
+    }
   }
 
-  return applyDashboardMigrations(dashboard);
+  return current;
 };
 
-export const applyDashboardMigrations = (
-  dashboard: unknown,
-): DashboardState => {
-  if (!isObject(dashboard)) {
-    return {
-      sections: [],
-      version: DASHBOARD_VERSION,
-      lastModified: Date.now(),
-    };
-  }
-
-  const migratedDashboard = { ...dashboard } as DashboardState;
-
-  if (!migratedDashboard.version || migratedDashboard.version < 1) {
-    migratedDashboard.version = 1;
-  }
-
-  if (!isArray(migratedDashboard.sections)) {
-    migratedDashboard.sections = [];
-  }
-
-  if (!isNumber(migratedDashboard.lastModified)) {
-    migratedDashboard.lastModified = Date.now();
-  }
-
-  return migratedDashboard;
-};
-
-export const isDashboardStateValid = (
-  data: unknown,
-): data is DashboardState => {
-  if (!isObject(data)) return false;
-
-  const dashboard = data as Partial<DashboardState>;
-
-  return (
-    isNumber(dashboard.version) &&
-    isArray(dashboard.sections) &&
-    isNumber(dashboard.lastModified)
-  );
-};
+// Future migrations:
+// Add migration functions here and register them in the migrations map
+//
+// Example for migrating to version 2:
+//
+// const migrateDashboardV1toV2 = (dashboard: DashboardState): DashboardState => {
+//   return {
+//     ...dashboard,
+//     version: 2,
+//     // Add any data transformations needed for v2
+//   };
+// };
+//
+// migrations[2] = migrateDashboardV1toV2;

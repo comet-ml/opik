@@ -76,7 +76,7 @@ const WidgetConfigDialog: React.FunctionComponent<WidgetConfigDialogProps> = ({
   }, [mode, open, widgetId, sectionId, getWidgetById]);
 
   useEffect(() => {
-    if (currentStep === "edit") {
+    if (open && currentStep === "edit") {
       const previewWidget: DashboardWidget = {
         id: "preview",
         title: widgetData.title || "Widget title",
@@ -86,7 +86,7 @@ const WidgetConfigDialog: React.FunctionComponent<WidgetConfigDialogProps> = ({
       };
       setPreviewWidget(previewWidget);
     }
-  }, [widgetData, currentStep, setPreviewWidget]);
+  }, [widgetData, currentStep, setPreviewWidget, open]);
 
   useEffect(() => {
     if (!open) {
