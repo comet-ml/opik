@@ -40,7 +40,6 @@ import useAppStore from "@/store/AppStore";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 import ExplainerDescription from "@/components/shared/ExplainerDescription/ExplainerDescription";
 import { useMessageContent } from "@/hooks/useMessageContent";
-import { useRawJsonView } from "@/hooks/useRawJsonView";
 import ChatPromptRawView from "@/components/pages-shared/llm/ChatPromptRawView/ChatPromptRawView";
 
 type AddPromptDialogProps = {
@@ -68,10 +67,7 @@ const AddEditPromptDialog: React.FC<AddPromptDialogProps> = ({
     generateDefaultLLMPromptMessage(),
   ]);
   const [showRawView, setShowRawView] = useState(false);
-
-  // Use hook for raw JSON view state management
-  const { rawJsonValue, setRawJsonValue, syncRawJsonFromMessages } =
-    useRawJsonView(messages);
+  const [rawJsonValue, setRawJsonValue] = useState("");
 
   const [showInvalidJSON, setShowInvalidJSON] = useBooleanTimeoutState({});
   const theme = useCodemirrorTheme({
@@ -249,7 +245,16 @@ const AddEditPromptDialog: React.FC<AddPromptDialogProps> = ({
                   onClick={() => {
                     const newShowRawView = !showRawView;
                     if (newShowRawView) {
-                      syncRawJsonFromMessages();
+                      setRawJsonValue(
+                        JSON.stringify(
+                          messages.map((m) => ({
+                            role: m.role,
+                            content: m.content,
+                          })),
+                          null,
+                          2,
+                        ),
+                      );
                     }
                     setShowRawView(newShowRawView);
                   }}
