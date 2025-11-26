@@ -97,22 +97,26 @@ const PlaygroundPrompt = ({
   const selectedChatPromptId = prompt?.loadedChatPromptId;
 
   // Fetch chat prompt data when selected
-  const { data: chatPromptData } = usePromptByIdApi(
-    {
-      promptId: selectedChatPromptId!,
-    },
-    {
-      enabled: !!selectedChatPromptId,
-    },
-  );
+  const { data: chatPromptData, isSuccess: chatPromptDataLoaded } =
+    usePromptByIdApi(
+      {
+        promptId: selectedChatPromptId!,
+      },
+      {
+        enabled: !!selectedChatPromptId,
+      },
+    );
 
   // Fetch chat prompt version when chat prompt is loaded
-  const { data: chatPromptVersionData } = usePromptVersionById(
+  const {
+    data: chatPromptVersionData,
+    isSuccess: chatPromptVersionDataLoaded,
+  } = usePromptVersionById(
     {
       versionId: chatPromptData?.latest_version?.id || "",
     },
     {
-      enabled: !!chatPromptData?.latest_version?.id,
+      enabled: !!chatPromptData?.latest_version?.id && chatPromptDataLoaded,
     },
   );
 
@@ -268,7 +272,8 @@ const PlaygroundPrompt = ({
     if (
       chatPromptVersionData?.template &&
       selectedChatPromptId &&
-      chatPromptData
+      chatPromptData &&
+      chatPromptVersionDataLoaded
     ) {
       try {
         // Parse the JSON string from template
@@ -298,6 +303,7 @@ const PlaygroundPrompt = ({
     updatePrompt,
     selectedChatPromptId,
     chatPromptData,
+    chatPromptVersionDataLoaded,
   ]);
 
   // Handler for saving chat prompt
