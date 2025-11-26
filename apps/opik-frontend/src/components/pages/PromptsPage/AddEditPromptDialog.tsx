@@ -68,6 +68,7 @@ const AddEditPromptDialog: React.FC<AddPromptDialogProps> = ({
   ]);
   const [showRawView, setShowRawView] = useState(false);
   const [rawJsonValue, setRawJsonValue] = useState("");
+  const [isRawJsonValid, setIsRawJsonValid] = useState(true);
 
   const [showInvalidJSON, setShowInvalidJSON] = useBooleanTimeoutState({});
   const theme = useCodemirrorTheme({
@@ -86,7 +87,10 @@ const AddEditPromptDialog: React.FC<AddPromptDialogProps> = ({
   const isChatPrompt = templateStructure === PROMPT_TEMPLATE_STRUCTURE.CHAT;
   const isValid = Boolean(
     name.length &&
-      (isEdit || (isChatPrompt ? messages.length > 0 : template.length)),
+      (isEdit ||
+        (isChatPrompt
+          ? messages.length > 0 && (!showRawView || isRawJsonValid)
+          : template.length)),
   );
   const title = isEdit ? "Edit prompt" : "Create a new prompt";
   const submitText = isEdit ? "Update prompt" : "Create prompt";
@@ -257,6 +261,8 @@ const AddEditPromptDialog: React.FC<AddPromptDialogProps> = ({
                           2,
                         ),
                       );
+                      // JSON generated from valid messages is always valid
+                      setIsRawJsonValid(true);
                     }
                     setShowRawView(newShowRawView);
                   }}
@@ -279,6 +285,7 @@ const AddEditPromptDialog: React.FC<AddPromptDialogProps> = ({
                   value={rawJsonValue}
                   onMessagesChange={setMessages}
                   onRawValueChange={setRawJsonValue}
+                  onValidationChange={setIsRawJsonValid}
                 />
               ) : (
                 <>

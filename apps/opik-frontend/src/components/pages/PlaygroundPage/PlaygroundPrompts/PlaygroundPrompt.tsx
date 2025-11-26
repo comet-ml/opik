@@ -7,6 +7,7 @@ import React, {
 } from "react";
 import { CopyPlus, Trash, Save } from "lucide-react";
 import last from "lodash/last";
+import isEqual from "fast-deep-equal";
 import { useQueryClient } from "@tanstack/react-query";
 
 import { LLM_MESSAGE_ROLE, LLMMessage } from "@/types/llm";
@@ -138,6 +139,17 @@ const PlaygroundPrompt = ({
       ),
     [messages],
   );
+
+  // Check if loaded chat prompt has unsaved changes
+  const hasUnsavedChatPromptChanges = useMemo(() => {
+    if (!selectedChatPromptId || !chatPromptVersionData) {
+      return false;
+    }
+
+    // Compare current messages with loaded chat prompt
+    const loadedTemplate = chatPromptVersionData.template;
+    return !isEqual(chatPromptTemplate, loadedTemplate);
+  }, [selectedChatPromptId, chatPromptVersionData, chatPromptTemplate]);
 
   const handleAddMessage = useCallback(() => {
     const newMessage = generateDefaultLLMPromptMessage();
@@ -377,11 +389,18 @@ const PlaygroundPrompt = ({
               />
             </div>
           </TooltipWrapper>
-          <TooltipWrapper content="Save as chat prompt">
+          <TooltipWrapper
+            content={
+              hasUnsavedChatPromptChanges
+                ? "This prompt version hasn't been saved"
+                : "Save as chat prompt"
+            }
+          >
             <Button
               variant="outline"
               size="icon-sm"
               onClick={handleSaveChatPrompt}
+              badge={hasUnsavedChatPromptChanges}
             >
               <Save />
             </Button>

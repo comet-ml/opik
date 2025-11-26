@@ -171,20 +171,20 @@ const LLMPromptMessages = ({
         </SortableContext>
 
         {hint && <p className="comet-body-s mt-2 text-light-slate">{hint}</p>}
-      </div>
 
-      {!hideAddButton && (
-        <Button
-          variant="outline"
-          size="sm"
-          className="mt-2"
-          onClick={onAddMessage}
-          type="button"
-        >
-          <Plus className="mr-2 size-4" />
-          Message
-        </Button>
-      )}
+        {!hideAddButton && (
+          <Button
+            variant="outline"
+            size="sm"
+            className="mt-2"
+            onClick={onAddMessage}
+            type="button"
+          >
+            <Plus className="mr-2 size-4" />
+            Message
+          </Button>
+        )}
+      </div>
     </DndContext>
   );
 };

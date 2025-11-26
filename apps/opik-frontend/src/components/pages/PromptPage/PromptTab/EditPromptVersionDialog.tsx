@@ -97,6 +97,7 @@ const EditPromptVersionDialog: React.FC<EditPromptVersionDialogProps> = ({
   const [messages, setMessages] = useState<LLMMessage[]>(initialMessages);
   const [showRawView, setShowRawView] = useState(false);
   const [rawJsonValue, setRawJsonValue] = useState("");
+  const [isRawJsonValid, setIsRawJsonValid] = useState(true);
 
   const [showInvalidJSON, setShowInvalidJSON] = useBooleanTimeoutState({});
   const theme = useCodemirrorTheme({
@@ -158,7 +159,9 @@ const EditPromptVersionDialog: React.FC<EditPromptVersionDialogProps> = ({
     : template !== promptTemplate;
   const metadataHasChanges = metadata !== metadataString;
   const isValid = isChatPrompt
-    ? messages.length > 0 && (templateHasChanges || metadataHasChanges)
+    ? messages.length > 0 &&
+      (!showRawView || isRawJsonValid) &&
+      (templateHasChanges || metadataHasChanges)
     : template?.length && (templateHasChanges || metadataHasChanges);
 
   const originalText = promptTemplate;
@@ -215,6 +218,8 @@ const EditPromptVersionDialog: React.FC<EditPromptVersionDialogProps> = ({
                           2,
                         ),
                       );
+                      // JSON generated from valid messages is always valid
+                      setIsRawJsonValid(true);
                     }
                     setShowRawView(newShowRawView);
                   }}
@@ -262,6 +267,7 @@ const EditPromptVersionDialog: React.FC<EditPromptVersionDialogProps> = ({
                   value={rawJsonValue}
                   onMessagesChange={setMessages}
                   onRawValueChange={setRawJsonValue}
+                  onValidationChange={setIsRawJsonValid}
                 />
               ) : (
                 <>
