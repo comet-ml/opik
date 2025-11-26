@@ -7,6 +7,7 @@ import com.comet.opik.api.Prompt;
 import com.comet.opik.api.PromptVersion;
 import com.comet.opik.api.events.webhooks.MetricsAlertPayload;
 import com.comet.opik.api.events.webhooks.WebhookEvent;
+import com.comet.opik.utils.template.TemplateUtils;
 import lombok.NonNull;
 import lombok.experimental.UtilityClass;
 import lombok.extern.slf4j.Slf4j;
@@ -35,6 +36,14 @@ public class SlackWebhookPayloadMapper {
     private static final int SLACK_TEXT_BLOCK_LIMIT = 3000;
     public static final String BASE_URL_METADATA_KEY = "base_url";
     private static final String DEFAULT_BASE_URL = "http://localhost:5173";
+
+    private static final String METRICS_ALERT_DETAILS_TEMPLATE = "• *Current <type>:* <valuePrefix><metricValue><valueSuffix>\n"
+            +
+            "  *Threshold:* <valuePrefix><threshold><valueSuffix>\n" +
+            "  *Time Window:* <windowDuration>\n" +
+            "<if(feedbackScoreName)>  *Feedback Score:* `<feedbackScoreName>`\n<endif>" +
+            "  *Scope:* <scope>";
+    private static final String PROJECTS_TEMPLATE = "*Projects:* `<projectNames>`";
 
     /**
      * Converts a webhook event to Slack webhook payload.
@@ -290,25 +299,29 @@ public class SlackWebhookPayloadMapper {
             // Build scope description
             String scope = (payload.projectIds() == null || payload.projectIds().isEmpty())
                     ? "*Workspace-wide*"
-                    : String.format("*Projects:* `%s`", payload.projectNames());
+                    : TemplateUtils.newST(PROJECTS_TEMPLATE)
+                            .add("projectNames", payload.projectNames())
+                            .render();
 
             // Format based on metric type
             String valuePrefix = type.equals("Cost") ? "$" : "";
             String valueSuffix = type.equals("Latency") ? " s" : "";
 
-            return String.format("• *Current %s:* %s%s%s\n" +
-                    "  *Threshold:* %s%s%s\n" +
-                    "  *Time Window:* %s\n" +
-                    "  *Scope:* %s",
-                    type,
-                    valuePrefix,
-                    payload.metricValue(),
-                    valueSuffix,
-                    valuePrefix,
-                    payload.threshold(),
-                    valueSuffix,
-                    windowDuration,
-                    scope);
+            var st = TemplateUtils.newST(METRICS_ALERT_DETAILS_TEMPLATE);
+            st.add("type", type);
+            st.add("valuePrefix", valuePrefix);
+            st.add("metricValue", payload.metricValue());
+            st.add("valueSuffix", valueSuffix);
+            st.add("threshold", payload.threshold());
+            st.add("windowDuration", windowDuration);
+            st.add("scope", scope);
+
+            // Only add feedback score name if it's not null
+            if (payload.feedbackScoreName() != null) {
+                st.add("feedbackScoreName", payload.feedbackScoreName());
+            }
+
+            return st.render();
         } catch (Exception e) {
             log.error("Failed to format metrics alert payload: '{}'", payload, e);
             return "• %s alert (unable to parse details)".formatted(type);
