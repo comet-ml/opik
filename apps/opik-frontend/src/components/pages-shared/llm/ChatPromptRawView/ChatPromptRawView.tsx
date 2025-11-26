@@ -7,6 +7,13 @@ import { Description } from "@/components/ui/description";
 import { useCodemirrorTheme } from "@/hooks/useCodemirrorTheme";
 import { LLMMessage } from "@/types/llm";
 
+const CODEMIRROR_BASIC_SETUP = {
+  lineNumbers: true,
+  highlightActiveLineGutter: false,
+  highlightActiveLine: false,
+  foldGutter: true,
+};
+
 interface ChatPromptRawViewProps {
   value: string;
   onMessagesChange: (messages: LLMMessage[]) => void;
@@ -59,12 +66,7 @@ const ChatPromptRawView: React.FC<ChatPromptRawViewProps> = ({
             }
           }}
           extensions={[jsonLanguage, EditorView.lineWrapping]}
-          basicSetup={{
-            lineNumbers: true,
-            highlightActiveLineGutter: false,
-            highlightActiveLine: false,
-            foldGutter: true,
-          }}
+          basicSetup={CODEMIRROR_BASIC_SETUP}
         />
       </div>
       <Description>
