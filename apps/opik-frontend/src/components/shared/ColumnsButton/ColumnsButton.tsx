@@ -124,7 +124,7 @@ const ColumnsButton = <TColumnData,>({
                     {section.title}
                   </DropdownMenuLabel>
                   {section.action && (
-                    <div className="shrink-0">{section.action}</div>
+                    <div className="shrink-0 self-start">{section.action}</div>
                   )}
                 </div>
                 <SortableMenuSection
