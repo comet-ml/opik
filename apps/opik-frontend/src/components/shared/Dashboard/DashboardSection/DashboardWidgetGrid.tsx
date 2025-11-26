@@ -3,7 +3,7 @@ import GridLayout, { Layout, WidthProvider } from "react-grid-layout";
 import "react-grid-layout/css/styles.css";
 import "react-resizable/css/styles.css";
 
-import { DashboardLayout } from "@/types/dashboard";
+import { DashboardLayout, WIDGET_TYPE } from "@/types/dashboard";
 import {
   GRID_COLUMNS,
   ROW_HEIGHT,
@@ -90,13 +90,17 @@ const DashboardWidgetGrid: React.FunctionComponent<
     >
       {widgetIds.map((widgetId) => {
         const widget = getWidget(widgetId);
-        const WidgetComponent = widgetResolver?.(widget?.type || "chart");
+        const widgetComponents = widgetResolver?.(
+          widget?.type || WIDGET_TYPE.CHART_METRIC,
+        );
 
-        if (!WidgetComponent) return null;
+        if (!widgetComponents) return null;
+
+        const { Widget } = widgetComponents;
 
         return (
           <div key={widgetId}>
-            <WidgetComponent sectionId={sectionId} widgetId={widgetId} />
+            <Widget sectionId={sectionId} widgetId={widgetId} />
           </div>
         );
       })}

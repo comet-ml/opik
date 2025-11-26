@@ -806,30 +806,56 @@ const trend = current > previous ? "up" : "down";
 
 **Backend API:** None (frontend only)
 
-**Component:**
+**Implementation Status:** ✅ **COMPLETED**
+
+**Components Created:**
 
 ```typescript
-// apps/opik-frontend/src/components/pages/DashboardPage/widgets/TextWidget.tsx
-import ReactMarkdown from "react-markdown";
-import CodeMirror from "@uiw/react-codemirror";
-import { markdown } from "@codemirror/lang-markdown";
+// Widget Component
+// apps/opik-frontend/src/components/shared/Dashboard/widgets/TextMarkdownWidget/TextMarkdownWidget.tsx
+// - Uses existing MarkdownPreview component for rendering
+// - Uses existing DashboardWidget compound components (Header, Actions, Content, EmptyState)
+// - Handles empty state when no content exists
+// - Includes all standard widget actions (edit, delete, duplicate, move, drag)
+// - Supports preview mode: preview={true} hides actions and uses previewData prop
 
-interface TextWidgetConfig {
-  content: string; // Markdown string
-}
-
-// Editor mode (in config dialog)
-<CodeMirror
-  value={config.content}
-  extensions={[markdown()]}
-  onChange={(value) => updateConfig({ content: value })}
-/>
-
-// Preview mode (in dashboard)
-<ReactMarkdown>{config.content}</ReactMarkdown>;
+// Editor Component
+// apps/opik-frontend/src/components/shared/Dashboard/widgets/TextMarkdownWidget/TextMarkdownEditor.tsx
+// - Uses CodeMirror for markdown editing
+// - Includes title and subtitle fields
+// - Uses useCodemirrorTheme for consistent theming
+// - No inline preview (preview shown only on right side of dialog)
 ```
 
-**Storage:**
+**Registration & Preview:**
+
+```typescript
+// Updated: apps/opik-frontend/src/components/shared/Dashboard/widgets/widgetRegistry.tsx
+// - Registered TextMarkdownWidget and TextMarkdownEditor
+// - Widget selector: apps/opik-frontend/src/components/shared/Dashboard/WidgetConfigDialog/WidgetConfigDialogAddStep.tsx
+// - Already includes TEXT_MARKDOWN widget option (enabled by default)
+
+// Updated: apps/opik-frontend/src/components/shared/Dashboard/WidgetConfigDialog/WidgetConfigPreview.tsx
+// - Renders actual widget component in preview mode
+// - Uses widgetResolver to get Widget component
+// - Reads preview widget from DashboardStore instead of props
+// - Live preview shows real widget rendering as user configures it
+// - Preview mode renders only widget content (no header, actions, or wrapper)
+
+// Updated: DashboardStore
+// - Added previewWidget state to store widget being configured
+// - Added setPreviewWidget/getPreviewWidget actions
+// - Added selectPreviewWidget/selectSetPreviewWidget selectors
+// - WidgetConfigDialog updates store as user edits widget config
+// - Store cleaned up when dialog closes
+
+// Updated: DashboardWidgetComponentProps interface
+// - Added optional preview?: boolean prop
+// - Made sectionId and widgetId optional for preview mode
+// - Removed previewData prop (now read from store)
+```
+
+**Widget Config Structure:**
 
 ```json
 {
@@ -840,13 +866,120 @@ interface TextWidgetConfig {
 }
 ```
 
-**Dependencies:**
+**Dependencies (Already Installed):**
 
-- `react-markdown` - For rendering markdown preview
-- `@uiw/react-codemirror` - For markdown editing (already used in project)
-- `@codemirror/lang-markdown` - Markdown syntax highlighting
+- `react-markdown` - For rendering markdown preview (via MarkdownPreview)
+- `@uiw/react-codemirror` - For markdown editing
+- Note: Markdown syntax highlighting not enabled (would require `@codemirror/lang-markdown` package)
+- Plain text editing mode used instead - fully functional
 
-**Implementation:** 0.5 day
+**Implementation:** 0.5 day ✅ (Completed)
+
+---
+
+### 3.2 Project Metrics Chart Widget
+
+**Implementation Status:** ✅ **COMPLETED**
+
+**Components:**
+
+```typescript
+// Widget Component
+// apps/opik-frontend/src/components/shared/Dashboard/widgets/ProjectMetricsWidget/ProjectMetricsWidget.tsx
+// - Renders metric charts using MetricContainerChart with chartOnly mode
+// - Supports both trace and thread metrics
+// - Passes filters and chart type to chart component
+// - Uses DashboardWidget compound components
+
+// Editor Component
+// apps/opik-frontend/src/components/shared/Dashboard/widgets/ProjectMetricsWidget/ProjectMetricsEditor.tsx
+// - Complete configuration form with:
+//   - Widget title and subtitle fields
+//   - Project selector (optional, falls back to dashboard project)
+//   - Metric type selector (all 9 metric types)
+//   - Chart type selector (line/bar)
+//   - Use global date range toggle
+//   - Local date range picker (shown when toggle is OFF, uses MetricDateRangeSelect)
+//   - Filters section (trace or thread filters based on metric type)
+//   - Filter UI matches AddEditRule dialog pattern
+```
+
+**Configuration Options:**
+
+1. **Metric Types** - 9 options:
+
+   - Trace Feedback Scores
+   - Number of Traces
+   - Trace Duration
+   - Token Usage
+   - Estimated Cost
+   - Failed Guardrails
+   - Number of Threads
+   - Thread Duration
+   - Thread Feedback Scores
+
+2. **Chart Types** - 2 options:
+
+   - Line Chart
+   - Bar Chart
+
+3. **Date Range** - Toggle:
+
+   - Use dashboard global date range (default: ON)
+   - Use widget-specific date range (with MetricDateRangeSelect picker)
+
+4. **Filters** - Full filtering support:
+   - Trace filters (for trace-based metrics)
+   - Thread filters (for thread-based metrics)
+   - Filter by: ID, name, time, input, output, duration, metadata, tags, feedback scores, custom paths
+   - Same filter UI as used in Rules and Metrics Tab
+
+**Widget Config Structure:**
+
+```typescript
+{
+  type: WidgetType.CHART_METRIC,
+  config: {
+    projectId?: string;  // Optional project ID (falls back to dashboard project)
+    metricType: "TRACE_COUNT",
+    chartType: "line",
+    useGlobalDateRange: true,
+    dateRange?: DateRangeValue;  // Local date range when useGlobalDateRange is false
+    traceFilters: [
+      { field: "tags", operator: "=", value: "production" }
+    ]
+  }
+}
+```
+
+**Implementation:** 1 day ✅ (Completed)
+
+---
+
+**Files Created:**
+
+- `/apps/opik-frontend/src/components/shared/Dashboard/constants.ts` - Dashboard widget constants (default titles)
+- `/apps/opik-frontend/src/components/shared/Dashboard/widgets/TextMarkdownWidget/TextMarkdownWidget.tsx` - Text widget display component
+- `/apps/opik-frontend/src/components/shared/Dashboard/widgets/TextMarkdownWidget/TextMarkdownEditor.tsx` - Text widget configuration editor
+- `/apps/opik-frontend/src/components/shared/Dashboard/DashboardWidget/DashboardWidgetPreviewContent.tsx` - Preview mode wrapper component
+
+**Files Updated:**
+
+- `/apps/opik-frontend/src/components/shared/Dashboard/widgets/widgetRegistry.tsx` - Registered TextMarkdown and ProjectMetrics widgets
+- `/apps/opik-frontend/src/components/shared/Dashboard/widgets/ProjectMetricsWidget/ProjectMetricsWidget.tsx` - Fixed imports, added preview mode, filters support, chart type support, project selector support, local date range support
+- `/apps/opik-frontend/src/components/shared/Dashboard/widgets/ProjectMetricsWidget/ProjectMetricsEditor.tsx` - Complete configuration editor with project selector (ProjectsSelectBox), metric selector (SelectBox), chart type (SelectBox), date range toggle, local date range picker (MetricDateRangeSelect), and filters (FiltersContent)
+- `/apps/opik-frontend/src/components/shared/Dashboard/WidgetConfigDialog/WidgetConfigPreview.tsx` - Renders actual widget using store
+- `/apps/opik-frontend/src/components/shared/Dashboard/WidgetConfigDialog/WidgetConfigDialog.tsx` - Updates preview widget in store on config changes, uses DEFAULT_WIDGET_TITLES from constants
+- `/apps/opik-frontend/src/components/shared/Dashboard/WidgetConfigDialog/WidgetConfigDialogAddStep.tsx` - Added ProjectMetric chart to widget selector
+- `/apps/opik-frontend/src/components/shared/Dashboard/DashboardWidget/index.ts` - Registered PreviewContent component
+- `/apps/opik-frontend/src/components/pages/TracesPage/MetricsTab/MetricChart/MetricChartContainer.tsx` - Added chartOnly mode
+- `/apps/opik-frontend/src/store/DashboardStore.ts` - Added preview widget state and actions
+- `/apps/opik-frontend/src/types/dashboard.ts` - Updated ChartMetricWidget config with projectId, filters, chartType, useGlobalDateRange, and dateRange (DateRangeValue)
+
+**Files Deleted:**
+
+- `/apps/opik-frontend/src/components/pages/DashboardPage/AddWidgetDialog.tsx` - Removed obsolete file (replaced by WidgetConfigDialog system)
+- `/apps/opik-frontend/src/components/shared/DashboardWidget/` - Removed duplicate directory (correct location is `/apps/opik-frontend/src/components/shared/Dashboard/DashboardWidget/`)
 
 ---
 
@@ -910,7 +1043,8 @@ const WIDGET_TYPES = {
 };
 ```
 
-**Implementation:** 
+**Implementation:**
+
 - **Base component with 3 chart types:** 1.5 days (build reusable component supporting line/bar/area)
 - **Remaining 8 widgets:** 2 days (0.25 each - just schema definitions)
 
@@ -1232,7 +1366,14 @@ interface Dashboard {
   globalDateRange: {
     start: string;
     end: string;
-    preset: "past24hours" | "past3days" | "past7days" | "past30days" | "past60days" | "alltime" | "custom";
+    preset:
+      | "past24hours"
+      | "past3days"
+      | "past7days"
+      | "past30days"
+      | "past60days"
+      | "alltime"
+      | "custom";
   };
 
   sections: DashboardSection[];

@@ -23,15 +23,11 @@ import {
   selectUpdateSection,
   useDashboardStore,
 } from "@/store/DashboardStore";
-import DashboardSection from "./DashboardSection";
+import DashboardSection from "./DashboardSection/DashboardSection";
 
 const MemoizedSortableContext = memo(SortableContext);
 
-interface DashboardSectionsContainerProps {}
-
-const DashboardSectionsContainer: React.FunctionComponent<
-  DashboardSectionsContainerProps
-> = () => {
+const Dashboard: React.FC = () => {
   const [active, setActive] = useState<Active | null>(null);
   const dragTopCoordinate = React.useRef<number>(0);
 
@@ -179,4 +175,4 @@ const DashboardSectionsContainer: React.FunctionComponent<
   );
 };
 
-export default memo(DashboardSectionsContainer);
+export default memo(Dashboard);
