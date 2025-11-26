@@ -352,16 +352,6 @@ const ExperimentsPage: React.FC = () => {
     ? "There are no experiments yet"
     : "No search results";
 
-  const reasonsAction = useMemo(
-    () => (
-      <FeedbackScoreReasonToggle
-        showReasons={showReasons}
-        setShowReasons={setShowReasons}
-      />
-    ),
-    [showReasons, setShowReasons],
-  );
-
   const {
     columns,
     selectedRows,
@@ -369,12 +359,13 @@ const ExperimentsPage: React.FC = () => {
     resizeConfig,
     columnPinningConfig,
     groupingConfig,
-    columnSections,
+    buildColumnSections,
     selectedColumns,
     setSelectedColumns,
     columnsOrder,
     setColumnsOrder,
     groupFieldNames,
+    scoresColumnsData,
   } = useExperimentsTableConfig({
     storageKeyPrefix: STORAGE_KEY_PREFIX,
     defaultColumns: DEFAULT_COLUMNS,
@@ -387,8 +378,24 @@ const ExperimentsPage: React.FC = () => {
     actionsCell: ExperimentRowActionsCell,
     sortedColumns,
     setSortedColumns,
-    reasonsAction,
   });
+
+  const reasonsAction = useMemo(
+    () => (
+      <FeedbackScoreReasonToggle
+        showReasons={showReasons}
+        setShowReasons={setShowReasons}
+        scoresColumnsData={scoresColumnsData}
+        selectedColumns={selectedColumns}
+      />
+    ),
+    [showReasons, setShowReasons, scoresColumnsData, selectedColumns],
+  );
+
+  const columnSections = useMemo(
+    () => buildColumnSections(reasonsAction),
+    [buildColumnSections, reasonsAction],
+  );
 
   const handleRowClick = useCallback(
     (row: GroupedExperiment) => {

@@ -600,6 +600,8 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
             setShowReasons={setShowReasons}
             height={height}
             setHeight={setHeight}
+            scoresColumnsData={scoresColumnsData}
+            selectedColumns={selectedColumns}
           />
         ),
       },
@@ -612,6 +614,7 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
     setShowReasons,
     height,
     setHeight,
+    selectedColumns,
   ]);
 
   if (isPending || isFeedbackScoresNamesPending) {

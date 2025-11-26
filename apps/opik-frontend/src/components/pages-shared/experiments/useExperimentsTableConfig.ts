@@ -54,7 +54,6 @@ export type UseExperimentsTableConfigProps<T> = {
   actionsCell?: ColumnDefTemplate<CellContext<T, unknown>>;
   sortedColumns: ColumnSort[];
   setSortedColumns: OnChangeFn<ColumnSort[]>;
-  reasonsAction?: React.ReactNode;
 };
 
 export const useExperimentsTableConfig = <
@@ -73,7 +72,6 @@ export const useExperimentsTableConfig = <
   actionsCell,
   sortedColumns,
   setSortedColumns,
-  reasonsAction,
 }: UseExperimentsTableConfigProps<T>) => {
   const [selectedColumns, setSelectedColumns] = useLocalStorageState<string[]>(
     `${storageKeyPrefix}-selected-columns`,
@@ -300,8 +298,8 @@ export const useExperimentsTableConfig = <
     };
   }, [groupFieldNames]);
 
-  const columnSections = useMemo(() => {
-    return [
+  const buildColumnSections = useMemo(
+    () => (reasonsAction?: React.ReactNode) => [
       {
         title: "Feedback scores",
         columns: scoresColumnsData,
@@ -309,13 +307,9 @@ export const useExperimentsTableConfig = <
         onOrderChange: setScoresColumnsOrder,
         action: reasonsAction,
       },
-    ];
-  }, [
-    scoresColumnsData,
-    scoresColumnsOrder,
-    setScoresColumnsOrder,
-    reasonsAction,
-  ]);
+    ],
+    [scoresColumnsData, scoresColumnsOrder, setScoresColumnsOrder],
+  );
 
   return {
     // State
@@ -340,6 +334,6 @@ export const useExperimentsTableConfig = <
     resizeConfig,
     columnPinningConfig,
     groupingConfig,
-    columnSections,
+    buildColumnSections,
   };
 };

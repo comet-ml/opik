@@ -887,6 +887,8 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
             setShowReasons={setShowReasons}
             height={height}
             setHeight={setHeight}
+            scoresColumnsData={scoresColumnsData}
+            selectedColumns={selectedColumns}
           />
         ),
       },
@@ -899,6 +901,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
     setShowReasons,
     height,
     setHeight,
+    selectedColumns,
   ]);
 
   if (isPending || isFeedbackScoresPending) {

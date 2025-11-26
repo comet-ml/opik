@@ -493,6 +493,8 @@ const ThreadQueueItemsTab: React.FunctionComponent<
             setShowReasons={setShowReasons}
             height={height}
             setHeight={setHeight}
+            scoresColumnsData={scoresColumnsData}
+            selectedColumns={selectedColumns}
           />
         ),
       },
@@ -505,6 +507,7 @@ const ThreadQueueItemsTab: React.FunctionComponent<
     setShowReasons,
     height,
     setHeight,
+    selectedColumns,
   ]);
 
   if (isPending) {

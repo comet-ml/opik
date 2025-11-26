@@ -325,7 +325,7 @@ const ExperimentsTab: React.FC<ExperimentsTabProps> = ({ promptId }) => {
     resizeConfig,
     columnPinningConfig,
     groupingConfig,
-    columnSections,
+    buildColumnSections,
     selectedColumns,
     setSelectedColumns,
     columnsOrder,
@@ -342,6 +342,11 @@ const ExperimentsTab: React.FC<ExperimentsTabProps> = ({ promptId }) => {
     sortedColumns,
     setSortedColumns,
   });
+
+  const columnSections = useMemo(
+    () => buildColumnSections(),
+    [buildColumnSections],
+  );
 
   const total = data?.total ?? 0;
   const noData = !search && filters.length === 0;

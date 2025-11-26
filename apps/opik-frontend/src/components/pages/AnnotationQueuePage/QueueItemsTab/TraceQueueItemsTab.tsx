@@ -538,6 +538,8 @@ const TraceQueueItemsTab: React.FC<TraceQueueItemsTabProps> = ({
             setShowReasons={setShowReasons}
             height={height}
             setHeight={setHeight}
+            scoresColumnsData={scoresColumnsData}
+            selectedColumns={selectedColumns}
           />
         ),
       },
@@ -550,6 +552,7 @@ const TraceQueueItemsTab: React.FC<TraceQueueItemsTabProps> = ({
     setShowReasons,
     height,
     setHeight,
+    selectedColumns,
   ]);
 
   if (isPending) {

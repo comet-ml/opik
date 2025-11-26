@@ -1,4 +1,4 @@
-import React, { useCallback } from "react";
+import React, { useCallback, useMemo } from "react";
 import { MessageSquareText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ROW_HEIGHT } from "@/types/shared";
@@ -8,6 +8,8 @@ type FeedbackScoreReasonToggleProps = {
   setShowReasons: (show: boolean) => void;
   height?: ROW_HEIGHT | string | null | undefined;
   setHeight?: (height: ROW_HEIGHT) => void;
+  scoresColumnsData: Array<{ id: string }>;
+  selectedColumns: string[];
 };
 
 const FeedbackScoreReasonToggle: React.FC<FeedbackScoreReasonToggleProps> = ({
@@ -15,7 +17,14 @@ const FeedbackScoreReasonToggle: React.FC<FeedbackScoreReasonToggleProps> = ({
   setShowReasons,
   height,
   setHeight,
+  scoresColumnsData,
+  selectedColumns,
 }) => {
+  const hasVisibleScoreColumns = useMemo(
+    () => scoresColumnsData.some((col) => selectedColumns.includes(col.id)),
+    [scoresColumnsData, selectedColumns],
+  );
+
   const handleToggle = useCallback(() => {
     const newShowReasons = !showReasons;
     setShowReasons(newShowReasons);
@@ -24,6 +33,10 @@ const FeedbackScoreReasonToggle: React.FC<FeedbackScoreReasonToggleProps> = ({
       setHeight(ROW_HEIGHT.medium);
     }
   }, [showReasons, setShowReasons, height, setHeight]);
+
+  if (!hasVisibleScoreColumns) {
+    return null;
+  }
 
   return (
     <Button
