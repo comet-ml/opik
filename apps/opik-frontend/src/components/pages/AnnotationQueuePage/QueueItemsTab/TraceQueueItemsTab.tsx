@@ -78,6 +78,7 @@ import SelectBox, {
   SelectBoxProps,
 } from "@/components/shared/SelectBox/SelectBox";
 import { useTruncationEnabled } from "@/components/server-sync-provider";
+import FeedbackScoreReasonToggle from "@/components/shared/FeedbackScoreReasonToggle/FeedbackScoreReasonToggle";
 
 const TRACE_COLUMNS: ColumnData<Trace>[] = [
   {
@@ -281,6 +282,13 @@ const TraceQueueItemsTab: React.FC<TraceQueueItemsTabProps> = ({
     queryParamConfig: StringParam,
     syncQueryWithLocalStorageOnInit: true,
   });
+
+  const [showReasons, setShowReasons] = useLocalStorageState<boolean>(
+    "queue-trace-show-reasons",
+    {
+      defaultValue: false,
+    },
+  );
 
   const [filters = [], setFilters] = useQueryParam("trace_filters", JsonParam, {
     updateType: "replaceIn",
@@ -525,9 +533,28 @@ const TraceQueueItemsTab: React.FC<TraceQueueItemsTabProps> = ({
         columns: scoresColumnsData,
         order: scoresColumnsOrder,
         onOrderChange: setScoresColumnsOrder,
+        action: (
+          <FeedbackScoreReasonToggle
+            showReasons={showReasons}
+            setShowReasons={setShowReasons}
+            height={height}
+            setHeight={setHeight}
+            scoresColumnsData={scoresColumnsData}
+            selectedColumns={selectedColumns}
+          />
+        ),
       },
     ];
-  }, [scoresColumnsData, scoresColumnsOrder, setScoresColumnsOrder]);
+  }, [
+    scoresColumnsData,
+    scoresColumnsOrder,
+    setScoresColumnsOrder,
+    showReasons,
+    setShowReasons,
+    height,
+    setHeight,
+    selectedColumns,
+  ]);
 
   if (isPending) {
     return <Loader />;
@@ -601,6 +628,9 @@ const TraceQueueItemsTab: React.FC<TraceQueueItemsTabProps> = ({
         getRowId={getRowId}
         rowHeight={height as ROW_HEIGHT}
         columnPinning={DEFAULT_COLUMN_PINNING}
+        meta={{
+          showReasons,
+        }}
         noData={<DataTableNoData title={noDataText} />}
         TableWrapper={PageBodyStickyTableWrapper}
         stickyHeader
