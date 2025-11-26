@@ -48,6 +48,7 @@ setup(
         #   See: https://github.com/BerriAI/litellm/issues/14762
         # - Exclude versions 1.77.5-1.79.1: remove trace_id/parent_span_id passthrough, fixed in 1.79.2+
         #   See: https://github.com/BerriAI/litellm/pull/15529
+        # Please keep this list in sync with the one in sdks/opik_optimizer/pyproject.toml
         "litellm>=1.79.2,!=1.75.0,!=1.75.1,!=1.75.2,!=1.75.3,!=1.75.4,!=1.75.5,!=1.77.3,!=1.77.4,!=1.77.5,!=1.77.7,!=1.78.0,!=1.78.2,!=1.78.3,!=1.78.4,!=1.78.5,!=1.78.6,!=1.78.7,!=1.79.0,!=1.79.1",
         "openai",
         "pydantic-settings>=2.0.0,<3.0.0,!=2.9.0",

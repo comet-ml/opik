@@ -22,6 +22,7 @@ import {
   generateDefaultPrompt,
   getDefaultConfigByProvider,
 } from "@/lib/playground";
+import { updateProviderConfig } from "@/lib/modelUtils";
 import { PLAYGROUND_LAST_PICKED_MODEL } from "@/constants/llm";
 import { generateDefaultLLMPromptMessage, getNextMessageType } from "@/lib/llm";
 import LLMPromptMessages from "@/components/pages-shared/llm/LLMPromptMessages/LLMPromptMessages";
@@ -184,16 +185,28 @@ const PlaygroundPrompt = ({
 
   const handleUpdateModel = useCallback(
     (newModel: PROVIDER_MODEL_TYPE, newProvider: COMPOSED_PROVIDER_TYPE) => {
+      let newConfigs: LLMPromptConfigsType;
+
+      if (newProvider !== provider) {
+        // Provider changed: Reset to default configs for the new provider
+        newConfigs = getDefaultConfigByProvider(newProvider, newModel);
+      } else {
+        // Model changed within same provider: Adjust existing configs if needed
+        const adjustedConfigs = updateProviderConfig(configs, {
+          model: newModel,
+          provider: newProvider,
+        });
+        newConfigs = adjustedConfigs || configs;
+      }
+
       updatePrompt(promptId, {
         model: newModel,
         provider: newProvider,
-        ...(newProvider !== provider && {
-          configs: getDefaultConfigByProvider(newProvider, newModel),
-        }),
+        configs: newConfigs,
       });
       setLastPickedModel(newModel);
     },
-    [updatePrompt, promptId, provider, setLastPickedModel],
+    [updatePrompt, promptId, provider, configs, setLastPickedModel],
   );
 
   const handleAddProvider = useCallback(

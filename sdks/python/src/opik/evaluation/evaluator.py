@@ -6,6 +6,8 @@ from ..api_objects.prompt import base_prompt
 from ..api_objects import opik_client
 from ..api_objects import dataset, experiment
 from ..api_objects.experiment import helpers as experiment_helpers
+from ..api_objects.prompt.chat import chat_prompt_template
+from ..api_objects.prompt import types as prompt_types
 from . import (
     asyncio_support,
     engine,
@@ -19,8 +21,6 @@ from .models import ModelCapabilities, base_model, models_factory
 from .scorers import scorer_function, scorer_wrapper_metric
 from .types import LLMTask, ScoringKeyMappingType
 from .. import url_helpers
-from opik.api_objects.prompt.chat import chat_prompt_template
-from opik.api_objects.prompt import types as prompt_types
 
 LOGGER = logging.getLogger(__name__)
 MODALITY_SUPPORT_DOC_URL = (
@@ -178,19 +178,19 @@ def _evaluate_task(
         evaluation_engine = engine.EvaluationEngine(
             client=client,
             project_name=project_name,
-            experiment_=experiment,
             scoring_metrics=scoring_metrics,
             workers=task_threads,
             verbose=verbose,
             scoring_key_mapping=scoring_key_mapping,
         )
-        test_results = evaluation_engine.evaluate_llm_tasks(
+        test_results = evaluation_engine.evaluate_llm_task_on_dataset(
             dataset_=dataset,
             task=task,
             nb_samples=nb_samples,
             dataset_item_ids=dataset_item_ids,
             dataset_sampler=dataset_sampler,
             trial_count=trial_count,
+            experiment_=experiment,
         )
 
     total_time = time.time() - start_time
@@ -303,7 +303,6 @@ def evaluate_experiment(
         evaluation_engine = engine.EvaluationEngine(
             client=client,
             project_name=project_name,
-            experiment_=experiment,
             scoring_metrics=scoring_metrics,
             workers=scoring_threads,
             verbose=verbose,
@@ -502,19 +501,19 @@ def evaluate_prompt(
         evaluation_engine = engine.EvaluationEngine(
             client=client,
             project_name=project_name,
-            experiment_=experiment,
             scoring_metrics=scoring_metrics,
             workers=task_threads,
             verbose=verbose,
             scoring_key_mapping=None,
         )
-        test_results = evaluation_engine.evaluate_llm_tasks(
+        test_results = evaluation_engine.evaluate_llm_task_on_dataset(
             dataset_=dataset,
             task=_build_prompt_evaluation_task(model=opik_model, messages=messages),
             nb_samples=nb_samples,
             dataset_item_ids=dataset_item_ids,
             dataset_sampler=dataset_sampler,
             trial_count=trial_count,
+            experiment_=experiment,
         )
 
     total_time = time.time() - start_time
@@ -657,10 +656,124 @@ def evaluate_optimization_trial(
     )
 
 
-def _wrap_scoring_functions(
+def evaluate_on_dict_items(
+    items: List[Dict[str, Any]],
+    task: LLMTask,
     scoring_metrics: Optional[List[base_metric.BaseMetric]] = None,
     scoring_functions: Optional[List[scorer_function.ScorerFunction]] = None,
     project_name: Optional[str] = None,
+    verbose: int = 0,
+    scoring_key_mapping: Optional[ScoringKeyMappingType] = None,
+    scoring_threads: int = 16,
+) -> evaluation_result.EvaluationResultOnDictItems:
+    """
+    Lightweight evaluation function that evaluates a task on dataset items (as dictionaries)
+    without requiring a Dataset object or creating an experiment.
+
+    This function is useful for optimization scenarios where you need to evaluate many
+    candidate solutions quickly using Opik's metric infrastructure. It creates traces for
+    tracking but doesn't require experiment setup or dataset management.
+
+    Args:
+        items: List of dataset item contents (dictionaries with the data to evaluate).
+
+        task: A callable object that takes dict with dataset item content
+            as input and returns dict which will later be used for scoring.
+
+        scoring_metrics: List of metrics to calculate during evaluation.
+            Each metric's `score(...)` method will be called with arguments taken from
+            the dataset item and task output.
+
+        scoring_functions: List of scorer functions to be executed during evaluation.
+            Each scorer function accepts predefined arguments:
+                • dataset_item — a dictionary containing the dataset item content,
+                • task_outputs — a dictionary containing the LLM task output.
+
+        project_name: The name of the project for logging traces.
+
+        verbose: Controls evaluation output logs and progress bars.
+            0 - no outputs (default), 1 - enable outputs.
+
+        scoring_key_mapping: A dictionary that allows you to rename keys present in either
+            the dataset item or the task output to match the keys expected by scoring metrics.
+
+        scoring_threads: Number of thread workers to run scoring metrics.
+
+    Returns:
+        EvaluationResultOnDictItems object containing test results and providing methods
+        to aggregate scores, similar to the regular evaluation result.
+
+    Example:
+        ```python
+        import opik
+        from opik.evaluation.metrics import Equals
+
+        items = [
+            {"input": "What is 2+2?", "expected_output": "4"},
+            {"input": "What is 3+3?", "expected_output": "6"},
+        ]
+
+        def my_task(item):
+            # Your LLM call here
+            question = item["input"]
+            # ... call model ...
+            return {"output": model_output}
+
+        result = opik.evaluate_on_dict_items(
+            items=items,
+            task=my_task,
+            scoring_metrics=[Equals()],
+            scoring_key_mapping={"reference": "expected_output"},
+        )
+
+        # Access individual test results
+        for test_result in result.test_results:
+            print(f"Score: {test_result.score_results[0].value}")
+
+        # Get aggregated statistics
+        aggregated = result.aggregate_evaluation_scores()
+        print(f"Mean equals score: {aggregated['equals_metric'].mean}")
+        ```
+    """
+    # Wrap scoring functions if any
+    scoring_metrics = _wrap_scoring_functions(
+        scoring_functions=scoring_functions,
+        scoring_metrics=scoring_metrics,
+        project_name=project_name,
+    )
+
+    if not scoring_metrics:
+        LOGGER.warning("No scoring metrics provided for items evaluation")
+        return evaluation_result.EvaluationResultOnDictItems(test_results=[])
+
+    client = opik_client.get_client_cached()
+
+    # Create evaluation engine
+    with asyncio_support.async_http_connections_expire_immediately():
+        evaluation_engine = engine.EvaluationEngine(
+            client=client,
+            project_name=project_name,
+            scoring_metrics=scoring_metrics,
+            workers=scoring_threads,
+            verbose=verbose,
+            scoring_key_mapping=scoring_key_mapping,
+        )
+
+        # Use the new evaluate_items method
+        test_results = evaluation_engine.evaluate_llm_task_on_dict_items(
+            items=items,
+            task=task,
+        )
+
+    return evaluation_result.EvaluationResultOnDictItems(
+        test_results=test_results,
+    )
+
+
+def _wrap_scoring_functions(
+    scoring_functions: Optional[List[scorer_function.ScorerFunction]],
+    scoring_metrics: Optional[List[base_metric.BaseMetric]],
+    project_name: Optional[str],
 ) -> List[base_metric.BaseMetric]:
     if scoring_functions:
         function_metrics = scorer_wrapper_metric.wrap_scorer_functions(

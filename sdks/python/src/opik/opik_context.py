@@ -1,7 +1,7 @@
 import contextlib
 from typing import Any, Dict, List, Optional, Iterator, Union
 
-import opik.llm_usage as llm_usage
+from opik import llm_usage
 from opik.api_objects import span, trace, opik_client, prompt
 from opik.api_objects.attachment import Attachment
 from opik.types import (
@@ -11,7 +11,7 @@ from opik.types import (
     ErrorInfoDict,
 )
 
-import opik.decorator.tracing_runtime_config as tracing_runtime_config
+from opik import tracing_runtime_config
 
 from . import context_storage, exceptions
 from .decorator import error_info_collector

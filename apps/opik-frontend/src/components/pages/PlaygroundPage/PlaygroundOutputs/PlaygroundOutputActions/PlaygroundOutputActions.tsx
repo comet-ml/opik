@@ -13,6 +13,7 @@ import AddEditDatasetDialog from "@/components/pages/DatasetsPage/AddEditDataset
 import DataTablePagination from "@/components/shared/DataTablePagination/DataTablePagination";
 import MetricSelector from "./MetricSelector";
 import DatasetEmptyState from "./DatasetEmptyState";
+import PlaygroundProgressIndicator from "@/components/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundProgressIndicator";
 
 import useDatasetsList from "@/api/datasets/useDatasetsList";
 import useProjectByName from "@/api/projects/useProjectByName";
@@ -448,6 +449,11 @@ const PlaygroundOutputActions = ({
 
   return (
     <>
+      {isRunning && datasetId && (
+        <div className="mb-4 mt-2">
+          <PlaygroundProgressIndicator />
+        </div>
+      )}
       <div className="sticky right-0 ml-auto flex h-0 gap-2">
         {createdExperiments.length > 0 && (
           <TooltipWrapper
