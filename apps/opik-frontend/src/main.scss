@@ -757,3 +757,13 @@ div.cm-theme div.cm-search.cm-panel {
     }
   }
 }
+
+/* Dashboard section sorting styles */
+.dashboard-section-sorting {
+  /* Hide accordion content during drag/sort operation */
+  /* This provides better UX by collapsing all sections while dragging */
+  /* The expanded state is preserved and restored after drag ends */
+  [data-state="open"] [data-radix-accordion-content] {
+    display: none;
+  }
+}
