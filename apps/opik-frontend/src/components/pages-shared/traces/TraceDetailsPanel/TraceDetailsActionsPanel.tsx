@@ -1,5 +1,8 @@
 import React, { useCallback, useMemo, useState } from "react";
 import copy from "clipboard-copy";
+import FileSaver from "file-saver";
+import { json2csv } from "json-2-csv";
+import get from "lodash/get";
 import {
   Copy,
   MessagesSquare,
@@ -8,6 +11,7 @@ import {
   Share,
   Sparkles,
   Trash,
+  Download,
 } from "lucide-react";
 import uniq from "lodash/uniq";
 import isObject from "lodash/isObject";
@@ -56,6 +60,11 @@ import {
   DetailsActionSection,
   DetailsActionSectionValue,
 } from "@/components/pages-shared/traces/DetailsActionSection";
+import {
+  mapRowDataForExport,
+  TRACE_EXPORT_COLUMNS,
+} from "@/lib/traces/exportUtils";
+import { TRACE_DATA_TYPE } from "@/hooks/useTracesOrSpansList";
 
 const SEARCH_SPACE_RESERVATION = 200;
 
@@ -106,6 +115,7 @@ const TraceDetailsActionsPanel: React.FunctionComponent<
   const isAIInspectorEnabled = useIsFeatureEnabled(
     FeatureToggleKeys.TOGGLE_OPIK_AI_ENABLED,
   );
+  const isExportEnabled = useIsFeatureEnabled(FeatureToggleKeys.EXPORT_ENABLED);
   const { toast } = useToast();
 
   const { mutate } = useTraceDeleteMutation();
@@ -143,6 +153,126 @@ const TraceDetailsActionsPanel: React.FunctionComponent<
       projectId,
     });
   }, [onClose, mutate, traceId, projectId]);
+
+  const getDataToExport = useCallback(
+    (treeData: Array<Trace | Span>) => {
+      let dataToExport: Array<Trace | Span>;
+      let entityType: string;
+      let entityId: string;
+
+      const collectDescendants = (
+        parentId: string,
+        items: Array<Trace | Span>,
+      ): Array<Span> => {
+        const directChildren = items.filter(
+          (item): item is Span =>
+            "parent_span_id" in item && item.parent_span_id === parentId,
+        );
+
+        const allDescendants: Array<Span> = [...directChildren];
+        directChildren.forEach((child) => {
+          allDescendants.push(...collectDescendants(child.id, items));
+        });
+
+        return allDescendants;
+      };
+
+      if (spanId) {
+        const span = treeData.find((item) => item.id === spanId);
+        if (span) {
+          const descendants = collectDescendants(spanId, treeData);
+          dataToExport = [span, ...descendants];
+        } else {
+          dataToExport = [];
+        }
+        entityType = TRACE_DATA_TYPE.spans;
+        entityId = spanId;
+      } else {
+        const trace = treeData.find((item) => item.id === traceId);
+        const allSpans = treeData.filter(
+          (item): item is Span =>
+            "trace_id" in item && item.trace_id === traceId,
+        );
+        dataToExport = trace ? [trace, ...allSpans] : [];
+        entityType = TRACE_DATA_TYPE.traces;
+        entityId = traceId;
+      }
+
+      return { dataToExport, entityType, entityId };
+    },
+    [spanId, traceId],
+  );
+
+  const exportColumns = useMemo(() => {
+    const feedbackScoreNames = uniq(
+      treeData.reduce<string[]>((acc, d) => {
+        return acc.concat(
+          isArray(d.feedback_scores)
+            ? d.feedback_scores.map(
+                (score) => `${COLUMN_FEEDBACK_SCORES_ID}.${score.name}`,
+              )
+            : [],
+        );
+      }, []),
+    );
+
+    return [...TRACE_EXPORT_COLUMNS, ...feedbackScoreNames];
+  }, [treeData]);
+
+  const handleExportCSV = useCallback(async () => {
+    try {
+      const { dataToExport, entityType, entityId } = getDataToExport(treeData);
+
+      const mappedData = await mapRowDataForExport(dataToExport, exportColumns);
+      const csv = json2csv(mappedData);
+      const fileSuffix =
+        entityType === TRACE_DATA_TYPE.spans ? "span" : "trace";
+      const fileName = `${entityId}-${fileSuffix}.csv`;
+      const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+      FileSaver.saveAs(blob, fileName);
+
+      toast({
+        title: "Export successful",
+        description: `Exported ${dataToExport.length} ${
+          dataToExport.length === 1 ? "item" : "items"
+        } to CSV`,
+      });
+    } catch (error) {
+      toast({
+        title: "Export failed",
+        description: get(error, "message", "Failed to export"),
+        variant: "destructive",
+      });
+    }
+  }, [treeData, exportColumns, getDataToExport, toast]);
+
+  const handleExportJSON = useCallback(async () => {
+    try {
+      const { dataToExport, entityType, entityId } = getDataToExport(treeData);
+
+      const mappedData = await mapRowDataForExport(dataToExport, exportColumns);
+      const fileSuffix =
+        entityType === TRACE_DATA_TYPE.spans ? "span" : "trace";
+      const fileName = `${entityId}-${fileSuffix}.json`;
+      const blob = new Blob([JSON.stringify(mappedData, null, 2)], {
+        type: "application/json;charset=utf-8",
+      });
+      FileSaver.saveAs(blob, fileName);
+
+      toast({
+        title: "Export successful",
+        description: `Exported ${dataToExport.length} ${
+          dataToExport.length === 1 ? "item" : "items"
+        } to JSON`,
+      });
+    } catch (error) {
+      toast({
+        title: "Export failed",
+        description: get(error, "message", "Failed to export"),
+        variant: "destructive",
+      });
+    }
+  }, [treeData, exportColumns, getDataToExport, toast]);
 
   const filtersColumnData = useMemo(() => {
     return [
@@ -412,6 +542,49 @@ const TraceDetailsActionsPanel: React.FunctionComponent<
                   Copy span ID
                 </DropdownMenuItem>
               </TooltipWrapper>
+            )}
+            <DropdownMenuSeparator />
+            {!isExportEnabled ? (
+              <TooltipWrapper
+                content="Export functionality is disabled for this installation"
+                side="left"
+              >
+                <div>
+                  <DropdownMenuItem
+                    onClick={handleExportCSV}
+                    disabled={!isExportEnabled}
+                  >
+                    <Download className="mr-2 size-4" />
+                    Export as CSV
+                  </DropdownMenuItem>
+                </div>
+              </TooltipWrapper>
+            ) : (
+              <DropdownMenuItem onClick={handleExportCSV}>
+                <Download className="mr-2 size-4" />
+                Export as CSV
+              </DropdownMenuItem>
+            )}
+            {!isExportEnabled ? (
+              <TooltipWrapper
+                content="Export functionality is disabled for this installation"
+                side="left"
+              >
+                <div>
+                  <DropdownMenuItem
+                    onClick={handleExportJSON}
+                    disabled={!isExportEnabled}
+                  >
+                    <Download className="mr-2 size-4" />
+                    Export as JSON
+                  </DropdownMenuItem>
+                </div>
+              </TooltipWrapper>
+            ) : (
+              <DropdownMenuItem onClick={handleExportJSON}>
+                <Download className="mr-2 size-4" />
+                Export as JSON
+              </DropdownMenuItem>
             )}
             <DropdownMenuSeparator />
             <DropdownMenuItem onClick={() => setPopupOpen(true)}>
