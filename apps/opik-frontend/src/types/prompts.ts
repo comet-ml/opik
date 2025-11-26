@@ -1,3 +1,8 @@
+export enum PROMPT_TEMPLATE_STRUCTURE {
+  CHAT = "chat",
+  TEXT = "text",
+}
+
 export interface Prompt {
   id: string;
   name: string;
@@ -6,7 +11,7 @@ export interface Prompt {
   created_at: string;
   version_count: number;
   tags: string[];
-  template_structure?: string;
+  template_structure?: PROMPT_TEMPLATE_STRUCTURE;
   latest_version?: PromptVersion;
 }
 

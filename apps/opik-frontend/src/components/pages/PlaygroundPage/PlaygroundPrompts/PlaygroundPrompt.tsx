@@ -41,6 +41,7 @@ import PromptsSelectBox from "@/components/pages-shared/llm/PromptsSelectBox/Pro
 import AddNewPromptVersionDialog from "@/components/pages-shared/llm/LLMPromptMessages/AddNewPromptVersionDialog";
 import usePromptVersionById from "@/api/prompts/usePromptVersionById";
 import usePromptByIdApi from "@/api/prompts/usePromptById";
+import { PROMPT_TEMPLATE_STRUCTURE } from "@/types/prompts";
 
 interface PlaygroundPromptProps {
   workspaceName: string;
@@ -323,7 +324,7 @@ const PlaygroundPrompt = ({
                 value={selectedChatPromptId}
                 onValueChange={handleImportChatPrompt}
                 clearable={false}
-                filterByTemplateStructure="chat"
+                filterByTemplateStructure={PROMPT_TEMPLATE_STRUCTURE.CHAT}
               />
             </div>
           </TooltipWrapper>
@@ -404,7 +405,7 @@ const PlaygroundPrompt = ({
         template={JSON.stringify(
           messages.map((msg) => ({ role: msg.role, content: msg.content })),
         )}
-        templateStructure="chat"
+        templateStructure={PROMPT_TEMPLATE_STRUCTURE.CHAT}
         defaultName={lastImportedPromptName}
         onSave={() => {
           setShowSaveChatPromptDialog(false);

@@ -27,7 +27,7 @@ import {
   Accordion,
 } from "@/components/ui/accordion";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
-import { Prompt } from "@/types/prompts";
+import { Prompt, PROMPT_TEMPLATE_STRUCTURE } from "@/types/prompts";
 import { LLMMessage } from "@/types/llm";
 import LLMPromptMessages from "@/components/pages-shared/llm/LLMPromptMessages/LLMPromptMessages";
 import { generateDefaultLLMPromptMessage, getNextMessageType } from "@/lib/llm";
@@ -62,9 +62,8 @@ const AddEditPromptDialog: React.FC<AddPromptDialogProps> = ({
   const [description, setDescription] = useState(
     defaultPrompt?.description || "",
   );
-  const [templateStructure, setTemplateStructure] = useState<"text" | "chat">(
-    "text",
-  );
+  const [templateStructure, setTemplateStructure] =
+    useState<PROMPT_TEMPLATE_STRUCTURE>(PROMPT_TEMPLATE_STRUCTURE.TEXT);
   const [messages, setMessages] = useState<LLMMessage[]>([
     generateDefaultLLMPromptMessage(),
   ]);
@@ -90,7 +89,7 @@ const AddEditPromptDialog: React.FC<AddPromptDialogProps> = ({
   const { mutate: updateMutate } = usePromptUpdateMutation();
 
   const isEdit = !!defaultPrompt;
-  const isChatPrompt = templateStructure === "chat";
+  const isChatPrompt = templateStructure === PROMPT_TEMPLATE_STRUCTURE.CHAT;
   const isValid = Boolean(
     name.length &&
       (isEdit || (isChatPrompt ? messages.length > 0 : template.length)),
@@ -197,13 +196,13 @@ const AddEditPromptDialog: React.FC<AddPromptDialogProps> = ({
                 value={templateStructure}
                 onValueChange={(value) => {
                   if (value) {
-                    setTemplateStructure(value as "text" | "chat");
+                    setTemplateStructure(value as PROMPT_TEMPLATE_STRUCTURE);
                   }
                 }}
                 className="w-fit justify-start"
               >
                 <ToggleGroupItem
-                  value="text"
+                  value={PROMPT_TEMPLATE_STRUCTURE.TEXT}
                   aria-label="Text prompt"
                   className="gap-1.5"
                 >
@@ -211,7 +210,7 @@ const AddEditPromptDialog: React.FC<AddPromptDialogProps> = ({
                   <span>Text prompt</span>
                 </ToggleGroupItem>
                 <ToggleGroupItem
-                  value="chat"
+                  value={PROMPT_TEMPLATE_STRUCTURE.CHAT}
                   aria-label="Chat prompt"
                   className="gap-1.5"
                 >

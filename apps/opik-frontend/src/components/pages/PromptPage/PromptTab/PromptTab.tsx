@@ -3,7 +3,11 @@ import { Info, Pencil } from "lucide-react";
 import { StringParam, useQueryParam } from "use-query-params";
 
 import { Button } from "@/components/ui/button";
-import { PromptVersion, PromptWithLatestVersion } from "@/types/prompts";
+import {
+  PromptVersion,
+  PromptWithLatestVersion,
+  PROMPT_TEMPLATE_STRUCTURE,
+} from "@/types/prompts";
 import Loader from "@/components/shared/Loader/Loader";
 import CodeHighlighter, {
   SUPPORTED_LANGUAGE,
@@ -92,7 +96,7 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
   }, [activeVersion]);
 
   const isChatPrompt = useMemo(() => {
-    return prompt?.template_structure === "chat";
+    return prompt?.template_structure === PROMPT_TEMPLATE_STRUCTURE.CHAT;
   }, [prompt?.template_structure]);
 
   if (!prompt) {

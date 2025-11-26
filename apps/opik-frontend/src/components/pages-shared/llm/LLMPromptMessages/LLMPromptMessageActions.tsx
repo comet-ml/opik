@@ -12,7 +12,7 @@ import isEqual from "fast-deep-equal";
 
 import { OnChangeFn } from "@/types/shared";
 import { LLMMessage, LLM_MESSAGE_ROLE, MessageContent } from "@/types/llm";
-import { PromptVersion } from "@/types/prompts";
+import { PromptVersion, PROMPT_TEMPLATE_STRUCTURE } from "@/types/prompts";
 import { PLAYGROUND_SELECTED_DATASET_KEY } from "@/constants/llm";
 import { Separator } from "@/components/ui/separator";
 import { Button } from "@/components/ui/button";
@@ -265,7 +265,8 @@ const LLMPromptMessageActions: React.FC<LLMPromptLibraryActionsProps> = ({
 
       const template = promptData.latest_version?.template ?? "";
       const versionId = promptData.latest_version?.id;
-      const isChatPrompt = promptData.template_structure === "chat";
+      const isChatPrompt =
+        promptData.template_structure === PROMPT_TEMPLATE_STRUCTURE.CHAT;
 
       // If it's a chat prompt and we have the callback, replace all messages
       if (isChatPrompt && onReplaceWithChatPrompt && template) {
@@ -367,7 +368,7 @@ const LLMPromptMessageActions: React.FC<LLMPromptLibraryActionsProps> = ({
               }
             }}
             onOpenChange={onPromptSelectBoxOpenChange}
-            filterByTemplateStructure="text"
+            filterByTemplateStructure={PROMPT_TEMPLATE_STRUCTURE.TEXT}
           />
         </div>
         <TooltipWrapper content="Discard changes">

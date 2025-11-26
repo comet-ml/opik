@@ -18,6 +18,7 @@ import useLastPickedModel from "@/hooks/useLastPickedModel";
 import useLLMProviderModelsData from "@/hooks/useLLMProviderModelsData";
 import useProviderKeys from "@/api/provider-keys/useProviderKeys";
 import { MessageContent } from "@/types/llm";
+import { PROMPT_TEMPLATE_STRUCTURE } from "@/types/prompts";
 
 interface LoadPlaygroundOptions {
   promptContent?: MessageContent;
@@ -25,7 +26,7 @@ interface LoadPlaygroundOptions {
   promptVersionId?: string;
   autoImprove?: boolean;
   datasetId?: string;
-  templateStructure?: string;
+  templateStructure?: PROMPT_TEMPLATE_STRUCTURE;
 }
 
 const useLoadPlayground = () => {
@@ -86,7 +87,7 @@ const useLoadPlayground = () => {
       });
 
       // For chat prompts, parse the JSON and create multiple messages
-      if (templateStructure === "chat") {
+      if (templateStructure === PROMPT_TEMPLATE_STRUCTURE.CHAT) {
         // Set the loaded chat prompt ID for the dropdown to display
         if (promptId) {
           newPrompt.loadedChatPromptId = promptId;

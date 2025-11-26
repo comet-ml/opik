@@ -10,12 +10,13 @@ import {
 import CodeHighlighter from "@/components/shared/CodeHighlighter/CodeHighlighter";
 import ExplainerDescription from "@/components/shared/ExplainerDescription/ExplainerDescription";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
+import { PROMPT_TEMPLATE_STRUCTURE } from "@/types/prompts";
 
 type UseThisPromptDialogProps = {
   open: boolean;
   setOpen: (open: boolean) => void;
   promptName: string;
-  templateStructure?: string;
+  templateStructure?: PROMPT_TEMPLATE_STRUCTURE;
 };
 
 const getCreatingPrompt = (promptName: string) => `import opik
@@ -82,7 +83,7 @@ print(formatted_messages)
 const UseThisPromptDialog: React.FunctionComponent<
   UseThisPromptDialogProps
 > = ({ open, setOpen, promptName, templateStructure }) => {
-  const isChatPrompt = templateStructure === "chat";
+  const isChatPrompt = templateStructure === PROMPT_TEMPLATE_STRUCTURE.CHAT;
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>

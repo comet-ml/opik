@@ -32,7 +32,11 @@ import PromptsSelectBox from "@/components/pages-shared/llm/PromptsSelectBox/Pro
 import { useBooleanTimeoutState } from "@/hooks/useBooleanTimeoutState";
 import { useCodemirrorTheme } from "@/hooks/useCodemirrorTheme";
 import { isValidJsonObject, safelyParseJSON } from "@/lib/utils";
-import { PromptVersion, PromptWithLatestVersion } from "@/types/prompts";
+import {
+  PromptVersion,
+  PromptWithLatestVersion,
+  PROMPT_TEMPLATE_STRUCTURE,
+} from "@/types/prompts";
 import usePromptById from "@/api/prompts/usePromptById";
 import usePromptCreateMutation from "@/api/prompts/usePromptCreateMutation";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
@@ -48,7 +52,7 @@ type AddNewPromptVersionDialogProps = {
   setOpen: (open: boolean) => void;
   prompt?: PromptWithLatestVersion;
   template: string;
-  templateStructure?: "text" | "chat";
+  templateStructure?: PROMPT_TEMPLATE_STRUCTURE;
   defaultName?: string;
   metadata?: object;
   onSave: (version: PromptVersion) => void;
@@ -59,7 +63,7 @@ const AddNewPromptVersionDialog: React.FC<AddNewPromptVersionDialogProps> = ({
   setOpen,
   prompt,
   template,
-  templateStructure = "text",
+  templateStructure = PROMPT_TEMPLATE_STRUCTURE.TEXT,
   defaultName = "",
   metadata: providedMetadata,
   onSave,

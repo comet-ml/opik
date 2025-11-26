@@ -29,7 +29,7 @@ import {
 import ColumnsButton from "@/components/shared/ColumnsButton/ColumnsButton";
 import FiltersButton from "@/components/shared/FiltersButton/FiltersButton";
 import usePromptsList from "@/api/prompts/usePromptsList";
-import { Prompt } from "@/types/prompts";
+import { Prompt, PROMPT_TEMPLATE_STRUCTURE } from "@/types/prompts";
 import { PromptRowActionsCell } from "@/components/pages/PromptsPage/PromptRowActionsCell";
 import AddEditPromptDialog from "@/components/pages/PromptsPage/AddEditPromptDialog";
 import PromptsActionsPanel from "@/components/pages/PromptsPage/PromptsActionsPanel";
@@ -69,8 +69,11 @@ export const DEFAULT_COLUMNS: ColumnData<Prompt>[] = [
     type: COLUMN_TYPE.string,
     size: 80,
     accessorFn: (row) => {
-      const structure = row.template_structure || "text";
-      return structure === "chat" ? "chat" : "text";
+      const structure =
+        row.template_structure || PROMPT_TEMPLATE_STRUCTURE.TEXT;
+      return structure === PROMPT_TEMPLATE_STRUCTURE.CHAT
+        ? PROMPT_TEMPLATE_STRUCTURE.CHAT
+        : PROMPT_TEMPLATE_STRUCTURE.TEXT;
     },
   },
   {

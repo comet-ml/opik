@@ -9,6 +9,7 @@ import { Separator } from "@/components/ui/separator";
 import LoadableSelectBox from "@/components/shared/LoadableSelectBox/LoadableSelectBox";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import usePromptsList from "@/api/prompts/usePromptsList";
+import { PROMPT_TEMPLATE_STRUCTURE } from "@/types/prompts";
 
 const DEFAULT_LOADED_PROMPTS = 1000;
 const MAX_LOADED_PROMPTS = 10000;
@@ -21,7 +22,7 @@ interface PromptsSelectBoxProps {
   clearable?: boolean;
   refetchOnMount?: boolean;
   asNewOption?: boolean;
-  filterByTemplateStructure?: "text" | "chat";
+  filterByTemplateStructure?: PROMPT_TEMPLATE_STRUCTURE;
 }
 
 const PromptsSelectBox: React.FC<PromptsSelectBoxProps> = ({
@@ -92,7 +93,7 @@ const PromptsSelectBox: React.FC<PromptsSelectBoxProps> = ({
         <div className="flex w-full items-center text-light-slate">
           <Database className="mr-2 size-4" />
           <span className="truncate font-normal">
-            {filterByTemplateStructure === "chat"
+            {filterByTemplateStructure === PROMPT_TEMPLATE_STRUCTURE.CHAT
               ? "Load chat prompt"
               : "Load a prompt"}
           </span>
@@ -102,9 +103,9 @@ const PromptsSelectBox: React.FC<PromptsSelectBoxProps> = ({
   );
 
   const searchPlaceholder = useMemo(() => {
-    if (filterByTemplateStructure === "chat") {
+    if (filterByTemplateStructure === PROMPT_TEMPLATE_STRUCTURE.CHAT) {
       return "Search chat prompt";
-    } else if (filterByTemplateStructure === "text") {
+    } else if (filterByTemplateStructure === PROMPT_TEMPLATE_STRUCTURE.TEXT) {
       return "Search text prompt";
     }
     return "Search";
