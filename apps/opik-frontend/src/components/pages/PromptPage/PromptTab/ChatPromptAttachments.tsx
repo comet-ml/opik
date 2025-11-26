@@ -12,8 +12,7 @@ const ChatPromptAttachments: React.FC<ChatPromptAttachmentsProps> = ({
 }) => {
   // Memoize the stringified attachments to avoid costly JSON.stringify on every render
   const stringifiedAttachments = useMemo(
-    () =>
-      attachments.map((attachment) => JSON.stringify(attachment, null, 2)),
+    () => attachments.map((attachment) => JSON.stringify(attachment, null, 2)),
     [attachments],
   );
 
@@ -36,4 +35,3 @@ const ChatPromptAttachments: React.FC<ChatPromptAttachmentsProps> = ({
 };
 
 export default ChatPromptAttachments;
-

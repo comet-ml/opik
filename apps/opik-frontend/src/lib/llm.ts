@@ -230,9 +230,7 @@ export const parseChatTemplateToLLMMessages = (
 
     return parsed.map((msg, index) => {
       // Generate ID with optional timestamp for uniqueness
-      const id = useTimestamp
-        ? `msg-${index}-${Date.now()}`
-        : `msg-${index}`;
+      const id = useTimestamp ? `msg-${index}-${Date.now()}` : `msg-${index}`;
 
       return {
         id,
