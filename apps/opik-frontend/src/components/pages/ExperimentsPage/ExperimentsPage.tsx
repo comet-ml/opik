@@ -357,9 +357,9 @@ const ExperimentsPage: React.FC = () => {
         variant="ghost"
         size="xs"
         onClick={() => setShowReasons(!showReasons)}
-        className="h-6 text-xs"
+        className="h-auto p-0 text-sm font-medium hover:bg-transparent"
       >
-        <MessageSquareText className="mr-1 size-3" />
+        <MessageSquareText className="mr-1.5 size-3.5" />
         {showReasons ? "Collapse reasons" : "Expand reasons"}
       </Button>
     ),
