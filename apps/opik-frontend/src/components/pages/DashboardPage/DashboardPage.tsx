@@ -12,22 +12,26 @@ import {
   selectSetOnAddWidgetCallback,
   selectSetWidgetResolver,
 } from "@/store/DashboardStore";
-import { METRIC_NAME_TYPE } from "@/api/projects/useProjectMetric";
 import useProjectsList from "@/api/projects/useProjectsList";
 import useDashboardById from "@/api/dashboards/useDashboardById";
 import useAppStore from "@/store/AppStore";
 import useBreadcrumbsStore from "@/store/BreadcrumbsStore";
 import { useMetricDateRangeWithQuery } from "@/components/pages-shared/traces/MetricDateRangeSelect/useMetricDateRangeWithQuery";
 import MetricDateRangeSelect from "@/components/pages-shared/traces/MetricDateRangeSelect/MetricDateRangeSelect";
-import DashboardSectionsContainer from "@/components/shared/Dashboard/DashboardSectionsContainer";
-import AddSectionButton from "@/components/shared/Dashboard/AddSectionButton";
-import AddWidgetDialog from "@/components/pages/DashboardPage/AddWidgetDialog";
+import DashboardSectionsContainer from "@/components/shared/Dashboard/Dashboard";
+import AddSectionButton from "@/components/shared/Dashboard/DashboardSection/AddSectionButton";
+import { WidgetConfigDialog } from "@/components/shared/Dashboard/WidgetConfigDialog";
 import Loader from "@/components/shared/Loader/Loader";
 import { useDashboardAutosave } from "./useDashboardAutosave";
 import { CheckCircle2, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { ProjectDashboardConfig } from "@/types/dashboard";
-import { createProjectWidgetResolver } from "./widgetRegistry";
+import {
+  ProjectDashboardConfig,
+  DashboardWidget,
+  WIDGET_TYPE,
+  AddWidgetConfig,
+} from "@/types/dashboard";
+import { createWidgetResolver } from "@/components/shared/Dashboard/widgets/widgetRegistry";
 
 const DashboardPage: React.FunctionComponent = () => {
   const { dashboardId } = useParams({ strict: false }) as {
@@ -113,9 +117,14 @@ const DashboardPage: React.FunctionComponent = () => {
     setAddWidgetDialogOpen(true);
   }, []);
 
-  const handleAddWidget = (metricType: METRIC_NAME_TYPE, title: string) => {
-    if (targetSectionId) {
-      addWidget(targetSectionId, "chart", title, metricType);
+  const handleSaveWidget = (widgetData: Partial<DashboardWidget>) => {
+    if (targetSectionId && widgetData.type && widgetData.title) {
+      addWidget(targetSectionId, {
+        type: widgetData.type as WIDGET_TYPE,
+        title: widgetData.title,
+        subtitle: widgetData.subtitle,
+        config: widgetData.config || {},
+      } as AddWidgetConfig);
     }
   };
 
@@ -138,7 +147,7 @@ const DashboardPage: React.FunctionComponent = () => {
   }, [handleOpenAddWidgetDialog, setOnAddWidgetCallback]);
 
   useEffect(() => {
-    const resolver = createProjectWidgetResolver();
+    const resolver = createWidgetResolver();
     setWidgetResolver(resolver);
   }, [setWidgetResolver]);
 
@@ -163,7 +172,7 @@ const DashboardPage: React.FunctionComponent = () => {
   }
 
   return (
-    <div className="flex h-full flex-col px-6">
+    <div className="flex h-full flex-col">
       <div className="flex items-center justify-between pb-4 pt-6">
         <div className="flex flex-col gap-1">
           <h1 className="text-2xl font-medium text-foreground">
@@ -210,10 +219,11 @@ const DashboardPage: React.FunctionComponent = () => {
           <AddSectionButton onAddSection={addSection} />
         </div>
 
-        <AddWidgetDialog
+        <WidgetConfigDialog
           open={addWidgetDialogOpen}
           onOpenChange={setAddWidgetDialogOpen}
-          onAddWidget={handleAddWidget}
+          sectionId={targetSectionId || ""}
+          onSave={handleSaveWidget}
         />
       </div>
     </div>

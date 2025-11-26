@@ -4,25 +4,30 @@ import { Copy } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import { useDashboardStore, selectAddWidget } from "@/store/DashboardStore";
+import { WIDGET_TYPE, AddWidgetConfig } from "@/types/dashboard";
 
 type DashboardWidgetDuplicateActionProps = {
   sectionId: string;
   widgetType: string;
   widgetTitle: string;
-  widgetMetricType?: string;
+  widgetConfig?: Record<string, unknown>;
 };
 
 const DashboardWidgetDuplicateAction: React.FC<
   DashboardWidgetDuplicateActionProps
-> = ({ sectionId, widgetType, widgetTitle, widgetMetricType }) => {
+> = ({ sectionId, widgetType, widgetTitle, widgetConfig }) => {
   const addWidget = useDashboardStore(selectAddWidget);
 
   const handleDuplicate = useCallback(
     (e: React.MouseEvent) => {
       e.stopPropagation();
-      addWidget(sectionId, widgetType, widgetTitle, widgetMetricType);
+      addWidget(sectionId, {
+        type: widgetType as WIDGET_TYPE,
+        title: widgetTitle,
+        config: widgetConfig || {},
+      } as AddWidgetConfig);
     },
-    [sectionId, widgetType, widgetTitle, widgetMetricType, addWidget],
+    [sectionId, widgetType, widgetTitle, widgetConfig, addWidget],
   );
 
   return (
