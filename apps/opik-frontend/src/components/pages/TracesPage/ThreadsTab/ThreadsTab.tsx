@@ -417,9 +417,7 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
       (col) => col.id !== USER_FEEDBACK_COLUMN_ID,
     );
 
-    const allScoreColumns = [userFeedbackColumn, ...otherDynamicColumns];
-
-    return allScoreColumns.map(
+    return [userFeedbackColumn, ...otherDynamicColumns].map(
       ({ label, id, columnType }) =>
         ({
           id,
