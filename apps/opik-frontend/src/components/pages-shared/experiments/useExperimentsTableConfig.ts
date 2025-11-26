@@ -101,9 +101,10 @@ export const useExperimentsTableConfig = <
     defaultValue: {},
   });
 
-  const dynamicColumnsIds = useMemo(() => {
-    return dynamicScoresColumns.map((c) => c.id);
-  }, [dynamicScoresColumns]);
+  const dynamicColumnsIds = useMemo(
+    () => dynamicScoresColumns.map((c) => c.id),
+    [dynamicScoresColumns],
+  );
 
   useDynamicColumnsCache({
     dynamicColumnsKey: `${storageKeyPrefix}-dynamic-columns`,
@@ -118,7 +119,7 @@ export const useExperimentsTableConfig = <
   }, []);
 
   const scoresColumnsData = useMemo(() => {
-    return dynamicScoresColumns.map(
+    const scoreColumns = dynamicScoresColumns.map(
       ({ label, id, columnType }) =>
         ({
           id,
@@ -141,6 +142,8 @@ export const useExperimentsTableConfig = <
           },
         }) as ColumnData<T>,
     );
+
+    return scoreColumns;
   }, [dynamicScoresColumns]);
 
   const selectedRows = useMemo(() => {
