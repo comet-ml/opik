@@ -95,16 +95,7 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
     type !== TRACE_TYPE_FOR_TREE && isSpansLazyLoading;
   const entityType = type === TRACE_TYPE_FOR_TREE ? "trace" : "span";
   const isTrace = type === TRACE_TYPE_FOR_TREE;
-  
-  /**
-   * Type guard function to safely check if data is a Trace.
-   * Traces have type === "trace" or no type field, while Spans have type in SPAN_TYPE enum.
-   */
-  const isTraceType = (data: Trace | Span): data is Trace => {
-    return type === TRACE_TYPE_FOR_TREE;
-  };
-  
-  const traceData = isTraceType(data) ? data : undefined;
+  const traceData = isTrace ? (data as Trace) : undefined;
   const hasSpanFeedbackScores = Boolean(
     traceData?.span_feedback_scores?.length,
   );
@@ -112,13 +103,24 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
   const feedbackScoreDeleteMutation = useTraceFeedbackScoreDeleteMutation();
 
   const onDeleteFeedbackScore = useCallback(
-    (name: string, author?: string) => {
-      feedbackScoreDeleteMutation.mutate({
-        traceId,
-        spanId,
-        name,
-        author,
-      });
+    (name: string, author?: string, spanIdToDelete?: string) => {
+      // If spanIdToDelete is provided (child row grouped by type), delete for that specific span
+      if (spanIdToDelete) {
+        feedbackScoreDeleteMutation.mutate({
+          traceId,
+          spanId: spanIdToDelete,
+          name,
+          author,
+        });
+      } else {
+        // Regular deletion (trace or single span)
+        feedbackScoreDeleteMutation.mutate({
+          traceId,
+          spanId,
+          name,
+          author,
+        });
+      }
     },
     [traceId, spanId, feedbackScoreDeleteMutation],
   );
@@ -306,29 +308,28 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
           <TabsContent value="feedback_scores">
             <div className="space-y-6">
               <div>
-                <div className="comet-body-s-accented mb-4">
-                  {isTrace ? "Trace Feedback Scores" : "Feedback Scores"}
-                </div>
                 <ConfigurableFeedbackScoreTable
+                  title={isTrace ? "Trace scores" : "Span scores"}
                   feedbackScores={data.feedback_scores}
                   onDeleteFeedbackScore={onDeleteFeedbackScore}
                   onAddHumanReview={() =>
                     setActiveSection(DetailsActionSection.Annotations)
                   }
                   entityType={entityType}
+                  isAggregatedSpanScores={false}
                 />
               </div>
               {isTrace && hasSpanFeedbackScores && traceData && (
                 <div>
-                  <div className="comet-body-s-accented mb-4">
-                    Spans Feedback Scores
-                  </div>
                   <ConfigurableFeedbackScoreTable
+                    title="Span scores"
                     feedbackScores={traceData.span_feedback_scores}
+                    onDeleteFeedbackScore={onDeleteFeedbackScore}
                     onAddHumanReview={() =>
                       setActiveSection(DetailsActionSection.Annotations)
                     }
                     entityType="span"
+                    isAggregatedSpanScores={true}
                   />
                 </div>
               )}

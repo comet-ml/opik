@@ -6,8 +6,11 @@ import FeedbackScoreTableNoData from "../FeedbackScoreTableNoData";
 import {
   CONFIGURABLE_COLUMNS,
   DEFAULT_SELECTED_COLUMNS,
+  DEFAULT_SELECTED_COLUMNS_WITH_TYPE,
   NON_CONFIGURABLE_COLUMNS,
   ENTITY_TYPE_TO_STORAGE_KEYS,
+  getConfigurableColumnsWithoutType,
+  getStorageKeyType,
 } from "./constants";
 import { ExpandingFeedbackScoreRow } from "./types";
 import { mapFeedbackScoresToRowsWithExpanded } from "./utils";
@@ -19,12 +22,21 @@ import { useFeedbackScoreDeletePreference } from "./hooks/useFeedbackScoreDelete
 import useLocalStorageState from "use-local-storage-state";
 
 export type FeedbackScoreTableProps = {
-  onDeleteFeedbackScore?: (name: string, author?: string) => void;
+  onDeleteFeedbackScore?: (
+    name: string,
+    author?: string,
+    spanId?: string,
+  ) => void;
   onAddHumanReview: () => void;
   feedbackScores?: TraceFeedbackScore[];
   entityType: "trace" | "thread" | "span" | "experiment";
   selectedColumns?: string[];
   columnsOrder?: string[];
+  /**
+   * Whether this table is showing aggregated span scores at trace level.
+   * When true, the Type column will be shown. When false or undefined, Type column is hidden.
+   */
+  isAggregatedSpanScores?: boolean;
 };
 
 const FeedbackScoreTable: React.FunctionComponent<FeedbackScoreTableProps> = ({
@@ -32,10 +44,19 @@ const FeedbackScoreTable: React.FunctionComponent<FeedbackScoreTableProps> = ({
   feedbackScores = [],
   entityType,
   onDeleteFeedbackScore,
-  selectedColumns = DEFAULT_SELECTED_COLUMNS,
-  columnsOrder = DEFAULT_SELECTED_COLUMNS,
+  selectedColumns,
+  columnsOrder,
+  isAggregatedSpanScores = false,
 }) => {
-  const storageKeys = ENTITY_TYPE_TO_STORAGE_KEYS[entityType];
+  // Use "span" storage keys for aggregated span scores, otherwise use entityType
+  const storageKeyType = getStorageKeyType(entityType, isAggregatedSpanScores);
+  const storageKeys = ENTITY_TYPE_TO_STORAGE_KEYS[storageKeyType];
+
+  // Default columns: include Type only for aggregated span scores at trace level
+  // Match mockup (Key, Type, Score, Scored by) for span scores at trace level
+  const defaultSelectedColumns = isAggregatedSpanScores
+    ? DEFAULT_SELECTED_COLUMNS_WITH_TYPE
+    : DEFAULT_SELECTED_COLUMNS;
 
   const [expanded, setExpanded] = React.useState<ExpandedState>({});
   const [columnSizing, setColumnSizing] =
@@ -46,15 +67,23 @@ const FeedbackScoreTable: React.FunctionComponent<FeedbackScoreTableProps> = ({
     React.useState<ExpandingFeedbackScoreRow | null>(null);
   const [dontAskAgain] = useFeedbackScoreDeletePreference();
 
+  const finalSelectedColumns = selectedColumns ?? defaultSelectedColumns;
+  const finalColumnsOrder = columnsOrder ?? defaultSelectedColumns;
+
   const rows = useMemo(() => {
-    return mapFeedbackScoresToRowsWithExpanded(feedbackScores);
-  }, [feedbackScores]);
+    return mapFeedbackScoresToRowsWithExpanded(
+      feedbackScores,
+      entityType,
+      isAggregatedSpanScores,
+    );
+  }, [feedbackScores, entityType, isAggregatedSpanScores]);
 
   const handleDeleteClick = React.useCallback(
     (row: ExpandingFeedbackScoreRow) => {
       if (!onDeleteFeedbackScore) return;
       if (dontAskAgain) {
-        onDeleteFeedbackScore(row.name, row.author);
+        // For child rows grouped by span type, pass span_id
+        onDeleteFeedbackScore(row.name, row.author, row.span_id);
       } else {
         setRowToDelete(row);
       }
@@ -63,6 +92,12 @@ const FeedbackScoreTable: React.FunctionComponent<FeedbackScoreTableProps> = ({
   );
 
   const columns = useMemo(() => {
+    // Filter out Type column if not aggregated span scores at trace level
+    // Type column should only appear when isAggregatedSpanScores is true
+    const filteredConfigurableColumns = isAggregatedSpanScores
+      ? CONFIGURABLE_COLUMNS
+      : getConfigurableColumnsWithoutType();
+
     const baseColumns = [
       ...convertColumnDataToColumn<
         ExpandingFeedbackScoreRow,
@@ -71,7 +106,10 @@ const FeedbackScoreTable: React.FunctionComponent<FeedbackScoreTableProps> = ({
       ...convertColumnDataToColumn<
         ExpandingFeedbackScoreRow,
         ExpandingFeedbackScoreRow
-      >(CONFIGURABLE_COLUMNS, { selectedColumns, columnsOrder }),
+      >(filteredConfigurableColumns, {
+        selectedColumns: finalSelectedColumns,
+        columnsOrder: finalColumnsOrder,
+      }),
     ];
 
     // Only add actions column if deletion is enabled
@@ -87,7 +125,13 @@ const FeedbackScoreTable: React.FunctionComponent<FeedbackScoreTableProps> = ({
     }
 
     return baseColumns;
-  }, [selectedColumns, columnsOrder, handleDeleteClick, onDeleteFeedbackScore]);
+  }, [
+    finalSelectedColumns,
+    finalColumnsOrder,
+    handleDeleteClick,
+    onDeleteFeedbackScore,
+    isAggregatedSpanScores,
+  ]);
 
   return (
     <>
