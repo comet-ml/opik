@@ -207,7 +207,8 @@ class DatasetsResourceTest {
             "createdBy", "lastUpdatedBy", "datasetId", "tags"};
     public static final String[] DATASET_IGNORED_FIELDS = {"id", "createdAt", "lastUpdatedAt", "createdBy",
             "lastUpdatedBy", "experimentCount", "mostRecentExperimentAt", "lastCreatedExperimentAt",
-            "datasetItemsCount", "lastCreatedOptimizationAt", "mostRecentOptimizationAt", "optimizationCount"};
+            "datasetItemsCount", "lastCreatedOptimizationAt", "mostRecentOptimizationAt", "optimizationCount",
+            "status"};
 
     public static final String API_KEY = UUID.randomUUID().toString();
     private static final String USER = UUID.randomUUID().toString();
