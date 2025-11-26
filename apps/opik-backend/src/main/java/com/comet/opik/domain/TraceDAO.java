@@ -1990,7 +1990,9 @@ class TraceDAOImpl implements TraceDAO {
                       AND trace_id IN (
                           SELECT id
                           FROM traces final
+                          <if(guardrails_filters)>
                           LEFT JOIN guardrails_agg gagg ON gagg.entity_id = traces.id
+                          <endif>
                           <if(annotation_queue_filters)>
                           LEFT JOIN trace_annotation_queue_ids as taqi ON taqi.trace_id = traces.id
                           <endif>
@@ -3702,6 +3704,8 @@ class TraceDAOImpl implements TraceDAO {
                     filterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.SPAN_FEEDBACK_SCORES_IS_EMPTY)
                             .ifPresent(feedbackScoreIsEmptyFilters -> template.add("span_feedback_scores_empty_filters",
                                     feedbackScoreIsEmptyFilters));
+                    filterQueryBuilder.hasGuardrailsFilter(filters)
+                            .ifPresent(hasGuardrailsFilter -> template.add("guardrails_filters", true));
                 });
         Optional.ofNullable(traceSearchCriteria.lastReceivedId())
                 .ifPresent(lastReceivedTraceId -> template.add("last_received_id", lastReceivedTraceId));

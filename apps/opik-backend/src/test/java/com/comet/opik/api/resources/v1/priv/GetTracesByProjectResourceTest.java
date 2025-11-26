@@ -4132,9 +4132,13 @@ class GetTracesByProjectResourceTest {
                     .stream()
                     .map(trace -> {
                         var llmSpanCount = RandomUtils.secure().randomInt(1, 7);
-                        return setCommonTraceDefaults(trace.toBuilder())
+                        return trace.toBuilder()
+                                .projectId(null)
                                 .projectName(projectName)
+                                .usage(null)
+                                .feedbackScores(null)
                                 .endTime(trace.startTime().plus(randomNumber(), ChronoUnit.MILLIS))
+                                .comments(null)
                                 .spanCount(llmSpanCount + RandomUtils.secure().randomInt(1, 7))
                                 .llmSpanCount(llmSpanCount)
                                 .build();
@@ -4680,6 +4684,7 @@ class GetTracesByProjectResourceTest {
     private Trace fromBuilder(Trace.TraceBuilder builder) {
         return builder
                 .feedbackScores(null)
+                .spanFeedbackScores(null)
                 .threadId(null)
                 .comments(null)
                 .totalEstimatedCost(null)
@@ -5006,6 +5011,8 @@ class GetTracesByProjectResourceTest {
                     .spanCount(0)
                     .llmSpanCount(0)
                     .guardrailsValidations(null)
+                    .feedbackScores(null)
+                    .spanFeedbackScores(null)
                     .build();
         }
 
