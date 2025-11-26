@@ -1,7 +1,7 @@
 import React, { useCallback, useState } from "react";
 import {
   GripHorizontal,
-  MoreVertical,
+  MoreHorizontal,
   Trash2,
   ArrowUp,
   ArrowDown,
@@ -20,6 +20,7 @@ import {
 import ConfirmDialog from "@/components/shared/ConfirmDialog/ConfirmDialog";
 import DashboardSectionTitle from "./DashboardSectionTitle";
 import { useDashboardStore } from "@/store/DashboardStore";
+import { cn } from "@/lib/utils";
 
 interface DashboardSectionHeaderProps {
   sectionId: string;
@@ -53,6 +54,7 @@ const DashboardSectionHeader: React.FunctionComponent<
   );
 
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
 
   const handleAddWidget = useCallback(
     (e: React.MouseEvent) => {
@@ -89,11 +91,10 @@ const DashboardSectionHeader: React.FunctionComponent<
       />
 
       <div
-        className={
-          expanded
-            ? "flex items-center gap-2"
-            : "hidden items-center gap-2 group-hover:flex"
-        }
+        className={cn(
+          "flex items-center gap-2",
+          !expanded && !menuOpen && "hidden group-hover:flex",
+        )}
       >
         <Button
           onClick={(e) => {
@@ -105,15 +106,14 @@ const DashboardSectionHeader: React.FunctionComponent<
           Add widget
         </Button>
 
-        <DropdownMenu>
+        <DropdownMenu onOpenChange={setMenuOpen}>
           <DropdownMenuTrigger asChild>
             <Button
               variant="outline"
-              size="icon"
-              className="size-8 rounded-md border-muted bg-primary-100"
+              size="icon-sm"
               onClick={(e) => e.stopPropagation()}
             >
-              <MoreVertical className="size-3.5" />
+              <MoreHorizontal />
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
@@ -155,11 +155,10 @@ const DashboardSectionHeader: React.FunctionComponent<
       <div
         {...dragHandleProps}
         onClick={(e) => e.stopPropagation()}
-        className={
-          expanded
-            ? "flex size-8 cursor-grab items-center justify-center rounded-md border border-muted bg-background text-foreground transition-colors hover:bg-muted active:cursor-grabbing"
-            : "hidden size-8 cursor-grab items-center justify-center rounded-md border border-muted bg-background text-foreground transition-colors hover:bg-muted active:cursor-grabbing group-hover:flex"
-        }
+        className={cn(
+          "flex size-8 cursor-grab items-center justify-center rounded-md border border-muted bg-background text-foreground transition-colors hover:bg-muted active:cursor-grabbing",
+          !expanded && !menuOpen && "hidden group-hover:flex",
+        )}
       >
         <GripHorizontal className="size-3.5" />
       </div>

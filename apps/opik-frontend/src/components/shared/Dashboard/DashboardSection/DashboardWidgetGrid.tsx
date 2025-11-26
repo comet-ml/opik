@@ -3,13 +3,19 @@ import GridLayout, { Layout, WidthProvider } from "react-grid-layout";
 import "react-grid-layout/css/styles.css";
 import "react-resizable/css/styles.css";
 
-import { DashboardLayout, WIDGET_TYPE } from "@/types/dashboard";
+import {
+  DashboardLayout,
+  DashboardWidget,
+  WIDGET_TYPE,
+} from "@/types/dashboard";
 import {
   GRID_COLUMNS,
   ROW_HEIGHT,
   GRID_MARGIN,
   normalizeLayout,
+  areLayoutsEqual,
 } from "@/lib/dashboard/layout";
+import { areWidgetArraysEqual } from "@/lib/dashboard/utils";
 import {
   useDashboardStore,
   selectUpdateLayout,
@@ -22,51 +28,33 @@ const ResponsiveGridLayout = WidthProvider(GridLayout);
 
 interface DashboardWidgetGridProps {
   sectionId: string;
-  widgetIds: string[];
+  widgets: DashboardWidget[];
   layout: DashboardLayout;
 }
 
 const DashboardWidgetGrid: React.FunctionComponent<
   DashboardWidgetGridProps
-> = ({ sectionId, widgetIds, layout }) => {
+> = ({ sectionId, widgets, layout }) => {
   const onAddWidgetCallback = useDashboardStore(
     (state) => state.onAddWidgetCallback,
   );
   const widgetResolver = useDashboardStore(selectWidgetResolver);
-  const sections = useDashboardStore((state) => state.sections);
   const updateLayout = useDashboardStore(selectUpdateLayout);
-
-  const getWidget = (widgetId: string) => {
-    const section = sections.find((s) => s.id === sectionId);
-    return section?.widgets.find((w) => w.id === widgetId);
-  };
 
   const handleAddWidget = () => {
     onAddWidgetCallback?.(sectionId);
   };
+
   const handleLayoutChange = useCallback(
     (newLayout: Layout[]) => {
-      const updatedLayout = newLayout.map((item) => ({
-        i: item.i,
-        x: item.x,
-        y: item.y,
-        w: item.w,
-        h: item.h,
-        minW: item.minW,
-        maxW: item.maxW,
-        minH: item.minH,
-        maxH: item.maxH,
-        static: item.static,
-        moved: item.moved,
-      }));
-
-      const normalizedLayout = normalizeLayout(updatedLayout);
+      if (newLayout.length === 0) return;
+      const normalizedLayout = normalizeLayout(newLayout);
       updateLayout(sectionId, normalizedLayout);
     },
     [sectionId, updateLayout],
   );
 
-  if (isEmpty(widgetIds)) {
+  if (isEmpty(widgets)) {
     return <DashboardWidgetGridEmpty onAddWidget={handleAddWidget} />;
   }
 
@@ -88,10 +76,9 @@ const DashboardWidgetGrid: React.FunctionComponent<
       maxRows={Infinity}
       autoSize={true}
     >
-      {widgetIds.map((widgetId) => {
-        const widget = getWidget(widgetId);
+      {widgets.map((widget) => {
         const widgetComponents = widgetResolver?.(
-          widget?.type || WIDGET_TYPE.CHART_METRIC,
+          widget.type || WIDGET_TYPE.CHART_METRIC,
         );
 
         if (!widgetComponents) return null;
@@ -99,8 +86,8 @@ const DashboardWidgetGrid: React.FunctionComponent<
         const { Widget } = widgetComponents;
 
         return (
-          <div key={widgetId}>
-            <Widget sectionId={sectionId} widgetId={widgetId} />
+          <div key={widget.id}>
+            <Widget sectionId={sectionId} widgetId={widget.id} />
           </div>
         );
       })}
@@ -112,11 +99,11 @@ const arePropsEqual = (
   prev: DashboardWidgetGridProps,
   next: DashboardWidgetGridProps,
 ) => {
-  if (prev.widgetIds.length !== next.widgetIds.length) return false;
-  if (prev.widgetIds.some((id, i) => id !== next.widgetIds[i])) return false;
-  if (prev.layout.length !== next.layout.length) return false;
-
-  return prev.sectionId === next.sectionId;
+  return (
+    prev.sectionId === next.sectionId &&
+    areWidgetArraysEqual(prev.widgets, next.widgets) &&
+    areLayoutsEqual(prev.layout, next.layout)
+  );
 };
 
 export default memo(DashboardWidgetGrid, arePropsEqual);

@@ -69,8 +69,7 @@ const WidgetConfigDialogAddStep: React.FunctionComponent<
                         : "border-border"
                     }`}
                   >
-                    {/* eslint-disable-next-line tailwindcss/no-custom-classname */}
-                    <div className="bg-primary-light flex size-10 shrink-0 items-center justify-center rounded-md text-primary">
+                    <div className="flex size-10 shrink-0 items-center justify-center rounded-md text-primary">
                       {widget.icon}
                     </div>
                     <div className="min-w-0 flex-1">

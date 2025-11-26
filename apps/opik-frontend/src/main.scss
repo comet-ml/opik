@@ -767,3 +767,9 @@ div.cm-theme div.cm-search.cm-panel {
     display: none;
   }
 }
+
+/* Dashboard widget grid layout styles */
+.react-grid-item.react-grid-placeholder {
+  background-color: rgb(59, 130, 246) !important;
+  opacity: 0.2;
+}

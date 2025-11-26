@@ -15,8 +15,6 @@ export interface ChartMetricWidget {
     projectId?: string;
     metricType: string;
     chartType?: "line" | "bar";
-    useGlobalDateRange?: boolean;
-    dateRange?: DateRangeValue;
     traceFilters?: Filter[];
     threadFilters?: Filter[];
   } & Record<string, unknown>;
@@ -108,8 +106,6 @@ export interface DashboardLayoutItem {
   maxW?: number;
   minH?: number;
   maxH?: number;
-  static?: boolean;
-  moved?: boolean;
 }
 
 export type DashboardLayout = DashboardLayoutItem[];
@@ -128,6 +124,7 @@ export interface DashboardState {
   version: number;
   sections: DashboardSections;
   lastModified: number;
+  config: BaseDashboardConfig;
 }
 
 export interface Dashboard {
