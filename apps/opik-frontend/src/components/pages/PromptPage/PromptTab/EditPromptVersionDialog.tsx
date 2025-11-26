@@ -265,16 +265,14 @@ const EditPromptVersionDialog: React.FC<EditPromptVersionDialogProps> = ({
                 />
               ) : (
                 <>
-                  <div className="rounded-md border">
-                    <LLMPromptMessages
-                      messages={messages}
-                      onChange={setMessages}
-                      onAddMessage={handleAddMessage}
-                      hidePromptActions={true}
-                      disableMedia={true}
-                      hideAddButton={true}
-                    />
-                  </div>
+                  <LLMPromptMessages
+                    messages={messages}
+                    onChange={setMessages}
+                    onAddMessage={handleAddMessage}
+                    hidePromptActions={true}
+                    disableMedia={true}
+                    hideAddButton={true}
+                  />
                   <Button
                     variant="outline"
                     size="sm"
