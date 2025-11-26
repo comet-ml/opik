@@ -142,14 +142,39 @@ const PlaygroundPrompt = ({
 
   // Check if loaded chat prompt has unsaved changes
   const hasUnsavedChatPromptChanges = useMemo(() => {
-    if (!selectedChatPromptId || !chatPromptVersionData) {
+    const hasContent = messages.length > 0;
+
+    // Return false if no content or no chat prompt is selected
+    if (!hasContent || !selectedChatPromptId) {
       return false;
     }
 
-    // Compare current messages with loaded chat prompt
-    const loadedTemplate = chatPromptVersionData.template;
-    return !isEqual(chatPromptTemplate, loadedTemplate);
-  }, [selectedChatPromptId, chatPromptVersionData, chatPromptTemplate]);
+    // Return false if chat prompt data hasn't loaded yet or doesn't match
+    if (!chatPromptData || chatPromptData.id !== selectedChatPromptId) {
+      return false;
+    }
+
+    // Return false if version data hasn't loaded yet
+    if (!chatPromptVersionData?.template) {
+      return false;
+    }
+
+    // Parse both templates as objects to compare semantically, not by string formatting
+    try {
+      const currentTemplate = JSON.parse(chatPromptTemplate);
+      const loadedTemplate = JSON.parse(chatPromptVersionData.template);
+      return !isEqual(currentTemplate, loadedTemplate);
+    } catch {
+      // If parsing fails, fall back to string comparison
+      return !isEqual(chatPromptTemplate, chatPromptVersionData.template);
+    }
+  }, [
+    selectedChatPromptId,
+    chatPromptData,
+    chatPromptVersionData,
+    chatPromptTemplate,
+    messages.length,
+  ]);
 
   const handleAddMessage = useCallback(() => {
     const newMessage = generateDefaultLLMPromptMessage();
@@ -383,7 +408,9 @@ const PlaygroundPrompt = ({
             <div className="flex h-full min-w-40 max-w-60 flex-auto flex-nowrap">
               <PromptsSelectBox
                 value={selectedChatPromptId}
-                onValueChange={(value) => value && handleImportChatPrompt(value)}
+                onValueChange={(value) =>
+                  value && handleImportChatPrompt(value)
+                }
                 clearable={false}
                 filterByTemplateStructure={PROMPT_TEMPLATE_STRUCTURE.CHAT}
               />
