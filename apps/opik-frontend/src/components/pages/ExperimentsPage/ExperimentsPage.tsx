@@ -1,5 +1,5 @@
 import React, { useCallback, useMemo, useRef, useState } from "react";
-import { ChartLine, Info, MessageSquareText, RotateCw } from "lucide-react";
+import { ChartLine, Info, RotateCw } from "lucide-react";
 import { ColumnSort, Row, RowSelectionState } from "@tanstack/react-table";
 import { useNavigate } from "@tanstack/react-router";
 import useLocalStorageState from "use-local-storage-state";
@@ -77,6 +77,7 @@ import { ChartData } from "@/components/pages-shared/experiments/FeedbackScoresC
 import GroupsButton from "@/components/shared/GroupsButton/GroupsButton";
 import useQueryParamAndLocalStorageState from "@/hooks/useQueryParamAndLocalStorageState";
 import TextCell from "@/components/shared/DataTableCells/TextCell";
+import FeedbackScoreReasonToggle from "@/components/shared/FeedbackScoreReasonToggle/FeedbackScoreReasonToggle";
 
 const STORAGE_KEY_PREFIX = "experiments";
 const PAGINATION_SIZE_KEY = "experiments-pagination-size";
@@ -353,15 +354,10 @@ const ExperimentsPage: React.FC = () => {
 
   const reasonsAction = useMemo(
     () => (
-      <Button
-        variant="ghost"
-        size="xs"
-        onClick={() => setShowReasons(!showReasons)}
-        className="h-auto p-0 text-sm font-medium hover:bg-transparent"
-      >
-        <MessageSquareText className="mr-1.5 size-3.5" />
-        {showReasons ? "Collapse reasons" : "Expand reasons"}
-      </Button>
+      <FeedbackScoreReasonToggle
+        showReasons={showReasons}
+        setShowReasons={setShowReasons}
+      />
     ),
     [showReasons, setShowReasons],
   );

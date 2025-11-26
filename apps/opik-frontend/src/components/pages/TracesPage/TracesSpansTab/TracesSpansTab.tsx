@@ -11,7 +11,7 @@ import {
   ColumnSort,
   RowSelectionState,
 } from "@tanstack/react-table";
-import { MessageSquareText, RotateCw } from "lucide-react";
+import { RotateCw } from "lucide-react";
 import findIndex from "lodash/findIndex";
 import isObject from "lodash/isObject";
 import isNumber from "lodash/isNumber";
@@ -104,6 +104,7 @@ import {
   USER_FEEDBACK_NAME,
 } from "@/constants/shared";
 import { useTruncationEnabled } from "@/components/server-sync-provider";
+import FeedbackScoreReasonToggle from "@/components/shared/FeedbackScoreReasonToggle/FeedbackScoreReasonToggle";
 
 const getRowId = (d: Trace | Span) => d.id;
 
@@ -874,16 +875,6 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
     [columnsWidth, setColumnsWidth],
   );
 
-  const handleToggleReasons = useCallback(() => {
-    const newShowReasons = !showReasons;
-    setShowReasons(newShowReasons);
-
-    // If expanding reasons and row height is small, change to medium
-    if (newShowReasons && height === ROW_HEIGHT.small) {
-      setHeight(ROW_HEIGHT.medium);
-    }
-  }, [showReasons, setShowReasons, height, setHeight]);
-
   const columnSections = useMemo(() => {
     return [
       {
@@ -892,15 +883,12 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
         order: scoresColumnsOrder,
         onOrderChange: setScoresColumnsOrder,
         action: (
-          <Button
-            variant="ghost"
-            size="xs"
-            onClick={handleToggleReasons}
-            className="h-auto p-0 text-sm font-medium hover:bg-transparent"
-          >
-            <MessageSquareText className="mr-1.5 size-3.5" />
-            {showReasons ? "Collapse reasons" : "Expand reasons"}
-          </Button>
+          <FeedbackScoreReasonToggle
+            showReasons={showReasons}
+            setShowReasons={setShowReasons}
+            height={height}
+            setHeight={setHeight}
+          />
         ),
       },
     ];
@@ -909,7 +897,9 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
     scoresColumnsOrder,
     setScoresColumnsOrder,
     showReasons,
-    handleToggleReasons,
+    setShowReasons,
+    height,
+    setHeight,
   ]);
 
   if (isPending || isFeedbackScoresPending) {

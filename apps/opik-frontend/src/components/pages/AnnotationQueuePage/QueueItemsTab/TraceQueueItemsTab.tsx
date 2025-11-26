@@ -16,7 +16,6 @@ import {
 import isObject from "lodash/isObject";
 import isNumber from "lodash/isNumber";
 import get from "lodash/get";
-import { MessageSquareText } from "lucide-react";
 
 import {
   COLUMN_COMMENTS_ID,
@@ -47,7 +46,6 @@ import Loader from "@/components/shared/Loader/Loader";
 import SearchInput from "@/components/shared/SearchInput/SearchInput";
 import FiltersButton from "@/components/shared/FiltersButton/FiltersButton";
 import { Separator } from "@/components/ui/separator";
-import { Button } from "@/components/ui/button";
 import DataTableRowHeightSelector from "@/components/shared/DataTableRowHeightSelector/DataTableRowHeightSelector";
 import ColumnsButton from "@/components/shared/ColumnsButton/ColumnsButton";
 import DataTable from "@/components/shared/DataTable/DataTable";
@@ -80,6 +78,7 @@ import SelectBox, {
   SelectBoxProps,
 } from "@/components/shared/SelectBox/SelectBox";
 import { useTruncationEnabled } from "@/components/server-sync-provider";
+import FeedbackScoreReasonToggle from "@/components/shared/FeedbackScoreReasonToggle/FeedbackScoreReasonToggle";
 
 const TRACE_COLUMNS: ColumnData<Trace>[] = [
   {
@@ -526,16 +525,6 @@ const TraceQueueItemsTab: React.FC<TraceQueueItemsTabProps> = ({
     [columnsWidth, setColumnsWidth],
   );
 
-  const handleToggleReasons = useCallback(() => {
-    const newShowReasons = !showReasons;
-    setShowReasons(newShowReasons);
-
-    // If expanding reasons and row height is small, change to medium
-    if (newShowReasons && height === ROW_HEIGHT.small) {
-      setHeight(ROW_HEIGHT.medium);
-    }
-  }, [showReasons, setShowReasons, height, setHeight]);
-
   const columnSections = useMemo(() => {
     return [
       {
@@ -544,15 +533,12 @@ const TraceQueueItemsTab: React.FC<TraceQueueItemsTabProps> = ({
         order: scoresColumnsOrder,
         onOrderChange: setScoresColumnsOrder,
         action: (
-          <Button
-            variant="ghost"
-            size="xs"
-            onClick={handleToggleReasons}
-            className="h-auto p-0 text-sm font-medium hover:bg-transparent"
-          >
-            <MessageSquareText className="mr-1.5 size-3.5" />
-            {showReasons ? "Collapse reasons" : "Expand reasons"}
-          </Button>
+          <FeedbackScoreReasonToggle
+            showReasons={showReasons}
+            setShowReasons={setShowReasons}
+            height={height}
+            setHeight={setHeight}
+          />
         ),
       },
     ];
@@ -561,7 +547,9 @@ const TraceQueueItemsTab: React.FC<TraceQueueItemsTabProps> = ({
     scoresColumnsOrder,
     setScoresColumnsOrder,
     showReasons,
-    handleToggleReasons,
+    setShowReasons,
+    height,
+    setHeight,
   ]);
 
   if (isPending) {
