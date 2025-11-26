@@ -118,9 +118,9 @@ const ColumnsButton = <TColumnData,>({
                 )}
                 <div
                   key={`label-${section.title}`}
-                  className="flex flex-wrap items-center justify-between gap-3 px-2 py-1.5"
+                  className="flex items-center justify-between gap-3 px-2 py-1.5"
                 >
-                  <DropdownMenuLabel className="p-0">
+                  <DropdownMenuLabel className="whitespace-nowrap p-0">
                     {section.title}
                   </DropdownMenuLabel>
                   {section.action && (

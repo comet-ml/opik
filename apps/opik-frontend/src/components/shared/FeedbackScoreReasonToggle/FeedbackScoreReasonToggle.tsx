@@ -31,7 +31,7 @@ const FeedbackScoreReasonToggle: React.FC<FeedbackScoreReasonToggleProps> = ({
       variant="ghost"
       size="xs"
       onClick={handleToggle}
-      className="h-auto p-0 text-sm leading-none hover:bg-transparent"
+      className="h-auto whitespace-nowrap p-0 text-sm leading-none hover:bg-transparent"
     >
       <MessageSquareText className="mr-1.5 size-3.5" />
       {showReasons ? "Collapse reasons" : "Expand reasons"}
