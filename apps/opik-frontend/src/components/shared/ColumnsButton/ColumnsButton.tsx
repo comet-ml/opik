@@ -153,7 +153,7 @@ const ColumnsButton = <TColumnData,>({
           Columns
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent className="min-w-56 max-w-72 p-0 pt-12" align="end">
+      <DropdownMenuContent className="min-w-64 max-w-80 p-0 pt-12" align="end">
         <div
           className="absolute inset-x-1 top-1 h-11"
           onKeyDown={(e) => e.stopPropagation()}
