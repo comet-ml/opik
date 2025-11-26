@@ -4,9 +4,9 @@ from datetime import datetime, timezone
 from rq import get_current_job
 from opentelemetry import trace
 import opik
-from opik_optimizer.gepa_optimizer import GepaOptimizer
-from opik_optimizer.evolutionary_optimizer import EvolutionaryOptimizer
-from opik_optimizer.hierarchical_reflective_optimizer import HierarchicalReflectiveOptimizer
+from opik_optimizer.algorithms.gepa_optimizer.gepa_optimizer import GepaOptimizer
+from opik_optimizer.algorithms.evolutionary_optimizer.evolutionary_optimizer import EvolutionaryOptimizer
+from opik_optimizer.algorithms.hierarchical_reflective_optimizer.hierarchical_reflective_optimizer import HierarchicalReflectiveOptimizer
 from opik_optimizer import ChatPrompt
 from opik.evaluation.metrics import Equals, GEval, Contains, LevenshteinRatio
 
