@@ -102,14 +102,12 @@ const PromptsSelectBox: React.FC<PromptsSelectBoxProps> = ({
     [asNewOption, filterByTemplateStructure],
   );
 
-  const searchPlaceholder = useMemo(() => {
-    if (filterByTemplateStructure === PROMPT_TEMPLATE_STRUCTURE.CHAT) {
-      return "Search chat prompt";
-    } else if (filterByTemplateStructure === PROMPT_TEMPLATE_STRUCTURE.TEXT) {
-      return "Search text prompt";
-    }
-    return "Search";
-  }, [filterByTemplateStructure]);
+  let searchPlaceholder = "Search";
+  if (filterByTemplateStructure === PROMPT_TEMPLATE_STRUCTURE.CHAT) {
+    searchPlaceholder = "Search chat prompt";
+  } else if (filterByTemplateStructure === PROMPT_TEMPLATE_STRUCTURE.TEXT) {
+    searchPlaceholder = "Search text prompt";
+  }
 
   const actionPanel = useMemo(() => {
     return asNewOption ? (
