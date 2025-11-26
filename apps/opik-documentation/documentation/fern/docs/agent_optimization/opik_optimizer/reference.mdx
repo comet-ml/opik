@@ -226,7 +226,11 @@ FewShotBayesianOptimizer(
     n_threads: int = 8,
     verbose: int = 1,
     seed: int = 42,
-    name: str | None = None
+    name: str | None = None,
+    enable_columnar_selection: bool = True,
+    enable_diversity: bool = True,
+    enable_multivariate_tpe: bool = True,
+    enable_optuna_pruning: bool = True
 )
 ```
 
@@ -241,6 +245,10 @@ FewShotBayesianOptimizer(
 <ParamField path="verbose" type="int" optional={true} default="1">Controls internal logging/progress bars (0=off, 1=on)</ParamField>
 <ParamField path="seed" type="int" optional={true} default="42">Random seed for reproducibility</ParamField>
 <ParamField path="name" type="str | None" optional={true} />
+<ParamField path="enable_columnar_selection" type="bool" optional={true} default="True">Toggle column-aware example grouping (categorical Optuna params)</ParamField>
+<ParamField path="enable_diversity" type="bool" optional={true} default="True" />
+<ParamField path="enable_multivariate_tpe" type="bool" optional={true} default="True">Enable Optuna's multivariate TPE sampler (default: True)</ParamField>
+<ParamField path="enable_optuna_pruning" type="bool" optional={true} default="True">Enable Optuna pruner for early stopping (default: True)</ParamField>
 
 ### Methods
 #### cleanup

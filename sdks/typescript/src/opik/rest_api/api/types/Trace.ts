@@ -32,6 +32,7 @@ export interface Trace {
     threadId?: string;
     visibilityMode?: OpikApi.TraceVisibilityMode;
     llmSpanCount?: number;
+    hasToolSpans?: boolean;
     /** List of unique provider names from all spans in this trace, sorted alphabetically */
     providers?: string[];
 }

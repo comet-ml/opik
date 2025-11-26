@@ -9292,6 +9292,9 @@ components:
           type: integer
           format: int32
           readOnly: true
+        has_tool_spans:
+          type: boolean
+          readOnly: true
         providers:
           type: array
           description: "List of unique provider names from all spans in this trace,\
@@ -11769,6 +11772,7 @@ components:
       required:
       - alertsEnabled
       - csvUploadEnabled
+      - exportEnabled
       - guardrailsEnabled
       - opikAIEnabled
       - pythonEvaluatorEnabled
@@ -11789,6 +11793,8 @@ components:
         welcomeWizardEnabled:
           type: boolean
         csvUploadEnabled:
+          type: boolean
+        exportEnabled:
           type: boolean
     SpanBatchUpdate:
       required:
@@ -12632,6 +12638,9 @@ components:
         llm_span_count:
           type: integer
           format: int32
+          readOnly: true
+        has_tool_spans:
+          type: boolean
           readOnly: true
         providers:
           type: array
