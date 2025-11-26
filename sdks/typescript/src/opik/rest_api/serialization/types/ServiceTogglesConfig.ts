@@ -17,6 +17,7 @@ export const ServiceTogglesConfig: core.serialization.ObjectSchema<
     alertsEnabled: core.serialization.boolean(),
     welcomeWizardEnabled: core.serialization.boolean(),
     csvUploadEnabled: core.serialization.boolean(),
+    exportEnabled: core.serialization.boolean(),
 });
 
 export declare namespace ServiceTogglesConfig {
@@ -28,5 +29,6 @@ export declare namespace ServiceTogglesConfig {
         alertsEnabled: boolean;
         welcomeWizardEnabled: boolean;
         csvUploadEnabled: boolean;
+        exportEnabled: boolean;
     }
 }
