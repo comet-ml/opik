@@ -544,42 +544,48 @@ const TraceDetailsActionsPanel: React.FunctionComponent<
               </TooltipWrapper>
             )}
             <DropdownMenuSeparator />
-            <TooltipWrapper
-              content={
-                !isExportEnabled
-                  ? "Export functionality is disabled for this installation"
-                  : ""
-              }
-              side="left"
-            >
-              <div>
-                <DropdownMenuItem
-                  onClick={handleExportCSV}
-                  disabled={!isExportEnabled}
-                >
-                  <Download className="mr-2 size-4" />
-                  Export as CSV
-                </DropdownMenuItem>
-              </div>
-            </TooltipWrapper>
-            <TooltipWrapper
-              content={
-                !isExportEnabled
-                  ? "Export functionality is disabled for this installation"
-                  : ""
-              }
-              side="left"
-            >
-              <div>
-                <DropdownMenuItem
-                  onClick={handleExportJSON}
-                  disabled={!isExportEnabled}
-                >
-                  <Download className="mr-2 size-4" />
-                  Export as JSON
-                </DropdownMenuItem>
-              </div>
-            </TooltipWrapper>
+            {!isExportEnabled ? (
+              <TooltipWrapper
+                content="Export functionality is disabled for this installation"
+                side="left"
+              >
+                <div>
+                  <DropdownMenuItem
+                    onClick={handleExportCSV}
+                    disabled={!isExportEnabled}
+                  >
+                    <Download className="mr-2 size-4" />
+                    Export as CSV
+                  </DropdownMenuItem>
+                </div>
+              </TooltipWrapper>
+            ) : (
+              <DropdownMenuItem onClick={handleExportCSV}>
+                <Download className="mr-2 size-4" />
+                Export as CSV
+              </DropdownMenuItem>
+            )}
+            {!isExportEnabled ? (
+              <TooltipWrapper
+                content="Export functionality is disabled for this installation"
+                side="left"
+              >
+                <div>
+                  <DropdownMenuItem
+                    onClick={handleExportJSON}
+                    disabled={!isExportEnabled}
+                  >
+                    <Download className="mr-2 size-4" />
+                    Export as JSON
+                  </DropdownMenuItem>
+                </div>
+              </TooltipWrapper>
+            ) : (
+              <DropdownMenuItem onClick={handleExportJSON}>
+                <Download className="mr-2 size-4" />
+                Export as JSON
+              </DropdownMenuItem>
+            )}
             <DropdownMenuSeparator />
             <DropdownMenuItem onClick={() => setPopupOpen(true)}>
               <Trash className="mr-2 size-4" />
