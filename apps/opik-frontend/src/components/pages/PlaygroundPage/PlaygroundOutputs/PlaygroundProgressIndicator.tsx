@@ -12,10 +12,9 @@ const PlaygroundProgressIndicator: React.FC = () => {
     return null;
   }
 
-  const progressPercentage =
-    progressTotal > 0
-      ? Math.round((progressCompleted / progressTotal) * 100)
-      : 0;
+  const progressPercentage = Math.round(
+    (progressCompleted / progressTotal) * 100,
+  );
 
   return (
     <div className="flex flex-col gap-2">
