@@ -70,10 +70,8 @@ const AddEditPromptDialog: React.FC<AddPromptDialogProps> = ({
   const [showRawView, setShowRawView] = useState(false);
 
   // Use hook for raw JSON view state management
-  const { rawJsonValue, setRawJsonValue } = useRawJsonView(
-    messages,
-    showRawView,
-  );
+  const { rawJsonValue, setRawJsonValue, syncRawJsonFromMessages } =
+    useRawJsonView(messages);
 
   const [showInvalidJSON, setShowInvalidJSON] = useBooleanTimeoutState({});
   const theme = useCodemirrorTheme({
@@ -248,7 +246,13 @@ const AddEditPromptDialog: React.FC<AddPromptDialogProps> = ({
                 <Button
                   variant="ghost"
                   size="sm"
-                  onClick={() => setShowRawView(!showRawView)}
+                  onClick={() => {
+                    const newShowRawView = !showRawView;
+                    if (newShowRawView) {
+                      syncRawJsonFromMessages();
+                    }
+                    setShowRawView(newShowRawView);
+                  }}
                 >
                   {showRawView ? (
                     <>
