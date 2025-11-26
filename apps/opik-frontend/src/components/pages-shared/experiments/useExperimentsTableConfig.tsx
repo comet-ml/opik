@@ -78,10 +78,10 @@ export const useExperimentsTableConfig = <
   actionsCell,
   sortedColumns,
   setSortedColumns,
-  showReasons,
-  setShowReasons,
   height,
   setHeight,
+  showReasons = false,
+  setShowReasons = () => {},
 }: UseExperimentsTableConfigProps<T>) => {
   const [selectedColumns, setSelectedColumns] = useLocalStorageState<string[]>(
     `${storageKeyPrefix}-selected-columns`,
@@ -315,17 +315,16 @@ export const useExperimentsTableConfig = <
         columns: scoresColumnsData,
         order: scoresColumnsOrder,
         onOrderChange: setScoresColumnsOrder,
-        action:
-          showReasons !== undefined && setShowReasons
-            ? React.createElement(FeedbackScoreReasonToggle, {
-                showReasons,
-                setShowReasons,
-                height,
-                setHeight,
-                scoresColumnsData,
-                selectedColumns,
-              })
-            : undefined,
+        action: (
+          <FeedbackScoreReasonToggle
+            showReasons={showReasons}
+            setShowReasons={setShowReasons}
+            height={height}
+            setHeight={setHeight}
+            scoresColumnsData={scoresColumnsData}
+            selectedColumns={selectedColumns}
+          />
+        ),
       },
     ],
     [
