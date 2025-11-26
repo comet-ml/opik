@@ -23,56 +23,23 @@ const formatCategoricScoreValue = (
     .join(separator);
 };
 
-const formatValueWithCounts = (
-  valuesByAuthor: FeedbackScoreValueByAuthorMap,
-  averageValue: string | number,
-  categoryName?: string,
-): string => {
-  // For categorical scores, reuse formatCategoricScoreValue with space separator
-  // and include the average value in parentheses
-  if (categoryName) {
-    const formatted = formatCategoricScoreValue(valuesByAuthor, " ");
-    return `${formatted} (${averageValue})`;
-  }
-
-  // For non-categorical scores (like emojis), count occurrences of each value
-  const valueCounts = new Map<string | number, number>();
-  
-  Object.values(valuesByAuthor).forEach((score) => {
-    // Use the raw value for counting (emojis, numbers, etc.)
-    const displayValue = score.value;
-    const currentCount = valueCounts.get(displayValue) || 0;
-    valueCounts.set(displayValue, currentCount + 1);
-  });
-
-  // Format as "2x 👍 1x 👎" - sort by count descending, then by value
-  // This matches the user's expected format: "2x 👍 1x 👎 (0.666666666)"
-  const formattedParts = Array.from(valueCounts.entries())
-    .sort((a, b) => {
-      // Sort by count descending first
-      if (b[1] !== a[1]) return b[1] - a[1];
-      // Then by value for consistency
-      return String(a[0]).localeCompare(String(b[0]));
-    })
-    .map(([value, count]) => `${count}x ${value}`)
-    .join(" "); // Space-separated format
-
-  return `${formattedParts} (${averageValue})`;
-};
-
 /**
  * Extracts the display value from a score entry.
  * Prefers category_name if available (contains display value like emoji), otherwise uses value.
  */
-const getDisplayValue = (score: FeedbackScoreValueByAuthorMap[string]): string | number => {
+const getDisplayValue = (
+  score: FeedbackScoreValueByAuthorMap[string],
+): string | number => {
   return score.category_name || score.value;
 };
 
 /**
  * Extracts the numeric value from a score entry.
  */
-const getNumericValue = (score: FeedbackScoreValueByAuthorMap[string]): number => {
-  if (typeof score.value === 'number') {
+const getNumericValue = (
+  score: FeedbackScoreValueByAuthorMap[string],
+): number => {
+  if (typeof score.value === "number") {
     return score.value;
   }
   const parsed = parseFloat(String(score.value));
@@ -94,7 +61,7 @@ const countValuesByDisplay = (
   Object.values(valuesByAuthor).forEach((score) => {
     const displayValue = getDisplayValue(score);
     const numericValue = getNumericValue(score);
-    
+
     const currentCount = valueCounts.get(displayValue) || 0;
     valueCounts.set(displayValue, currentCount + 1);
     valueMap.set(displayValue, numericValue);
@@ -106,8 +73,6 @@ const countValuesByDisplay = (
 // Format for parent rows: "avg X: Nx Emoji (Value) Nx Emoji (Value)"
 const formatParentRowWithCounts = (
   valuesByAuthor: FeedbackScoreValueByAuthorMap,
-  averageValue: string | number,
-  categoryName?: string,
 ): string => {
   const { valueCounts, valueMap } = countValuesByDisplay(valuesByAuthor);
 
@@ -131,19 +96,17 @@ const renderParentValue = (displayText: string): React.ReactElement => (
 const ValueCell: React.FC<ValueCellProps> = (context) => {
   const rowData = context.row.original;
   const value = context.getValue();
-  // Use rowData.value directly for child rows to ensure we get the individual value
-  const rowValue = rowData.value ?? value;
 
   const isParentRow = getIsParentFeedbackScoreRow(rowData);
   const isCategoricScore = getIsCategoricFeedbackScore(rowData.category_name);
-  
+
   // Check if parent row has subRows with span_type (grouped by type)
-  const isGroupedBySpanType = isParentRow && 
-    rowData.subRows?.some(subRow => subRow.span_type);
+  const isGroupedBySpanType =
+    isParentRow && rowData.subRows?.some((subRow) => subRow.span_type);
 
   // Check if this is a span feedback score parent row (has subRows with span_id)
-  const isSpanFeedbackScoreParent = isParentRow && 
-    rowData.subRows?.some(subRow => subRow.span_id);
+  const isSpanFeedbackScoreParent =
+    isParentRow && rowData.subRows?.some((subRow) => subRow.span_id);
 
   const cellContent = useMemo((): string | React.ReactElement => {
     // Check if this is a span feedback score (has span_id or span_type in value_by_author)
@@ -155,12 +118,12 @@ const ValueCell: React.FC<ValueCellProps> = (context) => {
       );
 
     // For span feedback score parent rows, show "avg X: count format"
-    if (isParentRow && (isGroupedBySpanType || isSpanFeedbackScoreParent) && rowData.value_by_author) {
-      const countFormat = formatParentRowWithCounts(
-        rowData.value_by_author,
-        value,
-        rowData.category_name,
-      );
+    if (
+      isParentRow &&
+      (isGroupedBySpanType || isSpanFeedbackScoreParent) &&
+      rowData.value_by_author
+    ) {
+      const countFormat = formatParentRowWithCounts(rowData.value_by_author);
       return renderParentValue(`avg ${value}: ${countFormat}`);
     }
 
@@ -181,22 +144,28 @@ const ValueCell: React.FC<ValueCellProps> = (context) => {
     if (!isParentRow && isSpanFeedbackScore) {
       const valueByAuthor = rowData.value_by_author ?? {};
       const entries = Object.values(valueByAuthor);
-      
+
       if (entries.length > 0) {
         const singleScore = entries[0];
         const displayValue = getDisplayValue(singleScore);
         const numericValue = getNumericValue(singleScore);
-        
+
         // Show display value with its numeric value in parentheses
         return `${displayValue} (${numericValue})`;
       }
-      
+
       // Fallback to rowData.value if value_by_author is empty
       const fallbackValue = rowData.value ?? value;
-      const fallbackNumeric = typeof fallbackValue === 'number' ? fallbackValue : parseFloat(String(fallbackValue)) || fallbackValue;
-      
+      const fallbackNumeric =
+        typeof fallbackValue === "number"
+          ? fallbackValue
+          : parseFloat(String(fallbackValue)) || fallbackValue;
+
       if (rowData.category_name) {
-        return categoryOptionLabelRenderer(rowData.category_name, rowData.value ?? value);
+        return categoryOptionLabelRenderer(
+          rowData.category_name,
+          rowData.value ?? value,
+        );
       }
       return `${fallbackValue} (${fallbackNumeric})`;
     }
@@ -215,7 +184,6 @@ const ValueCell: React.FC<ValueCellProps> = (context) => {
     rowData.category_name,
     rowData.span_id,
     rowData.span_type,
-    rowData.subRows,
     rowData.value,
     value,
   ]);

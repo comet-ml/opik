@@ -250,7 +250,7 @@ export const setTraceSpanFeedbackScoresCache = async (
         // The backend uses composite keys: author_spanId (e.g., "username_1_span-id-123")
         const updatedValueByAuthor = { ...score.value_by_author };
         const compositeKey = `${params.author}_${params.spanId}`;
-        
+
         // Try to delete by composite key (backend format)
         if (updatedValueByAuthor[compositeKey]) {
           delete updatedValueByAuthor[compositeKey];
@@ -275,7 +275,8 @@ export const setTraceSpanFeedbackScoresCache = async (
         }
 
         // Recalculate aggregated values
-        const aggregated = aggregateMultiAuthorFeedbackScore(updatedValueByAuthor);
+        const aggregated =
+          aggregateMultiAuthorFeedbackScore(updatedValueByAuthor);
 
         return {
           ...score,
@@ -284,9 +285,7 @@ export const setTraceSpanFeedbackScoresCache = async (
           last_updated_at: new Date().toISOString(),
         };
       })
-      .filter(
-        (score): score is TraceFeedbackScore => score !== null,
-      );
+      .filter((score): score is TraceFeedbackScore => score !== null);
 
     return {
       ...originalData,

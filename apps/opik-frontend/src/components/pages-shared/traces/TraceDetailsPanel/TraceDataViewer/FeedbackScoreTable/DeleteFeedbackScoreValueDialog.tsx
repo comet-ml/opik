@@ -16,7 +16,11 @@ import { Label } from "@/components/ui/label";
 type SetInactiveConfirmDialogProps = {
   open: boolean;
   setOpen: (open: boolean) => void;
-  onDeleteFeedbackScore: (name: string, author?: string, spanId?: string) => void;
+  onDeleteFeedbackScore: (
+    name: string,
+    author?: string,
+    spanId?: string,
+  ) => void;
   entityType: "trace" | "thread" | "span" | "experiment";
   row: ExpandingFeedbackScoreRow;
 };

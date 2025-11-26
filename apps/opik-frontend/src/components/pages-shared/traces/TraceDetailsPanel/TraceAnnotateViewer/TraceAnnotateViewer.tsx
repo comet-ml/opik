@@ -94,7 +94,11 @@ const TraceAnnotateViewer: React.FunctionComponent<
           onDeleteFeedbackScore={onDeleteFeedbackScore}
           className="mt-4"
           header={<FeedbackScoresEditor.Header isTrace={isTrace} />}
-          footer={<FeedbackScoresEditor.Footer entityCopy={isTrace ? "traces" : "spans"} />}
+          footer={
+            <FeedbackScoresEditor.Footer
+              entityCopy={isTrace ? "traces" : "spans"}
+            />
+          }
           isSpanFeedbackScores={isTrace}
         />
       </div>

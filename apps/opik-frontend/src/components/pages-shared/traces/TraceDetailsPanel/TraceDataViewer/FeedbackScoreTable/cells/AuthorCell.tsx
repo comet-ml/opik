@@ -9,7 +9,7 @@ const AuthorCell = (
 ) => {
   const row = context.row.original;
   const isParentFeedbackScoreRow = getIsParentFeedbackScoreRow(row);
-  
+
   // Extract authors - handle composite keys (author_spanId) from span feedback scores
   let authors: string[];
   if (row.author) {

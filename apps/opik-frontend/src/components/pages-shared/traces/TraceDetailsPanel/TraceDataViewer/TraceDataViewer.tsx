@@ -301,6 +301,7 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
                     setActiveSection(DetailsActionSection.Annotations)
                   }
                   entityType={entityType}
+                  isAggregatedSpanScores={false}
                 />
               </div>
               {isTrace && hasSpanFeedbackScores && traceData && (
@@ -313,6 +314,7 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
                       setActiveSection(DetailsActionSection.Annotations)
                     }
                     entityType="span"
+                    isAggregatedSpanScores={true}
                   />
                 </div>
               )}

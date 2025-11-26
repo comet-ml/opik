@@ -7,9 +7,7 @@ import BaseTraceDataTypeIcon from "@/components/pages-shared/traces/TraceDetails
 import { SPAN_TYPE } from "@/types/traces";
 import { SPAN_TYPE_LABELS_MAP } from "@/constants/traces";
 
-const TypeCell = (
-  context: CellContext<ExpandingFeedbackScoreRow, string>,
-) => {
+const TypeCell = (context: CellContext<ExpandingFeedbackScoreRow, string>) => {
   const rowData = context.row.original;
   const isParentRow = getIsParentFeedbackScoreRow(rowData);
 
@@ -40,4 +38,3 @@ const TypeCell = (
 };
 
 export default TypeCell;
-

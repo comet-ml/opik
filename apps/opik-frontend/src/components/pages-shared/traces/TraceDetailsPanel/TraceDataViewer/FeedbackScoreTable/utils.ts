@@ -14,8 +14,8 @@ import { PARENT_ROW_ID_PREFIX } from "./constants";
 export const extractAuthorName = (key: string): string => {
   // Check if it's a composite key (contains underscore followed by what looks like an ID)
   // Extract just the author part before the underscore
-  if (key.includes('_')) {
-    return key.split('_')[0];
+  if (key.includes("_")) {
+    return key.split("_")[0];
   }
   return key;
 };
@@ -136,22 +136,25 @@ const hasMultipleSpans = (
 export const mapFeedbackScoresToRowsWithExpanded = (
   feedbackScores: TraceFeedbackScore[],
   entityType: "trace" | "thread" | "span" | "experiment" = "trace",
+  isAggregatedSpanScores: boolean = false,
 ): ExpandingFeedbackScoreRow[] => {
   const rows: ExpandingFeedbackScoreRow[] = [];
-  const isSpanFeedbackScores = entityType === "span";
+  // Only treat as span feedback scores when showing aggregated span scores at trace level
+  // Individual span scores don't need parent/child rows
+  const isSpanFeedbackScores = isAggregatedSpanScores && entityType === "span";
 
   feedbackScores.forEach((feedbackScore) => {
     const hasMultiValue = getIsMultiValueFeedbackScore(
       feedbackScore.value_by_author,
     );
     const valueByAuthor = feedbackScore.value_by_author ?? {};
-    
+
     // For span feedback scores displayed at trace level, they are always aggregated from multiple spans
     // So we should create parent/child rows whenever we have multiple values OR multiple spans detected
     // Note: When multiple spans have the same author, backend's mapFromArrays collapses them,
     // but we still want to show grouping if we detect multiple span_ids or if value suggests aggregation
     const hasMultipleSpansDetected = hasMultipleSpans(valueByAuthor);
-    
+
     // Check if value has decimal places (indicating it's an average from multiple spans)
     const valueAsNumber =
       typeof feedbackScore.value === "string"
@@ -161,7 +164,7 @@ export const mapFeedbackScoresToRowsWithExpanded = (
       !isNaN(valueAsNumber) &&
       isFinite(valueAsNumber) &&
       valueAsNumber % 1 !== 0;
-    
+
     // For span feedback scores, create parent/child rows if:
     // 1. We have multiple values (different authors), OR
     // 2. We detect multiple spans (different span_ids in value_by_author), OR
@@ -187,9 +190,10 @@ export const mapFeedbackScoresToRowsWithExpanded = (
       rows.push(parentRow);
 
       // Group entries by span_type
-      const groupedByType = new Map<string, typeof feedbackScore.value_by_author>(
-        [],
-      );
+      const groupedByType = new Map<
+        string,
+        typeof feedbackScore.value_by_author
+      >([]);
 
       Object.entries(feedbackScore.value_by_author ?? {}).forEach(
         ([author, score]) => {
@@ -236,7 +240,7 @@ export const mapFeedbackScoresToRowsWithExpanded = (
       // If span_id is available, use it to create unique rows
       // Otherwise, use author as fallback
       const entries = Object.entries(feedbackScore.value_by_author ?? {});
-      
+
       // If we have span_ids, create one row per span_id
       // Otherwise, create one row per author entry
       parentRow.subRows = entries.map(([authorKey, score], index) =>
@@ -295,7 +299,8 @@ export const getIsParentFeedbackScoreRow = (
   value_by_author: FeedbackScoreValueByAuthorMap;
 } => {
   return (
-    (getIsMultiValueFeedbackScore(row.value_by_author) || Boolean(row.subRows?.length)) &&
+    (getIsMultiValueFeedbackScore(row.value_by_author) ||
+      Boolean(row.subRows?.length)) &&
     !row.author
   );
 };
