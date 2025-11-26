@@ -24,7 +24,6 @@ import { Separator } from "@/components/ui/separator";
 import { Input } from "@/components/ui/input";
 import SelectBox from "@/components/shared/SelectBox/SelectBox";
 import ProjectsSelectBox from "@/components/pages-shared/automations/ProjectsSelectBox";
-import AlertFeedbackScoresSelect from "@/components/shared/AlertFeedbackScoresSelect/AlertFeedbackScoresSelect";
 import { DropdownOption } from "@/types/shared";
 import { AlertFormType } from "./schema";
 import { TRIGGER_CONFIG } from "./helpers";
@@ -32,6 +31,9 @@ import { ALERT_EVENT_TYPE } from "@/types/alerts";
 import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
 import { cn } from "@/lib/utils";
+import FeedbackScoreConditions, {
+  DEFAULT_FEEDBACK_SCORE_CONDITION,
+} from "./FeedbackScoreConditions";
 
 type EventTriggersProps = {
   form: UseFormReturn<AlertFormType>;
@@ -49,11 +51,6 @@ const WINDOW_OPTIONS: DropdownOption<string>[] = [
   { label: "7 days", value: "604800" },
   { label: "15 days", value: "1296000" },
   { label: "30 days", value: "2592000" },
-];
-
-const OPERATOR_OPTIONS: DropdownOption<string>[] = [
-  { label: ">", value: ">" },
-  { label: "<", value: "<" },
 ];
 
 function getThresholdLabel(eventType: ALERT_EVENT_TYPE): string {
@@ -81,215 +78,6 @@ function getThresholdPlaceholder(eventType: ALERT_EVENT_TYPE): string {
       return "0";
   }
 }
-
-// Separate component for feedback score conditions - MUST be outside EventTriggers
-const FeedbackScoreConditions: React.FC<{
-  form: UseFormReturn<AlertFormType>;
-  triggerIndex: number;
-  eventType: ALERT_EVENT_TYPE;
-}> = ({ form, triggerIndex, eventType }) => {
-  const conditionsFieldArray = useFieldArray({
-    control: form.control,
-    name: `triggers.${triggerIndex}.conditions` as "triggers.0.conditions",
-  });
-
-  const addCondition = () => {
-    conditionsFieldArray.append({
-      threshold: "",
-      window: "1800",
-      name: "",
-      operator: ">",
-    });
-  };
-
-  const removeCondition = (conditionIndex: number) => {
-    conditionsFieldArray.remove(conditionIndex);
-  };
-
-  return (
-    <div className="flex flex-col gap-2">
-      {conditionsFieldArray.fields.map((condition, conditionIndex) => {
-        const isFirstCondition = conditionIndex === 0;
-        const canDelete = conditionsFieldArray.fields.length > 1;
-
-        return (
-          <div key={condition.id} className="flex items-end gap-2.5">
-            {/* Grouped inputs: feedback score name, operator, threshold */}
-            <div className="flex flex-1 items-end">
-              <FormField
-                control={form.control}
-                name={
-                  `triggers.${triggerIndex}.conditions.${conditionIndex}.name` as Path<AlertFormType>
-                }
-                render={({ field, formState }) => {
-                  const validationErrors = get(formState.errors, [
-                    "triggers",
-                    triggerIndex,
-                    "conditions",
-                    conditionIndex,
-                    "name",
-                  ]);
-                  return (
-                    <FormItem className="min-w-[150px] flex-1">
-                      {isFirstCondition && (
-                        <Label className="comet-body-s-accented">
-                          When average
-                        </Label>
-                      )}
-                      {!isFirstCondition && (
-                        <Label className="comet-body-s-accented">
-                          Or when average
-                        </Label>
-                      )}
-                      <FormControl>
-                        <AlertFeedbackScoresSelect
-                          value={field.value as string}
-                          onChange={field.onChange}
-                          eventType={eventType}
-                          className={cn("h-8 rounded-r-none", {
-                            "border-destructive": Boolean(
-                              validationErrors?.message,
-                            ),
-                          })}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  );
-                }}
-              />
-              <FormField
-                control={form.control}
-                name={
-                  `triggers.${triggerIndex}.conditions.${conditionIndex}.operator` as Path<AlertFormType>
-                }
-                render={({ field, formState }) => {
-                  const validationErrors = get(formState.errors, [
-                    "triggers",
-                    triggerIndex,
-                    "conditions",
-                    conditionIndex,
-                    "operator",
-                  ]);
-                  return (
-                    <FormItem className="-ml-px w-16">
-                      <FormControl>
-                        <SelectBox
-                          value={field.value as string}
-                          onChange={field.onChange}
-                          options={OPERATOR_OPTIONS}
-                          className={cn("h-8 rounded-none text-left", {
-                            "border-destructive": Boolean(
-                              validationErrors?.message,
-                            ),
-                          })}
-                          placeholder=">"
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  );
-                }}
-              />
-              <FormField
-                control={form.control}
-                name={
-                  `triggers.${triggerIndex}.conditions.${conditionIndex}.threshold` as Path<AlertFormType>
-                }
-                render={({ field, formState }) => {
-                  const validationErrors = get(formState.errors, [
-                    "triggers",
-                    triggerIndex,
-                    "conditions",
-                    conditionIndex,
-                    "threshold",
-                  ]);
-                  return (
-                    <FormItem className="-ml-px w-24">
-                      <FormControl>
-                        <Input
-                          className={cn("h-8 rounded-l-none", {
-                            "border-destructive": Boolean(
-                              validationErrors?.message,
-                            ),
-                          })}
-                          type="number"
-                          step="0.01"
-                          placeholder="0.7"
-                          value={field.value as string}
-                          onChange={field.onChange}
-                          onBlur={field.onBlur}
-                          name={field.name}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  );
-                }}
-              />
-            </div>
-            <FormField
-              control={form.control}
-              name={
-                `triggers.${triggerIndex}.conditions.${conditionIndex}.window` as Path<AlertFormType>
-              }
-              render={({ field, formState }) => {
-                const validationErrors = get(formState.errors, [
-                  "triggers",
-                  triggerIndex,
-                  "conditions",
-                  conditionIndex,
-                  "window",
-                ]);
-                return (
-                  <FormItem className="min-w-[120px] flex-1">
-                    <Label className="comet-body-s-accented">In the last</Label>
-                    <FormControl>
-                      <SelectBox
-                        value={field.value as string}
-                        onChange={field.onChange}
-                        options={WINDOW_OPTIONS}
-                        className={cn("h-8 text-left", {
-                          "border-destructive": Boolean(
-                            validationErrors?.message,
-                          ),
-                        })}
-                        placeholder="Select time window"
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                );
-              }}
-            />
-            {canDelete && (
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon-sm"
-                className="mb-0.5"
-                onClick={() => removeCondition(conditionIndex)}
-              >
-                <X className="size-4" />
-              </Button>
-            )}
-          </div>
-        );
-      })}
-      <div className="flex pt-1">
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          onClick={addCondition}
-        >
-          <Plus className="mr-1 size-3" />
-          Add condition
-        </Button>
-      </div>
-    </div>
-  );
-};
 
 const EventTriggers: React.FunctionComponent<EventTriggersProps> = ({
   form,
@@ -322,14 +110,7 @@ const EventTriggers: React.FunctionComponent<EventTriggersProps> = ({
         projectIds: projectsIds,
         ...(isFeedbackScoreTrigger
           ? {
-              conditions: [
-                {
-                  threshold: "",
-                  window: "1800",
-                  name: "",
-                  operator: ">",
-                },
-              ],
+              conditions: [DEFAULT_FEEDBACK_SCORE_CONDITION],
             }
           : {}),
       });

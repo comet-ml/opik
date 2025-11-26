@@ -14,7 +14,7 @@ import {
   AlertTriggerConfig,
   Alert,
 } from "@/types/alerts";
-import { TriggerFormType } from "./schema";
+import { TriggerFormType, FeedbackScoreConditionType } from "./schema";
 import SlackIcon from "@/icons/slack.svg?react";
 import PagerDutyIcon from "@/icons/pagerduty.svg?react";
 
@@ -150,12 +150,7 @@ const getThresholdFromTriggerConfigs = (
 const getAllThresholdConditionsFromTriggerConfigs = (
   configType: ALERT_TRIGGER_CONFIG_TYPE,
   triggerConfigs?: AlertTriggerConfig[],
-): Array<{
-  threshold: string;
-  window: string;
-  name: string;
-  operator: string;
-}> => {
+): FeedbackScoreConditionType[] => {
   if (!triggerConfigs) return [];
 
   const conditions = triggerConfigs
@@ -249,12 +244,7 @@ export const alertTriggersToFormTriggers = (
     }
 
     // Extract multiple conditions for feedback score triggers
-    let conditions: Array<{
-      threshold: string;
-      window: string;
-      name: string;
-      operator: string;
-    }> = [];
+    let conditions: FeedbackScoreConditionType[] = [];
     if (
       trigger.event_type === ALERT_EVENT_TYPE.trace_feedback_score ||
       trigger.event_type === ALERT_EVENT_TYPE.trace_thread_feedback_score
