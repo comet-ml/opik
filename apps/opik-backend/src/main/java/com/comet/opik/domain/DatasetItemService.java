@@ -391,7 +391,7 @@ class DatasetItemServiceImpl implements DatasetItemService {
             log.info("Resolved version '{}' to version ID '{}' for dataset '{}'",
                     versionHashOrTag, versionId, datasetItemSearchCriteria.datasetId());
 
-            return dao.getVersionedItems(datasetItemSearchCriteria, page, size, versionId)
+            return dao.getItems(datasetItemSearchCriteria, page, size, versionId)
                     .defaultIfEmpty(DatasetItemPage.empty(page, sortingFactory.getSortableFields()));
         } else {
             // Fetch draft (current) items from dataset_items table

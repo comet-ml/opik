@@ -163,25 +163,9 @@ class DatasetVersionServiceImpl implements DatasetVersionService {
         String versionHash = CommitUtils.getCommit(versionId);
         log.info("Generated version hash '{}' for dataset '{}'", versionHash, datasetId);
 
-        // Fetch current dataset items from ClickHouse to create snapshot
-        var fetchedItems = datasetItemDAO.getItems(datasetId, Integer.MAX_VALUE, null)
-                .contextWrite(ctx -> ctx
-                        .put(RequestContext.USER_NAME, userName)
-                        .put(RequestContext.WORKSPACE_ID, workspaceId))
-                .collectList()
-                .block();
-
-        // Make effectively final for lambda
-        final List<DatasetItem> currentItems;
-        if (fetchedItems == null || fetchedItems.isEmpty()) {
-            log.warn("No items found for dataset: '{}'", datasetId);
-            currentItems = List.of();
-        } else {
-            currentItems = fetchedItems;
-        }
-
-        log.info("Fetched '{}' items for dataset '{}' version '{}'",
-                currentItems.size(), datasetId, versionHash);
+        // Stream and save dataset items in batches to avoid memory issues
+        Long itemCount = saveVersionSnapshotStreaming(versionId, datasetId, workspaceId, userName);
+        log.info("Saved version snapshot with '{}' items for version '{}'", itemCount, versionId);
 
         return template.inTransaction(WRITE, handle -> {
             var datasetVersionDAO = handle.attach(DatasetVersionDAO.class);
@@ -189,18 +173,8 @@ class DatasetVersionServiceImpl implements DatasetVersionService {
             // Get previous version for diff calculation
             var previousVersion = datasetVersionDAO.findByTag(datasetId, LATEST_TAG, workspaceId);
 
-            // Create immutable snapshot in ClickHouse dataset_item_versions table FIRST
-            // (needed for ClickHouse-based diff calculation)
-            if (!currentItems.isEmpty()) {
-                datasetItemDAO.saveVersionSnapshot(versionId, datasetId, currentItems)
-                        .contextWrite(ctx -> ctx
-                                .put(RequestContext.USER_NAME, userName)
-                                .put(RequestContext.WORKSPACE_ID, workspaceId))
-                        .block();
-                log.info("Saved version snapshot with '{}' items for version '{}'", currentItems.size(), versionId);
-            }
-
-            // Calculate diff statistics by comparing IDs and hashes in service layer
+            // Calculate diff statistics by comparing IDs and hashes AFTER snapshot is saved
+            // This only loads IDs and hashes, not full item data
             DatasetVersionDiffStats diffStats;
             if (previousVersion.isPresent()) {
                 var previousItems = datasetItemDAO.getVersionItemIdsAndHashes(datasetId, previousVersion.get().id())
@@ -220,7 +194,7 @@ class DatasetVersionServiceImpl implements DatasetVersionService {
                 diffStats = calculateDiffStatistics(previousItems, currentVersionItems);
             } else {
                 // First version - all items are new
-                diffStats = new DatasetVersionDiffStats(currentItems.size(), 0, 0, currentItems.size());
+                diffStats = new DatasetVersionDiffStats(itemCount, 0, 0, itemCount);
             }
 
             log.info("Diff statistics for dataset '{}': added='{}', modified='{}', deleted='{}', unchanged='{}'",
@@ -230,7 +204,7 @@ class DatasetVersionServiceImpl implements DatasetVersionService {
             // Create a new version with calculated diff statistics
             var version = DatasetVersionMapper.INSTANCE.toDatasetVersion(
                     versionId, datasetId, versionHash,
-                    currentItems.size(),
+                    itemCount.intValue(),
                     (int) diffStats.itemsAdded(),
                     (int) diffStats.itemsModified(),
                     (int) diffStats.itemsDeleted(),
@@ -262,6 +236,54 @@ class DatasetVersionServiceImpl implements DatasetVersionService {
 
             return datasetVersionDAO.findById(versionId, workspaceId).orElseThrow();
         });
+    }
+
+    /**
+     * Streams dataset items in batches and saves them as a version snapshot.
+     * This avoids loading all items into memory at once for large datasets.
+     *
+     * @param versionId the version ID to save items under
+     * @param datasetId the dataset ID to stream items from
+     * @param workspaceId the workspace ID for context
+     * @param userName the user name for context
+     * @return the total number of items saved
+     */
+    private Long saveVersionSnapshotStreaming(UUID versionId, UUID datasetId, String workspaceId, String userName) {
+        final int batchSize = 1000; // Process items in batches of 1000
+        UUID lastRetrievedId = null;
+        long totalProcessed = 0L;
+
+        List<DatasetItem> items = datasetItemDAO.getItems(datasetId, batchSize, lastRetrievedId)
+                .contextWrite(ctx -> ctx
+                        .put(RequestContext.USER_NAME, userName)
+                        .put(RequestContext.WORKSPACE_ID, workspaceId))
+                .collectList()
+                .block();
+
+        while (items != null && !items.isEmpty()) {
+            log.debug("Processing batch of '{}' items for version: '{}'", items.size(), versionId);
+
+            // Save this batch
+            datasetItemDAO.saveVersionSnapshot(versionId, datasetId, items)
+                    .contextWrite(ctx -> ctx
+                            .put(RequestContext.USER_NAME, userName)
+                            .put(RequestContext.WORKSPACE_ID, workspaceId))
+                    .block();
+
+            totalProcessed += items.size();
+            lastRetrievedId = items.getLast().id();
+
+            // Fetch next batch
+            items = datasetItemDAO.getItems(datasetId, batchSize, lastRetrievedId)
+                    .contextWrite(ctx -> ctx
+                            .put(RequestContext.USER_NAME, userName)
+                            .put(RequestContext.WORKSPACE_ID, workspaceId))
+                    .collectList()
+                    .block();
+        }
+
+        log.info("Finished processing all items. Total processed: '{}'", totalProcessed);
+        return totalProcessed;
     }
 
     @Override
