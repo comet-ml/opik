@@ -1,5 +1,5 @@
 --liquibase formatted sql
---changeset alexkuzmik:000036_add_template_structure_to_prompts
+--changeset alexkuzmik:000037_add_template_structure_to_prompts
 --comment: Add template_structure column to prompts table
 
 ALTER TABLE prompts ADD COLUMN template_structure ENUM('text', 'chat') NOT NULL DEFAULT 'text';
