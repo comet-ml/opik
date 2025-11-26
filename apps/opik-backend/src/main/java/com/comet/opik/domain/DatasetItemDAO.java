@@ -1136,8 +1136,15 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                 statement.bind("spanId" + i, DatasetItemResultMapper.getOrDefault(item.spanId()));
                 statement.bind("data" + i, DatasetItemResultMapper.getOrDefault(data));
                 statement.bind("tags" + i, item.tags() != null ? item.tags().toArray(String[]::new) : new String[]{});
-                statement.bind("createdBy" + i, Optional.ofNullable(item.createdBy()).orElse(userName));
-                statement.bind("lastUpdatedBy" + i, Optional.ofNullable(item.lastUpdatedBy()).orElse(userName));
+
+                // For versions, preserve original creator information; for drafts, use fallback
+                if (isVersion) {
+                    statement.bind("createdBy" + i, item.createdBy());
+                    statement.bind("lastUpdatedBy" + i, item.lastUpdatedBy());
+                } else {
+                    statement.bind("createdBy" + i, Optional.ofNullable(item.createdBy()).orElse(userName));
+                    statement.bind("lastUpdatedBy" + i, Optional.ofNullable(item.lastUpdatedBy()).orElse(userName));
+                }
                 i++;
             }
 
@@ -1680,7 +1687,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
             @NonNull List<DatasetItem> items) {
 
         if (items.isEmpty()) {
-            return Mono.empty();
+            return Mono.just(0L);
         }
 
         log.info("Saving version snapshot for version: '{}', dataset: '{}', items count: '{}'",
