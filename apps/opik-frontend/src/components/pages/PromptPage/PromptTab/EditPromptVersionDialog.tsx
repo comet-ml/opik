@@ -40,6 +40,7 @@ import {
   getNextMessageType,
   parseLLMMessageContent,
   parsePromptVersionContent,
+  parseChatTemplateToLLMMessages,
 } from "@/lib/llm";
 import LLMPromptMessages from "@/components/pages-shared/llm/LLMPromptMessages/LLMPromptMessages";
 import { LLMMessage } from "@/types/llm";
@@ -85,19 +86,12 @@ const EditPromptVersionDialog: React.FC<EditPromptVersionDialogProps> = ({
   // Parse messages from template if it's a chat prompt
   const initialMessages = useMemo<LLMMessage[]>(() => {
     if (!isChatPrompt) return [];
-    try {
-      const parsed = JSON.parse(promptTemplate);
-      if (Array.isArray(parsed)) {
-        return parsed.map((msg, index) => ({
-          id: `msg-${index}`,
-          role: msg.role,
-          content: msg.content, // Keep content as-is (string or array)
-        }));
-      }
-    } catch {
-      // If parsing fails, return empty array
-    }
-    return [generateDefaultLLMPromptMessage()];
+
+    const parsedMessages = parseChatTemplateToLLMMessages(promptTemplate);
+
+    return parsedMessages.length > 0
+      ? parsedMessages
+      : [generateDefaultLLMPromptMessage()];
   }, [isChatPrompt, promptTemplate]);
 
   const [messages, setMessages] = useState<LLMMessage[]>(initialMessages);

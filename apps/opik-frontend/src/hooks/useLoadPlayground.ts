@@ -8,6 +8,7 @@ import { generateDefaultPrompt } from "@/lib/playground";
 import {
   generateDefaultLLMPromptMessage,
   getTextFromMessageContent,
+  parseChatTemplateToLLMMessages,
 } from "@/lib/llm";
 import {
   PLAYGROUND_LAST_PICKED_MODEL,
@@ -95,18 +96,14 @@ const useLoadPlayground = () => {
 
         try {
           const contentString = getTextFromMessageContent(promptContent);
-          const parsed = JSON.parse(contentString);
-          if (Array.isArray(parsed) && parsed.length > 0) {
-            newPrompt.messages = parsed.map((msg, index) => ({
-              id: `msg-${index}-${Date.now()}`,
-              role: msg.role as LLM_MESSAGE_ROLE,
-              content:
-                typeof msg.content === "string"
-                  ? msg.content
-                  : JSON.stringify(msg.content),
-              promptId,
-              promptVersionId,
-            }));
+          const parsedMessages = parseChatTemplateToLLMMessages(contentString, {
+            promptId,
+            promptVersionId,
+            useTimestamp: true,
+          });
+
+          if (parsedMessages.length > 0) {
+            newPrompt.messages = parsedMessages;
           } else {
             // Fallback to single message if parsing fails
             newPrompt.messages = [

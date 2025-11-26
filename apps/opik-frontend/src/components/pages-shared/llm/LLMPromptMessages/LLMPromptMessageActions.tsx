@@ -31,6 +31,7 @@ import {
   getTextFromMessageContent,
   convertMessageToMessagesJson,
   parsePromptVersionContent,
+  parseChatTemplateToLLMMessages,
 } from "@/lib/llm";
 
 type ConfirmType = "load" | "reset" | "save";
@@ -270,30 +271,20 @@ const LLMPromptMessageActions: React.FC<LLMPromptLibraryActionsProps> = ({
 
       // If it's a chat prompt and we have the callback, replace all messages
       if (isChatPrompt && onReplaceWithChatPrompt && template) {
-        try {
-          const parsed = JSON.parse(template);
-          if (Array.isArray(parsed) && parsed.length > 0) {
-            const newMessages: LLMMessage[] = parsed.map((msg, index) => ({
-              id: `msg-${index}-${Date.now()}`,
-              role: msg.role as LLM_MESSAGE_ROLE,
-              content:
-                typeof msg.content === "string"
-                  ? msg.content
-                  : JSON.stringify(msg.content),
-              promptId: promptData.id,
-              promptVersionId: versionId,
-            }));
-            onReplaceWithChatPrompt(
-              newMessages,
-              promptData.id,
-              versionId || "",
-            );
-            setIsLoading(false);
-            return;
-          }
-        } catch (error) {
-          console.error("Failed to parse chat prompt:", error);
-          // Fall through to regular message update
+        const newMessages = parseChatTemplateToLLMMessages(template, {
+          promptId: promptData.id,
+          promptVersionId: versionId,
+          useTimestamp: true,
+        });
+
+        if (newMessages.length > 0) {
+          onReplaceWithChatPrompt(
+            newMessages,
+            promptData.id,
+            versionId || "",
+          );
+          setIsLoading(false);
+          return;
         }
       }
 
