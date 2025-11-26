@@ -18,11 +18,21 @@ CREATE TABLE IF NOT EXISTS ${ANALYTICS_DB_DATABASE_NAME}.dataset_item_versions
     last_updated_at     DateTime64(9, 'UTC') DEFAULT now64(9),
     created_by          String DEFAULT '',
     last_updated_by     String DEFAULT '',
-    workspace_id        String
+    workspace_id        String,
+    data_hash           UInt64 MATERIALIZED xxHash64(toString(data))
 )
 ENGINE = ReplicatedReplacingMergeTree('/clickhouse/tables/{shard}/${ANALYTICS_DB_DATABASE_NAME}/dataset_item_versions', '{replica}', last_updated_at)
 ORDER BY (workspace_id, dataset_id, version_id, id)
 SETTINGS index_granularity = 8192;
 
 --rollback DROP TABLE IF EXISTS ${ANALYTICS_DB_DATABASE_NAME}.dataset_item_versions;
+
+--changeset idoberko2:000047_add_data_hash_to_dataset_items
+--comment: Add materialized data_hash column to dataset_items for efficient diff comparison with draft
+
+-- Add data_hash to dataset_items (draft items) for version comparison
+ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.dataset_items ON CLUSTER '{cluster}'
+    ADD COLUMN data_hash UInt64 MATERIALIZED xxHash64(toString(data));
+
+--rollback ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.dataset_items ON CLUSTER '{cluster}' DROP COLUMN data_hash;
 

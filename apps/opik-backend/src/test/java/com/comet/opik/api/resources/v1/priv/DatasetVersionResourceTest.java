@@ -858,5 +858,137 @@ class DatasetVersionResourceTest {
             assertThat(v1Data).containsExactlyInAnyOrderElementsOf(v2Data)
                     .as("Data content should be identical across versions");
         }
+
+        @Test
+        @DisplayName("Success: Compare two versions with diff endpoint")
+        void compareVersions__whenTwoVersions__thenReturnDiffStatistics() {
+            // Given - Create dataset with 3 items
+            var datasetId = createDataset(UUID.randomUUID().toString());
+            var originalItems = generateDatasetItems(3);
+
+            var batch1 = DatasetItemBatch.builder()
+                    .datasetId(datasetId)
+                    .items(originalItems)
+                    .build();
+
+            datasetResourceClient.createDatasetItems(batch1, TEST_WORKSPACE, API_KEY);
+
+            // Commit first version
+            var versionCreate1 = DatasetVersionCreate.builder()
+                    .tag("v1")
+                    .build();
+
+            datasetResourceClient.commitVersion(datasetId, versionCreate1, API_KEY, TEST_WORKSPACE);
+
+            // Modify items: delete 1, modify 1, add 2
+            var modifiedItem = originalItems.get(0).toBuilder()
+                    .data(Map.of("modified", JsonUtils.getJsonNodeFromString("true")))
+                    .build();
+
+            var newItems = generateDatasetItems(2);
+
+            var batch2 = DatasetItemBatch.builder()
+                    .datasetId(datasetId)
+                    .items(List.of(modifiedItem))
+                    .build();
+
+            datasetResourceClient.createDatasetItems(batch2, TEST_WORKSPACE, API_KEY);
+
+            // Delete one item
+            try (var response = client.target(baseURI)
+                    .path("/v1/private/datasets/%s/items/%s".formatted(datasetId, originalItems.get(1).id()))
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
+                    .delete()) {
+
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NO_CONTENT);
+            }
+
+            // Add new items
+            var batch3 = DatasetItemBatch.builder()
+                    .datasetId(datasetId)
+                    .items(newItems)
+                    .build();
+
+            datasetResourceClient.createDatasetItems(batch3, TEST_WORKSPACE, API_KEY);
+
+            // Commit second version
+            var versionCreate2 = DatasetVersionCreate.builder()
+                    .tag("v2")
+                    .build();
+
+            datasetResourceClient.commitVersion(datasetId, versionCreate2, API_KEY, TEST_WORKSPACE);
+
+            // When - Compare versions using diff endpoint
+            var diff = datasetResourceClient.compareVersions(datasetId, "v1", "v2", API_KEY, TEST_WORKSPACE);
+
+            // Then - Verify diff statistics
+            assertThat(diff.fromVersion()).isEqualTo("v1");
+            assertThat(diff.toVersion()).isEqualTo("v2");
+            assertThat(diff.statistics().itemsAdded()).isEqualTo(2)
+                    .as("2 new items were added");
+            assertThat(diff.statistics().itemsModified()).isEqualTo(1)
+                    .as("1 item was modified");
+            assertThat(diff.statistics().itemsDeleted()).isEqualTo(1)
+                    .as("1 item was deleted");
+            assertThat(diff.statistics().itemsUnchanged()).isEqualTo(1)
+                    .as("1 item remained unchanged");
+        }
+
+        @Test
+        @DisplayName("Success: Compare version with draft")
+        void compareVersions__whenVersionAndDraft__thenReturnDiffStatistics() {
+            // Given - Create dataset with 2 items
+            var datasetId = createDataset(UUID.randomUUID().toString());
+            var originalItems = generateDatasetItems(2);
+
+            var batch1 = DatasetItemBatch.builder()
+                    .datasetId(datasetId)
+                    .items(originalItems)
+                    .build();
+
+            datasetResourceClient.createDatasetItems(batch1, TEST_WORKSPACE, API_KEY);
+
+            // Commit version
+            var versionCreate = DatasetVersionCreate.builder()
+                    .tag("v1")
+                    .build();
+
+            datasetResourceClient.commitVersion(datasetId, versionCreate, API_KEY, TEST_WORKSPACE);
+
+            // Modify draft: add 1 new item
+            var newItem = generateDatasetItems(1).get(0);
+            var batch2 = DatasetItemBatch.builder()
+                    .datasetId(datasetId)
+                    .items(List.of(newItem))
+                    .build();
+
+            datasetResourceClient.createDatasetItems(batch2, TEST_WORKSPACE, API_KEY);
+
+            // When - Compare version with draft (omitting 'to' parameter defaults to draft)
+            var diff = datasetResourceClient.compareVersions(datasetId, "v1", null, API_KEY, TEST_WORKSPACE);
+
+            // Then - Verify diff statistics
+            assertThat(diff.fromVersion()).isEqualTo("v1");
+            assertThat(diff.toVersion()).isEqualTo("draft");
+            assertThat(diff.statistics().itemsAdded()).isEqualTo(1)
+                    .as("1 new item was added to draft");
+            assertThat(diff.statistics().itemsModified()).isEqualTo(0)
+                    .as("No items were modified");
+            assertThat(diff.statistics().itemsDeleted()).isEqualTo(0)
+                    .as("No items were deleted");
+            assertThat(diff.statistics().itemsUnchanged()).isEqualTo(2)
+                    .as("2 items remained unchanged");
+
+            // When - Compare using 'latest' tag with draft
+            var diff2 = datasetResourceClient.compareVersions(datasetId, DatasetVersionService.LATEST_TAG, null,
+                    API_KEY, TEST_WORKSPACE);
+
+            // Then - Verify same diff statistics
+            assertThat(diff2.fromVersion()).isEqualTo(DatasetVersionService.LATEST_TAG);
+            assertThat(diff2.toVersion()).isEqualTo("draft");
+            assertThat(diff2.statistics().itemsAdded()).isEqualTo(1);
+        }
     }
 }

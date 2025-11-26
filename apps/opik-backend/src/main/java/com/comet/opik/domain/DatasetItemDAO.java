@@ -79,6 +79,10 @@ public interface DatasetItemDAO {
 
     Mono<DatasetItemPage> getVersionedItems(DatasetItemSearchCriteria datasetItemSearchCriteria, int page, int size,
             UUID versionId);
+
+    Mono<DatasetVersionDiffStats> computeDiffStats(UUID datasetId, UUID fromVersionId, UUID toVersionId);
+
+    Mono<DatasetVersionDiffStats> computeDiffStatsWithDraft(UUID datasetId, UUID versionId);
 }
 
 @Singleton
@@ -1845,6 +1849,171 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                     .flatMap(DatasetItemResultMapper::mapCount)
                     .reduce(0L, Long::sum)
                     .onErrorResume(e -> handleSqlError(e, 0L))
+                    .doFinally(signalType -> endSegment(segment));
+        });
+    }
+
+    @Override
+    @WithSpan
+    public Mono<DatasetVersionDiffStats> computeDiffStats(@NonNull UUID datasetId, @NonNull UUID fromVersionId,
+            @NonNull UUID toVersionId) {
+
+        log.info("Computing diff stats between versions: from='{}', to='{}', dataset='{}'",
+                fromVersionId, toVersionId, datasetId);
+
+        String sql = """
+                WITH from_items AS (
+                    SELECT id, draft_item_id, data_hash
+                    FROM dataset_item_versions FINAL
+                    WHERE dataset_id = :datasetId
+                    AND version_id = :fromVersionId
+                    AND workspace_id = :workspace_id
+                ),
+                to_items AS (
+                    SELECT id, draft_item_id, data_hash
+                    FROM dataset_item_versions FINAL
+                    WHERE dataset_id = :datasetId
+                    AND version_id = :toVersionId
+                    AND workspace_id = :workspace_id
+                ),
+                -- Use draft_item_id for matching (links items across versions)
+                from_by_draft AS (
+                    SELECT draft_item_id, data_hash FROM from_items
+                ),
+                to_by_draft AS (
+                    SELECT draft_item_id, data_hash FROM to_items
+                ),
+                added AS (
+                    SELECT count() as cnt
+                    FROM to_by_draft
+                    WHERE draft_item_id NOT IN (SELECT draft_item_id FROM from_by_draft)
+                ),
+                deleted AS (
+                    SELECT count() as cnt
+                    FROM from_by_draft
+                    WHERE draft_item_id NOT IN (SELECT draft_item_id FROM to_by_draft)
+                ),
+                common_items AS (
+                    SELECT
+                        f.draft_item_id,
+                        f.data_hash as from_hash,
+                        t.data_hash as to_hash
+                    FROM from_by_draft f
+                    INNER JOIN to_by_draft t ON f.draft_item_id = t.draft_item_id
+                ),
+                modified AS (
+                    SELECT count() as cnt
+                    FROM common_items
+                    WHERE from_hash != to_hash
+                ),
+                unchanged AS (
+                    SELECT count() as cnt
+                    FROM common_items
+                    WHERE from_hash = to_hash
+                )
+                SELECT
+                    (SELECT cnt FROM added) as items_added,
+                    (SELECT cnt FROM modified) as items_modified,
+                    (SELECT cnt FROM deleted) as items_deleted,
+                    (SELECT cnt FROM unchanged) as items_unchanged
+                """;
+
+        Segment segment = startSegment(DATASET_ITEMS, CLICKHOUSE, "compute_diff_stats_versions");
+
+        return asyncTemplate.nonTransaction(connection -> {
+            var statement = connection.createStatement(sql)
+                    .bind("datasetId", datasetId.toString())
+                    .bind("fromVersionId", fromVersionId.toString())
+                    .bind("toVersionId", toVersionId.toString());
+
+            return makeMonoContextAware(bindWorkspaceIdToMono(statement))
+                    .flatMap(result -> Mono.from(result.map((row, metadata) -> new DatasetVersionDiffStats(
+                            row.get("items_added", Long.class),
+                            row.get("items_modified", Long.class),
+                            row.get("items_deleted", Long.class),
+                            row.get("items_unchanged", Long.class)))))
+                    .doFinally(signalType -> endSegment(segment));
+        });
+    }
+
+    @Override
+    @WithSpan
+    public Mono<DatasetVersionDiffStats> computeDiffStatsWithDraft(@NonNull UUID datasetId,
+            @NonNull UUID versionId) {
+
+        log.info("Computing diff stats between version='{}' and draft for dataset='{}'", versionId, datasetId);
+
+        String sql = """
+                WITH version_items AS (
+                    SELECT id, draft_item_id, data_hash
+                    FROM dataset_item_versions FINAL
+                    WHERE dataset_id = :datasetId
+                    AND version_id = :versionId
+                    AND workspace_id = :workspace_id
+                ),
+                draft_items AS (
+                    SELECT id, data_hash
+                    FROM dataset_items FINAL
+                    WHERE dataset_id = :datasetId
+                    AND workspace_id = :workspace_id
+                    ORDER BY id DESC, last_updated_at DESC
+                    LIMIT 1 BY id
+                ),
+                -- For draft items, id is the key; for version items, draft_item_id links back
+                version_by_id AS (
+                    SELECT draft_item_id as item_id, data_hash FROM version_items
+                ),
+                draft_by_id AS (
+                    SELECT id as item_id, data_hash FROM draft_items
+                ),
+                added AS (
+                    SELECT count() as cnt
+                    FROM draft_by_id
+                    WHERE item_id NOT IN (SELECT item_id FROM version_by_id)
+                ),
+                deleted AS (
+                    SELECT count() as cnt
+                    FROM version_by_id
+                    WHERE item_id NOT IN (SELECT item_id FROM draft_by_id)
+                ),
+                common_items AS (
+                    SELECT
+                        v.item_id,
+                        v.data_hash as version_hash,
+                        d.data_hash as draft_hash
+                    FROM version_by_id v
+                    INNER JOIN draft_by_id d ON v.item_id = d.item_id
+                ),
+                modified AS (
+                    SELECT count() as cnt
+                    FROM common_items
+                    WHERE version_hash != draft_hash
+                ),
+                unchanged AS (
+                    SELECT count() as cnt
+                    FROM common_items
+                    WHERE version_hash = draft_hash
+                )
+                SELECT
+                    (SELECT cnt FROM added) as items_added,
+                    (SELECT cnt FROM modified) as items_modified,
+                    (SELECT cnt FROM deleted) as items_deleted,
+                    (SELECT cnt FROM unchanged) as items_unchanged
+                """;
+
+        Segment segment = startSegment(DATASET_ITEMS, CLICKHOUSE, "compute_diff_stats_with_draft");
+
+        return asyncTemplate.nonTransaction(connection -> {
+            var statement = connection.createStatement(sql)
+                    .bind("datasetId", datasetId.toString())
+                    .bind("versionId", versionId.toString());
+
+            return makeMonoContextAware(bindWorkspaceIdToMono(statement))
+                    .flatMap(result -> Mono.from(result.map((row, metadata) -> new DatasetVersionDiffStats(
+                            row.get("items_added", Long.class),
+                            row.get("items_modified", Long.class),
+                            row.get("items_deleted", Long.class),
+                            row.get("items_unchanged", Long.class)))))
                     .doFinally(signalType -> endSegment(segment));
         });
     }

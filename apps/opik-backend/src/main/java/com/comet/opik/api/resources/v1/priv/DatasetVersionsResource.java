@@ -3,6 +3,7 @@ package com.comet.opik.api.resources.v1.priv;
 import com.comet.opik.api.DatasetVersion;
 import com.comet.opik.api.DatasetVersion.DatasetVersionPage;
 import com.comet.opik.api.DatasetVersionCreate;
+import com.comet.opik.api.DatasetVersionDiff;
 import com.comet.opik.api.DatasetVersionTag;
 import com.comet.opik.domain.DatasetVersionService;
 import com.comet.opik.infrastructure.auth.RequestContext;
@@ -134,5 +135,23 @@ public class DatasetVersionsResource {
                 workspaceId);
 
         return Response.noContent().build();
+    }
+
+    @GET
+    @Path("/diff")
+    @Operation(operationId = "compareDatasetVersions", summary = "Compare two dataset versions", description = "Compare two dataset versions or a version with the current draft. If 'to' parameter is omitted, compares with the current draft.", responses = {
+            @ApiResponse(responseCode = "200", description = "Diff computed successfully", content = @Content(schema = @Schema(implementation = DatasetVersionDiff.class))),
+            @ApiResponse(responseCode = "404", description = "Version not found")})
+    @RateLimited
+    public Response compareVersions(
+            @QueryParam("from") @NotNull String fromHashOrTag,
+            @QueryParam("to") String toHashOrTag) {
+
+        String workspaceId = requestContext.get().getWorkspaceId();
+        log.info("Comparing versions for dataset='{}', workspace='{}'", datasetId, workspaceId);
+
+        var diff = versionService.compareVersions(datasetId, fromHashOrTag, toHashOrTag);
+
+        return Response.ok(diff).build();
     }
 }

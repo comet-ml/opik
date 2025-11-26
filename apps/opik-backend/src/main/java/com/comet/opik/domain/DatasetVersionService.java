@@ -4,6 +4,7 @@ import com.comet.opik.api.DatasetItem;
 import com.comet.opik.api.DatasetVersion;
 import com.comet.opik.api.DatasetVersion.DatasetVersionPage;
 import com.comet.opik.api.DatasetVersionCreate;
+import com.comet.opik.api.DatasetVersionDiff;
 import com.comet.opik.api.DatasetVersionTag;
 import com.comet.opik.api.error.EntityAlreadyExistsException;
 import com.comet.opik.api.error.ErrorMessage;
@@ -14,6 +15,7 @@ import jakarta.inject.Inject;
 import jakarta.inject.Provider;
 import jakarta.inject.Singleton;
 import jakarta.ws.rs.ClientErrorException;
+import jakarta.ws.rs.InternalServerErrorException;
 import jakarta.ws.rs.NotFoundException;
 import jakarta.ws.rs.core.Response;
 import lombok.NonNull;
@@ -136,6 +138,8 @@ public interface DatasetVersionService {
      * @throws NotFoundException if no version is found with the given hash or tag
      */
     UUID resolveVersionId(UUID datasetId, String hashOrTag);
+
+    DatasetVersionDiff compareVersions(UUID datasetId, String fromHashOrTag, String toHashOrTag);
 }
 
 @Singleton
@@ -433,5 +437,47 @@ class DatasetVersionServiceImpl implements DatasetVersionService {
             int itemsAdded,
             int itemsModified,
             int itemsDeleted) {
+    }
+
+    @Override
+    public DatasetVersionDiff compareVersions(@NonNull UUID datasetId, @NonNull String fromHashOrTag,
+            String toHashOrTag) {
+
+        log.info("Comparing versions: from='{}', to='{}', dataset='{}'", fromHashOrTag, toHashOrTag, datasetId);
+
+        // Resolve 'from' version identifier to version ID
+        UUID fromVersionId = resolveVersionId(datasetId, fromHashOrTag);
+
+        DatasetVersionDiffStats stats;
+        String toVersionLabel;
+
+        if (toHashOrTag == null) {
+            // Compare version with current draft
+            log.info("Comparing version='{}' with draft for dataset='{}'", fromHashOrTag, datasetId);
+            stats = datasetItemDAO.computeDiffStatsWithDraft(datasetId, fromVersionId).block();
+            toVersionLabel = "draft";
+        } else {
+            // Compare two versions
+            UUID toVersionId = resolveVersionId(datasetId, toHashOrTag);
+            stats = datasetItemDAO.computeDiffStats(datasetId, fromVersionId, toVersionId).block();
+            toVersionLabel = toHashOrTag;
+        }
+
+        if (stats == null) {
+            log.error("Failed to compute diff statistics for dataset='{}', from='{}', to='{}'",
+                    datasetId, fromHashOrTag, toHashOrTag);
+            throw new InternalServerErrorException("Failed to compute diff statistics");
+        }
+
+        log.info("Computed diff: from='{}', to='{}', added='{}', modified='{}', deleted='{}', unchanged='{}'",
+                fromHashOrTag, toVersionLabel,
+                stats.itemsAdded(), stats.itemsModified(),
+                stats.itemsDeleted(), stats.itemsUnchanged());
+
+        return DatasetVersionDiff.builder()
+                .fromVersion(fromHashOrTag)
+                .toVersion(toVersionLabel)
+                .statistics(DatasetVersionDiffMapper.INSTANCE.toApiDiffStatistics(stats))
+                .build();
     }
 }
