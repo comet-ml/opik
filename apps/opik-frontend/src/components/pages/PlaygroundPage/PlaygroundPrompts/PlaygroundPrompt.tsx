@@ -1,4 +1,10 @@
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { CopyPlus, Trash, Save } from "lucide-react";
 import last from "lodash/last";
 import { useQueryClient } from "@tanstack/react-query";
@@ -117,6 +123,15 @@ const PlaygroundPrompt = ({
         .map((dv) => `{{${dv}}}`)
         .join(", ")}`
     : "";
+
+  // Memoize the template JSON to avoid costly JSON.stringify on every render
+  const chatPromptTemplate = useMemo(
+    () =>
+      JSON.stringify(
+        messages.map((msg) => ({ role: msg.role, content: msg.content })),
+      ),
+    [messages],
+  );
 
   const handleAddMessage = useCallback(() => {
     const newMessage = generateDefaultLLMPromptMessage();
@@ -402,9 +417,7 @@ const PlaygroundPrompt = ({
         open={showSaveChatPromptDialog}
         setOpen={setShowSaveChatPromptDialog}
         prompt={chatPromptData}
-        template={JSON.stringify(
-          messages.map((msg) => ({ role: msg.role, content: msg.content })),
-        )}
+        template={chatPromptTemplate}
         templateStructure={PROMPT_TEMPLATE_STRUCTURE.CHAT}
         defaultName={lastImportedPromptName}
         onSave={() => {
