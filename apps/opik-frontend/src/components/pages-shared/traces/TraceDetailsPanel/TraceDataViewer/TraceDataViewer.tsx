@@ -95,7 +95,7 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
     type !== TRACE_TYPE_FOR_TREE && isSpansLazyLoading;
   const entityType = type === TRACE_TYPE_FOR_TREE ? "trace" : "span";
   const isTrace = type === TRACE_TYPE_FOR_TREE;
-  
+
   /**
    * Type guard function to safely check if data is a Trace.
    * Traces have type === "trace" or no type field, while Spans have type in SPAN_TYPE enum.
@@ -103,7 +103,7 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
   const isTraceType = (data: Trace | Span): data is Trace => {
     return type === TRACE_TYPE_FOR_TREE;
   };
-  
+
   const traceData = isTraceType(data) ? data : undefined;
   const hasSpanFeedbackScores = Boolean(
     traceData?.span_feedback_scores?.length,

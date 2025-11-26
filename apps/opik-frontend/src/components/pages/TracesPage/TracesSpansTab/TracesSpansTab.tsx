@@ -505,17 +505,19 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
       },
     );
 
-  const { data: spanFeedbackScoresData, isPending: isSpanFeedbackScoresPending } =
-    useTracesOrSpansScoresColumns(
-      {
-        projectId,
-        type: TRACE_DATA_TYPE.spans,
-      },
-      {
-        enabled: type === TRACE_DATA_TYPE.traces,
-        refetchInterval: REFETCH_INTERVAL,
-      },
-    );
+  const {
+    data: spanFeedbackScoresData,
+    isPending: isSpanFeedbackScoresPending,
+  } = useTracesOrSpansScoresColumns(
+    {
+      projectId,
+      type: TRACE_DATA_TYPE.spans,
+    },
+    {
+      enabled: type === TRACE_DATA_TYPE.traces,
+      refetchInterval: REFETCH_INTERVAL,
+    },
+  );
 
   const noData = !search && filters.length === 0;
   const noDataText = noData
@@ -585,7 +587,10 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
   }, [spanFeedbackScoresData?.scores, type]);
 
   const dynamicColumnsIds = useMemo(
-    () => [...dynamicScoresColumns.map((c) => c.id), ...dynamicSpanScoresColumns.map((c) => c.id)],
+    () => [
+      ...dynamicScoresColumns.map((c) => c.id),
+      ...dynamicSpanScoresColumns.map((c) => c.id),
+    ],
     [dynamicScoresColumns, dynamicSpanScoresColumns],
   );
 
@@ -608,7 +613,10 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
       (col) => col.id !== USER_FEEDBACK_COLUMN_ID,
     );
 
-    const feedbackScoresColumns = [userFeedbackColumn, ...otherDynamicColumns].map(
+    const feedbackScoresColumns = [
+      userFeedbackColumn,
+      ...otherDynamicColumns,
+    ].map(
       ({ label, id, columnType }) =>
         ({
           id,
@@ -635,7 +643,9 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
             header: FeedbackScoreHeader as never,
             cell: FeedbackScoreCell as never,
             accessorFn: (row) =>
-              (row as Trace).span_feedback_scores?.find((f) => f.name === scoreName),
+              (row as Trace).span_feedback_scores?.find(
+                (f) => f.name === scoreName,
+              ),
             statisticKey: `${COLUMN_SPAN_FEEDBACK_SCORES_ID}.${scoreName}`,
           } as ColumnData<BaseTraceData>;
         },
