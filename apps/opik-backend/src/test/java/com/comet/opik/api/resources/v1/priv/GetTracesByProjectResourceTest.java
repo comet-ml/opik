@@ -470,13 +470,10 @@ class GetTracesByProjectResourceTest {
         void findWithUsage(String endpoint, TracePageTestAssertion testAssertion) {
             var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
             var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class).stream()
-                    .map(trace -> trace.toBuilder()
+                    .map(trace -> setCommonTraceDefaults(trace.toBuilder())
                             .projectName(projectName)
                             .startTime(generateStartTime())
-                            .usage(null)
-                            .feedbackScores(null)
                             .totalEstimatedCost(BigDecimal.ZERO)
-                            .guardrailsValidations(null)
                             .build())
                     .toList();
             traceResourceClient.batchCreateTraces(traces, API_KEY, TEST_WORKSPACE);
@@ -535,13 +532,10 @@ class GetTracesByProjectResourceTest {
 
             var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
             var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class).stream()
-                    .map(trace -> trace.toBuilder()
+                    .map(trace -> setCommonTraceDefaults(trace.toBuilder())
                             .projectName(projectName)
                             .startTime(generateStartTime())
-                            .usage(null)
-                            .feedbackScores(null)
                             .totalEstimatedCost(BigDecimal.ZERO)
-                            .guardrailsValidations(null)
                             .build())
                     .toList();
             traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
@@ -583,17 +577,12 @@ class GetTracesByProjectResourceTest {
             List<Trace> traces = new ArrayList<>();
 
             for (int i = 0; i < 15; i++) {
-                Trace trace = createTrace()
-                        .toBuilder()
+                Trace trace = setCommonTraceDefaults(createTrace().toBuilder())
                         .projectName(projectName)
                         .endTime(null)
                         .duration(null)
                         .output(null)
                         .tags(null)
-                        .feedbackScores(null)
-                        .guardrailsValidations(null)
-                        .llmSpanCount(0)
-                        .spanCount(0)
                         .build();
 
                 traces.add(trace);
@@ -620,18 +609,12 @@ class GetTracesByProjectResourceTest {
 
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
-            Trace trace = createTrace()
-                    .toBuilder()
+            Trace trace = setCommonTraceDefaults(createTrace().toBuilder())
                     .projectName(projectName)
                     .endTime(null)
                     .duration(null)
                     .output(null)
-                    .projectId(null)
                     .tags(null)
-                    .feedbackScores(null)
-                    .guardrailsValidations(null)
-                    .llmSpanCount(0)
-                    .spanCount(0)
                     .build();
 
             create(trace, apiKey, workspaceName);
@@ -665,34 +648,17 @@ class GetTracesByProjectResourceTest {
 
             var traces1 = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
                     .stream()
-                    .map(trace -> trace.toBuilder()
-                            .projectId(null)
+                    .map(trace -> setCommonTraceDefaults(trace.toBuilder())
                             .projectName(projectName1)
-                            .usage(null)
-                            .threadId(null)
-                            .feedbackScores(null)
-                            .totalEstimatedCost(null)
                             .endTime(trace.startTime().plus(randomNumber(), ChronoUnit.MILLIS))
-                            .comments(null)
-                            .guardrailsValidations(null)
-                            .llmSpanCount(0)
-                            .spanCount(0)
                             .build())
                     .toList();
 
             var traces2 = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
                     .stream()
-                    .map(trace -> trace.toBuilder()
-                            .projectId(null)
+                    .map(trace -> setCommonTraceDefaults(trace.toBuilder())
                             .projectName(projectName1)
-                            .usage(null)
-                            .threadId(null)
-                            .feedbackScores(null)
                             .endTime(trace.startTime().plus(randomNumber(), ChronoUnit.MILLIS))
-                            .totalEstimatedCost(null)
-                            .guardrailsValidations(null)
-                            .llmSpanCount(0)
-                            .spanCount(0)
                             .build())
                     .toList();
 
@@ -725,17 +691,12 @@ class GetTracesByProjectResourceTest {
 
             for (int i = 0; i < 5; i++) {
 
-                Trace trace = createTrace()
-                        .toBuilder()
+                Trace trace = setCommonTraceDefaults(createTrace().toBuilder())
                         .projectName(projectName)
                         .endTime(null)
                         .duration(null)
                         .output(null)
-                        .projectId(null)
                         .tags(null)
-                        .feedbackScores(null)
-                        .usage(null)
-                        .guardrailsValidations(null)
                         .totalEstimatedCost(BigDecimal.ZERO)
                         .build();
 
@@ -790,16 +751,8 @@ class GetTracesByProjectResourceTest {
             var projectName = RandomStringUtils.secure().nextAlphanumeric(20);
             var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
                     .stream()
-                    .map(trace -> trace.toBuilder()
-                            .projectId(null)
+                    .map(trace -> setCommonTraceDefaults(trace.toBuilder())
                             .projectName(projectName)
-                            .usage(null)
-                            .threadId(null)
-                            .feedbackScores(null)
-                            .totalEstimatedCost(null)
-                            .guardrailsValidations(null)
-                            .llmSpanCount(0)
-                            .spanCount(0)
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
 
@@ -844,16 +797,9 @@ class GetTracesByProjectResourceTest {
             var projectName = RandomStringUtils.secure().nextAlphanumeric(20);
             var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
                     .stream()
-                    .map(trace -> trace.toBuilder()
-                            .projectId(null)
+                    .map(trace -> setCommonTraceDefaults(trace.toBuilder())
                             .projectName(projectName)
-                            .usage(null)
-                            .feedbackScores(null)
-                            .totalEstimatedCost(null)
                             .threadId(UUID.randomUUID().toString())
-                            .guardrailsValidations(null)
-                            .llmSpanCount(0)
-                            .spanCount(0)
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
 
@@ -892,16 +838,8 @@ class GetTracesByProjectResourceTest {
             var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
             var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
                     .stream()
-                    .map(trace -> trace.toBuilder()
-                            .projectId(null)
+                    .map(trace -> setCommonTraceDefaults(trace.toBuilder())
                             .projectName(projectName)
-                            .usage(null)
-                            .totalEstimatedCost(null)
-                            .feedbackScores(null)
-                            .threadId(null)
-                            .guardrailsValidations(null)
-                            .llmSpanCount(0)
-                            .spanCount(0)
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
             traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
@@ -938,16 +876,8 @@ class GetTracesByProjectResourceTest {
             var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
             var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
                     .stream()
-                    .map(trace -> trace.toBuilder()
-                            .projectId(null)
+                    .map(trace -> setCommonTraceDefaults(trace.toBuilder())
                             .projectName(projectName)
-                            .usage(null)
-                            .threadId(null)
-                            .feedbackScores(null)
-                            .totalEstimatedCost(null)
-                            .guardrailsValidations(null)
-                            .llmSpanCount(0)
-                            .spanCount(0)
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
             traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
@@ -983,16 +913,8 @@ class GetTracesByProjectResourceTest {
             var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
             var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
                     .stream()
-                    .map(trace -> trace.toBuilder()
-                            .projectId(null)
+                    .map(trace -> setCommonTraceDefaults(trace.toBuilder())
                             .projectName(projectName)
-                            .usage(null)
-                            .feedbackScores(null)
-                            .threadId(null)
-                            .totalEstimatedCost(null)
-                            .guardrailsValidations(null)
-                            .llmSpanCount(0)
-                            .spanCount(0)
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
             traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
@@ -1027,16 +949,8 @@ class GetTracesByProjectResourceTest {
             var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
             var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
                     .stream()
-                    .map(trace -> trace.toBuilder()
-                            .projectId(null)
+                    .map(trace -> setCommonTraceDefaults(trace.toBuilder())
                             .projectName(projectName)
-                            .usage(null)
-                            .feedbackScores(null)
-                            .threadId(null)
-                            .totalEstimatedCost(null)
-                            .guardrailsValidations(null)
-                            .llmSpanCount(0)
-                            .spanCount(0)
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
             traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
@@ -1076,21 +990,31 @@ class GetTracesByProjectResourceTest {
 
             var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
                     .stream()
-                    .map(trace -> trace.toBuilder()
-                            .projectId(null)
+                    .map(trace -> setCommonTraceDefaults(trace.toBuilder())
                             .projectName(project.name())
-                            .usage(null)
-                            .feedbackScores(null)
-                            .threadId(null)
-                            .totalEstimatedCost(null)
-                            .guardrailsValidations(null)
-                            .llmSpanCount(0)
-                            .spanCount(0)
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
             traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
 
-            var expectedTraces = List.of(traces.getFirst());
+            // Create spans for stats endpoint
+            var spans = traces.stream()
+                    .flatMap(trace -> IntStream.range(0, 1)
+                            .mapToObj(i -> factory.manufacturePojo(Span.class).toBuilder()
+                                    .usage(null)
+                                    .totalEstimatedCost(null)
+                                    .projectName(project.name())
+                                    .traceId(trace.id())
+                                    .type(SpanType.general)
+                                    .build()))
+                    .toList();
+            spanResourceClient.batchCreateSpans(spans, apiKey, workspaceName);
+
+            // Update trace objects with span count for stats calculation
+            var updatedTraces = traces.stream()
+                    .map(trace -> trace.toBuilder().spanCount(1).build())
+                    .collect(Collectors.toCollection(ArrayList::new));
+
+            var expectedTraces = List.of(updatedTraces.getFirst());
             var unexpectedTraces = List.of(createTrace().toBuilder()
                     .projectId(null)
                     .projectName(project.name())
@@ -1105,9 +1029,10 @@ class GetTracesByProjectResourceTest {
                     new LinkedHashSet<>(List.of(queue1, queue2)), apiKey, workspaceName, HttpStatus.SC_NO_CONTENT);
 
             annotationQueuesResourceClient.addItemsToAnnotationQueue(
-                    queue1.id(), Set.of(traces.getFirst().id()), apiKey, workspaceName, HttpStatus.SC_NO_CONTENT);
+                    queue1.id(), Set.of(updatedTraces.getFirst().id()), apiKey, workspaceName,
+                    HttpStatus.SC_NO_CONTENT);
             annotationQueuesResourceClient.addItemsToAnnotationQueue(
-                    queue2.id(), Set.of(traces.get(1).id()), apiKey, workspaceName, HttpStatus.SC_NO_CONTENT);
+                    queue2.id(), Set.of(updatedTraces.get(1).id()), apiKey, workspaceName, HttpStatus.SC_NO_CONTENT);
 
             var filters = List.of(TraceFilter.builder()
                     .field(TraceField.ANNOTATION_QUEUE_IDS)
@@ -1115,7 +1040,7 @@ class GetTracesByProjectResourceTest {
                     .value(queue1.id().toString())
                     .build());
 
-            var values = testAssertion.transformTestParams(traces, expectedTraces, unexpectedTraces);
+            var values = testAssertion.transformTestParams(updatedTraces, expectedTraces, unexpectedTraces);
 
             testAssertion.assertTest(project.name(), null, apiKey, workspaceName, values.expected(),
                     values.unexpected(),
@@ -1146,17 +1071,9 @@ class GetTracesByProjectResourceTest {
             var traceName = UUID.randomUUID().toString();
             var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
                     .stream()
-                    .map(trace -> trace.toBuilder()
-                            .projectId(null)
+                    .map(trace -> setCommonTraceDefaults(trace.toBuilder())
                             .projectName(projectName)
                             .name(traceName)
-                            .usage(null)
-                            .feedbackScores(null)
-                            .totalEstimatedCost(null)
-                            .threadId(null)
-                            .guardrailsValidations(null)
-                            .llmSpanCount(0)
-                            .spanCount(0)
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
 
@@ -1201,16 +1118,8 @@ class GetTracesByProjectResourceTest {
             var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
             var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
                     .stream()
-                    .map(trace -> trace.toBuilder()
-                            .projectId(null)
+                    .map(trace -> setCommonTraceDefaults(trace.toBuilder())
                             .projectName(projectName)
-                            .usage(null)
-                            .feedbackScores(null)
-                            .totalEstimatedCost(null)
-                            .threadId(null)
-                            .guardrailsValidations(null)
-                            .llmSpanCount(0)
-                            .spanCount(0)
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
             traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
@@ -1243,17 +1152,9 @@ class GetTracesByProjectResourceTest {
             var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
             var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
                     .stream()
-                    .map(trace -> trace.toBuilder()
-                            .projectId(null)
+                    .map(trace -> setCommonTraceDefaults(trace.toBuilder())
                             .projectName(projectName)
                             .startTime(Instant.now().minusSeconds(60 * 5))
-                            .usage(null)
-                            .feedbackScores(null)
-                            .totalEstimatedCost(null)
-                            .threadId(null)
-                            .guardrailsValidations(null)
-                            .llmSpanCount(0)
-                            .spanCount(0)
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
             traces.set(0, traces.getFirst().toBuilder()
@@ -1292,17 +1193,9 @@ class GetTracesByProjectResourceTest {
             var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
             var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
                     .stream()
-                    .map(trace -> trace.toBuilder()
-                            .projectId(null)
+                    .map(trace -> setCommonTraceDefaults(trace.toBuilder())
                             .projectName(projectName)
                             .startTime(Instant.now().minusSeconds(60 * 5))
-                            .usage(null)
-                            .feedbackScores(null)
-                            .totalEstimatedCost(null)
-                            .threadId(null)
-                            .guardrailsValidations(null)
-                            .llmSpanCount(0)
-                            .spanCount(0)
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
             traces.set(0, traces.getFirst().toBuilder()
@@ -1342,17 +1235,9 @@ class GetTracesByProjectResourceTest {
             var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
             var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
                     .stream()
-                    .map(trace -> trace.toBuilder()
-                            .projectId(null)
+                    .map(trace -> setCommonTraceDefaults(trace.toBuilder())
                             .projectName(projectName)
                             .startTime(Instant.now().plusSeconds(60 * 5))
-                            .usage(null)
-                            .feedbackScores(null)
-                            .totalEstimatedCost(null)
-                            .threadId(null)
-                            .guardrailsValidations(null)
-                            .llmSpanCount(0)
-                            .spanCount(0)
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
             traces.set(0, traces.getFirst().toBuilder()
@@ -1391,17 +1276,9 @@ class GetTracesByProjectResourceTest {
             var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
             var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
                     .stream()
-                    .map(trace -> trace.toBuilder()
-                            .projectId(null)
+                    .map(trace -> setCommonTraceDefaults(trace.toBuilder())
                             .projectName(projectName)
                             .startTime(Instant.now().plusSeconds(60 * 5))
-                            .usage(null)
-                            .feedbackScores(null)
-                            .totalEstimatedCost(null)
-                            .threadId(null)
-                            .guardrailsValidations(null)
-                            .llmSpanCount(0)
-                            .spanCount(0)
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
             traces.set(0, traces.getFirst().toBuilder()
@@ -1440,16 +1317,8 @@ class GetTracesByProjectResourceTest {
             var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
             var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
                     .stream()
-                    .map(trace -> trace.toBuilder()
-                            .projectId(null)
+                    .map(trace -> setCommonTraceDefaults(trace.toBuilder())
                             .projectName(projectName)
-                            .usage(null)
-                            .feedbackScores(null)
-                            .totalEstimatedCost(null)
-                            .threadId(null)
-                            .guardrailsValidations(null)
-                            .llmSpanCount(0)
-                            .spanCount(0)
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
             traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
@@ -1484,16 +1353,8 @@ class GetTracesByProjectResourceTest {
             var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
             var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
                     .stream()
-                    .map(trace -> trace.toBuilder()
-                            .projectId(null)
+                    .map(trace -> setCommonTraceDefaults(trace.toBuilder())
                             .projectName(projectName)
-                            .usage(null)
-                            .totalEstimatedCost(null)
-                            .feedbackScores(null)
-                            .threadId(null)
-                            .guardrailsValidations(null)
-                            .llmSpanCount(0)
-                            .spanCount(0)
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
 
@@ -1530,16 +1391,8 @@ class GetTracesByProjectResourceTest {
             var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
             var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
                     .stream()
-                    .map(trace -> trace.toBuilder()
-                            .projectId(null)
+                    .map(trace -> setCommonTraceDefaults(trace.toBuilder())
                             .projectName(projectName)
-                            .usage(null)
-                            .totalEstimatedCost(null)
-                            .feedbackScores(null)
-                            .threadId(null)
-                            .guardrailsValidations(null)
-                            .llmSpanCount(0)
-                            .spanCount(0)
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
 
@@ -1576,14 +1429,8 @@ class GetTracesByProjectResourceTest {
             var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
             var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
                     .stream()
-                    .map(trace -> trace.toBuilder()
-                            .projectId(null)
+                    .map(trace -> setCommonTraceDefaults(trace.toBuilder())
                             .projectName(projectName)
-                            .usage(null)
-                            .threadId(null)
-                            .feedbackScores(null)
-                            .totalEstimatedCost(null)
-                            .guardrailsValidations(null)
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
 
@@ -1644,6 +1491,7 @@ class GetTracesByProjectResourceTest {
                             .projectName(projectName)
                             .usage(null)
                             .feedbackScores(null)
+                            .spanFeedbackScores(null)
                             .threadId(null)
                             .totalEstimatedCost(null)
                             .guardrailsValidations(null)
@@ -1729,6 +1577,7 @@ class GetTracesByProjectResourceTest {
                                 .projectName(projectName)
                                 .usage(null)
                                 .feedbackScores(null)
+                                .spanFeedbackScores(null)
                                 .threadId(null)
                                 .totalEstimatedCost(null)
                                 .guardrailsValidations(null)
@@ -1816,6 +1665,7 @@ class GetTracesByProjectResourceTest {
                             .projectName(projectName)
                             .usage(null)
                             .feedbackScores(null)
+                            .spanFeedbackScores(null)
                             .threadId(null)
                             .totalEstimatedCost(null)
                             .guardrailsValidations(null)
@@ -1879,18 +1729,10 @@ class GetTracesByProjectResourceTest {
             var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
             var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
                     .stream()
-                    .map(trace -> trace.toBuilder()
-                            .projectId(null)
+                    .map(trace -> setCommonTraceDefaults(trace.toBuilder())
                             .projectName(projectName)
                             .metadata(JsonUtils.getJsonNodeFromString("{\"model\":[{\"year\":2024,\"version\":\"Some " +
                                     "version\"}]}"))
-                            .usage(null)
-                            .feedbackScores(null)
-                            .threadId(null)
-                            .totalEstimatedCost(null)
-                            .guardrailsValidations(null)
-                            .llmSpanCount(0)
-                            .spanCount(0)
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
             traces.set(0, traces.getFirst().toBuilder()
@@ -1927,18 +1769,10 @@ class GetTracesByProjectResourceTest {
             var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
             var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
                     .stream()
-                    .map(trace -> trace.toBuilder()
-                            .projectId(null)
+                    .map(trace -> setCommonTraceDefaults(trace.toBuilder())
                             .projectName(projectName)
                             .metadata(JsonUtils.getJsonNodeFromString("{\"model\":[{\"year\":2024,\"version\":\"Some " +
                                     "version\"}]}"))
-                            .usage(null)
-                            .feedbackScores(null)
-                            .threadId(null)
-                            .totalEstimatedCost(null)
-                            .guardrailsValidations(null)
-                            .llmSpanCount(0)
-                            .spanCount(0)
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
             traces.set(0, traces.getFirst().toBuilder()
@@ -1980,19 +1814,11 @@ class GetTracesByProjectResourceTest {
             var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
             var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
                     .stream()
-                    .map(trace -> trace.toBuilder()
-                            .projectId(null)
+                    .map(trace -> setCommonTraceDefaults(trace.toBuilder())
                             .projectName(projectName)
                             .metadata(
                                     JsonUtils.getJsonNodeFromString("{\"model\":[{\"year\":false,\"version\":\"Some " +
                                             "version\"}]}"))
-                            .usage(null)
-                            .feedbackScores(null)
-                            .threadId(null)
-                            .totalEstimatedCost(null)
-                            .guardrailsValidations(null)
-                            .llmSpanCount(0)
-                            .spanCount(0)
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
             traces.set(0, traces.getFirst().toBuilder()
@@ -2033,18 +1859,10 @@ class GetTracesByProjectResourceTest {
             var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
             var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
                     .stream()
-                    .map(trace -> trace.toBuilder()
-                            .projectId(null)
+                    .map(trace -> setCommonTraceDefaults(trace.toBuilder())
                             .projectName(projectName)
                             .metadata(JsonUtils.getJsonNodeFromString("{\"model\":[{\"year\":2024,\"version\":\"Some " +
                                     "version\"}]}"))
-                            .usage(null)
-                            .threadId(null)
-                            .totalEstimatedCost(null)
-                            .feedbackScores(null)
-                            .guardrailsValidations(null)
-                            .llmSpanCount(0)
-                            .spanCount(0)
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
             traces.set(0, traces.getFirst().toBuilder()
@@ -2085,18 +1903,10 @@ class GetTracesByProjectResourceTest {
             var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
             var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
                     .stream()
-                    .map(trace -> trace.toBuilder()
-                            .projectId(null)
+                    .map(trace -> setCommonTraceDefaults(trace.toBuilder())
                             .projectName(projectName)
                             .metadata(JsonUtils.getJsonNodeFromString("{\"model\":[{\"year\":2024,\"version\":\"Some " +
                                     "version\"}]}"))
-                            .usage(null)
-                            .feedbackScores(null)
-                            .threadId(null)
-                            .totalEstimatedCost(null)
-                            .guardrailsValidations(null)
-                            .llmSpanCount(0)
-                            .spanCount(0)
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
             traces.set(0, traces.getFirst().toBuilder()
@@ -2137,18 +1947,10 @@ class GetTracesByProjectResourceTest {
             var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
             var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
                     .stream()
-                    .map(trace -> trace.toBuilder()
-                            .projectId(null)
+                    .map(trace -> setCommonTraceDefaults(trace.toBuilder())
                             .projectName(projectName)
-                            .threadId(null)
                             .metadata(JsonUtils.getJsonNodeFromString("{\"model\":[{\"year\":\"two thousand twenty " +
                                     "four\",\"version\":\"OpenAI, Chat-GPT 4.0\"}]}"))
-                            .usage(null)
-                            .feedbackScores(null)
-                            .totalEstimatedCost(null)
-                            .guardrailsValidations(null)
-                            .llmSpanCount(0)
-                            .spanCount(0)
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
             traces.set(0, traces.getFirst().toBuilder()
@@ -2189,19 +1991,11 @@ class GetTracesByProjectResourceTest {
             var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
             var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
                     .stream()
-                    .map(trace -> trace.toBuilder()
-                            .projectId(null)
+                    .map(trace -> setCommonTraceDefaults(trace.toBuilder())
                             .projectName(projectName)
                             .metadata(
                                     JsonUtils.getJsonNodeFromString("{\"model\":[{\"year\":false,\"version\":\"Some " +
                                             "version\"}]}"))
-                            .usage(null)
-                            .feedbackScores(null)
-                            .totalEstimatedCost(null)
-                            .threadId(null)
-                            .guardrailsValidations(null)
-                            .llmSpanCount(0)
-                            .spanCount(0)
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
             traces.set(0, traces.getFirst().toBuilder()
@@ -2242,18 +2036,10 @@ class GetTracesByProjectResourceTest {
             var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
             var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
                     .stream()
-                    .map(trace -> trace.toBuilder()
-                            .projectId(null)
+                    .map(trace -> setCommonTraceDefaults(trace.toBuilder())
                             .projectName(projectName)
                             .metadata(JsonUtils.getJsonNodeFromString("{\"model\":[{\"year\":2024,\"version\":\"Some " +
                                     "version\"}]}"))
-                            .usage(null)
-                            .feedbackScores(null)
-                            .totalEstimatedCost(null)
-                            .threadId(null)
-                            .guardrailsValidations(null)
-                            .llmSpanCount(0)
-                            .spanCount(0)
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
             traces.set(0, traces.getFirst().toBuilder()
@@ -2294,18 +2080,10 @@ class GetTracesByProjectResourceTest {
             var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
             var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
                     .stream()
-                    .map(trace -> trace.toBuilder()
-                            .projectId(null)
+                    .map(trace -> setCommonTraceDefaults(trace.toBuilder())
                             .projectName(projectName)
                             .metadata(JsonUtils.getJsonNodeFromString("{\"model\":[{\"year\":2020," +
                                     "\"version\":\"OpenAI, Chat-GPT 4.0\"}]}"))
-                            .usage(null)
-                            .feedbackScores(null)
-                            .totalEstimatedCost(null)
-                            .threadId(null)
-                            .guardrailsValidations(null)
-                            .llmSpanCount(0)
-                            .spanCount(0)
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
             traces.set(0, traces.getFirst().toBuilder()
@@ -2346,15 +2124,11 @@ class GetTracesByProjectResourceTest {
             var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
             var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
                     .stream()
-                    .map(trace -> trace.toBuilder()
-                            .projectId(null)
+                    .map(trace -> setCommonTraceDefaults(trace.toBuilder())
                             .projectName(projectName)
                             .metadata(JsonUtils
                                     .getJsonNodeFromString("{\"model\":[{\"year\":2024,\"version\":\"openAI, " +
                                             "Chat-GPT 4.0\"}]}"))
-                            .feedbackScores(null)
-                            .totalEstimatedCost(null)
-                            .threadId(null)
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
 
@@ -2391,15 +2165,11 @@ class GetTracesByProjectResourceTest {
             var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
             var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
                     .stream()
-                    .map(trace -> trace.toBuilder()
-                            .projectId(null)
+                    .map(trace -> setCommonTraceDefaults(trace.toBuilder())
                             .projectName(projectName)
                             .metadata(JsonUtils
                                     .getJsonNodeFromString("{\"model\":[{\"year\":true,\"version\":\"openAI, " +
                                             "Chat-GPT 4.0\"}]}"))
-                            .feedbackScores(null)
-                            .totalEstimatedCost(null)
-                            .threadId(null)
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
             traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
@@ -2435,14 +2205,11 @@ class GetTracesByProjectResourceTest {
             var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
             var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
                     .stream()
-                    .map(trace -> trace.toBuilder()
-                            .projectId(null)
+                    .map(trace -> setCommonTraceDefaults(trace.toBuilder())
                             .projectName(projectName)
                             .metadata(JsonUtils
                                     .getJsonNodeFromString("{\"model\":[{\"year\":null,\"version\":\"openAI, " +
                                             "Chat-GPT 4.0\"}]}"))
-                            .feedbackScores(null)
-                            .totalEstimatedCost(null)
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
             traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
@@ -2478,18 +2245,10 @@ class GetTracesByProjectResourceTest {
             var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
             var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
                     .stream()
-                    .map(trace -> trace.toBuilder()
-                            .projectId(null)
+                    .map(trace -> setCommonTraceDefaults(trace.toBuilder())
                             .projectName(projectName)
                             .metadata(JsonUtils.getJsonNodeFromString("{\"model\":[{\"year\":2026," +
                                     "\"version\":\"OpenAI, Chat-GPT 4.0\"}]}"))
-                            .usage(null)
-                            .feedbackScores(null)
-                            .totalEstimatedCost(null)
-                            .threadId(null)
-                            .guardrailsValidations(null)
-                            .llmSpanCount(0)
-                            .spanCount(0)
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
             traces.set(0, traces.getFirst().toBuilder()
@@ -2530,14 +2289,11 @@ class GetTracesByProjectResourceTest {
             var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
             var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
                     .stream()
-                    .map(trace -> trace.toBuilder()
-                            .projectId(null)
+                    .map(trace -> setCommonTraceDefaults(trace.toBuilder())
                             .projectName(projectName)
                             .metadata(JsonUtils
                                     .getJsonNodeFromString("{\"model\":[{\"year\":2024,\"version\":\"openAI, " +
                                             "Chat-GPT 4.0\"}]}"))
-                            .feedbackScores(null)
-                            .totalEstimatedCost(null)
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
 
@@ -2574,14 +2330,11 @@ class GetTracesByProjectResourceTest {
             var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
             var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
                     .stream()
-                    .map(trace -> trace.toBuilder()
-                            .projectId(null)
+                    .map(trace -> setCommonTraceDefaults(trace.toBuilder())
                             .projectName(projectName)
                             .metadata(JsonUtils
                                     .getJsonNodeFromString("{\"model\":[{\"year\":true,\"version\":\"openAI, " +
                                             "Chat-GPT 4.0\"}]}"))
-                            .feedbackScores(null)
-                            .totalEstimatedCost(null)
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
 
@@ -2618,14 +2371,11 @@ class GetTracesByProjectResourceTest {
             var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
             var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
                     .stream()
-                    .map(trace -> trace.toBuilder()
-                            .projectId(null)
+                    .map(trace -> setCommonTraceDefaults(trace.toBuilder())
                             .projectName(projectName)
                             .metadata(JsonUtils
                                     .getJsonNodeFromString("{\"model\":[{\"year\":null,\"version\":\"openAI, " +
                                             "Chat-GPT 4.0\"}]}"))
-                            .feedbackScores(null)
-                            .totalEstimatedCost(null)
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
             traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
@@ -2660,16 +2410,8 @@ class GetTracesByProjectResourceTest {
             var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
             var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
                     .stream()
-                    .map(trace -> trace.toBuilder()
-                            .projectId(null)
+                    .map(trace -> setCommonTraceDefaults(trace.toBuilder())
                             .projectName(projectName)
-                            .usage(null)
-                            .feedbackScores(null)
-                            .totalEstimatedCost(null)
-                            .threadId(null)
-                            .guardrailsValidations(null)
-                            .llmSpanCount(0)
-                            .spanCount(0)
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
 
@@ -2712,13 +2454,9 @@ class GetTracesByProjectResourceTest {
             var otherUsageValue = randomNumber(1, 8);
             var usageValue = randomNumber();
             var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class).stream()
-                    .map(trace -> trace.toBuilder()
+                    .map(trace -> setCommonTraceDefaults(trace.toBuilder())
                             .projectName(projectName)
                             .usage(Map.of(usageKey, (long) otherUsageValue))
-                            .feedbackScores(null)
-                            .totalEstimatedCost(null)
-                            .threadId(null)
-                            .guardrailsValidations(null)
                             .build())
                     .collect(Collectors.toList());
 
@@ -2775,13 +2513,9 @@ class GetTracesByProjectResourceTest {
 
             var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
             var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class).stream()
-                    .map(trace -> trace.toBuilder()
+                    .map(trace -> setCommonTraceDefaults(trace.toBuilder())
                             .projectName(projectName)
                             .usage(Map.of(usageKey, 123L))
-                            .feedbackScores(null)
-                            .threadId(null)
-                            .totalEstimatedCost(null)
-                            .guardrailsValidations(null)
                             .llmSpanCount(1)
                             .spanCount(1)
                             .build())
@@ -2838,13 +2572,9 @@ class GetTracesByProjectResourceTest {
 
             var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
             var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class).stream()
-                    .map(trace -> trace.toBuilder()
+                    .map(trace -> setCommonTraceDefaults(trace.toBuilder())
                             .projectName(projectName)
                             .usage(Map.of(usageKey, 123L))
-                            .feedbackScores(null)
-                            .totalEstimatedCost(null)
-                            .threadId(null)
-                            .guardrailsValidations(null)
                             .build())
                     .collect(Collectors.toList());
             traces.set(0, traces.getFirst().toBuilder()
@@ -2900,13 +2630,9 @@ class GetTracesByProjectResourceTest {
 
             var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
             var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class).stream()
-                    .map(trace -> trace.toBuilder()
+                    .map(trace -> setCommonTraceDefaults(trace.toBuilder())
                             .projectName(projectName)
                             .usage(Map.of(usageKey, 456L))
-                            .feedbackScores(null)
-                            .totalEstimatedCost(null)
-                            .threadId(null)
-                            .guardrailsValidations(null)
                             .build())
                     .collect(Collectors.toList());
             traces.set(0, traces.getFirst().toBuilder()
@@ -2962,13 +2688,9 @@ class GetTracesByProjectResourceTest {
 
             var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
             var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class).stream()
-                    .map(trace -> trace.toBuilder()
+                    .map(trace -> setCommonTraceDefaults(trace.toBuilder())
                             .projectName(projectName)
                             .usage(Map.of(usageKey, 456L))
-                            .feedbackScores(null)
-                            .totalEstimatedCost(null)
-                            .threadId(null)
-                            .guardrailsValidations(null)
                             .llmSpanCount(1)
                             .spanCount(1)
                             .build())
@@ -3029,18 +2751,13 @@ class GetTracesByProjectResourceTest {
             var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
             var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
                     .stream()
-                    .map(trace -> trace.toBuilder()
-                            .projectId(null)
+                    .map(trace -> setCommonTraceDefaults(trace.toBuilder())
                             .projectName(projectName)
-                            .usage(null)
-                            .threadId(null)
-                            .totalEstimatedCost(null)
                             .feedbackScores(trace.feedbackScores().stream()
                                     .map(feedbackScore -> feedbackScore.toBuilder()
                                             .value(factory.manufacturePojo(BigDecimal.class))
                                             .build())
                                     .collect(Collectors.toList()))
-                            .guardrailsValidations(null)
                             .llmSpanCount(0)
                             .spanCount(0)
                             .build())
@@ -3094,23 +2811,17 @@ class GetTracesByProjectResourceTest {
             var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
             var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
                     .stream()
-                    .map(trace -> trace.toBuilder()
-                            .projectId(null)
+                    .map(trace -> setCommonTraceDefaults(trace.toBuilder())
                             .projectName(projectName)
-                            .usage(null)
-                            .threadId(null)
                             .feedbackScores(trace.feedbackScores().stream()
                                     .map(feedbackScore -> feedbackScore.toBuilder()
                                             .value(factory.manufacturePojo(BigDecimal.class))
                                             .build())
                                     .collect(Collectors.toList()))
-                            .totalEstimatedCost(null)
-                            .guardrailsValidations(null)
-                            .llmSpanCount(0)
-                            .spanCount(0)
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
-            traces.set(traces.size() - 1, traces.getLast().toBuilder().feedbackScores(null).build());
+            traces.set(traces.size() - 1,
+                    traces.getLast().toBuilder().feedbackScores(null).spanFeedbackScores(null).build());
             traces.forEach(trace1 -> create(trace1, apiKey, workspaceName));
             traces.subList(0, traces.size() - 1).forEach(trace -> trace.feedbackScores()
                     .forEach(feedbackScore -> create(trace.id(), feedbackScore, workspaceName, apiKey)));
@@ -3245,18 +2956,8 @@ class GetTracesByProjectResourceTest {
             var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
                     .stream()
                     .limit(4) // Ensure exactly 4 traces for the test (PodamFactoryUtils always creates 5)
-                    .map(trace -> trace.toBuilder()
-                            .projectId(null)
+                    .map(trace -> setCommonTraceDefaults(trace.toBuilder())
                             .projectName(projectName)
-                            .usage(null)
-                            .threadId(null)
-                            .totalEstimatedCost(null)
-                            .feedbackScores(null)
-                            .spanFeedbackScores(null)
-                            .guardrailsValidations(null)
-                            .comments(null)
-                            .llmSpanCount(0)
-                            .spanCount(0)
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
 
@@ -3357,18 +3058,8 @@ class GetTracesByProjectResourceTest {
             var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
                     .stream()
                     .limit(2)
-                    .map(trace -> trace.toBuilder()
-                            .projectId(null)
+                    .map(trace -> setCommonTraceDefaults(trace.toBuilder())
                             .projectName(projectName)
-                            .usage(null)
-                            .threadId(null)
-                            .totalEstimatedCost(null)
-                            .feedbackScores(null)
-                            .spanFeedbackScores(null)
-                            .guardrailsValidations(null)
-                            .comments(null)
-                            .llmSpanCount(0)
-                            .spanCount(0)
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
 
@@ -3422,18 +3113,8 @@ class GetTracesByProjectResourceTest {
             var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
                     .stream()
                     .limit(2)
-                    .map(trace -> trace.toBuilder()
-                            .projectId(null)
+                    .map(trace -> setCommonTraceDefaults(trace.toBuilder())
                             .projectName(projectName)
-                            .usage(null)
-                            .threadId(null)
-                            .totalEstimatedCost(null)
-                            .feedbackScores(null)
-                            .spanFeedbackScores(null)
-                            .guardrailsValidations(null)
-                            .comments(null)
-                            .llmSpanCount(0)
-                            .spanCount(0)
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
 
@@ -3518,18 +3199,8 @@ class GetTracesByProjectResourceTest {
             var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
                     .stream()
                     .limit(2)
-                    .map(trace -> trace.toBuilder()
-                            .projectId(null)
+                    .map(trace -> setCommonTraceDefaults(trace.toBuilder())
                             .projectName(projectName)
-                            .usage(null)
-                            .threadId(null)
-                            .totalEstimatedCost(null)
-                            .feedbackScores(null)
-                            .spanFeedbackScores(null)
-                            .guardrailsValidations(null)
-                            .comments(null)
-                            .llmSpanCount(0)
-                            .spanCount(0)
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
 
@@ -3607,20 +3278,13 @@ class GetTracesByProjectResourceTest {
             var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
             var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
                     .stream()
-                    .map(trace -> trace.toBuilder()
-                            .projectId(null)
+                    .map(trace -> setCommonTraceDefaults(trace.toBuilder())
                             .projectName(projectName)
-                            .usage(null)
-                            .threadId(null)
-                            .totalEstimatedCost(null)
-                            .llmSpanCount(0)
-                            .spanCount(0)
                             .feedbackScores(updateFeedbackScore(trace.feedbackScores().stream()
                                     .map(feedbackScore -> feedbackScore.toBuilder()
                                             .value(factory.manufacturePojo(BigDecimal.class))
                                             .build())
                                     .collect(Collectors.toList()), 2, 1234.5678))
-                            .guardrailsValidations(null)
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
 
@@ -3676,15 +3340,8 @@ class GetTracesByProjectResourceTest {
             var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
             var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
                     .stream()
-                    .map(trace -> trace.toBuilder()
-                            .projectId(null)
+                    .map(trace -> setCommonTraceDefaults(trace.toBuilder())
                             .projectName(projectName)
-                            .usage(null)
-                            .threadId(null)
-                            .totalEstimatedCost(null)
-                            .guardrailsValidations(null)
-                            .llmSpanCount(0)
-                            .spanCount(0)
                             .feedbackScores(updateFeedbackScore(trace.feedbackScores().stream()
                                     .map(feedbackScore -> feedbackScore.toBuilder()
                                             .value(factory.manufacturePojo(BigDecimal.class))
@@ -3741,16 +3398,8 @@ class GetTracesByProjectResourceTest {
             var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
             var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
                     .stream()
-                    .map(trace -> trace.toBuilder()
-                            .projectId(null)
+                    .map(trace -> setCommonTraceDefaults(trace.toBuilder())
                             .projectName(projectName)
-                            .usage(null)
-                            .threadId(null)
-                            .comments(null)
-                            .totalEstimatedCost(null)
-                            .guardrailsValidations(null)
-                            .llmSpanCount(0)
-                            .spanCount(0)
                             .feedbackScores(updateFeedbackScore(trace.feedbackScores().stream()
                                     .map(feedbackScore -> feedbackScore.toBuilder()
                                             .value(factory.manufacturePojo(BigDecimal.class))
@@ -3807,20 +3456,13 @@ class GetTracesByProjectResourceTest {
             var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
             var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
                     .stream()
-                    .map(trace -> trace.toBuilder()
-                            .projectId(null)
+                    .map(trace -> setCommonTraceDefaults(trace.toBuilder())
                             .projectName(projectName)
-                            .usage(null)
-                            .threadId(null)
-                            .totalEstimatedCost(null)
-                            .llmSpanCount(0)
-                            .spanCount(0)
                             .feedbackScores(updateFeedbackScore(trace.feedbackScores().stream()
                                     .map(feedbackScore -> feedbackScore.toBuilder()
                                             .value(factory.manufacturePojo(BigDecimal.class))
                                             .build())
                                     .collect(Collectors.toList()), 2, 2345.6789))
-                            .guardrailsValidations(null)
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
 
@@ -3877,20 +3519,12 @@ class GetTracesByProjectResourceTest {
                     .stream()
                     .map(trace -> {
                         Instant now = Instant.now();
-                        return trace.toBuilder()
-                                .projectId(null)
-                                .usage(null)
+                        return setCommonTraceDefaults(trace.toBuilder())
                                 .projectName(projectName)
-                                .feedbackScores(null)
-                                .threadId(null)
-                                .totalEstimatedCost(null)
                                 .startTime(now)
                                 .endTime(Set.of(Operator.LESS_THAN, Operator.LESS_THAN_EQUAL).contains(operator)
                                         ? Instant.now().plusSeconds(2)
                                         : now.plusNanos(1000))
-                                .guardrailsValidations(null)
-                                .llmSpanCount(0)
-                                .spanCount(0)
                                 .build();
                     })
                     .collect(Collectors.toCollection(ArrayList::new));
@@ -4027,20 +3661,24 @@ class GetTracesByProjectResourceTest {
             var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
             var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
                     .stream()
-                    .map(trace -> trace.toBuilder()
-                            .projectId(null)
+                    .map(trace -> setCommonTraceDefaults(trace.toBuilder())
                             .projectName(projectName)
-                            .usage(null)
-                            .threadId(null)
-                            .totalEstimatedCost(null)
-                            .feedbackScores(null)
-                            .guardrailsValidations(null)
-                            .comments(null)
-                            .llmSpanCount(0)
-                            .spanCount(0)
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
             traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
+
+            // Create spans for stats endpoint
+            var spans = traces.stream()
+                    .flatMap(trace -> IntStream.range(0, 1)
+                            .mapToObj(i -> factory.manufacturePojo(Span.class).toBuilder()
+                                    .usage(null)
+                                    .totalEstimatedCost(null)
+                                    .projectName(projectName)
+                                    .traceId(trace.id())
+                                    .type(SpanType.general)
+                                    .build()))
+                    .toList();
+            spanResourceClient.batchCreateSpans(spans, apiKey, workspaceName);
 
             var guardrailsByTraceId = traces.stream()
                     .collect(Collectors.toMap(Trace::id, trace -> guardrailsGenerator.generateGuardrailsForTrace(
@@ -4063,7 +3701,9 @@ class GetTracesByProjectResourceTest {
                     .forEach(guardrail -> guardrailsResourceClient.addBatch(guardrail, apiKey,
                             workspaceName));
 
+            // Update trace objects with span count and guardrails validations
             traces = traces.stream().map(trace -> trace.toBuilder()
+                    .spanCount(1)
                     .guardrailsValidations(GuardrailsMapper.INSTANCE.mapToValidations(
                             guardrailsByTraceId.get(trace.id())))
                     .build())
@@ -4109,17 +3749,9 @@ class GetTracesByProjectResourceTest {
             var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
             var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
                     .stream()
-                    .map(trace -> trace.toBuilder()
-                            .projectId(null)
+                    .map(trace -> setCommonTraceDefaults(trace.toBuilder())
                             .projectName(projectName)
-                            .usage(null)
-                            .feedbackScores(null)
-                            .totalEstimatedCost(null)
-                            .threadId(null)
-                            .guardrailsValidations(null)
                             .errorInfo(null)
-                            .llmSpanCount(0)
-                            .spanCount(0)
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
 
@@ -4159,16 +3791,8 @@ class GetTracesByProjectResourceTest {
             var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
             var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
                     .stream()
-                    .map(trace -> trace.toBuilder()
-                            .projectId(null)
+                    .map(trace -> setCommonTraceDefaults(trace.toBuilder())
                             .projectName(projectName)
-                            .usage(null)
-                            .feedbackScores(null)
-                            .totalEstimatedCost(null)
-                            .threadId(null)
-                            .guardrailsValidations(null)
-                            .llmSpanCount(0)
-                            .spanCount(0)
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
 
@@ -4332,14 +3956,8 @@ class GetTracesByProjectResourceTest {
             var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
             var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
                     .stream()
-                    .map(trace -> trace.toBuilder()
-                            .projectId(null)
+                    .map(trace -> setCommonTraceDefaults(trace.toBuilder())
                             .projectName(projectName)
-                            .usage(null)
-                            .feedbackScores(null)
-                            .threadId(null)
-                            .comments(null)
-                            .totalEstimatedCost(null)
                             .build())
                     .collect(Collectors.toCollection(ArrayList::new));
 
@@ -4398,14 +4016,8 @@ class GetTracesByProjectResourceTest {
 
             var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
                     .stream()
-                    .map(trace -> trace.toBuilder()
-                            .projectId(null)
+                    .map(trace -> setCommonTraceDefaults(trace.toBuilder())
                             .projectName(projectName)
-                            .usage(null)
-                            .feedbackScores(null)
-                            .threadId(null)
-                            .comments(null)
-                            .totalEstimatedCost(null)
                             .build())
                     .toList();
 
@@ -4454,14 +4066,8 @@ class GetTracesByProjectResourceTest {
 
             var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
                     .stream()
-                    .map(trace -> trace.toBuilder()
-                            .projectId(null)
+                    .map(trace -> setCommonTraceDefaults(trace.toBuilder())
                             .projectName(projectName)
-                            .usage(null)
-                            .feedbackScores(null)
-                            .threadId(null)
-                            .comments(null)
-                            .totalEstimatedCost(null)
                             .build())
                     .collect(toCollection(ArrayList::new));
 
@@ -4526,13 +4132,9 @@ class GetTracesByProjectResourceTest {
                     .stream()
                     .map(trace -> {
                         var llmSpanCount = RandomUtils.secure().randomInt(1, 7);
-                        return trace.toBuilder()
-                                .projectId(null)
+                        return setCommonTraceDefaults(trace.toBuilder())
                                 .projectName(projectName)
-                                .usage(null)
-                                .feedbackScores(null)
                                 .endTime(trace.startTime().plus(randomNumber(), ChronoUnit.MILLIS))
-                                .comments(null)
                                 .spanCount(llmSpanCount + RandomUtils.secure().randomInt(1, 7))
                                 .llmSpanCount(llmSpanCount)
                                 .build();
@@ -4585,14 +4187,10 @@ class GetTracesByProjectResourceTest {
 
             // Create traces with varying spanCount values
             List<Trace> traces = IntStream.range(0, 5)
-                    .mapToObj(i -> createTrace().toBuilder()
-                            .projectId(null)
+                    .mapToObj(i -> setCommonTraceDefaults(createTrace().toBuilder())
                             .projectName(projectName)
                             .spanCount(i * 3) // e.g., 0, 3, 6, 9, 12
-                            .usage(null)
-                            .feedbackScores(null)
                             .endTime(Instant.now())
-                            .comments(null)
                             .build())
                     .collect(Collectors.toList());
 
@@ -4772,13 +4370,9 @@ class GetTracesByProjectResourceTest {
 
             var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
                     .stream()
-                    .map(trace -> trace.toBuilder()
-                            .projectId(null)
+                    .map(trace -> setCommonTraceDefaults(trace.toBuilder())
                             .projectName(projectName)
-                            .usage(null)
-                            .feedbackScores(null)
                             .endTime(trace.startTime().plus(randomNumber(), ChronoUnit.MILLIS))
-                            .comments(null)
                             .build())
                     .map(trace -> trace.toBuilder()
                             .duration(trace.startTime().until(trace.endTime(), ChronoUnit.MICROS) / 1000.0)
@@ -4976,14 +4570,9 @@ class GetTracesByProjectResourceTest {
             var traceName = "test%";
 
             // Create a trace with % characters in the name
-            var traces = List.of(createTrace().toBuilder()
+            var traces = List.of(setCommonTraceDefaults(createTrace().toBuilder())
                     .projectName(projectName)
                     .name(traceName)
-                    .usage(null)
-                    .feedbackScores(null)
-                    .threadId(null)
-                    .comments(null)
-                    .totalEstimatedCost(null)
                     .build());
 
             traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
@@ -5097,6 +4686,24 @@ class GetTracesByProjectResourceTest {
                 .usage(null)
                 .errorInfo(null)
                 .build();
+    }
+
+    /**
+     * Sets common null/default values for trace builders used in tests.
+     * This reduces code duplication across test methods.
+     */
+    private Trace.TraceBuilder setCommonTraceDefaults(Trace.TraceBuilder builder) {
+        return builder
+                .projectId(null)
+                .usage(null)
+                .threadId(null)
+                .feedbackScores(null)
+                .spanFeedbackScores(null)
+                .totalEstimatedCost(null)
+                .comments(null)
+                .guardrailsValidations(null)
+                .llmSpanCount(0)
+                .spanCount(0);
     }
 
     private UUID create(Trace trace, String apiKey, String workspaceName) {

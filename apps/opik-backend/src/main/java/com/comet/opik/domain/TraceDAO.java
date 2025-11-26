@@ -1990,12 +1990,16 @@ class TraceDAOImpl implements TraceDAO {
                       AND trace_id IN (
                           SELECT id
                           FROM traces final
+                          LEFT JOIN guardrails_agg gagg ON gagg.entity_id = traces.id
+                          <if(annotation_queue_filters)>
+                          LEFT JOIN trace_annotation_queue_ids as taqi ON taqi.trace_id = traces.id
+                          <endif>
                           WHERE workspace_id = :workspace_id
-                            AND project_id IN :project_ids
-                            <if(uuid_from_time)>AND id >= :uuid_from_time<endif>
-                            <if(uuid_to_time)>AND id \\<= :uuid_to_time<endif>
-                            <if(filters)> AND <filters> <endif>
-                            <if(annotation_queue_filters)> AND <annotation_queue_filters> <endif>
+                          AND project_id IN :project_ids
+                          <if(uuid_from_time)>AND id >= :uuid_from_time<endif>
+                          <if(uuid_to_time)>AND id \\<= :uuid_to_time<endif>
+                          <if(filters)> AND <filters> <endif>
+                          <if(annotation_queue_filters)> AND <annotation_queue_filters> <endif>
                       )
                     ORDER BY (workspace_id, project_id, trace_id, parent_span_id, id) DESC, last_updated_at DESC
                     LIMIT 1 BY id
@@ -2479,7 +2483,7 @@ class TraceDAOImpl implements TraceDAO {
                     AND t.id = tt.thread_id
                 LEFT JOIN feedback_scores_agg fsagg ON fsagg.entity_id = tt.thread_model_id
                 <if(annotation_queue_filters)>
-                LEFT JOIN thread_annotation_queue_ids as ttaqi ON ttaqi.thread_id = tt.thread_model_id
+                LEFT JOIN thread_annotation_queue_ids as taqi ON taqi.thread_id = tt.thread_model_id
                 <endif>
                 WHERE workspace_id = :workspace_id
                 <if(feedback_scores_filters)>
@@ -3724,6 +3728,7 @@ class TraceDAOImpl implements TraceDAO {
                 });
         Optional.ofNullable(traceSearchCriteria.lastReceivedId())
                 .ifPresent(lastReceivedTraceId -> statement.bind("last_received_id", lastReceivedTraceId));
+        // Bind UUID BETWEEN bounds for time-based filtering
         Optional.ofNullable(traceSearchCriteria.uuidFromTime())
                 .ifPresent(uuid_from_time -> statement.bind("uuid_from_time", uuid_from_time));
         Optional.ofNullable(traceSearchCriteria.uuidToTime())
