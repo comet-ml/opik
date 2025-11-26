@@ -103,18 +103,16 @@ const CompareExperimentsFeedbackScoreCell: React.FC<
           isUserFeedbackColumn={isUserFeedbackColumn}
           onValueChange={handleValueChange}
         />
-        {shouldShowInlineReasons ? (
+        {reasons.length > 0 && (
           <FeedbackScoreReasonTooltip reasons={reasons}>
-            <span className="line-clamp-3 break-words text-xs text-muted-foreground">
-              {reasons.map((r) => r.reason).join(", ")}
-            </span>
-          </FeedbackScoreReasonTooltip>
-        ) : (
-          reasons.length > 0 && (
-            <FeedbackScoreReasonTooltip reasons={reasons}>
+            {shouldShowInlineReasons ? (
+              <span className="line-clamp-3 break-words text-xs text-muted-foreground">
+                {reasons.map((r) => r.reason).join(", ")}
+              </span>
+            ) : (
               <MessageSquareMore className="size-3.5 shrink-0 text-light-slate" />
-            </FeedbackScoreReasonTooltip>
-          )
+            )}
+          </FeedbackScoreReasonTooltip>
         )}
       </div>
     );

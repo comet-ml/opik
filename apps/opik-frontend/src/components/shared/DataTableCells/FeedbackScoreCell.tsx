@@ -88,20 +88,18 @@ const FeedbackScoreCell = (context: CellContext<unknown, unknown>) => {
         onValueChange={handleValueChange}
       />
 
-      {shouldShowInlineReasons ? (
+      {reasons.length > 0 && (
         <FeedbackScoreReasonTooltip reasons={reasons}>
-          <span className="line-clamp-3 break-words text-xs text-muted-foreground">
-            {reasons.map((r) => r.reason).join(", ")}
-          </span>
-        </FeedbackScoreReasonTooltip>
-      ) : (
-        reasons.length > 0 && (
-          <FeedbackScoreReasonTooltip reasons={reasons}>
+          {shouldShowInlineReasons ? (
+            <span className="line-clamp-3 break-words text-xs text-muted-foreground">
+              {reasons.map((r) => r.reason).join(", ")}
+            </span>
+          ) : (
             <div className="flex h-[20px] items-center">
               <MessageSquareMore className="mt-0.5 size-3.5 shrink-0 text-light-slate" />
             </div>
-          </FeedbackScoreReasonTooltip>
-        )
+          )}
+        </FeedbackScoreReasonTooltip>
       )}
     </CellWrapper>
   );
