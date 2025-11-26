@@ -1,5 +1,5 @@
 import React from "react";
-import { CellContext } from "@tanstack/react-table";
+import { CellContext, TableMeta } from "@tanstack/react-table";
 
 import { ExperimentItem, ExperimentsCompare } from "@/types/datasets";
 import VerticallySplitCellWrapper, {
@@ -16,6 +16,7 @@ import { FeedbackScoreCustomMeta } from "@/types/feedback-scores";
 import useFeedbackScoreInlineEdit from "@/hooks/useFeedbackScoreInlineEdit";
 import { cn } from "@/lib/utils";
 import FeedbackScoreEditDropdown from "@/components/shared/DataTableCells/FeedbackScoreEditDropdown";
+import { ROW_HEIGHT } from "@/types/shared";
 
 const CompareExperimentsFeedbackScoreCell: React.FC<
   CellContext<ExperimentsCompare, unknown>
@@ -37,12 +38,17 @@ const CompareExperimentsFeedbackScoreCell: React.FC<
     feedbackScore,
   });
 
-  const enableUserFeedbackEditing =
+  const {
+    enableUserFeedbackEditing = false,
+    showReasons = false,
+    rowHeight = ROW_HEIGHT.small,
+  } = (context.table.options.meta ?? {}) as TableMeta<ExperimentsCompare>;
+
+  const isEditingEnabled =
     experimentCompare.experiment_items.length === 1 &&
-    (context.table.options.meta?.enableUserFeedbackEditing ?? false);
+    enableUserFeedbackEditing;
   const isUserFeedbackColumn =
-    enableUserFeedbackEditing &&
-    context.column.id === "feedback_scores_User feedback";
+    isEditingEnabled && context.column.id === "feedback_scores_User feedback";
 
   const renderContent = (item: ExperimentItem | undefined) => {
     const feedbackScore = item?.feedback_scores?.find(
@@ -79,10 +85,15 @@ const CompareExperimentsFeedbackScoreCell: React.FC<
 
     const color = feedbackKey && colorMap ? colorMap[feedbackKey] : undefined;
 
+    const shouldShowInlineReasons =
+      showReasons &&
+      [ROW_HEIGHT.medium, ROW_HEIGHT.large].includes(rowHeight) &&
+      reasons.length > 0;
+
     return (
       <div
         className={cn(
-          "flex h-4 w-full items-center justify-end gap-1",
+          "flex h-4 w-full items-center justify-end gap-1 flex-wrap overflow-hidden",
           isUserFeedbackColumn && "group",
         )}
       >
@@ -92,10 +103,16 @@ const CompareExperimentsFeedbackScoreCell: React.FC<
           isUserFeedbackColumn={isUserFeedbackColumn}
           onValueChange={handleValueChange}
         />
-        {reasons.length > 0 && (
-          <FeedbackScoreReasonTooltip reasons={reasons}>
-            <MessageSquareMore className="size-3.5 shrink-0 text-light-slate" />
-          </FeedbackScoreReasonTooltip>
+        {shouldShowInlineReasons ? (
+          <span className="line-clamp-3 break-words text-xs text-muted-foreground">
+            {reasons.map((r) => r.reason).join(", ")}
+          </span>
+        ) : (
+          reasons.length > 0 && (
+            <FeedbackScoreReasonTooltip reasons={reasons}>
+              <MessageSquareMore className="size-3.5 shrink-0 text-light-slate" />
+            </FeedbackScoreReasonTooltip>
+          )
         )}
       </div>
     );

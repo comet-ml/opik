@@ -24,6 +24,7 @@ type ColumnsButtonShared<TColumnData> = {
 
 type ColumnsButtonExtraSection<TColumnData> = {
   title: string;
+  action?: React.ReactNode;
 } & ColumnsButtonShared<TColumnData>;
 
 export type ColumnsButtonProps<TColumnData> = {
@@ -115,9 +116,19 @@ const ColumnsButton = <TColumnData,>({
                 {!(isFirst && filteredColumns.length === 0) && (
                   <DropdownMenuSeparator key={`separator-${section.title}`} />
                 )}
-                <DropdownMenuLabel key={`label-${section.title}`}>
-                  {section.title}
-                </DropdownMenuLabel>
+                <div
+                  key={`label-${section.title}`}
+                  className="flex items-center justify-between gap-3 px-2 py-1.5"
+                >
+                  <DropdownMenuLabel className="whitespace-nowrap p-0">
+                    {section.title}
+                  </DropdownMenuLabel>
+                  {section.action && (
+                    <div className="mr-1 shrink-0 self-start">
+                      {section.action}
+                    </div>
+                  )}
+                </div>
                 <SortableMenuSection
                   key={`sortable-section-${section.title}`}
                   columns={section.columns}
@@ -142,7 +153,7 @@ const ColumnsButton = <TColumnData,>({
           Columns
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent className="min-w-56 max-w-72 p-0 pt-12" align="end">
+      <DropdownMenuContent className="min-w-64 max-w-80 p-0 pt-12" align="end">
         <div
           className="absolute inset-x-1 top-1 h-11"
           onKeyDown={(e) => e.stopPropagation()}

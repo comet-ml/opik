@@ -104,6 +104,7 @@ import {
   USER_FEEDBACK_NAME,
 } from "@/constants/shared";
 import { useTruncationEnabled } from "@/components/server-sync-provider";
+import FeedbackScoreReasonToggle from "@/components/shared/FeedbackScoreReasonToggle/FeedbackScoreReasonToggle";
 
 const getRowId = (d: Trace | Span) => d.id;
 
@@ -538,6 +539,13 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
     defaultValue: {},
   });
 
+  const [showReasons, setShowReasons] = useLocalStorageState<boolean>(
+    "traces-show-reasons",
+    {
+      defaultValue: false,
+    },
+  );
+
   const dynamicScoresColumns = useMemo(() => {
     return (feedbackScoresData?.scores ?? [])
       .sort((c1, c2) => c1.name.localeCompare(c2.name))
@@ -634,8 +642,9 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
         handleRowClick(row, DetailsActionSection.Comments);
       },
       enableUserFeedbackEditing: true,
+      showReasons,
     }),
-    [handleRowClick],
+    [handleRowClick, showReasons],
   );
 
   const handleThreadIdClick = useCallback(
@@ -873,9 +882,28 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
         columns: scoresColumnsData,
         order: scoresColumnsOrder,
         onOrderChange: setScoresColumnsOrder,
+        action: (
+          <FeedbackScoreReasonToggle
+            showReasons={showReasons}
+            setShowReasons={setShowReasons}
+            height={height}
+            setHeight={setHeight}
+            scoresColumnsData={scoresColumnsData}
+            selectedColumns={selectedColumns}
+          />
+        ),
       },
     ];
-  }, [scoresColumnsData, scoresColumnsOrder, setScoresColumnsOrder]);
+  }, [
+    scoresColumnsData,
+    scoresColumnsOrder,
+    setScoresColumnsOrder,
+    showReasons,
+    setShowReasons,
+    height,
+    setHeight,
+    selectedColumns,
+  ]);
 
   if (isPending || isFeedbackScoresPending) {
     return <Loader />;

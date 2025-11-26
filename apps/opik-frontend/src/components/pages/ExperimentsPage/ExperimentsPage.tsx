@@ -284,6 +284,13 @@ const ExperimentsPage: React.FC = () => {
     },
   );
 
+  const [showReasons, setShowReasons] = useLocalStorageState<boolean>(
+    `${STORAGE_KEY_PREFIX}-show-reasons`,
+    {
+      defaultValue: false,
+    },
+  );
+
   const { isFeedbackScoresPending, dynamicScoresColumns } =
     useExperimentsFeedbackScores();
 
@@ -369,6 +376,8 @@ const ExperimentsPage: React.FC = () => {
     actionsCell: ExperimentRowActionsCell,
     sortedColumns,
     setSortedColumns,
+    showReasons,
+    setShowReasons,
   });
 
   const handleRowClick = useCallback(
@@ -644,6 +653,9 @@ const ExperimentsPage: React.FC = () => {
         groupingConfig={groupingConfig}
         getRowId={getRowId}
         columnPinning={columnPinningConfig}
+        meta={{
+          showReasons,
+        }}
         noData={
           <DataTableNoData title={noDataText}>
             {noData && (

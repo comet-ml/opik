@@ -18,7 +18,9 @@ import {
   COLUMN_TYPE,
   COLUMN_DATASET_ID,
   COLUMN_METADATA_ID,
+  ROW_HEIGHT,
 } from "@/types/shared";
+import FeedbackScoreReasonToggle from "@/components/shared/FeedbackScoreReasonToggle/FeedbackScoreReasonToggle";
 import { convertColumnDataToColumn, isColumnSortable } from "@/lib/table";
 import {
   buildGroupFieldName,
@@ -54,6 +56,10 @@ export type UseExperimentsTableConfigProps<T> = {
   actionsCell?: ColumnDefTemplate<CellContext<T, unknown>>;
   sortedColumns: ColumnSort[];
   setSortedColumns: OnChangeFn<ColumnSort[]>;
+  showReasons?: boolean;
+  setShowReasons?: (show: boolean) => void;
+  height?: ROW_HEIGHT | string | null | undefined;
+  setHeight?: (height: ROW_HEIGHT) => void;
 };
 
 export const useExperimentsTableConfig = <
@@ -72,6 +78,10 @@ export const useExperimentsTableConfig = <
   actionsCell,
   sortedColumns,
   setSortedColumns,
+  height,
+  setHeight,
+  showReasons = false,
+  setShowReasons = () => {},
 }: UseExperimentsTableConfigProps<T>) => {
   const [selectedColumns, setSelectedColumns] = useLocalStorageState<string[]>(
     `${storageKeyPrefix}-selected-columns`,
@@ -305,9 +315,28 @@ export const useExperimentsTableConfig = <
         columns: scoresColumnsData,
         order: scoresColumnsOrder,
         onOrderChange: setScoresColumnsOrder,
+        action: (
+          <FeedbackScoreReasonToggle
+            showReasons={showReasons}
+            setShowReasons={setShowReasons}
+            height={height}
+            setHeight={setHeight}
+            scoresColumnsData={scoresColumnsData}
+            selectedColumns={selectedColumns}
+          />
+        ),
       },
     ];
-  }, [scoresColumnsData, scoresColumnsOrder, setScoresColumnsOrder]);
+  }, [
+    scoresColumnsData,
+    scoresColumnsOrder,
+    setScoresColumnsOrder,
+    showReasons,
+    setShowReasons,
+    height,
+    setHeight,
+    selectedColumns,
+  ]);
 
   return {
     // State
