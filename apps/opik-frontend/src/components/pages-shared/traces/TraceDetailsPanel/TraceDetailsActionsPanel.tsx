@@ -60,7 +60,10 @@ import {
   DetailsActionSection,
   DetailsActionSectionValue,
 } from "@/components/pages-shared/traces/DetailsActionSection";
-import { mapRowDataForExport } from "@/lib/traces/exportUtils";
+import {
+  mapRowDataForExport,
+  TRACE_EXPORT_COLUMNS,
+} from "@/lib/traces/exportUtils";
 import { TRACE_DATA_TYPE } from "@/hooks/useTracesOrSpansList";
 
 const SEARCH_SPACE_RESERVATION = 200;
@@ -112,6 +115,7 @@ const TraceDetailsActionsPanel: React.FunctionComponent<
   const isAIInspectorEnabled = useIsFeatureEnabled(
     FeatureToggleKeys.TOGGLE_OPIK_AI_ENABLED,
   );
+  const isExportEnabled = useIsFeatureEnabled(FeatureToggleKeys.EXPORT_ENABLED);
   const { toast } = useToast();
 
   const { mutate } = useTraceDeleteMutation();
@@ -200,25 +204,6 @@ const TraceDetailsActionsPanel: React.FunctionComponent<
   );
 
   const exportColumns = useMemo(() => {
-    const baseColumns = [
-      "id",
-      "name",
-      "type",
-      "start_time",
-      "end_time",
-      "duration",
-      "input",
-      "output",
-      "metadata",
-      "tags",
-      "error_info",
-      "usage",
-      "provider",
-      "model",
-      "total_estimated_cost",
-      "thread_id",
-    ];
-
     const feedbackScoreNames = uniq(
       treeData.reduce<string[]>((acc, d) => {
         return acc.concat(
@@ -231,7 +216,7 @@ const TraceDetailsActionsPanel: React.FunctionComponent<
       }, []),
     );
 
-    return [...baseColumns, ...feedbackScoreNames];
+    return [...TRACE_EXPORT_COLUMNS, ...feedbackScoreNames];
   }, [treeData]);
 
   const handleExportCSV = useCallback(async () => {
@@ -559,14 +544,42 @@ const TraceDetailsActionsPanel: React.FunctionComponent<
               </TooltipWrapper>
             )}
             <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={handleExportCSV}>
-              <Download className="mr-2 size-4" />
-              Export as CSV
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={handleExportJSON}>
-              <Download className="mr-2 size-4" />
-              Export as JSON
-            </DropdownMenuItem>
+            <TooltipWrapper
+              content={
+                !isExportEnabled
+                  ? "Export functionality is disabled for this installation"
+                  : ""
+              }
+              side="left"
+            >
+              <div>
+                <DropdownMenuItem
+                  onClick={handleExportCSV}
+                  disabled={!isExportEnabled}
+                >
+                  <Download className="mr-2 size-4" />
+                  Export as CSV
+                </DropdownMenuItem>
+              </div>
+            </TooltipWrapper>
+            <TooltipWrapper
+              content={
+                !isExportEnabled
+                  ? "Export functionality is disabled for this installation"
+                  : ""
+              }
+              side="left"
+            >
+              <div>
+                <DropdownMenuItem
+                  onClick={handleExportJSON}
+                  disabled={!isExportEnabled}
+                >
+                  <Download className="mr-2 size-4" />
+                  Export as JSON
+                </DropdownMenuItem>
+              </div>
+            </TooltipWrapper>
             <DropdownMenuSeparator />
             <DropdownMenuItem onClick={() => setPopupOpen(true)}>
               <Trash className="mr-2 size-4" />
