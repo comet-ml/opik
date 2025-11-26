@@ -68,10 +68,9 @@ const FeedbackScoreCell = (context: CellContext<unknown, unknown>) => {
   const isUserFeedbackColumn =
     isEditingEnabled && context.column.id === "feedback_scores_User feedback";
 
-  // Check if we should show reasons inline (when showReasons is true and row height is Medium or Large)
   const shouldShowInlineReasons =
     showReasons &&
-    (rowHeight === ROW_HEIGHT.medium || rowHeight === ROW_HEIGHT.large) &&
+    [ROW_HEIGHT.medium, ROW_HEIGHT.large].includes(rowHeight) &&
     reasons.length > 0;
 
   return (
@@ -87,7 +86,7 @@ const FeedbackScoreCell = (context: CellContext<unknown, unknown>) => {
       />
 
       {shouldShowInlineReasons ? (
-        <span className="whitespace-nowrap text-xs text-muted-foreground">
+        <span className="break-words text-xs text-muted-foreground">
           {reasons.map((r) => r.reason).join(", ")}
         </span>
       ) : (

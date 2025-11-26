@@ -104,7 +104,7 @@ const CompareExperimentsFeedbackScoreCell: React.FC<
           onValueChange={handleValueChange}
         />
         {shouldShowInlineReasons ? (
-          <span className="whitespace-nowrap text-xs text-muted-foreground">
+          <span className="break-words text-xs text-muted-foreground">
             {reasons.map((r) => r.reason).join(", ")}
           </span>
         ) : (
