@@ -87,7 +87,7 @@ const CompareExperimentsFeedbackScoreCell: React.FC<
 
     const shouldShowInlineReasons =
       showReasons &&
-      (rowHeight === ROW_HEIGHT.medium || rowHeight === ROW_HEIGHT.large) &&
+      [ROW_HEIGHT.medium, ROW_HEIGHT.large].includes(rowHeight) &&
       reasons.length > 0;
 
     return (
