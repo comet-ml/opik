@@ -78,6 +78,7 @@ import {
   USER_FEEDBACK_NAME,
 } from "@/constants/shared";
 import { useTruncationEnabled } from "@/components/server-sync-provider";
+import FeedbackScoreReasonToggle from "@/components/shared/FeedbackScoreReasonToggle/FeedbackScoreReasonToggle";
 
 const getRowId = (d: Thread) => d.id;
 
@@ -459,6 +460,13 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
     defaultValue: {},
   });
 
+  const [showReasons, setShowReasons] = useLocalStorageState<boolean>(
+    "threads-show-reasons",
+    {
+      defaultValue: false,
+    },
+  );
+
   const selectedRows: Thread[] = useMemo(() => {
     return rows.filter((row) => rowSelection[row.id]);
   }, [rowSelection, rows]);
@@ -493,8 +501,9 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
       projectId,
       projectName,
       enableUserFeedbackEditing: true,
+      showReasons,
     }),
-    [projectId, projectName],
+    [projectId, projectName, showReasons],
   );
 
   const columns = useMemo(() => {
@@ -584,9 +593,28 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
         columns: scoresColumnsData,
         order: scoresColumnsOrder,
         onOrderChange: setScoresColumnsOrder,
+        action: (
+          <FeedbackScoreReasonToggle
+            showReasons={showReasons}
+            setShowReasons={setShowReasons}
+            height={height}
+            setHeight={setHeight}
+            scoresColumnsData={scoresColumnsData}
+            selectedColumns={selectedColumns}
+          />
+        ),
       },
     ];
-  }, [scoresColumnsData, scoresColumnsOrder, setScoresColumnsOrder]);
+  }, [
+    scoresColumnsData,
+    scoresColumnsOrder,
+    setScoresColumnsOrder,
+    showReasons,
+    setShowReasons,
+    height,
+    setHeight,
+    selectedColumns,
+  ]);
 
   if (isPending || isFeedbackScoresNamesPending) {
     return <Loader />;

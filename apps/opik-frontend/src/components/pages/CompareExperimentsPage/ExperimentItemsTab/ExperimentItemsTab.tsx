@@ -95,6 +95,7 @@ import {
   USER_FEEDBACK_COLUMN_ID,
   USER_FEEDBACK_NAME,
 } from "@/constants/shared";
+import FeedbackScoreReasonToggle from "@/components/shared/FeedbackScoreReasonToggle/FeedbackScoreReasonToggle";
 
 const getRowId = (d: ExperimentsCompare) => d.id;
 
@@ -115,6 +116,7 @@ const COLUMNS_OUTPUT_ORDER_KEY = "compare-experiments-output-columns-order";
 const PAGINATION_SIZE_KEY = "compare-experiments-pagination-size";
 const ROW_HEIGHT_KEY = "compare-experiments-row-height";
 const SORTING_KEY = "compare-experiments-sorting";
+const SHOW_REASONS_KEY = "compare-experiments-show-reasons";
 
 export const FILTER_COLUMNS: ColumnData<ExperimentsCompare>[] = [
   {
@@ -276,6 +278,13 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
   );
 
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
+
+  const [showReasons, setShowReasons] = useLocalStorageState<boolean>(
+    SHOW_REASONS_KEY,
+    {
+      defaultValue: false,
+    },
+  );
 
   const truncationEnabled = useTruncationEnabled();
 
@@ -776,6 +785,16 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
         columns: scoresColumnsData,
         order: scoresColumnsOrder,
         onOrderChange: setScoresColumnsOrder,
+        action: (
+          <FeedbackScoreReasonToggle
+            showReasons={showReasons}
+            setShowReasons={setShowReasons}
+            height={height}
+            setHeight={setHeight}
+            scoresColumnsData={scoresColumnsData}
+            selectedColumns={selectedColumns}
+          />
+        ),
       },
     ];
   }, [
@@ -785,6 +804,11 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
     scoresColumnsData,
     scoresColumnsOrder,
     setScoresColumnsOrder,
+    showReasons,
+    setShowReasons,
+    height,
+    setHeight,
+    selectedColumns,
   ]);
 
   const meta = useMemo(
@@ -798,8 +822,16 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
       },
       columnsStatistic,
       enableUserFeedbackEditing: true,
+      showReasons,
+      rowHeight: height,
     }),
-    [handleRowClick, setExpandedCommentSections, columnsStatistic],
+    [
+      handleRowClick,
+      setExpandedCommentSections,
+      columnsStatistic,
+      showReasons,
+      height,
+    ],
   );
 
   if (isPending || isFeedbackScoresPending || isExperimentsOutputPending) {
