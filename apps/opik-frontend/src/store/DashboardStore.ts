@@ -10,12 +10,14 @@ import {
   DashboardSections,
   DashboardState,
   DashboardWidget,
-  DashboardWidgetComponentProps,
+  AddWidgetConfig,
+  UpdateWidgetConfig,
+  WidgetResolver,
 } from "@/types/dashboard";
 import {
   generateEmptyDashboard,
   generateEmptySection,
-  generateEmptyWidget,
+  generateId,
   getSectionById,
 } from "@/lib/dashboard/utils";
 import {
@@ -47,9 +49,8 @@ interface DashboardStoreState<TConfig = BaseDashboardConfig> {
   config: TConfig | null;
   search: string;
   onAddWidgetCallback: ((sectionId: string) => void) | null;
-  widgetResolver:
-    | ((type: string) => React.ComponentType<DashboardWidgetComponentProps>)
-    | null;
+  widgetResolver: WidgetResolver | null;
+  previewWidget: DashboardWidget | null;
 }
 
 /**
@@ -70,17 +71,12 @@ interface DashboardActions<TConfig = BaseDashboardConfig> {
   ) => void;
 
   // Widget operations
-  addWidget: (
-    sectionId: string,
-    type: string,
-    title?: string,
-    metricType?: string,
-  ) => string | undefined;
+  addWidget: (sectionId: string, config: AddWidgetConfig) => string | undefined;
   deleteWidget: (sectionId: string, widgetId: string) => void;
   updateWidget: (
     sectionId: string,
     widgetId: string,
-    updates: Partial<DashboardWidget>,
+    config: UpdateWidgetConfig,
   ) => void;
   moveWidget: (
     sourceSectionId: string,
@@ -105,14 +101,12 @@ interface DashboardActions<TConfig = BaseDashboardConfig> {
   getOnAddWidgetCallback: () => ((sectionId: string) => void) | null;
 
   // Widget resolver operations
-  setWidgetResolver: (
-    resolver:
-      | ((type: string) => React.ComponentType<DashboardWidgetComponentProps>)
-      | null,
-  ) => void;
-  getWidgetResolver: () =>
-    | ((type: string) => React.ComponentType<DashboardWidgetComponentProps>)
-    | null;
+  setWidgetResolver: (resolver: WidgetResolver | null) => void;
+  getWidgetResolver: () => WidgetResolver | null;
+
+  // Preview widget operations
+  setPreviewWidget: (widget: DashboardWidget | null) => void;
+  getPreviewWidget: () => DashboardWidget | null;
 
   // Utility operations
   clearDashboard: () => void;
@@ -160,6 +154,7 @@ export const useDashboardStore = create<DashboardStore<BaseDashboardConfig>>()(
         search: "",
         onAddWidgetCallback: null,
         widgetResolver: null,
+        previewWidget: null,
 
         // Section Actions
         addSection: (title?: string) => {
@@ -253,17 +248,19 @@ export const useDashboardStore = create<DashboardStore<BaseDashboardConfig>>()(
         },
 
         // Widget Actions
-        addWidget: (
-          sectionId: string,
-          type: string,
-          title?: string,
-          metricType?: string,
-        ) => {
+        addWidget: (sectionId: string, widgetConfig) => {
           const state = get();
           const section = getSectionById(state.sections, sectionId);
           if (!section) return undefined;
 
-          const newWidget = generateEmptyWidget(type, title, metricType);
+          const newWidget: DashboardWidget = {
+            id: generateId(),
+            type: widgetConfig.type,
+            title: widgetConfig.title,
+            subtitle: widgetConfig.subtitle,
+            config: widgetConfig.config || {},
+          };
+
           const updatedLayout = calculateLayoutForAddingWidget(
             section.layout,
             newWidget,
@@ -320,11 +317,7 @@ export const useDashboardStore = create<DashboardStore<BaseDashboardConfig>>()(
           );
         },
 
-        updateWidget: (
-          sectionId: string,
-          widgetId: string,
-          updates: Partial<DashboardWidget>,
-        ) => {
+        updateWidget: (sectionId: string, widgetId: string, widgetConfig) => {
           set(
             (state) => ({
               sections: state.sections.map((s) =>
@@ -332,7 +325,20 @@ export const useDashboardStore = create<DashboardStore<BaseDashboardConfig>>()(
                   ? {
                       ...s,
                       widgets: s.widgets.map((w) =>
-                        w.id === widgetId ? { ...w, ...updates } : w,
+                        w.id === widgetId
+                          ? {
+                              ...w,
+                              ...(widgetConfig.title !== undefined && {
+                                title: widgetConfig.title,
+                              }),
+                              ...(widgetConfig.subtitle !== undefined && {
+                                subtitle: widgetConfig.subtitle,
+                              }),
+                              ...(widgetConfig.config !== undefined && {
+                                config: { ...w.config, ...widgetConfig.config },
+                              }),
+                            }
+                          : w,
                       ),
                     }
                   : s,
@@ -458,6 +464,15 @@ export const useDashboardStore = create<DashboardStore<BaseDashboardConfig>>()(
 
         getWidgetResolver: () => {
           return get().widgetResolver;
+        },
+
+        // Preview Widget Actions
+        setPreviewWidget: (widget) => {
+          set({ previewWidget: widget }, false, "setPreviewWidget");
+        },
+
+        getPreviewWidget: () => {
+          return get().previewWidget;
         },
 
         // Utility Actions
@@ -623,3 +638,11 @@ export const selectWidgetResolver = (
 export const selectSetWidgetResolver = (
   state: DashboardStore<BaseDashboardConfig>,
 ) => state.setWidgetResolver;
+
+// Preview widget selectors
+export const selectPreviewWidget = (
+  state: DashboardStore<BaseDashboardConfig>,
+) => state.previewWidget;
+export const selectSetPreviewWidget = (
+  state: DashboardStore<BaseDashboardConfig>,
+) => state.setPreviewWidget;
