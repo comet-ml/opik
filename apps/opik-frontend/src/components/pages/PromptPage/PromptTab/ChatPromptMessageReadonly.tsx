@@ -1,9 +1,7 @@
-import React, { useMemo } from "react";
+import React from "react";
 import { LLM_MESSAGE_ROLE_NAME_MAP } from "@/constants/llm";
 import { LLM_MESSAGE_ROLE } from "@/types/llm";
-import CodeHighlighter, {
-  SUPPORTED_LANGUAGE,
-} from "@/components/shared/CodeHighlighter/CodeHighlighter";
+import ChatPromptAttachments from "./ChatPromptAttachments";
 
 interface ChatMessage {
   role: string;
@@ -54,13 +52,6 @@ const ChatPromptMessageReadonly: React.FC<ChatPromptMessageReadonlyProps> = ({
     message.content,
   );
 
-  // Memoize the stringified attachments to avoid costly JSON.stringify on every render
-  const stringifiedAttachments = useMemo(
-    () =>
-      attachments.map((attachment) => JSON.stringify(attachment, null, 2)),
-    [attachments],
-  );
-
   return (
     <div className="flex flex-col gap-2.5 rounded-md border bg-primary-foreground p-3">
       <div className="flex items-center">
@@ -73,18 +64,7 @@ const ChatPromptMessageReadonly: React.FC<ChatPromptMessageReadonlyProps> = ({
           {displayText}
         </div>
       )}
-      {attachments.length > 0 && (
-        <div className="space-y-2">
-          {stringifiedAttachments.map((stringifiedAttachment, index) => (
-            <div key={index} className="rounded border">
-              <CodeHighlighter
-                data={stringifiedAttachment}
-                language={SUPPORTED_LANGUAGE.json}
-              />
-            </div>
-          ))}
-        </div>
-      )}
+      <ChatPromptAttachments attachments={attachments} />
     </div>
   );
 };
