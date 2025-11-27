@@ -1,0 +1,24 @@
+Frontend:
+  - apps/opik-frontend/**/*
+
+Backend:
+  - apps/opik-backend/**/*
+
+Python SDK:
+  - sdks/python/**/*
+
+TypeScript SDK:
+  - sdks/typescript/**/*
+
+Infrastructure:
+  - .github/**/*
+  - deployment/**/*
+  - scripts/**/*
+  - extensions/**/*
+  - "*.sh"
+  - "*.ps1"
+
+documentation:
+  - apps/opik-documentation/**/*
+  - "*.md"
+  - "*.mdx"
