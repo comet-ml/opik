@@ -314,22 +314,34 @@ public class ExperimentsTestUtils {
     }
 
     /**
-     * Generic method to calculate score averages.
+     * Generic method to calculate score averages from a list of score objects.
      *
      * @param items List of items to extract scores from
-     * @param scoreExtractor Function to extract scores from each item (returns name -> value map)
+     * @param scoreListExtractor Function to extract list of score objects from each item
+     * @param nameExtractor Function to extract name from a score object
+     * @param valueExtractor Function to extract value from a score object
      * @param <T> Type of items to process
+     * @param <S> Type of score objects
      * @return List of FeedbackScoreAverage with calculated averages
      */
-    private <T> List<FeedbackScoreAverage> calculateScoreAverages(
+    private <T, S> List<FeedbackScoreAverage> calculateScoreAverages(
             List<T> items,
-            Function<T, Map<String, BigDecimal>> scoreExtractor) {
+            Function<T, List<S>> scoreListExtractor,
+            Function<S, String> nameExtractor,
+            Function<S, BigDecimal> valueExtractor) {
 
         Map<String, List<BigDecimal>> scoresByName = new HashMap<>();
 
         for (T item : items) {
-            Map<String, BigDecimal> scores = scoreExtractor.apply(item);
-            scores.forEach((name, value) -> scoresByName.computeIfAbsent(name, k -> new ArrayList<>()).add(value));
+            List<S> scores = scoreListExtractor.apply(item);
+            if (scores != null) {
+                scores.stream()
+                        .filter(score -> nameExtractor.apply(score) != null
+                                && valueExtractor.apply(score) != null)
+                        .forEach(score -> scoresByName
+                                .computeIfAbsent(nameExtractor.apply(score), k -> new ArrayList<>())
+                                .add(valueExtractor.apply(score)));
+            }
         }
 
         return scoresByName.entrySet().stream()
@@ -348,17 +360,11 @@ public class ExperimentsTestUtils {
     }
 
     private List<FeedbackScoreAverage> calculateFeedbackScoreAverages(List<ExperimentItem> items) {
-        return calculateScoreAverages(items, item -> {
-            if (item.feedbackScores() == null) {
-                return Map.of();
-            }
-            return item.feedbackScores().stream()
-                    .filter(score -> score.name() != null && score.value() != null)
-                    .collect(Collectors.toMap(
-                            FeedbackScore::name,
-                            FeedbackScore::value,
-                            (v1, v2) -> v1)); // In case of duplicate names, keep first
-        });
+        return calculateScoreAverages(
+                items,
+                ExperimentItem::feedbackScores,
+                FeedbackScore::name,
+                FeedbackScore::value);
     }
 
     /**
@@ -366,17 +372,11 @@ public class ExperimentsTestUtils {
      * Extracts experiment scores from each experiment and calculates the average value for each score name.
      */
     private List<FeedbackScoreAverage> calculateExperimentScoreAverages(List<Experiment> experiments) {
-        return calculateScoreAverages(experiments, experiment -> {
-            if (experiment.experimentScores() == null) {
-                return Map.of();
-            }
-            return experiment.experimentScores().stream()
-                    .filter(score -> score.name() != null && score.value() != null)
-                    .collect(Collectors.toMap(
-                            ExperimentScore::name,
-                            ExperimentScore::value,
-                            (v1, v2) -> v1)); // In case of duplicate names, keep first
-        });
+        return calculateScoreAverages(
+                experiments,
+                Experiment::experimentScores,
+                ExperimentScore::name,
+                ExperimentScore::value);
     }
 
     /**
