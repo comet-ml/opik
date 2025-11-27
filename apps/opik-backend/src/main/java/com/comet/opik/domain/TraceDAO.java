@@ -334,6 +334,10 @@ class TraceDAOImpl implements TraceDAO {
             ;
             """;
 
+    // Build value_by_author map with composite keys (author_spanId) for span feedback scores.
+    // The composite key format ensures uniqueness when multiple spans have the same author.
+    // Format: if span_id exists, use 'author_spanId', otherwise use 'author'.
+    // The tuple contains: (value, reason, category_name, source, last_updated_at, span_type, span_id)
     private static final String SELECT_BY_IDS = """
             WITH feedback_scores_combined_raw AS (
                 SELECT workspace_id,

@@ -399,6 +399,14 @@ export const getFeedbackScoreValue = (
   scoreName: string,
 ) => getFeedbackScore(scores, scoreName)?.value;
 
+/**
+ * Checks if a reason string is valid (not empty and not a placeholder).
+ * This is used consistently across the codebase to filter out invalid reasons.
+ */
+export const isValidReason = (reason: string | null | undefined): boolean => {
+  return Boolean(reason && reason.trim() && reason !== "<no reason>");
+};
+
 export const extractReasonsFromValueByAuthor = (
   valueByAuthor?: FeedbackScoreValueByAuthorMap,
 ) => {
@@ -411,12 +419,7 @@ export const extractReasonsFromValueByAuthor = (
       lastUpdatedAt: last_updated_at,
       value,
     }))
-    .filter(
-      (v) =>
-        v.reason.trim() &&
-        v.reason !== "<no reason>" &&
-        v.reason.toLowerCase() !== "<no reason>",
-    );
+    .filter((v) => isValidReason(v.reason));
 };
 
 export const aggregateMultiAuthorFeedbackScore = (

@@ -10,12 +10,15 @@ import { PARENT_ROW_ID_PREFIX } from "./constants";
  * Extracts the author name from a composite key (author_spanId) or returns the key as-is.
  * This is used for span feedback scores where the backend uses composite keys to uniquely identify
  * each span's feedback score even when multiple spans have the same author.
+ *
+ * The format is guaranteed to be `author_spanId`, so we extract the author part by splitting
+ * from the right (using lastIndexOf) to handle author names that may contain underscores.
  */
 export const extractAuthorName = (key: string): string => {
-  // Check if it's a composite key (contains underscore followed by what looks like an ID)
-  // Extract just the author part before the underscore
-  if (key.includes("_")) {
-    return key.split("_")[0];
+  // Extract just the author part before the last underscore
+  const lastUnderscore = key.lastIndexOf("_");
+  if (lastUnderscore !== -1) {
+    return key.substring(0, lastUnderscore);
   }
   return key;
 };

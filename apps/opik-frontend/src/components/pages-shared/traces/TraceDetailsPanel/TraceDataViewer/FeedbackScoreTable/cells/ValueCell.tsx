@@ -167,7 +167,11 @@ const ValueCell: React.FC<ValueCellProps> = (context) => {
           rowData.value ?? value,
         );
       }
-      return `${fallbackValue} (${fallbackNumeric})`;
+      // Only show parenthesized value if fallbackValue and fallbackNumeric differ
+      if (fallbackValue !== fallbackNumeric) {
+        return `${fallbackValue} (${fallbackNumeric})`;
+      }
+      return `${fallbackValue}`;
     }
 
     if (rowData.category_name) {
