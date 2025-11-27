@@ -139,7 +139,7 @@ public class DatasetsResource {
             @QueryParam("with_experiments_only") boolean withExperimentsOnly,
             @QueryParam("with_optimizations_only") boolean withOptimizationsOnly,
             @QueryParam("prompt_id") UUID promptId,
-            @QueryParam("name") String name,
+            @QueryParam("name") @Schema(description = "Filter datasets by name (partial match, case insensitive)") String name,
             @QueryParam("sorting") String sorting,
             @QueryParam("filters") String filters) {
 
