@@ -2673,6 +2673,14 @@ class AlertResourceTest {
         triggerConfigs.add(AlertTriggerConfig.builder()
                 .type(AlertTriggerConfigType.THRESHOLD_FEEDBACK_SCORE)
                 .configValue(Map.of(
+                        NAME_CONFIG_KEY, "non_existent_metric",
+                        THRESHOLD_CONFIG_KEY, threshold,
+                        WINDOW_CONFIG_KEY, window,
+                        OPERATOR_CONFIG_KEY, operator.getValue()))
+                .build());
+        triggerConfigs.add(AlertTriggerConfig.builder()
+                .type(AlertTriggerConfigType.THRESHOLD_FEEDBACK_SCORE)
+                .configValue(Map.of(
                         NAME_CONFIG_KEY, feedbackScoreName,
                         THRESHOLD_CONFIG_KEY, threshold,
                         WINDOW_CONFIG_KEY, window,

@@ -20,5 +20,6 @@ public record MetricsAlertPayload(
         @NonNull String threshold,
         long windowSeconds,
         String projectIds,
-        String projectNames) {
+        String projectNames,
+        String feedbackScoreName) {
 }
