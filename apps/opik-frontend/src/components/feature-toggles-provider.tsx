@@ -22,6 +22,7 @@ const DEFAULT_STATE: FeatureToggles = {
   [FeatureToggleKeys.WELCOME_WIZARD_ENABLED]: false,
   [FeatureToggleKeys.CSV_UPLOAD_ENABLED]: false,
   [FeatureToggleKeys.EXPORT_ENABLED]: true,
+  [FeatureToggleKeys.DASHBOARDS_ENABLED]: false,
 };
 
 const initialState: FeatureTogglesState = {
@@ -41,7 +42,14 @@ export function FeatureTogglesProvider({ children }: FeatureTogglesProps) {
   });
 
   useEffect(() => {
-    if (data) setFeatures(data);
+    if (data) {
+      // TODO lala Remove this override once dashboards feature is ready for production
+      const featuresWithOverrides = {
+        ...data,
+        [FeatureToggleKeys.DASHBOARDS_ENABLED]: true,
+      };
+      setFeatures(featuresWithOverrides);
+    }
   }, [data]);
 
   const value = useMemo(() => {
