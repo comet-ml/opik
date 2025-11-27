@@ -433,6 +433,7 @@ paths:
         in: query
         schema:
           type: string
+          description: "Filter annotation queues by name (partial match, case insensitive)"
       - name: filters
         in: query
         schema:
@@ -966,6 +967,8 @@ paths:
         in: query
         schema:
           type: string
+          description: "Filter automation rule evaluators by name (partial match,\
+            \ case insensitive)"
       - name: filters
         in: query
         schema:
@@ -1327,6 +1330,7 @@ paths:
         in: query
         schema:
           type: string
+          description: "Filter datasets by name (partial match, case insensitive)"
       - name: sorting
         in: query
         schema:
@@ -2031,6 +2035,7 @@ paths:
         in: query
         schema:
           type: string
+          description: "Filter experiments by name (partial match, case insensitive)"
       - name: dataset_deleted
         in: query
         schema:
@@ -2202,6 +2207,7 @@ paths:
         in: query
         schema:
           type: string
+          description: "Filter experiments by name (partial match, case insensitive)"
       - name: filters
         in: query
         schema:
@@ -2239,6 +2245,7 @@ paths:
         in: query
         schema:
           type: string
+          description: "Filter experiments by name (partial match, case insensitive)"
       - name: filters
         in: query
         schema:
@@ -2440,6 +2447,7 @@ paths:
         in: query
         schema:
           type: string
+          description: "Filter feedback definitions by name (partial match, case insensitive)"
       - name: type
         in: query
         schema:
@@ -2814,6 +2822,7 @@ paths:
         in: query
         schema:
           type: string
+          description: "Filter optimizations by name (partial match, case insensitive)"
       - name: dataset_deleted
         in: query
         schema:
@@ -2962,6 +2971,7 @@ paths:
         in: query
         schema:
           type: string
+          description: "Filter projects by name (partial match, case insensitive)"
       - name: sorting
         in: query
         schema:
@@ -3180,6 +3190,7 @@ paths:
         in: query
         schema:
           type: string
+          description: "Filter projects by name (partial match, case insensitive)"
       - name: sorting
         in: query
         schema:
@@ -3254,6 +3265,7 @@ paths:
         in: query
         schema:
           type: string
+          description: "Filter prompts by name (partial match, case insensitive)"
       - name: sorting
         in: query
         schema:
