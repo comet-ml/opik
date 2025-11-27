@@ -1,24 +1,32 @@
 Frontend:
-  - apps/opik-frontend/**/*
+  - changed-files:
+    - any-glob-to-any-file: 'apps/opik-frontend/**/*'
 
 Backend:
-  - apps/opik-backend/**/*
+  - changed-files:
+    - any-glob-to-any-file: 'apps/opik-backend/**/*'
 
 Python SDK:
-  - sdks/python/**/*
+  - changed-files:
+    - any-glob-to-any-file: 'sdks/python/**/*'
 
 TypeScript SDK:
-  - sdks/typescript/**/*
+  - changed-files:
+    - any-glob-to-any-file: 'sdks/typescript/**/*'
 
 Infrastructure:
-  - .github/**/*
-  - deployment/**/*
-  - scripts/**/*
-  - extensions/**/*
-  - "*.sh"
-  - "*.ps1"
+  - changed-files:
+    - any-glob-to-any-file:
+      - '.github/**/*'
+      - 'deployment/**/*'
+      - 'scripts/**/*'
+      - 'extensions/**/*'
+      - '*.sh'
+      - '*.ps1'
 
 documentation:
-  - apps/opik-documentation/**/*
-  - "*.md"
-  - "*.mdx"
+  - changed-files:
+    - any-glob-to-any-file:
+      - 'apps/opik-documentation/**/*'
+      - '**/*.md'
+      - '**/*.mdx'
