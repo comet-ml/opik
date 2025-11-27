@@ -53,15 +53,67 @@ public class CostService {
 
     public static BigDecimal calculateCost(@Nullable String modelName, @Nullable String provider,
             @Nullable Map<String, Integer> usage, @Nullable JsonNode metadata) {
-        ModelPrice modelPrice = Optional.ofNullable(modelName)
-                .flatMap(mn -> Optional.ofNullable(provider).map(p -> createModelProviderKey(mn, p)))
-                .map(modelProviderPrices::get)
-                .orElse(DEFAULT_COST);
+        ModelPrice modelPrice = findModelPrice(modelName, provider);
 
         BigDecimal estimatedCost = modelPrice.calculator().apply(modelPrice,
                 Optional.ofNullable(usage).orElse(Map.of()));
 
         return estimatedCost.compareTo(BigDecimal.ZERO) > 0 ? estimatedCost : getCostFromMetadata(metadata);
+    }
+
+    /**
+     * Finds model pricing information with fallback to normalized model names.
+     * This method provides backwards compatibility by first trying exact match,
+     * then falling back to normalized variations.
+     *
+     * Fixes issue #4114: Handles model name variations like "claude-3.5-sonnet"
+     * by normalizing to "claude-3-5-sonnet" format used in pricing database.
+     *
+     * @param modelName The model name (may contain dots, e.g., "claude-3.5-sonnet")
+     * @param provider The provider name (e.g., "anthropic")
+     * @return ModelPrice for the model, or DEFAULT_COST if not found
+     */
+    private static ModelPrice findModelPrice(@Nullable String modelName, @Nullable String provider) {
+        if (modelName == null || provider == null) {
+            return DEFAULT_COST;
+        }
+
+        // Try exact match first (backwards compatibility)
+        String exactKey = createModelProviderKey(modelName, provider);
+        ModelPrice exactMatch = modelProviderPrices.get(exactKey);
+        if (exactMatch != null) {
+            return exactMatch;
+        }
+
+        // Try normalized model name (replace dots with hyphens)
+        String normalizedModelName = normalizeModelName(modelName);
+        if (!normalizedModelName.equals(modelName)) {
+            String normalizedKey = createModelProviderKey(normalizedModelName, provider);
+            ModelPrice normalizedMatch = modelProviderPrices.get(normalizedKey);
+            if (normalizedMatch != null) {
+                log.debug("Found model price using normalized name. Original: '{}', Normalized: '{}'",
+                        modelName, normalizedModelName);
+                return normalizedMatch;
+            }
+        }
+
+        log.debug("No model price found for model: '{}' with provider: '{}'", modelName, provider);
+        return DEFAULT_COST;
+    }
+
+    /**
+     * Normalizes model names by replacing dots with hyphens.
+     * This handles common naming variations where users specify model names
+     * like "claude-3.5-sonnet" but the pricing database uses "claude-3-5-sonnet".
+     *
+     * @param modelName The original model name
+     * @return Normalized model name with dots replaced by hyphens
+     */
+    private static String normalizeModelName(String modelName) {
+        if (StringUtils.isBlank(modelName)) {
+            return modelName;
+        }
+        return modelName.replace('.', '-');
     }
 
     public static BigDecimal getCostFromMetadata(JsonNode metadata) {

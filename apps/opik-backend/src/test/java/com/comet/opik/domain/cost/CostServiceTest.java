@@ -45,4 +45,84 @@ class CostServiceTest {
 
         assertThat(cost).isEqualByComparingTo("0.42");
     }
+
+    /**
+     * Test for issue #4114: Cost estimate not showing for recent Claude models.
+     *
+     * This test verifies that model names with dots (e.g., "claude-3.5-sonnet")
+     * are correctly normalized to hyphens (e.g., "claude-3-5-sonnet") to match
+     * the pricing database format.
+     *
+     * Backwards compatibility is maintained by trying exact match first.
+     */
+    @Test
+    void calculateCost_shouldNormalizeModelNameWithDots_issue4114() {
+        // Test case 1: claude-3.5-sonnet (with dot) should match claude-3-5-sonnet-* entries
+        Map<String, Integer> usage = Map.of(
+                "original_usage.input_tokens", 1000,
+                "original_usage.output_tokens", 500);
+
+        BigDecimal cost = CostService.calculateCost("claude-3.5-sonnet-20241022", "anthropic", usage, null);
+
+        // Should find pricing data (non-zero cost indicates model was found)
+        assertThat(cost).isGreaterThan(BigDecimal.ZERO);
+    }
+
+    @Test
+    void calculateCost_shouldNormalizeClaudeSonnet45_issue4114() {
+        // Test case 2: claude-sonnet-4.5 (with dot) should match claude-sonnet-4-5 entry
+        Map<String, Integer> usage = Map.of(
+                "original_usage.input_tokens", 1000,
+                "original_usage.output_tokens", 500);
+
+        BigDecimal cost = CostService.calculateCost("claude-sonnet-4.5", "anthropic", usage, null);
+
+        // Should find pricing data (non-zero cost indicates model was found)
+        assertThat(cost).isGreaterThan(BigDecimal.ZERO);
+    }
+
+    @Test
+    void calculateCost_shouldNormalizeClaudeHaiku45_issue4114() {
+        // Test case 3: claude-haiku-4.5 (with dot) should match claude-haiku-4-5 entry
+        Map<String, Integer> usage = Map.of(
+                "original_usage.input_tokens", 1000,
+                "original_usage.output_tokens", 500);
+
+        BigDecimal cost = CostService.calculateCost("claude-haiku-4.5", "anthropic", usage, null);
+
+        // Should find pricing data (non-zero cost indicates model was found)
+        assertThat(cost).isGreaterThan(BigDecimal.ZERO);
+    }
+
+    @Test
+    void calculateCost_shouldMaintainBackwardsCompatibility_issue4114() {
+        // Test case 4: Exact model names (without dots) should still work
+        Map<String, Integer> usage = Map.of(
+                "original_usage.input_tokens", 1000,
+                "original_usage.output_tokens", 500);
+
+        // These exact model names should work as before
+        BigDecimal cost1 = CostService.calculateCost("claude-3-5-sonnet-20241022", "anthropic", usage, null);
+        BigDecimal cost2 = CostService.calculateCost("claude-haiku-4-5", "anthropic", usage, null);
+        BigDecimal cost3 = CostService.calculateCost("claude-sonnet-4-5", "anthropic", usage, null);
+
+        // All should return non-zero costs (backwards compatibility maintained)
+        assertThat(cost1).isGreaterThan(BigDecimal.ZERO);
+        assertThat(cost2).isGreaterThan(BigDecimal.ZERO);
+        assertThat(cost3).isGreaterThan(BigDecimal.ZERO);
+    }
+
+    @Test
+    void calculateCost_shouldHandleMultipleDotsInModelName_issue4114() {
+        // Test case 5: Model names with multiple dots should be normalized
+        Map<String, Integer> usage = Map.of(
+                "original_usage.input_tokens", 1000,
+                "original_usage.output_tokens", 500);
+
+        // This would normalize "claude-3.5.1-sonnet" to "claude-3-5-1-sonnet"
+        BigDecimal cost = CostService.calculateCost("claude-3.5.1", "anthropic", usage, null);
+
+        // Even if not found in pricing database, should not throw exception
+        assertThat(cost).isGreaterThanOrEqualTo(BigDecimal.ZERO);
+    }
 }
