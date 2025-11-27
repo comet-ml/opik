@@ -14,16 +14,18 @@ public final class OpenInferenceMappingRules {
 
     public static final String SOURCE = "OpenInference";
 
+    private static final List<OpenTelemetryMappingRule> RULES = List.of(
+            OpenTelemetryMappingRule.builder()
+                    .rule("llm.invocation_parameters.*").isPrefix(true).source(SOURCE)
+                    .outcome(OpenTelemetryMappingRule.Outcome.INPUT).spanType(SpanType.llm).build(),
+            OpenTelemetryMappingRule.builder()
+                    .rule("llm.model_name").source(SOURCE).outcome(OpenTelemetryMappingRule.Outcome.MODEL)
+                    .spanType(SpanType.llm).build(),
+            OpenTelemetryMappingRule.builder()
+                    .rule("llm.token_count.").isPrefix(true).source(SOURCE)
+                    .outcome(OpenTelemetryMappingRule.Outcome.USAGE).spanType(SpanType.llm).build());
+
     public static List<OpenTelemetryMappingRule> getRules() {
-        return List.of(
-                OpenTelemetryMappingRule.builder()
-                        .rule("llm.invocation_parameters.*").isPrefix(true).source(SOURCE)
-                        .outcome(OpenTelemetryMappingRule.Outcome.INPUT).spanType(SpanType.llm).build(),
-                OpenTelemetryMappingRule.builder()
-                        .rule("llm.model_name").source(SOURCE).outcome(OpenTelemetryMappingRule.Outcome.MODEL)
-                        .spanType(SpanType.llm).build(),
-                OpenTelemetryMappingRule.builder()
-                        .rule("llm.token_count.").isPrefix(true).source(SOURCE)
-                        .outcome(OpenTelemetryMappingRule.Outcome.USAGE).spanType(SpanType.llm).build());
+        return RULES;
     }
 }

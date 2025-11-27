@@ -12,6 +12,7 @@ import lombok.NonNull;
 @Data
 @Builder
 public class OpenTelemetryMappingRule {
+    /** OpenTelemetry attribute key or prefix to match */
     @NonNull String rule;
     /** true if the rule matches by prefix, false for exact match */
     boolean isPrefix;
@@ -27,7 +28,7 @@ public class OpenTelemetryMappingRule {
      */
     public boolean matches(String key) {
         if (isPrefix) {
-            return key.startsWith(rule);
+            return key != null && key.startsWith(rule);
         } else {
             return rule.equals(key);
         }

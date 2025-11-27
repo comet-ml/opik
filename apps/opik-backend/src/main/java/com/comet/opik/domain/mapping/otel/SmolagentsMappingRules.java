@@ -13,10 +13,12 @@ public final class SmolagentsMappingRules {
 
     public static final String SOURCE = "Smolagents";
 
+    private static final List<OpenTelemetryMappingRule> RULES = List.of(
+            OpenTelemetryMappingRule.builder()
+                    .rule("smolagents.").isPrefix(true).source(SOURCE)
+                    .outcome(OpenTelemetryMappingRule.Outcome.METADATA).build());
+
     public static List<OpenTelemetryMappingRule> getRules() {
-        return List.of(
-                OpenTelemetryMappingRule.builder()
-                        .rule("smolagents.").isPrefix(true).source(SOURCE)
-                        .outcome(OpenTelemetryMappingRule.Outcome.METADATA).build());
+        return RULES;
     }
 }

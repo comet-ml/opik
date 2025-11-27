@@ -14,10 +14,12 @@ public class LangFuseMappingRules {
 
     public static final String SOURCE = "LangFuse";
 
+    private static final List<OpenTelemetryMappingRule> RULES = List.of(
+            OpenTelemetryMappingRule.builder()
+                    .rule("langfuse.observation.completion_start_time").source(SOURCE)
+                    .outcome(OpenTelemetryMappingRule.Outcome.METADATA).spanType(SpanType.llm).build());
+
     public static List<OpenTelemetryMappingRule> getRules() {
-        return List.of(
-                OpenTelemetryMappingRule.builder()
-                        .rule("langfuse.observation.completion_start_time").source(SOURCE)
-                        .outcome(OpenTelemetryMappingRule.Outcome.METADATA).spanType(SpanType.llm).build());
+        return RULES;
     }
 }

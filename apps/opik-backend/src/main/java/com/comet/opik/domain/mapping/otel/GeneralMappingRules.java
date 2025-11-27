@@ -13,15 +13,17 @@ public final class GeneralMappingRules {
 
     public static final String SOURCE = "General";
 
+    private static final List<OpenTelemetryMappingRule> RULES = List.of(
+            OpenTelemetryMappingRule.builder()
+                    .rule("input").isPrefix(true).source(SOURCE).outcome(OpenTelemetryMappingRule.Outcome.INPUT)
+                    .build(),
+            OpenTelemetryMappingRule.builder()
+                    .rule("output").isPrefix(true).source(SOURCE).outcome(OpenTelemetryMappingRule.Outcome.OUTPUT)
+                    .build(),
+            OpenTelemetryMappingRule.builder()
+                    .rule("thread_id").source(SOURCE).outcome(OpenTelemetryMappingRule.Outcome.METADATA).build());
+
     public static List<OpenTelemetryMappingRule> getRules() {
-        return List.of(
-                OpenTelemetryMappingRule.builder()
-                        .rule("input").isPrefix(true).source(SOURCE).outcome(OpenTelemetryMappingRule.Outcome.INPUT)
-                        .build(),
-                OpenTelemetryMappingRule.builder()
-                        .rule("output").isPrefix(true).source(SOURCE).outcome(OpenTelemetryMappingRule.Outcome.OUTPUT)
-                        .build(),
-                OpenTelemetryMappingRule.builder()
-                        .rule("thread_id").source(SOURCE).outcome(OpenTelemetryMappingRule.Outcome.METADATA).build());
+        return RULES;
     }
 }

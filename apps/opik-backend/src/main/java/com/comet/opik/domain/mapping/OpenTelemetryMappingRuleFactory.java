@@ -35,6 +35,9 @@ public class OpenTelemetryMappingRuleFactory {
             .flatMap(List::stream)
             .toList();
 
+    private static final Set<String> INTEGRATIONS_TO_IGNORE = Set.of(
+            LogfireMappingRules.SOURCE.toLowerCase());
+
     /**
      * Finds the first matching rule for the given key.
      * Rules are checked in the order they were registered.
@@ -72,7 +75,6 @@ public class OpenTelemetryMappingRuleFactory {
         if (Objects.isNull(name)) {
             return false;
         }
-        Set<String> INTEGRATIONS_TO_IGNORE = Set.of(LogfireMappingRules.SOURCE.toLowerCase());
         return !INTEGRATIONS_TO_IGNORE.contains(name.toLowerCase());
     }
 }
