@@ -24,6 +24,7 @@ import useDatasetsList from "@/api/datasets/useDatasetsList";
 import useExperimentsList from "@/api/datasets/useExperimentsList";
 import useRulesList from "@/api/automations/useRulesList";
 import useOptimizationsList from "@/api/optimizations/useOptimizationsList";
+import useAlertsList from "@/api/alerts/useAlertsList";
 import { OnChangeFn } from "@/types/shared";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
@@ -157,6 +158,7 @@ const MENU_ITEMS: MenuItemGroup[] = [
         type: MENU_ITEM_TYPE.router,
         icon: Bell,
         label: "Alerts",
+        count: "alerts",
         featureFlag: FeatureToggleKeys.TOGGLE_ALERTS_ENABLED,
       },
     ],
@@ -265,6 +267,18 @@ const SideBar: React.FunctionComponent<SideBarProps> = ({
     },
   );
 
+  const { data: alertsData } = useAlertsList(
+    {
+      workspaceName,
+      page: 1,
+      size: 1,
+    },
+    {
+      placeholderData: keepPreviousData,
+      enabled: expanded,
+    },
+  );
+
   const countDataMap: Record<string, number | undefined> = {
     projects: projectData?.total,
     datasets: datasetsData?.total,
@@ -273,6 +287,7 @@ const SideBar: React.FunctionComponent<SideBarProps> = ({
     rules: rulesData?.total,
     optimizations: optimizationsData?.total,
     annotation_queues: annotationQueuesData?.total,
+    alerts: alertsData?.total,
   };
 
   const logo = LogoComponent ? (
