@@ -125,4 +125,22 @@ class CostServiceTest {
         // Even if not found in pricing database, should not throw exception
         assertThat(cost).isGreaterThanOrEqualTo(BigDecimal.ZERO);
     }
+
+    @Test
+    void calculateCost_shouldHandleVersionedClaudeModelsWithDots_issue4114() {
+        // Test case 6: Specific models from user complaint in issue #4114
+        // User reported: "claude-sonnet-4.5" and "claude-haiku-4.5" not showing costs
+        // This also applies to versioned variants like claude-sonnet-4.5-20250929
+        Map<String, Integer> usage = Map.of(
+                "original_usage.input_tokens", 1000,
+                "original_usage.output_tokens", 500);
+
+        // Test versioned model names with dots (as users would specify them)
+        BigDecimal cost1 = CostService.calculateCost("claude-sonnet-4.5-20250929", "anthropic", usage, null);
+        BigDecimal cost2 = CostService.calculateCost("claude-haiku-4.5-20251001", "anthropic", usage, null);
+
+        // Both should resolve to their hyphenated equivalents and return non-zero costs
+        assertThat(cost1).isGreaterThan(BigDecimal.ZERO);
+        assertThat(cost2).isGreaterThan(BigDecimal.ZERO);
+    }
 }
