@@ -299,7 +299,7 @@ services:
   frontend-otel:
     <<: *frontend
     image: ghcr.io/comet-ml/opik/opik-frontend:${OPIK_VERSION:-latest}
-    pull_policy: missing
+    pull_policy: build
     profiles:
       - opik-otel
     build:
