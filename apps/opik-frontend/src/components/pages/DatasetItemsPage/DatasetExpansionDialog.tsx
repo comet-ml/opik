@@ -74,7 +74,7 @@ const DatasetExpansionDialog: React.FunctionComponent<
   });
 
   const providerKeys = useMemo(() => {
-    return providerKeysData?.content?.map((c) => c.provider) || [];
+    return providerKeysData?.content?.map((c) => c.ui_composed_provider) || [];
   }, [providerKeysData]);
 
   const { calculateModelProvider, calculateDefaultModel } =

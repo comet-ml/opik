@@ -7,10 +7,16 @@ from opik import evaluation, exceptions, url_helpers
 from opik.api_objects import opik_client
 from opik.api_objects.dataset import dataset_item
 from opik.api_objects.experiment import experiment
-from opik.evaluation import evaluator as evaluator_module, metrics, samplers
+from opik.evaluation import (
+    evaluator as evaluator_module,
+    metrics,
+    samplers,
+    score_statistics,
+)
 from opik.evaluation.metrics import score_result
 from opik.evaluation.models import models_factory
 from opik.evaluation.evaluator import _build_prompt_evaluation_task
+
 from ...testlib import ANY_BUT_NONE, ANY_STRING, ANY_LIST, SpanModel, assert_equal
 from ...testlib.models import FeedbackScoreModel, TraceModel
 
@@ -1825,3 +1831,267 @@ def test_evaluate__with_experiment_scores_empty_results(fake_backend):
 
     # Verify experiment scores are empty when no test results
     assert len(result.experiment_scores) == 0
+
+
+def test_evaluate_on_dict_items__happyflow(fake_backend):
+    items = [
+        {"input": "What is 2+2?", "expected_output": "4"},
+        {"input": "What is 3+3?", "expected_output": "6"},
+    ]
+
+    def simple_task(item):
+        # Simple echo task for testing
+        if "2+2" in item["input"]:
+            return {"output": "4"}
+        return {"output": "6"}
+
+    result = evaluation.evaluator.evaluate_on_dict_items(
+        items=items,
+        task=simple_task,
+        scoring_metrics=[metrics.Equals()],
+        scoring_key_mapping={"reference": "expected_output"},
+        scoring_threads=1,  # Use single thread for deterministic order
+    )
+
+    assert len(result.test_results) == 2
+
+    # Check first result
+    assert result.test_results[0].test_case.task_output == {"output": "4"}
+    assert result.test_results[0].score_results[0].value == 1.0
+    assert result.test_results[0].score_results[0].name == "equals_metric"
+
+    # Check second result
+    assert result.test_results[1].test_case.task_output == {"output": "6"}
+    assert result.test_results[1].score_results[0].value == 1.0
+    assert result.test_results[1].score_results[0].name == "equals_metric"
+
+    # Test aggregation
+    aggregated = result.aggregate_evaluation_scores()
+    assert aggregated == {
+        "equals_metric": score_statistics.ScoreStatistics(
+            mean=1.0,
+            max=1.0,
+            min=1.0,
+            values=[1.0, 1.0],
+            std=0.0,
+        )
+    }
+
+
+def test_evaluate_on_dict_items__with_scoring_key_mapping(fake_backend):
+    items = [
+        {"user_question": "Hello?", "expected_answer": "Hi"},
+    ]
+
+    def task(item):
+        return {"model_response": "Hi"}
+
+    result = evaluation.evaluate_on_dict_items(
+        items=items,
+        task=task,
+        scoring_metrics=[metrics.Equals()],
+        scoring_key_mapping={
+            "input": "user_question",
+            "output": "model_response",
+            "reference": "expected_answer",
+        },
+        scoring_threads=1,
+    )
+
+    assert len(result.test_results) == 1
+    assert result.test_results[0].score_results[0].value == 1.0
+
+
+def test_evaluate_on_dict_items__multiple_metrics(fake_backend):
+    items = [
+        {"input": "test", "expected_output": "test"},
+    ]
+
+    def task(item):
+        return {"output": "test"}
+
+    class CustomMetric(metrics.base_metric.BaseMetric):
+        def score(self, output: str, **kwargs):
+            return score_result.ScoreResult(
+                name="custom_metric",
+                value=0.5,
+            )
+
+    result = evaluation.evaluator.evaluate_on_dict_items(
+        items=items,
+        task=task,
+        scoring_metrics=[metrics.Equals(), CustomMetric()],
+        scoring_key_mapping={"reference": "expected_output"},
+        scoring_threads=1,
+    )
+
+    assert len(result.test_results) == 1
+    assert len(result.test_results[0].score_results) == 2
+    assert result.test_results[0].score_results[0] == score_result.ScoreResult(
+        name="equals_metric",
+        value=1.0,
+    )
+    assert result.test_results[0].score_results[1] == score_result.ScoreResult(
+        name="custom_metric",
+        value=0.5,
+    )
+
+    # Test aggregation with multiple metrics
+    aggregated = result.aggregate_evaluation_scores()
+    assert aggregated == {
+        "equals_metric": score_statistics.ScoreStatistics(
+            mean=1.0,
+            max=1.0,
+            min=1.0,
+            values=[1.0],
+            std=None,
+        ),
+        "custom_metric": score_statistics.ScoreStatistics(
+            mean=0.5,
+            max=0.5,
+            min=0.5,
+            values=[0.5],
+            std=None,
+        ),
+    }
+
+
+def test_evaluate_on_dict_items__task_execution(fake_backend):
+    items = [{"value": 5, "expected": 10}]
+
+    task_calls = []
+
+    def task(item):
+        task_calls.append(item)
+        return {"result": item["value"] * 2}
+
+    class CustomMetric(metrics.base_metric.BaseMetric):
+        def score(self, output: int, reference: int, **kwargs):
+            return score_result.ScoreResult(
+                name="result_check",
+                value=1.0 if output == reference else 0.0,
+            )
+
+    result = evaluation.evaluator.evaluate_on_dict_items(
+        items=items,
+        task=task,
+        scoring_metrics=[CustomMetric()],
+        scoring_key_mapping={"output": "result", "reference": "expected"},
+        scoring_threads=1,
+    )
+
+    # Verify task was called with correct input
+    assert task_calls == [{"value": 5, "expected": 10, "id": "temp_item_0"}]
+
+    # Verify result
+    assert result.test_results[0].test_case.task_output == {"result": 10}
+    assert result.test_results[0].score_results[0].value == 1.0
+
+
+def test_evaluate_on_dict_items__no_metrics_returns_empty(fake_backend):
+    items = [{"input": "test"}]
+
+    def task(item):
+        return {"output": "test"}
+
+    result = evaluation.evaluate_on_dict_items(
+        items=items,
+        task=task,
+        scoring_metrics=[],
+        scoring_threads=1,
+    )
+
+    assert result.test_results == []
+
+
+def test_evaluate_on_dict_items__empty_items_list(fake_backend):
+    """Test that empty items list returns empty results."""
+    items = []
+
+    def task(item):
+        return {"output": "test"}
+
+    result = evaluation.evaluate_on_dict_items(
+        items=items,
+        task=task,
+        scoring_metrics=[metrics.Equals()],
+        scoring_threads=1,
+    )
+
+    assert result.test_results == []
+
+
+def test_evaluate_on_dict_items__task_raises_exception(fake_backend):
+    """Test that exceptions in task execution are properly propagated."""
+    items = [{"input": "test", "expected": "result"}]
+
+    def failing_task(item):
+        raise ValueError("Task failed")
+
+    with pytest.raises(ValueError, match="Task failed"):
+        evaluation.evaluate_on_dict_items(
+            items=items,
+            task=failing_task,
+            scoring_metrics=[metrics.Equals()],
+            scoring_key_mapping={"reference": "expected"},
+            scoring_threads=1,
+        )
+
+
+def test_evaluate_on_dict_items__with_scoring_functions(fake_backend):
+    """Test evaluate_on_dict_items with scoring functions instead of metrics."""
+    items = [
+        {"input": "What is 2+2?", "expected_output": "4"},
+        {"input": "What is 3+3?", "expected_output": "6"},
+    ]
+
+    def task(item: Dict[str, Any]) -> Dict[str, Any]:
+        if "2+2" in item["input"]:
+            return {"output": "4"}
+        return {"output": "6"}
+
+    def custom_scorer(
+        dataset_item: Dict[str, Any],
+        task_outputs: Dict[str, Any],
+    ) -> score_result.ScoreResult:
+        expected = dataset_item.get("expected_output", "")
+        actual = task_outputs.get("output", "")
+        return score_result.ScoreResult(
+            name="custom_scorer",
+            value=1.0 if expected == actual else 0.0,
+            reason=f"Expected: {expected}, Got: {actual}",
+        )
+
+    result = evaluation.evaluate_on_dict_items(
+        items=items,
+        task=task,
+        scoring_functions=[custom_scorer],
+        scoring_threads=1,
+    )
+
+    # Verify results structure
+    assert len(result.test_results) == 2
+
+    # Verify scoring results
+    assert result.test_results[0].score_results[0] == score_result.ScoreResult(
+        name="custom_scorer",
+        value=1.0,
+        reason="Expected: 4, Got: 4",
+    )
+    assert result.test_results[1].score_results[0] == score_result.ScoreResult(
+        name="custom_scorer",
+        value=1.0,
+        reason="Expected: 6, Got: 6",
+    )
+
+    # Verify aggregation
+    aggregated = result.aggregate_evaluation_scores()
+    assert aggregated == {
+        "custom_scorer": score_statistics.ScoreStatistics(
+            mean=1.0,
+            max=1.0,
+            min=1.0,
+            values=[1.0, 1.0],
+            std=0.0,
+        )
+    }
