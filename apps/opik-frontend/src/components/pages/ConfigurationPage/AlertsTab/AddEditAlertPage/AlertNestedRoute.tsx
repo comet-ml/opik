@@ -6,7 +6,7 @@ const AlertNestedRoute: React.FunctionComponent = () => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const matchRoute = useMatchRoute();
   const isAlertsRootRoute = matchRoute({
-    to: "/$workspaceName/configuration/alerts",
+    to: "/$workspaceName/alerts",
   });
 
   if (isAlertsRootRoute) {

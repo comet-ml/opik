@@ -157,7 +157,7 @@ export const DEFAULT_SELECTED_COLUMNS: string[] = [
   "status",
 ];
 
-const AlertsTab: React.FunctionComponent = () => {
+const AlertsPage: React.FunctionComponent = () => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const navigate = useNavigate();
 
@@ -294,6 +294,7 @@ const AlertsTab: React.FunctionComponent = () => {
     navigate({
       to: "/$workspaceName/alerts/new",
       params: { workspaceName },
+      search: (prev) => prev,
     });
   }, [navigate, workspaceName]);
 
@@ -302,71 +303,75 @@ const AlertsTab: React.FunctionComponent = () => {
   }
 
   return (
-    <div>
-      <div className="mb-4 flex items-center justify-between gap-8">
-        <div className="flex items-center gap-2">
-          <SearchInput
-            searchText={search!}
-            setSearchText={setSearch}
-            placeholder="Search by name"
-            className="w-[320px]"
-            dimension="sm"
-          ></SearchInput>
-          <FiltersButton
-            columns={FILTERS_COLUMNS}
-            filters={filters}
-            onChange={setFilters}
-            config={filtersConfig}
-          />
-        </div>
+    <div className="pt-6">
+      <h1 className="comet-title-l">Alerts</h1>
 
-        <div className="flex items-center gap-2">
-          <AlertsActionsPanel alerts={selectedRows} />
-          <Separator orientation="vertical" className="mx-2 h-4" />
-          <ColumnsButton
-            columns={DEFAULT_COLUMNS}
-            selectedColumns={selectedColumns}
-            onSelectionChange={setSelectedColumns}
-            order={columnsOrder}
-            onOrderChange={setColumnsOrder}
-          ></ColumnsButton>
-          <Button variant="default" size="sm" onClick={handleNewAlertClick}>
-            Create new alert
-          </Button>
+      <div className="mt-6">
+        <div className="mb-4 flex items-center justify-between gap-8">
+          <div className="flex items-center gap-2">
+            <SearchInput
+              searchText={search!}
+              setSearchText={setSearch}
+              placeholder="Search by name"
+              className="w-[320px]"
+              dimension="sm"
+            ></SearchInput>
+            <FiltersButton
+              columns={FILTERS_COLUMNS}
+              filters={filters}
+              onChange={setFilters}
+              config={filtersConfig}
+            />
+          </div>
+
+          <div className="flex items-center gap-2">
+            <AlertsActionsPanel alerts={selectedRows} />
+            <Separator orientation="vertical" className="mx-2 h-4" />
+            <ColumnsButton
+              columns={DEFAULT_COLUMNS}
+              selectedColumns={selectedColumns}
+              onSelectionChange={setSelectedColumns}
+              order={columnsOrder}
+              onOrderChange={setColumnsOrder}
+            ></ColumnsButton>
+            <Button variant="default" size="sm" onClick={handleNewAlertClick}>
+              Create new alert
+            </Button>
+          </div>
         </div>
-      </div>
-      <DataTable
-        columns={columns}
-        data={alerts}
-        resizeConfig={resizeConfig}
-        sortConfig={sortConfig}
-        selectionConfig={{
-          rowSelection,
-          setRowSelection,
-        }}
-        getRowId={getRowId}
-        columnPinning={DEFAULT_COLUMN_PINNING}
-        noData={
-          <DataTableNoData title={noDataText}>
-            {noData && (
-              <Button variant="link" onClick={handleNewAlertClick}>
-                Create new alert
-              </Button>
-            )}
-          </DataTableNoData>
-        }
-      />
-      <div className="py-4">
-        <DataTablePagination
-          page={page}
-          pageChange={setPage}
-          size={size}
-          sizeChange={setSize}
-          total={total}
-        ></DataTablePagination>
+        <DataTable
+          columns={columns}
+          data={alerts}
+          resizeConfig={resizeConfig}
+          sortConfig={sortConfig}
+          selectionConfig={{
+            rowSelection,
+            setRowSelection,
+          }}
+          getRowId={getRowId}
+          columnPinning={DEFAULT_COLUMN_PINNING}
+          noData={
+            <DataTableNoData title={noDataText}>
+              {noData && (
+                <Button variant="link" onClick={handleNewAlertClick}>
+                  Create new alert
+                </Button>
+              )}
+            </DataTableNoData>
+          }
+        />
+        <div className="py-4">
+          <DataTablePagination
+            page={page}
+            pageChange={setPage}
+            size={size}
+            sizeChange={setSize}
+            total={total}
+          ></DataTablePagination>
+        </div>
       </div>
     </div>
   );
 };
 
-export default AlertsTab;
+export default AlertsPage;
