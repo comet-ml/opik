@@ -83,9 +83,9 @@ const EventsList: React.FC<EventsListProps> = ({ data, isLoading, search }) => {
   }
 
   return (
-    <AccordionItem value="events" className="group" disabled={isLoading}>
+    <AccordionItem value="events" disabled={isLoading}>
       <AccordionTrigger>Events</AccordionTrigger>
-      <AccordionContent forceMount className="group-data-[state=closed]:hidden">
+      <AccordionContent>
         {isLoading ? (
           <Loader />
         ) : (
