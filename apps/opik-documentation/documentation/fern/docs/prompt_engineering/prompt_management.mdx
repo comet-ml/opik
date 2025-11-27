@@ -230,6 +230,14 @@ You can view the prompts associated with a trace or span in the Opik UI:
 
 Further details on using prompts from the Prompt library are provided in the following sections.
 
+
+## Using prompts in supported integrations
+
+Prompts can be used in all supported third-party integrations by attaching them to traces and spans through the [`opik_context` module](/docs/opik/prompt_engineering/prompt_management#adding-prompts-to-traces-and-spans).
+
+For instance, you can use prompts with the `Google ADK` integration, as shown in the [example here](/docs/opik/integrations/adk#prompts-integration).
+
+
 ### Downloading your prompts
 
 Once a prompt is created in the library, you can download it in code using the [`Opik.get_prompt`](https://www.comet.com/docs/opik/python-sdk-reference/Opik.html#opik.Opik.get_prompt) method:
@@ -438,9 +446,3 @@ experiment_v2 = evaluate(
 ```
 
 This workflow allows you to systematically test and compare different prompt versions to identify the most effective one for your use case.
-
-## Using prompts in supported integrations
-
-Prompts can be used in all supported third-party integrations by attaching them to traces and spans through the [`opik_context` module](/docs/opik/prompt_engineering/prompt_management#adding-prompts-to-traces-and-spans).
-
-For instance, you can use prompts with the `Google ADK` integration, as shown in the [example here](/docs/opik/integrations/adk#prompts-integration).
