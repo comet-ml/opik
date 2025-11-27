@@ -122,6 +122,52 @@ export const SUPPORTED_IMAGE_FORMATS = IMAGE_URL_EXTENSIONS.map(
   (ext) => `.${ext}`,
 ).join(",");
 
+/**
+ * Extract the file extension from a URL
+ * @param url - The URL to extract extension from
+ * @returns The lowercase extension without the dot, or null if no extension found
+ */
+export const getUrlExtension = (url: string): string | null => {
+  try {
+    // Remove query params and hash fragments
+    const cleanUrl = url.split(/[?#]/)[0];
+    const lastDot = cleanUrl.lastIndexOf(".");
+    const lastSlash = cleanUrl.lastIndexOf("/");
+
+    // Extension must come after the last slash
+    if (lastDot === -1 || lastDot < lastSlash) {
+      return null;
+    }
+
+    const extension = cleanUrl.slice(lastDot + 1).toLowerCase();
+    return extension || null;
+  } catch {
+    return null;
+  }
+};
+
+/**
+ * Check if a URL has an image file extension
+ * @param url - The URL to check
+ * @returns True if the URL has a recognized image extension
+ */
+export const hasImageExtension = (url: string): boolean => {
+  const ext = getUrlExtension(url);
+  if (!ext) return false;
+  return (IMAGE_URL_EXTENSIONS as readonly string[]).includes(ext);
+};
+
+/**
+ * Check if a URL has a video file extension
+ * @param url - The URL to check
+ * @returns True if the URL has a recognized video extension
+ */
+export const hasVideoExtension = (url: string): boolean => {
+  const ext = getUrlExtension(url);
+  if (!ext) return false;
+  return (VIDEO_URL_EXTENSIONS as readonly string[]).includes(ext);
+};
+
 const IMAGE_CHARS_REGEX = "[A-Za-z0-9+/]+={0,2}";
 export const DATA_IMAGE_REGEX = new RegExp(
   `data:image/[^;]{3,4};base64,${IMAGE_CHARS_REGEX}`,
@@ -325,6 +371,9 @@ const extractOpenAIURLImages = (input: object, images: ParsedImageData[]) => {
 
           const url = content.image_url!.url;
           if (!isImageBase64String(url)) {
+            // Skip if URL has a video extension
+            if (hasVideoExtension(url)) return;
+
             images.push({
               url,
               name: extractFilename(url),
@@ -353,6 +402,10 @@ const extractOpenAIVideos = (input: object, videos: ParsedVideoData[]) => {
 
       const pushVideo = (source: string | undefined, mimeType?: string) => {
         if (!source) return;
+
+        // Skip if URL has an image extension (only check http URLs)
+        if (source.startsWith("http") && hasImageExtension(source)) return;
+
         const url = source;
         const name = url.startsWith("data:")
           ? "Base64 Video"
