@@ -78,6 +78,7 @@ public interface DatasetItemService {
 class DatasetItemServiceImpl implements DatasetItemService {
 
     private final @NonNull DatasetItemDAO dao;
+    private final @NonNull DatasetItemVersionDAO versionDao;
     private final @NonNull DatasetService datasetService;
     private final @NonNull Provider<DatasetVersionService> versionServiceProvider;
     private final @NonNull TraceService traceService;
@@ -391,7 +392,7 @@ class DatasetItemServiceImpl implements DatasetItemService {
             log.info("Resolved version '{}' to version ID '{}' for dataset '{}'",
                     versionHashOrTag, versionId, datasetItemSearchCriteria.datasetId());
 
-            return dao.getItems(datasetItemSearchCriteria, page, size, versionId)
+            return versionDao.getItems(datasetItemSearchCriteria, page, size, versionId)
                     .defaultIfEmpty(DatasetItemPage.empty(page, sortingFactory.getSortableFields()));
         } else {
             // Fetch draft (current) items from dataset_items table

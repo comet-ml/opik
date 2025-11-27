@@ -75,10 +75,6 @@ public interface DatasetItemDAO {
     Mono<Void> bulkUpdate(Set<UUID> ids, List<DatasetItemFilter> filters, DatasetItemUpdate update,
             boolean mergeTags);
 
-    Mono<Long> saveVersionSnapshot(UUID versionId, UUID datasetId, List<DatasetItem> items);
-
-    Flux<DatasetItemIdAndHash> getVersionItemIdsAndHashes(UUID datasetId, UUID versionId);
-
     Flux<DatasetItemIdAndHash> getDraftItemIdsAndHashes(UUID datasetId);
 }
 
@@ -885,13 +881,12 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
             LIMIT 1 BY s.id;
             """;
 
-    private static final String SELECT_ITEM_IDS_AND_HASHES = """
+    private static final String SELECT_DRAFT_ITEM_IDS_AND_HASHES = """
             SELECT
-                <if(version)>draft_item_id<else>id<endif> as id,
+                id,
                 data_hash
-            FROM <if(version)>dataset_item_versions<else>dataset_items<endif> FINAL
+            FROM dataset_items FINAL
             WHERE dataset_id = :datasetId
-            <if(version)>AND version_id = :versionId<endif>
             AND workspace_id = :workspace_id
             LIMIT 1 BY id
             """;
@@ -1683,67 +1678,14 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
 
     @Override
     @WithSpan
-    public Mono<Long> saveVersionSnapshot(@NonNull UUID versionId, @NonNull UUID datasetId,
-            @NonNull List<DatasetItem> items) {
-
-        if (items.isEmpty()) {
-            return Mono.just(0L);
-        }
-
-        log.info("Saving version snapshot for version: '{}', dataset: '{}', items count: '{}'",
-                versionId, datasetId, items.size());
-
-        // Generate new UUIDs for versioned items (immutable snapshots get fresh IDs)
-        // Store original item ID in draftItemId field
-        List<DatasetItem> versionedItems = items.stream()
-                .map(item -> item.toBuilder()
-                        .draftItemId(item.id()) // Preserve original draft item ID
-                        .id(idGenerator.generateId()) // Generate new ID for version
-                        .build())
-                .toList();
-
-        return asyncTemplate.nonTransaction(connection -> mapAndInsert(datasetId, versionId, versionedItems, connection)
-                .doOnSuccess(count -> log.info("Saved '{}' items to version snapshot for version: '{}'",
-                        count, versionId)));
-    }
-
-    @Override
-    @WithSpan
-    public Flux<DatasetItemIdAndHash> getVersionItemIdsAndHashes(@NonNull UUID datasetId, @NonNull UUID versionId) {
-
-        log.info("Fetching item IDs and hashes for version='{}', dataset='{}'", versionId, datasetId);
-
-        var template = TemplateUtils.newST(SELECT_ITEM_IDS_AND_HASHES)
-                .add("version", true);
-
-        Segment segment = startSegment(DATASET_ITEMS, CLICKHOUSE, "get_version_item_ids_and_hashes");
-
-        return asyncTemplate.stream(connection -> {
-            var statement = connection.createStatement(template.render())
-                    .bind("datasetId", datasetId.toString())
-                    .bind("versionId", versionId.toString());
-
-            return makeFluxContextAware(bindWorkspaceIdToFlux(statement))
-                    .flatMap(result -> result.map((row, metadata) -> DatasetItemIdAndHash.builder()
-                            .itemId(UUID.fromString(row.get("id", String.class)))
-                            .dataHash(row.get("data_hash", Long.class))
-                            .build()));
-        }).doFinally(signalType -> endSegment(segment));
-    }
-
-    @Override
-    @WithSpan
     public Flux<DatasetItemIdAndHash> getDraftItemIdsAndHashes(@NonNull UUID datasetId) {
 
         log.info("Fetching draft item IDs and hashes for dataset='{}'", datasetId);
 
-        var template = TemplateUtils.newST(SELECT_ITEM_IDS_AND_HASHES)
-                .add("version", false);
-
         Segment segment = startSegment(DATASET_ITEMS, CLICKHOUSE, "get_draft_item_ids_and_hashes");
 
         return asyncTemplate.stream(connection -> {
-            var statement = connection.createStatement(template.render())
+            var statement = connection.createStatement(SELECT_DRAFT_ITEM_IDS_AND_HASHES)
                     .bind("datasetId", datasetId.toString());
 
             return makeFluxContextAware(bindWorkspaceIdToFlux(statement))

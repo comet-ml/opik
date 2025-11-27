@@ -20,8 +20,6 @@ import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
-import reactor.core.publisher.Flux;
-import reactor.core.publisher.Mono;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
 import java.util.List;
@@ -151,6 +149,7 @@ class DatasetVersionServiceImpl implements DatasetVersionService {
     private final @NonNull TransactionTemplate template;
     private final @NonNull Provider<RequestContext> requestContext;
     private final @NonNull DatasetItemDAO datasetItemDAO;
+    private final @NonNull DatasetItemVersionDAO datasetItemVersionDAO;
 
     @Override
     public DatasetVersion commitVersion(@NonNull UUID datasetId, @NonNull DatasetVersionCreate request) {
@@ -164,8 +163,12 @@ class DatasetVersionServiceImpl implements DatasetVersionService {
         String versionHash = CommitUtils.getCommit(versionId);
         log.info("Generated version hash '{}' for dataset '{}'", versionHash, datasetId);
 
-        // Stream and save dataset items in batches to avoid memory issues
-        Long itemCount = saveVersionSnapshotStreaming(versionId, datasetId, workspaceId, userName);
+        // Create snapshot in ClickHouse (single query, no streaming needed)
+        Long itemCount = datasetItemVersionDAO.makeSnapshot(datasetId, versionId)
+                .contextWrite(ctx -> ctx
+                        .put(RequestContext.USER_NAME, userName)
+                        .put(RequestContext.WORKSPACE_ID, workspaceId))
+                .block();
         log.info("Saved version snapshot with '{}' items for version '{}'", itemCount, versionId);
 
         return template.inTransaction(WRITE, handle -> {
@@ -178,14 +181,14 @@ class DatasetVersionServiceImpl implements DatasetVersionService {
             // This only loads IDs and hashes, not full item data
             DatasetVersionDiffStats diffStats;
             if (previousVersion.isPresent()) {
-                var previousItems = datasetItemDAO.getVersionItemIdsAndHashes(datasetId, previousVersion.get().id())
+                var previousItems = datasetItemVersionDAO.getItemIdsAndHashes(datasetId, previousVersion.get().id())
                         .contextWrite(ctx -> ctx
                                 .put(RequestContext.USER_NAME, userName)
                                 .put(RequestContext.WORKSPACE_ID, workspaceId))
                         .collectList()
                         .block();
 
-                var currentVersionItems = datasetItemDAO.getVersionItemIdsAndHashes(datasetId, versionId)
+                var currentVersionItems = datasetItemVersionDAO.getItemIdsAndHashes(datasetId, versionId)
                         .contextWrite(ctx -> ctx
                                 .put(RequestContext.USER_NAME, userName)
                                 .put(RequestContext.WORKSPACE_ID, workspaceId))
@@ -237,76 +240,6 @@ class DatasetVersionServiceImpl implements DatasetVersionService {
 
             return datasetVersionDAO.findById(versionId, workspaceId).orElseThrow();
         });
-    }
-
-    /**
-     * Streams dataset items in batches and saves them as a version snapshot.
-     * This avoids loading all items into memory at once for large datasets.
-     *
-     * @param versionId the version ID to save items under
-     * @param datasetId the dataset ID to stream items from
-     * @param workspaceId the workspace ID for context
-     * @param userName the user name for context
-     * @return the total number of items saved
-     */
-    private Long saveVersionSnapshotStreaming(UUID versionId, UUID datasetId, String workspaceId, String userName) {
-        final int batchSize = 1000; // Process items in batches of 1000
-
-        log.info("Saving version snapshot using streaming for version: '{}', dataset: '{}'", versionId, datasetId);
-
-        // Use Flux.expand to reactively fetch and process batches without blocking in a loop
-        return Flux.defer(() -> fetchAndSaveBatch(versionId, datasetId, workspaceId, userName, batchSize, null))
-                .expand(state -> {
-                    if (state.lastRetrievedId() == null) {
-                        // No more items to process
-                        return Mono.empty();
-                    }
-                    // Fetch and process next batch
-                    return fetchAndSaveBatch(versionId, datasetId, workspaceId, userName, batchSize,
-                            state.lastRetrievedId());
-                })
-                .reduce(0L, (total, state) -> total + state.itemsProcessed())
-                .doOnSuccess(total -> log.info("Finished processing all items. Total processed: '{}'", total))
-                .contextWrite(ctx -> ctx
-                        .put(RequestContext.USER_NAME, userName)
-                        .put(RequestContext.WORKSPACE_ID, workspaceId))
-                .block(); // Single block at the end, not in a loop
-    }
-
-    /**
-     * Fetches a batch of items, saves them as a version snapshot, and returns the batch state.
-     *
-     * @param versionId the version ID to save items under
-     * @param datasetId the dataset ID to stream items from
-     * @param workspaceId the workspace ID for context
-     * @param userName the user name for context
-     * @param batchSize the number of items to fetch per batch
-     * @param lastRetrievedId the ID of the last retrieved item for pagination (null for first batch)
-     * @return Mono containing the batch state (items processed and last ID), or empty if no more items
-     */
-    private Mono<BatchState> fetchAndSaveBatch(UUID versionId, UUID datasetId, String workspaceId, String userName,
-            int batchSize, UUID lastRetrievedId) {
-
-        return datasetItemDAO.getItems(datasetId, batchSize, lastRetrievedId)
-                .collectList()
-                .flatMap(items -> {
-                    if (items.isEmpty()) {
-                        // No more items to process
-                        return Mono.empty();
-                    }
-
-                    log.debug("Processing batch of '{}' items for version: '{}'", items.size(), versionId);
-
-                    // Save this batch (DAO will handle ID generation and draftItemId setting)
-                    return datasetItemDAO.saveVersionSnapshot(versionId, datasetId, items)
-                            .map(count -> {
-                                UUID lastId = items.get(items.size() - 1).id();
-                                return new BatchState(lastId, items.size());
-                            });
-                })
-                .contextWrite(ctx -> ctx
-                        .put(RequestContext.USER_NAME, userName)
-                        .put(RequestContext.WORKSPACE_ID, workspaceId));
     }
 
     @Override
@@ -452,7 +385,7 @@ class DatasetVersionServiceImpl implements DatasetVersionService {
         String toVersionLabel;
 
         // Fetch 'from' version items
-        var fromItems = datasetItemDAO.getVersionItemIdsAndHashes(datasetId, fromVersionId)
+        var fromItems = datasetItemVersionDAO.getItemIdsAndHashes(datasetId, fromVersionId)
                 .contextWrite(ctx -> ctx
                         .put(RequestContext.USER_NAME, userName)
                         .put(RequestContext.WORKSPACE_ID, workspaceId))
@@ -476,7 +409,7 @@ class DatasetVersionServiceImpl implements DatasetVersionService {
             // Compare two versions
             UUID toVersionId = resolveVersionId(datasetId, toHashOrTag);
 
-            var toItems = datasetItemDAO.getVersionItemIdsAndHashes(datasetId, toVersionId)
+            var toItems = datasetItemVersionDAO.getItemIdsAndHashes(datasetId, toVersionId)
                     .contextWrite(ctx -> ctx
                             .put(RequestContext.USER_NAME, userName)
                             .put(RequestContext.WORKSPACE_ID, workspaceId))
@@ -547,14 +480,5 @@ class DatasetVersionServiceImpl implements DatasetVersionService {
                 added, modified, deleted, unchanged);
 
         return new DatasetVersionDiffStats(added, modified, deleted, unchanged);
-    }
-
-    /**
-     * Internal record to track batch processing state for reactive streaming.
-     *
-     * @param lastRetrievedId the ID of the last retrieved item for pagination (null if no more items)
-     * @param itemsProcessed the number of items processed in this batch
-     */
-    private record BatchState(UUID lastRetrievedId, long itemsProcessed) {
     }
 }
