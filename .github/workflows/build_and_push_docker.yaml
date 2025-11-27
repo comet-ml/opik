@@ -145,7 +145,7 @@ jobs:
           build-args: |
             OPIK_VERSION=${{ inputs.version }}
             ${{ matrix.image_type == 'comet' && (
-              format('{0} SENTRY_ENABLED=true SENTRY_DSN={1}', inputs.comet_build_args, secrets.OPIK_FE_SENTRY_DSN)
+             '${{ inputs.comet_build_args }} SENTRY_ENABLED=true SENTRY_DSN=${{ secrets.OPIK_FE_SENTRY_DSN }}'
             ) || '' }}
           secrets: |
             ${{ matrix.image_type == 'comet' && secrets.OPIK_FE_SENTRY_DSN != '' && format('OPIK_FE_SENTRY_DSN={0}', secrets.OPIK_FE_SENTRY_DSN) || '' }}
