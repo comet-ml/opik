@@ -27,6 +27,19 @@ serviceAccount:
 demoDataJob:
   enabled: true
 
+# chartMigration:
+#   # Enable this for the first upgrade that includes a migration from Bitnami charts and images
+#   # After successful migration, set this back to false
+#   enabled: false
+#   image: "bitnamilegacy/kubectl:1.29.11"
+#   # Service account name (must have permissions to delete StatefulSets and Deployments)
+#   serviceAccountName: ""
+#   # Node selector for the migration job pod (falls back to global nodeSelector if not specified)
+#   nodeSelector: {}
+#   # Tolerations for the migration job pod (falls back to global tolerations if not specified)
+#   tolerations: []
+
+
 nodeSelector: {}
 tolerations: []
 affinity: {}
@@ -354,8 +367,6 @@ component:
 
 mysql:
   enabled: true
-  image:
-    repository: bitnamilegacy/mysql
   fullnameOverride: opik-mysql
   auth:
     rootPassword: "opik"
@@ -365,83 +376,64 @@ mysql:
       CREATE USER IF NOT EXISTS 'opik'@'%' IDENTIFIED BY 'opik';
       GRANT ALL ON `opik`.* TO 'opik'@'%';
       FLUSH PRIVILEGES;
+  primary:
+    # Use Bitnami MySQL data directory path for compatibility
+    dataDir: /bitnami/mysql/data
+    persistence:
+      enabled: true
+      size: 20Gi
 
 minio:
   enabled: true
   image:
-    repository: bitnamilegacy/minio
-  volumePermissions:
-    image:
-      repository: bitnamilegacy/os-shell
-  mode: standalone
-  disableWebUI: true
+    registry: docker.io
+    repository: minio/minio
+    tag: "RELEASE.2025-03-12T18-04-18Z"
+    imagePullPolicy: IfNotPresent
+  replicaCount: 1
+  config:
+    browserEnabled: false
   persistence:
     enabled: true
     size: 50Gi
   auth:
     rootUser: "THAAIOSFODNN7EXAMPLE"
     rootPassword: "LESlrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
-  provisioning:
-    enabled: true
-    extraCommands:
-      - mc alias set s3 http://opik-minio:9000 THAAIOSFODNN7EXAMPLE LESlrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY --api S3v4
-      - mc mb --ignore-existing s3/public
-      - mc anonymous set download s3/public/
+  defaultBuckets: "public:download"
   fullnameOverride: opik-minio
 
 
 redis:
   enabled: true
-  ssl: false
-  fullnameOverride: opik-redis
+  # Use bitnami redis fullnameOverride for compatibility
+  fullnameOverride: opik-redis-master
   architecture: standalone
   metrics:
     enabled: false
   auth:
+    enabled: true
     password: "wFSuJX9nDBdCa25sKZG7bh"
   image:
+    registry: docker.io
     repository: redis/redis-stack-server
-    tag: 7.2.0-v10
-  master:
-    resources:
-      requests:
-        cpu: 15m
-        memory: 105M
-      limits:
-        # cpu: 15m
-        memory: 1Gi
-    args:
-      - -c
-      - /opt/bitnami/scripts/merged-start-scripts/start-master.sh
-    configuration: maxmemory 105M
-    extraVolumes:
-      - name: merged-start-scripts
-        configMap:
-          name: bitnami-redis-stack-server-merged
-          defaultMode: 493
-    extraVolumeMounts:
-      - name: merged-start-scripts
-        mountPath: /opt/bitnami/scripts/merged-start-scripts
-  extraDeploy:
-    - apiVersion: v1
-      kind: ConfigMap
-      metadata:
-        name: bitnami-redis-stack-server-merged
-      data:
-        start-master.sh: "#!/usr/bin/dumb-init /bin/bash\n### docker entrypoint script,\
-          \ for starting redis stack\nBASEDIR=/opt/redis-stack\ncd ${BASEDIR}\nCMD=${BASEDIR}/bin/redis-server\n\
-          if [ -z \"${REDISEARCH_ARGS}\" ]; then\nREDISEARCH_ARGS=\"MAXSEARCHRESULTS\
-          \ 10000 MAXAGGREGATERESULTS 10000\"\nfi\n[[ -f $REDIS_PASSWORD_FILE ]] &&\
-          \ export REDIS_PASSWORD=\"$(< \"${REDIS_PASSWORD_FILE}\")\"\nif [[ -f /opt/bitnami/redis/mounted-etc/master.conf\
-          \ ]];then\n    cp /opt/bitnami/redis/mounted-etc/master.conf /opt/bitnami/redis/etc/master.conf\n\
-          fi\nif [[ -f /opt/bitnami/redis/mounted-etc/redis.conf ]];then\n    cp /opt/bitnami/redis/mounted-etc/redis.conf\
-          \ /opt/bitnami/redis/etc/redis.conf\nfi\n${CMD} \\\n--port \"${REDIS_PORT}\"\
-          \ \\\n--requirepass \"${REDIS_PASSWORD}\" \\\n--masterauth \"${REDIS_PASSWORD}\"\
-          \ \\\n--include \"/opt/bitnami/redis/etc/redis.conf\" \\\n--include \"/opt/bitnami/redis/etc/master.conf\"\
-          \ \\\n--loadmodule ${BASEDIR}/lib/redisearch.so ${REDISEARCH_ARGS} \\\n\
-          --loadmodule ${BASEDIR}/lib/redistimeseries.so ${REDISTIMESERIES_ARGS} \\\
-          \n--loadmodule ${BASEDIR}/lib/rejson.so ${REDISJSON_ARGS} \\\n--loadmodule\
-          \ ${BASEDIR}/lib/redisbloom.so ${REDISBLOOM_ARGS}\n"
+    tag: "7.2.0-v10"
+    pullPolicy: IfNotPresent
+  resources:
+    requests:
+      cpu: 15m
+      memory: 105M
+    limits:
+      memory: 1Gi
+  config:
+    content: |
+      # Redis Stack configuration
+      dir /data
+      maxmemory 105M
+      maxmemory-policy allkeys-lru
+      # Redis Stack modules are automatically loaded by the redis-stack-server image
+  persistence:
+    enabled: true
+    size: 8Gi
 
 altinity-clickhouse-operator:
   metrics:
@@ -646,27 +638,26 @@ clickhouse:
       honorLabels: false
 
 zookeeper:
+  enabled: true
+  fullnameOverride: opik-zookeeper
+  image:
+    registry: docker.io
+    repository: zookeeper
+    tag: "3.9.4"
+    imagePullPolicy: IfNotPresent
+  replicaCount: 1
+  podDisruptionBudget:
     enabled: true
-    fullnameOverride: opik-zookeeper
-    image:
-      repository: bitnamilegacy/zookeeper
-      tag: 3.9.3-debian-12-r16
-    replicaCount: 1
-    # podAntiAffinityPreset: hard
-    podDisruptionBudget:
-      enabled: true
-    persistence:
-      enabled: true
-      ## The amount of PV storage allocated to each Zookeeper pod in the statefulset
-      size: "50Gi"
-    ## Environmental variables to set in Zookeeper
-    ##
-    env:
-      ## The JVM heap size to allocate to Zookeeper
-      ZK_HEAP_SIZE: "512M"
-    ## Configure Zookeeper headless
-    headless:
-      publishNotReadyAddresses: true
+  persistence:
+    # Use bitnami zookeeper data directory path for compatibility
+    mountPath: /bitnami/zookeeper/data
+    enabled: true
+    size: "50Gi"
+  headless:
+    publishNotReadyAddresses: true
+  extraEnvVars:
+    - name: ZK_HEAP_SIZE
+      value: "512M"
 
     # resources:
     #   requests:
