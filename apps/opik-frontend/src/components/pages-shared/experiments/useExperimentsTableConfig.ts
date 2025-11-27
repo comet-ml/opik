@@ -118,45 +118,50 @@ export const useExperimentsTableConfig = <
   }, []);
 
   const scoresColumnsData = useMemo(() => {
+    const getScoreByName = (
+      scores: AggregatedFeedbackScore[] | undefined,
+      scoreName: string,
+    ) => scores?.find((f) => f.name === scoreName);
+
     return [
       ...dynamicScoresColumns.map(
-        ({ label, id, columnType, type: scoreType }) =>
-          ({
+        ({ label, id, columnType, type: scoreType }) => {
+          const actualType = scoreType || "feedback_scores";
+          const isExperimentScore = actualType === "experiment_scores";
+
+          return {
             id,
-            label: scoreType === "experiment_scores" ? label : `${label} (avg)`,
+            label: isExperimentScore ? label : `${label} (avg)`,
             type: columnType,
             header: FeedbackScoreHeader as never,
             cell: FeedbackScoreCell as never,
             aggregatedCell: FeedbackScoreCell.Aggregation as never,
             accessorFn: (row: T) => {
-              const actualType = scoreType || "feedback_scores";
-              if (actualType === "experiment_scores") {
-                return (
-                  row as T & { experiment_scores?: AggregatedFeedbackScore[] }
-                ).experiment_scores?.find((f) => f.name === label);
-              }
-              return (
-                row as T & { feedback_scores?: AggregatedFeedbackScore[] }
-              ).feedback_scores?.find((f) => f.name === label);
+              const scores = isExperimentScore
+                ? (row as T & { experiment_scores?: AggregatedFeedbackScore[] })
+                    .experiment_scores
+                : (row as T & { feedback_scores?: AggregatedFeedbackScore[] })
+                    .feedback_scores;
+              return getScoreByName(scores, label);
             },
             customMeta: {
               accessorFn: (aggregation: ExperimentsAggregations) => {
-                const actualType = scoreType || "feedback_scores";
-                if (actualType === "experiment_scores") {
-                  return (
-                    aggregation as ExperimentsAggregations & {
-                      experiment_scores?: AggregatedFeedbackScore[];
-                    }
-                  ).experiment_scores?.find((f) => f.name === label)?.value;
-                }
-                return (
-                  aggregation as ExperimentsAggregations & {
-                    feedback_scores?: AggregatedFeedbackScore[];
-                  }
-                ).feedback_scores?.find((f) => f.name === label)?.value;
+                const scores = isExperimentScore
+                  ? (
+                      aggregation as ExperimentsAggregations & {
+                        experiment_scores?: AggregatedFeedbackScore[];
+                      }
+                    ).experiment_scores
+                  : (
+                      aggregation as ExperimentsAggregations & {
+                        feedback_scores?: AggregatedFeedbackScore[];
+                      }
+                    ).feedback_scores;
+                return getScoreByName(scores, label)?.value;
               },
             },
-          }) as ColumnData<T>,
+          } as ColumnData<T>;
+        },
       ),
     ];
   }, [dynamicScoresColumns]);

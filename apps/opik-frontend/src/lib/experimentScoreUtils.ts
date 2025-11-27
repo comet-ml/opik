@@ -18,22 +18,22 @@ export interface FormattedScore {
  * @returns Combined array of formatted scores
  */
 export const transformExperimentScores = (
-  row: Record<string, unknown>,
+  row:
+    | {
+        feedback_scores?: AggregatedFeedbackScore[];
+        experiment_scores?: AggregatedFeedbackScore[];
+      }
+    | Record<string, unknown>,
 ): FormattedScore[] => {
-  const feedbackScores = (
-    get(row, "feedback_scores", []) as AggregatedFeedbackScore[]
-  ).map((score) => ({
-    ...score,
-    name: `${score.name} (avg)`,
-    value: formatNumericData(score.value),
-  }));
+  const formatScores = (key: string, addAvgSuffix: boolean): FormattedScore[] =>
+    (get(row, key, []) as AggregatedFeedbackScore[]).map((score) => ({
+      ...score,
+      name: addAvgSuffix ? `${score.name} (avg)` : score.name,
+      value: formatNumericData(score.value),
+    }));
 
-  const experimentScores = (
-    get(row, "experiment_scores", []) as AggregatedFeedbackScore[]
-  ).map((score) => ({
-    ...score,
-    value: formatNumericData(score.value),
-  }));
-
-  return [...feedbackScores, ...experimentScores];
+  return [
+    ...formatScores("feedback_scores", true),
+    ...formatScores("experiment_scores", false),
+  ];
 };

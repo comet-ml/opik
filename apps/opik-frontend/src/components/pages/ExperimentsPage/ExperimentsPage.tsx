@@ -492,20 +492,32 @@ const ExperimentsPage: React.FC = () => {
           lines: [],
         };
       }
-      groupExperiments.forEach((experiment) => {
-        const feedbackScoresMap = (experiment.feedback_scores || []).reduce<
-          Record<string, number>
-        >((acc, score) => {
-          acc[`${score.name} (avg)`] = score.value;
+
+      const createScoresMap = (
+        scores: Array<{ name: string; value: number }> | undefined,
+        addAvgSuffix: boolean,
+      ): Record<string, number> =>
+        (scores || []).reduce<Record<string, number>>((acc, score) => {
+          const key = addAvgSuffix ? `${score.name} (avg)` : score.name;
+          acc[key] = score.value;
           return acc;
         }, {});
 
-        const experimentScoresMap = (experiment.experiment_scores || []).reduce<
-          Record<string, number>
-        >((acc, score) => {
-          acc[score.name] = score.value;
-          return acc;
-        }, {});
+      const getScoreNames = (
+        scores: Array<{ name: string }> | undefined,
+        addAvgSuffix: boolean,
+      ): string[] =>
+        (scores || []).map((s) => (addAvgSuffix ? `${s.name} (avg)` : s.name));
+
+      groupExperiments.forEach((experiment) => {
+        const feedbackScoresMap = createScoresMap(
+          experiment.feedback_scores,
+          true,
+        );
+        const experimentScoresMap = createScoresMap(
+          experiment.experiment_scores,
+          false,
+        );
 
         groupsMap[groupKey].data.unshift({
           entityId: experiment.id,
@@ -514,11 +526,13 @@ const ExperimentsPage: React.FC = () => {
           scores: { ...feedbackScoresMap, ...experimentScoresMap },
         });
 
-        const feedbackScoreNames = (experiment.feedback_scores || []).map(
-          (s) => `${s.name} (avg)`,
+        const feedbackScoreNames = getScoreNames(
+          experiment.feedback_scores,
+          true,
         );
-        const experimentScoreNames = (experiment.experiment_scores || []).map(
-          (s) => s.name,
+        const experimentScoreNames = getScoreNames(
+          experiment.experiment_scores,
+          false,
         );
         groupsMap[groupKey].lines = uniq([
           ...groupsMap[groupKey].lines,
