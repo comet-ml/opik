@@ -365,6 +365,7 @@ class ExperimentDAO {
                 e.status as status,
                 e.experiment_scores as experiment_scores,
                 fs.feedback_scores as feedback_scores,
+                es.experiment_scores as experiment_scores_agg,
                 ed.trace_count as trace_count,
                 ed.duration_values AS duration,
                 ed.usage as usage,
@@ -374,6 +375,7 @@ class ExperimentDAO {
             FROM experiments_final AS e
             LEFT JOIN experiment_durations AS ed ON e.id = ed.experiment_id
             LEFT JOIN feedback_scores_agg AS fs ON e.id = fs.experiment_id
+            LEFT JOIN experiment_scores_agg AS es ON e.id = es.experiment_id
             LEFT JOIN comments_agg AS ca ON e.id = ca.experiment_id
             ORDER BY <if(sort_fields)><sort_fields>,<endif> e.id DESC
             <if(limit)> LIMIT :limit <endif> <if(offset)> OFFSET :offset <endif>

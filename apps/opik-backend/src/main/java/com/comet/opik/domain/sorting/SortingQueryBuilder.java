@@ -34,9 +34,8 @@ public class SortingQueryBuilder {
                 .map(sortingField -> {
                     String dbField = fieldMapper.apply(sortingField);
 
-                    // Skip null handling for JSONExtractRaw fields and experiment_scores fields (they're JSON strings/arrays, not maps)
-                    boolean isJsonExtract = dbField.startsWith(JSON_EXTRACT_RAW_PREFIX)
-                            || sortingField.field().startsWith(EXPERIMENT_METRICS_PREFIX);
+                    // Skip null handling for JSONExtractRaw fields (they're JSON strings, not maps)
+                    boolean isJsonExtract = dbField.startsWith(JSON_EXTRACT_RAW_PREFIX);
 
                     // Handle null direction for dynamic fields (unless it's a JSON extract)
                     if (sortingField.handleNullDirection().isEmpty() || isJsonExtract) {
@@ -50,16 +49,13 @@ public class SortingQueryBuilder {
     }
 
     private String getDbField(SortingField sortingField) {
-        // Handle experiment_scores.* fields - extract from JSON array
+        // Handle experiment_scores.* fields - use map access from experiment_scores_agg
         if (sortingField.field().startsWith(EXPERIMENT_METRICS_PREFIX) && sortingField.isDynamic()) {
             String bindKey = sortingField.bindKey();
-            // Extract value from experiment_scores JSON array where name matches the key
-            // experiment_scores is stored as a JSON string array: [{"name": "metric1", "value": 0.5}, ...]
-            // We filter the array to find the object with matching name, then extract its value
-            // Use ifNull with toFloat64OrNull to handle cases where experiment doesn't have the specific score
-            // toFloat64OrNull returns NULL on parse failure instead of throwing an error
+            // Access experiment_scores map using key
+            // Use coalesce to handle cases where experiment doesn't have the specific score
             return String.format(
-                    "ifNull(toFloat64OrNull(JSON_VALUE(arrayFirst(x -> JSON_VALUE(x, '$.name') == :%s, JSONExtractArrayRaw(e.experiment_scores)), '$.value')), 0)",
+                    "coalesce(experiment_scores_agg[:%s], 0)",
                     bindKey);
         }
         return sortingField.dbField();
