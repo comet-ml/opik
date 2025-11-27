@@ -28,6 +28,7 @@ const SidebarInviteDevButton: React.FC<SidebarInviteDevButtonProps> = ({
         path: inviteMembersURL,
       }}
       expanded={expanded}
+      compact
     />
   );
 };
