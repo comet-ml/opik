@@ -11,7 +11,7 @@ import {
 } from "@/components/ui/accordion";
 import { Alert } from "@/types/alerts";
 import { AlertFormType } from "./schema";
-import { TRIGGER_CONFIG } from "@/components/pages/ConfigurationPage/AlertsTab/AddEditAlertPage/helpers";
+import { TRIGGER_CONFIG } from "@/components/pages/AlertsPage/AddEditAlertPage/helpers";
 import WebhookPayloadExample from "./WebhookPayloadExample";
 import useWebhookTestMutation from "@/api/alerts/useWebhookTestMutation";
 import { useToast } from "@/components/ui/use-toast";

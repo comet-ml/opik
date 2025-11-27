@@ -110,9 +110,8 @@ const AlertForm: React.FunctionComponent<AlertFormProps> = ({
 
   const handleNavigateBack = useCallback(() => {
     navigate({
-      to: "/$workspaceName/configuration",
+      to: "/$workspaceName/alerts",
       params: { workspaceName },
-      search: { tab: "alerts" },
     });
   }, [navigate, workspaceName]);
 

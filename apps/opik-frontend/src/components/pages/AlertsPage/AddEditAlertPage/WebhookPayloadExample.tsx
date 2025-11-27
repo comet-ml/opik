@@ -7,7 +7,7 @@ import CodeHighlighter, {
 } from "@/components/shared/CodeHighlighter/CodeHighlighter";
 import Loader from "@/components/shared/Loader/Loader";
 import { safelyParseJSON } from "@/lib/utils";
-import { applyFieldReplacements } from "@/components/pages/ConfigurationPage/AlertsTab/AddEditAlertPage/helpers";
+import { applyFieldReplacements } from "@/components/pages/AlertsPage/AddEditAlertPage/helpers";
 
 type WebhookPayloadExampleProps = {
   eventType: ALERT_EVENT_TYPE;
