@@ -4,7 +4,6 @@ import useLocalStorageState from "use-local-storage-state";
 import { ColumnPinningState } from "@tanstack/react-table";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { ArrowRight } from "lucide-react";
-import get from "lodash/get";
 
 import DataTable from "@/components/shared/DataTable/DataTable";
 import DataTableNoData from "@/components/shared/DataTableNoData/DataTableNoData";
@@ -20,7 +19,7 @@ import { Experiment } from "@/types/datasets";
 import { convertColumnDataToColumn } from "@/lib/table";
 import { formatDate } from "@/lib/date";
 import FeedbackScoreListCell from "@/components/shared/DataTableCells/FeedbackScoreListCell";
-import { formatNumericData } from "@/lib/utils";
+import { transformExperimentScores } from "@/lib/experimentScoreUtils";
 
 const COLUMNS_WIDTH_KEY = "home-experiments-columns-width";
 
@@ -61,11 +60,7 @@ export const COLUMNS = convertColumnDataToColumn<Experiment, Experiment>(
       id: "feedback_scores",
       label: "Feedback scores",
       type: COLUMN_TYPE.numberDictionary,
-      accessorFn: (row) =>
-        get(row, "feedback_scores", []).map((score) => ({
-          ...score,
-          value: formatNumericData(score.value),
-        })),
+      accessorFn: transformExperimentScores,
       cell: FeedbackScoreListCell as never,
       customMeta: {
         getHoverCardName: (row: Experiment) => row.name,
