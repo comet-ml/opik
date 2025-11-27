@@ -188,7 +188,7 @@ public class SlackWebhookPayloadMapper {
     private static DetailsBuildResult buildTraceThreadFeedbackScoreDetails(List<?> metadata,
             String baseUrl) {
         return buildMetricsAlertDetails(metadata, baseUrl, "Thread Feedback Score",
-                "No thread feedback score alerts triggered");
+                "No thread feedback score alerts triggered", "threads");
     }
 
     private static DetailsBuildResult buildGuardrailsTriggeredDetails(List<?> metadata,
@@ -254,6 +254,11 @@ public class SlackWebhookPayloadMapper {
                 "No latency alerts triggered");
     }
 
+    private static DetailsBuildResult buildMetricsAlertDetails(List<?> metadata,
+            String baseUrl, String metricType, String emptyMessage) {
+        return buildMetricsAlertDetails(metadata, baseUrl, metricType, emptyMessage, "traces");
+    }
+
     /**
      * Builds metrics alert details for Slack notification.
      *
@@ -264,7 +269,7 @@ public class SlackWebhookPayloadMapper {
      * @return the formatted details result
      */
     private static DetailsBuildResult buildMetricsAlertDetails(List<?> metadata,
-            String baseUrl, String metricType, String emptyMessage) {
+            String baseUrl, String metricType, String emptyMessage, String feTabType) {
         if (metadata.isEmpty()) {
             return new DetailsBuildResult(emptyMessage);
         }
@@ -282,7 +287,8 @@ public class SlackWebhookPayloadMapper {
 
         String mainText = String.format("*%s Alert Triggered:*\n%s", metricType, String.join("\n", alertDetails));
         String projectsLink = projectIds.size() == 1
-                ? String.format("\n\n<%s/projects/%s/traces|View Project>", baseUrl, projectIds.getFirst())
+                ? String.format("\n\n<%s/projects/%s/traces?type=%s|View Project>", baseUrl, projectIds.getFirst(),
+                        feTabType)
                 : String.format("\n\n<%s/projects|View All Projects>", baseUrl);
 
         return new DetailsBuildResult(mainText + projectsLink);
