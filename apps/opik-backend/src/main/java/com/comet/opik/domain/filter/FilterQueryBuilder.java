@@ -94,6 +94,7 @@ public class FilterQueryBuilder {
     private static final String TRACE_ID_DB = "trace_id";
     private static final String SPAN_ID_DB = "span_id";
     public static final String ANNOTATION_QUEUE_IDS_ANALYTICS_DB = "taqi.annotation_queue_ids";
+    public static final String THREAD_ANNOTATION_QUEUE_IDS_ANALYTICS_DB = "ttaqi.annotation_queue_ids";
     private static final String WEBHOOK_URL_DB = "webhook_url";
     private static final String ALERT_TYPE_DB = "alert_type";
     private static final String ENABLED_DB = "enabled";
@@ -242,7 +243,7 @@ public class FilterQueryBuilder {
                     .put(TraceThreadField.FEEDBACK_SCORES, VALUE_ANALYTICS_DB)
                     .put(TraceThreadField.STATUS, STATUS_DB)
                     .put(TraceThreadField.TAGS, TAGS_DB)
-                    .put(TraceThreadField.ANNOTATION_QUEUE_IDS, ANNOTATION_QUEUE_IDS_ANALYTICS_DB)
+                    .put(TraceThreadField.ANNOTATION_QUEUE_IDS, THREAD_ANNOTATION_QUEUE_IDS_ANALYTICS_DB)
                     .build());
 
     private static final Map<SpanField, String> SPAN_FIELDS_MAP = new EnumMap<>(

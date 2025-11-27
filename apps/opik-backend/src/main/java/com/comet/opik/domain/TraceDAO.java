@@ -424,7 +424,7 @@ class TraceDAOImpl implements TraceDAO {
                      name,
                      arrayStringConcat(categories, ', ') AS category_name,
                      IF(length(values) = 1, arrayElement(values, 1), toDecimal64(arrayAvg(values), 9)) AS value,
-                     IF(length(reasons) = 1, arrayElement(reasons, 1), arrayStringConcat(arrayMap(x -> if(x = '', '\\<no reason>', x), reasons), ', ')) AS reason,
+                     IF(length(reasons) = 1, arrayElement(reasons, 1), arrayStringConcat(arrayMap(x -> if(x = '', '<no reason>', x), reasons), ', ')) AS reason,
                      arrayElement(sources, 1) AS source,
                      mapFromArrays(
                              authors,
@@ -2485,7 +2485,7 @@ class TraceDAOImpl implements TraceDAO {
                     AND t.id = tt.thread_id
                 LEFT JOIN feedback_scores_agg fsagg ON fsagg.entity_id = tt.thread_model_id
                 <if(annotation_queue_filters)>
-                LEFT JOIN thread_annotation_queue_ids as taqi ON taqi.thread_id = tt.thread_model_id
+                LEFT JOIN thread_annotation_queue_ids as ttaqi ON ttaqi.thread_id = tt.thread_model_id
                 <endif>
                 WHERE workspace_id = :workspace_id
                 <if(feedback_scores_filters)>
