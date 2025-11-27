@@ -113,6 +113,10 @@ public record RedisUrl(
             return DEFAULT_DATABASE;
         }
         // Excluding the leading '/' character
-        return Integer.parseInt(path.substring(1));
+        var dbString = path.substring(1);
+        if (StringUtils.isBlank(dbString)) {
+            return DEFAULT_DATABASE;
+        }
+        return Integer.parseInt(dbString);
     }
 }

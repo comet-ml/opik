@@ -60,7 +60,7 @@ class RedisUrlTest {
                                 .password(Optional.empty())
                                 .address("redis://localhost:6379")
                                 .build()),
-                // URL with default database
+                // URL with default database without trailing slash
                 Arguments.of("redis://localhost:7000",
                         RedisUrl.builder()
                                 .scheme("redis")
@@ -70,6 +70,17 @@ class RedisUrlTest {
                                 .username(Optional.empty())
                                 .password(Optional.empty())
                                 .address("redis://localhost:7000")
+                                .build()),
+                // URL with default database with trailing slash
+                Arguments.of("redis://:opik@redis:7000/",
+                        RedisUrl.builder()
+                                .scheme("redis")
+                                .host("redis")
+                                .port(7000)
+                                .database(0)
+                                .username(Optional.empty())
+                                .password(Optional.of("opik"))
+                                .address("redis://redis:7000")
                                 .build()),
                 // URL with username and password
                 Arguments.of("redis://user123:pass456@localhost:7000/5",
