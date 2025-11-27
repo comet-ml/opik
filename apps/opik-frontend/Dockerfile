@@ -33,11 +33,11 @@ LABEL build.mode="${BUILD_MODE}"
 RUN apk upgrade --no-cache
 
 # Copy custom Nginx configuration
-COPY --chown=nginx:nginx --chmod=0755 nginx /etc/nginx
+COPY --chown=nginx:nginx nginx /etc/nginx
 
 # Copy entrypoint script to the docker-entrypoint.d directory so it runs automatically
-COPY --chmod=0755 entrypoint.sh /docker-entrypoint.d/05-opik-frontend-entrypoint.sh
-
+COPY --chmod=0755 patch-nginx.conf.sh /docker-entrypoint.d/99-patch-nginx.conf.sh
+      
 # Fix permissions
 RUN chown -R nginx:nginx /var/log/nginx /var/cache/nginx /run /etc/nginx/conf.d \
  && rm -f /var/log/nginx/access.log /var/log/nginx/error.log
