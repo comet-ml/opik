@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { Link } from "@tanstack/react-router";
 
 import {
+  Bell,
   Database,
   FlaskConical,
   LayoutGrid,
@@ -40,6 +41,7 @@ import SidebarMenuItem, {
   MenuItem,
   MenuItemGroup,
 } from "@/components/layout/SideBar/MenuItem/SidebarMenuItem";
+import { FeatureToggleKeys } from "@/types/feature-toggles";
 
 const HOME_PATH = "/$workspaceName/home";
 
@@ -148,6 +150,14 @@ const MENU_ITEMS: MenuItemGroup[] = [
         icon: Brain,
         label: "Online evaluation",
         count: "rules",
+      },
+      {
+        id: "alerts",
+        path: "/$workspaceName/alerts",
+        type: MENU_ITEM_TYPE.router,
+        icon: Bell,
+        label: "Alerts",
+        featureFlag: FeatureToggleKeys.TOGGLE_ALERTS_ENABLED,
       },
     ],
   },
