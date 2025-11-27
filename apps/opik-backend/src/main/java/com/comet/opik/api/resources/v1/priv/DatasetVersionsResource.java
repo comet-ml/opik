@@ -19,6 +19,7 @@ import jakarta.inject.Inject;
 import jakarta.inject.Provider;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.DELETE;
@@ -144,13 +145,20 @@ public class DatasetVersionsResource {
             @ApiResponse(responseCode = "404", description = "Version not found")})
     @RateLimited
     public Response compareVersions(
-            @QueryParam("from") @NotNull String fromHashOrTag,
+            @QueryParam("from") @NotNull @NotBlank String fromHashOrTag,
             @QueryParam("to") String toHashOrTag) {
 
         String workspaceId = requestContext.get().getWorkspaceId();
-        log.info("Comparing versions for dataset='{}', workspace='{}'", datasetId, workspaceId);
+        log.info("Comparing versions for dataset='{}', from='{}', to='{}', workspace='{}'",
+                datasetId, fromHashOrTag, toHashOrTag != null ? toHashOrTag : "draft", workspaceId);
 
         var diff = versionService.compareVersions(datasetId, fromHashOrTag, toHashOrTag);
+
+        log.info(
+                "Computed diff for dataset='{}', from='{}', to='{}': added='{}', modified='{}', deleted='{}', unchanged='{}'",
+                datasetId, fromHashOrTag, toHashOrTag != null ? toHashOrTag : "draft",
+                diff.statistics().itemsAdded(), diff.statistics().itemsModified(),
+                diff.statistics().itemsDeleted(), diff.statistics().itemsUnchanged());
 
         return Response.ok(diff).build();
     }
