@@ -95,7 +95,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
     private static final String SELECT_DATASET_ITEM_VERSIONS = """
             SELECT
                 id,
-                dataset_item_id as draft_item_id,
+                dataset_item_id,
                 dataset_id,
                 data,
                 trace_id,

@@ -145,7 +145,7 @@ public class DatasetVersionsResource {
             @ApiResponse(responseCode = "404", description = "Version not found")})
     @RateLimited
     public Response compareVersions(
-            @QueryParam("from") @NotNull @NotBlank String fromHashOrTag,
+            @QueryParam("from") @NotBlank String fromHashOrTag,
             @QueryParam("to") String toHashOrTag) {
 
         String workspaceId = requestContext.get().getWorkspaceId();

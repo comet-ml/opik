@@ -134,10 +134,10 @@ class DatasetItemResultMapper {
 
             Map<String, JsonNode> data = getData(row);
 
-            // Check if draft_item_id column exists in the result (only present for versioned items)
+            // Check if dataset_item_id column exists in the result (only present for versioned items)
             UUID draftItemId = null;
-            if (rowMetadata.contains("draft_item_id")) {
-                draftItemId = Optional.ofNullable(row.get("draft_item_id", String.class))
+            if (rowMetadata.contains("dataset_item_id")) {
+                draftItemId = Optional.ofNullable(row.get("dataset_item_id", String.class))
                         .filter(s -> !s.isBlank())
                         .map(UUID::fromString)
                         .orElse(null);

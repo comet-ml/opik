@@ -17,7 +17,6 @@ import com.comet.opik.infrastructure.auth.RequestContext;
 import com.google.inject.ImplementedBy;
 import io.opentelemetry.instrumentation.annotations.WithSpan;
 import jakarta.inject.Inject;
-import jakarta.inject.Provider;
 import jakarta.inject.Singleton;
 import jakarta.ws.rs.ClientErrorException;
 import jakarta.ws.rs.NotFoundException;
@@ -79,7 +78,7 @@ class DatasetItemServiceImpl implements DatasetItemService {
     private final @NonNull DatasetItemDAO dao;
     private final @NonNull DatasetItemVersionDAO versionDao;
     private final @NonNull DatasetService datasetService;
-    private final @NonNull Provider<DatasetVersionService> versionServiceProvider;
+    private final @NonNull DatasetVersionService versionService;
     private final @NonNull TraceService traceService;
     private final @NonNull SpanService spanService;
     private final @NonNull TraceEnrichmentService traceEnrichmentService;
@@ -385,7 +384,7 @@ class DatasetItemServiceImpl implements DatasetItemService {
                     datasetItemSearchCriteria, datasetItemSearchCriteria.versionHashOrTag(), page, size);
 
             // Resolve version hash/tag to version ID
-            UUID versionId = versionServiceProvider.get().resolveVersionId(datasetItemSearchCriteria.datasetId(),
+            UUID versionId = versionService.resolveVersionId(datasetItemSearchCriteria.datasetId(),
                     datasetItemSearchCriteria.versionHashOrTag());
             log.info("Resolved version '{}' to version ID '{}' for dataset '{}'",
                     datasetItemSearchCriteria.versionHashOrTag(), versionId, datasetItemSearchCriteria.datasetId());
