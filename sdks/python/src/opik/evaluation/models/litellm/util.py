@@ -36,30 +36,54 @@ def apply_model_specific_filters(
     already_warned: Set[str],
     warn: Callable[[str, Any], None],
 ) -> None:
-    """Remove parameters known to be unsupported for specific models.
+    """Adjust/drop params for specific model families before calling LiteLLM.
 
-    Currently handles the GPT-5 family which only honours temperature=1 and does not
-    return log probabilities. Removing those eagerly avoids provider errors while the
-    callback surfaces a one-time warning to the caller.
+    Currently handles:
+    - GPT-5:
+      Only honours temperature=1 and does not return log probabilities.
+      Removing those eagerly avoids provider errors while the callback
+      surfaces a one-time warning to the caller.
+    - DashScope/Qwen (model_name starts with "dashscope/"):
+      top_logprobs is only meaningful if logprobs is true and must be an int
+      in [0, 5]. When logprobs is false, drops top_logprobs; when logprobs is
+      true, clamps top_logprobs into [0, 5].
     """
-
-    if not model_name.startswith("gpt-5"):
-        return
 
     unsupported: list[tuple[str, Any]] = []
 
-    if "temperature" in params:
-        value = params["temperature"]
-        try:
-            numeric_value = float(value)
-        except (TypeError, ValueError):
-            numeric_value = None
-        if numeric_value is None or abs(numeric_value - 1.0) > 1e-6:
-            unsupported.append(("temperature", value))
+    if model_name.startswith("gpt-5"):
+        if "temperature" in params:
+            value = params["temperature"]
+            try:
+                numeric_value = float(value)
+            except (TypeError, ValueError):
+                numeric_value = None
+            if numeric_value is None or abs(numeric_value - 1.0) > 1e-6:
+                unsupported.append(("temperature", value))
 
-    for param in ("logprobs", "top_logprobs"):
-        if param in params:
-            unsupported.append((param, params[param]))
+        for param in ("logprobs", "top_logprobs"):
+            if param in params:
+                unsupported.append((param, params[param]))
+
+    if model_name.startswith("dashscope/"):
+        logprobs_value = params.get("logprobs")
+
+        if not logprobs_value:
+            if "top_logprobs" in params:
+                unsupported.append(("top_logprobs", params["top_logprobs"]))
+        else:
+            if "top_logprobs" in params:
+                raw_top_logprobs = params["top_logprobs"]
+                try:
+                    top_logprobs = int(raw_top_logprobs)
+                except (TypeError, ValueError):
+                    unsupported.append(("top_logprobs", raw_top_logprobs))
+                else:
+                    if top_logprobs < 0:
+                        top_logprobs = 0
+                    elif top_logprobs > 5:
+                        top_logprobs = 5
+                    params["top_logprobs"] = top_logprobs
 
     for param, value in unsupported:
         params.pop(param, None)
