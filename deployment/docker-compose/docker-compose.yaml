@@ -138,6 +138,7 @@ services:
     profiles:
       - backend
       - opik
+      - opik-otel
     build:
       context: ../../apps/opik-backend
       dockerfile: Dockerfile
@@ -286,10 +287,9 @@ services:
     tmpfs:
       - /var/lib/docker
 
-  frontend:
-    # image: ghcr.io/comet-ml/opik/opik-frontend:${OPIK_VERSION:-latest}
-    image: opik-frontend:${OPIK_VERSION:-latest}
-    # pull_policy: always
+  frontend: &frontend
+    image: ghcr.io/comet-ml/opik/opik-frontend:${OPIK_VERSION:-latest}
+    pull_policy: missing
     profiles:
       - opik
       - local-be
@@ -300,11 +300,9 @@ services:
     ports:
       - "${NGINX_PORT:-8080}:${NGINX_PORT:-8080}" # Frontend server port (configurable via NGINX_PORT env var)
     volumes:
-      - ./nginx_${OPIK_FRONTEND_FLAVOR:-default}_local.conf:/etc/nginx/templates/default.conf.template:ro
+      - ./nginx_${OPIK_FRONTEND_FLAVOR:-default}_local.conf:/etc/nginx/templates/opik-frontend.conf.template:ro
     depends_on:
       backend:
-        condition: service_healthy
-      otel-collector:
         condition: service_healthy
     healthcheck:
       test: [ "CMD-SHELL", "curl -f http://localhost:$${NGINX_PORT:-8080}/health || exit 1" ]
@@ -314,21 +312,47 @@ services:
       start_period: 1s
     environment:
       OPIK_VERSION: ${OPIK_VERSION:-latest}
-      OTEL_TRACE: ${OTEL_TRACE:-off}
+      NGINX_PORT: ${NGINX_PORT:-8080}
+
+  frontend-otel:
+    <<: *frontend
+    image: ghcr.io/comet-ml/opik/opik-frontend:${OPIK_VERSION:-latest}
+    pull_policy: missing
+    profiles:
+      - opik-otel
+    build:
+      context: ../../apps/opik-frontend
+      dockerfile: Dockerfile
+      cache_from:
+        - alpine:latest
+        - nginx:1.29.3-alpine-otel
+        - node:20.19.5-alpine3.22
+        - type=local,src=./.cache
+      cache_to:
+        - type=local,dest=./.cache
+    depends_on:
+      backend:
+        condition: service_healthy
+      otel-collector:
+        condition: service_healthy
+    volumes:
+      - ./nginx_${OPIK_FRONTEND_FLAVOR:-default}_otel.conf:/etc/nginx/templates/default.conf.template:ro
+    environment:
+      OPIK_VERSION: ${OPIK_VERSION:-latest}
+      OTEL_TRACE: ${OTEL_TRACE:-on}
       OTEL_COLLECTOR_HOST: ${OTEL_COLLECTOR_HOST:-otel-collector}
       OTEL_COLLECTOR_PORT: ${OTEL_COLLECTOR_PORT:-4317}
       NGINX_PORT: ${NGINX_PORT:-8080}
-      # Direct logs to OTEL collector's syslog receiver
       SYSLOG_SERVER_HOST: ${OTEL_COLLECTOR_HOST:-otel-collector}
-      SYSLOG_SERVER_PORT: 5140
+      SYSLOG_SERVER_PORT: ${SYSLOG_SERVER_PORT:-5140}
+
 
   # OpenTelemetry Collector - receives logs, traces, and metrics via OTLP
   otel-collector:
     image: otel/opentelemetry-collector-contrib:0.139.0
-    pull_policy: always
+    pull_policy: missing
     profiles:
-      - opik
-      - local-be
+      - opik-otel
     hostname: otel-collector
     volumes:
       - ./otel-collector-config.yaml:/etc/otelcol/config.yaml:ro
