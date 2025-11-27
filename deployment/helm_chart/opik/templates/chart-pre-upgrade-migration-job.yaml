@@ -1,0 +1,150 @@
+{{- if .Values.chartMigration.enabled }}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ include "opik.fullname" . }}-chart-migration-sa
+  namespace: {{ .Release.Namespace }}
+  annotations:
+    "helm.sh/hook": pre-upgrade
+    "helm.sh/hook-weight": "-10"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "opik.fullname" . }}-chart-migration-role
+  namespace: {{ .Release.Namespace }}
+  annotations:
+    "helm.sh/hook": pre-upgrade
+    "helm.sh/hook-weight": "-10"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+rules:
+  - apiGroups: ["apps"]
+    resources: ["statefulsets", "deployments"]
+    verbs: ["get", "list", "delete"]
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "opik.fullname" . }}-chart-migration-rb
+  namespace: {{ .Release.Namespace }}
+  annotations:
+    "helm.sh/hook": pre-upgrade
+    "helm.sh/hook-weight": "-10"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ include "opik.fullname" . }}-chart-migration-role
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "opik.fullname" . }}-chart-migration-sa
+    namespace: {{ .Release.Namespace }}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "opik.fullname" . }}-chart-migration
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "opik.labels" $  | nindent 4 }}
+    component: {{ include "opik.name" $ }}-chart-migration
+    {{- with $.Values.commonLabels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}  
+  annotations:
+    "helm.sh/hook": pre-upgrade
+    "helm.sh/hook-weight": "-5"
+    "helm.sh/hook-delete-policy": before-hook-creation
+spec:
+  ttlSecondsAfterFinished: 14400  # Keep for 4 hours
+  backoffLimit: 2
+  template:
+    metadata:
+      labels:
+        app: pre-upgrade-cleanup
+    spec:
+      restartPolicy: Never
+      serviceAccountName: {{ .Values.chartMigration.serviceAccountName | default (printf "%s-chart-migration-sa" (include "opik.fullname" .)) }}
+      {{- with (.Values.chartMigration.nodeSelector | default .Values.nodeSelector) }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with (.Values.chartMigration.tolerations | default .Values.tolerations) }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: migration
+          image: {{ .Values.chartMigration.image }}
+          command:
+            - /bin/bash
+            - -c
+            - |
+              set -e
+              
+              echo "=== Pre-Upgrade Chart Migration ==="
+              NAMESPACE="{{ .Release.Namespace }}"
+              
+              {{- if .Values.mysql.enabled }}
+              # Delete MySQL StatefulSet (if exists)
+              MYSQL_STS="{{ .Values.mysql.fullnameOverride | default "opik-mysql" }}"
+              echo "Checking MySQL StatefulSet: $MYSQL_STS"
+              if kubectl get statefulset $MYSQL_STS -n $NAMESPACE 2>/dev/null; then
+                echo "Deleting MySQL StatefulSet: $MYSQL_STS"
+                kubectl delete statefulset $MYSQL_STS -n $NAMESPACE --wait=true
+                echo "MySQL StatefulSet $MYSQL_STS deleted (PVCs are preserved)"
+              else
+                echo "MySQL StatefulSet $MYSQL_STS not found, skipping"
+              fi
+              echo ""
+              {{- end }}
+              
+              {{- if .Values.zookeeper.enabled }}
+              # Delete Zookeeper StatefulSet (if exists)
+              ZOOKEEPER_STS="{{ .Values.zookeeper.fullnameOverride | default "opik-zookeeper" }}"
+              echo "Checking Zookeeper StatefulSet: $ZOOKEEPER_STS"
+              if kubectl get statefulset $ZOOKEEPER_STS -n $NAMESPACE 2>/dev/null; then
+                echo "Deleting Zookeeper StatefulSet: $ZOOKEEPER_STS"
+                kubectl delete statefulset $ZOOKEEPER_STS -n $NAMESPACE --wait=true
+                echo "Zookeeper StatefulSet $ZOOKEEPER_STS deleted (PVCs are preserved)"
+              else
+                echo "Zookeeper StatefulSet $ZOOKEEPER_STS not found, skipping"
+              fi
+              echo ""
+              {{- end }}
+              
+              {{- if .Values.redis.enabled }}
+              # Delete Redis StatefulSet (if exists)
+              REDIS_STS="{{ .Values.redis.fullnameOverride | default "opik-redis-master" }}"
+              echo "Checking Redis StatefulSet: $REDIS_STS"
+              if kubectl get statefulset $REDIS_STS -n $NAMESPACE 2>/dev/null; then
+                echo "Deleting Redis StatefulSet: $REDIS_STS"
+                kubectl delete statefulset $REDIS_STS -n $NAMESPACE --wait=true
+                echo "Redis StatefulSet $REDIS_STS deleted (PVCs are preserved)"
+              else
+                echo "Redis StatefulSet $REDIS_STS not found, skipping"
+              fi
+              echo ""
+              {{- end }}
+              
+              # Delete opik-backend deployment
+              BACKEND_DEPLOYMENT="{{ include "opik.name" . }}-backend"
+              echo "Checking backend deployment: $BACKEND_DEPLOYMENT"
+              if kubectl get deployment $BACKEND_DEPLOYMENT -n $NAMESPACE 2>/dev/null; then
+                echo "Deleting backend deployment: $BACKEND_DEPLOYMENT"
+                kubectl delete deployment $BACKEND_DEPLOYMENT -n $NAMESPACE --wait=true
+                echo "Backend deployment $BACKEND_DEPLOYMENT deleted"
+              else
+                echo "Backend deployment $BACKEND_DEPLOYMENT not found, skipping"
+              fi
+              echo ""
+              
+              echo "=== Migration Completed Successfully ==="
+
+{{- end }}
+
