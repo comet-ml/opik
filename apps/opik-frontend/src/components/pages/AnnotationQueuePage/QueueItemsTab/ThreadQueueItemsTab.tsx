@@ -74,7 +74,6 @@ import SelectBox, {
   SelectBoxProps,
 } from "@/components/shared/SelectBox/SelectBox";
 import { useTruncationEnabled } from "@/components/server-sync-provider";
-import FeedbackScoreReasonToggle from "@/components/shared/FeedbackScoreReasonToggle/FeedbackScoreReasonToggle";
 
 const SHARED_COLUMNS: ColumnData<Thread>[] = [
   {
@@ -250,13 +249,6 @@ const ThreadQueueItemsTab: React.FunctionComponent<
     queryParamConfig: StringParam,
     syncQueryWithLocalStorageOnInit: true,
   });
-
-  const [showReasons, setShowReasons] = useLocalStorageState<boolean>(
-    "queue-thread-show-reasons",
-    {
-      defaultValue: false,
-    },
-  );
 
   const [filters = [], setFilters] = useQueryParam(
     "thread_filters",
@@ -487,28 +479,9 @@ const ThreadQueueItemsTab: React.FunctionComponent<
         columns: scoresColumnsData,
         order: scoresColumnsOrder,
         onOrderChange: setScoresColumnsOrder,
-        action: (
-          <FeedbackScoreReasonToggle
-            showReasons={showReasons}
-            setShowReasons={setShowReasons}
-            height={height}
-            setHeight={setHeight}
-            scoresColumnsData={scoresColumnsData}
-            selectedColumns={selectedColumns}
-          />
-        ),
       },
     ];
-  }, [
-    scoresColumnsData,
-    scoresColumnsOrder,
-    setScoresColumnsOrder,
-    showReasons,
-    setShowReasons,
-    height,
-    setHeight,
-    selectedColumns,
-  ]);
+  }, [scoresColumnsData, scoresColumnsOrder, setScoresColumnsOrder]);
 
   if (isPending) {
     return <Loader />;
@@ -581,9 +554,6 @@ const ThreadQueueItemsTab: React.FunctionComponent<
         getRowId={getRowId}
         rowHeight={height as ROW_HEIGHT}
         columnPinning={DEFAULT_COLUMN_PINNING}
-        meta={{
-          showReasons,
-        }}
         noData={<DataTableNoData title={noDataText} />}
         TableWrapper={PageBodyStickyTableWrapper}
         stickyHeader

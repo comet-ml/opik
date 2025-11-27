@@ -27,7 +27,6 @@ const FeedbackScoreCell = (context: CellContext<unknown, unknown>) => {
   const {
     projectId,
     projectName,
-    showReasons = false,
     rowHeight = ROW_HEIGHT.small,
     enableUserFeedbackEditing = false,
   } = (context.table.options.meta ?? {}) as TableMeta<unknown>;
@@ -69,7 +68,6 @@ const FeedbackScoreCell = (context: CellContext<unknown, unknown>) => {
     isEditingEnabled && context.column.id === "feedback_scores_User feedback";
 
   const shouldShowInlineReasons =
-    showReasons &&
     [ROW_HEIGHT.medium, ROW_HEIGHT.large].includes(rowHeight) &&
     reasons.length > 0;
 
@@ -91,7 +89,13 @@ const FeedbackScoreCell = (context: CellContext<unknown, unknown>) => {
       {reasons.length > 0 && (
         <FeedbackScoreReasonTooltip reasons={reasons}>
           {shouldShowInlineReasons ? (
-            <span className="line-clamp-3 break-words text-xs text-muted-foreground">
+            <span
+              className={cn(
+                "break-words text-xs text-muted-foreground",
+                rowHeight === ROW_HEIGHT.medium && "line-clamp-3",
+                rowHeight === ROW_HEIGHT.large && "line-clamp-[10]",
+              )}
+            >
               {reasons.map((r) => r.reason).join(", ")}
             </span>
           ) : (

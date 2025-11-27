@@ -38,11 +38,8 @@ const CompareExperimentsFeedbackScoreCell: React.FC<
     feedbackScore,
   });
 
-  const {
-    enableUserFeedbackEditing = false,
-    showReasons = false,
-    rowHeight = ROW_HEIGHT.small,
-  } = (context.table.options.meta ?? {}) as TableMeta<ExperimentsCompare>;
+  const { enableUserFeedbackEditing = false, rowHeight = ROW_HEIGHT.small } =
+    (context.table.options.meta ?? {}) as TableMeta<ExperimentsCompare>;
 
   const isEditingEnabled =
     experimentCompare.experiment_items.length === 1 &&
@@ -86,7 +83,6 @@ const CompareExperimentsFeedbackScoreCell: React.FC<
     const color = feedbackKey && colorMap ? colorMap[feedbackKey] : undefined;
 
     const shouldShowInlineReasons =
-      showReasons &&
       [ROW_HEIGHT.medium, ROW_HEIGHT.large].includes(rowHeight) &&
       reasons.length > 0;
 
@@ -107,7 +103,13 @@ const CompareExperimentsFeedbackScoreCell: React.FC<
         {reasons.length > 0 && (
           <FeedbackScoreReasonTooltip reasons={reasons}>
             {shouldShowInlineReasons ? (
-              <span className="line-clamp-3 break-words text-xs text-muted-foreground">
+              <span
+                className={cn(
+                  "break-words text-xs text-muted-foreground",
+                  rowHeight === ROW_HEIGHT.medium && "line-clamp-3",
+                  rowHeight === ROW_HEIGHT.large && "line-clamp-[10]",
+                )}
+              >
                 {reasons.map((r) => r.reason).join(", ")}
               </span>
             ) : (
