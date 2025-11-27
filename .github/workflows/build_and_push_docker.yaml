@@ -1,130 +1,267 @@
-name: "Build Docker Images"
+name: "Build Docker Images Multi-Arch"
+
+run-name: "Build ${{ inputs.image }}${{ inputs.build_comet_image && '-comet' || '' }} - ${{ inputs.version }}"
 
 on:
   workflow_call:
     inputs:
-        image:
-            type: string
-            required: true
-            description: Docker Image
-        version:
-            type: string
-            required: true
-            description: Version
-        build_from:
-            type: string
-            required: true
-            description: Original version to build from 
-            default: ""
-        build_comet_image:
-            type: boolean
-            required: true
-            description: If to build a Comet integration image
-            default: false
-        comet_build_args:
-            type: string
-            required: false
-            default: ""
-            description: Arguments for cloud docker build
-        is_release:
-            type: boolean
-            required: true
-            description: If this is a release build (will build multi-arch and push latest tag)
-            default: false
+      image:
+        type: string
+        required: true
+        description: Docker Image
+      version:
+        type: string
+        required: true
+        description: Version
+      build_from:
+        type: string
+        required: true
+        description: Original version to build from 
+        default: ""
+      build_comet_image:
+        type: boolean
+        required: true
+        description: If to build a Comet integration image
+        default: false
+      comet_build_args:
+        type: string
+        required: false
+        default: ""
+        description: Arguments for cloud docker build
+      is_release:
+        type: boolean
+        required: true
+        description: If this is a release build (will build multi-arch and push latest tag)
+        default: false
     secrets:
       OPIK_FE_SENTRY_DSN:
         required: false
 
 env:
-  DOCKER_REGISTRY: "ghcr.io/comet-ml/opik" 
+  DOCKER_REGISTRY: "ghcr.io/comet-ml/opik"
+  DOCKER_BUILD_SUMMARY: "false"
 
 jobs:
-
-  build-n-push-image:
+  generate-matrix:
     runs-on: ubuntu-latest
+    outputs:
+      build_matrix: ${{ steps.set-matrix.outputs.build_matrix }}
+      merge_matrix: ${{ steps.set-matrix.outputs.merge_matrix }}
+    steps:
+      - name: Generate build and merge matrices
+        id: set-matrix
+        run: |
+          # Build 2D matrix: image_type x platform
+          BUILD_MATRIX='{"image_type":["regular","comet"],"platform":["amd64","arm64"],"exclude":[]}'
+          MERGE_MATRIX='{"image_type":["regular","comet"],"exclude":[]}'
+          
+          # Exclude comet if build_comet_image is false
+          if [[ "${{ inputs.build_comet_image }}" != "true" ]]; then
+            BUILD_MATRIX=$(echo "$BUILD_MATRIX" | jq '.exclude += [{"image_type":"comet"}]')
+            MERGE_MATRIX=$(echo "$MERGE_MATRIX" | jq '.exclude += [{"image_type":"comet"}]')
+          fi
+          
+          # Exclude arm64 if not a release build or if guardrails backend
+          if [[ "${{ inputs.is_release }}" != "true" ]] || [[ "${{ inputs.image }}" == "opik-guardrails-backend" ]]; then
+            BUILD_MATRIX=$(echo "$BUILD_MATRIX" | jq '.exclude += [{"platform":"arm64"}]')
+          fi
+          
+          echo "build_matrix<<EOF" >> $GITHUB_OUTPUT
+          echo "$BUILD_MATRIX" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+          
+          echo "merge_matrix<<EOF" >> $GITHUB_OUTPUT
+          echo "$MERGE_MATRIX" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+  build:
+    needs: generate-matrix
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.generate-matrix.outputs.build_matrix) }}
+    runs-on: ${{ matrix.platform == 'amd64' && 'ubuntu-latest' || 'ubuntu-24.04-arm' }}
+    name: ${{ matrix.platform }} ${{ inputs.image }}${{ matrix.image_type == 'comet' && '-comet' || '' }}
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      digest: ${{ steps.build.outputs.digest }}
+      platform: ${{ matrix.platform }}
+      image_name: ${{ steps.set_vars.outputs.image_name }}
     timeout-minutes: 60
     steps:
-        - name: Checkout
-          uses: actions/checkout@v4.1.1
-          with:
-            ref: ${{inputs.build_from}}
+      - name: Set image variables
+        id: set_vars
+        run: |
+          if [[ "${{ matrix.image_type }}" == "comet" ]]; then
+            IMAGE_NAME="${{ inputs.image }}-comet"
+          else
+            IMAGE_NAME="${{ inputs.image }}"
+          fi
+          echo "image_name=$IMAGE_NAME" >> $GITHUB_OUTPUT
 
-        - name: Save opik-sandbox-executor-python
-          if: inputs.image == 'opik-python-backend'
-          run: |
-            docker pull ${{env.DOCKER_REGISTRY}}/opik-sandbox-executor-python:${{inputs.version}}
-            docker save ${{env.DOCKER_REGISTRY}}/opik-sandbox-executor-python:${{inputs.version}} | gzip > apps/opik-python-backend/opik-sandbox-executor-python.tar.gz
-            
-        - name: Login to GHCR
-          uses: docker/login-action@v3
-          with:
-            registry: ${{env.DOCKER_REGISTRY}}
-            username: "github-actions"
-            password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Checkout
+        uses: actions/checkout@v4.1.1
+        with:
+          ref: ${{ inputs.build_from }}
 
-        - name: Set up Docker Buildx
-          uses: docker/setup-buildx-action@v3
+      - name: Save opik-sandbox-executor-python
+        if: inputs.image == 'opik-python-backend'
+        run: |
+          docker pull ${{env.DOCKER_REGISTRY}}/opik-sandbox-executor-python:${{inputs.version}}
+          docker save ${{env.DOCKER_REGISTRY}}/opik-sandbox-executor-python:${{inputs.version}} | gzip > apps/opik-python-backend/opik-sandbox-executor-python.tar.gz
 
-        - name: Build and Push Docker Image
-          uses: docker/build-push-action@v6
-          with:
-            context: apps/${{ inputs.image }}/
-            platforms: ${{ (inputs.is_release && inputs.image != 'opik-guardrails-backend') && 'linux/amd64,linux/arm64' || 'linux/amd64' }}
-            cache-from: type=registry,ref=${{ env.DOCKER_REGISTRY }}/${{ inputs.image }}:${{ inputs.is_release && 'latest' || 'main' }}
-            provenance: false
-            push: true
-            tags: |
-              ${{env.DOCKER_REGISTRY}}/${{ inputs.image }}:${{inputs.version}}
-              ${{ inputs.is_release && format('{0}/{1}:latest', env.DOCKER_REGISTRY, inputs.image) || '' }}
-              ${{ github.ref == 'refs/heads/main' && format('{0}/{1}:main', env.DOCKER_REGISTRY, inputs.image) || '' }}
-            build-args: |
-              OPIK_VERSION=${{inputs.version}}
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
-        - name: Build and Push Docker Image for Comet integration
-          if: inputs.build_comet_image
-          uses: docker/build-push-action@v6
-          with:
-            context: apps/${{ inputs.image }}/
-            platforms: ${{ inputs.is_release && 'linux/amd64,linux/arm64' || 'linux/amd64' }}
-            cache-from: type=registry,ref=${{ env.DOCKER_REGISTRY }}/${{ inputs.image }}-comet:${{ inputs.is_release && 'latest' || 'main' }}
-            provenance: false
-            push: true
-            tags: |
-              ${{env.DOCKER_REGISTRY}}/${{ inputs.image }}-comet:${{inputs.version}}
-              ${{ inputs.is_release && format('{0}/{1}-comet:latest', env.DOCKER_REGISTRY, inputs.image) || '' }}
-              ${{ github.ref == 'refs/heads/main' && format('{0}/{1}-comet:main', env.DOCKER_REGISTRY, inputs.image) || '' }}
-            build-args: |
-              ${{inputs.comet_build_args}}
-              OPIK_VERSION=${{inputs.version}}
-              SENTRY_ENABLED=true
-              SENTRY_DSN=${{secrets.OPIK_FE_SENTRY_DSN}}
-            secrets: |
-              OPIK_FE_SENTRY_DSN=${{secrets.OPIK_FE_SENTRY_DSN}}
-              GITHUB_TOKEN=${{ secrets.GITHUB_TOKEN }}
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
 
-        - name: Write Build Summary
-          run: |
-            echo "### Docker images pushed:" >> $GITHUB_STEP_SUMMARY
-            echo "${{env.DOCKER_REGISTRY}}/${{ inputs.image }}:${{inputs.version}}" >> $GITHUB_STEP_SUMMARY
-            if [[ "${{ inputs.is_release }}" == "true" ]]; then
-              echo "${{env.DOCKER_REGISTRY}}/${{ inputs.image }}:latest" >> $GITHUB_STEP_SUMMARY
-              if [[ "${{ inputs.image }}" == "guardrails" ]]; then
-                echo "Built for platforms: linux/amd64" >> $GITHUB_STEP_SUMMARY
-              else
-                echo "Built for platforms: linux/amd64, linux/arm64" >> $GITHUB_STEP_SUMMARY
+      - name: Extract metadata (tags, labels) for Docker
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.DOCKER_REGISTRY }}/${{ steps.set_vars.outputs.image_name }}
+          tags: |
+            type=raw,value=${{ inputs.version }}
+            type=raw,value=latest,enable=${{ inputs.is_release == true }}
+            type=raw,value=main,enable=${{ github.ref == 'refs/heads/main' }}
+
+      - name: Build and Push Docker Image
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: apps/${{ inputs.image }}/
+          platforms: linux/${{ matrix.platform }}
+          cache-from: type=registry,ref=${{ env.DOCKER_REGISTRY }}/${{ steps.set_vars.outputs.image_name }}:main
+          provenance: false
+          load: false
+          outputs: type=image,name=${{ env.DOCKER_REGISTRY }}/${{ steps.set_vars.outputs.image_name }},push-by-digest=true,name-canonical=true,push=true
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            OPIK_VERSION=${{ inputs.version }}
+            ${{ matrix.image_type == 'comet' && (
+              format('{0}\nSENTRY_ENABLED=true\nSENTRY_DSN={1}', inputs.comet_build_args, secrets.OPIK_FE_SENTRY_DSN)
+            ) || '' }}
+          secrets: |
+            ${{ matrix.image_type == 'comet' && secrets.OPIK_FE_SENTRY_DSN != '' && format('OPIK_FE_SENTRY_DSN={0}', secrets.OPIK_FE_SENTRY_DSN) || '' }}
+            GITHUB_TOKEN=${{ secrets.GITHUB_TOKEN }}
+
+      - name: Export digest
+        run: |
+          mkdir -p /tmp/digests/${{ steps.set_vars.outputs.image_name }}
+          digest="${{ steps.build.outputs.digest }}"
+          # Strip sha256: prefix
+          HASH="${digest#sha256:}"
+          echo "$HASH" > "/tmp/digests/${{ steps.set_vars.outputs.image_name }}/${{ matrix.platform }}.digest"
+
+      - name: Upload digest
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ github.run_id }}-${{ steps.set_vars.outputs.image_name }}-digest-${{ matrix.platform }}
+          path: /tmp/digests/${{ steps.set_vars.outputs.image_name }}/${{ matrix.platform }}.digest
+          if-no-files-found: error
+          retention-days: 1
+
+  merge:
+    needs: [generate-matrix, build]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      matrix: ${{ fromJson(needs.generate-matrix.outputs.merge_matrix) }}
+    steps:
+      - name: Set image variables
+        id: set_vars
+        run: |
+          if [[ "${{ matrix.image_type }}" == "comet" ]]; then
+            IMAGE_NAME="${{ inputs.image }}-comet"
+          else
+            IMAGE_NAME="${{ inputs.image }}"
+          fi
+          echo "image_name=$IMAGE_NAME" >> $GITHUB_OUTPUT
+
+      - name: Download digests
+        uses: actions/download-artifact@v4
+        with:
+          path: /tmp/digests/${{ steps.set_vars.outputs.image_name }}
+          pattern: ${{ github.run_id }}-${{ steps.set_vars.outputs.image_name }}-digest-*
+          
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata (tags, labels) for Docker
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.DOCKER_REGISTRY }}/${{ steps.set_vars.outputs.image_name }}
+          tags: |
+            type=raw,value=${{ inputs.version }}
+            type=raw,value=latest,enable=${{ inputs.is_release == true }}
+            type=raw,value=main,enable=${{ github.ref == 'refs/heads/main' }}
+
+      - name: Create manifest list and push tags
+        run: |
+          cd /tmp/digests/${{ steps.set_vars.outputs.image_name }}
+          
+          DIGESTS=""
+          
+          for artifact_dir in ${{ github.run_id }}-${{ steps.set_vars.outputs.image_name }}-digest-*; do
+            if [ -d "$artifact_dir" ]; then
+              PLATFORM="${artifact_dir##*-}"
+              DIGEST_FILE="$artifact_dir/$PLATFORM.digest"
+              
+              if [ -f "$DIGEST_FILE" ]; then
+                DIGEST_VALUE=$(tr -d '\n\r ' < "$DIGEST_FILE")
+                DIGEST_REF="${{ env.DOCKER_REGISTRY }}/${{ steps.set_vars.outputs.image_name }}@sha256:$DIGEST_VALUE"
+                DIGESTS="$DIGESTS $DIGEST_REF"
               fi
-            else
-              echo "Built for platforms: linux/amd64" >> $GITHUB_STEP_SUMMARY
             fi
-            
-            if [[ "${{ inputs.build_comet_image }}" == "true" ]]; then
-              echo "### Comet Integration Image" >> $GITHUB_STEP_SUMMARY
-              echo "${{env.DOCKER_REGISTRY}}/${{ inputs.image }}-comet:${{inputs.version}}" >> $GITHUB_STEP_SUMMARY
-              if [[ "${{ inputs.is_release }}" == "true" ]]; then
-                echo "${{env.DOCKER_REGISTRY}}/${{ inputs.image }}-comet:latest" >> $GITHUB_STEP_SUMMARY
-                echo "Built for platforms: linux/amd64, linux/arm64" >> $GITHUB_STEP_SUMMARY
-              else
-                echo "Built for platforms: linux/amd64" >> $GITHUB_STEP_SUMMARY
-              fi
+          done
+          
+          if [ -z "$DIGESTS" ]; then
+            echo "ERROR: No digests found for ${{ steps.set_vars.outputs.image_name }}"
+            exit 1
+          fi
+          
+          # Create and push manifest using metadata tags
+          # Metadata outputs tags as newline-separated string, convert to -t flags
+          TAG_ARGS=""
+          while IFS= read -r tag; do
+            if [ -n "$tag" ]; then
+              TAG_ARGS="$TAG_ARGS -t $tag"
             fi
-        
+          done <<< "${{ steps.meta.outputs.tags }}"
+          
+          if [ -z "$TAG_ARGS" ]; then
+            echo "ERROR: No tags generated from metadata!"
+            exit 1
+          fi
+          
+          docker buildx imagetools create $TAG_ARGS $DIGESTS
+
+      - name: Write Build Summary
+        run: |
+          echo "### Docker images pushed: ${{ steps.set_vars.outputs.image_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "${{ steps.meta.outputs.tags }}" >> $GITHUB_STEP_SUMMARY
+          if [[ "${{ inputs.image }}" == "opik-guardrails-backend" ]]; then
+            echo "Built for platforms: linux/amd64" >> $GITHUB_STEP_SUMMARY
+          elif [[ "${{ inputs.is_release }}" == "true" ]]; then
+            echo "Built for platforms: linux/amd64, linux/arm64" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "Built for platforms: linux/amd64" >> $GITHUB_STEP_SUMMARY
+          fi
+          echo "- [View on GitHub Container Registry](https://github.com/${{ github.repository }}/pkgs/container/opik%2F${{ steps.set_vars.outputs.image_name }})" >> $GITHUB_STEP_SUMMARY
+

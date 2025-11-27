@@ -10,6 +10,7 @@ import LoadableSelectBox from "@/components/shared/LoadableSelectBox/LoadableSel
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import usePromptsList from "@/api/prompts/usePromptsList";
 import { PROMPT_TEMPLATE_STRUCTURE } from "@/types/prompts";
+import useDeepMemo from "@/hooks/useDeepMemo";
 
 const DEFAULT_LOADED_PROMPTS = 1000;
 const MAX_LOADED_PROMPTS = 10000;
@@ -50,7 +51,7 @@ const PromptsSelectBox: React.FC<PromptsSelectBoxProps> = ({
     },
   );
 
-  const prompts = useMemo(
+  const prompts = useDeepMemo(
     () => promptsData?.content ?? [],
     [promptsData?.content],
   );

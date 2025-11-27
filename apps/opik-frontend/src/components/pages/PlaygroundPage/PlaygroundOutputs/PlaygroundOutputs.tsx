@@ -67,9 +67,12 @@ const PlaygroundOutputs = ({
   const handleChangeDatasetId = useCallback(
     (id: string | null) => {
       resetDatasetFilters();
+      if (!id) {
+        setDatasetVariables([]);
+      }
       onChangeDatasetId(id);
     },
-    [onChangeDatasetId, resetDatasetFilters],
+    [onChangeDatasetId, resetDatasetFilters, setDatasetVariables],
   );
 
   const renderResult = () => {
