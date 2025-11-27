@@ -106,13 +106,11 @@ public class CostService {
      * This handles common naming variations where users specify model names
      * like "claude-3.5-sonnet" but the pricing database uses "claude-3-5-sonnet".
      *
-     * @param modelName The original model name
+     * @param modelName The original model name (must not be null or blank)
      * @return Normalized model name with dots replaced by hyphens
      */
     private static String normalizeModelName(String modelName) {
-        if (StringUtils.isBlank(modelName)) {
-            return modelName;
-        }
+        // Caller guarantees modelName is non-null and non-blank
         return modelName.replace('.', '-');
     }
 

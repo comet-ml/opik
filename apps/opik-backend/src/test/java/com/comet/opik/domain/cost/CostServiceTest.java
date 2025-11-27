@@ -113,17 +113,18 @@ class CostServiceTest {
     }
 
     @Test
-    void calculateCost_shouldHandleMultipleDotsInModelName_issue4114() {
-        // Test case 5: Model names with multiple dots should be normalized
+    void calculateCost_shouldHandleUnknownModelWithDotsGracefully_issue4114() {
+        // Test case 5: Unknown models with multiple dots should not throw exceptions
         Map<String, Integer> usage = Map.of(
                 "original_usage.input_tokens", 1000,
                 "original_usage.output_tokens", 500);
 
-        // This would normalize "claude-3.5.1-sonnet" to "claude-3-5-1-sonnet"
+        // Unknown model with dots: "claude-3.5.1" (not in pricing database)
+        // Should normalize to "claude-3-5-1" and gracefully return zero cost
         BigDecimal cost = CostService.calculateCost("claude-3.5.1", "anthropic", usage, null);
 
-        // Even if not found in pricing database, should not throw exception
-        assertThat(cost).isGreaterThanOrEqualTo(BigDecimal.ZERO);
+        // Should return zero gracefully (not throw exception)
+        assertThat(cost).isEqualTo(BigDecimal.ZERO);
     }
 
     @Test
