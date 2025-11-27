@@ -72,7 +72,7 @@ const DatasetItemsPage = () => {
           datasetId={datasetId}
         />
       </div>
-      <Tabs value={tab || "items"} onValueChange={setTab} className="min-w-min">
+      <Tabs value={tab || "items"} onValueChange={setTab}>
         <TabsList variant="underline">
           <TabsTrigger variant="underline" value="items">
             Dataset items
