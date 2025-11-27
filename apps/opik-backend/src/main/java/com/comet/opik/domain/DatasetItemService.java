@@ -61,8 +61,7 @@ public interface DatasetItemService {
 
     Mono<Void> delete(List<UUID> ids);
 
-    Mono<DatasetItemPage> getItems(int page, int size, DatasetItemSearchCriteria datasetItemSearchCriteria,
-            String versionHashOrTag);
+    Mono<DatasetItemPage> getItems(int page, int size, DatasetItemSearchCriteria datasetItemSearchCriteria);
 
     Flux<DatasetItem> getItems(String workspaceId, DatasetItemStreamRequest request, Visibility visibility);
 
@@ -375,22 +374,21 @@ class DatasetItemServiceImpl implements DatasetItemService {
     @Override
     @WithSpan
     public Mono<DatasetItemPage> getItems(
-            int page, int size, @NonNull DatasetItemSearchCriteria datasetItemSearchCriteria,
-            String versionHashOrTag) {
+            int page, int size, @NonNull DatasetItemSearchCriteria datasetItemSearchCriteria) {
 
         // Verify dataset visibility
         datasetService.findById(datasetItemSearchCriteria.datasetId());
 
-        if (StringUtils.isNotBlank(versionHashOrTag)) {
+        if (StringUtils.isNotBlank(datasetItemSearchCriteria.versionHashOrTag())) {
             // Fetch versioned (immutable) items from dataset_item_versions table
             log.info("Finding versioned dataset items by '{}', version '{}', page '{}', size '{}'",
-                    datasetItemSearchCriteria, versionHashOrTag, page, size);
+                    datasetItemSearchCriteria, datasetItemSearchCriteria.versionHashOrTag(), page, size);
 
             // Resolve version hash/tag to version ID
             UUID versionId = versionServiceProvider.get().resolveVersionId(datasetItemSearchCriteria.datasetId(),
-                    versionHashOrTag);
+                    datasetItemSearchCriteria.versionHashOrTag());
             log.info("Resolved version '{}' to version ID '{}' for dataset '{}'",
-                    versionHashOrTag, versionId, datasetItemSearchCriteria.datasetId());
+                    datasetItemSearchCriteria.versionHashOrTag(), versionId, datasetItemSearchCriteria.datasetId());
 
             return versionDao.getItems(datasetItemSearchCriteria, page, size, versionId)
                     .defaultIfEmpty(DatasetItemPage.empty(page, sortingFactory.getSortableFields()));

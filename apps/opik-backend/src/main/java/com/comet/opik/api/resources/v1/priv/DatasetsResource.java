@@ -384,9 +384,10 @@ public class DatasetsResource {
                 .filters(queryFilters)
                 .entityType(EntityType.TRACE)
                 .truncate(truncate)
+                .versionHashOrTag(version)
                 .build();
 
-        var datasetItemPage = itemService.getItems(page, size, datasetItemSearchCriteria, version)
+        var datasetItemPage = itemService.getItems(page, size, datasetItemSearchCriteria)
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
 
@@ -602,6 +603,7 @@ public class DatasetsResource {
                 .search(search)
                 .entityType(EntityType.TRACE)
                 .truncate(truncate)
+                .versionHashOrTag(null) // Get draft items
                 .build();
 
         String workspaceId = requestContext.get().getWorkspaceId();
@@ -609,7 +611,7 @@ public class DatasetsResource {
         log.info("Finding dataset items with experiment items by '{}', page '{}', size '{}' on workspaceId '{}'",
                 datasetItemSearchCriteria, page, size, workspaceId);
 
-        var datasetItemPage = itemService.getItems(page, size, datasetItemSearchCriteria, null)
+        var datasetItemPage = itemService.getItems(page, size, datasetItemSearchCriteria)
                 .map(it -> {
                     // Remove sortableBy fields if dynamic sorting is disabled due to workspace size
                     if (metadata.cannotUseDynamicSorting()) {

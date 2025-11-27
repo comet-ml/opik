@@ -19,6 +19,7 @@ import jakarta.ws.rs.core.Response;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
@@ -448,31 +449,30 @@ class DatasetVersionServiceImpl implements DatasetVersionService {
         var toMap = toItems.stream()
                 .collect(Collectors.toMap(DatasetItemIdAndHash::itemId, item -> item));
 
+        var fromIds = fromMap.keySet();
+        var toIds = toMap.keySet();
+
         // Calculate added items (in 'to' but not in 'from')
-        long added = toMap.keySet().stream()
-                .filter(id -> !fromMap.containsKey(id))
-                .count();
+        var addedIds = CollectionUtils.subtract(toIds, fromIds);
+        long added = addedIds.size();
 
         // Calculate deleted items (in 'from' but not in 'to')
-        long deleted = fromMap.keySet().stream()
-                .filter(id -> !toMap.containsKey(id))
-                .count();
+        var deletedIds = CollectionUtils.subtract(fromIds, toIds);
+        long deleted = deletedIds.size();
 
-        // Calculate modified and unchanged items (in both)
+        // Calculate modified and unchanged items (items in both versions)
+        var commonIds = CollectionUtils.intersection(fromIds, toIds);
         long modified = 0;
         long unchanged = 0;
 
-        for (var entry : fromMap.entrySet()) {
-            UUID itemId = entry.getKey();
-            if (toMap.containsKey(itemId)) {
-                var fromItem = entry.getValue();
-                var toItem = toMap.get(itemId);
+        for (UUID itemId : commonIds) {
+            var fromItem = fromMap.get(itemId);
+            var toItem = toMap.get(itemId);
 
-                if (fromItem.dataHash() != toItem.dataHash()) {
-                    modified++;
-                } else {
-                    unchanged++;
-                }
+            if (fromItem.dataHash() != toItem.dataHash()) {
+                modified++;
+            } else {
+                unchanged++;
             }
         }
 
