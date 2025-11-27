@@ -11,6 +11,7 @@ import com.comet.opik.api.ProjectStats;
 import com.comet.opik.api.Visibility;
 import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.api.error.IdentifierMismatchException;
+import com.comet.opik.api.filter.DatasetItemFilter;
 import com.comet.opik.api.filter.ExperimentsComparisonFilter;
 import com.comet.opik.api.sorting.SortingFactoryDatasets;
 import com.comet.opik.infrastructure.auth.RequestContext;
@@ -57,7 +58,7 @@ public interface DatasetItemService {
 
     Mono<Void> batchUpdate(DatasetItemBatchUpdate batchUpdate);
 
-    Mono<Void> delete(List<UUID> ids);
+    Mono<Void> delete(Set<UUID> ids, List<DatasetItemFilter> filters);
 
     Mono<DatasetItemPage> getItems(int page, int size, DatasetItemSearchCriteria datasetItemSearchCriteria);
 
@@ -359,12 +360,8 @@ class DatasetItemServiceImpl implements DatasetItemService {
 
     @Override
     @WithSpan
-    public Mono<Void> delete(@NonNull List<UUID> ids) {
-        if (ids.isEmpty()) {
-            return Mono.empty();
-        }
-
-        return dao.delete(ids).then();
+    public Mono<Void> delete(Set<UUID> ids, List<DatasetItemFilter> filters) {
+        return dao.delete(ids, filters).then();
     }
 
     @Override

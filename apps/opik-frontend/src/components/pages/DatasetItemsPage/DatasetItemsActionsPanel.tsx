@@ -17,6 +17,7 @@ import { stripColumnPrefix } from "@/lib/utils";
 import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
 import { useDatasetItemDeletePreference } from "./hooks/useDatasetItemDeletePreference";
+import { Filters } from "@/types/filters";
 
 type DatasetItemsActionsPanelProps = {
   getDataForExport: () => Promise<DatasetItem[]>;
@@ -25,6 +26,10 @@ type DatasetItemsActionsPanelProps = {
   datasetName: string;
   columnsToExport: string[];
   dynamicColumns: string[];
+  isAllItemsSelected?: boolean;
+  filters?: Filters;
+  search?: string;
+  totalCount?: number;
 };
 
 const DatasetItemsActionsPanel: React.FunctionComponent<
@@ -36,6 +41,10 @@ const DatasetItemsActionsPanel: React.FunctionComponent<
   datasetName,
   columnsToExport,
   dynamicColumns,
+  isAllItemsSelected = false,
+  filters = [],
+  search = "",
+  totalCount = 0,
 }) => {
   const resetKeyRef = useRef(0);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState<boolean>(false);
@@ -54,8 +63,11 @@ const DatasetItemsActionsPanel: React.FunctionComponent<
   const deleteDatasetItemsHandler = useCallback(() => {
     mutate({
       ids: selectedDatasetItems.map((i) => i.id),
+      isAllItemsSelected,
+      filters,
+      search,
     });
-  }, [selectedDatasetItems, mutate]);
+  }, [selectedDatasetItems, mutate, isAllItemsSelected, filters, search]);
 
   const handleDeleteClick = useCallback(() => {
     if (dontAskAgain) {
@@ -134,6 +146,10 @@ const DatasetItemsActionsPanel: React.FunctionComponent<
         open={addTagDialogOpen}
         setOpen={setAddTagDialogOpen}
         onSuccess={() => {}}
+        isAllItemsSelected={isAllItemsSelected}
+        filters={filters}
+        search={search}
+        totalCount={totalCount}
       />
 
       <Button
