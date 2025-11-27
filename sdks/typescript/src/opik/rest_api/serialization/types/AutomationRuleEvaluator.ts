@@ -61,8 +61,7 @@ export declare namespace AutomationRuleEvaluator {
     }
 
     export interface TraceThreadUserDefinedMetricPython
-        extends _Base,
-            AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython.Raw {
+        extends _Base, AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython.Raw {
         type: "trace_thread_user_defined_metric_python";
     }
 
