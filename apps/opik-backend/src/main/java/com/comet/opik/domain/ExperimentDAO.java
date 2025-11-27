@@ -318,6 +318,25 @@ class ExperimentDAO {
                 ) as fs_avg
                 GROUP BY experiment_id
             ),
+            experiment_scores_agg AS (
+                SELECT
+                    experiment_id,
+                    mapFromArrays(
+                        groupArray(name),
+                        groupArray(value)
+                    ) AS experiment_scores
+                FROM (
+                    SELECT
+                        e.id AS experiment_id,
+                        JSON_VALUE(score, '$.name') AS name,
+                        CAST(JSON_VALUE(score, '$.value') AS Float64) AS value
+                    FROM experiments_final AS e
+                    ARRAY JOIN JSONExtractArrayRaw(e.experiment_scores) AS score
+                    WHERE length(e.experiment_scores) > 2
+                      AND length(JSON_VALUE(score, '$.name')) > 0
+                ) AS es
+                GROUP BY experiment_id
+            ),
             comments_agg AS (
                 SELECT
                     ei.experiment_id,
