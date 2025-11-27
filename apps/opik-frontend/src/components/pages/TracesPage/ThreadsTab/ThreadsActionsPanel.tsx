@@ -1,7 +1,5 @@
 import React, { useCallback, useRef, useState } from "react";
 import { Trash, Brain, Tag } from "lucide-react";
-import get from "lodash/get";
-import first from "lodash/first";
 import slugify from "slugify";
 
 import { Button } from "@/components/ui/button";
@@ -11,11 +9,13 @@ import ConfirmDialog from "@/components/shared/ConfirmDialog/ConfirmDialog";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import ExportToButton from "@/components/shared/ExportToButton/ExportToButton";
 import AddToDropdown from "@/components/pages-shared/traces/AddToDropdown/AddToDropdown";
-import { COLUMN_FEEDBACK_SCORES_ID } from "@/types/shared";
 import RunEvaluationDialog from "@/components/pages-shared/automations/RunEvaluationDialog/RunEvaluationDialog";
 import AddTagDialog, {
   TAG_ENTITY_TYPE,
 } from "@/components/pages-shared/traces/AddTagDialog/AddTagDialog";
+import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
+import { FeatureToggleKeys } from "@/types/feature-toggles";
+import { mapRowDataForExport } from "@/lib/traces/exportUtils";
 
 type ThreadsActionsPanelProps = {
   getDataForExport: () => Promise<Thread[]>;
@@ -39,6 +39,7 @@ const ThreadsActionsPanel: React.FunctionComponent<
 
   const { mutate } = useThreadBatchDeleteMutation();
   const disabled = !selectedRows?.length;
+  const isExportEnabled = useIsFeatureEnabled(FeatureToggleKeys.EXPORT_ENABLED);
 
   const deleteThreadsHandler = useCallback(() => {
     mutate({
@@ -49,29 +50,7 @@ const ThreadsActionsPanel: React.FunctionComponent<
 
   const mapRowData = useCallback(async () => {
     const rows = await getDataForExport();
-    return rows.map((row) => {
-      return columnsToExport.reduce<Record<string, unknown>>((acc, column) => {
-        // we need split by dot to parse feedback_scores into correct structure
-        const keys = column.split(".");
-        const keyPrefix = first(keys) as string;
-
-        if (keyPrefix === COLUMN_FEEDBACK_SCORES_ID) {
-          const scoreName = column.replace(`${COLUMN_FEEDBACK_SCORES_ID}.`, "");
-          const scoreObject = row.feedback_scores?.find(
-            (f) => f.name === scoreName,
-          );
-          acc[column] = get(scoreObject, "value", "-");
-
-          if (scoreObject && scoreObject.reason) {
-            acc[`${column}_reason`] = scoreObject.reason;
-          }
-        } else {
-          acc[column] = get(row, keys, "");
-        }
-
-        return acc;
-      }, {});
-    });
+    return mapRowDataForExport(rows, columnsToExport);
   }, [getDataForExport, columnsToExport]);
 
   const generateFileName = useCallback(
@@ -144,9 +123,14 @@ const ThreadsActionsPanel: React.FunctionComponent<
         </Button>
       </TooltipWrapper>
       <ExportToButton
-        disabled={disabled || columnsToExport.length === 0}
+        disabled={disabled || columnsToExport.length === 0 || !isExportEnabled}
         getData={mapRowData}
         generateFileName={generateFileName}
+        tooltipContent={
+          !isExportEnabled
+            ? "Export functionality is disabled for this installation"
+            : undefined
+        }
       />
       <TooltipWrapper content="Delete">
         <Button

@@ -593,3 +593,102 @@ opik_tracer = OpikTracer()
 # Ensure all traces are sent before script exits
 opik_tracer.flush()
 ```
+
+## Prompts integration
+
+The `OpikTracer` can be used together with the [OPIK prompts library](/docs/opik/prompt_engineering/prompt_management)
+to easily access your existing prompts or create new ones, and then associate them with traces or spans within an ADK agent flow.
+
+```python
+import datetime
+import uuid
+from typing import Iterator, Optional
+from zoneinfo import ZoneInfo
+
+from google.adk import Agent, Runner
+from google.adk.agents import LlmAgent
+from google.adk.models.lite_llm import LiteLlm
+from google.adk.sessions import InMemorySessionService
+from google.genai import types as genai_types
+from google.adk import events as adk_events
+
+import opik
+from opik.opik_context import update_current_trace
+from opik.integrations.adk import OpikTracer, track_adk_agent_recursive
+
+# Create prompt
+system_prompt = opik.Prompt(
+    name="system-prompt",
+    prompt="You are a helpful assistant that provides accurate and concise answers."
+)
+
+# Get prompt from the Prompt library
+client = opik.Opik()
+user_prompt = client.get_prompt(name="user-prompt")
+
+def get_weather(city: str) -> dict:
+    """Get weather information for a city."""
+    # Add prompts to the current trace
+    update_current_trace(
+        prompts=[system_prompt, user_prompt]
+    )
+
+    if city.lower() == "new york":
+        return {
+            "status": "success",
+            "report": "The weather in New York is sunny with a temperature of 25 °C (77 °F).",
+        }
+    elif city.lower() == "london":
+        return {
+            "status": "success",
+            "report": "The weather in London is cloudy with a temperature of 18 °C (64 °F).",
+        }
+    return {"status": "error", "error_message": f"Weather info for '{city}' is unavailable."}
+
+def get_current_time(city: str) -> dict:
+    """Get current time for a city."""
+    if city.lower() == "new york":
+        tz = ZoneInfo("America/New_York")
+        now = datetime.datetime.now(tz)
+        return {
+            "status": "success",
+            "report": now.strftime(f"The current time in {city} is %Y-%m-%d %H:%M:%S %Z%z."),
+        }
+    elif city.lower() == "london":
+        tz = ZoneInfo("Europe/London")
+        now = datetime.datetime.now(tz)
+        return {
+            "status": "success",
+            "report": now.strftime(f"The current time in {city} is %Y-%m-%d %H:%M:%S %Z%z."),
+        }
+    return {"status": "error", "error_message": f"No timezone info for '{city}'."}
+
+# Initialize LiteLLM with OpenAI gpt-4o
+llm = LiteLlm(model="openai/gpt-4o")
+
+# Create the basic agent
+basic_agent = LlmAgent(
+    name="weather_time_agent",
+    model=llm,
+    description="Agent for answering time & weather questions",
+    instruction="Answer questions about the time or weather in a city. Be helpful and provide clear information.",
+    tools=[get_weather, get_current_time],
+)
+
+# Configure Opik tracer
+opik_tracer = OpikTracer(
+    name="basic-weather-agent",
+    tags=["basic", "weather", "time", "single-agent"],
+    metadata={
+        "environment": "development",
+        "model": "gpt-4o",
+        "framework": "google-adk",
+        "example": "basic"
+    },
+    project_name="adk-basic-demo"
+)
+
+# Instrument the agent with a single function call - this is the recommended approach
+track_adk_agent_recursive(basic_agent, opik_tracer)
+
+```

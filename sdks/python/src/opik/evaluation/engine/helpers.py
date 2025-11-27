@@ -11,7 +11,7 @@ import opik.context_storage as context_storage
 
 @contextlib.contextmanager
 def evaluate_llm_task_context(
-    experiment: experiment.Experiment,
+    experiment: Optional[experiment.Experiment],
     dataset_item_id: str,
     trace_data: trace.TraceData,
     client: opik_client.Opik,
@@ -36,12 +36,13 @@ def evaluate_llm_task_context(
         client = client if client is not None else opik_client.get_client_cached()
         client.trace(**trace_data.as_parameters)
 
-        experiment_item_ = experiment_item.ExperimentItemReferences(
-            dataset_item_id=dataset_item_id,
-            trace_id=trace_data.id,
-        )
-
-        experiment.insert(experiment_items_references=[experiment_item_])
+        # Only insert experiment item if an experiment is provided
+        if experiment is not None:
+            experiment_item_ = experiment_item.ExperimentItemReferences(
+                dataset_item_id=dataset_item_id,
+                trace_id=trace_data.id,
+            )
+            experiment.insert(experiment_items_references=[experiment_item_])
 
 
 @contextlib.contextmanager

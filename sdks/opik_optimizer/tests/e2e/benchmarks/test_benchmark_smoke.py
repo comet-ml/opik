@@ -33,7 +33,8 @@ class InlineExecutor:
         fut.set_result(result)
         return fut
 
-    def shutdown(self, wait: bool = True, cancel_futures: bool = False) -> None:
+    def shutdown(self, wait: bool = True, _cancel_futures: bool = False) -> None:
+        _ = _cancel_futures
         return None
 
 

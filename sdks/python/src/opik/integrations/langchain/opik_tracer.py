@@ -19,8 +19,7 @@ from langchain_core import language_models
 from langchain_core.tracers import BaseTracer
 from langchain_core.tracers.schemas import Run
 
-import opik.dict_utils as dict_utils
-import opik.llm_usage as llm_usage
+from opik import context_storage, dict_utils, llm_usage, tracing_runtime_config
 from opik.api_objects import span, trace
 from opik.types import DistributedTraceHeadersDict, ErrorInfoDict
 from opik.validation import parameters_validator
@@ -32,8 +31,6 @@ from . import (
 )
 
 from ...api_objects import helpers, opik_client
-import opik.context_storage as context_storage
-import opik.decorator.tracing_runtime_config as tracing_runtime_config
 
 if TYPE_CHECKING:
     from langchain_core.runnables.graph import Graph

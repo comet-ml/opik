@@ -18,6 +18,8 @@ import {
   useSetPromptMap,
   useClearCreatedExperiments,
   useSetSelectedRuleIds,
+  useResetDatasetFilters,
+  useSetDatasetVariables,
 } from "@/store/PlaygroundStore";
 import useLastPickedModel from "@/hooks/useLastPickedModel";
 import useLLMProviderModelsData from "@/hooks/useLLMProviderModelsData";
@@ -45,6 +47,8 @@ const PlaygroundPrompts = ({
   const clearCreatedExperiments = useClearCreatedExperiments();
   const setSelectedRuleIds = useSetSelectedRuleIds();
   const setIsRunning = useSetIsRunning();
+  const resetDatasetFilters = useResetDatasetFilters();
+  const setDatasetVariables = useSetDatasetVariables();
   const resetKeyRef = useRef(0);
   const scrollToPromptRef = useRef<string>("");
   const [open, setOpen] = useState<boolean>(false);
@@ -86,6 +90,8 @@ const PlaygroundPrompts = ({
     setSelectedRuleIds(null);
     clearCreatedExperiments();
     setIsRunning(false);
+    resetDatasetFilters();
+    setDatasetVariables([]);
     onResetHeight();
   }, [
     providerKeys,
@@ -97,6 +103,8 @@ const PlaygroundPrompts = ({
     setSelectedRuleIds,
     clearCreatedExperiments,
     setIsRunning,
+    resetDatasetFilters,
+    setDatasetVariables,
     onResetHeight,
   ]);
 

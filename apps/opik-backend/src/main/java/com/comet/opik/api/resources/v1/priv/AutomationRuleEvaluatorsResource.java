@@ -76,7 +76,7 @@ public class AutomationRuleEvaluatorsResource {
     @JsonView(View.Public.class)
     public Response find(@QueryParam("project_id") UUID projectId,
             @QueryParam("id") @Schema(description = "Filter automation rules with rule ID containing this value (partial match, like %id%)") String id,
-            @QueryParam("name") String name,
+            @QueryParam("name") @Schema(description = "Filter automation rule evaluators by name (partial match, case insensitive)") String name,
             @QueryParam("filters") String filters,
             @QueryParam("sorting") String sorting,
             @QueryParam("page") @Min(1) @DefaultValue("1") int page,
