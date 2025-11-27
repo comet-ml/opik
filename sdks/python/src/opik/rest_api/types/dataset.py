@@ -5,6 +5,7 @@ import typing
 
 import pydantic
 from ..core.pydantic_utilities import IS_PYDANTIC_V2, UniversalBaseModel
+from .dataset_status import DatasetStatus
 from .dataset_visibility import DatasetVisibility
 
 
@@ -25,6 +26,7 @@ class Dataset(UniversalBaseModel):
     last_created_experiment_at: typing.Optional[dt.datetime] = None
     most_recent_optimization_at: typing.Optional[dt.datetime] = None
     last_created_optimization_at: typing.Optional[dt.datetime] = None
+    status: typing.Optional[DatasetStatus] = None
 
     if IS_PYDANTIC_V2:
         model_config: typing.ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(extra="allow", frozen=True)  # type: ignore # Pydantic v2

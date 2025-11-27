@@ -177,7 +177,11 @@ from .dataset_item_write import DatasetItemWrite
 from .dataset_item_write_source import DatasetItemWriteSource
 from .dataset_page_public import DatasetPagePublic
 from .dataset_public import DatasetPublic
+from .dataset_public_status import DatasetPublicStatus
 from .dataset_public_visibility import DatasetPublicVisibility
+from .dataset_status import DatasetStatus
+from .dataset_version_page_public import DatasetVersionPagePublic
+from .dataset_version_public import DatasetVersionPublic
 from .dataset_visibility import DatasetVisibility
 from .delete_attachments_request import DeleteAttachmentsRequest
 from .delete_attachments_request_entity_type import DeleteAttachmentsRequestEntityType
@@ -613,7 +617,11 @@ __all__ = [
     "DatasetItemWriteSource",
     "DatasetPagePublic",
     "DatasetPublic",
+    "DatasetPublicStatus",
     "DatasetPublicVisibility",
+    "DatasetStatus",
+    "DatasetVersionPagePublic",
+    "DatasetVersionPublic",
     "DatasetVisibility",
     "DeleteAttachmentsRequest",
     "DeleteAttachmentsRequestEntityType",

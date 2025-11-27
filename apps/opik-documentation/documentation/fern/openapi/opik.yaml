@@ -1834,6 +1834,163 @@ paths:
                   anyOf:
                   - $ref: "#/components/schemas/DatasetItem"
                   - $ref: "#/components/schemas/ErrorMessage"
+  /v1/private/datasets/{id}/versions/hash/{versionHash}/tags:
+    post:
+      tags:
+      - Datasets
+      summary: Create version tag
+      description: "Add a tag to a specific dataset version for easy reference (e.g.,\
+        \ 'baseline', 'v1.0', 'production')"
+      operationId: createVersionTag
+      parameters:
+      - name: versionHash
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DatasetVersionTag"
+      responses:
+        "204":
+          description: Tag created successfully
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "404":
+          description: Not Found - Version not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "409":
+          description: Conflict - Tag already exists
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+  /v1/private/datasets/{id}/versions:
+    get:
+      tags:
+      - Datasets
+      summary: List dataset versions
+      description: "Get paginated list of versions for a dataset, ordered by creation\
+        \ time (newest first)"
+      operationId: listDatasetVersions
+      parameters:
+      - name: page
+        in: query
+        schema:
+          minimum: 1
+          type: integer
+          format: int32
+          default: 1
+      - name: size
+        in: query
+        schema:
+          minimum: 1
+          type: integer
+          format: int32
+          default: 10
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "200":
+          description: Dataset versions
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DatasetVersionPage_Public"
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage_Public"
+    post:
+      tags:
+      - Datasets
+      summary: Create dataset version
+      description: Create a new immutable version of the dataset by snapshotting the
+        current state
+      operationId: createDatasetVersion
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DatasetVersionCreate_Public"
+      responses:
+        "201":
+          description: Created
+          headers:
+            Location:
+              required: true
+              style: simple
+              schema:
+                type: string
+              example: "${basePath}/v1/private/datasets/{datasetId}/versions"
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage_Public"
+        "409":
+          description: Conflict - Tag already exists
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage_Public"
+  /v1/private/datasets/{id}/versions/{versionHash}/tags/{tag}:
+    delete:
+      tags:
+      - Datasets
+      summary: Delete version tag
+      description: "Remove a tag from a dataset version. The version itself is not\
+        \ deleted, only the tag reference."
+      operationId: deleteVersionTag
+      parameters:
+      - name: versionHash
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: tag
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "204":
+          description: Tag deleted successfully
   /v1/private/experiments:
     get:
       tags:
@@ -7685,6 +7842,14 @@ components:
           type: string
           format: date-time
           readOnly: true
+        status:
+          type: string
+          readOnly: true
+          enum:
+          - unknown
+          - processing
+          - completed
+          - failed
     Dataset_Write:
       required:
       - name
@@ -8528,6 +8693,14 @@ components:
           type: string
           format: date-time
           readOnly: true
+        status:
+          type: string
+          readOnly: true
+          enum:
+          - unknown
+          - processing
+          - completed
+          - failed
     DatasetIdentifier_Public:
       required:
       - dataset_name
@@ -8813,6 +8986,113 @@ components:
           type: array
           items:
             type: string
+    DatasetVersionTag:
+      required:
+      - tag
+      type: object
+      properties:
+        tag:
+          maxLength: 100
+          minLength: 0
+          type: string
+    DatasetVersionCreate_Public:
+      type: object
+      properties:
+        tag:
+          maxLength: 100
+          minLength: 0
+          type: string
+          description: Optional tag for this version
+        change_description:
+          type: string
+          description: Optional description of changes in this version
+          example: Initial baseline version with production data
+        metadata:
+          type: object
+          additionalProperties:
+            type: string
+            description: Optional user-defined metadata
+          description: Optional user-defined metadata
+    DatasetVersionPage_Public:
+      type: object
+      properties:
+        content:
+          type: array
+          items:
+            $ref: "#/components/schemas/DatasetVersion_Public"
+        page:
+          type: integer
+          format: int32
+        size:
+          type: integer
+          format: int32
+        total:
+          type: integer
+          format: int64
+    DatasetVersion_Public:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        dataset_id:
+          type: string
+          format: uuid
+          readOnly: true
+        version_hash:
+          type: string
+          readOnly: true
+        tags:
+          uniqueItems: true
+          type: array
+          readOnly: true
+          items:
+            type: string
+            readOnly: true
+        items_total:
+          type: integer
+          description: Total number of items in this version
+          format: int32
+          readOnly: true
+        items_added:
+          type: integer
+          description: Number of items added since last version
+          format: int32
+          readOnly: true
+        items_modified:
+          type: integer
+          description: Number of items modified since last version
+          format: int32
+          readOnly: true
+        items_deleted:
+          type: integer
+          description: Number of items deleted since last version
+          format: int32
+          readOnly: true
+        change_description:
+          type: string
+          readOnly: true
+        metadata:
+          type: object
+          additionalProperties:
+            type: string
+            readOnly: true
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        created_by:
+          type: string
+          readOnly: true
+        last_updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        last_updated_by:
+          type: string
+          readOnly: true
     Experiment:
       required:
       - dataset_name
