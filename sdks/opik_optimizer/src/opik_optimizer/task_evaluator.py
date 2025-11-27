@@ -7,7 +7,7 @@ import opik
 from opik.evaluation import evaluator as opik_evaluator
 from opik.evaluation import evaluation_result as opik_evaluation_result
 from opik.evaluation.metrics import base_metric, score_result
-from . import multi_metric_objective
+from .metrics import multi_metric_objective
 
 logger = logging.getLogger(__name__)
 
