@@ -72,7 +72,7 @@ public class AnnotationQueuesResource {
     public Response findAnnotationQueues(
             @QueryParam("page") @Min(1) @DefaultValue("1") int page,
             @QueryParam("size") @Min(1) @DefaultValue("10") int size,
-            @QueryParam("name") String name,
+            @QueryParam("name") @Schema(description = "Filter annotation queues by name (partial match, case insensitive)") String name,
             @QueryParam("filters") String filters,
             @QueryParam("sorting") String sorting) {
 

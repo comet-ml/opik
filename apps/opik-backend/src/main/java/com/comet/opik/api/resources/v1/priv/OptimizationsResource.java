@@ -89,7 +89,7 @@ public class OptimizationsResource {
             @QueryParam("page") @Min(1) @DefaultValue("1") int page,
             @QueryParam("size") @Min(1) @DefaultValue("10") int size,
             @QueryParam("dataset_id") UUID datasetId,
-            @QueryParam("name") String name,
+            @QueryParam("name") @Schema(description = "Filter optimizations by name (partial match, case insensitive)") String name,
             @QueryParam("dataset_deleted") Boolean datasetDeleted) {
 
         var searchCriteria = OptimizationSearchCriteria.builder()

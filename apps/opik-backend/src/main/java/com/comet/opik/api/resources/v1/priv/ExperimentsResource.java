@@ -117,7 +117,7 @@ public class ExperimentsResource {
             @QueryParam("datasetId") UUID datasetId,
             @QueryParam("optimization_id") UUID optimizationId,
             @QueryParam("types") String typesQueryParam,
-            @QueryParam("name") String name,
+            @QueryParam("name") @Schema(description = "Filter experiments by name (partial match, case insensitive)") String name,
             @QueryParam("dataset_deleted") boolean datasetDeleted,
             @QueryParam("prompt_id") UUID promptId,
             @QueryParam("sorting") String sorting,
@@ -177,7 +177,7 @@ public class ExperimentsResource {
     public Response findGroups(
             @QueryParam("groups") String groupsQueryParam,
             @QueryParam("types") String typesQueryParam,
-            @QueryParam("name") String name,
+            @QueryParam("name") @Schema(description = "Filter experiments by name (partial match, case insensitive)") String name,
             @QueryParam("filters") String filters) {
 
         // Parse and validate groups parameter using GroupingFactory
@@ -215,7 +215,7 @@ public class ExperimentsResource {
     public Response findGroupsAggregations(
             @QueryParam("groups") String groupsQueryParam,
             @QueryParam("types") String typesQueryParam,
-            @QueryParam("name") String name,
+            @QueryParam("name") @Schema(description = "Filter experiments by name (partial match, case insensitive)") String name,
             @QueryParam("filters") String filters) {
 
         // Parse and validate groups parameter using GroupingFactory
