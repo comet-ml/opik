@@ -7,6 +7,7 @@ import { CursorService } from './cursor/cursorService';
 import { initializeSentry, captureException } from './sentry';
 import { MCPService } from './mcp/mcpService';
 import { updateStatusBar, showInitialApiKeyWarning } from './ui';
+import { resetExtensionState } from './state';
 
 export function activate(context: vscode.ExtensionContext) {
   // Get or create user UUID for tracking
@@ -43,6 +44,14 @@ export function activate(context: vscode.ExtensionContext) {
       }
     });
     context.subscriptions.push(configChangeListener);
+
+    // Register reset command
+    const resetCommand = vscode.commands.registerCommand('opik.resetState', () => {
+      resetExtensionState(context);
+      vscode.window.showInformationMessage('Opik: Extension state has been reset. Recent conversations will be re-synced.');
+      console.log('🔄 Extension state reset - will re-sync recent conversations');
+    });
+    context.subscriptions.push(resetCommand);
 
     const opikConfigPath = path.join(os.homedir(), '.opik.config');
     if (fs.existsSync(opikConfigPath)) {

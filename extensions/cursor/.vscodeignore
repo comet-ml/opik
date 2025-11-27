@@ -10,7 +10,6 @@ vsc-extension-quickstart.md
 **/*.ts
 **/.vscode-test.*
 node_modules/**
-!node_modules/sql.js/dist/sql-wasm.wasm
 .editorconfig
 .eslintrc.json
 .prettierrc
