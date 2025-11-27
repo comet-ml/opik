@@ -4,7 +4,7 @@
   "description": "Export your chat history from Cursor to Opik.",
   "repository": "https://github.com/comet-ml/opik",
   "publisher": "opik",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "preview": false,
   "engines": {
     "vscode": "^1.90.0"
