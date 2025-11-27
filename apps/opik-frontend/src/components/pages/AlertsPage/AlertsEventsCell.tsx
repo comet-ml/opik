@@ -2,7 +2,7 @@ import { CellContext } from "@tanstack/react-table";
 
 import { Alert } from "@/types/alerts";
 import TextCell from "@/components/shared/DataTableCells/TextCell";
-import { TRIGGER_CONFIG } from "@/components/pages/ConfigurationPage/AlertsTab/AddEditAlertPage/helpers";
+import { TRIGGER_CONFIG } from "@/components/pages/AlertsPage/AddEditAlertPage/helpers";
 
 const AlertsEventsCell = (context: CellContext<Alert, unknown>) => {
   const alert = context.row.original;
