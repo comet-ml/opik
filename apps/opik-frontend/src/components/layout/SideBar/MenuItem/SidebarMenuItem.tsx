@@ -109,7 +109,7 @@ const SidebarMenuItem: React.FunctionComponent<SidebarMenuItemProps> = ({
       <item.icon className="size-4 shrink-0" />
       {expanded && (
         <>
-          <div className="ml-1 grow truncate">{item.label}</div>
+          <div className="grow truncate">{item.label}</div>
           {hasCount && <div className="h-6 shrink-0 leading-6">{count}</div>}
         </>
       )}
@@ -118,7 +118,9 @@ const SidebarMenuItem: React.FunctionComponent<SidebarMenuItemProps> = ({
 
   const linkClasses = cn(
     "comet-body-s flex w-full items-center gap-2 rounded-md hover:bg-primary-foreground data-[status=active]:bg-primary-100 data-[status=active]:text-primary",
-    compact ? "h-8 text-muted-slate" : "h-9 text-foreground",
+    compact
+      ? "h-8 text-muted-slate data-[status=active]:text-muted-slate data-[status=active]:bg-muted"
+      : "h-9 text-foreground",
     compact
       ? expanded
         ? "px-2.5"

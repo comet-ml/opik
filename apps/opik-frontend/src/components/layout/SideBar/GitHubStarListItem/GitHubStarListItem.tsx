@@ -27,7 +27,7 @@ const GitHubStarListItem: React.FC<GitHubStarListItemProps> = ({
         variant="outline"
         size="sm"
         className={cn(
-          expanded ? "ml-1.5 h-8 gap-1.5 px-2" : "size-8 p-0 max-w-full",
+          expanded ? "ml-0.5 h-8 gap-1.5 px-2" : "size-8 p-0 max-w-full",
           "dark:bg-primary-foreground",
         )}
         asChild
