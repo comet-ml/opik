@@ -83,17 +83,21 @@ export const getFeedbackScoresForExperimentsAsRows = ({
     string,
     "feedback_scores" | "experiment_scores"
   >();
+
+  const addScoresToMap = (
+    type: "feedback_scores" | "experiment_scores",
+    scores?: AggregatedFeedbackScore[],
+  ) => {
+    scores?.forEach((score) => {
+      if (!scoreTypeMap.has(score.name)) {
+        scoreTypeMap.set(score.name, type);
+      }
+    });
+  };
+
   experiments.forEach((experiment) => {
-    experiment.feedback_scores?.forEach((score) => {
-      if (!scoreTypeMap.has(score.name)) {
-        scoreTypeMap.set(score.name, "feedback_scores");
-      }
-    });
-    experiment.experiment_scores?.forEach((score) => {
-      if (!scoreTypeMap.has(score.name)) {
-        scoreTypeMap.set(score.name, "experiment_scores");
-      }
-    });
+    addScoresToMap("feedback_scores", experiment.feedback_scores);
+    addScoresToMap("experiment_scores", experiment.experiment_scores);
   });
 
   return keys.map((key) => {
