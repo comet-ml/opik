@@ -144,9 +144,9 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
             OPIK_VERSION=${{ inputs.version }}
-            ${{ matrix.image_type == 'comet' && (
-              format('{0} --build-arg SENTRY_ENABLED=true --build-arg SENTRY_DSN={1}', inputs.comet_build_args, secrets.OPIK_FE_SENTRY_DSN)
-            ) || '' }}
+            ${{ matrix.image_type == 'comet' && inputs.comet_build_args }}
+            ${{ matrix.image_type == 'comet' && 'SENTRY_ENABLED=true' }}
+            ${{ matrix.image_type == 'comet' && secrets.OPIK_FE_SENTRY_DSN }}
           secrets: |
             ${{ matrix.image_type == 'comet' && secrets.OPIK_FE_SENTRY_DSN != '' && format('OPIK_FE_SENTRY_DSN={0}', secrets.OPIK_FE_SENTRY_DSN) || '' }}
             GITHUB_TOKEN=${{ secrets.GITHUB_TOKEN }}
