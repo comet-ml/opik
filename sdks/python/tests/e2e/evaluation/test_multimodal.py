@@ -1,8 +1,13 @@
 from typing import Any, Dict, List
 
+import pytest
+
 import opik
 from opik import flush_tracker
 from opik.evaluation import evaluate_prompt, metrics
+
+from ...testlib import environment
+
 
 CAT_IMAGE_URL = "https://cataas.com/cat"
 PNG_DOG_DATA_URL = (
@@ -59,6 +64,9 @@ def _normalize_output(output: Any) -> str:
     return str(output).strip().lower()
 
 
+@pytest.mark.skipif(
+    not environment.has_openai_api_key(), reason="OPENAI_API_KEY is not set"
+)
 def test_evaluate_prompt_supports_multimodal_images(
     opik_client: opik.Opik,
     dataset_name: str,
