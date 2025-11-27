@@ -9,6 +9,7 @@ import {
 } from "@/components/ui/accordion";
 import SyntaxHighlighter from "@/components/shared/SyntaxHighlighter/SyntaxHighlighter";
 import AttachmentsList from "./AttachmentsList";
+import EventsList from "./EventsList";
 import Loader from "@/components/shared/Loader/Loader";
 
 type InputOutputTabProps = {
@@ -32,7 +33,7 @@ const InputOutputTab: React.FunctionComponent<InputOutputTabProps> = ({
     <Accordion
       type="multiple"
       className="w-full"
-      defaultValue={["attachments", "error", "input", "output"]}
+      defaultValue={["attachments", "error", "input", "output", "events"]}
     >
       <AttachmentsList data={data} media={media} />
       {hasError && (
@@ -93,6 +94,7 @@ const InputOutputTab: React.FunctionComponent<InputOutputTabProps> = ({
           )}
         </AccordionContent>
       </AccordionItem>
+      <EventsList data={data} isLoading={isLoading} search={search} />
     </Accordion>
   );
 };

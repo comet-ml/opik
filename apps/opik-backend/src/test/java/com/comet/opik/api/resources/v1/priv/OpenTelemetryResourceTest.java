@@ -365,7 +365,7 @@ class OpenTelemetryResourceTest {
                     .projectId(UUID.randomUUID())
                     .startTime(Instant.now());
 
-            OpenTelemetryMapper.enrichSpanWithAttributes(spanBuilder, attributes, null);
+            OpenTelemetryMapper.enrichSpanWithAttributes(spanBuilder, attributes, null, null);
 
             var span = spanBuilder.build();
 
