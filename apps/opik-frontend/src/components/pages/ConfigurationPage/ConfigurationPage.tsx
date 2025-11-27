@@ -1,5 +1,4 @@
 import React, { useEffect } from "react";
-import { Outlet, useMatchRoute } from "@tanstack/react-router";
 import AIProvidersTab from "@/components/pages/ConfigurationPage/AIProvidersTab/AIProvidersTab";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { StringParam, useQueryParam } from "use-query-params";

@@ -16,4 +16,3 @@ const AlertsRouteWrapper: React.FunctionComponent = () => {
 };
 
 export default AlertsRouteWrapper;
-

@@ -292,9 +292,8 @@ const AlertsTab: React.FunctionComponent = () => {
 
   const handleNewAlertClick = useCallback(() => {
     navigate({
-      to: "/$workspaceName/configuration/alerts/new",
+      to: "/$workspaceName/alerts/new",
       params: { workspaceName },
-      search: (prev) => prev, // Preserve existing search params
     });
   }, [navigate, workspaceName]);
 

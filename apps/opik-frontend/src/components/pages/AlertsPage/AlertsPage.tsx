@@ -375,4 +375,3 @@ const AlertsPage: React.FunctionComponent = () => {
 };
 
 export default AlertsPage;
-
