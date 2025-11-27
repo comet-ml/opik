@@ -39,7 +39,7 @@ import OptimizationsPage from "@/components/pages/OptimizationsPage/Optimization
 import OptimizationPage from "@/components/pages/OptimizationPage/OptimizationPage";
 import CompareOptimizationsPage from "@/components/pages/CompareOptimizationsPage/CompareOptimizationsPage";
 import CompareTrialsPage from "@/components/pages/CompareTrialsPage/CompareTrialsPage";
-import AddEditAlertPage from "@/components/pages/ConfigurationPage/AlertsTab/AddEditAlertPage/AddEditAlertPage";
+import AddEditAlertPage from "@/components/pages/AlertsPage/AddEditAlertPage/AddEditAlertPage";
 import AlertsRouteWrapper from "@/components/pages/AlertsPage/AlertsRouteWrapper";
 
 declare module "@tanstack/react-router" {

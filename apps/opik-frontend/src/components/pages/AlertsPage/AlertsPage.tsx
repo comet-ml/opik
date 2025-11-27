@@ -5,10 +5,10 @@ import { JsonParam, StringParam, useQueryParam } from "use-query-params";
 import { useNavigate } from "@tanstack/react-router";
 
 import useAlertsList from "@/api/alerts/useAlertsList";
-import AlertsRowActionsCell from "@/components/pages/ConfigurationPage/AlertsTab/AlertsRowActionsCell";
-import AlertsEventsCell from "@/components/pages/ConfigurationPage/AlertsTab/AlertsEventsCell";
-import AlertTypeCell from "@/components/pages/ConfigurationPage/AlertsTab/AlertTypeCell";
-import { ALERT_TYPE_LABELS } from "@/components/pages/ConfigurationPage/AlertsTab/AddEditAlertPage/helpers";
+import AlertsRowActionsCell from "@/components/pages/AlertsPage/AlertsRowActionsCell";
+import AlertsEventsCell from "@/components/pages/AlertsPage/AlertsEventsCell";
+import AlertTypeCell from "@/components/pages/AlertsPage/AlertTypeCell";
+import { ALERT_TYPE_LABELS } from "@/components/pages/AlertsPage/AddEditAlertPage/helpers";
 import DataTable from "@/components/shared/DataTable/DataTable";
 import DataTablePagination from "@/components/shared/DataTablePagination/DataTablePagination";
 import DataTableNoData from "@/components/shared/DataTableNoData/DataTableNoData";
@@ -43,7 +43,7 @@ import {
   generateSelectColumDef,
 } from "@/components/shared/DataTable/utils";
 import { Separator } from "@/components/ui/separator";
-import AlertsActionsPanel from "@/components/pages/ConfigurationPage/AlertsTab/AlertsActionsPanel";
+import AlertsActionsPanel from "@/components/pages/AlertsPage/AlertsActionsPanel";
 
 export const getRowId = (a: Alert) => a.id!;
 
