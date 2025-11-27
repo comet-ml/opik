@@ -60,6 +60,10 @@ public interface DatasetItemDAO {
 
     Flux<DatasetItem> getItems(UUID datasetId, int limit, UUID lastRetrievedId);
 
+    Flux<DatasetItem> getVersionItems(UUID datasetId, UUID versionId, int limit, UUID lastRetrievedId);
+
+    Mono<Long> deleteAllDraftItems(UUID datasetId);
+
     Mono<List<WorkspaceAndResourceId>> getDatasetItemWorkspace(Set<UUID> datasetItemIds);
 
     Flux<DatasetItemSummary> findDatasetItemSummaryByDatasetIds(Set<UUID> datasetIds);
@@ -154,9 +158,31 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
             ;
             """;
 
+    private static final String SELECT_DATASET_ITEMS_STREAM_VERSION = """
+            SELECT
+                *,
+                null AS experiment_items_array
+            FROM dataset_item_versions
+            WHERE dataset_id = :datasetId
+            AND version_id = :versionId
+            AND workspace_id = :workspace_id
+            <if(lastRetrievedId)>AND id \\< :lastRetrievedId <endif>
+            ORDER BY id DESC, version_created_at DESC
+            LIMIT 1 BY id
+            LIMIT :limit
+            ;
+            """;
+
     private static final String DELETE_DATASET_ITEM = """
             DELETE FROM dataset_items
             WHERE id IN :ids
+            AND workspace_id = :workspace_id
+            ;
+            """;
+
+    private static final String DELETE_ALL_DRAFT_ITEMS = """
+            DELETE FROM dataset_items
+            WHERE dataset_id = :datasetId
             AND workspace_id = :workspace_id
             ;
             """;
@@ -1614,5 +1640,57 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                             .dataHash(row.get("data_hash", Long.class))
                             .build()));
         }).doFinally(signalType -> endSegment(segment));
+    }
+
+    @Override
+    @WithSpan
+    public Flux<DatasetItem> getVersionItems(@NonNull UUID datasetId, @NonNull UUID versionId, int limit,
+            UUID lastRetrievedId) {
+        log.info("Getting versioned dataset items by datasetId '{}', versionId '{}', limit '{}', lastRetrievedId '{}'",
+                datasetId, versionId, limit, lastRetrievedId);
+
+        var template = TemplateUtils.newST(SELECT_DATASET_ITEMS_STREAM_VERSION);
+
+        if (lastRetrievedId != null) {
+            template.add("lastRetrievedId", lastRetrievedId);
+        }
+
+        return asyncTemplate.stream(connection -> {
+
+            var statement = connection.createStatement(template.render())
+                    .bind("datasetId", datasetId)
+                    .bind("versionId", versionId)
+                    .bind("limit", limit);
+
+            if (lastRetrievedId != null) {
+                statement.bind("lastRetrievedId", lastRetrievedId);
+            }
+
+            Segment segment = startSegment(DATASET_ITEMS, CLICKHOUSE, "select_version_items_stream");
+
+            return makeFluxContextAware(bindWorkspaceIdToFlux(statement))
+                    .doFinally(signalType -> endSegment(segment))
+                    .flatMap(DatasetItemResultMapper::mapItem);
+        });
+    }
+
+    @Override
+    @WithSpan
+    public Mono<Long> deleteAllDraftItems(@NonNull UUID datasetId) {
+        log.info("Deleting all draft items for dataset: '{}'", datasetId);
+
+        return asyncTemplate.nonTransaction(connection -> {
+
+            Statement statement = connection.createStatement(DELETE_ALL_DRAFT_ITEMS);
+
+            Segment segment = startSegment(DATASET_ITEMS, CLICKHOUSE, "delete_all_draft_items");
+
+            statement.bind("datasetId", datasetId);
+
+            return makeFluxContextAware(bindWorkspaceIdToFlux(statement))
+                    .flatMap(Result::getRowsUpdated)
+                    .reduce(0L, Long::sum)
+                    .doFinally(signalType -> endSegment(segment));
+        });
     }
 }

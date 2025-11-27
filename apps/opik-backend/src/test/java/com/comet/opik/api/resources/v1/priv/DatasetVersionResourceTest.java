@@ -47,6 +47,7 @@ import uk.co.jemos.podam.api.PodamFactory;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
@@ -129,12 +130,12 @@ class DatasetVersionResourceTest {
     }
 
     private void createDatasetItems(UUID datasetId, int count) {
-        List<DatasetItem> itemsList = PodamFactoryUtils.manufacturePojoList(factory, DatasetItem.class).stream()
-                .limit(count)
-                .map(item -> {
+        List<DatasetItem> itemsList = IntStream.range(0, count)
+                .mapToObj(i -> {
+                    DatasetItem item = factory.manufacturePojo(DatasetItem.class);
                     Map<String, JsonNode> data = Map.of(
-                            "input", JsonUtils.getJsonNodeFromString("\"test input\""),
-                            "output", JsonUtils.getJsonNodeFromString("\"test output\""));
+                            "input", JsonUtils.getJsonNodeFromString("\"test input " + i + "\""),
+                            "output", JsonUtils.getJsonNodeFromString("\"test output " + i + "\""));
                     return item.toBuilder()
                             .id(null)
                             .data(data)
@@ -979,6 +980,284 @@ class DatasetVersionResourceTest {
             assertThat(diff2.fromVersion()).isEqualTo(DatasetVersionService.LATEST_TAG);
             assertThat(diff2.toVersion()).isEqualTo("draft");
             assertThat(diff2.statistics().itemsAdded()).isEqualTo(1);
+        }
+    }
+
+    @Nested
+    @DisplayName("Restore Dataset Version:")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class RestoreVersion {
+
+        @Test
+        @DisplayName("Success: Restore to previous version creates new version")
+        void restoreVersion__whenNotLatest__thenCreateNewVersion() {
+            // Given - Create dataset with 3 items
+            var datasetId = createDataset(UUID.randomUUID().toString());
+            var originalItems = generateDatasetItems(3);
+
+            var batch1 = DatasetItemBatch.builder()
+                    .datasetId(datasetId)
+                    .items(originalItems)
+                    .build();
+            datasetResourceClient.createDatasetItems(batch1, TEST_WORKSPACE, API_KEY);
+
+            // Commit version 1
+            var version1 = datasetResourceClient.commitVersion(
+                    datasetId,
+                    DatasetVersionCreate.builder().tag("v1").build(),
+                    API_KEY,
+                    TEST_WORKSPACE);
+
+            // Modify draft: add 2 items, delete 1 item
+            var createdItemsPage = datasetResourceClient.getDatasetItems(datasetId, 1, 10, null, API_KEY,
+                    TEST_WORKSPACE);
+            var createdItems = createdItemsPage.content();
+            var itemToDelete = createdItems.get(0);
+            datasetResourceClient.deleteDatasetItems(List.of(itemToDelete.id()), API_KEY, TEST_WORKSPACE);
+
+            var newItems = generateDatasetItems(2);
+            var batch2 = DatasetItemBatch.builder()
+                    .datasetId(datasetId)
+                    .items(newItems)
+                    .build();
+            datasetResourceClient.createDatasetItems(batch2, TEST_WORKSPACE, API_KEY);
+
+            // Commit version 2
+            var version2 = datasetResourceClient.commitVersion(
+                    datasetId,
+                    DatasetVersionCreate.builder().tag("v2").build(),
+                    API_KEY,
+                    TEST_WORKSPACE);
+
+            // Verify v2 is now latest
+            assertThat(version2.tags()).contains(DatasetVersionService.LATEST_TAG);
+
+            // When - Restore to v1
+            var restoredVersion = datasetResourceClient.restoreVersion(datasetId, "v1", API_KEY, TEST_WORKSPACE);
+
+            // Then - Verify a new version was created
+            assertThat(restoredVersion.id()).isNotEqualTo(version1.id());
+            assertThat(restoredVersion.id()).isNotEqualTo(version2.id());
+            assertThat(restoredVersion.versionHash()).isNotEqualTo(version1.versionHash());
+            assertThat(restoredVersion.versionHash()).isNotEqualTo(version2.versionHash());
+
+            // Verify new version has 'latest' tag
+            assertThat(restoredVersion.tags()).contains(DatasetVersionService.LATEST_TAG);
+
+            // Verify new version has same item count as v1
+            assertThat(restoredVersion.itemsTotal()).isEqualTo(version1.itemsTotal());
+
+            // Verify change description indicates restore
+            assertThat(restoredVersion.changeDescription()).contains("Restored from version: v1");
+
+            // Verify draft items match v1 items
+            var draftItems = datasetResourceClient.getDatasetItems(datasetId, 1, 10, null, API_KEY, TEST_WORKSPACE);
+            assertThat(draftItems.content()).hasSize(3);
+
+            // Verify v1 items are still accessible
+            var v1Items = datasetResourceClient.getDatasetItems(datasetId, 1, 10, "v1", API_KEY, TEST_WORKSPACE);
+            assertThat(v1Items.content()).hasSize(3);
+
+            // Verify v2 items are still accessible
+            var v2Items = datasetResourceClient.getDatasetItems(datasetId, 1, 10, "v2", API_KEY, TEST_WORKSPACE);
+            assertThat(v2Items.content()).hasSize(4);
+        }
+
+        @Test
+        @DisplayName("Success: Restore to latest version (revert) does not create new version")
+        void restoreVersion__whenLatest__thenRevertWithoutNewVersion() {
+            // Given - Create dataset with 2 items
+            var datasetId = createDataset(UUID.randomUUID().toString());
+            var originalItems = generateDatasetItems(2);
+
+            var batch1 = DatasetItemBatch.builder()
+                    .datasetId(datasetId)
+                    .items(originalItems)
+                    .build();
+            datasetResourceClient.createDatasetItems(batch1, TEST_WORKSPACE, API_KEY);
+
+            // Commit version
+            var version1 = datasetResourceClient.commitVersion(
+                    datasetId,
+                    DatasetVersionCreate.builder().tag("v1").build(),
+                    API_KEY,
+                    TEST_WORKSPACE);
+
+            // Modify draft: add 3 new items
+            var newItems = generateDatasetItems(3);
+            var batch2 = DatasetItemBatch.builder()
+                    .datasetId(datasetId)
+                    .items(newItems)
+                    .build();
+            datasetResourceClient.createDatasetItems(batch2, TEST_WORKSPACE, API_KEY);
+
+            // Verify draft has 5 items
+            var draftBeforeRestore = datasetResourceClient.getDatasetItems(datasetId, 1, 10, null, API_KEY,
+                    TEST_WORKSPACE);
+            assertThat(draftBeforeRestore.content()).hasSize(5);
+
+            // When - Restore to latest version (revert scenario)
+            var restoredVersion = datasetResourceClient.restoreVersion(datasetId, DatasetVersionService.LATEST_TAG,
+                    API_KEY, TEST_WORKSPACE);
+
+            // Then - Verify no new version was created (same version returned)
+            assertThat(restoredVersion.id()).isEqualTo(version1.id());
+            assertThat(restoredVersion.versionHash()).isEqualTo(version1.versionHash());
+
+            // Verify draft items were reverted to v1 state
+            var draftAfterRestore = datasetResourceClient.getDatasetItems(datasetId, 1, 10, null, API_KEY,
+                    TEST_WORKSPACE);
+            assertThat(draftAfterRestore.content()).hasSize(2);
+
+            // Verify only one version exists
+            var versions = datasetResourceClient.listVersions(datasetId, API_KEY, TEST_WORKSPACE);
+            assertThat(versions.content()).hasSize(1);
+        }
+
+        @Test
+        @DisplayName("Success: Restore by version hash")
+        void restoreVersion__whenVersionHash__thenRestore() {
+            // Given - Create dataset with items and commit version
+            var datasetId = createDataset(UUID.randomUUID().toString());
+            createDatasetItems(datasetId, 2);
+
+            var version1 = datasetResourceClient.commitVersion(
+                    datasetId,
+                    DatasetVersionCreate.builder().tag("v1").build(),
+                    API_KEY,
+                    TEST_WORKSPACE);
+
+            // Modify draft
+            createDatasetItems(datasetId, 1);
+
+            var version2 = datasetResourceClient.commitVersion(
+                    datasetId,
+                    DatasetVersionCreate.builder().tag("v2").build(),
+                    API_KEY,
+                    TEST_WORKSPACE);
+
+            // When - Restore using version hash
+            var restoredVersion = datasetResourceClient.restoreVersion(datasetId, version1.versionHash(), API_KEY,
+                    TEST_WORKSPACE);
+
+            // Then - Verify restore succeeded
+            assertThat(restoredVersion.itemsTotal()).isEqualTo(version1.itemsTotal());
+            assertThat(restoredVersion.tags()).contains(DatasetVersionService.LATEST_TAG);
+        }
+
+        @Test
+        @DisplayName("Success: Restore by version tag")
+        void restoreVersion__whenVersionTag__thenRestore() {
+            // Given - Create dataset with items and commit version
+            var datasetId = createDataset(UUID.randomUUID().toString());
+            createDatasetItems(datasetId, 2);
+
+            var version1 = datasetResourceClient.commitVersion(
+                    datasetId,
+                    DatasetVersionCreate.builder().tag("baseline").build(),
+                    API_KEY,
+                    TEST_WORKSPACE);
+
+            // Modify draft
+            createDatasetItems(datasetId, 1);
+
+            var version2 = datasetResourceClient.commitVersion(
+                    datasetId,
+                    DatasetVersionCreate.builder().tag("v2").build(),
+                    API_KEY,
+                    TEST_WORKSPACE);
+
+            // When - Restore using version tag
+            var restoredVersion = datasetResourceClient.restoreVersion(datasetId, "baseline", API_KEY, TEST_WORKSPACE);
+
+            // Then - Verify restore succeeded
+            assertThat(restoredVersion.itemsTotal()).isEqualTo(version1.itemsTotal());
+            assertThat(restoredVersion.tags()).contains(DatasetVersionService.LATEST_TAG);
+        }
+
+        @Test
+        @DisplayName("Error: Restore non-existent version")
+        void restoreVersion__whenVersionNotFound__thenReturnNotFound() {
+            // Given
+            var datasetId = createDataset(UUID.randomUUID().toString());
+            createDatasetItems(datasetId, 2);
+
+            // When - Try to restore non-existent version
+            try (var response = datasetResourceClient.callRestoreVersion(datasetId, "nonexistent", API_KEY,
+                    TEST_WORKSPACE)) {
+
+                // Then
+                assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_NOT_FOUND);
+            }
+        }
+
+        @Test
+        @DisplayName("Success: Restore preserves version history")
+        void restoreVersion__whenRestored__thenVersionHistoryPreserved() {
+            // Given - Create dataset with versions
+            var datasetId = createDataset(UUID.randomUUID().toString());
+            createDatasetItems(datasetId, 2);
+
+            var version1 = datasetResourceClient.commitVersion(
+                    datasetId,
+                    DatasetVersionCreate.builder().tag("v1").build(),
+                    API_KEY,
+                    TEST_WORKSPACE);
+
+            createDatasetItems(datasetId, 1);
+
+            var version2 = datasetResourceClient.commitVersion(
+                    datasetId,
+                    DatasetVersionCreate.builder().tag("v2").build(),
+                    API_KEY,
+                    TEST_WORKSPACE);
+
+            // When - Restore to v1
+            var restoredVersion = datasetResourceClient.restoreVersion(datasetId, "v1", API_KEY, TEST_WORKSPACE);
+
+            // Then - Verify all versions are still accessible
+            var versions = datasetResourceClient.listVersions(datasetId, API_KEY, TEST_WORKSPACE);
+            assertThat(versions.content()).hasSize(3); // v1, v2, and restored version
+
+            // Verify v1 and v2 are still accessible by their tags
+            var v1Items = datasetResourceClient.getDatasetItems(datasetId, 1, 10, "v1", API_KEY, TEST_WORKSPACE);
+            assertThat(v1Items.content()).hasSize(2);
+
+            var v2Items = datasetResourceClient.getDatasetItems(datasetId, 1, 10, "v2", API_KEY, TEST_WORKSPACE);
+            assertThat(v2Items.content()).hasSize(3);
+        }
+
+        @Test
+        @DisplayName("Success: Restore with large dataset")
+        void restoreVersion__whenLargeDataset__thenRestoreSuccessfully() {
+            // Given - Create dataset with many items
+            var datasetId = createDataset(UUID.randomUUID().toString());
+            createDatasetItems(datasetId, 50);
+
+            var version1 = datasetResourceClient.commitVersion(
+                    datasetId,
+                    DatasetVersionCreate.builder().tag("v1").build(),
+                    API_KEY,
+                    TEST_WORKSPACE);
+
+            // Modify draft significantly
+            createDatasetItems(datasetId, 30);
+
+            var version2 = datasetResourceClient.commitVersion(
+                    datasetId,
+                    DatasetVersionCreate.builder().tag("v2").build(),
+                    API_KEY,
+                    TEST_WORKSPACE);
+
+            // When - Restore to v1
+            var restoredVersion = datasetResourceClient.restoreVersion(datasetId, "v1", API_KEY, TEST_WORKSPACE);
+
+            // Then - Verify restore succeeded
+            assertThat(restoredVersion.itemsTotal()).isEqualTo(50);
+
+            // Verify draft has correct number of items
+            var draftItems = datasetResourceClient.getDatasetItems(datasetId, 1, 100, null, API_KEY, TEST_WORKSPACE);
+            assertThat(draftItems.content()).hasSize(50);
         }
     }
 }

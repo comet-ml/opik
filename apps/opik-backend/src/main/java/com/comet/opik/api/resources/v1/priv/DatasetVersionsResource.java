@@ -4,6 +4,7 @@ import com.comet.opik.api.DatasetVersion;
 import com.comet.opik.api.DatasetVersion.DatasetVersionPage;
 import com.comet.opik.api.DatasetVersionCreate;
 import com.comet.opik.api.DatasetVersionDiff;
+import com.comet.opik.api.DatasetVersionRestore;
 import com.comet.opik.api.DatasetVersionTag;
 import com.comet.opik.domain.DatasetVersionService;
 import com.comet.opik.infrastructure.auth.RequestContext;
@@ -156,5 +157,26 @@ public class DatasetVersionsResource {
                 diff.statistics());
 
         return Response.ok(diff).build();
+    }
+
+    @POST
+    @Path("/restore")
+    @Operation(operationId = "restoreDatasetVersion", summary = "Restore dataset to a previous version", description = "Restores the dataset to a previous version state. All draft items are replaced with items from the specified version. If the version is not the latest, a new version snapshot is created. If the version is the latest, only draft items are replaced (revert functionality).", responses = {
+            @ApiResponse(responseCode = "200", description = "Version restored successfully", content = @Content(schema = @Schema(implementation = DatasetVersion.class))),
+            @ApiResponse(responseCode = "404", description = "Version not found", content = @Content(schema = @Schema(implementation = io.dropwizard.jersey.errors.ErrorMessage.class)))})
+    @RateLimited
+    @JsonView(DatasetVersion.View.Public.class)
+    public Response restoreVersion(
+            @RequestBody(content = @Content(schema = @Schema(implementation = DatasetVersionRestore.class))) @Valid @NotNull DatasetVersionRestore request) {
+
+        String workspaceId = requestContext.get().getWorkspaceId();
+
+        log.info("Restoring dataset '{}' to version '{}' on workspace '{}'", datasetId, request.versionRef(),
+                workspaceId);
+        DatasetVersion version = versionService.restoreVersion(datasetId, request.versionRef());
+        log.info("Restored dataset '{}' to version '{}' on workspace '{}'", datasetId, request.versionRef(),
+                workspaceId);
+
+        return Response.ok(version).build();
     }
 }

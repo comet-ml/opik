@@ -21,6 +21,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
@@ -141,6 +142,23 @@ public interface DatasetVersionService {
     UUID resolveVersionId(UUID datasetId, String hashOrTag);
 
     DatasetVersionDiff compareVersions(UUID datasetId, String fromHashOrTag, String toHashOrTag);
+
+    /**
+     * Restores a dataset to a previous version state.
+     * <p>
+     * This operation:
+     * <ul>
+     *   <li>Replaces all draft items with items from the specified version</li>
+     *   <li>If the version is not the latest, creates a new version snapshot</li>
+     *   <li>If the version is the latest, only replaces draft items (revert functionality)</li>
+     * </ul>
+     *
+     * @param datasetId the unique identifier of the dataset
+     * @param versionRef version hash or tag to restore from
+     * @return the restored version (existing if latest, new if not latest)
+     * @throws NotFoundException if the version is not found
+     */
+    DatasetVersion restoreVersion(UUID datasetId, String versionRef);
 }
 
 @Singleton
@@ -477,5 +495,160 @@ class DatasetVersionServiceImpl implements DatasetVersionService {
                 added, modified, deleted, unchanged);
 
         return new DatasetVersionDiffStats(added, modified, deleted, unchanged);
+    }
+
+    @Override
+    public DatasetVersion restoreVersion(@NonNull UUID datasetId, @NonNull String versionRef) {
+        log.info("Restoring dataset '{}' to version '{}'", datasetId, versionRef);
+
+        String workspaceId = requestContext.get().getWorkspaceId();
+        String userName = requestContext.get().getUserName();
+
+        // Resolve version reference to version ID and get version details
+        UUID versionId = resolveVersionId(datasetId, versionRef);
+        DatasetVersion versionToRestore = template.inTransaction(READ_ONLY, handle -> {
+            var dao = handle.attach(DatasetVersionDAO.class);
+            return dao.findById(versionId, workspaceId).orElseThrow(
+                    () -> new NotFoundException(ERROR_VERSION_NOT_FOUND.formatted(versionRef, datasetId)));
+        });
+
+        // Check if this is the latest version
+        Optional<DatasetVersion> latestVersion = getLatestVersion(datasetId);
+        boolean isLatestVersion = latestVersion.isPresent()
+                && latestVersion.get().id().equals(versionId);
+
+        log.info("Restoring version '{}' for dataset '{}', isLatest='{}'",
+                versionRef, datasetId, isLatestVersion);
+
+        // Step 1: Delete all draft items
+        Long deletedCount = datasetItemDAO.deleteAllDraftItems(datasetId)
+                .contextWrite(ctx -> ctx
+                        .put(RequestContext.USER_NAME, userName)
+                        .put(RequestContext.WORKSPACE_ID, workspaceId))
+                .block();
+
+        log.info("Deleted '{}' draft items for dataset '{}'", deletedCount, datasetId);
+
+        // Step 2: Copy items from version to draft
+        Long restoredCount = restoreVersionItemsStreaming(versionId, datasetId, workspaceId, userName);
+        log.info("Restored '{}' items from version '{}' to draft for dataset '{}'",
+                restoredCount, versionRef, datasetId);
+
+        // Step 3: If not latest version, commit a new version with the restored items
+        if (!isLatestVersion) {
+            log.info("Creating new version snapshot after restore for dataset '{}'", datasetId);
+            return commitVersion(datasetId, DatasetVersionCreate.builder()
+                    .changeDescription("Restored from version: " + versionRef)
+                    .build());
+        } else {
+            // If restoring to latest version, just return the existing version (revert scenario)
+            log.info("Restored to latest version '{}' for dataset '{}' (revert scenario)", versionRef, datasetId);
+            return versionToRestore;
+        }
+    }
+
+    /**
+     * Streams items from a version and restores them as draft items in batches.
+     *
+     * @param versionId the version ID to restore items from
+     * @param datasetId the dataset ID to restore items to
+     * @param workspaceId the workspace ID for context
+     * @param userName the user name for context
+     * @return the total number of items restored
+     */
+    private Long restoreVersionItemsStreaming(UUID versionId, UUID datasetId, String workspaceId, String userName) {
+        log.info("Restoring version items using streaming for version: '{}', dataset: '{}'", versionId, datasetId);
+
+        return processItemsInBatches(
+                (batchSize, lastRetrievedId) -> fetchAndRestoreBatch(versionId, datasetId, workspaceId, userName,
+                        batchSize, lastRetrievedId),
+                workspaceId, userName);
+    }
+
+    /**
+     * Fetches a batch of items from a version, restores them as draft items, and returns the batch state.
+     *
+     * @param versionId the version ID to restore items from
+     * @param datasetId the dataset ID to restore items to
+     * @param workspaceId the workspace ID for context
+     * @param userName the user name for context
+     * @param batchSize the number of items to fetch per batch
+     * @param lastRetrievedId the ID of the last retrieved item for pagination (null for first batch)
+     * @return Mono containing the batch state (items processed and last ID), or empty if no more items
+     */
+    private Mono<BatchState> fetchAndRestoreBatch(UUID versionId, UUID datasetId, String workspaceId, String userName,
+            int batchSize, UUID lastRetrievedId) {
+
+        return datasetItemDAO.getVersionItems(datasetId, versionId, batchSize, lastRetrievedId)
+                .collectList()
+                .flatMap(items -> {
+                    if (items.isEmpty()) {
+                        return Mono.empty();
+                    }
+
+                    log.debug("Restoring batch of '{}' items from version: '{}'", items.size(), versionId);
+
+                    // Convert versioned items to draft items (generate new IDs, remove version-specific fields)
+                    List<com.comet.opik.api.DatasetItem> draftItems = items.stream()
+                            .map(item -> item.toBuilder()
+                                    .id(idGenerator.generateId()) // Generate new ID for draft item
+                                    .draftItemId(null) // Not applicable for draft items
+                                    .build())
+                            .toList();
+
+                    // Save as draft items
+                    return datasetItemDAO.save(datasetId, draftItems)
+                            .map(count -> {
+                                UUID lastId = items.get(items.size() - 1).id();
+                                return new BatchState(lastId, (long) items.size());
+                            });
+                })
+                .contextWrite(ctx -> ctx
+                        .put(RequestContext.USER_NAME, userName)
+                        .put(RequestContext.WORKSPACE_ID, workspaceId));
+    }
+
+    /**
+     * Generic method to process items in batches using reactive streaming.
+     * This avoids code duplication between save and restore operations.
+     *
+     * @param batchProcessor function that processes a single batch given batch size and last retrieved ID
+     * @param workspaceId the workspace ID for context
+     * @param userName the user name for context
+     * @return the total number of items processed
+     */
+    private Long processItemsInBatches(BatchProcessor batchProcessor, String workspaceId, String userName) {
+        final int batchSize = 1000;
+
+        return Flux.defer(() -> batchProcessor.process(batchSize, null))
+                .expand(state -> {
+                    if (state.lastRetrievedId() == null) {
+                        return Mono.empty();
+                    }
+                    return batchProcessor.process(batchSize, state.lastRetrievedId());
+                })
+                .reduce(0L, (total, state) -> total + state.itemsProcessed())
+                .doOnSuccess(total -> log.info("Finished processing all items. Total processed: '{}'", total))
+                .contextWrite(ctx -> ctx
+                        .put(RequestContext.USER_NAME, userName)
+                        .put(RequestContext.WORKSPACE_ID, workspaceId))
+                .block();
+    }
+
+    /**
+     * Functional interface for batch processing operations.
+     */
+    @FunctionalInterface
+    private interface BatchProcessor {
+        Mono<BatchState> process(int batchSize, UUID lastRetrievedId);
+    }
+
+    /**
+     * Internal record to track batch processing state for reactive streaming.
+     *
+     * @param lastRetrievedId the ID of the last retrieved item for pagination (null if no more items)
+     * @param itemsProcessed the number of items processed in this batch
+     */
+    private record BatchState(UUID lastRetrievedId, long itemsProcessed) {
     }
 }
