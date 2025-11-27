@@ -12,7 +12,7 @@ type ModelPricingEntry = {
  * - Converts to lowercase
  * - Trims whitespace
  * - Replaces dots with hyphens (fixes issue #4114 for vision capability detection)
- * 
+ *
  * This ensures "claude-3.5-sonnet" matches "claude-3-5-sonnet" in the pricing database.
  */
 const normalizeModelName = (value: string) =>
