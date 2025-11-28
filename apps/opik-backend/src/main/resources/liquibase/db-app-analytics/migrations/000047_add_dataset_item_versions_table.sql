@@ -4,24 +4,26 @@
 
 CREATE TABLE IF NOT EXISTS ${ANALYTICS_DB_DATABASE_NAME}.dataset_item_versions ON CLUSTER '{cluster}'
 (
-    id                  FixedString(36),
-    dataset_item_id     FixedString(36),
-    dataset_id          FixedString(36),
-    dataset_version_id  FixedString(36),
-    data                Map(String, String) DEFAULT map(),
-    source              Enum8('unknown' = 0, 'sdk' = 1, 'manual' = 2, 'span' = 3, 'trace' = 4),
-    trace_id            String DEFAULT '',
-    span_id             String DEFAULT '',
-    tags                Array(String) DEFAULT [],
-    item_created_at     DateTime64(9, 'UTC'),
-    item_last_updated_at DateTime64(9, 'UTC'),
-    item_created_by     String DEFAULT '',
-    item_last_updated_by String DEFAULT '',
-    created_at          DateTime64(9, 'UTC') DEFAULT now64(9),
-    workspace_id        String,
-    data_hash           UInt64 MATERIALIZED xxHash64(toString(data))
+    id                      FixedString(36),
+    dataset_item_id         FixedString(36),
+    dataset_id              FixedString(36),
+    dataset_version_id      FixedString(36),
+    data                    Map(String, String) DEFAULT map(),
+    metadata                String DEFAULT '',
+    source                  Enum8('unknown' = 0, 'sdk' = 1, 'manual' = 2, 'span' = 3, 'trace' = 4),
+    trace_id                String DEFAULT '',
+    span_id                 String DEFAULT '',
+    tags                    Array(String) DEFAULT [],
+    item_created_at         DateTime64(9, 'UTC'),
+    item_last_updated_at    DateTime64(9, 'UTC'),
+    item_created_by         String DEFAULT '',
+    item_last_updated_by    String DEFAULT '',
+    created_at              DateTime64(9, 'UTC') DEFAULT now64(9),
+    last_updated_at         DateTime64(9, 'UTC') DEFAULT now64(9),
+    workspace_id            String,
+    data_hash               UInt64 MATERIALIZED xxHash64(toString(data))
 )
-ENGINE = ReplicatedReplacingMergeTree('/clickhouse/tables/{shard}/${ANALYTICS_DB_DATABASE_NAME}/dataset_item_versions', '{replica}', created_at)
+ENGINE = ReplicatedReplacingMergeTree('/clickhouse/tables/{shard}/${ANALYTICS_DB_DATABASE_NAME}/dataset_item_versions', '{replica}', last_updated_at)
 ORDER BY (workspace_id, dataset_id, dataset_version_id, id)
 SETTINGS index_granularity = 8192;
 

@@ -49,6 +49,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 dataset_id,
                 dataset_version_id,
                 data,
+                metadata,
                 source,
                 trace_id,
                 span_id,
@@ -58,6 +59,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 item_created_by,
                 item_last_updated_by,
                 created_at,
+                last_updated_at,
                 workspace_id
             )
             SELECT
@@ -66,6 +68,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 dataset_id,
                 :versionId as dataset_version_id,
                 data,
+                metadata,
                 source,
                 trace_id,
                 span_id,
@@ -75,6 +78,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 created_by as item_created_by,
                 last_updated_by as item_last_updated_by,
                 now64(9) as created_at,
+                now64(9) as last_updated_at,
                 workspace_id
             FROM dataset_items FINAL
             WHERE dataset_id = :datasetId
