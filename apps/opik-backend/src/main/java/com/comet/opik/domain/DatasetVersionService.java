@@ -183,7 +183,7 @@ class DatasetVersionServiceImpl implements DatasetVersionService {
             // This only loads IDs and hashes, not full item data
             DatasetVersionDiffStats diffStats = previousVersion
                     .map(datasetVersion -> calculateDiffStatistics(datasetId, datasetVersion.id(), versionId))
-                    .orElseGet(() -> new DatasetVersionDiffStats(itemCount, 0, 0, itemCount));
+                    .orElseGet(() -> new DatasetVersionDiffStats(itemCount.intValue(), 0, 0, itemCount.intValue()));
 
             log.info("Diff statistics for dataset '{}': added='{}', modified='{}', deleted='{}', unchanged='{}'",
                     datasetId, diffStats.itemsAdded(), diffStats.itemsModified(),
@@ -193,9 +193,9 @@ class DatasetVersionServiceImpl implements DatasetVersionService {
             var version = DatasetVersionMapper.INSTANCE.toDatasetVersion(
                     versionId, datasetId, versionHash,
                     itemCount.intValue(),
-                    (int) diffStats.itemsAdded(),
-                    (int) diffStats.itemsModified(),
-                    (int) diffStats.itemsDeleted(),
+                    diffStats.itemsAdded(),
+                    diffStats.itemsModified(),
+                    diffStats.itemsDeleted(),
                     request, userName);
 
             EntityConstraintHandler.handle(() -> {
@@ -432,16 +432,16 @@ class DatasetVersionServiceImpl implements DatasetVersionService {
 
         // Calculate added items (in 'to' but not in 'from')
         var addedIds = CollectionUtils.subtract(toIds, fromIds);
-        long added = addedIds.size();
+        int added = addedIds.size();
 
         // Calculate deleted items (in 'from' but not in 'to')
         var deletedIds = CollectionUtils.subtract(fromIds, toIds);
-        long deleted = deletedIds.size();
+        int deleted = deletedIds.size();
 
         // Calculate modified and unchanged items (items in both versions)
         var commonIds = CollectionUtils.intersection(fromIds, toIds);
-        long modified = 0;
-        long unchanged = 0;
+        int modified = 0;
+        int unchanged = 0;
 
         for (UUID itemId : commonIds) {
             var fromItem = fromMap.get(itemId);

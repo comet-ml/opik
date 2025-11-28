@@ -9,8 +9,8 @@ package com.comet.opik.domain;
  * @param itemsUnchanged Number of items that remained unchanged
  */
 public record DatasetVersionDiffStats(
-        long itemsAdded,
-        long itemsModified,
-        long itemsDeleted,
-        long itemsUnchanged) {
+        int itemsAdded,
+        int itemsModified,
+        int itemsDeleted,
+        int itemsUnchanged) {
 }
