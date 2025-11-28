@@ -82,4 +82,22 @@ class ModelCapabilitiesTest {
         assertThat(ModelCapabilities.supportsVision("openai/gpt-3.5-turbo")).isFalse();
         assertThat(ModelCapabilities.supportsVision("GPT-3.5-TURBO")).isFalse();
     }
+
+    @Test
+    void supportsVisionHandlesDotNotation_issue4114() {
+        // Test for issue #4114: Model names with dots should be normalized to hyphens
+        // This ensures vision capability detection works consistently with cost calculation
+
+        // Claude models with dots should match their hyphenated equivalents
+        assertThat(ModelCapabilities.supportsVision("claude-3.5-sonnet-20241022")).isTrue();
+        assertThat(ModelCapabilities.supportsVision("claude-3-5-sonnet-20241022")).isTrue(); // Both should work
+
+        // Gemini models with dots
+        assertThat(ModelCapabilities.supportsVision("gemini-1.5-pro")).isTrue();
+        assertThat(ModelCapabilities.supportsVision("gemini-1-5-pro")).isTrue(); // Both should work
+
+        // Qwen models with dots (also matches vision pattern)
+        assertThat(ModelCapabilities.supportsVision("qwen2.5-vl-32b-instruct")).isTrue();
+        assertThat(ModelCapabilities.supportsVision("qwen2-5-vl-32b-instruct")).isTrue(); // Both should work
+    }
 }

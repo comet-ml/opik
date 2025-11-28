@@ -121,7 +121,15 @@ public class ModelCapabilities {
         return new ArrayList<>(candidates);
     }
 
+    /**
+     * Normalizes model names for consistent lookup.
+     * - Converts to lowercase
+     * - Trims whitespace
+     * - Replaces dots with hyphens (fixes issue #4114 for vision capability detection)
+     *
+     * This ensures "claude-3.5-sonnet" matches "claude-3-5-sonnet" in the pricing database.
+     */
     private String normalize(String modelName) {
-        return modelName.trim().toLowerCase();
+        return modelName.trim().toLowerCase().replace('.', '-');
     }
 }
