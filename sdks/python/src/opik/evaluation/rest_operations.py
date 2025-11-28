@@ -94,6 +94,7 @@ def log_test_result_feedback_scores(
         )
         all_trace_scores.append(trace_score)
 
-    client.log_traces_feedback_scores(
-        scores=all_trace_scores, project_name=project_name
-    )
+    if len(all_trace_scores) > 0:
+        client.log_traces_feedback_scores(
+            scores=all_trace_scores, project_name=project_name
+        )
