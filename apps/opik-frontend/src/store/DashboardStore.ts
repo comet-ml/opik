@@ -13,6 +13,7 @@ import {
   AddWidgetConfig,
   UpdateWidgetConfig,
   WidgetResolver,
+  AddEditWidgetCallbackParams,
 } from "@/types/dashboard";
 import {
   generateEmptyDashboard,
@@ -25,21 +26,9 @@ import {
   removeWidgetFromLayout,
   normalizeLayout,
 } from "@/lib/dashboard/layout";
-import { createWidgetFilterMap } from "@/lib/dashboard/search";
 import { migrateDashboardConfig } from "@/lib/dashboard/migrations";
 
 const EMPTY_CONFIG: BaseDashboardConfig = {};
-
-/**
- * Filtered widgets map type for search functionality
- */
-export type FilteredWidgetsMap = {
-  [sectionId: string]:
-    | {
-        [widgetId: string]: boolean;
-      }
-    | undefined;
-};
 
 /**
  * Dashboard Store State
@@ -49,8 +38,9 @@ interface DashboardStoreState<TConfig = BaseDashboardConfig> {
   version: number;
   lastModified: number;
   config: TConfig | null;
-  search: string;
-  onAddWidgetCallback: ((sectionId: string) => void) | null;
+  onAddEditWidgetCallback:
+    | ((params: AddEditWidgetCallbackParams) => void)
+    | null;
   widgetResolver: WidgetResolver | null;
   previewWidget: DashboardWidget | null;
 }
@@ -74,6 +64,7 @@ interface DashboardActions<TConfig = BaseDashboardConfig> {
 
   // Widget operations
   addWidget: (sectionId: string, config: AddWidgetConfig) => string | undefined;
+  duplicateWidget: (sectionId: string, widgetId: string) => string | undefined;
   deleteWidget: (sectionId: string, widgetId: string) => void;
   updateWidget: (
     sectionId: string,
@@ -92,15 +83,13 @@ interface DashboardActions<TConfig = BaseDashboardConfig> {
   getConfig: () => TConfig | null;
   clearConfig: () => void;
 
-  // Search operations
-  setSearch: (search: string) => void;
-  getSearch: () => string;
-
   // Callback operations
-  setOnAddWidgetCallback: (
-    callback: ((sectionId: string) => void) | null,
+  setOnAddEditWidgetCallback: (
+    callback: ((params: AddEditWidgetCallbackParams) => void) | null,
   ) => void;
-  getOnAddWidgetCallback: () => ((sectionId: string) => void) | null;
+  getOnAddEditWidgetCallback: () =>
+    | ((params: AddEditWidgetCallbackParams) => void)
+    | null;
 
   // Widget resolver operations
   setWidgetResolver: (resolver: WidgetResolver | null) => void;
@@ -124,7 +113,6 @@ interface DashboardActions<TConfig = BaseDashboardConfig> {
     sectionId: string,
     widgetId: string,
   ) => DashboardWidget | undefined;
-  getFilteredWidgetsMap: (search: string) => FilteredWidgetsMap;
 }
 
 /**
@@ -153,8 +141,7 @@ export const useDashboardStore = create<DashboardStore<BaseDashboardConfig>>()(
         version: initialDashboard.version,
         lastModified: initialDashboard.lastModified,
         config: EMPTY_CONFIG,
-        search: "",
-        onAddWidgetCallback: null,
+        onAddEditWidgetCallback: null,
         widgetResolver: null,
         previewWidget: null,
 
@@ -283,6 +270,54 @@ export const useDashboardStore = create<DashboardStore<BaseDashboardConfig>>()(
             }),
             false,
             "addWidget",
+          );
+
+          return newWidget.id;
+        },
+
+        duplicateWidget: (sectionId: string, widgetId: string) => {
+          const state = get();
+          const section = getSectionById(state.sections, sectionId);
+          if (!section) return undefined;
+
+          const widget = section.widgets.find((w) => w.id === widgetId);
+          if (!widget) return undefined;
+
+          const layoutItem = section.layout.find((item) => item.i === widgetId);
+
+          const newWidget: DashboardWidget = {
+            id: generateId(),
+            type: widget.type,
+            title: widget.title,
+            subtitle: widget.subtitle,
+            config: widget.config || {},
+          };
+
+          const size = layoutItem
+            ? { w: layoutItem.w, h: layoutItem.h }
+            : undefined;
+
+          const updatedLayout = calculateLayoutForAddingWidget(
+            section.layout,
+            newWidget,
+            size,
+          );
+
+          set(
+            (state) => ({
+              sections: state.sections.map((s) =>
+                s.id === sectionId
+                  ? {
+                      ...s,
+                      widgets: [...s.widgets, newWidget],
+                      layout: updatedLayout,
+                    }
+                  : s,
+              ),
+              lastModified: Date.now(),
+            }),
+            false,
+            "duplicateWidget",
           );
 
           return newWidget.id;
@@ -437,26 +472,17 @@ export const useDashboardStore = create<DashboardStore<BaseDashboardConfig>>()(
           set({ config: null }, false, "clearConfig");
         },
 
-        // Search Actions
-        setSearch: (search) => {
-          set({ search }, false, "setSearch");
-        },
-
-        getSearch: () => {
-          return get().search;
-        },
-
         // Callback Actions
-        setOnAddWidgetCallback: (callback) => {
+        setOnAddEditWidgetCallback: (callback) => {
           set(
-            { onAddWidgetCallback: callback },
+            { onAddEditWidgetCallback: callback },
             false,
-            "setOnAddWidgetCallback",
+            "setOnAddEditWidgetCallback",
           );
         },
 
-        getOnAddWidgetCallback: () => {
-          return get().onAddWidgetCallback;
+        getOnAddEditWidgetCallback: () => {
+          return get().onAddEditWidgetCallback;
         },
 
         // Widget Resolver Actions
@@ -541,11 +567,6 @@ export const useDashboardStore = create<DashboardStore<BaseDashboardConfig>>()(
           if (!section) return undefined;
           return section.widgets.find((w) => w.id === widgetId);
         },
-
-        getFilteredWidgetsMap: (search: string) => {
-          const state = get();
-          return createWidgetFilterMap(state.sections, search);
-        },
       };
     },
     {
@@ -608,6 +629,8 @@ export const selectReorderSections = (state: DashboardStore) =>
   state.reorderSections;
 
 export const selectAddWidget = (state: DashboardStore) => state.addWidget;
+export const selectDuplicateWidget = (state: DashboardStore) =>
+  state.duplicateWidget;
 export const selectDeleteWidget = (state: DashboardStore) => state.deleteWidget;
 export const selectUpdateWidget = (state: DashboardStore) => state.updateWidget;
 export const selectMoveWidget = (state: DashboardStore) => state.moveWidget;
@@ -624,19 +647,13 @@ export const selectClearDashboard = (
   state: DashboardStore<BaseDashboardConfig>,
 ) => state.clearDashboard;
 
-// Search selectors
-export const selectSearch = (state: DashboardStore<BaseDashboardConfig>) =>
-  state.search;
-export const selectSetSearch = (state: DashboardStore<BaseDashboardConfig>) =>
-  state.setSearch;
-
 // Callback selectors
-export const selectOnAddWidgetCallback = (
+export const selectOnAddEditWidgetCallback = (
   state: DashboardStore<BaseDashboardConfig>,
-) => state.onAddWidgetCallback;
-export const selectSetOnAddWidgetCallback = (
+) => state.onAddEditWidgetCallback;
+export const selectSetOnAddEditWidgetCallback = (
   state: DashboardStore<BaseDashboardConfig>,
-) => state.setOnAddWidgetCallback;
+) => state.setOnAddEditWidgetCallback;
 
 // Widget resolver selectors
 export const selectWidgetResolver = (

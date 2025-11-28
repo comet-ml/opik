@@ -31,6 +31,7 @@
     "@codemirror/lang-python": "^6.1.6",
     "@codemirror/lang-yaml": "^6.1.1",
     "@codemirror/search": "^6.5.10",
+    "@dnd-kit/modifiers": "^8.0.0",
     "@dnd-kit/sortable": "^8.0.0",
     "@hookform/resolvers": "^3.10.0",
     "@lezer/highlight": "^1.2.1",

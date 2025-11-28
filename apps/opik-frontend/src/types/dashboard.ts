@@ -1,4 +1,5 @@
 import { Filter } from "@/types/filters";
+import { DateRangeSerializedValue } from "@/components/shared/DateRangeSelect";
 
 export enum WIDGET_TYPE {
   CHART_METRIC = "chart",
@@ -29,8 +30,11 @@ export interface TextMarkdownWidget {
 export interface StatCardWidget {
   type: WIDGET_TYPE.STAT_CARD;
   config: {
-    metricType: string;
-    showTrend?: boolean;
+    source: "traces" | "spans";
+    projectId: string;
+    metric: string;
+    traceFilters?: Filter[];
+    spanFilters?: Filter[];
   } & Record<string, unknown>;
 }
 
@@ -95,6 +99,11 @@ export type DashboardWidget = {
     }
 );
 
+export type WidgetSize = {
+  w: number;
+  h: number;
+};
+
 export interface DashboardLayoutItem {
   i: string;
   x: number;
@@ -137,23 +146,13 @@ export interface Dashboard {
   created_by?: string;
 }
 
-export interface FilteredWidgetsMap {
-  [sectionId: string]:
-    | {
-        [widgetId: string]: boolean;
-      }
-    | undefined;
-}
-
 export interface BaseDashboardConfig {
   [key: string]: unknown;
 }
 
 export interface ProjectDashboardConfig extends BaseDashboardConfig {
   projectId: string;
-  interval: string;
-  intervalStart?: string;
-  intervalEnd?: string;
+  dateRange: DateRangeSerializedValue;
 }
 
 export interface DashboardWidgetComponentProps {
@@ -162,16 +161,33 @@ export interface DashboardWidgetComponentProps {
   preview?: boolean;
 }
 
-export type WidgetEditorComponent = React.ComponentType<
-  AddWidgetConfig & { onChange: (data: Partial<AddWidgetConfig>) => void }
+export interface WidgetEditorHandle {
+  submit: () => Promise<boolean>;
+  isValid: boolean;
+}
+
+export type WidgetEditorProps = AddWidgetConfig & {
+  onChange: (data: Partial<AddWidgetConfig>) => void;
+  onValidationChange?: (isValid: boolean) => void;
+};
+
+export type WidgetEditorComponent = React.ForwardRefExoticComponent<
+  WidgetEditorProps & React.RefAttributes<WidgetEditorHandle>
 >;
 
 export interface WidgetComponents {
   Widget: React.ComponentType<DashboardWidgetComponentProps>;
   Editor: WidgetEditorComponent | null;
+  getDefaultConfig: () => Record<string, unknown>;
+  calculateTitle: (config: Record<string, unknown>) => string;
 }
 
 export type WidgetResolver = (type: string) => WidgetComponents;
+
+export interface AddEditWidgetCallbackParams {
+  sectionId: string;
+  widgetId?: string | null;
+}
 
 export interface WidgetConfigDialogProps {
   open: boolean;

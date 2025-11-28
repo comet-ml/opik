@@ -40,29 +40,22 @@ const TextMarkdownWidget: React.FunctionComponent<
     );
   };
 
-  if (preview) {
-    return (
-      <DashboardWidget.PreviewContent>
-        {renderContent()}
-      </DashboardWidget.PreviewContent>
-    );
-  }
-
   return (
     <DashboardWidget>
       <DashboardWidget.Header
         title={widget.title}
         subtitle={widget.subtitle}
+        preview={preview}
         actions={
-          <DashboardWidget.ActionsMenu
-            sectionId={sectionId!}
-            widgetId={widgetId!}
-            widgetType={widget.type}
-            widgetTitle={widget.title}
-            widgetConfig={widget.config}
-          />
+          !preview ? (
+            <DashboardWidget.ActionsMenu
+              sectionId={sectionId!}
+              widgetId={widgetId!}
+              widgetTitle={widget.title}
+            />
+          ) : undefined
         }
-        dragHandle={<DashboardWidget.DragHandle />}
+        dragHandle={!preview ? <DashboardWidget.DragHandle /> : undefined}
       />
       <DashboardWidget.Content>{renderContent()}</DashboardWidget.Content>
     </DashboardWidget>

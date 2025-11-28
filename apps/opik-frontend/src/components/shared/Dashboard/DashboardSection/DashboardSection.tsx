@@ -10,7 +10,7 @@ import {
   AccordionItem,
   CustomAccordionTrigger,
 } from "@/components/ui/accordion";
-import { selectSearch, useDashboardStore } from "@/store/DashboardStore";
+import { useDashboardStore } from "@/store/DashboardStore";
 import { cn } from "@/lib/utils";
 import DashboardSectionHeader from "./DashboardSectionHeader";
 import DashboardWidgetGrid from "./DashboardWidgetGrid";
@@ -18,7 +18,6 @@ import get from "lodash/get";
 
 interface DashboardSectionProps {
   sectionId: string;
-  widgetFilterMap?: Record<string, boolean>;
   isLastSection: boolean;
   onUpdateSection: (
     sectionId: string,
@@ -32,7 +31,6 @@ interface DashboardSectionProps {
 
 const DashboardSection: React.FunctionComponent<DashboardSectionProps> = ({
   sectionId,
-  widgetFilterMap,
   isLastSection,
   onUpdateSection,
   onDeleteSection,
@@ -40,9 +38,6 @@ const DashboardSection: React.FunctionComponent<DashboardSectionProps> = ({
   onAddSectionBelow,
   isDragPreview = false,
 }) => {
-  const search = useDashboardStore(selectSearch);
-  const isSearchMode = Boolean(search);
-
   const { sectionTitle, sectionExpanded, widgets, layout } = useDashboardStore(
     useShallow((state) => {
       const section = state.sections.find((s) => s.id === sectionId);
@@ -53,18 +48,6 @@ const DashboardSection: React.FunctionComponent<DashboardSectionProps> = ({
         layout: get(section, "layout", []),
       };
     }),
-  );
-
-  const widgetIds = useMemo(() => widgets.map((w) => w.id), [widgets]);
-
-  const filteredWidgets = useMemo(() => {
-    if (!widgetFilterMap) return widgetIds;
-    return widgetIds.filter((id) => widgetFilterMap[id]);
-  }, [widgetIds, widgetFilterMap]);
-
-  const widgetCount = useMemo(
-    () => (isSearchMode ? filteredWidgets.length : widgetIds.length),
-    [isSearchMode, filteredWidgets.length, widgetIds.length],
   );
 
   const {
@@ -145,7 +128,6 @@ const DashboardSection: React.FunctionComponent<DashboardSectionProps> = ({
             <DashboardSectionHeader
               sectionId={sectionId}
               title={sectionTitle}
-              widgetCount={widgetCount}
               expanded={sectionExpanded}
               isLastSection={isLastSection}
               dragHandleProps={dragHandleProps}
@@ -159,7 +141,7 @@ const DashboardSection: React.FunctionComponent<DashboardSectionProps> = ({
             <AccordionContent className="px-3 pb-3 pt-0">
               <DashboardWidgetGrid
                 sectionId={sectionId}
-                widgets={widgets.filter((w) => filteredWidgets.includes(w.id))}
+                widgets={widgets}
                 layout={layout}
               />
             </AccordionContent>

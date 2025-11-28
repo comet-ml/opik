@@ -25,7 +25,6 @@ import { cn } from "@/lib/utils";
 interface DashboardSectionHeaderProps {
   sectionId: string;
   title: string;
-  widgetCount: number;
   expanded: boolean;
   isLastSection: boolean;
   dragHandleProps: Record<string, unknown> | undefined;
@@ -40,7 +39,6 @@ const DashboardSectionHeader: React.FunctionComponent<
 > = ({
   sectionId,
   title,
-  widgetCount,
   expanded,
   isLastSection,
   dragHandleProps,
@@ -49,8 +47,8 @@ const DashboardSectionHeader: React.FunctionComponent<
   onAddSectionAbove,
   onAddSectionBelow,
 }) => {
-  const onAddWidgetCallback = useDashboardStore(
-    (state) => state.onAddWidgetCallback,
+  const onAddEditWidgetCallback = useDashboardStore(
+    (state) => state.onAddEditWidgetCallback,
   );
 
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
@@ -59,9 +57,9 @@ const DashboardSectionHeader: React.FunctionComponent<
   const handleAddWidget = useCallback(
     (e: React.MouseEvent) => {
       e.stopPropagation();
-      onAddWidgetCallback?.(sectionId);
+      onAddEditWidgetCallback?.({ sectionId });
     },
-    [onAddWidgetCallback, sectionId],
+    [onAddEditWidgetCallback, sectionId],
   );
 
   const handleDeleteClick = useCallback(
@@ -84,11 +82,7 @@ const DashboardSectionHeader: React.FunctionComponent<
         )}
       </div>
 
-      <DashboardSectionTitle
-        title={title}
-        widgetCount={widgetCount}
-        onChange={onUpdateTitle}
-      />
+      <DashboardSectionTitle title={title} onChange={onUpdateTitle} />
 
       <div
         className={cn(
@@ -156,11 +150,11 @@ const DashboardSectionHeader: React.FunctionComponent<
         {...dragHandleProps}
         onClick={(e) => e.stopPropagation()}
         className={cn(
-          "flex size-8 cursor-grab items-center justify-center rounded-md border border-muted bg-background text-foreground transition-colors hover:bg-muted active:cursor-grabbing",
+          "cursor-grab text-light-slate active:cursor-grabbing",
           !expanded && !menuOpen && "hidden group-hover:flex",
         )}
       >
-        <GripHorizontal className="size-3.5" />
+        <GripHorizontal className="size-4" />
       </div>
 
       <ConfirmDialog
@@ -168,8 +162,8 @@ const DashboardSectionHeader: React.FunctionComponent<
         setOpen={setShowDeleteDialog}
         onConfirm={onDeleteSection}
         title={`Delete ${title} section?`}
-        description={`The '${title}' section will be permanently deleted and cannot be recovered.`}
-        confirmText="Yes, delete"
+        description={`This section will be removed from your dashboard. You can still undo this change before saving the dashboard.`}
+        confirmText={`Delete ${title}`}
         confirmButtonVariant="destructive"
       />
     </div>

@@ -10,7 +10,7 @@ const DashboardWidgetGridEmpty: React.FunctionComponent<
 > = ({ onAddWidget }) => {
   return (
     <div className="grid grid-cols-3 gap-4">
-      <div className="flex min-h-[327px] items-center justify-center rounded-md border border-dashed border-muted bg-background">
+      <div className="flex min-h-[327px] items-center justify-center rounded-md border border-dashed border-border bg-background">
         <div className="flex flex-col items-center gap-1 px-4 py-2">
           <div className="pb-1">
             <LineChart className="size-4 text-light-slate" />
@@ -28,8 +28,8 @@ const DashboardWidgetGridEmpty: React.FunctionComponent<
           </button>
         </div>
       </div>
-      <div className="min-h-[327px] rounded-md border border-dashed border-muted bg-background" />
-      <div className="min-h-[327px] rounded-md border border-dashed border-muted bg-background" />
+      <div className="min-h-[327px] rounded-md border border-dashed border-border bg-background" />
+      <div className="min-h-[327px] rounded-md border border-dashed border-border bg-background" />
     </div>
   );
 };

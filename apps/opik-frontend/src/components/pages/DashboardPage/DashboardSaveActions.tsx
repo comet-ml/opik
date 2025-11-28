@@ -80,7 +80,7 @@ const DashboardSaveActions: React.FunctionComponent<
         setOpen={setShowDiscardDialog}
         onConfirm={handleConfirmDiscard}
         title="Discard changes?"
-        description="All unsaved changes will be lost. This action cannot be undone."
+        description="All unsaved changes will be removed. This will return the dashboard to its last saved version."
         confirmText="Discard changes"
         cancelText="Cancel"
         confirmButtonVariant="destructive"
