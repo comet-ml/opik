@@ -21,6 +21,31 @@ export interface Dataset {
   tags?: string[];
   created_at: string;
   last_updated_at: string;
+  status?: DATASET_STATUS;
+}
+
+export interface DatasetVersion {
+  id: string;
+  dataset_id: string;
+  version_hash: string;
+  items_count: number;
+  items_added: number;
+  items_modified: number;
+  items_deleted: number;
+  change_description?: string;
+  metadata?: Record<string, unknown>;
+  tags?: string[];
+  created_at: string;
+  created_by: string;
+  last_updated_at: string;
+  last_updated_by: string;
+}
+
+export enum DATASET_STATUS {
+  unknown = "unknown",
+  processing = "processing",
+  completed = "completed",
+  failed = "failed",
 }
 
 export enum DATASET_ITEM_SOURCE {
