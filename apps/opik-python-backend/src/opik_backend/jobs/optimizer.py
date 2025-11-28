@@ -52,8 +52,7 @@ def process_optimizer_job(*args, **kwargs):
                 "messages": [{"role": "...", "content": "..."}]
             },
             "llm_model": {
-                "provider": "openai",
-                "name": "gpt-4o",
+                "model": "openai/gpt-4o",
                 "parameters": {"temperature": 0.7}
             },
             "evaluation": {
@@ -127,7 +126,7 @@ def process_optimizer_job(*args, **kwargs):
             
             # Build LLM config first (needed for prompt)
             llm_config = config["llm_model"]
-            model = f"{llm_config['provider']}/{llm_config['name']}"
+            model = llm_config["model"]
             model_params = llm_config.get("parameters", {})
             logger.info(f"Using model: {model} with params: {model_params}")
             

@@ -140,13 +140,14 @@ class OptimizationServiceImpl implements OptimizationService {
                             .id(id)
                             .name(name)
                             .datasetId(datasetId);
-                    
+
                     // Force INITIALIZED status for Studio optimizations
                     if (isStudioOptimization) {
                         builder.status(OptimizationStatus.INITIALIZED);
-                        log.info("Force INITIALIZED (was '{}') status for Studio optimization id '{}'", optimization.status(), id);
+                        log.info("Force INITIALIZED (was '{}') status for Studio optimization id '{}'",
+                                optimization.status(), id);
                     }
-                    
+
                     var newOptimization = builder.build();
 
                     return makeMonoContextAware((userName, workspaceId) -> Mono.deferContextual(ctx -> {
