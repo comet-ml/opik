@@ -13,15 +13,28 @@ import DatasetItemsTab from "@/components/pages/DatasetItemsPage/DatasetItemsTab
 import VersionHistoryTab from "@/components/pages/DatasetItemsPage/VersionHistoryTab/VersionHistoryTab";
 import AddVersionDialog from "@/components/pages/DatasetItemsPage/VersionHistoryTab/AddVersionDialog";
 import { Button } from "@/components/ui/button";
+import { DATASET_STATUS } from "@/types/datasets";
+
+const POLLING_INTERVAL_MS = 3000;
 
 const DatasetItemsPage = () => {
   const datasetId = useDatasetIdFromURL();
   const [tab, setTab] = useQueryParam("tab", StringParam);
   const [addVersionDialogOpen, setAddVersionDialogOpen] = useState(false);
 
-  const { data: dataset, isPending } = useDatasetById({
-    datasetId,
-  });
+  const { data: dataset, isPending } = useDatasetById(
+    {
+      datasetId,
+    },
+    {
+      refetchInterval: (query) => {
+        const status = query.state.data?.status;
+        return status === DATASET_STATUS.processing
+          ? POLLING_INTERVAL_MS
+          : false;
+      },
+    },
+  );
 
   if (isPending) {
     return <Loader />;
@@ -82,7 +95,11 @@ const DatasetItemsPage = () => {
           </TabsTrigger>
         </TabsList>
         <TabsContent value="items">
-          <DatasetItemsTab datasetId={datasetId} datasetName={dataset?.name} />
+          <DatasetItemsTab
+            datasetId={datasetId}
+            datasetName={dataset?.name}
+            datasetStatus={dataset?.status}
+          />
         </TabsContent>
         <TabsContent value="version-history">
           <VersionHistoryTab datasetId={datasetId} />

@@ -14,11 +14,13 @@ import DataTable from "@/components/shared/DataTable/DataTable";
 import DataTablePagination from "@/components/shared/DataTablePagination/DataTablePagination";
 import { useDynamicColumnsCache } from "@/hooks/useDynamicColumnsCache";
 import useQueryParamAndLocalStorageState from "@/hooks/useQueryParamAndLocalStorageState";
+import useDatasetLoadingStatus from "@/hooks/useDatasetLoadingStatus";
 import ColumnsButton from "@/components/shared/ColumnsButton/ColumnsButton";
 import SearchInput from "@/components/shared/SearchInput/SearchInput";
 import FiltersButton from "@/components/shared/FiltersButton/FiltersButton";
 import useDatasetItemsList from "@/api/datasets/useDatasetItemsList";
-import { DatasetItem } from "@/types/datasets";
+import StatusMessage from "@/components/shared/StatusMessage/StatusMessage";
+import { DatasetItem, DATASET_STATUS } from "@/types/datasets";
 import { Filters } from "@/types/filters";
 import {
   COLUMN_ID_ID,
@@ -37,6 +39,7 @@ import AddEditDatasetItemDialog from "@/components/pages/DatasetItemsPage/AddEdi
 import AddDatasetItemSidebar from "@/components/pages/DatasetItemsPage/AddDatasetItemSidebar";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
+import { Check, Loader2 } from "lucide-react";
 import { convertColumnDataToColumn, mapColumnDataFields } from "@/lib/table";
 import { buildDocsUrl } from "@/lib/utils";
 import DataTableNoData from "@/components/shared/DataTableNoData/DataTableNoData";
@@ -66,17 +69,24 @@ const COLUMNS_ORDER_KEY = "dataset-items-columns-order";
 const DYNAMIC_COLUMNS_KEY = "dataset-items-dynamic-columns";
 const PAGINATION_SIZE_KEY = "dataset-items-pagination-size";
 const ROW_HEIGHT_KEY = "dataset-items-row-height";
+const POLLING_INTERVAL_MS = 3000;
 
 interface DatasetItemsTabProps {
   datasetId: string;
   datasetName?: string;
+  datasetStatus?: DATASET_STATUS;
 }
 
 const DatasetItemsTab: React.FC<DatasetItemsTabProps> = ({
   datasetId,
   datasetName,
+  datasetStatus,
 }) => {
   const truncationEnabled = false;
+
+  const { isProcessing, showSuccessMessage } = useDatasetLoadingStatus({
+    datasetStatus,
+  });
 
   const [activeRowId = "", setActiveRowId] = useQueryParam("row", StringParam, {
     updateType: "replaceIn",
@@ -137,6 +147,7 @@ const DatasetItemsTab: React.FC<DatasetItemsTabProps> = ({
       },
       {
         placeholderData: keepPreviousData,
+        refetchInterval: isProcessing ? POLLING_INTERVAL_MS : false,
       },
     );
   const totalCount = data?.total ?? 0;
@@ -469,6 +480,23 @@ const DatasetItemsTab: React.FC<DatasetItemsTabProps> = ({
           </Button>
         </div>
       </div>
+      {isProcessing && (
+        <StatusMessage
+          icon={Loader2}
+          iconClassName="animate-spin"
+          title="Your dataset is still loading"
+          description="Some results or counts may update as more data becomes available. You can continue exploring while the full dataset loads."
+          className="mb-4"
+        />
+      )}
+      {showSuccessMessage && (
+        <StatusMessage
+          icon={Check}
+          title="Your dataset fully loaded"
+          description="All items are now available."
+          className="mb-4"
+        />
+      )}
       {showSelectAllBanner && (
         <SelectAllBanner
           selectedCount={isAllItemsSelected ? totalCount : selectedRows.length}
@@ -517,6 +545,7 @@ const DatasetItemsTab: React.FC<DatasetItemsTabProps> = ({
           total={data?.total ?? 0}
           supportsTruncation
           truncationEnabled={truncationEnabled}
+          isLoadingTotal={isProcessing}
         />
       </div>
       <DatasetItemEditor
