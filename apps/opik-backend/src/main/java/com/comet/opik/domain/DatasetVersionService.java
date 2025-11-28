@@ -429,7 +429,7 @@ class DatasetVersionServiceImpl implements DatasetVersionService {
         return DatasetVersionDiff.builder()
                 .fromVersion(fromHashOrTag)
                 .toVersion(toVersionLabel)
-                .statistics(DatasetVersionDiffMapper.INSTANCE.toApiDiffStatistics(stats))
+                .statistics(stats)
                 .build();
     }
 
