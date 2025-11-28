@@ -968,7 +968,7 @@ class DatasetVersionResourceTest {
 
             // Then - Verify diff statistics
             assertThat(diff.fromVersion()).isEqualTo("v1");
-            assertThat(diff.toVersion()).isEqualTo("draft");
+            assertThat(diff.toVersion()).isEqualTo(null);
             assertThat(diff.statistics().itemsAdded()).isEqualTo(1)
                     .as("1 new item was added to draft");
             assertThat(diff.statistics().itemsModified()).isEqualTo(0)
@@ -984,7 +984,7 @@ class DatasetVersionResourceTest {
 
             // Then - Verify same diff statistics
             assertThat(diff2.fromVersion()).isEqualTo(DatasetVersionService.LATEST_TAG);
-            assertThat(diff2.toVersion()).isEqualTo("draft");
+            assertThat(diff2.toVersion()).isEqualTo(null);
             assertThat(diff2.statistics().itemsAdded()).isEqualTo(1);
         }
     }
