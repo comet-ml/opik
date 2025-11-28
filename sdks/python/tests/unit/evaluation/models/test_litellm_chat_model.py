@@ -128,6 +128,69 @@ def test_litellm_chat_model_drops_temperature_for_gpt5(monkeypatch, caplog):
     assert not caplog.records
 
 
+def test_litellm_chat_model_drops_top_logprobs_for_dashscope_when_logprobs_false(
+    monkeypatch,
+):
+    stub = _install_litellm_stub(
+        monkeypatch,
+        supported_params=["logprobs", "top_logprobs", "response_format"],
+    )
+
+    model = litellm_chat_model.LiteLLMChatModel(
+        model_name="dashscope/qwen-flash",
+        logprobs=False,
+        top_logprobs=10,
+    )
+
+    # top_logprobs should not be kept in static completion kwargs
+    assert "top_logprobs" not in model._completion_kwargs
+
+    model.generate_string("hello")
+
+    assert stub._calls, "Expected completion to be invoked"
+    _, _, kwargs = stub._calls[-1]
+
+    # top_logprobs should not be forwarded to the provider
+    assert "top_logprobs" not in kwargs
+
+
+@pytest.mark.parametrize(
+    "raw_top_logprobs, expected",
+    [
+        (10, 5),  # too high → clamp to 5
+        (-1, 0),  # too low  → clamp to 0
+        ("3", 3),  # string that can be parsed → clamp to int
+    ],
+)
+def test_litellm_chat_model_clamps_top_logprobs_for_dashscope(
+    monkeypatch,
+    raw_top_logprobs,
+    expected,
+):
+    stub = _install_litellm_stub(
+        monkeypatch,
+        supported_params=["logprobs", "top_logprobs", "response_format"],
+    )
+
+    model = litellm_chat_model.LiteLLMChatModel(
+        model_name="dashscope/qwen-flash",
+        logprobs=True,
+        top_logprobs=raw_top_logprobs,
+    )
+
+    # top_logprobs should be clamped in the static completion kwargs
+    assert model._completion_kwargs.get("top_logprobs") == expected
+
+    stub._calls.clear()
+    model.generate_string("hello")
+
+    assert stub._calls, "Expected completion to be invoked"
+    _, _, kwargs = stub._calls[-1]
+
+    # and the clamped value should be forwarded to the provider
+    assert kwargs.get("top_logprobs") == expected
+
+
 def test_geval_passes_logprobs_only_when_supported(monkeypatch):
     _install_litellm_stub(
         monkeypatch, supported_params=["logprobs", "top_logprobs", "response_format"]
