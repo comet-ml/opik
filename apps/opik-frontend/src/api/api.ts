@@ -33,6 +33,7 @@ export const WORKSPACE_CONFIG_REST_ENDPOINT =
 export const TRACE_ANALYZER_REST_ENDPOINT = "/trace-analyzer/session/";
 export const PLAYGROUND_EVALUATION_REST_ENDPOINT =
   "/v1/private/playground/evaluations/";
+export const DASHBOARDS_REST_ENDPOINT = "/v1/private/dashboards/";
 
 export const COMPARE_EXPERIMENTS_KEY = "compare-experiments";
 export const SPANS_KEY = "spans";
@@ -50,6 +51,8 @@ export const ANNOTATION_QUEUES_KEY = "annotation-queues";
 export const ANNOTATION_QUEUE_KEY = "annotation-queue";
 export const WORKSPACE_CONFIG_KEY = "workspace-config";
 export const TRACE_AI_ASSISTANT_KEY = "trace-analyzer-history";
+export const DASHBOARDS_KEY = "dashboards";
+export const DASHBOARD_KEY = "dashboard";
 
 // stats for feedback
 export const STATS_COMET_ENDPOINT = "https://stats.comet.com/notify/event/";

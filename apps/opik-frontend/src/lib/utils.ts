@@ -11,7 +11,11 @@ import sample from "lodash/sample";
 import mapKeys from "lodash/mapKeys";
 import snakeCase from "lodash/snakeCase";
 import isString from "lodash/isString";
+import isPlainObject from "lodash/isPlainObject";
+import mapValues from "lodash/mapValues";
+import pickBy from "lodash/pickBy";
 import { twMerge } from "tailwind-merge";
+import isEqual from "fast-deep-equal";
 import { DEFAULT_WORKSPACE_NAME } from "@/constants/user";
 import { JsonNode } from "@/types/shared";
 
@@ -262,4 +266,27 @@ export const stripColumnPrefix = (column: string, prefix: string): string => {
   return column.startsWith(prefixWithDot)
     ? column.slice(prefixWithDot.length)
     : column;
+};
+
+export const removeUndefinedKeys = <T>(value: T): T => {
+  if (value === null || value === undefined) {
+    return value;
+  }
+
+  if (isArray(value)) {
+    return value.map((item) => removeUndefinedKeys(item)) as T;
+  }
+
+  if (isPlainObject(value)) {
+    return mapValues(
+      pickBy(value as Record<string, unknown>, (v) => v !== undefined),
+      (v) => removeUndefinedKeys(v),
+    ) as T;
+  }
+
+  return value;
+};
+
+export const isLooseEqual = <T>(a: T, b: T): boolean => {
+  return isEqual(removeUndefinedKeys(a), removeUndefinedKeys(b));
 };
