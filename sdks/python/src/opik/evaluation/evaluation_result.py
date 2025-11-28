@@ -5,6 +5,7 @@ import logging
 import dataclasses
 
 from . import score_statistics, test_result
+from .metrics import score_result
 
 if TYPE_CHECKING:
     pass
@@ -71,6 +72,9 @@ class EvaluationResult:
     test_results: List[test_result.TestResult]
     experiment_url: Optional[str]
     trial_count: int
+    experiment_scores: List[score_result.ScoreResult] = dataclasses.field(
+        default_factory=list
+    )
 
     def aggregate_evaluation_scores(self) -> EvaluationResultAggregatedScoresView:
         """

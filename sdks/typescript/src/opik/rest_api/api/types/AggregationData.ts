@@ -11,4 +11,5 @@ export interface AggregationData {
     totalEstimatedCostAvg?: number;
     duration?: OpikApi.PercentageValues;
     feedbackScores?: OpikApi.FeedbackScoreAverage[];
+    experimentScores?: OpikApi.FeedbackScoreAverage[];
 }

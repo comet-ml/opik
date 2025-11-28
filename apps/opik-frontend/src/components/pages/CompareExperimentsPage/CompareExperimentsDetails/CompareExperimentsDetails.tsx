@@ -102,18 +102,33 @@ const CompareExperimentsDetails: React.FunctionComponent<
           <TooltipWrapper content="Feedback scores">
             <PenLine className="size-4 shrink-0" />
           </TooltipWrapper>
-          <div className="flex gap-2 overflow-x-auto">
-            {sortBy(experiment?.feedback_scores ?? [], "name").map(
-              (feedbackScore) => {
-                return (
-                  <FeedbackScoreTag
-                    key={feedbackScore.name + feedbackScore.value}
-                    label={feedbackScore.name}
-                    value={feedbackScore.value}
-                  />
-                );
-              },
-            )}
+          <div className="flex gap-1 overflow-x-auto">
+            {(() => {
+              const markScores = (
+                scores: typeof experiment.feedback_scores,
+                isFeedbackScore: boolean,
+              ) =>
+                (scores ?? []).map((score) => ({
+                  ...score,
+                  isFeedbackScore,
+                }));
+
+              return sortBy(
+                [
+                  ...markScores(experiment?.feedback_scores, true),
+                  ...markScores(experiment?.experiment_scores, false),
+                ],
+                "name",
+              ).map((score) => (
+                <FeedbackScoreTag
+                  key={score.name + score.value}
+                  label={
+                    score.isFeedbackScore ? `${score.name} (avg)` : score.name
+                  }
+                  value={score.value}
+                />
+              ));
+            })()}
           </div>
         </div>
       );

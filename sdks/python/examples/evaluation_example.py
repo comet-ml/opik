@@ -1,7 +1,7 @@
-from typing import Dict, Any
+from typing import Dict, Any, List
 
-from opik.evaluation.metrics import IsJson, Hallucination
-from opik.evaluation import evaluate
+from opik.evaluation.metrics import IsJson, Hallucination, score_result
+from opik.evaluation import evaluate, test_result
 from opik import Opik, track
 from opik.integrations.openai import track_openai
 import openai
@@ -59,12 +59,35 @@ def llm_task(item: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
+def compute_hallucination_stats(
+    test_results: List[test_result.TestResult],
+) -> List[score_result.ScoreResult]:
+    # Extract scores safely, checking for empty score_results
+    scores = [
+        x.score_results[0].value
+        for x in test_results
+        if x.score_results and len(x.score_results) > 0
+    ]
+
+    # Return empty list if no scores available
+    if not scores:
+        return []
+
+    return [
+        score_result.ScoreResult(
+            name="Custom metric",
+            value=max(scores) if len(scores) > 1 else 0.0,
+        )
+    ]
+
+
 results = evaluate(
     experiment_name="My experiment",
     dataset=dataset,
     task=llm_task,
     nb_samples=2,
     scoring_metrics=[is_json, hallucination],
+    experiment_scoring_functions=[compute_hallucination_stats],
 )
 
 print(results)

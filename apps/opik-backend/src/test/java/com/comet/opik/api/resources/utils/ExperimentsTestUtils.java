@@ -8,6 +8,7 @@ import com.comet.opik.api.ExperimentGroupEnrichInfoHolder;
 import com.comet.opik.api.ExperimentGroupItem;
 import com.comet.opik.api.ExperimentGroupResponse;
 import com.comet.opik.api.ExperimentItem;
+import com.comet.opik.api.ExperimentScore;
 import com.comet.opik.api.FeedbackScore;
 import com.comet.opik.api.FeedbackScoreAverage;
 import com.comet.opik.api.GroupContentWithAggregations;
@@ -33,6 +34,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -217,6 +219,9 @@ public class ExperimentsTestUtils {
                 .toList();
         List<FeedbackScoreAverage> feedbackScores = calculateFeedbackScoreAverages(allItems);
 
+        // Calculate experiment score averages across all experiments
+        List<FeedbackScoreAverage> experimentScores = calculateExperimentScoreAverages(experiments);
+
         return AggregationData.builder()
                 .experimentCount(experimentCount)
                 .traceCount(totalTraceCount)
@@ -224,6 +229,7 @@ public class ExperimentsTestUtils {
                 .totalEstimatedCostAvg(avgCost)
                 .duration(avgDurationPercentiles)
                 .feedbackScores(feedbackScores)
+                .experimentScores(experimentScores)
                 .build();
     }
 
@@ -307,15 +313,34 @@ public class ExperimentsTestUtils {
         return new PercentageValues(avgP50, avgP90, avgP99);
     }
 
-    private List<FeedbackScoreAverage> calculateFeedbackScoreAverages(List<ExperimentItem> items) {
+    /**
+     * Generic method to calculate score averages from a list of score objects.
+     *
+     * @param items List of items to extract scores from
+     * @param scoreListExtractor Function to extract list of score objects from each item
+     * @param nameExtractor Function to extract name from a score object
+     * @param valueExtractor Function to extract value from a score object
+     * @param <T> Type of items to process
+     * @param <S> Type of score objects
+     * @return List of FeedbackScoreAverage with calculated averages
+     */
+    private <T, S> List<FeedbackScoreAverage> calculateScoreAverages(
+            List<T> items,
+            Function<T, List<S>> scoreListExtractor,
+            Function<S, String> nameExtractor,
+            Function<S, BigDecimal> valueExtractor) {
+
         Map<String, List<BigDecimal>> scoresByName = new HashMap<>();
 
-        for (ExperimentItem item : items) {
-            if (item.feedbackScores() != null) {
-                for (FeedbackScore score : item.feedbackScores()) {
-                    scoresByName.computeIfAbsent(score.name(), k -> new ArrayList<>())
-                            .add(score.value());
-                }
+        for (T item : items) {
+            List<S> scores = scoreListExtractor.apply(item);
+            if (scores != null) {
+                scores.stream()
+                        .filter(score -> nameExtractor.apply(score) != null
+                                && valueExtractor.apply(score) != null)
+                        .forEach(score -> scoresByName
+                                .computeIfAbsent(nameExtractor.apply(score), k -> new ArrayList<>())
+                                .add(valueExtractor.apply(score)));
             }
         }
 
@@ -330,7 +355,28 @@ public class ExperimentsTestUtils {
                             .value(average)
                             .build();
                 })
+                .sorted((a, b) -> a.name().compareTo(b.name()))
                 .toList();
+    }
+
+    private List<FeedbackScoreAverage> calculateFeedbackScoreAverages(List<ExperimentItem> items) {
+        return calculateScoreAverages(
+                items,
+                ExperimentItem::feedbackScores,
+                FeedbackScore::name,
+                FeedbackScore::value);
+    }
+
+    /**
+     * Calculate experiment score averages across all experiments.
+     * Extracts experiment scores from each experiment and calculates the average value for each score name.
+     */
+    private List<FeedbackScoreAverage> calculateExperimentScoreAverages(List<Experiment> experiments) {
+        return calculateScoreAverages(
+                experiments,
+                Experiment::experimentScores,
+                ExperimentScore::name,
+                ExperimentScore::value);
     }
 
     /**
