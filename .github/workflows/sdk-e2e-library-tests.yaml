@@ -28,12 +28,23 @@ env:
   OPIK_SENTRY_ENABLE: False
   SLACK_WEBHOOK_URL: ${{ secrets.ACTION_MONITORING_SLACK }}
   LIBS: ${{ github.event.inputs.libs != '' && github.event.inputs.libs  || 'all' }}
+  HAS_OPENAI_API_KEY: False  # ${{ secrets.OPENAI_API_KEY != '' }}
 
 jobs:
+  check_api_key:
+    name: Check OpenAI API Key
+    runs-on: ubuntu-latest
+    if: ${{ env.HAS_OPENAI_API_KEY == 'false' }}
+    steps:
+      - name: Print disabled message
+        run: |
+          echo "::warning::SDK E2E Libraries Integration Tests workflow is disabled because OPENAI_API_KEY is not set"
+
   run_e2e_lib_integration:
     name: E2E Lib Integration Python ${{matrix.python_version}}
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    if: ${{ env.HAS_OPENAI_API_KEY == 'true' }}
     strategy:
       fail-fast: false
       matrix:
