@@ -169,15 +169,13 @@ class TotalSpanCost(base_metric.BaseMetric):
     ):
         super().__init__(name=name, track=track, project_name=project_name)
 
-    def score(
-        self, task_span: models.SpanModel, **ignored_kwargs: Any
-    ) -> score_result.ScoreResult:
+    def score(self, task_span: models.SpanModel, **_: Any) -> score_result.ScoreResult:
         """
         Calculate the total cost based on the span's token usage, recursively traversing the span tree.
 
         Args:
             task_span: The span model containing usage information and nested spans.
-            **ignored_kwargs: Additional keyword arguments that are ignored.
+            **_: Additional keyword arguments that are ignored.
 
         Returns:
             score_result.ScoreResult: A ScoreResult object with the calculated cost value.

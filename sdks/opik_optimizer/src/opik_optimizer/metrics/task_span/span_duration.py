@@ -24,7 +24,7 @@ class SpanDuration(base_metric.BaseMetric):
         super().__init__(name=name, track=track, project_name=project_name)
 
     def score(
-        self, task_span: emulation_models.SpanModel, **ignored_kwargs: Any
+        self, task_span: emulation_models.SpanModel, **_: Any
     ) -> score_result.ScoreResult:
         if task_span.end_time is None or task_span.start_time is None:
             raise opik.exceptions.MetricComputationError(
