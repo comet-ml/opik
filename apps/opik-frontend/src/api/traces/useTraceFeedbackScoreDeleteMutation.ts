@@ -16,6 +16,7 @@ import {
   setExperimentsCompareCache,
   setSpansCache,
   setTraceCache,
+  setTraceSpanFeedbackScoresCache,
   setTracesCache,
 } from "@/lib/feedback-scores";
 
@@ -71,15 +72,26 @@ const useTraceFeedbackScoreDeleteMutation = () => {
       const deleteMutation = generateDeleteMutation(params.name, authorToUse);
 
       if (params.spanId) {
+        const spanId = params.spanId; // TypeScript guard: ensure spanId is defined
         // make optimistic update for spans
         await setSpansCache(
           queryClient,
           {
             traceId: params.traceId,
-            spanId: params.spanId,
+            spanId,
           },
           deleteMutation,
         );
+        // Also update trace's span_feedback_scores aggregation
+        // Only update if we have an author (required for cache key matching)
+        if (authorToUse) {
+          await setTraceSpanFeedbackScoresCache(queryClient, {
+            traceId: params.traceId,
+            spanId,
+            name: params.name,
+            author: authorToUse,
+          });
+        }
       } else {
         // make optimistic update for compare experiments
         await setExperimentsCompareCache(

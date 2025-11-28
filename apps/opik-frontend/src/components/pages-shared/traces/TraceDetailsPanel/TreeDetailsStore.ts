@@ -14,6 +14,7 @@ export type SpanWithMetadata = Omit<Span, "type"> & {
   maxDuration: number;
   hasError?: boolean;
   isInSearch?: boolean;
+  span_feedback_scores?: import("@/types/traces").TraceFeedbackScore[];
 };
 
 export interface TreeNode {

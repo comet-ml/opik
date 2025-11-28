@@ -94,17 +94,33 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
   const isSpanInputOutputLoading =
     type !== TRACE_TYPE_FOR_TREE && isSpansLazyLoading;
   const entityType = type === TRACE_TYPE_FOR_TREE ? "trace" : "span";
+  const isTrace = type === TRACE_TYPE_FOR_TREE;
+  const traceData = isTrace ? (data as Trace) : undefined;
+  const hasSpanFeedbackScores = Boolean(
+    traceData?.span_feedback_scores?.length,
+  );
 
   const feedbackScoreDeleteMutation = useTraceFeedbackScoreDeleteMutation();
 
   const onDeleteFeedbackScore = useCallback(
-    (name: string, author?: string) => {
-      feedbackScoreDeleteMutation.mutate({
-        traceId,
-        spanId,
-        name,
-        author,
-      });
+    (name: string, author?: string, spanIdToDelete?: string) => {
+      // If spanIdToDelete is provided (child row grouped by type), delete for that specific span
+      if (spanIdToDelete) {
+        feedbackScoreDeleteMutation.mutate({
+          traceId,
+          spanId: spanIdToDelete,
+          name,
+          author,
+        });
+      } else {
+        // Regular deletion (trace or single span)
+        feedbackScoreDeleteMutation.mutate({
+          traceId,
+          spanId,
+          name,
+          author,
+        });
+      }
     },
     [traceId, spanId, feedbackScoreDeleteMutation],
   );
@@ -275,14 +291,34 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
             />
           </TabsContent>
           <TabsContent value="feedback_scores">
-            <ConfigurableFeedbackScoreTable
-              feedbackScores={data.feedback_scores}
-              onDeleteFeedbackScore={onDeleteFeedbackScore}
-              onAddHumanReview={() =>
-                setActiveSection(DetailsActionSection.Annotations)
-              }
-              entityType={entityType}
-            />
+            <div className="space-y-6">
+              <div>
+                <ConfigurableFeedbackScoreTable
+                  title={isTrace ? "Trace scores" : "Span scores"}
+                  feedbackScores={data.feedback_scores}
+                  onDeleteFeedbackScore={onDeleteFeedbackScore}
+                  onAddHumanReview={() =>
+                    setActiveSection(DetailsActionSection.Annotations)
+                  }
+                  entityType={entityType}
+                  isAggregatedSpanScores={false}
+                />
+              </div>
+              {isTrace && hasSpanFeedbackScores && traceData && (
+                <div>
+                  <ConfigurableFeedbackScoreTable
+                    title="Span scores"
+                    feedbackScores={traceData.span_feedback_scores}
+                    onDeleteFeedbackScore={onDeleteFeedbackScore}
+                    onAddHumanReview={() =>
+                      setActiveSection(DetailsActionSection.Annotations)
+                    }
+                    entityType="span"
+                    isAggregatedSpanScores={true}
+                  />
+                </div>
+              )}
+            </div>
           </TabsContent>
           <TabsContent value="metadata">
             <MetadataTab data={data} search={search} />

@@ -25,7 +25,8 @@ import static org.assertj.core.api.Assertions.within;
 public class TraceAssertions {
 
     public static final String[] IGNORED_FIELDS_TRACES = {"projectId", "projectName", "createdAt",
-            "lastUpdatedAt", "feedbackScores", "createdBy", "lastUpdatedBy", "totalEstimatedCost", "spanCount",
+            "lastUpdatedAt", "feedbackScores", "spanFeedbackScores", "createdBy", "lastUpdatedBy", "totalEstimatedCost",
+            "spanCount",
             "llmSpanCount", "hasToolSpans", "duration", "comments", "threadId", "guardrailsValidations",
             "providers"};
 
@@ -85,6 +86,8 @@ public class TraceAssertions {
         EXCLUDE_FUNCTIONS.put(Trace.TraceField.CREATED_BY, it -> it.toBuilder().createdBy(null).build());
         EXCLUDE_FUNCTIONS.put(Trace.TraceField.LAST_UPDATED_BY, it -> it.toBuilder().lastUpdatedBy(null).build());
         EXCLUDE_FUNCTIONS.put(Trace.TraceField.FEEDBACK_SCORES, it -> it.toBuilder().feedbackScores(null).build());
+        EXCLUDE_FUNCTIONS.put(Trace.TraceField.SPAN_FEEDBACK_SCORES,
+                it -> it.toBuilder().spanFeedbackScores(null).build());
         EXCLUDE_FUNCTIONS.put(Trace.TraceField.COMMENTS, it -> it.toBuilder().comments(null).build());
         EXCLUDE_FUNCTIONS.put(Trace.TraceField.GUARDRAILS_VALIDATIONS,
                 it -> it.toBuilder().guardrailsValidations(null).build());

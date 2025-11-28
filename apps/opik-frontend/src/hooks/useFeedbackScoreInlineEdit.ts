@@ -6,6 +6,7 @@ import { USER_FEEDBACK_NAME } from "@/constants/shared";
 import { useLoggedInUserNameOrOpenSourceDefaultUser } from "@/store/AppStore";
 import { TraceFeedbackScore } from "@/types/traces";
 import { useCallback } from "react";
+import { findValueByAuthor } from "@/lib/feedback-scores";
 
 interface UseFeedbackScoreInlineEditProps {
   id: string;
@@ -37,8 +38,11 @@ const useFeedbackScoreInlineEdit = ({
 
   const handleValueChange = useCallback(
     (categoryName: string, value: number) => {
-      const isSameValue =
-        feedbackScore?.value_by_author?.[currentUserName]?.value === value;
+      const userValue = findValueByAuthor(
+        feedbackScore?.value_by_author,
+        currentUserName,
+      );
+      const isSameValue = userValue?.value === value;
 
       if (isThread) {
         // Handle Thread feedback score

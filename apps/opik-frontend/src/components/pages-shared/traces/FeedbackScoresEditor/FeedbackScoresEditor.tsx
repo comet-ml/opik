@@ -17,7 +17,11 @@ type FeedbackScoresEditorProps = {
   feedbackScores: TraceFeedbackScore[];
   className?: string;
   onUpdateFeedbackScore: (update: UpdateFeedbackScoreData) => void;
-  onDeleteFeedbackScore: (name: string, author?: string) => void;
+  onDeleteFeedbackScore: (
+    name: string,
+    author?: string,
+    spanId?: string,
+  ) => void;
   header?: React.ReactNode;
   footer?: React.ReactNode;
   feedbackDefinitionNames?: string[];
@@ -33,10 +37,35 @@ type FeedbackScoresEditorFooterProps = {
   entityCopy: string;
 };
 
-const FeedbackScoresEditorHeader: React.FC = () => {
+type FeedbackScoresEditorHeaderProps = {
+  isTrace?: boolean;
+  isThread?: boolean;
+};
+
+const getTitleOfScores = ({
+  isThread,
+  isTrace,
+}: {
+  isThread?: boolean;
+  isTrace?: boolean;
+}): string => {
+  if (isThread) {
+    return "Your thread scores";
+  }
+  if (isTrace) {
+    return "Your trace scores";
+  }
+  return "Your span scores";
+};
+
+const FeedbackScoresEditorHeader: React.FC<FeedbackScoresEditorHeaderProps> = ({
+  isTrace = false,
+  isThread = false,
+}) => {
+  const title = getTitleOfScores({ isThread, isTrace });
   return (
     <div className="flex items-center gap-1 pb-2">
-      <span className="comet-body-s-accented truncate">Your scores</span>
+      <span className="comet-body-s-accented truncate">{title}</span>
       <ExplainerIcon {...EXPLAINERS_MAP[EXPLAINER_ID.what_is_human_review]} />
     </div>
   );

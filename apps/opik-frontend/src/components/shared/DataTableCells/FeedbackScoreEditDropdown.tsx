@@ -21,6 +21,7 @@ import {
 } from "@/types/feedback-definitions";
 import sortBy from "lodash/sortBy";
 import TooltipWrapper from "../TooltipWrapper/TooltipWrapper";
+import { findValueByAuthor } from "@/lib/feedback-scores";
 
 interface FeedbackScoreEditDropdownProps {
   feedbackScore?: TraceFeedbackScore;
@@ -80,7 +81,11 @@ const FeedbackScoreEditDropdown: React.FC<FeedbackScoreEditDropdownProps> = ({
     setOpen(false);
   };
 
-  const currentValue = feedbackScore?.value_by_author?.[currentUserName]?.value;
+  const userValue = findValueByAuthor(
+    feedbackScore?.value_by_author,
+    currentUserName,
+  );
+  const currentValue = userValue?.value;
 
   // Don't render if no feedback options are available
   if (feedbackOptions.length === 0) {

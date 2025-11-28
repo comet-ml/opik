@@ -56,7 +56,7 @@ const ThreadAnnotations: React.FC<ThreadAnnotationsProps> = ({
 
   return (
     <DetailsActionSectionLayout
-      title="Feedback scores"
+      title="Thread scores"
       closeTooltipContent="Close annotate"
       setActiveSection={setActiveSection}
       activeSection={activeSection}
@@ -66,7 +66,7 @@ const ThreadAnnotations: React.FC<ThreadAnnotationsProps> = ({
         {hasFeedbackScores && (
           <>
             <div className="comet-body-s-accented truncate px-6 pt-4">
-              All scores
+              Thread scores
             </div>
             <div className="flex flex-wrap gap-2 px-6 py-2">
               {feedbackScores.map((score) => {
@@ -92,7 +92,7 @@ const ThreadAnnotations: React.FC<ThreadAnnotationsProps> = ({
           onUpdateFeedbackScore={onUpdateFeedbackScore}
           onDeleteFeedbackScore={onDeleteFeedbackScore}
           className="mt-4"
-          header={<FeedbackScoresEditor.Header />}
+          header={<FeedbackScoresEditor.Header isThread={true} />}
           footer={<FeedbackScoresEditor.Footer entityCopy="threads" />}
         />
       </div>

@@ -22,25 +22,25 @@ const ICONS_MAP = {
     icon: MessageCircle,
     bg: "var(--tag-blue-bg)",
     color: "var(--tag-blue-text)",
-    tooltip: "LLM",
+    tooltip: "LLM span",
   },
   [SPAN_TYPE.general]: {
     icon: Link,
     bg: "var(--tag-green-bg)",
     color: "var(--tag-green-text)",
-    tooltip: "General",
+    tooltip: "General span",
   },
   [SPAN_TYPE.tool]: {
     icon: Hammer,
     bg: "var(--tag-burgundy-bg)",
     color: "var(--tag-burgundy-text)",
-    tooltip: "Tool",
+    tooltip: "Tool span",
   },
   [SPAN_TYPE.guardrail]: {
     icon: Construction,
     bg: "var(--tag-orange-bg)",
     color: "var(--tag-orange-text)",
-    tooltip: "Guardrail",
+    tooltip: "Guardrail span",
   },
 };
 
