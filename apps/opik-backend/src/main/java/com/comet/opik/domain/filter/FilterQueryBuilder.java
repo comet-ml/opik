@@ -62,6 +62,7 @@ public class FilterQueryBuilder {
     private static final String TYPE_ANALYTICS_DB = "type";
     private static final String TAGS_DB = "tags";
     private static final String VERSION_COUNT_DB = "version_count";
+    private static final String TEMPLATE_STRUCTURE_DB = "template_structure";
     private static final String USAGE_COMPLETION_TOKENS_ANALYTICS_DB = "usage['completion_tokens']";
     private static final String USAGE_PROMPT_TOKENS_ANALYTICS_DB = "usage['prompt_tokens']";
     private static final String USAGE_TOTAL_TOKENS_ANALYTICS_DB = "usage['total_tokens']";
@@ -285,6 +286,7 @@ public class FilterQueryBuilder {
                     .put(PromptField.LAST_UPDATED_BY, LAST_UPDATED_BY_DB)
                     .put(PromptField.TAGS, TAGS_DB)
                     .put(PromptField.VERSION_COUNT, VERSION_COUNT_DB)
+                    .put(PromptField.TEMPLATE_STRUCTURE, TEMPLATE_STRUCTURE_DB)
                     .build());
 
     private static final Map<DatasetField, String> DATASET_FIELDS_MAP = new EnumMap<>(
@@ -459,7 +461,8 @@ public class FilterQueryBuilder {
                 PromptField.CREATED_BY,
                 PromptField.LAST_UPDATED_BY,
                 PromptField.TAGS,
-                PromptField.VERSION_COUNT));
+                PromptField.VERSION_COUNT,
+                PromptField.TEMPLATE_STRUCTURE));
 
         map.put(FilterStrategy.DATASET, Set.of(
                 DatasetField.ID,

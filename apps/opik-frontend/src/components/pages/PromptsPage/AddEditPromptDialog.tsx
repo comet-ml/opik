@@ -3,6 +3,7 @@ import CodeMirror from "@uiw/react-codemirror";
 import { EditorView } from "@codemirror/view";
 import { jsonLanguage } from "@codemirror/lang-json";
 import { useNavigate } from "@tanstack/react-router";
+import { Code2, FileText, MessagesSquare, Plus } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -25,7 +26,11 @@ import {
   AccordionTrigger,
   Accordion,
 } from "@/components/ui/accordion";
-import { Prompt } from "@/types/prompts";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import { Prompt, PROMPT_TEMPLATE_STRUCTURE } from "@/types/prompts";
+import { LLMMessage } from "@/types/llm";
+import LLMPromptMessages from "@/components/pages-shared/llm/LLMPromptMessages/LLMPromptMessages";
+import { generateDefaultLLMPromptMessage, getNextMessageType } from "@/lib/llm";
 import usePromptCreateMutation from "@/api/prompts/usePromptCreateMutation";
 import usePromptUpdateMutation from "@/api/prompts/usePromptUpdateMutation";
 import { isValidJsonObject, safelyParseJSON } from "@/lib/utils";
@@ -35,6 +40,7 @@ import useAppStore from "@/store/AppStore";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 import ExplainerDescription from "@/components/shared/ExplainerDescription/ExplainerDescription";
 import { useMessageContent } from "@/hooks/useMessageContent";
+import ChatPromptRawView from "@/components/pages-shared/llm/ChatPromptRawView/ChatPromptRawView";
 
 type AddPromptDialogProps = {
   open: boolean;
@@ -42,7 +48,7 @@ type AddPromptDialogProps = {
   prompt?: Prompt;
 };
 
-const AddEditPromptDialog: React.FunctionComponent<AddPromptDialogProps> = ({
+const AddEditPromptDialog: React.FC<AddPromptDialogProps> = ({
   open,
   setOpen,
   prompt: defaultPrompt,
@@ -55,6 +61,14 @@ const AddEditPromptDialog: React.FunctionComponent<AddPromptDialogProps> = ({
   const [description, setDescription] = useState(
     defaultPrompt?.description || "",
   );
+  const [templateStructure, setTemplateStructure] =
+    useState<PROMPT_TEMPLATE_STRUCTURE>(PROMPT_TEMPLATE_STRUCTURE.TEXT);
+  const [messages, setMessages] = useState<LLMMessage[]>([
+    generateDefaultLLMPromptMessage(),
+  ]);
+  const [showRawView, setShowRawView] = useState(false);
+  const [rawJsonValue, setRawJsonValue] = useState("");
+  const [isRawJsonValid, setIsRawJsonValid] = useState(true);
 
   const [showInvalidJSON, setShowInvalidJSON] = useBooleanTimeoutState({});
   const theme = useCodemirrorTheme({
@@ -70,9 +84,26 @@ const AddEditPromptDialog: React.FunctionComponent<AddPromptDialogProps> = ({
   const { mutate: updateMutate } = usePromptUpdateMutation();
 
   const isEdit = !!defaultPrompt;
-  const isValid = Boolean(name.length && (isEdit || template.length));
+  const isChatPrompt = templateStructure === PROMPT_TEMPLATE_STRUCTURE.CHAT;
+  const isValid = Boolean(
+    name.length &&
+      (isEdit ||
+        (isChatPrompt
+          ? messages.length > 0 && (!showRawView || isRawJsonValid)
+          : template.length)),
+  );
   const title = isEdit ? "Edit prompt" : "Create a new prompt";
   const submitText = isEdit ? "Update prompt" : "Create prompt";
+
+  const handleAddMessage = useCallback(() => {
+    setMessages((prev) => {
+      const lastMessage = prev[prev.length - 1];
+      const nextRole = lastMessage
+        ? getNextMessageType(lastMessage)
+        : undefined;
+      return [...prev, generateDefaultLLMPromptMessage({ role: nextRole })];
+    });
+  }, []);
 
   const onPromptCreated = useCallback(
     (prompt: Prompt) => {
@@ -89,18 +120,31 @@ const AddEditPromptDialog: React.FunctionComponent<AddPromptDialogProps> = ({
     [workspaceName, navigate],
   );
 
-  const createPrompt = useCallback(() => {
+  const createPrompt = () => {
     const isMetadataValid = metadata === "" || isValidJsonObject(metadata);
 
     if (!isMetadataValid) {
       return setShowInvalidJSON(true);
     }
 
+    // For chat prompts, convert messages to JSON string
+    const promptTemplate = isChatPrompt
+      ? JSON.stringify(
+          messages.map((m) => ({
+            role: m.role,
+            content: m.content,
+          })),
+          null,
+          2,
+        )
+      : template;
+
     createMutate(
       {
         prompt: {
           name,
-          template,
+          template: promptTemplate,
+          template_structure: templateStructure,
           ...(metadata && { metadata: safelyParseJSON(metadata) }),
           ...(description && { description }),
         },
@@ -108,18 +152,9 @@ const AddEditPromptDialog: React.FunctionComponent<AddPromptDialogProps> = ({
       { onSuccess: onPromptCreated },
     );
     setOpen(false);
-  }, [
-    metadata,
-    createMutate,
-    name,
-    template,
-    description,
-    setOpen,
-    setShowInvalidJSON,
-    onPromptCreated,
-  ]);
+  };
 
-  const editPrompt = useCallback(() => {
+  const editPrompt = () => {
     updateMutate({
       prompt: {
         id: defaultPrompt?.id,
@@ -128,7 +163,7 @@ const AddEditPromptDialog: React.FunctionComponent<AddPromptDialogProps> = ({
       },
     });
     setOpen(false);
-  }, [updateMutate, defaultPrompt?.id, name, description, setOpen]);
+  };
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -154,6 +189,42 @@ const AddEditPromptDialog: React.FunctionComponent<AddPromptDialogProps> = ({
           </div>
           {!isEdit && (
             <div className="flex flex-col gap-2 pb-4">
+              <Label htmlFor="templateStructure">Prompt type</Label>
+              <ToggleGroup
+                type="single"
+                variant="ghost"
+                value={templateStructure}
+                onValueChange={(value) => {
+                  if (value) {
+                    setTemplateStructure(value as PROMPT_TEMPLATE_STRUCTURE);
+                  }
+                }}
+                className="w-fit justify-start"
+              >
+                <ToggleGroupItem
+                  value={PROMPT_TEMPLATE_STRUCTURE.TEXT}
+                  aria-label="Text prompt"
+                  className="gap-1.5"
+                >
+                  <FileText className="size-3.5" />
+                  <span>Text prompt</span>
+                </ToggleGroupItem>
+                <ToggleGroupItem
+                  value={PROMPT_TEMPLATE_STRUCTURE.CHAT}
+                  aria-label="Chat prompt"
+                  className="gap-1.5"
+                >
+                  <MessagesSquare className="size-3.5" />
+                  <span>Chat prompt</span>
+                </ToggleGroupItem>
+              </ToggleGroup>
+              <Description>
+                Choose between a simple text prompt or a chat conversation
+              </Description>
+            </div>
+          )}
+          {!isEdit && !isChatPrompt && (
+            <div className="flex flex-col gap-2 pb-4">
               <Label htmlFor="template">Prompt</Label>
               <Textarea
                 id="template"
@@ -168,6 +239,76 @@ const AddEditPromptDialog: React.FunctionComponent<AddPromptDialogProps> = ({
                     .description
                 }
               </Description>
+            </div>
+          )}
+          {!isEdit && isChatPrompt && (
+            <div className="flex flex-col gap-2 pb-4">
+              <div className="flex items-center justify-between gap-0.5">
+                <Label>Chat messages</Label>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    const newShowRawView = !showRawView;
+                    if (newShowRawView) {
+                      setRawJsonValue(
+                        JSON.stringify(
+                          messages.map((m) => ({
+                            role: m.role,
+                            content: m.content,
+                          })),
+                          null,
+                          2,
+                        ),
+                      );
+                      // JSON generated from valid messages is always valid
+                      setIsRawJsonValid(true);
+                    }
+                    setShowRawView(newShowRawView);
+                  }}
+                >
+                  {showRawView ? (
+                    <>
+                      <MessagesSquare className="mr-1.5 size-3.5" />
+                      Message view
+                    </>
+                  ) : (
+                    <>
+                      <Code2 className="mr-1.5 size-3.5" />
+                      Raw view
+                    </>
+                  )}
+                </Button>
+              </div>
+              {showRawView ? (
+                <ChatPromptRawView
+                  value={rawJsonValue}
+                  onMessagesChange={setMessages}
+                  onRawValueChange={setRawJsonValue}
+                  onValidationChange={setIsRawJsonValid}
+                />
+              ) : (
+                <>
+                  <LLMPromptMessages
+                    messages={messages}
+                    onChange={setMessages}
+                    onAddMessage={handleAddMessage}
+                    hidePromptActions={true}
+                    disableMedia={true}
+                    hideAddButton={true}
+                  />
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="mt-2 w-fit"
+                    onClick={handleAddMessage}
+                    type="button"
+                  >
+                    <Plus className="mr-2 size-4" />
+                    Message
+                  </Button>
+                </>
+              )}
             </div>
           )}
           <div className="flex flex-col gap-2 border-t border-border pb-4">

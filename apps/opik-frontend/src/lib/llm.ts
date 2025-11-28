@@ -197,3 +197,50 @@ export const parsePromptVersionContent = (promptVersion?: {
   // Backward compatibility: treat as plain text
   return template;
 };
+
+/**
+ * Parse chat template JSON string into LLMMessage array
+ * Factory method that converts chat template to LLMMessage format with optional metadata
+ *
+ * @param template - JSON string containing array of messages with role and content
+ * @param options - Optional configuration for parsed messages
+ * @param options.promptId - Prompt ID to attach to each message
+ * @param options.promptVersionId - Prompt version ID to attach to each message
+ * @param options.useTimestamp - Whether to include timestamp in message IDs for uniqueness (default: false)
+ * @returns Array of LLMMessage objects, or empty array if parsing fails
+ *
+ * Note: Content is kept as-is (string or array format) as per MessageContent type definition
+ */
+export const parseChatTemplateToLLMMessages = (
+  template: string,
+  options: {
+    promptId?: string;
+    promptVersionId?: string;
+    useTimestamp?: boolean;
+  } = {},
+): LLMMessage[] => {
+  const { promptId, promptVersionId, useTimestamp = false } = options;
+
+  try {
+    const parsed = JSON.parse(template);
+
+    if (!Array.isArray(parsed) || parsed.length === 0) {
+      return [];
+    }
+
+    return parsed.map((msg, index) => {
+      // Generate ID with optional timestamp for uniqueness
+      const id = useTimestamp ? `msg-${index}-${Date.now()}` : `msg-${index}`;
+
+      return {
+        id,
+        role: msg.role as LLM_MESSAGE_ROLE,
+        content: msg.content, // Keep as-is: string | Array<TextPart | ImagePart | VideoPart>
+        ...(promptId && { promptId }),
+        ...(promptVersionId && { promptVersionId }),
+      };
+    });
+  } catch {
+    return [];
+  }
+};

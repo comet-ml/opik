@@ -1,13 +1,12 @@
 import pytest
-from opik.api_objects.prompt import prompt_template
-from opik.api_objects.prompt.types import PromptType
+from opik.api_objects.prompt import PromptTemplate, PromptType
 from opik import exceptions
 
 
 def test_prompt__format__happyflow():
     PROMPT_TEMPLATE = "Hi, my name is {{name}}, I live in {{city}}."
 
-    tested = prompt_template.PromptTemplate(PROMPT_TEMPLATE)
+    tested = PromptTemplate(PROMPT_TEMPLATE)
 
     result = tested.format(name="Harry", city="London")
     assert result == "Hi, my name is Harry, I live in London."
@@ -18,7 +17,7 @@ def test_prompt__format__one_placeholder_used_multiple_times():
         "Hi, my name is {{name}}, I live in {{city}}. I repeat, my name is {{name}}"
     )
 
-    tested = prompt_template.PromptTemplate(PROMPT_TEMPLATE)
+    tested = PromptTemplate(PROMPT_TEMPLATE)
 
     result = tested.format(name="Harry", city="London")
     assert (
@@ -29,7 +28,7 @@ def test_prompt__format__one_placeholder_used_multiple_times():
 def test_prompt__format__passed_arguments_that_are_not_in_template__error_raised_with_correct_report_info():
     PROMPT_TEMPLATE = "Hi, my name is {{name}}, I live in {{city}}."
 
-    tested = prompt_template.PromptTemplate(PROMPT_TEMPLATE)
+    tested = PromptTemplate(PROMPT_TEMPLATE)
 
     with pytest.raises(
         exceptions.PromptPlaceholdersDontMatchFormatArguments
@@ -49,7 +48,7 @@ def test_prompt__format__passed_arguments_that_are_not_in_template__error_raised
 def test_prompt__format__some_placeholders_dont_have_corresponding_format_arguments__error_raised_with_correct_report_info():
     PROMPT_TEMPLATE = "Hi, my name is {{name}}, I live in {{city}}."
 
-    tested = prompt_template.PromptTemplate(PROMPT_TEMPLATE)
+    tested = PromptTemplate(PROMPT_TEMPLATE)
 
     with pytest.raises(
         exceptions.PromptPlaceholdersDontMatchFormatArguments
@@ -64,7 +63,7 @@ def test_prompt__format__some_placeholders_dont_have_corresponding_format_argume
 def test_prompt__format__some_placeholders_dont_have_corresponding_format_arguments_AND_there_are_format_arguments_that_are_not_in_the_template__error_raised_with_correct_report_info():
     PROMPT_TEMPLATE = "Hi, my name is {{name}}, I live in {{city}}."
 
-    tested = prompt_template.PromptTemplate(PROMPT_TEMPLATE)
+    tested = PromptTemplate(PROMPT_TEMPLATE)
 
     with pytest.raises(
         exceptions.PromptPlaceholdersDontMatchFormatArguments
@@ -79,7 +78,7 @@ def test_prompt__format__some_placeholders_dont_have_corresponding_format_argume
 def test_prompt__format_jinja2__happyflow():
     PROMPT_TEMPLATE = "Hi, my name is {{ name }}, I live in {{ city }}."
 
-    tested = prompt_template.PromptTemplate(PROMPT_TEMPLATE, type=PromptType.JINJA2)
+    tested = PromptTemplate(PROMPT_TEMPLATE, type=PromptType.JINJA2)
 
     result = tested.format(name="Harry", city="London")
     assert result == "Hi, my name is Harry, I live in London."
@@ -94,7 +93,7 @@ def test_prompt__format_jinja2__with_control_flow():
     {% endif %}
     """
 
-    tested = prompt_template.PromptTemplate(PROMPT_TEMPLATE, type=PromptType.JINJA2)
+    tested = PromptTemplate(PROMPT_TEMPLATE, type=PromptType.JINJA2)
 
     wizard_result = tested.format(name="Harry", city="London", is_wizard=True)
     assert "Harry is a wizard who lives in London." in wizard_result.strip()
@@ -111,7 +110,7 @@ def test_prompt__format_jinja2__with_loops():
     {% endfor %}
     """
 
-    tested = prompt_template.PromptTemplate(PROMPT_TEMPLATE, type=PromptType.JINJA2)
+    tested = PromptTemplate(PROMPT_TEMPLATE, type=PromptType.JINJA2)
 
     result = tested.format(name="Harry", friends=["Ron", "Hermione", "Neville"])
 
@@ -124,7 +123,7 @@ def test_prompt__format_jinja2__with_loops():
 def test_prompt__format_jinja2__with_filters():
     PROMPT_TEMPLATE = "{{ name | upper }} lives in {{ city | lower }}."
 
-    tested = prompt_template.PromptTemplate(PROMPT_TEMPLATE, type=PromptType.JINJA2)
+    tested = PromptTemplate(PROMPT_TEMPLATE, type=PromptType.JINJA2)
 
     result = tested.format(name="Harry", city="LONDON")
     assert result == "HARRY lives in london."
@@ -133,7 +132,7 @@ def test_prompt__format_jinja2__with_filters():
 def test_prompt__format__none_values_render_as_empty_strings() -> None:
     PROMPT_TEMPLATE = "Primary: {{primary}} Secondary: {{secondary}}"
 
-    tested = prompt_template.PromptTemplate(PROMPT_TEMPLATE)
+    tested = PromptTemplate(PROMPT_TEMPLATE)
 
     result = tested.format(primary="cat", secondary=None)
     assert result == "Primary: cat Secondary: "

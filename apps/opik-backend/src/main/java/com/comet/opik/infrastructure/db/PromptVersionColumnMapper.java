@@ -29,16 +29,18 @@ public class PromptVersionColumnMapper implements ColumnMapper<PromptVersion> {
     }
 
     private PromptVersion mapObject(JsonNode jsonNode) {
+        String template = jsonNode.get("template").asText();
+        PromptType type = PromptType.fromString(jsonNode.get("type").asText());
+
         return PromptVersion.builder()
                 .id(UUID.fromString(jsonNode.get("id").asText()))
                 .promptId(UUID.fromString(jsonNode.get("prompt_id").asText()))
                 .commit(jsonNode.get("commit").asText())
-                .template(jsonNode.get("template").asText())
+                .template(template)
                 .metadata(jsonNode.get("metadata"))
                 .changeDescription(jsonNode.get("change_description").asText())
-                .type(PromptType.fromString(jsonNode.get("type").asText()))
-                .variables(TemplateParseUtils.extractVariables(jsonNode.get("template").asText(),
-                        PromptType.fromString(jsonNode.get("type").asText())))
+                .type(type)
+                .variables(TemplateParseUtils.extractVariables(template, type))
                 .createdAt(Instant.from(FORMATTER.parse(jsonNode.get("created_at").asText())))
                 .createdBy(jsonNode.get("created_by").asText())
                 .build();

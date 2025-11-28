@@ -15,6 +15,7 @@ public enum PromptField implements Field {
     LAST_UPDATED_BY(LAST_UPDATED_BY_QUERY_PARAM, FieldType.STRING_STATE_DB),
     TAGS(TAGS_QUERY_PARAM, FieldType.STRING_STATE_DB),
     VERSION_COUNT(VERSION_COUNT_QUERY_PARAM, FieldType.NUMBER),
+    TEMPLATE_STRUCTURE(TEMPLATE_STRUCTURE_QUERY_PARAM, FieldType.STRING_STATE_DB),
     ;
 
     private final String queryParamField;
