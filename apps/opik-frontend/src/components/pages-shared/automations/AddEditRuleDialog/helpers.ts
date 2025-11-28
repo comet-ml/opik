@@ -45,7 +45,8 @@ export const getBackendRuleType = (
     [EVALUATORS_RULE_SCOPE.span]: {
       [UI_EVALUATORS_RULE_TYPE.llm_judge]: EVALUATORS_RULE_TYPE.span_llm_judge,
       // Python code is not supported for span scope
-      [UI_EVALUATORS_RULE_TYPE.python_code]: EVALUATORS_RULE_TYPE.span_llm_judge,
+      [UI_EVALUATORS_RULE_TYPE.python_code]:
+        EVALUATORS_RULE_TYPE.span_llm_judge,
     },
   })[scope][uiType];
 

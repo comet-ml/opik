@@ -525,7 +525,9 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
                                   Thread
                                 </SelectItem>
                                 {isSpanLlmAsJudgeEnabled && (
-                                  <SelectItem value={EVALUATORS_RULE_SCOPE.span}>
+                                  <SelectItem
+                                    value={EVALUATORS_RULE_SCOPE.span}
+                                  >
                                     Span
                                   </SelectItem>
                                 )}

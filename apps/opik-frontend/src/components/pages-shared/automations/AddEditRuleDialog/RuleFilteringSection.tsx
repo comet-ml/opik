@@ -407,7 +407,13 @@ const RuleFilteringSection: React.FC<RuleFilteringSectionProps> = ({
           : {}),
       },
     }),
-    [projectId, isThreadScope, isSpanScope, isGuardrailsEnabled, ruleDictionaryOperators],
+    [
+      projectId,
+      isThreadScope,
+      isSpanScope,
+      isGuardrailsEnabled,
+      ruleDictionaryOperators,
+    ],
   );
 
   const handleAddFilter = useCallback(() => {

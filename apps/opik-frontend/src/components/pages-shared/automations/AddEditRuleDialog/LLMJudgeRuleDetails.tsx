@@ -85,8 +85,9 @@ const LLMJudgeRuleDetails: React.FC<LLMJudgeRuleDetailsProps> = ({
   const templates = LLM_PROMPT_TEMPLATES[scope];
 
   // Determine the type for autocomplete based on scope
-  const autocompleteType =
-    isSpanScope ? TRACE_DATA_TYPE.spans : TRACE_DATA_TYPE.traces;
+  const autocompleteType = isSpanScope
+    ? TRACE_DATA_TYPE.spans
+    : TRACE_DATA_TYPE.traces;
 
   const handleAddProvider = useCallback(
     (provider: COMPOSED_PROVIDER_TYPE) => {
