@@ -2,12 +2,10 @@ import React, { useState } from "react";
 import { Link } from "@tanstack/react-router";
 
 import {
-  Book,
+  Bell,
   Database,
   FlaskConical,
-  GraduationCap,
   LayoutGrid,
-  MessageCircleQuestion,
   FileTerminal,
   LucideHome,
   Blocks,
@@ -26,10 +24,11 @@ import useDatasetsList from "@/api/datasets/useDatasetsList";
 import useExperimentsList from "@/api/datasets/useExperimentsList";
 import useRulesList from "@/api/automations/useRulesList";
 import useOptimizationsList from "@/api/optimizations/useOptimizationsList";
+import useAlertsList from "@/api/alerts/useAlertsList";
 import { OnChangeFn } from "@/types/shared";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
-import { buildDocsUrl, cn } from "@/lib/utils";
+import { cn } from "@/lib/utils";
 import Logo from "@/components/layout/Logo/Logo";
 import usePluginsStore from "@/store/PluginsStore";
 import ProvideFeedbackDialog from "@/components/layout/SideBar/FeedbackDialog/ProvideFeedbackDialog";
@@ -37,13 +36,23 @@ import usePromptsList from "@/api/prompts/usePromptsList";
 import useAnnotationQueuesList from "@/api/annotation-queues/useAnnotationQueuesList";
 import { useOpenQuickStartDialog } from "@/components/pages-shared/onboarding/QuickstartDialog/QuickstartDialog";
 import GitHubStarListItem from "@/components/layout/SideBar/GitHubStarListItem/GitHubStarListItem";
+import SupportHubDropdown from "@/components/layout/SideBar/SupportHubDropdown/SupportHubDropdown";
 import SidebarMenuItem, {
   MENU_ITEM_TYPE,
   MenuItem,
   MenuItemGroup,
 } from "@/components/layout/SideBar/MenuItem/SidebarMenuItem";
+import { FeatureToggleKeys } from "@/types/feature-toggles";
 
 const HOME_PATH = "/$workspaceName/home";
+
+const CONFIGURATION_ITEM: MenuItem = {
+  id: "configuration",
+  path: "/$workspaceName/configuration",
+  type: MENU_ITEM_TYPE.router,
+  icon: Bolt,
+  label: "Configuration",
+};
 
 const MENU_ITEMS: MenuItemGroup[] = [
   {
@@ -143,18 +152,14 @@ const MENU_ITEMS: MenuItemGroup[] = [
         label: "Online evaluation",
         count: "rules",
       },
-    ],
-  },
-  {
-    id: "configuration",
-    label: "Configuration",
-    items: [
       {
-        id: "configuration",
-        path: "/$workspaceName/configuration",
+        id: "alerts",
+        path: "/$workspaceName/alerts",
         type: MENU_ITEM_TYPE.router,
-        icon: Bolt,
-        label: "Configuration",
+        icon: Bell,
+        label: "Alerts",
+        count: "alerts",
+        featureFlag: FeatureToggleKeys.TOGGLE_ALERTS_ENABLED,
       },
     ],
   },
@@ -262,6 +267,18 @@ const SideBar: React.FunctionComponent<SideBarProps> = ({
     },
   );
 
+  const { data: alertsData } = useAlertsList(
+    {
+      workspaceName,
+      page: 1,
+      size: 1,
+    },
+    {
+      placeholderData: keepPreviousData,
+      enabled: expanded,
+    },
+  );
+
   const countDataMap: Record<string, number | undefined> = {
     projects: projectData?.total,
     datasets: datasetsData?.total,
@@ -270,6 +287,7 @@ const SideBar: React.FunctionComponent<SideBarProps> = ({
     rules: rulesData?.total,
     optimizations: optimizationsData?.total,
     annotation_queues: annotationQueuesData?.total,
+    alerts: alertsData?.total,
   };
 
   const logo = LogoComponent ? (
@@ -290,34 +308,23 @@ const SideBar: React.FunctionComponent<SideBarProps> = ({
   };
 
   const renderBottomItems = () => {
-    const bottomItems = renderItems([
-      {
-        id: "documentation",
-        path: buildDocsUrl(),
-        type: MENU_ITEM_TYPE.link,
-        icon: Book,
-        label: "Documentation",
-      },
-      {
-        id: "quickstart",
-        type: MENU_ITEM_TYPE.button,
-        icon: GraduationCap,
-        label: "Quickstart guide",
-        onClick: openQuickstart,
-      },
-      {
-        id: "provideFeedback",
-        type: MENU_ITEM_TYPE.button,
-        icon: MessageCircleQuestion,
-        label: "Provide feedback",
-        onClick: () => setOpenProvideFeedback(true),
-      },
-    ]);
+    const bottomItems = [
+      <SidebarMenuItem
+        key="configuration"
+        item={CONFIGURATION_ITEM}
+        expanded={expanded}
+        compact
+      />,
+      <SupportHubDropdown
+        key="support-hub"
+        expanded={expanded}
+        openQuickstart={openQuickstart}
+        openProvideFeedback={() => setOpenProvideFeedback(true)}
+      />,
+    ];
 
     if (SidebarInviteDevButton) {
-      bottomItems.splice(
-        2,
-        0,
+      bottomItems.push(
         <SidebarInviteDevButton key="inviteDevButton" expanded={expanded} />,
       );
     }
@@ -376,9 +383,9 @@ const SideBar: React.FunctionComponent<SideBarProps> = ({
             <ul className="flex flex-col gap-1 pb-2">
               {renderGroups(MENU_ITEMS)}
             </ul>
-            <div className="flex flex-col gap-4">
+            <div className="flex flex-col gap-3">
               <Separator />
-              <ul className="flex flex-col gap-1">
+              <ul className="flex flex-col">
                 <GitHubStarListItem expanded={expanded} />
                 {renderBottomItems()}
               </ul>

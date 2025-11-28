@@ -44,18 +44,27 @@ type FeedbackScoresEditorHeaderProps = {
   isThread?: boolean;
 };
 
+const getTitleOfScores = ({
+  isThread,
+  isTrace,
+}: {
+  isThread?: boolean;
+  isTrace?: boolean;
+}): string => {
+  if (isThread) {
+    return "Your thread scores";
+  }
+  if (isTrace) {
+    return "Your trace scores";
+  }
+  return "Your span scores";
+};
+
 const FeedbackScoresEditorHeader: React.FC<FeedbackScoresEditorHeaderProps> = ({
   isTrace = false,
   isThread = false,
 }) => {
-  let title = "Your scores";
-  if (isThread) {
-    title = "Your thread scores";
-  } else if (isTrace) {
-    title = "Your trace scores";
-  } else {
-    title = "Your span scores";
-  }
+  const title = getTitleOfScores({ isThread, isTrace });
   return (
     <div className="flex items-center gap-1 pb-2">
       <span className="comet-body-s-accented truncate">{title}</span>

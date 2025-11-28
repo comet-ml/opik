@@ -1,4 +1,4 @@
-import React, { useMemo } from "react";
+import React, { useCallback, useMemo } from "react";
 import { Span, Trace } from "@/types/traces";
 import FeedbackScoresEditor from "../../FeedbackScoresEditor/FeedbackScoresEditor";
 import FeedbackScoreTag from "@/components/shared/FeedbackScoreTag/FeedbackScoreTag";
@@ -10,6 +10,7 @@ import {
 import useTraceFeedbackScoreSetMutation from "@/api/traces/useTraceFeedbackScoreSetMutation";
 import useTraceFeedbackScoreDeleteMutation from "@/api/traces/useTraceFeedbackScoreDeleteMutation";
 import { UpdateFeedbackScoreData } from "./types";
+import { extractSpanMetadataFromValueByAuthor } from "../TraceDataViewer/FeedbackScoreTable/utils";
 
 type TraceAnnotateViewerProps = {
   data: Trace | Span;
@@ -30,6 +31,14 @@ const TraceAnnotateViewer: React.FunctionComponent<
   const { mutate: setTraceFeedbackScore } = useTraceFeedbackScoreSetMutation();
   const { mutate: feedbackScoreDelete } = useTraceFeedbackScoreDeleteMutation();
 
+  // Only show feedback scores for the current entity type
+  // When showing a trace, only show trace feedback scores (not span scores)
+  // When showing a span, only show span feedback scores (not trace scores)
+  const allFeedbackScores = useMemo(
+    () => data.feedback_scores || [],
+    [data.feedback_scores],
+  );
+
   const onUpdateFeedbackScore = (data: UpdateFeedbackScoreData) => {
     setTraceFeedbackScore({
       ...data,
@@ -38,16 +47,24 @@ const TraceAnnotateViewer: React.FunctionComponent<
     });
   };
 
-  const onDeleteFeedbackScore = (
-    name: string,
-    author?: string,
-    spanIdToDelete?: string,
-  ) => {
-    // If spanIdToDelete is provided (for span feedback scores), use it
-    // Otherwise use the current spanId (for trace/span context)
-    const targetSpanId = spanIdToDelete ?? spanId;
-    feedbackScoreDelete({ name, traceId, spanId: targetSpanId, author });
-  };
+  const onDeleteFeedbackScore = useCallback(
+    (name: string, author?: string, spanIdToDelete?: string) => {
+      // For span feedback scores at trace level, extract span_id from the score's value_by_author
+      let targetSpanId = spanIdToDelete ?? spanId;
+      if (isTrace && !spanIdToDelete) {
+        // Look up the score to extract span_id from value_by_author
+        const score = allFeedbackScores.find((s) => s.name === name);
+        if (score?.value_by_author) {
+          const metadata = extractSpanMetadataFromValueByAuthor(
+            score.value_by_author,
+          );
+          targetSpanId = metadata.span_id;
+        }
+      }
+      feedbackScoreDelete({ name, traceId, spanId: targetSpanId, author });
+    },
+    [isTrace, spanId, allFeedbackScores, feedbackScoreDelete, traceId],
+  );
 
   // Only show feedback scores for the current entity type
   // When showing a trace, only show trace feedback scores (not span scores)
@@ -99,7 +116,6 @@ const TraceAnnotateViewer: React.FunctionComponent<
               entityCopy={isTrace ? "traces" : "spans"}
             />
           }
-          isSpanFeedbackScores={isTrace}
         />
       </div>
     </DetailsActionSectionLayout>

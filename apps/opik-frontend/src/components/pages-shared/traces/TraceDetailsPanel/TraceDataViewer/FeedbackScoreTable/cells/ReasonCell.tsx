@@ -4,7 +4,10 @@ import { ExpandingFeedbackScoreRow } from "../types";
 import FeedbackScoreReasonTooltip from "@/components/shared/FeedbackScoreTag/FeedbackScoreReasonTooltip";
 import { cn } from "@/lib/utils";
 import { getIsParentFeedbackScoreRow } from "../utils";
-import { extractReasonsFromValueByAuthor } from "@/lib/feedback-scores";
+import {
+  extractReasonsFromValueByAuthor,
+  isValidReason,
+} from "@/lib/feedback-scores";
 
 const ReasonCell = (
   context: CellContext<ExpandingFeedbackScoreRow, string>,
@@ -25,9 +28,7 @@ const ReasonCell = (
       ];
 
   // Filter out empty reasons and "<no reason>" placeholders
-  const filteredReasons = reasons.filter(
-    (r) => r.reason && r.reason.trim() && r.reason !== "<no reason>",
-  );
+  const filteredReasons = reasons.filter((r) => isValidReason(r.reason));
 
   const reasonsList = filteredReasons.map((reason) => reason.reason).join(", ");
 
