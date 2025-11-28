@@ -1,6 +1,8 @@
 # The workflow to run tests for third-party libraries integrations that require OPIK server running
 #
 name: SDK E2E Libraries Integration Tests
+permissions:
+  contents: read
 run-name: "SDK E2E Libraries Integration Tests ${{ github.ref_name }} by @${{ github.actor }}"
 on:
     workflow_dispatch:
@@ -30,10 +32,31 @@ env:
   LIBS: ${{ github.event.inputs.libs != '' && github.event.inputs.libs  || 'all' }}
 
 jobs:
+  has_needed_secrets:
+    name: Check Secrets
+    runs-on: ubuntu-latest
+    outputs:
+        has_secrets: ${{ steps.init.outputs.has_secrets }}
+    steps:
+      - name: Print has secrets into output
+        id: init
+        run: |
+          echo "has_secrets=${{ secrets.OPENAI_API_KEY != '' }}" >> $GITHUB_OUTPUT
+
+  missed_api_key_warning:
+    name: Missed OpenAI API Key Warning
+    runs-on: ubuntu-latest
+    if: ${{ needs.has_needed_secrets.outputs.has_secrets == 'false' }}
+    steps:
+      - name: Print disabled message
+        run: |
+          echo "::warning::SDK E2E Libraries Integration Tests workflow is disabled because OPENAI_API_KEY is not set"
+
   run_e2e_lib_integration:
     name: E2E Lib Integration Python ${{matrix.python_version}}
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    if: ${{ needs.has_needed_secrets.outputs.has_secrets != 'false' }}
     strategy:
       fail-fast: false
       matrix:
