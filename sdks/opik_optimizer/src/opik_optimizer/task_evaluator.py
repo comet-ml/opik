@@ -16,15 +16,10 @@ logger = logging.getLogger(__name__)
 
 
 def _create_metric_class(metric: Callable) -> base_metric.BaseMetric:
-    function_to_check = (
-        metric.__call__
-        if isinstance(metric, multi_metric_objective.MultiMetricObjective)
-        else metric
-    )
     metric_name = metric.__name__
 
     needs_task_span = (
-        helpers.has_task_span_parameter(function_to_check)
+        helpers.has_task_span_parameter(metric)
         if not isinstance(metric, multi_metric_objective.MultiMetricObjective)
         else metric.needs_task_span
     )
