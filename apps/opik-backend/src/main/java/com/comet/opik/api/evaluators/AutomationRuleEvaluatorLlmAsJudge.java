@@ -25,7 +25,7 @@ import static com.comet.opik.api.evaluators.AutomationRuleEvaluatorLlmAsJudge.Ll
 @EqualsAndHashCode(callSuper = true)
 @JsonIgnoreProperties(ignoreUnknown = true)
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
-public final class AutomationRuleEvaluatorLlmAsJudge extends AutomationRuleEvaluator<LlmAsJudgeCode> {
+public final class AutomationRuleEvaluatorLlmAsJudge extends AutomationRuleEvaluator<LlmAsJudgeCode, TraceFilter> {
 
     @Builder(toBuilder = true)
     @JsonIgnoreProperties(ignoreUnknown = true)
@@ -49,9 +49,8 @@ public final class AutomationRuleEvaluatorLlmAsJudge extends AutomationRuleEvalu
             List<TraceFilter> filters,
             @NotNull LlmAsJudgeCode code, Instant createdAt, String createdBy, Instant lastUpdatedAt,
             String lastUpdatedBy) {
-        super(id, projectId, projectName, name, samplingRate, enabled, filters, code, createdAt, createdBy,
-                lastUpdatedAt,
-                lastUpdatedBy);
+        super(id, projectId, projectName, name, samplingRate, enabled, code, createdAt, createdBy, lastUpdatedAt,
+                lastUpdatedBy, filters);
     }
 
     /**
@@ -65,8 +64,15 @@ public final class AutomationRuleEvaluatorLlmAsJudge extends AutomationRuleEvalu
         return super.getCode();
     }
 
+    @JsonView({View.Public.class, View.Write.class})
+    @Override
+    public List<TraceFilter> getFilters() {
+        return super.filters;
+    }
+
     @Override
     public AutomationRuleEvaluatorType getType() {
         return AutomationRuleEvaluatorType.LLM_AS_JUDGE;
     }
+
 }

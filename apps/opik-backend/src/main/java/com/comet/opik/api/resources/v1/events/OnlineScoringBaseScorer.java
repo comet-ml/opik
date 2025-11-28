@@ -90,6 +90,19 @@ public abstract class OnlineScoringBaseScorer<M> extends BaseRedisSubscriber<M> 
                         Collectors.mapping(FeedbackScoreItem::value, Collectors.toList())));
     }
 
+    protected Map<String, List<BigDecimal>> storeSpanScores(
+            List<FeedbackScoreBatchItem> scores, com.comet.opik.api.Span span, String userName, String workspaceId) {
+        log.info("Received '{}' scores for spanId '{}' in workspace '{}'. Storing them",
+                scores.size(), span.id(), workspaceId);
+        feedbackScoreService.scoreBatchOfSpans(scores)
+                .contextWrite(ctx -> ctx.put(RequestContext.USER_NAME, userName)
+                        .put(RequestContext.WORKSPACE_ID, workspaceId))
+                .block();
+        return scores.stream()
+                .collect(Collectors.groupingBy(FeedbackScoreItem::name,
+                        Collectors.mapping(FeedbackScoreItem::value, Collectors.toList())));
+    }
+
     protected Map<String, List<BigDecimal>> storeThreadScores(
             List<FeedbackScoreBatchItemThread> scores, String threadId, String userName, String workspaceId) {
         log.info("Received '{}' scores for threadId '{}' in workspace '{}'. Storing them",

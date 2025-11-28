@@ -89,7 +89,7 @@ public class OnlineScoringSampler {
             log.info("Fetching evaluators for '{}' traces, project '{}' on workspace '{}'",
                     traces.size(), projectId, tracesBatch.workspaceId());
 
-            List<? extends AutomationRuleEvaluator<?>> evaluators = ruleEvaluatorService.findAll(
+            List<? extends AutomationRuleEvaluator<?, ?>> evaluators = ruleEvaluatorService.findAll(
                     projectId, tracesBatch.workspaceId());
 
             // Filter evaluators based on trace metadata if selected_rule_ids is present
@@ -129,7 +129,7 @@ public class OnlineScoringSampler {
         });
     }
 
-    private boolean shouldSampleTrace(AutomationRuleEvaluator<?> evaluator, String workspaceId, Trace trace) {
+    private boolean shouldSampleTrace(AutomationRuleEvaluator<?, ?> evaluator, String workspaceId, Trace trace) {
         // Check if rule is enabled first
         if (!evaluator.isEnabled()) {
             // Important to set the workspaceId for logging purposes
@@ -192,7 +192,7 @@ public class OnlineScoringSampler {
                 .build();
     }
 
-    private void logSampledTrace(TracesCreated tracesBatch, AutomationRuleEvaluator<?> evaluator, List<?> messages) {
+    private void logSampledTrace(TracesCreated tracesBatch, AutomationRuleEvaluator<?, ?> evaluator, List<?> messages) {
         log.info("[AutomationRule '{}', type '{}'] Sampled '{}/{}' from trace batch (expected rate: '{}')",
                 evaluator.getName(),
                 evaluator.getType(),
@@ -201,7 +201,8 @@ public class OnlineScoringSampler {
                 evaluator.getSamplingRate());
     }
 
-    private LogContextAware.Closable createTraceLoggingContext(String workspaceId, AutomationRuleEvaluator<?> evaluator,
+    private LogContextAware.Closable createTraceLoggingContext(String workspaceId,
+            AutomationRuleEvaluator<?, ?> evaluator,
             Trace trace) {
         return wrapWithMdc(Map.of(
                 UserLog.MARKER, UserLog.AUTOMATION_RULE_EVALUATOR.name(),
@@ -222,8 +223,8 @@ public class OnlineScoringSampler {
      * @param traces the traces batch to check for metadata
      * @return filtered list of evaluators, or all evaluators if no selection metadata is present
      */
-    private List<? extends AutomationRuleEvaluator<?>> filterEvaluatorsByTraceMetadata(
-            List<? extends AutomationRuleEvaluator<?>> evaluators, List<Trace> traces) {
+    private List<? extends AutomationRuleEvaluator<?, ?>> filterEvaluatorsByTraceMetadata(
+            List<? extends AutomationRuleEvaluator<?, ?>> evaluators, List<Trace> traces) {
 
         // Check if batch is empty
         if (traces.isEmpty()) {
@@ -243,7 +244,7 @@ public class OnlineScoringSampler {
         log.info("Filtering evaluators based on trace metadata. Selected rule IDs: '{}'", ruleIdsToApply);
 
         // Filter evaluators to only include those in the selected list
-        List<? extends AutomationRuleEvaluator<?>> filtered = evaluators.stream()
+        List<? extends AutomationRuleEvaluator<?, ?>> filtered = evaluators.stream()
                 .filter(evaluator -> ruleIdsToApply.contains(evaluator.getId()))
                 .toList();
 

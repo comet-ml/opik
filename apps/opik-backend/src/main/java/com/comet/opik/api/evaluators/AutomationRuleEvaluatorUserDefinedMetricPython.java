@@ -28,7 +28,7 @@ import static com.comet.opik.api.evaluators.AutomationRuleEvaluatorUserDefinedMe
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
 public final class AutomationRuleEvaluatorUserDefinedMetricPython
         extends
-            AutomationRuleEvaluator<UserDefinedMetricPythonCode> {
+            AutomationRuleEvaluator<UserDefinedMetricPythonCode, TraceFilter> {
 
     @Builder(toBuilder = true)
     @JsonIgnoreProperties(ignoreUnknown = true)
@@ -48,9 +48,8 @@ public final class AutomationRuleEvaluatorUserDefinedMetricPython
             @NotNull UserDefinedMetricPythonCode code,
             Instant createdAt,
             String createdBy, Instant lastUpdatedAt, String lastUpdatedBy) {
-        super(id, projectId, projectName, name, samplingRate, enabled, filters, code, createdAt, createdBy,
-                lastUpdatedAt,
-                lastUpdatedBy);
+        super(id, projectId, projectName, name, samplingRate, enabled, code, createdAt, createdBy,
+                lastUpdatedAt, lastUpdatedBy, filters);
     }
 
     /**
@@ -62,6 +61,12 @@ public final class AutomationRuleEvaluatorUserDefinedMetricPython
     @Override
     public UserDefinedMetricPythonCode getCode() {
         return super.getCode();
+    }
+
+    @JsonView({View.Public.class, View.Write.class})
+    @Override
+    public List<TraceFilter> getFilters() {
+        return super.filters;
     }
 
     @Override

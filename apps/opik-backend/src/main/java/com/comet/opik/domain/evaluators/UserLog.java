@@ -9,6 +9,7 @@ public enum UserLog {
     public static final String WORKSPACE_ID = "workspace_id";
     public static final String RULE_ID = "rule_id";
     public static final String TRACE_ID = "trace_id";
+    public static final String SPAN_ID = "span_id";
     public static final String THREAD_MODEL_ID = "thread_model_id";
     public static final String EVENT_ID = "event_id";
     public static final String ALERT_ID = "alert_id";

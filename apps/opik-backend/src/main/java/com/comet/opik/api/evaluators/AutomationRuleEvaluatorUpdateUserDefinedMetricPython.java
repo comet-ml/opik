@@ -24,7 +24,7 @@ import static com.comet.opik.api.evaluators.AutomationRuleEvaluatorUserDefinedMe
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
 public final class AutomationRuleEvaluatorUpdateUserDefinedMetricPython
         extends
-            AutomationRuleEvaluatorUpdate<UserDefinedMetricPythonCode> {
+            AutomationRuleEvaluatorUpdate<UserDefinedMetricPythonCode, TraceFilter> {
 
     @ConstructorProperties({"name", "samplingRate", "enabled", "filters", "code", "projectId"})
     public AutomationRuleEvaluatorUpdateUserDefinedMetricPython(
@@ -43,6 +43,12 @@ public final class AutomationRuleEvaluatorUpdateUserDefinedMetricPython
     @Override
     public UserDefinedMetricPythonCode getCode() {
         return super.getCode();
+    }
+
+    @JsonProperty
+    @Override
+    public List<TraceFilter> getFilters() {
+        return super.filters;
     }
 
     @Override

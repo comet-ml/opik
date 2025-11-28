@@ -1279,4 +1279,82 @@ class OnlineScoringEngineTest {
         var videoContent = (VideoContent) userMessage.contents().get(1);
         assertThat(videoContent.video().url().toString()).isEqualTo("http://example.com/generated-video.mp4");
     }
+
+    @Test
+    @DisplayName("render span message templates")
+    void testRenderSpanTemplate() throws JsonProcessingException {
+        var evaluatorCode = JsonUtils.readValue(TEST_EVALUATOR,
+                com.comet.opik.api.evaluators.AutomationRuleEvaluatorSpanLlmAsJudge.SpanLlmAsJudgeCode.class);
+        var spanId = generator.generate();
+        var projectId = generator.generate();
+        var span = createSpan(spanId, projectId);
+        var renderedMessages = OnlineScoringEngine.renderMessages(
+                evaluatorCode.messages(), evaluatorCode.variables(), span);
+
+        assertThat(renderedMessages).hasSize(2);
+
+        var userMessage = renderedMessages.getFirst();
+        assertThat(userMessage.getClass()).isEqualTo(UserMessage.class);
+        assertThat(((UserMessage) userMessage).singleText()).contains(SUMMARY_STR);
+        assertThat(((UserMessage) userMessage).singleText()).contains(OUTPUT_STR);
+        assertThat(((UserMessage) userMessage).singleText()).contains("some.nonexistent.path");
+        assertThat(((UserMessage) userMessage).singleText()).contains("some literal value");
+
+        var systemMessage = renderedMessages.get(1);
+        assertThat(systemMessage.getClass()).isEqualTo(SystemMessage.class);
+    }
+
+    @Test
+    @DisplayName("prepare span LLM request with tool-calling strategy")
+    void testPrepareSpanLlmRequestWithToolCallingStrategy() throws JsonProcessingException {
+        var evaluatorCode = JsonUtils.readValue(TEST_EVALUATOR,
+                com.comet.opik.api.evaluators.AutomationRuleEvaluatorSpanLlmAsJudge.SpanLlmAsJudgeCode.class);
+        var span = createSpan(generator.generate(), generator.generate());
+
+        var request = OnlineScoringEngine.prepareSpanLlmRequest(evaluatorCode, span, new ToolCallingStrategy());
+
+        assertThat(request.responseFormat()).isNotNull();
+        var expectedSchema = createTestSchema();
+        assertThat(request.responseFormat().jsonSchema().rootElement()).isEqualTo(expectedSchema);
+    }
+
+    @Test
+    @DisplayName("prepare span LLM request with instruction strategy")
+    void testPrepareSpanLlmRequestWithInstructionStrategy() throws JsonProcessingException {
+        var evaluatorCode = JsonUtils.readValue(TEST_EVALUATOR,
+                com.comet.opik.api.evaluators.AutomationRuleEvaluatorSpanLlmAsJudge.SpanLlmAsJudgeCode.class);
+        var span = createSpan(generator.generate(), generator.generate());
+
+        var request = OnlineScoringEngine.prepareSpanLlmRequest(evaluatorCode, span, new InstructionStrategy());
+
+        assertThat(request.responseFormat()).isNull();
+
+        var messages = request.messages();
+        assertThat(messages).hasSize(2);
+
+        var lastMessage = messages.get(1);
+        assertThat(lastMessage).isInstanceOf(UserMessage.class);
+
+        var userMessage = (UserMessage) lastMessage;
+        assertThat(userMessage.singleText()).contains("IMPORTANT:");
+        assertThat(userMessage.singleText()).contains("You must respond with ONLY a single valid JSON object");
+
+        // Verify original content is preserved
+        assertThat(userMessage.singleText()).contains("Summary: " + SUMMARY_STR);
+        assertThat(userMessage.singleText()).contains("Instruction: " + OUTPUT_STR);
+        assertThat(userMessage.singleText()).contains("Literal: some literal value");
+    }
+
+    private com.comet.opik.api.Span createSpan(UUID spanId, UUID projectId) throws JsonProcessingException {
+        return com.comet.opik.api.Span.builder()
+                .id(spanId)
+                .projectName(PROJECT_NAME)
+                .projectId(projectId)
+                .createdBy(USER_NAME)
+                .traceId(generator.generate())
+                .input(JsonUtils.getJsonNodeFromString(INPUT))
+                .output(JsonUtils.getJsonNodeFromString(OUTPUT))
+                .startTime(java.time.Instant.now())
+                .build();
+    }
 }

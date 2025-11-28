@@ -21,15 +21,15 @@ public class OnlineScoringStreamConfigurationAdapter implements StreamConfigurat
 
     public static OnlineScoringStreamConfigurationAdapter create(
             @NonNull OnlineScoringConfig config,
-            @NonNull AutomationRuleEvaluatorType evaluatorType) {
+            @NonNull AutomationRuleEvaluatorType ruleEvaluatorType) {
 
         var streamConfig = config.getStreams().stream()
-                .filter(stream -> evaluatorType.name().equalsIgnoreCase(stream.getScorer()))
+                .filter(stream -> ruleEvaluatorType.name().equalsIgnoreCase(stream.getScorer()))
                 .findFirst()
                 .orElseThrow(() -> new IllegalArgumentException(
-                        "No stream configuration found for evaluator type: " + evaluatorType.name()));
+                        "No stream configuration found for evaluator type: " + ruleEvaluatorType.name()));
 
-        return new OnlineScoringStreamConfigurationAdapter(config, evaluatorType, streamConfig);
+        return new OnlineScoringStreamConfigurationAdapter(config, ruleEvaluatorType, streamConfig);
     }
 
     @Override

@@ -398,11 +398,11 @@ For test data generation in parameterized tests, follow the [PODAM guidelines](#
 ```java
 // ❌ BAD: Using Function with wildcards (harder to work with)
 void sortEvaluators(String field, String direction,
-        java.util.function.Function<AutomationRuleEvaluator<?>, Comparable> extractor)
+        java.util.function.Function<AutomationRuleEvaluator<?, ?>, Comparable> extractor)
 
 // ✅ GOOD: Using Comparator (cleaner and more flexible)
 void sortEvaluators(String field, String direction,
-        Comparator<AutomationRuleEvaluator<?>> comparator)
+        Comparator<AutomationRuleEvaluator<?, ?>> comparator)
 ```
 
 ### **Pagination Testing**

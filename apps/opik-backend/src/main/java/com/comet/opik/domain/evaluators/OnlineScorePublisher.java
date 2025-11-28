@@ -104,7 +104,7 @@ class OnlineScorePublisherImpl implements OnlineScorePublisher {
     public void enqueueThreadMessage(@NonNull List<String> threadIds, @NonNull UUID ruleId, @NonNull UUID projectId,
             @NonNull String workspaceId, @NonNull String userName) {
 
-        AutomationRuleEvaluator<?> rule;
+        AutomationRuleEvaluator<?, ?> rule;
 
         try {
             rule = automationRuleEvaluatorService.findById(ruleId, projectId, workspaceId);
