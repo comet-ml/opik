@@ -44,6 +44,8 @@ import {
 } from "@/components/shared/DataTable/utils";
 import { Separator } from "@/components/ui/separator";
 import AlertsActionsPanel from "@/components/pages/AlertsPage/AlertsActionsPanel";
+import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
+import ExplainerDescription from "@/components/shared/ExplainerDescription/ExplainerDescription";
 
 export const getRowId = (a: Alert) => a.id!;
 
@@ -304,9 +306,15 @@ const AlertsPage: React.FunctionComponent = () => {
 
   return (
     <div className="pt-6">
-      <h1 className="comet-title-l">Alerts</h1>
+      <div className="mb-1 flex items-center justify-between">
+        <h1 className="comet-title-l">Alerts</h1>
+      </div>
+      <ExplainerDescription
+        className="mb-4"
+        {...EXPLAINERS_MAP[EXPLAINER_ID.whats_an_alert]}
+      />
 
-      <div className="mt-6">
+      <div className="mt-2">
         <div className="mb-4 flex items-center justify-between gap-8">
           <div className="flex items-center gap-2">
             <SearchInput
