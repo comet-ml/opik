@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useCallback, useMemo } from "react";
 import { Span, Trace } from "@/types/traces";
 import FeedbackScoresEditor from "../../FeedbackScoresEditor/FeedbackScoresEditor";
 import FeedbackScoreTag from "@/components/shared/FeedbackScoreTag/FeedbackScoreTag";
@@ -10,6 +10,7 @@ import {
 import useTraceFeedbackScoreSetMutation from "@/api/traces/useTraceFeedbackScoreSetMutation";
 import useTraceFeedbackScoreDeleteMutation from "@/api/traces/useTraceFeedbackScoreDeleteMutation";
 import { UpdateFeedbackScoreData } from "./types";
+import { extractSpanMetadataFromValueByAuthor } from "../TraceDataViewer/FeedbackScoreTable/utils";
 
 type TraceAnnotateViewerProps = {
   data: Trace | Span;
@@ -23,9 +24,20 @@ const TraceAnnotateViewer: React.FunctionComponent<
   TraceAnnotateViewerProps
 > = ({ data, spanId, traceId, activeSection, setActiveSection }) => {
   const hasFeedbackScores = Boolean(data.feedback_scores?.length);
+  const isTrace = !spanId;
+  const title = isTrace ? "Trace feedback scores" : "Span feedback scores";
+  const scoresSectionTitle = isTrace ? "Trace scores" : "Span scores";
 
   const { mutate: setTraceFeedbackScore } = useTraceFeedbackScoreSetMutation();
   const { mutate: feedbackScoreDelete } = useTraceFeedbackScoreDeleteMutation();
+
+  // Only show feedback scores for the current entity type
+  // When showing a trace, only show trace feedback scores (not span scores)
+  // When showing a span, only show span feedback scores (not trace scores)
+  const allFeedbackScores = useMemo(
+    () => data.feedback_scores || [],
+    [data.feedback_scores],
+  );
 
   const onUpdateFeedbackScore = (data: UpdateFeedbackScoreData) => {
     setTraceFeedbackScore({
@@ -35,13 +47,28 @@ const TraceAnnotateViewer: React.FunctionComponent<
     });
   };
 
-  const onDeleteFeedbackScore = (name: string, author?: string) => {
-    feedbackScoreDelete({ name, traceId, spanId, author });
-  };
+  const onDeleteFeedbackScore = useCallback(
+    (name: string, author?: string, spanIdToDelete?: string) => {
+      // For span feedback scores at trace level, extract span_id from the score's value_by_author
+      let targetSpanId = spanIdToDelete ?? spanId;
+      if (isTrace && !spanIdToDelete) {
+        // Look up the score to extract span_id from value_by_author
+        const score = allFeedbackScores.find((s) => s.name === name);
+        if (score?.value_by_author) {
+          const metadata = extractSpanMetadataFromValueByAuthor(
+            score.value_by_author,
+          );
+          targetSpanId = metadata.span_id;
+        }
+      }
+      feedbackScoreDelete({ name, traceId, spanId: targetSpanId, author });
+    },
+    [isTrace, spanId, allFeedbackScores, feedbackScoreDelete, traceId],
+  );
 
   return (
     <DetailsActionSectionLayout
-      title="Feedback scores"
+      title={title}
       closeTooltipContent="Close annotate"
       setActiveSection={setActiveSection}
       activeSection={activeSection}
@@ -51,10 +78,10 @@ const TraceAnnotateViewer: React.FunctionComponent<
         {hasFeedbackScores && (
           <>
             <div className="comet-body-s-accented truncate px-6 pt-4">
-              All scores
+              {scoresSectionTitle}
             </div>
             <div className="flex flex-wrap gap-2 px-6 py-2">
-              {data.feedback_scores?.map((score) => (
+              {allFeedbackScores.map((score) => (
                 <FeedbackScoreTag
                   key={score.name}
                   label={score.name}
@@ -71,12 +98,16 @@ const TraceAnnotateViewer: React.FunctionComponent<
         )}
         <FeedbackScoresEditor
           key={`${traceId}-${spanId}`}
-          feedbackScores={data.feedback_scores || []}
+          feedbackScores={allFeedbackScores}
           onUpdateFeedbackScore={onUpdateFeedbackScore}
           onDeleteFeedbackScore={onDeleteFeedbackScore}
           className="mt-4"
-          header={<FeedbackScoresEditor.Header />}
-          footer={<FeedbackScoresEditor.Footer entityCopy="traces" />}
+          header={<FeedbackScoresEditor.Header isTrace={isTrace} />}
+          footer={
+            <FeedbackScoresEditor.Footer
+              entityCopy={isTrace ? "traces" : "spans"}
+            />
+          }
         />
       </div>
     </DetailsActionSectionLayout>
