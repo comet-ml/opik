@@ -13,7 +13,9 @@ START_DELIM = "{"
 END_DELIM = "}"
 
 
-def build_reasoning_system_prompt(allow_user_prompt_optimization: bool = True) -> str:
+def build_reasoning_system_prompt(
+    allow_user_prompt_optimization: bool = True, mode: str = "single"
+) -> str:
     """Build the system prompt for the meta-reasoning LLM that generates improved prompts.
 
     Args:
@@ -51,6 +53,8 @@ def build_reasoning_system_prompt(allow_user_prompt_optimization: bool = True) -
         - DO NOT add variables that expose dataset-specific field names from evaluation data
         - Variables should represent task inputs/outputs, not internal dataset structure
 
+        {bundle_constraints}
+
         {{mode_instruction}}
 
         Instructions:
@@ -62,20 +66,7 @@ def build_reasoning_system_prompt(allow_user_prompt_optimization: bool = True) -
         Return a JSON array of prompts with the following structure. Make sure to return a valid
         JSON object with correct use of double quotes and single quotes. JSON keys should be
         double-quoted:
-        {
-            "prompts": [
-                {
-                    "prompt": [{"role": "<role>", "content": "<content>"}],
-                    "improvement_focus": "what aspect this prompt improves",
-                    "reasoning": "why this improvement should help"
-                },
-                {
-                    "prompt": [{"role": "<role>", "content": "<content>"}],
-                    "improvement_focus": "what aspect this prompt improves",
-                    "reasoning": "why this improvement should help"
-                }
-            ]
-        }"""
+        {output_format}"""
         )
         .strip()
         .replace(
@@ -88,15 +79,65 @@ def build_reasoning_system_prompt(allow_user_prompt_optimization: bool = True) -
         )
         .replace("{start}", START_DELIM)
         .replace("{end}", END_DELIM)
+        .replace(
+            "{bundle_constraints}",
+            (
+                """
+        Bundle mode:
+        - You will be given multiple named agents (each with its own chat prompt).
+        - Keep agent names unchanged.
+        - Preserve placeholders, tools, and role ordering per agent.
+        - Return updated prompts grouped as candidate bundles. Each candidate can include bundle-level improvement_focus and reasoning.
+        - Try to propose multiple distinct candidate bundles (e.g., up to the requested count) if possible.
+        - Each candidate must include every agent under "agents" with fields: name, messages, improvement_focus, reasoning.
+        """
+            )
+            if mode == "bundle"
+            else "",
+        )
+        .replace(
+            "{output_format}",
+            (
+                """
+        {
+          "candidates": [
+            {
+              "bundle_improvement_focus": "what the whole bundle is trying to improve",
+              "bundle_reasoning": "why these changes should help overall",
+              "agents": [
+                {
+                  "name": "<agent_name>",
+                  "messages": [{"role": "<role>", "content": "<content>"}],
+                  "improvement_focus": "what you changed for this agent",
+                  "reasoning": "why this should help this agent"
+                }
+              ]
+            }
+          ]
+        }"""
+            )
+            if mode == "bundle"
+            else """
+        {
+            "prompts": [
+                {
+                    "prompt": [{"role": "<role>", "content": "<content>"}],
+                    "improvement_focus": "what aspect this prompt improves",
+                    "reasoning": "why this improvement should help"
+                }
+            ]
+        }""",
+        )
     )
 
 
 # Meta-prompt template sections
 META_PROMPT_SECTIONS = {
-    "baseline_prompt": "###### START prompt ######\n{prompt}\n###### END prompt ######\n",
-    "examples": "###### START example-data ######\n{examples}\n###### END example-data ######\n",
-    "history": "###### START history ######\n{history}\n###### END history ######\n",
-    "patterns": "###### START winning-patterns ######\n{patterns}\n###### END winning-patterns ######\n",
+    "baseline_prompt": "<prompt>\n{prompt}\n</prompt>\n",
+    "examples": "<example-data>\n{examples}\n</example-data>\n",
+    "history": "<history>\n{history}\n</history>\n",
+    "patterns": "<winning-patterns>\n{patterns}\n</winning-patterns>\n",
+    "agents": "<agents>\n{agents}\n</agents>\n",
 }
 
 
@@ -109,6 +150,8 @@ def build_candidate_generation_user_prompt(
     metric_focus_instruction: str,
     prompts_per_round: int,
     pattern_guidance: str = "",
+    mode: str = "single",
+    agent_blocks: str | None = None,
 ) -> str:
     """Build the user prompt for generating candidate prompt variations.
 
@@ -126,9 +169,12 @@ def build_candidate_generation_user_prompt(
         Formatted user prompt string
     """
     # Use structured sections for clarity
-    prompt_section = META_PROMPT_SECTIONS["baseline_prompt"].format(
-        prompt=current_prompt_messages
-    )
+    if mode == "bundle" and agent_blocks is not None:
+        prompt_section = META_PROMPT_SECTIONS["agents"].format(agents=agent_blocks)
+    else:
+        prompt_section = META_PROMPT_SECTIONS["baseline_prompt"].format(
+            prompt=current_prompt_messages
+        )
 
     # Add pattern section if patterns are provided
     pattern_section = ""
@@ -421,3 +467,71 @@ def build_synthesis_prompt(
         IMPORTANT: Each prompt object MUST have "prompt", "improvement_focus", and "reasoning" fields. Do NOT mix array and object syntax.
         """
     ).strip()
+
+
+def build_agent_bundle_reasoning_system_prompt(
+    allow_user_prompt_optimization: bool = True,
+) -> str:
+    """
+    System prompt for optimizing multiple named chat prompts at once.
+    """
+    # Thin wrapper to keep compatibility; delegates to build_reasoning_system_prompt
+    return build_reasoning_system_prompt(
+        allow_user_prompt_optimization=allow_user_prompt_optimization, mode="bundle"
+    )
+
+
+def build_agent_bundle_user_prompt(
+    agent_blocks: str,
+    best_score: float,
+    history_context: str,
+    task_context_str: str,
+    analysis_instruction: str,
+    metric_focus_instruction: str,
+    prompts_per_round: int,
+    pattern_guidance: str = "",
+) -> str:
+    """
+    User prompt for generating improved prompts across multiple named agents.
+    """
+    return (
+        textwrap.dedent(
+            f"""
+            ###### START agents ######
+            {agent_blocks}
+            ###### END agents ######
+
+            Current score: {best_score}
+
+            {META_PROMPT_SECTIONS["history"].format(history=history_context) if history_context else ""}
+
+            {META_PROMPT_SECTIONS["examples"].format(examples=task_context_str) if task_context_str else ""}
+
+            {META_PROMPT_SECTIONS["patterns"].format(patterns=pattern_guidance) if pattern_guidance else ""}
+
+            {analysis_instruction}
+            Generate updated versions for ALL agents above (keep names the same).
+            Return between 1 and {prompts_per_round} candidate bundles in the JSON format below.
+            Each candidate bundle must include ALL agents under "agents" and may also include bundle_improvement_focus and bundle_reasoning.
+
+            {metric_focus_instruction}
+
+            Diversity guidance:
+            - Consider different structures (concise vs detailed) where helpful per agent.
+            - Tighten entity specificity and retrieval intent for search-style agents.
+            - Strengthen factual grounding and output-format compliance for synthesis agents.
+
+            IMPORTANT:
+            - Preserve every placeholder token (curly-braced variables).
+            - Preserve tool/function definitions and message ordering.
+            - Do NOT rename agents or swap their responsibilities.
+
+            Generate up to [{prompts_per_round}] distinct bundle candidates when you see multiple viable directions; otherwise return your single best bundle.
+
+            Output must be valid JSON with the top-level key "candidates" (or "agents" for a single bundle).
+            """
+        )
+        .strip()
+        .replace("{start}", START_DELIM)
+        .replace("{end}", END_DELIM)
+    )

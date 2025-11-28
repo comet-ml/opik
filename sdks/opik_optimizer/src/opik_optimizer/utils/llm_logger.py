@@ -24,6 +24,22 @@ from collections.abc import Generator
 __all__ = ["LLMLogger"]
 
 
+def _sanitize_log_text(text: str | None) -> str:
+    """
+    Sanitize text for clean logging by removing newlines and tabs.
+
+    Args:
+        text: Text to sanitize (can be None)
+
+    Returns:
+        Text with newlines and tabs replaced with spaces, normalized whitespace. Returns empty string if input is None or empty.
+    """
+    if not text:
+        return ""
+    # Replace newlines and tabs with spaces, then normalize whitespace
+    return " ".join(text.replace("\n", " ").replace("\t", " ").split())
+
+
 class LLMLogger:
     """Clean logging interface for LLM framework integrations.
 
@@ -81,6 +97,8 @@ class LLMLogger:
             query: Query being processed
             max_length: Maximum length to display (truncate with ...)
         """
+        # Sanitize to remove newlines/tabs, then truncate
+        query = _sanitize_log_text(query)
         truncated = query[:max_length] + "..." if len(query) > max_length else query
         self._logger.info(
             f"[cyan]→[/cyan] {self.agent_name} processing: [italic]{truncated}[/italic]"
@@ -97,6 +115,8 @@ class LLMLogger:
             max_length: Maximum length to display (truncate with ...)
         """
         if query:
+            # Sanitize to remove newlines/tabs, then truncate
+            query = _sanitize_log_text(query)
             truncated = query[:max_length] + "..." if len(query) > max_length else query
             self._logger.info(
                 f"[yellow]🔧 Tool:[/yellow] {tool_name}([italic]{truncated}[/italic])"
@@ -111,6 +131,8 @@ class LLMLogger:
             response: Response from the agent
             max_length: Maximum length to display (truncate with ...)
         """
+        # Sanitize to remove newlines/tabs, then truncate
+        response = _sanitize_log_text(response)
         truncated = (
             response[:max_length] + "..." if len(response) > max_length else response
         )

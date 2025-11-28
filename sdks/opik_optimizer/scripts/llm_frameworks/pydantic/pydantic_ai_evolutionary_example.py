@@ -1,6 +1,6 @@
 from typing import Any
 
-
+import opik
 from opik.evaluation.metrics.score_result import ScoreResult
 from opik.evaluation.metrics import LevenshteinRatio
 
@@ -9,7 +9,7 @@ from opik_optimizer import (
     EvolutionaryOptimizer,
 )
 from opik_optimizer.datasets import hotpot
-from opik_optimizer.utils import search_wikipedia
+from opik_optimizer.utils.tools.wikipedia import search_wikipedia
 from pydantic_ai_agent import PydanticAIAgent
 
 
@@ -47,7 +47,11 @@ prompt = ChatPrompt(
             },
         },
     ],
-    function_map={"search_wikipedia": search_wikipedia},
+    function_map={
+        "search_wikipedia": opik.track(type="tool")(
+            lambda query: search_wikipedia(query, search_type="api")
+        )
+    },
 )
 
 optimizer = EvolutionaryOptimizer(
