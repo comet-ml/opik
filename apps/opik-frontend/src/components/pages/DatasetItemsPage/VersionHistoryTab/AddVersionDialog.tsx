@@ -77,9 +77,9 @@ const AddVersionDialog: React.FunctionComponent<AddVersionDialogProps> = ({
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
             <p className="text-sm text-muted-foreground">
-              Saving your changes will create a new version. You'll be able to
-              use it in experiments or in the Playground. The previous version
-              will remain available in version history.
+              Saving your changes will create a new version. You&apos;ll be able
+              to use it in experiments or in the Playground. The previous
+              version will remain available in version history.
             </p>
 
             <FormField
