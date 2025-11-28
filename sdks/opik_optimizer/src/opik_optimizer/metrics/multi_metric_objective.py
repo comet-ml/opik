@@ -27,13 +27,13 @@ class MultiMetricObjective:
         weights: list[float] | None = None,
         name: str = "multi_metric_objective",
     ):
+        self.__name__ = name
         self.metrics = metrics
-        self.weights = weights if weights else [1 / len(metrics)] * len(metrics)
 
-        if len(metrics) != len(weights):
+        if weights is not None and len(metrics) != len(weights):
             raise ValueError("metrics and weights must have the same length")
 
-        self.__name__ = name
+        self.weights = weights if weights else [1 / len(metrics)] * len(metrics)
 
         self._needs_task_span = any(
             helpers.has_task_span_parameter(metric) for metric in self.metrics
