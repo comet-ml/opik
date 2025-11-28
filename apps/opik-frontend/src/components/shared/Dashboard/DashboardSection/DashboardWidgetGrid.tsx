@@ -35,14 +35,14 @@ interface DashboardWidgetGridProps {
 const DashboardWidgetGrid: React.FunctionComponent<
   DashboardWidgetGridProps
 > = ({ sectionId, widgets, layout }) => {
-  const onAddWidgetCallback = useDashboardStore(
-    (state) => state.onAddWidgetCallback,
+  const onAddEditWidgetCallback = useDashboardStore(
+    (state) => state.onAddEditWidgetCallback,
   );
   const widgetResolver = useDashboardStore(selectWidgetResolver);
   const updateLayout = useDashboardStore(selectUpdateLayout);
 
   const handleAddWidget = () => {
-    onAddWidgetCallback?.(sectionId);
+    onAddEditWidgetCallback?.({ sectionId });
   };
 
   const handleLayoutChange = useCallback(

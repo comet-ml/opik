@@ -1,17 +1,22 @@
 import React from "react";
-import { WidgetEditorComponent } from "@/types/dashboard";
-import { AddWidgetConfig } from "@/types/dashboard";
+import {
+  WidgetEditorComponent,
+  WidgetEditorHandle,
+  AddWidgetConfig,
+} from "@/types/dashboard";
 
 interface WidgetConfigFormProps {
   widgetData: AddWidgetConfig;
   onChange: (data: Partial<AddWidgetConfig>) => void;
   editorComponent: WidgetEditorComponent | null;
+  editorRef: React.RefObject<WidgetEditorHandle>;
 }
 
 const WidgetConfigForm: React.FunctionComponent<WidgetConfigFormProps> = ({
   widgetData,
   onChange,
   editorComponent: EditorComponent,
+  editorRef,
 }) => {
   if (!EditorComponent) {
     return (
@@ -25,7 +30,7 @@ const WidgetConfigForm: React.FunctionComponent<WidgetConfigFormProps> = ({
 
   return (
     <div className="size-full overflow-auto">
-      <EditorComponent {...widgetData} onChange={onChange} />
+      <EditorComponent ref={editorRef} {...widgetData} onChange={onChange} />
     </div>
   );
 };

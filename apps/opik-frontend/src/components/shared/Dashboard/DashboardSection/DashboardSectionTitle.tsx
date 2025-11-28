@@ -1,5 +1,5 @@
 import React, { useCallback, useState, useRef, useEffect } from "react";
-import { Pencil, Check } from "lucide-react";
+import { Pencil, Check, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,13 +9,12 @@ const HORIZONTAL_PADDING = 40;
 
 interface DashboardSectionTitleProps {
   title: string;
-  widgetCount: number;
   onChange: (title: string) => void;
 }
 
 const DashboardSectionTitle: React.FunctionComponent<
   DashboardSectionTitleProps
-> = ({ title, widgetCount, onChange }) => {
+> = ({ title, onChange }) => {
   const [isEditing, setIsEditing] = useState(false);
   const [editValue, setEditValue] = useState(title);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -57,16 +56,20 @@ const DashboardSectionTitle: React.FunctionComponent<
     }
   }, [editValue, title, onChange]);
 
+  const handleCancelEdit = useCallback(() => {
+    setIsEditing(false);
+    setEditValue(title);
+  }, [title]);
+
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
       if (e.key === "Enter") {
         handleSaveEdit();
       } else if (e.key === "Escape") {
-        setIsEditing(false);
-        setEditValue(title);
+        handleCancelEdit();
       }
     },
-    [handleSaveEdit, title],
+    [handleSaveEdit, handleCancelEdit],
   );
 
   return (
@@ -93,20 +96,28 @@ const DashboardSectionTitle: React.FunctionComponent<
           />
           <Button
             variant="ghost"
-            size="icon"
-            className="size-6"
+            size="icon-xs"
             onClick={(e) => {
               e.stopPropagation();
               handleSaveEdit();
             }}
           >
-            <Check className="size-3.5 text-muted-slate" />
+            <Check />
+          </Button>
+          <Button
+            variant="destructive"
+            size="icon-xs"
+            onClick={(e) => {
+              e.stopPropagation();
+              handleCancelEdit();
+            }}
+          >
+            <X />
           </Button>
         </>
       ) : (
         <>
           <span className="text-sm font-medium text-foreground">{title}</span>
-          <span className="text-sm text-muted-slate">({widgetCount})</span>
           <Button
             variant="ghost"
             size="icon"
