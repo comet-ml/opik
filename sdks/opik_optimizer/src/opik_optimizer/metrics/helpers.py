@@ -1,5 +1,6 @@
 import inspect
-from typing import Callable
+from collections.abc import Callable
+
 
 def has_task_span_parameter(func: Callable) -> bool:
     """Check if a scoring function expects the task_span parameter."""
