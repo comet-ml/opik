@@ -37,6 +37,7 @@ import static com.comet.opik.api.evaluators.AutomationRuleEvaluatorSpanLlmAsJudg
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.mockStatic;
 import static org.mockito.Mockito.never;
@@ -105,9 +106,10 @@ class OnlineScoringSpanSamplerTest {
             SpansCreated event = new SpansCreated(List.of(span), workspaceId, userName);
 
             AutomationRuleEvaluatorSpanLlmAsJudge evaluator = createTestEvaluator(true, 1.0f, List.of());
-            @SuppressWarnings({"unchecked", "rawtypes"})
-            List evaluators = List.of(evaluator);
-            when(ruleEvaluatorService.findAll(projectId, workspaceId)).thenReturn(evaluators);
+
+            List<AutomationRuleEvaluatorSpanLlmAsJudge> evaluators = List.of(evaluator);
+            when(ruleEvaluatorService.<SpanLlmAsJudgeCode, SpanFilter, AutomationRuleEvaluatorSpanLlmAsJudge>findAll(
+                    projectId, workspaceId)).thenReturn(evaluators);
 
             // When
             sampler.onSpansCreated(event);
@@ -125,10 +127,17 @@ class OnlineScoringSpanSamplerTest {
             SpansCreated event = new SpansCreated(List.of(span), workspaceId, userName);
 
             AutomationRuleEvaluatorSpanLlmAsJudge evaluator = createTestEvaluator(true, 1.0f, List.of());
-            @SuppressWarnings({"unchecked", "rawtypes"})
-            List evaluators = List.of(evaluator);
-            when(ruleEvaluatorService.findAll(projectId, workspaceId)).thenReturn(evaluators);
-            when(filterEvaluationService.matchesAllFilters(any(), any())).thenReturn(true);
+            List<AutomationRuleEvaluatorSpanLlmAsJudge> evaluators = List.of(evaluator);
+
+            when(ruleEvaluatorService.<SpanLlmAsJudgeCode, SpanFilter, AutomationRuleEvaluatorSpanLlmAsJudge>findAll(
+                    projectId, workspaceId))
+                    .thenReturn(evaluators);
+            // Empty filters list means all spans match (matchesAllFilters returns true for empty list)
+            // The implementation calls matchesAllFilters even with empty list, so we need to stub it
+            // Use lenient to avoid unnecessary stubbing warnings when the method might not be called
+            // in certain code paths
+            lenient().when(filterEvaluationService.matchesAllFilters(any(), any()))
+                    .thenReturn(true);
 
             // When
             sampler.onSpansCreated(event);
@@ -140,8 +149,8 @@ class OnlineScoringSpanSamplerTest {
 
             List<SpanToScoreLlmAsJudge> messages = captor.getValue();
             assertThat(messages).hasSize(1);
-            assertThat(messages.get(0).span()).isEqualTo(span);
-            assertThat(messages.get(0).ruleId()).isEqualTo(evaluator.getId());
+            assertThat(messages.getFirst().span()).isEqualTo(span);
+            assertThat(messages.getFirst().ruleId()).isEqualTo(evaluator.getId());
         }
     }
 
@@ -159,10 +168,14 @@ class OnlineScoringSpanSamplerTest {
 
             AutomationRuleEvaluatorSpanLlmAsJudge spanEvaluator = createTestEvaluator(true, 1.0f, List.of());
             // Create a non-span evaluator (would be LLM_AS_JUDGE or other type)
-            @SuppressWarnings({"unchecked", "rawtypes"})
-            List evaluators = List.of(spanEvaluator);
-            when(ruleEvaluatorService.findAll(projectId, workspaceId)).thenReturn(evaluators);
-            when(filterEvaluationService.matchesAllFilters(any(), any())).thenReturn(true);
+            List<AutomationRuleEvaluatorSpanLlmAsJudge> evaluators = List.of(spanEvaluator);
+            when(ruleEvaluatorService.<SpanLlmAsJudgeCode, SpanFilter, AutomationRuleEvaluatorSpanLlmAsJudge>findAll(
+                    projectId, workspaceId)).thenReturn(evaluators);
+
+            // Empty filters list means all spans match (matchesAllFilters returns true for empty list)
+            // Need to stub since the mock needs to return true for empty filter lists
+            lenient().when(filterEvaluationService.matchesAllFilters(any(), any()))
+                    .thenReturn(true);
 
             // When
             sampler.onSpansCreated(event);
@@ -181,9 +194,10 @@ class OnlineScoringSpanSamplerTest {
             SpansCreated event = new SpansCreated(List.of(span), workspaceId, userName);
 
             AutomationRuleEvaluatorSpanLlmAsJudge disabledEvaluator = createTestEvaluator(false, 1.0f, List.of());
-            @SuppressWarnings({"unchecked", "rawtypes"})
-            List evaluators = List.of(disabledEvaluator);
-            when(ruleEvaluatorService.findAll(projectId, workspaceId)).thenReturn(evaluators);
+
+            List<AutomationRuleEvaluatorSpanLlmAsJudge> evaluators = List.of(disabledEvaluator);
+            when(ruleEvaluatorService.<SpanLlmAsJudgeCode, SpanFilter, AutomationRuleEvaluatorSpanLlmAsJudge>findAll(
+                    projectId, workspaceId)).thenReturn(evaluators);
 
             // When
             sampler.onSpansCreated(event);
@@ -200,10 +214,18 @@ class OnlineScoringSpanSamplerTest {
             Span span = createTestSpan();
             SpansCreated event = new SpansCreated(List.of(span), workspaceId, userName);
 
-            AutomationRuleEvaluatorSpanLlmAsJudge evaluator = createTestEvaluator(true, 1.0f, List.of());
-            @SuppressWarnings({"unchecked", "rawtypes"})
-            List evaluators = List.of(evaluator);
-            when(ruleEvaluatorService.findAll(projectId, workspaceId)).thenReturn(evaluators);
+            // Create evaluator with a filter that won't match
+            SpanFilter spanFilter = SpanFilter.builder()
+                    .field(SpanField.NAME)
+                    .operator(Operator.EQUAL)
+                    .value("different-name")
+                    .build();
+
+            AutomationRuleEvaluatorSpanLlmAsJudge evaluator = createTestEvaluator(true, 1.0f, List.of(spanFilter));
+            List<AutomationRuleEvaluatorSpanLlmAsJudge> evaluators = List.of(evaluator);
+
+            when(ruleEvaluatorService.<SpanLlmAsJudgeCode, SpanFilter, AutomationRuleEvaluatorSpanLlmAsJudge>findAll(
+                    projectId, workspaceId)).thenReturn(evaluators);
             when(filterEvaluationService.matchesAllFilters(any(), any())).thenReturn(false);
 
             // When
@@ -228,18 +250,28 @@ class OnlineScoringSpanSamplerTest {
                     .build();
 
             AutomationRuleEvaluatorSpanLlmAsJudge evaluator = createTestEvaluator(true, 1.0f, List.of(spanFilter));
-            @SuppressWarnings({"unchecked", "rawtypes"})
-            List evaluators = List.of(evaluator);
-            when(ruleEvaluatorService.findAll(projectId, workspaceId)).thenReturn(evaluators);
+
+            List<AutomationRuleEvaluatorSpanLlmAsJudge> evaluators = List.of(evaluator);
+            when(ruleEvaluatorService.<SpanLlmAsJudgeCode, SpanFilter, AutomationRuleEvaluatorSpanLlmAsJudge>findAll(
+                    projectId, workspaceId)).thenReturn(evaluators);
             when(filterEvaluationService.matchesAllFilters(any(), any())).thenReturn(true);
 
             // When
             sampler.onSpansCreated(event);
 
             // Then
-            verify(filterEvaluationService, times(1)).matchesAllFilters(any(), eq(span));
+            @SuppressWarnings("unchecked")
+            ArgumentCaptor<List<SpanFilter>> filterCaptor = ArgumentCaptor.forClass(List.class);
+            verify(filterEvaluationService, times(1)).matchesAllFilters(filterCaptor.capture(), eq(span));
             verify(onlineScorePublisher, times(1)).enqueueMessage(any(),
                     eq(AutomationRuleEvaluatorType.SPAN_LLM_AS_JUDGE));
+
+            // Verify the converted filters
+            List<SpanFilter> convertedFilters = filterCaptor.getValue();
+            assertThat(convertedFilters).hasSize(1);
+            assertThat(convertedFilters.getFirst().field()).isEqualTo(SpanField.NAME);
+            assertThat(convertedFilters.getFirst().operator()).isEqualTo(Operator.EQUAL);
+            assertThat(convertedFilters.getFirst().value()).isEqualTo("test-span");
         }
     }
 
@@ -257,9 +289,10 @@ class OnlineScoringSpanSamplerTest {
             SpansCreated event = new SpansCreated(List.of(span1, span2), workspaceId, userName);
 
             AutomationRuleEvaluatorSpanLlmAsJudge evaluator = createTestEvaluator(true, 1.0f, List.of());
-            @SuppressWarnings({"unchecked", "rawtypes"})
-            List evaluators = List.of(evaluator);
-            when(ruleEvaluatorService.findAll(projectId, workspaceId)).thenReturn(evaluators);
+
+            List<AutomationRuleEvaluatorSpanLlmAsJudge> evaluators = List.of(evaluator);
+            when(ruleEvaluatorService.<SpanLlmAsJudgeCode, SpanFilter, AutomationRuleEvaluatorSpanLlmAsJudge>findAll(
+                    projectId, workspaceId)).thenReturn(evaluators);
             when(filterEvaluationService.matchesAllFilters(any(), any())).thenReturn(true);
 
             // When
@@ -282,10 +315,13 @@ class OnlineScoringSpanSamplerTest {
             SpansCreated event = new SpansCreated(List.of(span), workspaceId, userName);
 
             AutomationRuleEvaluatorSpanLlmAsJudge evaluator = createTestEvaluator(true, 0.0f, List.of());
-            @SuppressWarnings({"unchecked", "rawtypes"})
-            List evaluators = List.of(evaluator);
-            when(ruleEvaluatorService.findAll(projectId, workspaceId)).thenReturn(evaluators);
-            when(filterEvaluationService.matchesAllFilters(any(), any())).thenReturn(true);
+
+            List<AutomationRuleEvaluatorSpanLlmAsJudge> evaluators = List.of(evaluator);
+            when(ruleEvaluatorService.<SpanLlmAsJudgeCode, SpanFilter, AutomationRuleEvaluatorSpanLlmAsJudge>findAll(
+                    projectId, workspaceId)).thenReturn(evaluators);
+            // Empty filters list means all spans match (matchesAllFilters returns true for empty list)
+            // No need to stub since empty list returns true immediately, and with sampling rate 0.0,
+            // the span won't be sampled anyway
 
             // When
             sampler.onSpansCreated(event);
@@ -314,13 +350,17 @@ class OnlineScoringSpanSamplerTest {
             AutomationRuleEvaluatorSpanLlmAsJudge evaluator1 = createTestEvaluator(true, 1.0f, List.of());
             AutomationRuleEvaluatorSpanLlmAsJudge evaluator2 = createTestEvaluator(true, 1.0f, List.of());
 
-            @SuppressWarnings({"unchecked", "rawtypes"})
-            List evaluators1 = List.of(evaluator1);
-            @SuppressWarnings({"unchecked", "rawtypes"})
-            List evaluators2 = List.of(evaluator2);
-            when(ruleEvaluatorService.findAll(projectId, workspaceId)).thenReturn(evaluators1);
-            when(ruleEvaluatorService.findAll(projectId2, workspaceId)).thenReturn(evaluators2);
-            when(filterEvaluationService.matchesAllFilters(any(), any())).thenReturn(true);
+            List<AutomationRuleEvaluatorSpanLlmAsJudge> evaluators1 = List.of(evaluator1);
+            List<AutomationRuleEvaluatorSpanLlmAsJudge> evaluators2 = List.of(evaluator2);
+
+            when(ruleEvaluatorService.<SpanLlmAsJudgeCode, SpanFilter, AutomationRuleEvaluatorSpanLlmAsJudge>findAll(
+                    projectId, workspaceId)).thenReturn(evaluators1);
+            when(ruleEvaluatorService.<SpanLlmAsJudgeCode, SpanFilter, AutomationRuleEvaluatorSpanLlmAsJudge>findAll(
+                    projectId2, workspaceId)).thenReturn(evaluators2);
+            // Empty filters list means all spans match (matchesAllFilters returns true for empty list)
+            // Need to stub since the mock needs to return true for empty filter lists
+            lenient().when(filterEvaluationService.matchesAllFilters(any(), any()))
+                    .thenReturn(true);
 
             // When
             sampler.onSpansCreated(event);
@@ -358,9 +398,9 @@ class OnlineScoringSpanSamplerTest {
             Span span = createTestSpan();
             SpansCreated event = new SpansCreated(List.of(span), workspaceId, userName);
 
-            @SuppressWarnings({"unchecked", "rawtypes"})
-            List emptyList = List.of();
-            when(ruleEvaluatorService.findAll(projectId, workspaceId)).thenReturn(emptyList);
+            List<AutomationRuleEvaluatorSpanLlmAsJudge> emptyList = List.of();
+            when(ruleEvaluatorService.<SpanLlmAsJudgeCode, SpanFilter, AutomationRuleEvaluatorSpanLlmAsJudge>findAll(
+                    projectId, workspaceId)).thenReturn(emptyList);
 
             // When
             sampler.onSpansCreated(event);
@@ -391,24 +431,24 @@ class OnlineScoringSpanSamplerTest {
 
             // AutomationRuleEvaluator now uses List<Filter>, so span evaluators can use SpanFilter directly
             AutomationRuleEvaluatorSpanLlmAsJudge evaluator = createTestEvaluator(true, 1.0f, List.of(spanFilter));
-            @SuppressWarnings({"unchecked", "rawtypes"})
-            List evaluators = List.of(evaluator);
-            when(ruleEvaluatorService.findAll(projectId, workspaceId)).thenReturn(evaluators);
+
+            List<AutomationRuleEvaluatorSpanLlmAsJudge> evaluators = List.of(evaluator);
+            when(ruleEvaluatorService.<SpanLlmAsJudgeCode, SpanFilter, AutomationRuleEvaluatorSpanLlmAsJudge>findAll(
+                    projectId, workspaceId)).thenReturn(evaluators);
             when(filterEvaluationService.matchesAllFilters(any(), any())).thenReturn(true);
 
             // When
             sampler.onSpansCreated(event);
 
             // Then
-            @SuppressWarnings("unchecked")
             ArgumentCaptor<List<SpanFilter>> filterCaptor = ArgumentCaptor.forClass(List.class);
             verify(filterEvaluationService, times(1)).matchesAllFilters(filterCaptor.capture(), eq(span));
 
             List<SpanFilter> convertedFilters = filterCaptor.getValue();
             assertThat(convertedFilters).hasSize(1);
-            assertThat(convertedFilters.get(0).field()).isInstanceOf(SpanField.class);
-            assertThat(convertedFilters.get(0).operator()).isEqualTo(Operator.EQUAL);
-            assertThat(convertedFilters.get(0).value()).isEqualTo("test-span");
+            assertThat(convertedFilters.getFirst().field()).isInstanceOf(SpanField.class);
+            assertThat(convertedFilters.getFirst().operator()).isEqualTo(Operator.EQUAL);
+            assertThat(convertedFilters.getFirst().value()).isEqualTo("test-span");
         }
     }
 
