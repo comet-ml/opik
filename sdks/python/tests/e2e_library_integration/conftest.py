@@ -6,20 +6,11 @@ import opik
 import opik.api_objects.opik_client
 from .. import testlib
 from ..conftest import random_chars
-from ..testlib import environment
+
 
 OPIK_E2E_LIB_INTEGRATION_TESTS_PROJECT_NAME: Final[str] = (
     "e2e-libraries-integration-tests"
 )
-
-
-@pytest.fixture(scope="session", autouse=True)
-def skip_all_tests_in_package(request):
-    if environment.should_skip_library_integration_tests():
-        pytest.skip(
-            "Skipping entire 'E2E library integration tests' because authorization credentials not found",
-            allow_module_level=True,
-        )
 
 
 @pytest.fixture()
