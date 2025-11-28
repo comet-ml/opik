@@ -17,18 +17,3 @@ def has_openai_api_key():
         and "OPENAI_ORG_ID" in os.environ
         and len(os.environ["OPENAI_ORG_ID"]) > 0
     )
-
-
-def should_skip_library_integration_tests():
-    """
-    Determines whether library integration tests should be skipped.
-
-    This function checks the availability of the OpenAI API key to decide
-    whether the library integration tests should be executed. If the API key
-    is not available, the function returns True, indicating that tests should
-    be skipped.
-
-    Returns:
-        bool: True if integration tests should be skipped, otherwise False.
-    """
-    return not has_openai_api_key()
