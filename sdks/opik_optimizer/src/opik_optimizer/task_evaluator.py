@@ -11,6 +11,40 @@ from . import multi_metric_objective
 
 logger = logging.getLogger(__name__)
 
+try:
+    from opik import evaluate_on_dict_items as _evaluate_on_dict_items
+except Exception:  # pragma: no cover - compatibility for older Opik SDKs
+    _evaluate_on_dict_items = None
+
+
+def evaluate_dict_items(
+    items: list[dict[str, Any]],
+    task: Callable[[dict[str, Any]], dict[str, Any]],
+    *,
+    scoring_metrics: list[base_metric.BaseMetric] | None = None,
+    scoring_functions: list[Any] | None = None,
+    project_name: str | None = None,
+    verbose: int = 0,
+    scoring_key_mapping: dict[str, str] | None = None,
+    scoring_threads: int = 16,
+) -> opik_evaluation_result.EvaluationResult | None:
+    """Lightweight evaluation hook for upcoming Opik SDK support."""
+    if _evaluate_on_dict_items is None:
+        raise RuntimeError(
+            "opik.evaluate_on_dict_items is not available in this Opik SDK version."
+        )
+
+    return _evaluate_on_dict_items(
+        items=items,
+        task=task,
+        scoring_metrics=scoring_metrics,
+        scoring_functions=scoring_functions,
+        project_name=project_name,
+        verbose=verbose,
+        scoring_key_mapping=scoring_key_mapping,
+        scoring_threads=scoring_threads,
+    )
+
 
 def _create_metric_class(metric: Callable) -> base_metric.BaseMetric:
     class MetricClass(base_metric.BaseMetric):

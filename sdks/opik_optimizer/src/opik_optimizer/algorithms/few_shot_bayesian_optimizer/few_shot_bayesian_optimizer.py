@@ -2,10 +2,8 @@ from typing import Any
 from collections.abc import Callable
 
 import copy
-import hashlib
 import json
 import logging
-import random
 from datetime import datetime
 
 import optuna
@@ -20,6 +18,7 @@ from ... import base_optimizer, _llm_calls, helpers
 from ...api_objects import chat_prompt
 from ...optimizable_agent import OptimizableAgent
 from ... import _throttle, optimization_result, task_evaluator, utils
+from ...utils import rng as rng_utils
 from . import reporting, prompts
 from .columnar_search_space import ColumnarSearchSpace
 
@@ -109,14 +108,6 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             "enable_optuna_pruning": self.enable_optuna_pruning,
         }
 
-    # FIXME: Use a centralized RNG function with seed and sampler across all optimizers
-    def _make_rng(self, *parts: object) -> random.Random:
-        """Create a deterministic RNG keyed by the base seed plus contextual parts (e.g., trial id)."""
-        namespace = "|".join(str(part) for part in (self.seed, *parts))
-        digest = hashlib.sha256(namespace.encode("utf-8")).digest()
-        derived_seed = int.from_bytes(digest[:8], "big")
-        return random.Random(derived_seed)
-
     def _split_dataset(
         self, dataset: list[dict[str, Any]], train_ratio: float
     ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
@@ -133,7 +124,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         if not dataset:
             return [], []
 
-        rng = self._make_rng("split_dataset", train_ratio)
+        rng = rng_utils.make_rng(self.seed, "split_dataset", train_ratio)
         dataset_copy = dataset.copy()
         rng.shuffle(dataset_copy)
 
@@ -385,7 +376,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         eval_dataset_items = evaluation_dataset.get_items()
         eval_dataset_item_ids = [item["id"] for item in eval_dataset_items]
         if n_samples is not None and n_samples < len(dataset_items):
-            rng = self._make_rng("optimization_eval_ids", n_samples)
+            rng = rng_utils.make_rng(self.seed, "optimization_eval_ids", n_samples)
             eval_dataset_item_ids = rng.sample(eval_dataset_item_ids, n_samples)
 
         configuration_updates = helpers.drop_none(
@@ -801,7 +792,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             all_ids = [dataset_item["id"] for dataset_item in dataset.get_items()]
             n_samples = min(n_samples, len(all_ids))
             # FIXME: Use a centralized RNG function with seed and sampler across all optimizers
-            rng = self._make_rng("evaluate_prompt", n_samples)
+            rng = rng_utils.make_rng(self.seed, "evaluate_prompt", n_samples)
             dataset_item_ids = rng.sample(all_ids, n_samples)
 
         configuration_updates = helpers.drop_none(
