@@ -34,7 +34,7 @@ jobs:
     name: Check Secrets
     runs-on: ubuntu-latest
     outputs:
-        has_secrets: ${{ steps.init.outputs.LIBS }}
+        has_secrets: ${{ steps.init.outputs.has_secrets }}
     steps:
       - name: Print has secrets into output
         id: init
