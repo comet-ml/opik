@@ -21,7 +21,26 @@ export function updateLastSyncTime(context: vscode.ExtensionContext, time: numbe
   context.globalState.update('lastSyncTime', time);
 }
 
+export function getLastSyncedAt(context: vscode.ExtensionContext): number {
+  const storedValue = context.globalState.get<number>('lastSyncedAt');
+  
+  if (storedValue === undefined) {
+    // First time: Default to 30 minutes ago to catch recent conversations
+    // including ones that completed just before extension activation
+    const thirtyMinutesAgo = Date.now() - (30 * 60 * 1000);
+    console.log(`🔄 First sync - will fetch conversations from last 30 minutes`);
+    return thirtyMinutesAgo;
+  }
+  
+  return storedValue;
+}
+
+export function updateLastSyncedAt(context: vscode.ExtensionContext, timestamp: number) {
+  context.globalState.update('lastSyncedAt', timestamp);
+}
+
 export function resetExtensionState(context: vscode.ExtensionContext) {
   context.globalState.update('sessionInfo', undefined);
   context.globalState.update('lastSyncTime', null);
+  context.globalState.update('lastSyncedAt', undefined);
 }

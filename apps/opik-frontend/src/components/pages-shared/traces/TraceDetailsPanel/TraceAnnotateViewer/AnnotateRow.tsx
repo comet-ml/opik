@@ -26,6 +26,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import {
   categoryOptionLabelRenderer,
+  findValueByAuthor,
   hasValuesByAuthor,
 } from "@/lib/feedback-scores";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
@@ -65,13 +66,16 @@ const AnnotateRow: React.FunctionComponent<AnnotateRowProps> = ({
     }
 
     if (hasValuesByAuthor(feedbackScore) && userName) {
-      const rawValue = feedbackScore.value_by_author[userName]?.value;
+      const userValue = findValueByAuthor(
+        feedbackScore.value_by_author,
+        userName,
+      );
+      const rawValue = userValue?.value;
 
       return {
         value: isNumber(rawValue) ? rawValue : ("" as const),
-        reason: feedbackScore.value_by_author[userName]?.reason ?? "",
-        category_name:
-          feedbackScore.value_by_author[userName]?.category_name ?? "",
+        reason: userValue?.reason ?? "",
+        category_name: userValue?.category_name ?? "",
       };
     }
 
