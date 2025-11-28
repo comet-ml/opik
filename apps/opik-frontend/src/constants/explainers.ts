@@ -78,6 +78,7 @@ export enum EXPLAINER_ID {
   prompt_generation_learn_more = "prompt_generation_learn_more",
   prompt_improvement_learn_more = "prompt_improvement_learn_more",
   prompt_improvement_optimizer = "prompt_improvement_optimizer",
+  whats_an_alert = "whats_an_alert",
 }
 
 export const EXPLAINERS_MAP: Record<EXPLAINER_ID, Explainer> = {
@@ -548,5 +549,11 @@ export const EXPLAINERS_MAP: Record<EXPLAINER_ID, Explainer> = {
     description:
       "Looking for advanced optimization algorithms? Check out the Opik optimizer!",
     docLink: "/agent_optimization/opik_optimizer/overview",
+  },
+  [EXPLAINER_ID.whats_an_alert]: {
+    id: EXPLAINER_ID.whats_an_alert,
+    description:
+      "Monitor important events in your project and get notified when something needs your attention.",
+    docLink: "/production/alerts",
   },
 };
