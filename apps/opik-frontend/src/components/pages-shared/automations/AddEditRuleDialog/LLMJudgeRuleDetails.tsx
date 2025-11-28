@@ -40,6 +40,7 @@ import ExplainerIcon from "@/components/shared/ExplainerIcon/ExplainerIcon";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 import { EVALUATORS_RULE_SCOPE } from "@/types/automations";
 import { updateProviderConfig } from "@/lib/modelUtils";
+import { TRACE_DATA_TYPE } from "@/hooks/useTracesOrSpansList";
 
 const MESSAGE_TYPE_OPTIONS = [
   {
@@ -79,8 +80,13 @@ const LLMJudgeRuleDetails: React.FC<LLMJudgeRuleDetailsProps> = ({
 
   const scope = form.watch("scope");
   const isThreadScope = scope === EVALUATORS_RULE_SCOPE.thread;
+  const isSpanScope = scope === EVALUATORS_RULE_SCOPE.span;
 
   const templates = LLM_PROMPT_TEMPLATES[scope];
+
+  // Determine the type for autocomplete based on scope
+  const autocompleteType =
+    isSpanScope ? TRACE_DATA_TYPE.spans : TRACE_DATA_TYPE.traces;
 
   const handleAddProvider = useCallback(
     (provider: COMPOSED_PROVIDER_TYPE) => {
@@ -333,6 +339,7 @@ const LLMJudgeRuleDetails: React.FC<LLMJudgeRuleDetailsProps> = ({
                     onChange={field.onChange}
                     projectName={projectName}
                     datasetColumnNames={datasetColumnNames}
+                    type={autocompleteType}
                   />
                 </>
               );
