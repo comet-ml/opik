@@ -61,7 +61,9 @@ class MultiMetricObjective:
                         task_span=task_span,
                     )
                 else:
-                    score_result_ = metric(dataset_item=dataset_item, llm_output=llm_output)
+                    score_result_ = metric(
+                        dataset_item=dataset_item, llm_output=llm_output
+                    )
                 raw_score_results.append(score_result_)
                 weighted_score_value += score_result_.value * weight
 
@@ -72,7 +74,9 @@ class MultiMetricObjective:
             )
 
             return aggregated_score_result
-        except opik.exceptions.MetricComputationError as exception:
+        except opik.exceptions.MetricComputationError:
             raise
         except Exception as exception:
-            raise opik.exceptions.MetricComputationError(f"Failed to compute {self.__name__}") from exception
+            raise opik.exceptions.MetricComputationError(
+                f"Failed to compute {self.__name__}"
+            ) from exception

@@ -52,7 +52,7 @@ You can optimize for efficiency alongside quality by including span-based metric
 ```python
 from opik_optimizer import MultiMetricObjective
 from opik.evaluation.metrics import AnswerRelevance
-from opik_optimizer.metrics import TotalSpanCost, TotalSpanDuration
+from opik_optimizer.metrics import TotalSpanCost, SpanDuration
 
 # Metric that needs task_span
 def cost_in_cents(dataset_item, llm_output, task_span):
@@ -62,7 +62,7 @@ def cost_in_cents(dataset_item, llm_output, task_span):
 
 # Metric that needs task_span
 def duration_seconds(dataset_item, llm_output, task_span):
-    duration_metric = TotalSpanDuration()
+    duration_metric = SpanDuration()
     result = duration_metric.score(task_span=task_span)
     return result.value
 
@@ -85,7 +85,7 @@ objective = MultiMetricObjective(
 ```
 
 <Note>
-  Span-based metrics like `TotalSpanCost` and `TotalSpanDuration` automatically receive the `task_span` parameter during evaluation, which contains execution information about the agent's run. Use negative weights to minimize metrics (cost, duration) rather than maximize them.
+  Span-based metrics like `TotalSpanCost` and `SpanDuration` automatically receive the `task_span` parameter during evaluation, which contains execution information about the agent's run. Use negative weights to minimize metrics (cost, duration) rather than maximize them.
 </Note>
 
 <Note>
