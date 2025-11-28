@@ -56,6 +56,7 @@ interface PlaygroundOutputActionsProps {
   size: number;
   onChangeSize: (size: number) => void;
   total: number;
+  isLoadingTotal?: boolean;
 }
 
 const DEFAULT_LOADED_DATASETS = 1000;
@@ -77,6 +78,7 @@ const PlaygroundOutputActions = ({
   size,
   onChangeSize,
   total,
+  isLoadingTotal,
 }: PlaygroundOutputActionsProps) => {
   const [isLoadedMore, setIsLoadedMore] = useState(false);
   const [isRuleDialogOpen, setIsRuleDialogOpen] = useState(false);
@@ -454,7 +456,7 @@ const PlaygroundOutputActions = ({
           <PlaygroundProgressIndicator />
         </div>
       )}
-      <div className="sticky right-0 ml-auto flex h-0 gap-2">
+      <div className="sticky right-0 ml-auto flex gap-2">
         {createdExperiments.length > 0 && (
           <TooltipWrapper
             content={
@@ -572,6 +574,7 @@ const PlaygroundOutputActions = ({
               variant="minimal"
               itemsPerPage={[10, 50, 100, 200, 500, 1000]}
               disabled={isRunning}
+              isLoadingTotal={isLoadingTotal}
             />
             <Separator orientation="vertical" className="mx-2 h-4" />
           </div>

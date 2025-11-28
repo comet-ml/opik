@@ -6,16 +6,18 @@ import slugify from "slugify";
 import { Button } from "@/components/ui/button";
 import { DatasetItem } from "@/types/datasets";
 import useDatasetItemBatchDeleteMutation from "@/api/datasets/useDatasetItemBatchDeleteMutation";
-import ConfirmDialog from "@/components/shared/ConfirmDialog/ConfirmDialog";
 import ExportToButton from "@/components/shared/ExportToButton/ExportToButton";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import DatasetExpansionDialog from "./DatasetExpansionDialog";
 import GeneratedSamplesDialog from "./GeneratedSamplesDialog";
 import AddTagDialog from "./AddTagDialog";
+import RemoveDatasetItemsDialog from "./RemoveDatasetItemsDialog";
 import { DATASET_ITEM_DATA_PREFIX } from "@/constants/datasets";
 import { stripColumnPrefix } from "@/lib/utils";
 import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
+import { useDatasetItemDeletePreference } from "./hooks/useDatasetItemDeletePreference";
+import { Filters } from "@/types/filters";
 
 type DatasetItemsActionsPanelProps = {
   getDataForExport: () => Promise<DatasetItem[]>;
@@ -24,6 +26,10 @@ type DatasetItemsActionsPanelProps = {
   datasetName: string;
   columnsToExport: string[];
   dynamicColumns: string[];
+  isAllItemsSelected?: boolean;
+  filters?: Filters;
+  search?: string;
+  totalCount?: number;
 };
 
 const DatasetItemsActionsPanel: React.FunctionComponent<
@@ -35,6 +41,10 @@ const DatasetItemsActionsPanel: React.FunctionComponent<
   datasetName,
   columnsToExport,
   dynamicColumns,
+  isAllItemsSelected = false,
+  filters = [],
+  search = "",
+  totalCount = 0,
 }) => {
   const resetKeyRef = useRef(0);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState<boolean>(false);
@@ -48,12 +58,25 @@ const DatasetItemsActionsPanel: React.FunctionComponent<
 
   const { mutate } = useDatasetItemBatchDeleteMutation();
   const isExportEnabled = useIsFeatureEnabled(FeatureToggleKeys.EXPORT_ENABLED);
+  const [dontAskAgain] = useDatasetItemDeletePreference();
 
   const deleteDatasetItemsHandler = useCallback(() => {
     mutate({
       ids: selectedDatasetItems.map((i) => i.id),
+      isAllItemsSelected,
+      filters,
+      search,
     });
-  }, [selectedDatasetItems, mutate]);
+  }, [selectedDatasetItems, mutate, isAllItemsSelected, filters, search]);
+
+  const handleDeleteClick = useCallback(() => {
+    if (dontAskAgain) {
+      deleteDatasetItemsHandler();
+    } else {
+      setDeleteDialogOpen(true);
+      resetKeyRef.current = resetKeyRef.current + 1;
+    }
+  }, [dontAskAgain, deleteDatasetItemsHandler]);
 
   const handleSamplesGenerated = useCallback((samples: DatasetItem[]) => {
     setGeneratedSamples(samples);
@@ -92,15 +115,11 @@ const DatasetItemsActionsPanel: React.FunctionComponent<
 
   return (
     <div className="flex items-center gap-2">
-      <ConfirmDialog
+      <RemoveDatasetItemsDialog
         key={`delete-${resetKeyRef.current}`}
         open={deleteDialogOpen}
         setOpen={setDeleteDialogOpen}
         onConfirm={deleteDatasetItemsHandler}
-        title="Delete dataset items"
-        description="Deleting dataset items will also remove the related sample data from any linked experiments. This action can't be undone. Are you sure you want to continue?"
-        confirmText="Delete dataset items"
-        confirmButtonVariant="destructive"
       />
 
       <DatasetExpansionDialog
@@ -127,6 +146,10 @@ const DatasetItemsActionsPanel: React.FunctionComponent<
         open={addTagDialogOpen}
         setOpen={setAddTagDialogOpen}
         onSuccess={() => {}}
+        isAllItemsSelected={isAllItemsSelected}
+        filters={filters}
+        search={search}
+        totalCount={totalCount}
       />
 
       <Button
@@ -170,10 +193,7 @@ const DatasetItemsActionsPanel: React.FunctionComponent<
         <Button
           variant="outline"
           size="icon-sm"
-          onClick={() => {
-            setDeleteDialogOpen(true);
-            resetKeyRef.current = resetKeyRef.current + 1;
-          }}
+          onClick={handleDeleteClick}
           disabled={disabled}
         >
           <Trash />
