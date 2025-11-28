@@ -3,50 +3,94 @@ import math
 from typing import Any
 from collections.abc import Callable
 
+
 import opik
 from opik.evaluation import evaluator as opik_evaluator
 from opik.evaluation import evaluation_result as opik_evaluation_result
 from opik.evaluation.metrics import base_metric, score_result
 from .metrics import multi_metric_objective
+from opik.message_processing.emulation.models import SpanModel
+from opik_optimizer.metrics import helpers
 
 logger = logging.getLogger(__name__)
 
 
 def _create_metric_class(metric: Callable) -> base_metric.BaseMetric:
-    class MetricClass(base_metric.BaseMetric):
-        def __init__(self) -> None:
-            self.name = metric.__name__
+    function_to_check = (
+        metric.__call__
+        if isinstance(metric, multi_metric_objective.MultiMetricObjective)
+        else metric
+    )
+    metric_name = metric.__name__
 
-        def score(
-            self, llm_output: str, **kwargs: Any
-        ) -> score_result.ScoreResult | list[score_result.ScoreResult]:
-            try:
-                metric_val = metric(dataset_item=kwargs, llm_output=llm_output)
+    needs_task_span = (
+        helpers.has_task_span_parameter(function_to_check)
+        if not isinstance(metric, multi_metric_objective.MultiMetricObjective)
+        else metric.needs_task_span
+    )
 
-                if isinstance(metric, multi_metric_objective.MultiMetricObjective):
-                    if (
-                        hasattr(metric_val, "metadata")
-                        and "raw_score_results" in metric_val.metadata
-                    ):
-                        return [metric_val, *metric_val.metadata["raw_score_results"]]
-                    else:
-                        return [metric_val]
-                if isinstance(metric_val, score_result.ScoreResult):
+    def _process_metric_result(
+        metric: Callable,
+        metric_val: Any,
+        metric_name: str,
+    ) -> score_result.ScoreResult | list[score_result.ScoreResult]:
+        """Process metric result and return appropriate ScoreResult(s)."""
+        if isinstance(metric, multi_metric_objective.MultiMetricObjective):
+            if (
+                hasattr(metric_val, "metadata")
+                and "raw_score_results" in metric_val.metadata
+            ):
+                return [metric_val, *metric_val.metadata["raw_score_results"]]
+            else:
+                return [metric_val]
+
+        if isinstance(metric_val, score_result.ScoreResult):
+            return score_result.ScoreResult(
+                name=metric_name,
+                value=metric_val.value,
+                scoring_failed=metric_val.scoring_failed,
+                metadata=metric_val.metadata,
+                reason=metric_val.reason,
+            )
+        else:
+            return score_result.ScoreResult(
+                name=metric_name, value=metric_val, scoring_failed=False
+            )
+
+    if not needs_task_span:
+
+        class MetricClass(base_metric.BaseMetric):
+            def __init__(self) -> None:
+                super().__init__(name=metric_name, track=True)
+
+            def score(
+                self, llm_output: str, **kwargs: Any
+            ) -> score_result.ScoreResult | list[score_result.ScoreResult]:
+                try:
+                    metric_val = metric(dataset_item=kwargs, llm_output=llm_output)
+                    return _process_metric_result(metric, metric_val, self.name)
+                except Exception:
                     return score_result.ScoreResult(
-                        name=self.name,
-                        value=metric_val.value,
-                        scoring_failed=metric_val.scoring_failed,
-                        metadata=metric_val.metadata,
-                        reason=metric_val.reason,
+                        name=self.name, value=0, scoring_failed=True
                     )
-                else:
+    else:
+
+        class MetricClass(base_metric.BaseMetric):
+            def __init__(self) -> None:
+                super().__init__(name=metric_name, track=True)
+
+            def score(
+                self, llm_output: str, task_span: SpanModel, **kwargs: Any
+            ) -> score_result.ScoreResult | list[score_result.ScoreResult]:
+                try:
+                    metric_val = metric(
+                        dataset_item=kwargs, llm_output=llm_output, task_span=task_span
+                    )
+                    return _process_metric_result(metric, metric_val, self.name)
+                except Exception:
                     return score_result.ScoreResult(
-                        name=self.name, value=metric_val, scoring_failed=False
+                        name=self.name, value=0, scoring_failed=True
                     )
-            except Exception:
-                return score_result.ScoreResult(
-                    name=self.name, value=0, scoring_failed=True
-                )
 
     return MetricClass()
 

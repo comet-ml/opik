@@ -1,9 +1,12 @@
 import pytest
 from typing import Any
 from collections.abc import Callable
+from unittest.mock import Mock
 
 from opik.evaluation.metrics.score_result import ScoreResult
-from opik_optimizer.multi_metric_objective import MultiMetricObjective
+from opik.message_processing.emulation.models import SpanModel
+from opik_optimizer.metrics.multi_metric_objective import MultiMetricObjective
+from opik_optimizer.metrics import helpers
 
 
 # Mock metric functions for testing
@@ -303,3 +306,98 @@ class TestMultiMetricObjective:
         raw_scores = result.metadata["raw_score_results"]
         assert len(raw_scores) == 3, "All metrics should be in metadata"
         assert raw_scores[1].name == "metric_returning_0_2"
+
+    def test_metric_with_task_span_signature__call_includes_task_span(self) -> None:
+        """Test that __call__ includes task_span parameter when at least one metric needs it"""
+
+        # Arrange
+        def metric_with_task_span(
+            dataset_item: dict[str, Any], llm_output: str, task_span: SpanModel | None
+        ) -> ScoreResult:
+            return ScoreResult(name="metric_with_task_span", value=0.5)
+
+        metrics: list[Callable] = [metric_with_task_span]
+        multi_metric = MultiMetricObjective(metrics=metrics)
+
+        # Act & Assert
+        # The __call__ method should accept task_span parameter
+        assert helpers.has_task_span_parameter(multi_metric.__call__), (
+            "MultiMetricObjective with task_span metrics should have task_span in __call__ signature"
+        )
+
+        # Should work with task_span provided
+        mock_span = Mock(spec=SpanModel)
+        result = multi_metric(dataset_item={}, llm_output="test", task_span=mock_span)
+        assert result.value == 0.5
+
+    def test_metric_without_task_span_signature__call_excludes_task_span(self) -> None:
+        """Test that __call__ excludes task_span parameter when no metric needs it"""
+        # Arrange
+        metrics: list[Callable[[dict[str, Any], str], ScoreResult]] = [
+            metric_returning_0_5,
+            metric_returning_0_2,
+        ]
+        multi_metric = MultiMetricObjective(metrics=metrics)
+
+        # Act & Assert
+        # The __call__ method should NOT have task_span parameter
+        assert not helpers.has_task_span_parameter(multi_metric.__call__), (
+            "MultiMetricObjective without task_span metrics should not have task_span in __call__ signature"
+        )
+
+        # Should work without task_span
+        result = multi_metric(dataset_item={}, llm_output="test")
+        assert result.value == pytest.approx(0.35)
+
+    def test_mixed_metrics_with_and_without_task_span(self) -> None:
+        """Test that MultiMetricObjective works with mix of metrics with/without task_span"""
+        # Arrange
+        received_spans = []
+
+        def metric_with_task_span(
+            dataset_item: dict[str, Any], llm_output: str, task_span: SpanModel | None
+        ) -> ScoreResult:
+            received_spans.append(task_span)
+            return ScoreResult(name="metric_with_task_span", value=0.4)
+
+        def metric_without_task_span(
+            dataset_item: dict[str, Any], llm_output: str
+        ) -> ScoreResult:
+            return ScoreResult(name="metric_without_task_span", value=0.6)
+
+        metrics: list[Callable] = [
+            metric_with_task_span,
+            metric_without_task_span,
+        ]
+        weights = [0.5, 0.5]
+        multi_metric = MultiMetricObjective(metrics=metrics, weights=weights)
+
+        # Act
+        mock_span = Mock(spec=SpanModel)
+        result = multi_metric(dataset_item={}, llm_output="test", task_span=mock_span)
+
+        # Assert
+        # Should have task_span in signature since at least one metric needs it
+        assert helpers.has_task_span_parameter(multi_metric.__call__), (
+            "MultiMetricObjective with mixed metrics should have task_span in __call__ signature"
+        )
+
+        # Expected: (0.4 * 0.5) + (0.6 * 0.5) = 0.2 + 0.3 = 0.5
+        expected_value = 0.5
+        assert result.value == pytest.approx(expected_value), (
+            f"Expected weighted score {expected_value}, got {result.value}"
+        )
+
+        # Verify task_span was passed to metric that needs it
+        assert len(received_spans) == 1, (
+            "Metric with task_span should have been called once"
+        )
+        assert received_spans[0] is mock_span, "Task span should be passed through"
+
+        # Verify both metrics are in metadata
+        raw_scores = result.metadata["raw_score_results"]
+        assert len(raw_scores) == 2, "Should have both metrics in metadata"
+        assert raw_scores[0].name == "metric_with_task_span"
+        assert raw_scores[0].value == 0.4
+        assert raw_scores[1].name == "metric_without_task_span"
+        assert raw_scores[1].value == 0.6
