@@ -247,6 +247,57 @@ export const LLMJudgeDetailsTraceFormSchema = LLMJudgeBaseSchema.extend({
   }
 });
 
+export const LLMJudgeDetailsSpanFormSchema = LLMJudgeBaseSchema.extend({
+  variables: z.record(
+    z.string(),
+    z
+      .string()
+      .min(1, { message: "Key is required" })
+      .regex(/^(input|output|metadata)/, {
+        message: `Key is invalid, it should begin with "input", "output", or "metadata" and follow this format: "input.[PATH]" For example: "input.message"`,
+      }),
+  ),
+}).superRefine((data, ctx) => {
+  const hasImages = data.messages.some((message) =>
+    hasImagesInContent(message.content),
+  );
+  const hasVideos = data.messages.some((message) =>
+    hasVideosInContent(message.content),
+  );
+
+  if (hasImages || hasVideos) {
+    const modelSupportsImages = supportsImageInput(data.model);
+    const modelSupportsVideos = supportsVideoInput(data.model);
+    const supportsMultimodal = modelSupportsImages || modelSupportsVideos;
+
+    if (!supportsMultimodal) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message:
+          "The selected model does not support media input. Please choose a model with vision capabilities or remove images from messages.",
+        path: ["model"],
+      });
+    } else {
+      if (hasImages && !modelSupportsImages) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message:
+            "The selected model does not support image input. Please choose a model with vision capabilities or remove images from messages.",
+          path: ["model"],
+        });
+      }
+      if (hasVideos && !modelSupportsVideos) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message:
+            "The selected model does not support video input. Please choose a model with video capabilities or remove videos from messages.",
+          path: ["model"],
+        });
+      }
+    }
+  }
+});
+
 export const LLMJudgeDetailsThreadFormSchema = LLMJudgeBaseSchema.extend({
   variables: z.record(z.string(), z.string()),
 }).superRefine((data, ctx) => {
@@ -335,6 +386,12 @@ export const LLMJudgeThreadEvaluationRuleFormSchema =
     llmJudgeDetails: LLMJudgeDetailsThreadFormSchema,
   });
 
+export const LLMJudgeSpanEvaluationRuleFormSchema =
+  BaseEvaluationRuleFormSchema.extend({
+    type: z.literal(EVALUATORS_RULE_TYPE.span_llm_judge),
+    llmJudgeDetails: LLMJudgeDetailsSpanFormSchema,
+  });
+
 export const PythonCodeTraceEvaluationRuleFormSchema =
   BaseEvaluationRuleFormSchema.extend({
     type: z.literal(EVALUATORS_RULE_TYPE.python_code),
@@ -350,6 +407,7 @@ export const PythonCodeThreadEvaluationRuleFormSchema =
 export const EvaluationRuleFormSchema = z.discriminatedUnion("type", [
   LLMJudgeTraceEvaluationRuleFormSchema,
   LLMJudgeThreadEvaluationRuleFormSchema,
+  LLMJudgeSpanEvaluationRuleFormSchema,
   PythonCodeTraceEvaluationRuleFormSchema,
   PythonCodeThreadEvaluationRuleFormSchema,
 ]);
@@ -360,6 +418,10 @@ export type LLMJudgeDetailsTraceFormType = z.infer<
 
 export type LLMJudgeDetailsThreadFormType = z.infer<
   typeof LLMJudgeDetailsThreadFormSchema
+>;
+
+export type LLMJudgeDetailsSpanFormType = z.infer<
+  typeof LLMJudgeDetailsSpanFormSchema
 >;
 
 export type EvaluationRuleFormType = z.infer<typeof EvaluationRuleFormSchema>;
@@ -417,7 +479,10 @@ export const convertLLMJudgeObjectToLLMJudgeData = (data: LLMJudgeObject) => {
 };
 
 export const convertLLMJudgeDataToLLMJudgeObject = (
-  data: LLMJudgeDetailsTraceFormType | LLMJudgeDetailsThreadFormType,
+  data:
+    | LLMJudgeDetailsTraceFormType
+    | LLMJudgeDetailsThreadFormType
+    | LLMJudgeDetailsSpanFormType,
 ) => {
   const { temperature, seed, custom_parameters } = data.config;
   const model: LLMJudgeObject["model"] = {
