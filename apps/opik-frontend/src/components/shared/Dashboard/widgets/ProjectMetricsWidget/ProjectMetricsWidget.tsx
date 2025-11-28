@@ -12,8 +12,11 @@ import {
   DashboardWidgetComponentProps,
 } from "@/types/dashboard";
 import { Filter } from "@/types/filters";
+import { isFilterValid } from "@/lib/filters";
 import MetricContainerChart from "@/components/pages/TracesPage/MetricsTab/MetricChart/MetricChartContainer";
 import { INTERVAL_DESCRIPTIONS } from "@/components/pages/TracesPage/MetricsTab/utils";
+import { calculateIntervalConfig } from "@/components/pages-shared/traces/MetricDateRangeSelect/utils";
+import { DateRangeSerializedValue } from "@/components/shared/DateRangeSelect";
 
 const ProjectMetricsWidget: React.FunctionComponent<
   DashboardWidgetComponentProps
@@ -23,9 +26,7 @@ const ProjectMetricsWidget: React.FunctionComponent<
       const config = state.config as ProjectDashboardConfig | null;
       return {
         projectId: config?.projectId,
-        interval: config?.interval,
-        intervalStart: config?.intervalStart,
-        intervalEnd: config?.intervalEnd,
+        dateRange: config?.dateRange as DateRangeSerializedValue,
       };
     }),
   );
@@ -44,19 +45,17 @@ const ProjectMetricsWidget: React.FunctionComponent<
   const { projectId, interval, intervalStart, intervalEnd } = useMemo(() => {
     const finalProjectId = widgetProjectId || globalConfig.projectId;
 
+    const { interval, intervalStart, intervalEnd } = calculateIntervalConfig(
+      globalConfig.dateRange,
+    );
+
     return {
       projectId: finalProjectId,
-      interval: globalConfig.interval,
-      intervalStart: globalConfig.intervalStart,
-      intervalEnd: globalConfig.intervalEnd,
+      interval,
+      intervalStart,
+      intervalEnd,
     };
-  }, [
-    widgetProjectId,
-    globalConfig.projectId,
-    globalConfig.interval,
-    globalConfig.intervalStart,
-    globalConfig.intervalEnd,
-  ]);
+  }, [widgetProjectId, globalConfig.projectId, globalConfig.dateRange]);
 
   if (!widget) {
     return null;
@@ -76,6 +75,9 @@ const ProjectMetricsWidget: React.FunctionComponent<
         />
       );
     }
+
+    const validTraceFilters = traceFilters?.filter(isFilterValid);
+    const validThreadFilters = threadFilters?.filter(isFilterValid);
 
     const metricName = metricType as METRIC_NAME_TYPE;
     const intervalType = interval as INTERVAL_TYPE;
@@ -99,37 +101,30 @@ const ProjectMetricsWidget: React.FunctionComponent<
           intervalEnd={intervalEnd}
           projectId={projectId!}
           chartType={chartType}
-          traceFilters={traceFilters}
-          threadFilters={threadFilters}
+          traceFilters={validTraceFilters}
+          threadFilters={validThreadFilters}
           chartOnly
         />
       </div>
     );
   };
 
-  if (preview) {
-    return (
-      <DashboardWidget.PreviewContent>
-        {renderChartContent()}
-      </DashboardWidget.PreviewContent>
-    );
-  }
-
   return (
     <DashboardWidget>
       <DashboardWidget.Header
         title={widget.title}
         subtitle={widget.subtitle}
+        preview={preview}
         actions={
-          <DashboardWidget.ActionsMenu
-            sectionId={sectionId!}
-            widgetId={widgetId!}
-            widgetType={widget.type}
-            widgetTitle={widget.title}
-            widgetConfig={widget.config}
-          />
+          !preview ? (
+            <DashboardWidget.ActionsMenu
+              sectionId={sectionId!}
+              widgetId={widgetId!}
+              widgetTitle={widget.title}
+            />
+          ) : undefined
         }
-        dragHandle={<DashboardWidget.DragHandle />}
+        dragHandle={!preview ? <DashboardWidget.DragHandle /> : undefined}
       />
       <DashboardWidget.Content>{renderChartContent()}</DashboardWidget.Content>
     </DashboardWidget>

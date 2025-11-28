@@ -3,7 +3,7 @@ import {
   MoreHorizontal,
   Pencil,
   Copy,
-  ArrowRightLeft,
+  ArrowUpDown,
   Trash2,
 } from "lucide-react";
 import { useShallow } from "zustand/react/shallow";
@@ -23,24 +23,16 @@ import {
   useDashboardStore,
   selectSections,
   selectMoveWidget,
-  selectAddWidget,
+  selectDuplicateWidget,
   selectDeleteWidget,
+  selectOnAddEditWidgetCallback,
 } from "@/store/DashboardStore";
-import { WidgetConfigDialog } from "@/components/shared/Dashboard/WidgetConfigDialog";
 import ConfirmDialog from "@/components/shared/ConfirmDialog/ConfirmDialog";
-import {
-  DashboardWidget,
-  UpdateWidgetConfig,
-  WIDGET_TYPE,
-  AddWidgetConfig,
-} from "@/types/dashboard";
 
 type DashboardWidgetActionsMenuProps = {
   sectionId: string;
   widgetId: string;
-  widgetType: string;
   widgetTitle: string;
-  widgetConfig?: Record<string, unknown>;
   customMenuItems?: React.ReactNode;
   hideEdit?: boolean;
   hideDuplicate?: boolean;
@@ -52,9 +44,7 @@ type DashboardWidgetActionsMenuProps = {
 const DashboardWidgetActionsMenu: React.FC<DashboardWidgetActionsMenuProps> = ({
   sectionId,
   widgetId,
-  widgetType,
   widgetTitle,
-  widgetConfig,
   customMenuItems,
   hideEdit = false,
   hideDuplicate = false,
@@ -63,62 +53,43 @@ const DashboardWidgetActionsMenu: React.FC<DashboardWidgetActionsMenuProps> = ({
   onOpenChange,
 }) => {
   const [open, setOpen] = useState(false);
-  const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
 
   const sections = useDashboardStore(useShallow(selectSections));
   const moveWidget = useDashboardStore(selectMoveWidget);
-  const addWidget = useDashboardStore(selectAddWidget);
+  const duplicateWidget = useDashboardStore(selectDuplicateWidget);
   const deleteWidget = useDashboardStore(selectDeleteWidget);
-  const updateWidget = useDashboardStore((state) => state.updateWidget);
+  const onAddEditWidgetCallback = useDashboardStore(
+    selectOnAddEditWidgetCallback,
+  );
 
   const handleOpenChange = (newOpen: boolean) => {
     setOpen(newOpen);
     onOpenChange?.(newOpen);
   };
 
-  const handleEditDialogOpenChange = useCallback(
-    (isOpen: boolean) => {
-      setEditDialogOpen(isOpen);
-      onOpenChange?.(open || isOpen || deleteDialogOpen);
-    },
-    [open, deleteDialogOpen, onOpenChange],
-  );
-
   const handleDeleteDialogOpenChange = useCallback(
     (isOpen: boolean) => {
       setDeleteDialogOpen(isOpen);
-      onOpenChange?.(open || editDialogOpen || isOpen);
+      onOpenChange?.(open || isOpen);
     },
-    [open, editDialogOpen, onOpenChange],
+    [open, onOpenChange],
   );
 
-  const handleEdit = useCallback((e: React.MouseEvent) => {
-    e.stopPropagation();
-    setEditDialogOpen(true);
-  }, []);
-
-  const handleSaveWidget = useCallback(
-    (widgetData: Partial<DashboardWidget>) => {
-      updateWidget(sectionId, widgetId, {
-        title: widgetData.title,
-        subtitle: widgetData.subtitle,
-        config: widgetData.config,
-      } as UpdateWidgetConfig);
+  const handleEdit = useCallback(
+    (e: React.MouseEvent) => {
+      e.stopPropagation();
+      onAddEditWidgetCallback?.({ sectionId, widgetId });
     },
-    [sectionId, widgetId, updateWidget],
+    [onAddEditWidgetCallback, sectionId, widgetId],
   );
 
   const handleDuplicate = useCallback(
     (e: React.MouseEvent) => {
       e.stopPropagation();
-      addWidget(sectionId, {
-        type: widgetType as WIDGET_TYPE,
-        title: widgetTitle,
-        config: widgetConfig || {},
-      } as AddWidgetConfig);
+      duplicateWidget(sectionId, widgetId);
     },
-    [sectionId, widgetType, widgetTitle, widgetConfig, addWidget],
+    [sectionId, widgetId, duplicateWidget],
   );
 
   const handleDeleteClick = useCallback((e: React.MouseEvent) => {
@@ -169,7 +140,7 @@ const DashboardWidgetActionsMenu: React.FC<DashboardWidgetActionsMenuProps> = ({
           {showMove && (
             <DropdownMenuSub>
               <DropdownMenuSubTrigger>
-                <ArrowRightLeft className="mr-2 size-4" />
+                <ArrowUpDown className="mr-2 size-4" />
                 Move to section
               </DropdownMenuSubTrigger>
               <DropdownMenuSubContent>
@@ -203,21 +174,13 @@ const DashboardWidgetActionsMenu: React.FC<DashboardWidgetActionsMenuProps> = ({
         </DropdownMenuContent>
       </DropdownMenu>
 
-      <WidgetConfigDialog
-        open={editDialogOpen}
-        onOpenChange={handleEditDialogOpenChange}
-        sectionId={sectionId}
-        widgetId={widgetId}
-        onSave={handleSaveWidget}
-      />
-
       <ConfirmDialog
         open={deleteDialogOpen}
         setOpen={handleDeleteDialogOpenChange}
         onConfirm={handleConfirmDelete}
         title="Delete widget?"
-        description={`The '${widgetTitle}' widget will be permanently deleted and cannot be recovered.`}
-        confirmText="Yes, delete"
+        description={`This widget will be removed from this dashboard. You can still undo this change before saving the dashboard.`}
+        confirmText={`Delete ${widgetTitle}`}
         confirmButtonVariant="destructive"
       />
     </>

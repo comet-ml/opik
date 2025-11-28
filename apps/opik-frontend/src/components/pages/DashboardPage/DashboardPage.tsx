@@ -5,17 +5,20 @@ import {
   useDashboardStore,
   selectAddSection,
   selectAddWidget,
+  selectUpdateWidget,
   selectSetConfig,
-  selectSetSearch,
   selectClearConfig,
   selectClearDashboard,
-  selectSetOnAddWidgetCallback,
+  selectSetOnAddEditWidgetCallback,
   selectSetWidgetResolver,
+  selectConfig,
 } from "@/store/DashboardStore";
 import useDashboardById from "@/api/dashboards/useDashboardById";
 import useBreadcrumbsStore from "@/store/BreadcrumbsStore";
-import { useMetricDateRangeWithQuery } from "@/components/pages-shared/traces/MetricDateRangeSelect/useMetricDateRangeWithQuery";
+import { useMetricDateRangeCore } from "@/components/pages-shared/traces/MetricDateRangeSelect/useMetricDateRangeCore";
+import { DEFAULT_DATE_PRESET } from "@/components/pages-shared/traces/MetricDateRangeSelect/constants";
 import MetricDateRangeSelect from "@/components/pages-shared/traces/MetricDateRangeSelect/MetricDateRangeSelect";
+import { DateRangeSerializedValue } from "@/components/shared/DateRangeSelect";
 import DashboardSectionsContainer from "@/components/shared/Dashboard/Dashboard";
 import AddSectionButton from "@/components/shared/Dashboard/DashboardSection/AddSectionButton";
 import { WidgetConfigDialog } from "@/components/shared/Dashboard/WidgetConfigDialog";
@@ -28,6 +31,8 @@ import {
   DashboardWidget,
   WIDGET_TYPE,
   AddWidgetConfig,
+  UpdateWidgetConfig,
+  AddEditWidgetCallbackParams,
 } from "@/types/dashboard";
 import { createWidgetResolver } from "@/components/shared/Dashboard/widgets/widgetRegistry";
 
@@ -36,9 +41,9 @@ const DashboardPage: React.FunctionComponent = () => {
     dashboardId: string;
   };
   const setBreadcrumbParam = useBreadcrumbsStore((state) => state.setParam);
-  const [search] = useState("");
-  const [addWidgetDialogOpen, setAddWidgetDialogOpen] = useState(false);
+  const [widgetDialogOpen, setWidgetDialogOpen] = useState(false);
   const [targetSectionId, setTargetSectionId] = useState<string | null>(null);
+  const [targetWidgetId, setTargetWidgetId] = useState<string | null>(null);
 
   const { data: dashboard, isPending } = useDashboardById(
     { dashboardId },
@@ -47,17 +52,21 @@ const DashboardPage: React.FunctionComponent = () => {
 
   const addSection = useDashboardStore(selectAddSection);
   const addWidget = useDashboardStore(selectAddWidget);
+  const updateWidget = useDashboardStore(selectUpdateWidget);
   const loadDashboardFromBackend = useDashboardStore(
     (state) => state.loadDashboardFromBackend,
   );
+  const config = useDashboardStore(selectConfig);
   const setConfig = useDashboardStore(selectSetConfig);
-  const setSearch = useDashboardStore(selectSetSearch);
   const clearConfig = useDashboardStore(selectClearConfig);
   const clearDashboard = useDashboardStore(selectClearDashboard);
-  const setOnAddWidgetCallback = useDashboardStore(
-    selectSetOnAddWidgetCallback,
+  const setOnAddEditWidgetCallback = useDashboardStore(
+    selectSetOnAddEditWidgetCallback,
   );
   const setWidgetResolver = useDashboardStore(selectSetWidgetResolver);
+
+  const dateRangeValue =
+    (config as ProjectDashboardConfig)?.dateRange || DEFAULT_DATE_PRESET;
 
   useEffect(() => {
     if (dashboard?.config) {
@@ -85,25 +94,41 @@ const DashboardPage: React.FunctionComponent = () => {
     }
   }, [dashboardId, dashboard?.name, setBreadcrumbParam]);
 
-  const {
-    dateRange,
-    handleDateRangeChange,
-    interval,
-    intervalStart,
-    intervalEnd,
-    minDate,
-    maxDate,
-  } = useMetricDateRangeWithQuery({
-    key: "dashboard_date_range",
-  });
+  const handleDateRangeValueChange = useCallback(
+    (value: DateRangeSerializedValue) => {
+      setConfig({
+        ...(config as ProjectDashboardConfig),
+        dateRange: value,
+      });
+    },
+    [config, setConfig],
+  );
 
-  const handleOpenAddWidgetDialog = useCallback((sectionId: string) => {
-    setTargetSectionId(sectionId);
-    setAddWidgetDialogOpen(true);
-  }, []);
+  const { dateRange, handleDateRangeChange, minDate, maxDate } =
+    useMetricDateRangeCore({
+      value: dateRangeValue,
+      setValue: handleDateRangeValueChange,
+    });
+
+  const handleOpenWidgetDialog = useCallback(
+    ({ sectionId, widgetId }: AddEditWidgetCallbackParams) => {
+      setTargetSectionId(sectionId);
+      setTargetWidgetId(widgetId || null);
+      setWidgetDialogOpen(true);
+    },
+    [],
+  );
 
   const handleSaveWidget = (widgetData: Partial<DashboardWidget>) => {
-    if (targetSectionId && widgetData.type && widgetData.title) {
+    if (!targetSectionId) return;
+
+    if (targetWidgetId) {
+      updateWidget(targetSectionId, targetWidgetId, {
+        title: widgetData.title,
+        subtitle: widgetData.subtitle,
+        config: widgetData.config,
+      } as UpdateWidgetConfig);
+    } else if (widgetData.type && widgetData.title) {
       addWidget(targetSectionId, {
         type: widgetData.type as WIDGET_TYPE,
         title: widgetData.title,
@@ -114,22 +139,8 @@ const DashboardPage: React.FunctionComponent = () => {
   };
 
   useEffect(() => {
-    const config: ProjectDashboardConfig = {
-      projectId: "",
-      interval,
-      intervalStart,
-      intervalEnd,
-    };
-    setConfig(config);
-  }, [interval, intervalStart, intervalEnd, setConfig]);
-
-  useEffect(() => {
-    setSearch(search);
-  }, [search, setSearch]);
-
-  useEffect(() => {
-    setOnAddWidgetCallback(handleOpenAddWidgetDialog);
-  }, [handleOpenAddWidgetDialog, setOnAddWidgetCallback]);
+    setOnAddEditWidgetCallback(handleOpenWidgetDialog);
+  }, [handleOpenWidgetDialog, setOnAddEditWidgetCallback]);
 
   useEffect(() => {
     const resolver = createWidgetResolver();
@@ -140,10 +151,15 @@ const DashboardPage: React.FunctionComponent = () => {
     return () => {
       clearDashboard();
       clearConfig();
-      setOnAddWidgetCallback(null);
+      setOnAddEditWidgetCallback(null);
       setWidgetResolver(null);
     };
-  }, [clearDashboard, clearConfig, setOnAddWidgetCallback, setWidgetResolver]);
+  }, [
+    clearDashboard,
+    clearConfig,
+    setOnAddEditWidgetCallback,
+    setWidgetResolver,
+  ]);
 
   if (isPending) {
     return <Loader />;
@@ -181,21 +197,23 @@ const DashboardPage: React.FunctionComponent = () => {
             onChangeValue={handleDateRangeChange}
             minDate={minDate}
             maxDate={maxDate}
+            hideAlltime
           />
         </div>
       </div>
 
       <div className="flex-1 overflow-auto">
-        <div className="text-clip rounded-md">
-          <DashboardSectionsContainer />
+        <DashboardSectionsContainer />
 
+        <div className="text-clip rounded-md">
           <AddSectionButton onAddSection={addSection} />
         </div>
 
         <WidgetConfigDialog
-          open={addWidgetDialogOpen}
-          onOpenChange={setAddWidgetDialogOpen}
+          open={widgetDialogOpen}
+          onOpenChange={setWidgetDialogOpen}
           sectionId={targetSectionId || ""}
+          widgetId={targetWidgetId || undefined}
           onSave={handleSaveWidget}
         />
       </div>

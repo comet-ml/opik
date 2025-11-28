@@ -2,6 +2,8 @@ import {
   DashboardLayout,
   DashboardLayoutItem,
   DashboardWidget,
+  WIDGET_TYPE,
+  WidgetSize,
 } from "@/types/dashboard";
 import isEmpty from "lodash/isEmpty";
 
@@ -16,14 +18,12 @@ export const getDefaultWidgetSize = (
   type: string,
 ): { w: number; h: number } => {
   switch (type) {
-    case "chart":
+    case WIDGET_TYPE.CHART_METRIC:
       return { w: 2, h: 2 };
-    case "metric":
-      return { w: 2, h: 1 };
-    case "table":
-      return { w: 6, h: 3 };
-    case "text":
-      return { w: 2, h: 1 };
+    case WIDGET_TYPE.STAT_CARD:
+      return { w: 1, h: 1 };
+    case WIDGET_TYPE.TEXT_MARKDOWN:
+      return { w: 2, h: 2 };
     default:
       return { w: 2, h: 2 };
   }
@@ -68,8 +68,9 @@ export const findFirstAvailablePosition = (
 export const calculateLayoutForAddingWidget = (
   layout: DashboardLayout,
   widget: DashboardWidget,
+  size?: WidgetSize,
 ): DashboardLayout => {
-  const { w, h } = getDefaultWidgetSize(widget.type);
+  const { w, h } = size || getDefaultWidgetSize(widget.type);
 
   const newItem: DashboardLayoutItem = {
     i: widget.id,

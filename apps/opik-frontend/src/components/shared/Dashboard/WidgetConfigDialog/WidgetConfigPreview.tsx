@@ -29,7 +29,7 @@ const WidgetConfigPreview: React.FunctionComponent<
   }
 
   return (
-    <div className="h-full overflow-hidden rounded-md border border-border bg-white">
+    <div className="h-full overflow-hidden rounded-md bg-white">
       <WidgetComponent preview />
     </div>
   );

@@ -7,6 +7,7 @@ type DashboardWidgetHeaderProps = {
   actions?: React.ReactElement<{ onOpenChange?: (open: boolean) => void }>;
   dragHandle?: React.ReactNode;
   className?: string;
+  preview?: boolean;
 };
 
 const DashboardWidgetHeader: React.FC<DashboardWidgetHeaderProps> = ({
@@ -15,22 +16,31 @@ const DashboardWidgetHeader: React.FC<DashboardWidgetHeaderProps> = ({
   actions,
   dragHandle,
   className,
+  preview = false,
 }) => {
   const [menuOpen, setMenuOpen] = useState(false);
 
-  const actionsWithHandler = actions
-    ? React.cloneElement(actions, { onOpenChange: setMenuOpen })
-    : null;
+  const actionsWithHandler =
+    actions && !preview
+      ? React.cloneElement(actions, { onOpenChange: setMenuOpen })
+      : null;
+
+  const showDragHandle = dragHandle && !preview;
 
   return (
     <div
       className={cn(
-        "flex flex-col gap-0.5 rounded px-2 pb-0.5 pt-1",
+        "relative flex flex-col gap-0.5 rounded px-2 pb-0.5 pt-1",
         className,
       )}
     >
       <div className="flex items-center gap-2">
-        <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+        <div
+          className={cn(
+            "flex min-w-0 flex-1 flex-col gap-0.5 transition-[padding-right]",
+            actionsWithHandler && (menuOpen ? "pr-14" : "group-hover:pr-14"),
+          )}
+        >
           <div className="truncate text-xs font-medium text-foreground">
             {title}
           </div>
@@ -43,12 +53,12 @@ const DashboardWidgetHeader: React.FC<DashboardWidgetHeaderProps> = ({
         {actionsWithHandler && (
           <div
             className={cn(
-              "flex items-center gap-2 transition-opacity",
+              "absolute right-2 top-1 flex items-center gap-2 transition-opacity",
               menuOpen ? "opacity-100" : "opacity-0 group-hover:opacity-100",
             )}
           >
             {actionsWithHandler}
-            {dragHandle && (
+            {showDragHandle && (
               <>
                 <div className="h-4 w-px bg-muted" />
                 {dragHandle}
