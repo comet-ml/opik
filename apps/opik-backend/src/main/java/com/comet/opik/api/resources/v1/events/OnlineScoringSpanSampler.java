@@ -2,8 +2,12 @@ package com.comet.opik.api.resources.v1.events;
 
 import com.comet.opik.api.Span;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluator;
+import com.comet.opik.api.evaluators.AutomationRuleEvaluatorLlmAsJudge;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorSpanLlmAsJudge;
+import com.comet.opik.api.evaluators.AutomationRuleEvaluatorTraceThreadLlmAsJudge;
+import com.comet.opik.api.evaluators.AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorType;
+import com.comet.opik.api.evaluators.AutomationRuleEvaluatorUserDefinedMetricPython;
 import com.comet.opik.api.events.SpanToScoreLlmAsJudge;
 import com.comet.opik.api.events.SpansCreated;
 import com.comet.opik.api.filter.SpanFilter;
@@ -99,37 +103,48 @@ public class OnlineScoringSpanSampler {
             }
 
             //When using the MDC with multiple threads, we must ensure that the context is propagated. For this reason, we must use the wrapWithMdc method.
-            spanEvaluators.parallelStream().forEach(evaluator -> {
-                // samples spans for this rule
-                var samples = spans.stream()
-                        .filter(span -> shouldSampleSpan(evaluator, spansBatch.workspaceId(), span))
-                        .toList();
+            evaluators.parallelStream().forEach(evaluator -> {
+                switch (evaluator) {
+                    case AutomationRuleEvaluatorSpanLlmAsJudge rule -> {
 
-                switch (evaluator.getType()) {
-                    case SPAN_LLM_AS_JUDGE -> {
-                        if (serviceTogglesConfig.isSpanLlmAsJudgeEnabled()) {
-                            var messages = samples.stream()
-                                    .map(span -> toLlmAsJudgeMessage(spansBatch,
-                                            (AutomationRuleEvaluatorSpanLlmAsJudge) evaluator, span))
-                                    .toList();
-                            if (!messages.isEmpty()) {
-                                logSampledSpan(spansBatch, evaluator, messages);
-                                onlineScorePublisher.enqueueMessage(messages,
-                                        AutomationRuleEvaluatorType.SPAN_LLM_AS_JUDGE);
-                            }
-                        } else {
+                        if (!serviceTogglesConfig.isSpanLlmAsJudgeEnabled()) {
                             log.warn(
                                     "Span LLM as Judge evaluator is disabled. Skipping sampling for evaluator type '{}'",
                                     evaluator.getType());
+                            return;
+                        }
+
+                        // samples spans for this rule
+                        var samples = spans.stream()
+                                .filter(span -> shouldSampleSpan(rule, spansBatch.workspaceId(), span))
+                                .toList();
+
+                        var messages = samples.stream()
+                                .map(span -> toLlmAsJudgeMessage(spansBatch, rule, span))
+                                .toList();
+
+                        if (!messages.isEmpty()) {
+                            logSampledSpan(spansBatch, evaluator, messages);
+                            onlineScorePublisher.enqueueMessage(messages,
+                                    AutomationRuleEvaluatorType.SPAN_LLM_AS_JUDGE);
                         }
                     }
-                    default -> log.warn("No process defined for evaluator type '{}'", evaluator.getType());
+                    case AutomationRuleEvaluatorLlmAsJudge rule -> logUnsupportedEvaluatorType(rule);
+                    case AutomationRuleEvaluatorUserDefinedMetricPython rule -> logUnsupportedEvaluatorType(rule);
+                    case AutomationRuleEvaluatorTraceThreadLlmAsJudge rule -> logUnsupportedEvaluatorType(rule);
+                    case AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython rule ->
+                        logUnsupportedEvaluatorType(rule);
                 }
             });
         });
     }
 
-    private boolean shouldSampleSpan(AutomationRuleEvaluator<SpanLlmAsJudgeCode, SpanFilter> evaluator,
+    private void logUnsupportedEvaluatorType(AutomationRuleEvaluator<?, ?> evaluator) {
+        log.warn("Received unsupported evaluator type '{}' in span sampler. This should not happen.",
+                evaluator.getType());
+    }
+
+    private boolean shouldSampleSpan(AutomationRuleEvaluator<?, SpanFilter> evaluator,
             String workspaceId, Span span) {
         // Check if rule is enabled first
         if (!evaluator.isEnabled()) {
