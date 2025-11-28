@@ -1,5 +1,6 @@
 # Runner for the suite of library integration tests
 #
+#          echo "result=${{ secrets.OPENAI_API_KEY != '' }}" >> $GITHUB_OUTPUT
 name: SDK Library Integration Tests Runner
 run-name: "SDK Library Integration Tests Runner ${{ github.ref_name }} by @${{ github.actor }}"
 permissions:
@@ -53,8 +54,7 @@ jobs:
     steps:
       - name: Print secrets
         run: |
-#          echo "result=${{ secrets.OPENAI_API_KEY != '' }}" >> $GITHUB_OUTPUT
-          echo "result=false" >> $GITHUB_OUTPUT
+          echo "result='false'" >> $GITHUB_OUTPUT
 
   missed_api_key_warning:
     name: Check OpenAI API Key
