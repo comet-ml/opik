@@ -33,15 +33,18 @@ jobs:
   has_needed_secrets:
     name: Check Secrets
     runs-on: ubuntu-latest
+    outputs:
+        has_secrets: ${{ steps.init.outputs.LIBS }}
     steps:
       - name: Print has secrets into output
+        id: init
         run: |
-          echo "result=${{ secrets.OPENAI_API_KEY != '' }}" >> $GITHUB_OUTPUT
+          echo "has_secrets=${{ secrets.OPENAI_API_KEY != '' }}" >> $GITHUB_OUTPUT
 
   missed_api_key_warning:
     name: Check OpenAI API Key
     runs-on: ubuntu-latest
-    if: ${{ needs.has_needed_secrets.outputs.result == 'false' }}
+    if: ${{ needs.has_needed_secrets.outputs.has_secrets == 'false' }}
     steps:
       - name: Print disabled message
         run: |
@@ -51,7 +54,7 @@ jobs:
     name: E2E Lib Integration Python ${{matrix.python_version}}
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    if: ${{ needs.has_needed_secrets.outputs.result != 'false' }}
+    if: ${{ needs.has_needed_secrets.outputs.has_secrets != 'false' }}
     strategy:
       fail-fast: false
       matrix:
