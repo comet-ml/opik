@@ -6,6 +6,7 @@ import com.comet.opik.api.evaluators.AutomationRuleEvaluatorSpanLlmAsJudge;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorType;
 import com.comet.opik.api.events.SpanToScoreLlmAsJudge;
 import com.comet.opik.api.events.SpansCreated;
+import com.comet.opik.api.filter.SpanFilter;
 import com.comet.opik.domain.evaluators.AutomationRuleEvaluatorService;
 import com.comet.opik.domain.evaluators.OnlineScorePublisher;
 import com.comet.opik.domain.evaluators.SpanFilterEvaluationService;
@@ -27,6 +28,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
+import static com.comet.opik.api.evaluators.AutomationRuleEvaluatorSpanLlmAsJudge.SpanLlmAsJudgeCode;
 import static com.comet.opik.infrastructure.log.LogContextAware.wrapWithMdc;
 
 /**
@@ -85,18 +87,19 @@ public class OnlineScoringSpanSampler {
                     projectId, spansBatch.workspaceId());
 
             // Filter to only span-level evaluators
-            evaluators = evaluators.stream()
+            List<AutomationRuleEvaluator<SpanLlmAsJudgeCode, SpanFilter>> spanEvaluators = evaluators.stream()
                     .filter(evaluator -> evaluator.getType() == AutomationRuleEvaluatorType.SPAN_LLM_AS_JUDGE)
-                    .collect(Collectors.toList());
+                    .map(evaluator -> (AutomationRuleEvaluator<SpanLlmAsJudgeCode, SpanFilter>) evaluator)
+                    .toList();
 
-            if (evaluators.isEmpty()) {
+            if (spanEvaluators.isEmpty()) {
                 log.debug("No span-level evaluators found for project '{}' on workspace '{}'",
                         projectId, spansBatch.workspaceId());
                 return;
             }
 
             //When using the MDC with multiple threads, we must ensure that the context is propagated. For this reason, we must use the wrapWithMdc method.
-            evaluators.parallelStream().forEach(evaluator -> {
+            spanEvaluators.parallelStream().forEach(evaluator -> {
                 // samples spans for this rule
                 var samples = spans.stream()
                         .filter(span -> shouldSampleSpan(evaluator, spansBatch.workspaceId(), span))
@@ -126,7 +129,8 @@ public class OnlineScoringSpanSampler {
         });
     }
 
-    private boolean shouldSampleSpan(AutomationRuleEvaluator<?, ?> evaluator, String workspaceId, Span span) {
+    private boolean shouldSampleSpan(AutomationRuleEvaluator<SpanLlmAsJudgeCode, SpanFilter> evaluator,
+            String workspaceId, Span span) {
         // Check if rule is enabled first
         if (!evaluator.isEnabled()) {
             // Important to set the workspaceId for logging purposes
@@ -191,7 +195,7 @@ public class OnlineScoringSpanSampler {
                 UserLog.MARKER, UserLog.AUTOMATION_RULE_EVALUATOR.name(),
                 UserLog.WORKSPACE_ID, workspaceId,
                 UserLog.RULE_ID, evaluator.getId().toString(),
-                UserLog.TRACE_ID, span.traceId() != null ? span.traceId().toString() : ""));
+                UserLog.SPAN_ID, span.id().toString()));
     }
 
 }
