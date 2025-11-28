@@ -69,6 +69,7 @@ public class StatsUtils {
         return getProjectStatItems(expectedTraces,
                 expectedTraces.stream().map(Trace::usage).toList(),
                 expectedTraces.stream().map(Trace::feedbackScores).toList(),
+                expectedTraces.stream().map(Trace::spanFeedbackScores).toList(),
                 Trace::input,
                 Trace::output,
                 Trace::metadata,
@@ -95,6 +96,7 @@ public class StatsUtils {
         return getProjectStatItems(expectedSpans,
                 list,
                 expectedSpans.stream().map(Span::feedbackScores).toList(),
+                null, // Spans don't have span feedback scores
                 Span::input,
                 Span::output,
                 Span::metadata,
@@ -131,6 +133,7 @@ public class StatsUtils {
             List<T> expectedEntities,
             List<Map<String, Long>> usages,
             List<List<FeedbackScore>> feedbacks,
+            List<List<FeedbackScore>> spanFeedbacks,
             Function<T, JsonNode> inputProvider,
             Function<T, JsonNode> outputProvider,
             Function<T, JsonNode> metadataProvider,
@@ -194,6 +197,9 @@ public class StatsUtils {
 
         Map<String, Double> usage = calculateUsageAverage(usages);
         Map<String, Double> feedback = calculateFeedbackAverage(feedbacks);
+        Map<String, Double> spanFeedback = spanFeedbacks != null
+                ? calculateFeedbackAverage(spanFeedbacks)
+                : Map.of();
 
         stats.add(new CountValueStat(countLabel, input));
         if (!quantities.isEmpty()) {
@@ -250,6 +256,16 @@ public class StatsUtils {
                 .forEach(key -> stats
                         .add(new AvgValueStat("%s.%s".formatted(StatsMapper.FEEDBACK_SCORE, key),
                                 feedback.get(key))));
+
+        // Only add span feedback scores statistics for traces (not spans) when there are actual values
+        if (spanFeedbacks != null && countLabel.equals("trace_count") && !spanFeedback.isEmpty()) {
+            spanFeedback.keySet()
+                    .stream()
+                    .sorted()
+                    .forEach(key -> stats
+                            .add(new AvgValueStat("%s.%s".formatted(StatsMapper.SPAN_FEEDBACK_SCORE, key),
+                                    spanFeedback.get(key))));
+        }
 
         Optional.ofNullable(failedGuardrails).ifPresent(failedGuardrailCount -> stats
                 .add(new CountValueStat(StatsMapper.GUARDRAILS_FAILED_COUNT, failedGuardrailCount)));

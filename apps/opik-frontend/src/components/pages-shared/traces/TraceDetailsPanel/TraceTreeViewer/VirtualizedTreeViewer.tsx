@@ -34,6 +34,7 @@ import UserCommentHoverList from "@/components/pages-shared/traces/UserComment/U
 import TagsHoverCard from "@/components/shared/TagsHoverCard/TagsHoverCard";
 import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
+import { TRACE_TYPE_FOR_TREE } from "@/constants/traces";
 
 const EXPAND_HOTKEYS = ["⏎"];
 const DETAILS_SECTION_COMPONENTS = [
@@ -205,8 +206,11 @@ const VirtualizedTreeViewer: React.FC<VirtualizedTreeViewerProps> = ({
       model,
       provider,
       feedback_scores: feedbackScores,
+      span_feedback_scores: spanFeedbackScores,
       total_estimated_cost: estimatedCost,
+      type,
     } = node.data;
+    const isTrace = type === TRACE_TYPE_FOR_TREE;
 
     const promptTokens = node.data.usage?.prompt_tokens;
     const completionTokens = node.data.usage?.completion_tokens;
@@ -292,6 +296,16 @@ const VirtualizedTreeViewer: React.FC<VirtualizedTreeViewerProps> = ({
             <FeedbackScoreHoverCard scores={feedbackScores!}>
               <div className="comet-body-xs-accented flex items-center gap-1 text-muted-slate">
                 <PenLine className="size-3 shrink-0" /> {feedbackScores!.length}
+              </div>
+            </FeedbackScoreHoverCard>
+          )}
+        {config[TREE_DATABLOCK_TYPE.NUMBER_OF_SCORES] &&
+          isTrace &&
+          Boolean(spanFeedbackScores?.length) && (
+            <FeedbackScoreHoverCard scores={spanFeedbackScores!}>
+              <div className="comet-body-xs-accented flex items-center gap-1 text-muted-slate">
+                <PenLine className="size-3 shrink-0" />{" "}
+                {spanFeedbackScores!.length} span
               </div>
             </FeedbackScoreHoverCard>
           )}

@@ -3,6 +3,7 @@ import { JsonParam, useQueryParam } from "use-query-params";
 
 import {
   COLUMN_FEEDBACK_SCORES_ID,
+  COLUMN_SPAN_FEEDBACK_SCORES_ID,
   COLUMN_GUARDRAILS_ID,
   COLUMN_ID_ID,
   COLUMN_CUSTOM_ID,
@@ -96,6 +97,11 @@ const TRACE_FILTER_COLUMNS: ColumnData<BaseTraceData>[] = [
     type: COLUMN_TYPE.numberDictionary,
   },
   {
+    id: COLUMN_SPAN_FEEDBACK_SCORES_ID,
+    label: "Span feedback scores",
+    type: COLUMN_TYPE.numberDictionary,
+  },
+  {
     id: COLUMN_CUSTOM_ID,
     label: "Custom filter",
     type: COLUMN_TYPE.dictionary,
@@ -184,6 +190,19 @@ const TraceMetricsSection: React.FC<TraceMetricsSectionProps> = ({
             projectId,
             type: TRACE_DATA_TYPE.traces,
             placeholder: "Select score",
+          },
+        },
+        [COLUMN_SPAN_FEEDBACK_SCORES_ID]: {
+          keyComponent:
+            TracesOrSpansFeedbackScoresSelect as React.FC<unknown> & {
+              placeholder: string;
+              value: string;
+              onValueChange: (value: string) => void;
+            },
+          keyComponentProps: {
+            projectId,
+            type: TRACE_DATA_TYPE.spans,
+            placeholder: "Select span score",
           },
         },
         [COLUMN_GUARDRAILS_ID]: {

@@ -73,7 +73,7 @@ interface TraceThreadMapper {
      */
     default <T> T getOptionalValue(Row row, String columnName, Class<T> type) {
         try {
-            return row.get(columnName, type);
+            return row.getMetadata().contains(columnName) ? row.get(columnName, type) : null;
         } catch (Exception e) {
             // Column doesn't exist in this query result - return null
             return null;
