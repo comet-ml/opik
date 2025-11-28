@@ -74,7 +74,7 @@ jobs:
     needs: [has_needed_secrets]
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    if: ${{ needs.has_needed_secrets.outputs.has_secrets != 'false' }}
+    if: ${{ needs.has_needed_secrets.outputs.has_secrets == 'true' }}
     outputs:
       LIBS: ${{ steps.init.outputs.LIBS }}
 

@@ -58,7 +58,7 @@ jobs:
     needs: [has_needed_secrets]
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    if: ${{ needs.has_needed_secrets.outputs.has_secrets != 'true' }}
+    if: ${{ needs.has_needed_secrets.outputs.has_secrets == 'true' }}
     strategy:
       fail-fast: false
       matrix:
