@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   Dialog,
   DialogContent,
@@ -19,8 +19,9 @@ import {
   WIDGET_TYPE,
   DashboardWidget,
   WidgetConfigDialogProps,
+  WidgetEditorHandle,
 } from "@/types/dashboard";
-import { DEFAULT_WIDGET_TITLES } from "../constants";
+import { createDefaultWidgetConfig } from "@/lib/dashboard/utils";
 
 const convertWidgetToAddConfig = (widget: DashboardWidget): AddWidgetConfig => {
   return {
@@ -48,6 +49,7 @@ const WidgetConfigDialog: React.FunctionComponent<WidgetConfigDialogProps> = ({
     subtitle: "",
     config: {},
   });
+  const editorRef = useRef<WidgetEditorHandle>(null);
 
   const widgetResolver = useDashboardStore(selectWidgetResolver);
   const getWidgetById = useDashboardStore((state) => state.getWidgetById);
@@ -58,14 +60,8 @@ const WidgetConfigDialog: React.FunctionComponent<WidgetConfigDialogProps> = ({
     : null;
 
   useEffect(() => {
-    if (mode === "create") {
+    if (mode === "create" && open) {
       setCurrentStep("add");
-      setWidgetData({
-        type: WIDGET_TYPE.TEXT_MARKDOWN,
-        title: "",
-        subtitle: "",
-        config: {},
-      });
     } else if (mode === "edit" && widgetId) {
       setCurrentStep("edit");
       const widget = getWidgetById(sectionId, widgetId);
@@ -95,19 +91,9 @@ const WidgetConfigDialog: React.FunctionComponent<WidgetConfigDialogProps> = ({
   }, [open, setPreviewWidget]);
 
   const handleSelectWidget = (widgetType: string) => {
-    const newData = {
-      type: widgetType as WIDGET_TYPE,
-      title: DEFAULT_WIDGET_TITLES[widgetType] || "Widget",
-      subtitle: "",
-      config: {},
-    } as AddWidgetConfig;
+    const newData = createDefaultWidgetConfig(widgetType, widgetResolver);
     setWidgetData(newData);
-  };
-
-  const handleNext = () => {
-    if (currentStep === "add") {
-      setCurrentStep("edit");
-    }
+    setCurrentStep("edit");
   };
 
   const handleBack = () => {
@@ -123,9 +109,12 @@ const WidgetConfigDialog: React.FunctionComponent<WidgetConfigDialogProps> = ({
     });
   };
 
-  const handleSave = () => {
-    onSave(widgetData);
-    onOpenChange(false);
+  const handleSave = async () => {
+    const isValid = await editorRef.current?.submit();
+    if (isValid) {
+      onSave(widgetData);
+      onOpenChange(false);
+    }
   };
 
   const handleCancel = () => {
@@ -136,9 +125,9 @@ const WidgetConfigDialog: React.FunctionComponent<WidgetConfigDialogProps> = ({
   const dialogDescription =
     currentStep === "add"
       ? "Choose a widget type to add to your dashboard"
-      : "Configure your widget settings and preview";
-
-  const canProceed = currentStep === "add" ? widgetData.type !== null : true;
+      : mode === "create"
+        ? "Adjust the data, visualization, or settings for this widget."
+        : "Adjust the data, visualization, or settings for this widget. Changes will update the dashboard automatically.";
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -160,6 +149,7 @@ const WidgetConfigDialog: React.FunctionComponent<WidgetConfigDialogProps> = ({
             widgetData={widgetData}
             onChange={handleChange}
             editorComponent={editorComponent}
+            editorRef={editorRef}
           />
         )}
 
@@ -175,11 +165,7 @@ const WidgetConfigDialog: React.FunctionComponent<WidgetConfigDialogProps> = ({
             <Button variant="outline" onClick={handleCancel}>
               Cancel
             </Button>
-            {currentStep === "add" ? (
-              <Button onClick={handleNext} disabled={!canProceed}>
-                Next
-              </Button>
-            ) : (
+            {currentStep === "edit" && (
               <Button onClick={handleSave}>
                 {mode === "create" ? "Add widget" : "Save changes"}
               </Button>

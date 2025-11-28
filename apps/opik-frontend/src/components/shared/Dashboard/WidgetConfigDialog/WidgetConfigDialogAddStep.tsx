@@ -1,5 +1,5 @@
 import React from "react";
-import { FileText, ChartLine } from "lucide-react";
+import { FileText, ChartLine, Hash } from "lucide-react";
 import { WidgetOption } from "@/types/dashboard";
 import { WIDGET_TYPES } from "@/lib/dashboard/utils";
 
@@ -20,6 +20,14 @@ const WIDGET_OPTIONS: WidgetOption[] = [
     category: "charts",
     disabled: false,
   },
+  {
+    id: WIDGET_TYPES.STAT_CARD,
+    title: "Stat Card",
+    description: "Display single metric value from traces or spans",
+    icon: <Hash className="size-5" />,
+    category: "stats",
+    disabled: false,
+  },
 ];
 
 const CATEGORY_LABELS = {
@@ -38,7 +46,7 @@ interface WidgetConfigDialogAddStepProps {
 const WidgetConfigDialogAddStep: React.FunctionComponent<
   WidgetConfigDialogAddStepProps
 > = ({ selectedWidgetType, onSelectWidget }) => {
-  const categories = ["general", "charts"] as const;
+  const categories = ["general", "charts", "stats"] as const;
 
   return (
     <div className="max-h-[500px] overflow-auto pr-4">

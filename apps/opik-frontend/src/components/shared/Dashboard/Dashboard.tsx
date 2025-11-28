@@ -38,10 +38,6 @@ const Dashboard: React.FC = () => {
   const deleteSection = useDashboardStore(selectDeleteSection);
   const updateSection = useDashboardStore(selectUpdateSection);
 
-  const filteredWidgetsMap = useDashboardStore(
-    useShallow((state) => state.getFilteredWidgetsMap(state.search)),
-  );
-
   const measuringConfig = useMemo(
     () => ({
       draggable: {
@@ -74,11 +70,6 @@ const Dashboard: React.FC = () => {
     if (!active) return -1;
     return sectionIds.findIndex((id) => id === active.id);
   }, [active, sectionIds]);
-
-  const activeSectionFilterMap = useMemo(() => {
-    if (!active?.id) return undefined;
-    return filteredWidgetsMap[active.id as string];
-  }, [active?.id, filteredWidgetsMap]);
 
   const handleDragStart = useCallback((event: DragStartEvent) => {
     dragTopCoordinate.current = 0;
@@ -146,7 +137,6 @@ const Dashboard: React.FC = () => {
             <DashboardSection
               key={sectionId}
               sectionId={sectionId}
-              widgetFilterMap={filteredWidgetsMap[sectionId]}
               isLastSection={sectionIds.length === 1}
               onUpdateSection={updateSection}
               onDeleteSection={deleteSection}
@@ -161,7 +151,6 @@ const Dashboard: React.FC = () => {
         {active && activeSectionIndex !== -1 && (
           <DashboardSection
             sectionId={active.id as string}
-            widgetFilterMap={activeSectionFilterMap}
             isLastSection={sectionIds.length === 1}
             onUpdateSection={updateSection}
             onDeleteSection={deleteSection}

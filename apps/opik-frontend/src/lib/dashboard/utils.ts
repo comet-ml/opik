@@ -4,9 +4,12 @@ import {
   DashboardState,
   DashboardWidget,
   WIDGET_TYPE,
+  AddWidgetConfig,
+  WidgetResolver,
 } from "@/types/dashboard";
 import { areLayoutsEqual } from "@/lib/dashboard/layout";
 import { isLooseEqual } from "@/lib/utils";
+import { DEFAULT_DATE_PRESET } from "@/components/pages-shared/traces/MetricDateRangeSelect/constants";
 
 export const DASHBOARD_VERSION = 1;
 const DEFAULT_SECTION_NAME = "New section";
@@ -36,7 +39,10 @@ export const generateEmptyDashboard = (): DashboardState => {
     version: DASHBOARD_VERSION,
     sections: [defaultSection],
     lastModified: Date.now(),
-    config: {},
+    config: {
+      projectId: "",
+      dateRange: DEFAULT_DATE_PRESET,
+    },
   };
 };
 
@@ -107,4 +113,29 @@ export const isDashboardChanged = (
   if (!areSectionArraysEqual(current.sections, previous.sections)) return true;
 
   return !isLooseEqual(current.config, previous.config);
+};
+
+export const createDefaultWidgetConfig = (
+  widgetType: string,
+  widgetResolver: WidgetResolver | null,
+): AddWidgetConfig => {
+  if (!widgetResolver) {
+    return {
+      type: widgetType as WIDGET_TYPE,
+      title: "Widget",
+      subtitle: "",
+      config: {},
+    } as AddWidgetConfig;
+  }
+
+  const widgetComponents = widgetResolver(widgetType);
+  const defaultConfig = widgetComponents.getDefaultConfig();
+  const defaultTitle = widgetComponents.calculateTitle(defaultConfig);
+
+  return {
+    type: widgetType as WIDGET_TYPE,
+    title: defaultTitle,
+    subtitle: "",
+    config: defaultConfig,
+  } as AddWidgetConfig;
 };

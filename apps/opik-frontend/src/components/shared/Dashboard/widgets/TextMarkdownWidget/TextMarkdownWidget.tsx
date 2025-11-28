@@ -57,9 +57,7 @@ const TextMarkdownWidget: React.FunctionComponent<
           <DashboardWidget.ActionsMenu
             sectionId={sectionId!}
             widgetId={widgetId!}
-            widgetType={widget.type}
             widgetTitle={widget.title}
-            widgetConfig={widget.config}
           />
         }
         dragHandle={<DashboardWidget.DragHandle />}
