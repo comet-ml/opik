@@ -32,6 +32,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
+import static com.comet.opik.api.evaluators.AutomationRuleEvaluatorSpanLlmAsJudge.SpanLlmAsJudgeCode;
 import static com.comet.opik.infrastructure.log.LogContextAware.wrapWithMdc;
 
 /**
@@ -90,11 +91,12 @@ public class OnlineScoringSpanSampler {
                     projectId, spansBatch.workspaceId());
 
             // Filter to only span-level evaluators
-            evaluators = evaluators.stream()
+            List<AutomationRuleEvaluator<SpanLlmAsJudgeCode, SpanFilter>> spanEvaluators = evaluators.stream()
                     .filter(evaluator -> evaluator.getType() == AutomationRuleEvaluatorType.SPAN_LLM_AS_JUDGE)
+                    .map(evaluator -> (AutomationRuleEvaluator<SpanLlmAsJudgeCode, SpanFilter>) evaluator)
                     .toList();
 
-            if (evaluators.isEmpty()) {
+            if (spanEvaluators.isEmpty()) {
                 log.debug("No span-level evaluators found for project '{}' on workspace '{}'",
                         projectId, spansBatch.workspaceId());
                 return;

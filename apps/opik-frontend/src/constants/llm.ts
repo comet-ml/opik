@@ -141,6 +141,40 @@ export const LLM_PROMPT_CUSTOM_TRACE_TEMPLATE: LLMPromptTemplate = {
   ],
 };
 
+export const LLM_PROMPT_CUSTOM_SPAN_TEMPLATE: LLMPromptTemplate = {
+  label: "Custom LLM-as-judge",
+  description:
+    "Use our template editor to write your own LLM as a Judge metric",
+  value: LLM_JUDGE.custom,
+  messages: [
+    {
+      id: "kYZISG1",
+      role: LLM_MESSAGE_ROLE.user,
+      content:
+        "You are an impartial AI judge. Evaluate if the span's output effectively addresses the span's input. Consider: accuracy, completeness, and relevance. Provide a binary score (true/false) and explain your reasoning in one clear sentence.\n" +
+        "\n" +
+        "INPUT:\n" +
+        "{{input}}\n" +
+        "\n" +
+        "OUTPUT:\n" +
+        "{{output}}",
+    },
+  ],
+  variables: {
+    input: "",
+    output: "",
+  },
+  schema: [
+    {
+      name: "Correctness",
+      description:
+        "Whether the span's output effectively addresses the span's input",
+      type: LLM_SCHEMA_TYPE.BOOLEAN,
+      unsaved: false,
+    },
+  ],
+};
+
 export const LLM_PROMPT_CUSTOM_THREAD_TEMPLATE: LLMPromptTemplate = {
   label: "Custom LLM-as-judge",
   description:
@@ -622,12 +656,17 @@ export const LLM_PROMPT_THREAD_TEMPLATES: LLMPromptTemplate[] = [
   },
 ];
 
+export const LLM_PROMPT_SPAN_TEMPLATES: LLMPromptTemplate[] = [
+  LLM_PROMPT_CUSTOM_SPAN_TEMPLATE,
+];
+
 export const LLM_PROMPT_TEMPLATES: Record<
   EVALUATORS_RULE_SCOPE,
   LLMPromptTemplate[]
 > = {
   [EVALUATORS_RULE_SCOPE.trace]: LLM_PROMPT_TRACE_TEMPLATES,
   [EVALUATORS_RULE_SCOPE.thread]: LLM_PROMPT_THREAD_TEMPLATES,
+  [EVALUATORS_RULE_SCOPE.span]: LLM_PROMPT_SPAN_TEMPLATES,
 };
 
 export const DEFAULT_PYTHON_CODE_TRACE_DATA: PythonCodeDetailsTraceForm = {

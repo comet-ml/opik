@@ -582,6 +582,216 @@ class SpanFilterEvaluationServiceTest {
             // Then
             assertThat(result).isTrue();
         }
+
+        @Test
+        void matchesFilterWithInputJsonFieldIsNotEmpty() {
+            // Given
+            ObjectNode input = JsonUtils.createObjectNode();
+            input.put("query", "What is AI?");
+            input.put("context", "machine learning");
+
+            var span = podamFactory.manufacturePojo(Span.class).toBuilder()
+                    .input(input)
+                    .build();
+            var filter = SpanFilter.builder()
+                    .field(SpanField.INPUT_JSON)
+                    .key("context")
+                    .operator(Operator.IS_NOT_EMPTY)
+                    .value("")
+                    .build();
+
+            // When
+            var result = spanFilterEvaluationService.matchesFilter(filter, span);
+
+            // Then
+            assertThat(result).isTrue();
+        }
+
+        @Test
+        void matchesFilterWithInputJsonFieldIsEmpty() {
+            // Given
+            ObjectNode input = JsonUtils.createObjectNode();
+            input.put("query", "What is AI?");
+            // context key is missing
+
+            var span = podamFactory.manufacturePojo(Span.class).toBuilder()
+                    .input(input)
+                    .build();
+            var filter = SpanFilter.builder()
+                    .field(SpanField.INPUT_JSON)
+                    .key("context")
+                    .operator(Operator.IS_EMPTY)
+                    .value("")
+                    .build();
+
+            // When
+            var result = spanFilterEvaluationService.matchesFilter(filter, span);
+
+            // Then
+            assertThat(result).isTrue();
+        }
+
+        @Test
+        void matchesFilterWithInputJsonFieldIsEmptyWhenValueIsNull() {
+            // Given
+            ObjectNode input = JsonUtils.createObjectNode();
+            input.putNull("context");
+
+            var span = podamFactory.manufacturePojo(Span.class).toBuilder()
+                    .input(input)
+                    .build();
+            var filter = SpanFilter.builder()
+                    .field(SpanField.INPUT_JSON)
+                    .key("context")
+                    .operator(Operator.IS_EMPTY)
+                    .value("")
+                    .build();
+
+            // When
+            var result = spanFilterEvaluationService.matchesFilter(filter, span);
+
+            // Then
+            assertThat(result).isTrue();
+        }
+
+        @Test
+        void matchesFilterWithInputJsonFieldIsEmptyWhenValueIsEmptyString() {
+            // Given
+            ObjectNode input = JsonUtils.createObjectNode();
+            input.put("context", "");
+
+            var span = podamFactory.manufacturePojo(Span.class).toBuilder()
+                    .input(input)
+                    .build();
+            var filter = SpanFilter.builder()
+                    .field(SpanField.INPUT_JSON)
+                    .key("context")
+                    .operator(Operator.IS_EMPTY)
+                    .value("")
+                    .build();
+
+            // When
+            var result = spanFilterEvaluationService.matchesFilter(filter, span);
+
+            // Then
+            assertThat(result).isTrue();
+        }
+
+        @Test
+        void matchesFilterWithOutputJsonFieldIsNotEmpty() {
+            // Given
+            ObjectNode output = JsonUtils.createObjectNode();
+            output.put("answer", "AI is artificial intelligence");
+            output.put("confidence", "high");
+
+            var span = podamFactory.manufacturePojo(Span.class).toBuilder()
+                    .output(output)
+                    .build();
+            var filter = SpanFilter.builder()
+                    .field(SpanField.OUTPUT_JSON)
+                    .key("answer")
+                    .operator(Operator.IS_NOT_EMPTY)
+                    .value("")
+                    .build();
+
+            // When
+            var result = spanFilterEvaluationService.matchesFilter(filter, span);
+
+            // Then
+            assertThat(result).isTrue();
+        }
+
+        @Test
+        void matchesFilterWithOutputJsonFieldIsEmpty() {
+            // Given
+            ObjectNode output = JsonUtils.createObjectNode();
+            output.put("answer", "AI is artificial intelligence");
+            // confidence key is missing
+
+            var span = podamFactory.manufacturePojo(Span.class).toBuilder()
+                    .output(output)
+                    .build();
+            var filter = SpanFilter.builder()
+                    .field(SpanField.OUTPUT_JSON)
+                    .key("confidence")
+                    .operator(Operator.IS_EMPTY)
+                    .value("")
+                    .build();
+
+            // When
+            var result = spanFilterEvaluationService.matchesFilter(filter, span);
+
+            // Then
+            assertThat(result).isTrue();
+        }
+
+        @Test
+        void matchesFilterWithMetadataFieldIsNotEmpty() {
+            // Given
+            ObjectNode metadata = JsonUtils.createObjectNode();
+            metadata.put("environment", "production");
+            metadata.put("version", "1.0.0");
+
+            var span = podamFactory.manufacturePojo(Span.class).toBuilder()
+                    .metadata(metadata)
+                    .build();
+            var filter = SpanFilter.builder()
+                    .field(SpanField.METADATA)
+                    .key("environment")
+                    .operator(Operator.IS_NOT_EMPTY)
+                    .value("")
+                    .build();
+
+            // When
+            var result = spanFilterEvaluationService.matchesFilter(filter, span);
+
+            // Then
+            assertThat(result).isTrue();
+        }
+
+        @Test
+        void matchesFilterWithMetadataFieldIsEmpty() {
+            // Given
+            ObjectNode metadata = JsonUtils.createObjectNode();
+            metadata.put("environment", "production");
+            // version key is missing
+
+            var span = podamFactory.manufacturePojo(Span.class).toBuilder()
+                    .metadata(metadata)
+                    .build();
+            var filter = SpanFilter.builder()
+                    .field(SpanField.METADATA)
+                    .key("version")
+                    .operator(Operator.IS_EMPTY)
+                    .value("")
+                    .build();
+
+            // When
+            var result = spanFilterEvaluationService.matchesFilter(filter, span);
+
+            // Then
+            assertThat(result).isTrue();
+        }
+
+        @Test
+        void matchesFilterWithInputJsonFieldIsNotEmptyWhenInputIsNull() {
+            // Given
+            var span = podamFactory.manufacturePojo(Span.class).toBuilder()
+                    .input(null)
+                    .build();
+            var filter = SpanFilter.builder()
+                    .field(SpanField.INPUT_JSON)
+                    .key("context")
+                    .operator(Operator.IS_EMPTY)
+                    .value("")
+                    .build();
+
+            // When
+            var result = spanFilterEvaluationService.matchesFilter(filter, span);
+
+            // Then
+            assertThat(result).isTrue();
+        }
     }
 
     @Nested
