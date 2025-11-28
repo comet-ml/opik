@@ -2,6 +2,7 @@ from typing import Any, Protocol
 from opik.evaluation.metrics import score_result
 from opik.message_processing.emulation import models as emulation_models
 from . import helpers
+import opik.exceptions
 
 
 class MetricFunction(Protocol):
@@ -48,25 +49,30 @@ class MultiMetricObjective:
         llm_output: str,
         task_span: emulation_models.SpanModel | None = None,
     ) -> score_result.ScoreResult:
-        raw_score_results = []
-        weighted_score_value = 0
+        try:
+            raw_score_results = []
+            weighted_score_value = 0
 
-        for metric, weight in zip(self.metrics, self.weights):
-            if helpers.has_task_span_parameter(metric) and task_span is not None:
-                score_result_ = metric(
-                    dataset_item=dataset_item,
-                    llm_output=llm_output,
-                    task_span=task_span,
-                )
-            else:
-                score_result_ = metric(dataset_item=dataset_item, llm_output=llm_output)
-            raw_score_results.append(score_result_)
-            weighted_score_value += score_result.value * weight
+            for metric, weight in zip(self.metrics, self.weights):
+                if helpers.has_task_span_parameter(metric) and task_span is not None:
+                    score_result_ = metric(
+                        dataset_item=dataset_item,
+                        llm_output=llm_output,
+                        task_span=task_span,
+                    )
+                else:
+                    score_result_ = metric(dataset_item=dataset_item, llm_output=llm_output)
+                raw_score_results.append(score_result_)
+                weighted_score_value += score_result_.value * weight
 
-        aggregated_score_result = score_result.ScoreResult(
-            name=self.__name__,
-            value=weighted_score_value,
-            metadata={"raw_score_results": raw_score_results},
-        )
+            aggregated_score_result = score_result.ScoreResult(
+                name=self.__name__,
+                value=weighted_score_value,
+                metadata={"raw_score_results": raw_score_results},
+            )
 
-        return aggregated_score_result
+            return aggregated_score_result
+        except opik.exceptions.MetricComputationError as exception:
+            raise
+        except Exception as exception:
+            raise opik.exceptions.MetricComputationError(f"Failed to compute {self.__name__}") from exception
