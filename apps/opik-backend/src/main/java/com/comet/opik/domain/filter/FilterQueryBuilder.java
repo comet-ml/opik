@@ -95,6 +95,12 @@ public class FilterQueryBuilder {
     private static final String SPAN_ID_DB = "span_id";
     public static final String ANNOTATION_QUEUE_IDS_ANALYTICS_DB = "taqi.annotation_queue_ids";
     public static final String THREAD_ANNOTATION_QUEUE_IDS_ANALYTICS_DB = "ttaqi.annotation_queue_ids";
+    private static final Set<Field> FEEDBACK_SCORE_FIELDS = Set.of(
+            TraceField.FEEDBACK_SCORES,
+            TraceField.SPAN_FEEDBACK_SCORES,
+            SpanField.FEEDBACK_SCORES,
+            TraceThreadField.FEEDBACK_SCORES,
+            ExperimentsComparisonValidKnownField.FEEDBACK_SCORES);
     private static final String WEBHOOK_URL_DB = "webhook_url";
     private static final String ALERT_TYPE_DB = "alert_type";
     private static final String ENABLED_DB = "enabled";
@@ -627,10 +633,7 @@ public class FilterQueryBuilder {
     }
 
     private static boolean isFeedbackScore(Filter filter) {
-        Set<Field> feedbackScoreFields = Set.of(TraceField.FEEDBACK_SCORES, TraceField.SPAN_FEEDBACK_SCORES,
-                SpanField.FEEDBACK_SCORES, TraceThreadField.FEEDBACK_SCORES,
-                ExperimentsComparisonValidKnownField.FEEDBACK_SCORES);
-        return feedbackScoreFields.contains(filter.field());
+        return FEEDBACK_SCORE_FIELDS.contains(filter.field());
     }
 
     private String toAnalyticsDbFilter(Filter filter, int i, FilterStrategy filterStrategy) {
