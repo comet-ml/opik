@@ -20,6 +20,7 @@ import com.comet.opik.domain.sorting.SortingQueryBuilder;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.cache.Cacheable;
 import com.comet.opik.utils.RetryUtils;
+import com.fasterxml.uuid.Generators;
 import com.google.inject.ImplementedBy;
 import io.dropwizard.jersey.errors.ErrorMessage;
 import jakarta.inject.Inject;
@@ -416,7 +417,7 @@ class AlertServiceImpl implements AlertService {
     }
 
     private static WebhookEvent<Map<String, Object>> mapAlertToWebhookEvent(Alert alert, String workspaceId) {
-        String eventId = "0198ec7e-e844-7537-aaaa-fc5db24dcce7";
+        String eventId = Generators.timeBasedEpochGenerator().generate().toString();
         var eventType = CollectionUtils.isEmpty(alert.triggers())
                 ? AlertEventType.TRACE_ERRORS
                 : alert.triggers().getFirst().eventType();
