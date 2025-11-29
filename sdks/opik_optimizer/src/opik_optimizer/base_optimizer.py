@@ -1,5 +1,5 @@
 from typing import Any, cast
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 
 import copy
 import inspect
@@ -48,6 +48,16 @@ class OptimizationRound(BaseModel):
 
 
 class BaseOptimizer(ABC):
+    # Mapping of optimizer class names to short names for tagging
+    _OPTIMIZER_SHORT_NAMES = {
+        "GepaOptimizer": "GEPA",
+        "EvolutionaryOptimizer": "EVGO",
+        "FewShotBayesianOptimizer": "FSBO",
+        "HierarchicalReflectiveOptimizer": "HAPO",
+        "MetaPromptOptimizer": "MEPO",
+        "ParameterOptimizer": "PARAM",
+    }
+
     def __init__(
         self,
         model: str,
@@ -97,6 +107,36 @@ class BaseOptimizer(ABC):
         """Increment the tool call counter."""
         self.tool_call_counter += 1
 
+    def _get_optimizer_short_name(self) -> str:
+        """Get the short name for this optimizer class for use in tags."""
+        class_name = self.__class__.__name__
+        return self._OPTIMIZER_SHORT_NAMES.get(class_name, class_name)
+
+    def _tag_trace(
+        self, phase: str | None = "Evaluation", extra_tags: Sequence[str] | None = None
+    ) -> None:
+        """
+        Update the active trace with standard optimizer tags when available.
+
+        Args:
+            phase: The current phase of the optimization (e.g., "Evaluation"). Optional.
+            extra_tags: Additional tags to add to the trace. Should be a sequence of strings,
+                or None. These tags will be appended to the standard optimizer tags.
+        """
+        if not self.current_optimization_id:
+            return
+
+        tags: list[str] = [
+            self._get_optimizer_short_name(),
+            self.current_optimization_id,
+        ]
+        if phase:
+            tags.append(phase)
+        if extra_tags:
+            tags.extend(list(extra_tags))
+
+        opik_context.update_current_trace(tags=tags)
+
     def cleanup(self) -> None:
         """
         Clean up resources and perform memory management.
@@ -130,6 +170,9 @@ class BaseOptimizer(ABC):
             import opik
 
             self._opik_client = opik.Opik()
+            logger.debug(
+                f"Opik client initialized with project name: {self.project_name}"
+            )
         return self._opik_client
 
     def _validate_optimization_inputs(
@@ -193,12 +236,24 @@ class BaseOptimizer(ABC):
         """Attach this optimizer to the agent instance without mutating the class."""
         try:
             agent.optimizer = self  # type: ignore[attr-defined]
+            if getattr(agent, "trace_phase", None) is None:
+                agent.trace_phase = "Prompt Optimization"  # type: ignore[attr-defined]
         except Exception:  # pragma: no cover - custom agents may forbid new attrs
             logger.debug(
                 "Unable to record optimizer on agent instance of %s",
                 agent.__class__.__name__,
             )
         return agent
+
+    def _set_agent_trace_phase(self, agent: OptimizableAgent, phase: str) -> None:
+        """Best-effort setter for agent trace tagging phase."""
+        try:
+            agent.trace_phase = phase  # type: ignore[attr-defined]
+        except Exception:  # pragma: no cover - defensive for custom agents
+            logger.debug(
+                "Unable to set trace_phase on agent instance of %s",
+                agent.__class__.__name__,
+            )
 
     def _instantiate_agent(
         self,
@@ -556,6 +611,7 @@ class BaseOptimizer(ABC):
             self.agent_class = agent_class
 
         agent = self._instantiate_agent(prompt)
+        self._set_agent_trace_phase(agent, "Evaluation")
 
         def llm_task(dataset_item: dict[str, Any]) -> dict[str, str]:
             messages = prompt.get_messages(dataset_item)
@@ -563,10 +619,7 @@ class BaseOptimizer(ABC):
             cleaned_model_output = raw_model_output.strip()
 
             # Add tags to trace for optimization tracking
-            if self.current_optimization_id:
-                opik_context.update_current_trace(
-                    tags=[self.current_optimization_id, "Evaluation"]
-                )
+            self._tag_trace()
 
             result = {
                 "llm_output": cleaned_model_output,

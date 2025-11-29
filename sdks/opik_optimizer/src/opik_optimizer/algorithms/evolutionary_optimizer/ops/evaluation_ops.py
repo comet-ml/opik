@@ -6,7 +6,6 @@ from .... import task_evaluator, helpers
 from ....api_objects import chat_prompt
 from ....mcp_utils.mcp_workflow import MCPExecutionConfig
 import opik
-from opik import opik_context
 import copy
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
@@ -63,6 +62,7 @@ def evaluate_prompt(
     )
     try:
         agent = optimizer._instantiate_agent(new_prompt)
+        optimizer._set_agent_trace_phase(agent, "Evaluation")  # type: ignore[attr-defined]
     except Exception:
         return 0.0
 
@@ -73,16 +73,6 @@ def evaluate_prompt(
 
         if mcp_execution_config is None:
             model_output = agent.invoke(messages)
-
-            # Add tags to trace for optimization tracking
-            if (
-                hasattr(optimizer, "current_optimization_id")
-                and optimizer.current_optimization_id
-            ):
-                opik_context.update_current_trace(
-                    tags=[optimizer.current_optimization_id, "Evaluation"]
-                )
-
             return {"llm_output": model_output}
 
         coordinator = mcp_execution_config.coordinator
@@ -120,15 +110,6 @@ def evaluate_prompt(
             )
         else:
             final_response = raw_model_output
-
-        # Add tags to trace for optimization tracking
-        if (
-            hasattr(optimizer, "current_optimization_id")
-            and optimizer.current_optimization_id
-        ):
-            opik_context.update_current_trace(
-                tags=[optimizer.current_optimization_id, "Evaluation"]
-            )
 
         return {"llm_output": final_response.strip()}
 

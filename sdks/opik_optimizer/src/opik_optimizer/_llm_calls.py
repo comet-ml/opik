@@ -1,7 +1,9 @@
 from typing import Any
+from collections.abc import Sequence
 from pydantic import BaseModel, ValidationError as PydanticValidationError
 import json
 import logging
+import os
 import sys
 from types import FrameType
 
@@ -35,6 +37,57 @@ def _increment_llm_counter_if_needed() -> None:
         optimizer_candidate = frame.f_locals.get("self")
         if isinstance(optimizer_candidate, BaseOptimizer):
             optimizer_candidate._increment_llm_counter()
+            break
+        frame = frame.f_back
+
+
+def _get_optimizer_short_name_from_stack() -> str | None:
+    """
+    Walk up the call stack to find the optimizer and return its short name.
+    """
+    try:
+        from .base_optimizer import BaseOptimizer
+    except Exception:
+        return None
+
+    try:
+        frame: FrameType | None = sys._getframe()
+    except ValueError:
+        return None
+
+    while frame is not None:
+        optimizer_candidate = frame.f_locals.get("self")
+        if isinstance(optimizer_candidate, BaseOptimizer):
+            return optimizer_candidate._get_optimizer_short_name()
+        frame = frame.f_back
+
+    return None
+
+
+def _tag_trace_from_stack(
+    phase: str | None = "Prompt Optimization",
+    extra_tags: Sequence[str] | None = None,
+) -> None:
+    """
+    Walk up the call stack and tag the current trace using the optimizer helper.
+    """
+    try:
+        from .base_optimizer import BaseOptimizer
+    except Exception:
+        return
+
+    try:
+        frame: FrameType | None = sys._getframe()
+    except ValueError:
+        return
+
+    while frame is not None:
+        optimizer_candidate = frame.f_locals.get("self")
+        if isinstance(optimizer_candidate, BaseOptimizer):
+            try:
+                optimizer_candidate._tag_trace(phase=phase, extra_tags=extra_tags)
+            except Exception:
+                pass
             break
         frame = frame.f_back
 
@@ -104,8 +157,27 @@ def _prepare_model_params(
     # Merge optimizer's model_parameters with call-time overrides
     merged_params = {**model_parameters, **call_time_params}
 
-    # Add Opik monitoring wrapper
-    final_params = opik_litellm_monitor.try_add_opik_monitoring_to_params(merged_params)
+    # Add Opik monitoring wrapper unless tracing is disabled or API key is missing.
+    # FIXME: Tracing without a valid API key is not supported by Opik; we skip attaching
+    # the monitor to avoid 401/402s. To enable tracing locally, set OPIK_API_KEY (and
+    # OPIK_BASE_URL/OPIK_WORKSPACE if using a non-default host). Otherwise set
+    # OPIK_TRACK_DISABLE=true to silence tracing.
+    tracing_disabled = os.getenv("OPIK_TRACK_DISABLE", "false").lower() in (
+        "true",
+        "1",
+        "yes",
+        "on",
+    )
+    api_key_present = bool(os.getenv("OPIK_API_KEY"))
+    if tracing_disabled or not api_key_present:
+        final_params = merged_params.copy()
+    else:
+        try:
+            final_params = opik_litellm_monitor.try_add_opik_monitoring_to_params(
+                merged_params
+            )
+        except Exception:
+            final_params = merged_params.copy()
 
     # Add reasoning metadata if applicable
     if is_reasoning and "metadata" in final_params:
@@ -122,10 +194,18 @@ def _prepare_model_params(
 
     # Add tags if optimization_id is available
     if optimization_id:
-        opik_metadata["tags"] = [
-            optimization_id,
-            "Prompt Optimization",
-        ]
+        tags = []
+        # Add optimizer short name if available
+        optimizer_short_name = _get_optimizer_short_name_from_stack()
+        if optimizer_short_name:
+            tags.append(optimizer_short_name)
+        tags.extend(
+            [
+                optimization_id,
+                "Prompt Optimization",
+            ]
+        )
+        opik_metadata["tags"] = tags
 
     # Add structured output support
     if response_model is not None:
@@ -257,6 +337,7 @@ def call_model(
         Otherwise, returns the raw string response.
     """
     _increment_llm_counter_if_needed()
+    _tag_trace_from_stack()
 
     # Build dict of call-time LiteLLM parameter overrides (non-None only)
     call_time_params = _build_call_time_params(
@@ -334,6 +415,7 @@ async def call_model_async(
         Otherwise, returns the raw string response.
     """
     _increment_llm_counter_if_needed()
+    _tag_trace_from_stack()
 
     # Build dict of call-time LiteLLM parameter overrides (non-None only)
     call_time_params = _build_call_time_params(

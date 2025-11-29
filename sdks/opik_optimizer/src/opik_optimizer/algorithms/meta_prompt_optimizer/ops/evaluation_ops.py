@@ -10,7 +10,6 @@ import logging
 import random
 
 import opik
-from opik import opik_context
 
 from ....api_objects import chat_prompt
 from .... import task_evaluator, helpers
@@ -104,6 +103,7 @@ def evaluate_prompt(
         messages = new_prompt.get_messages(dataset_item)
         new_prompt.set_messages(messages)
         agent = optimizer._instantiate_agent(new_prompt)
+        optimizer._set_agent_trace_phase(agent, "Evaluation")  # type: ignore[attr-defined]
 
         if mcp_config is not None:
             coordinator = mcp_config.coordinator
@@ -173,15 +173,6 @@ def evaluate_prompt(
                 raise
 
             cleaned_model_output = raw_model_output.strip()
-
-        # Add tags to trace for optimization tracking
-        if optimizer.current_optimization_id:
-            opik_context.update_current_trace(
-                tags=[
-                    optimizer.current_optimization_id,
-                    "Evaluation",
-                ]
-            )
 
         result = {
             "llm_output": cleaned_model_output,

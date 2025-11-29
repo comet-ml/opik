@@ -4,7 +4,7 @@ from typing import Any, Literal, overload
 from collections.abc import Callable
 
 import opik
-from opik import Dataset, opik_context
+from opik import Dataset
 from opik.evaluation import evaluator as opik_evaluator
 from opik.evaluation.metrics.score_result import ScoreResult
 
@@ -615,14 +615,11 @@ class GepaOptimizer(BaseOptimizer):
                     final_llm_agent = self._create_agent_for_prompt(
                         final_prompt, project_name=analysis_project_name
                     )
+                    self._set_agent_trace_phase(final_llm_agent, "Evaluation")  # type: ignore[attr-defined]
 
                     def final_llm_task(dataset_item: dict[str, Any]) -> dict[str, str]:
                         messages = final_prompt.get_messages(dataset_item)
                         raw = final_llm_agent.invoke(messages)
-                        if self.current_optimization_id:
-                            opik_context.update_current_trace(
-                                tags=[self.current_optimization_id, "Evaluation"]
-                            )
                         return {"llm_output": raw.strip()}
 
                     metric_class = _create_metric_class(metric)
@@ -663,6 +660,7 @@ class GepaOptimizer(BaseOptimizer):
             agent = self._create_agent_for_prompt(
                 analysis_prompt, project_name=analysis_project_name
             )
+            self._set_agent_trace_phase(agent, "Evaluation")  # type: ignore[attr-defined]
             for item in train_items:
                 messages = analysis_prompt.get_messages(item)
                 output_text = agent.invoke(messages).strip()
@@ -886,16 +884,11 @@ class GepaOptimizer(BaseOptimizer):
             prompt.model_kwargs = self.model_parameters
 
         agent = self._create_agent_for_prompt(prompt)
+        self._set_agent_trace_phase(agent, "Evaluation")  # type: ignore[attr-defined]
 
         def llm_task(dataset_item: dict[str, Any]) -> dict[str, str]:
             messages = prompt.get_messages(dataset_item)
             raw = agent.invoke(messages)
-
-            # Add tags to trace for optimization tracking
-            if self.current_optimization_id:
-                opik_context.update_current_trace(
-                    tags=[self.current_optimization_id, "Evaluation"]
-                )
 
             return {"llm_output": raw.strip()}
 

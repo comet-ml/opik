@@ -2,7 +2,6 @@ import logging
 from typing import cast
 
 import opik
-from opik import opik_context
 from opik.evaluation.evaluation_result import EvaluationResult
 from opik.evaluation import evaluator as opik_evaluator
 
@@ -159,6 +158,7 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
             messages = new_prompt.get_messages(dataset_item)
             new_prompt.set_messages(messages)
             agent = self._instantiate_agent(prompt=new_prompt)
+            self._set_agent_trace_phase(agent, "Evaluation")  # type: ignore[attr-defined]
 
             try:
                 logger.debug(
@@ -176,12 +176,6 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
                 raise
 
             cleaned_model_output = raw_model_output.strip()
-
-            # Add tags to trace for optimization tracking
-            if self.current_optimization_id:
-                opik_context.update_current_trace(
-                    tags=[self.current_optimization_id, "Evaluation"]
-                )
 
             result = {
                 "llm_output": cleaned_model_output,

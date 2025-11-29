@@ -13,7 +13,7 @@ import optuna.samplers
 import optuna.pruners
 
 import opik
-from opik import Dataset, opik_context
+from opik import Dataset
 from pydantic import BaseModel
 
 from ... import base_optimizer, _llm_calls, helpers
@@ -847,6 +847,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         new_prompt = prompt.copy()
         new_prompt.set_messages(messages)
         agent = self._instantiate_agent(new_prompt)
+        self._set_agent_trace_phase(agent, "Evaluation")  # type: ignore[attr-defined]
 
         def llm_task(dataset_item: dict[str, Any]) -> dict[str, Any]:
             """
@@ -867,12 +868,6 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
                     )
 
             result = agent.invoke(messages, seed=self.seed)
-
-            # Add tags to trace for optimization tracking
-            if self.current_optimization_id:
-                opik_context.update_current_trace(
-                    tags=[self.current_optimization_id, "Evaluation"]
-                )
 
             return {"llm_output": result}
 
