@@ -7,10 +7,10 @@ import org.jdbi.v3.core.statement.StatementContext;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 
-public class AutomationRuleEvaluatorRowMapper implements RowMapper<AutomationRuleEvaluatorModel<?>> {
+public class AutomationRuleEvaluatorRowMapper implements RowMapper<AutomationRuleModel> {
 
     @Override
-    public AutomationRuleEvaluatorModel<?> map(ResultSet rs, StatementContext ctx) throws SQLException {
+    public AutomationRuleModel map(ResultSet rs, StatementContext ctx) throws SQLException {
         var type = AutomationRuleEvaluatorType.fromString(rs.getString("type"));
         var mapperClass = switch (type) {
             case LLM_AS_JUDGE -> LlmAsJudgeAutomationRuleEvaluatorModel.class;
@@ -18,6 +18,7 @@ public class AutomationRuleEvaluatorRowMapper implements RowMapper<AutomationRul
             case TRACE_THREAD_LLM_AS_JUDGE -> TraceThreadLlmAsJudgeAutomationRuleEvaluatorModel.class;
             case TRACE_THREAD_USER_DEFINED_METRIC_PYTHON ->
                 TraceThreadUserDefinedMetricPythonAutomationRuleEvaluatorModel.class;
+            case SPAN_LLM_AS_JUDGE -> SpanLlmAsJudgeAutomationRuleEvaluatorModel.class;
         };
         return ctx.findMapperFor(mapperClass)
                 .orElseThrow(() -> new IllegalStateException(

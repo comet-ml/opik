@@ -5,10 +5,14 @@ import com.comet.opik.api.error.EntityAlreadyExistsException;
 import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluator;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorLlmAsJudge;
+import com.comet.opik.api.evaluators.AutomationRuleEvaluatorSpan;
+import com.comet.opik.api.evaluators.AutomationRuleEvaluatorSpanLlmAsJudge;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorTraceThreadLlmAsJudge;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorUpdate;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorUpdateLlmAsJudge;
+import com.comet.opik.api.evaluators.AutomationRuleEvaluatorUpdateSpan;
+import com.comet.opik.api.evaluators.AutomationRuleEvaluatorUpdateSpanLlmAsJudge;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorUpdateTraceThreadLlmAsJudge;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorUpdateTraceThreadUserDefinedMetricPython;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorUpdateUserDefinedMetricPython;
@@ -53,10 +57,19 @@ public interface AutomationRuleEvaluatorService {
     <E, T extends AutomationRuleEvaluator<E>> T save(T automationRuleEvaluator, @NonNull UUID projectId,
             @NonNull String workspaceId, @NonNull String userName);
 
+    <E, T extends AutomationRuleEvaluatorSpan<E>> T saveSpan(T automationRuleEvaluator, @NonNull UUID projectId,
+            @NonNull String workspaceId, @NonNull String userName);
+
     void update(@NonNull UUID id, @NonNull UUID projectId, @NonNull String workspaceId, @NonNull String userName,
             AutomationRuleEvaluatorUpdate<?> automationRuleEvaluator);
 
+    void updateSpan(@NonNull UUID id, @NonNull UUID projectId, @NonNull String workspaceId, @NonNull String userName,
+            AutomationRuleEvaluatorUpdateSpan<?> automationRuleEvaluator);
+
     <E, T extends AutomationRuleEvaluator<E>> T findById(@NonNull UUID id, UUID projectId,
+            @NonNull String workspaceId);
+
+    <E, T extends AutomationRuleEvaluatorSpan<E>> T findSpanById(@NonNull UUID id, UUID projectId,
             @NonNull String workspaceId);
 
     <E, T extends AutomationRuleEvaluator<E>> List<T> findByIds(@NonNull Set<UUID> ids, UUID projectId,
@@ -70,6 +83,9 @@ public interface AutomationRuleEvaluatorService {
             @NonNull List<String> sortableBy);
 
     <E, T extends AutomationRuleEvaluator<E>> List<T> findAll(@NonNull UUID projectId, @NonNull String workspaceId);
+
+    <E, T extends AutomationRuleEvaluatorSpan<E>> List<T> findAllSpan(@NonNull UUID projectId,
+            @NonNull String workspaceId);
 
     Mono<LogPage> getLogs(LogCriteria criteria);
 }
@@ -174,6 +190,53 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
 
     @Override
     @CacheEvict(name = "automation_rule_evaluators_find_all", key = "$projectId + '-' + $workspaceId")
+    public <E, T extends AutomationRuleEvaluatorSpan<E>> T saveSpan(@NonNull T inputRuleEvaluator,
+            @NonNull UUID projectId,
+            @NonNull String workspaceId,
+            @NonNull String userName) {
+
+        UUID id = idGenerator.generateId();
+        IdGenerator.validateVersion(id, "AutomationRuleEvaluator");
+
+        var savedEvaluator = template.inTransaction(WRITE, handle -> {
+            var evaluatorsDAO = handle.attach(AutomationRuleEvaluatorDAO.class);
+
+            AutomationRuleEvaluatorSpanModel<?> evaluator = switch (inputRuleEvaluator) {
+                case AutomationRuleEvaluatorSpanLlmAsJudge spanLlmAsJudge -> {
+                    var definition = spanLlmAsJudge.toBuilder()
+                            .id(id)
+                            .projectId(projectId)
+                            .createdBy(userName)
+                            .lastUpdatedBy(userName)
+                            .build();
+
+                    yield AutomationModelEvaluatorMapper.INSTANCE.map(definition);
+                }
+            };
+
+            try {
+                log.debug("Creating {} AutomationRuleEvaluator with id '{}' in projectId '{}' and workspaceId '{}'",
+                        evaluator.type(), id, evaluator.projectId(), workspaceId);
+
+                evaluatorsDAO.saveBaseRule(evaluator, workspaceId);
+                evaluatorsDAO.saveEvaluator(evaluator);
+
+                return evaluator;
+            } catch (UnableToExecuteStatementException e) {
+                if (e.getCause() instanceof SQLIntegrityConstraintViolationException) {
+                    log.info(EVALUATOR_ALREADY_EXISTS, e);
+                    throw new EntityAlreadyExistsException(new ErrorMessage(List.of(EVALUATOR_ALREADY_EXISTS)));
+                } else {
+                    throw e;
+                }
+            }
+        });
+
+        return findSpanById(savedEvaluator.id(), savedEvaluator.projectId(), workspaceId);
+    }
+
+    @Override
+    @CacheEvict(name = "automation_rule_evaluators_find_all", key = "$projectId + '-' + $workspaceId")
     public void update(@NonNull UUID id, @NonNull UUID projectId, @NonNull String workspaceId,
             @NonNull String userName, @NonNull AutomationRuleEvaluatorUpdate<?> evaluatorUpdate) {
 
@@ -219,6 +282,72 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
                                 .lastUpdatedBy(userName)
                                 .build();
                     }
+                };
+
+                int resultEval = dao.updateEvaluator(id, modelUpdate);
+
+                if (resultEval == 0 || resultBase == 0) {
+                    throw newNotFoundException();
+                }
+            } catch (UnableToExecuteStatementException e) {
+                if (e.getCause() instanceof SQLIntegrityConstraintViolationException) {
+                    log.info(EVALUATOR_ALREADY_EXISTS);
+                    throw new EntityAlreadyExistsException(new ErrorMessage(List.of(EVALUATOR_ALREADY_EXISTS)));
+                } else {
+                    throw e;
+                }
+            }
+
+            return null;
+        });
+    }
+
+    @Override
+    public <E, T extends AutomationRuleEvaluatorSpan<E>> T findSpanById(@NonNull UUID id, UUID projectId,
+            @NonNull String workspaceId) {
+        log.debug("Finding span AutomationRuleEvaluator with id '{}' in projectId '{}' and workspaceId '{}'", id,
+                projectId, workspaceId);
+
+        return template.inTransaction(READ_ONLY, handle -> {
+            var dao = handle.attach(AutomationRuleEvaluatorDAO.class);
+            var singleIdSet = Collections.singleton(id);
+            var criteria = AutomationRuleEvaluatorCriteria.builder().ids(singleIdSet).build();
+            return dao.find(workspaceId, projectId, criteria)
+                    .stream()
+                    .findFirst()
+                    .map(ruleEvaluator -> switch (ruleEvaluator) {
+                        case SpanLlmAsJudgeAutomationRuleEvaluatorModel spanLlmAsJudge ->
+                            AutomationModelEvaluatorMapper.INSTANCE.map(spanLlmAsJudge);
+                        default -> null;
+                    })
+                    .filter(obj -> obj != null)
+                    .map(evaluator -> (T) evaluator)
+                    .orElseThrow(this::newNotFoundException);
+        });
+    }
+
+    @Override
+    @CacheEvict(name = "automation_rule_evaluators_find_all", key = "$projectId + '-' + $workspaceId")
+    public void updateSpan(@NonNull UUID id, @NonNull UUID projectId, @NonNull String workspaceId,
+            @NonNull String userName, @NonNull AutomationRuleEvaluatorUpdateSpan<?> evaluatorUpdate) {
+
+        log.debug("Updating span AutomationRuleEvaluator with id '{}' in projectId '{}' and workspaceId '{}'", id,
+                projectId, workspaceId);
+        template.inTransaction(WRITE, handle -> {
+            var dao = handle.attach(AutomationRuleEvaluatorDAO.class);
+
+            try {
+                String filtersJson = AutomationModelEvaluatorMapper.INSTANCE.map(evaluatorUpdate.getFilters());
+                int resultBase = dao.updateBaseRule(id, projectId, workspaceId, evaluatorUpdate.getName(),
+                        evaluatorUpdate.getSamplingRate(), evaluatorUpdate.isEnabled(), filtersJson);
+
+                AutomationRuleEvaluatorSpanModel<?> modelUpdate = switch (evaluatorUpdate) {
+                    case AutomationRuleEvaluatorUpdateSpanLlmAsJudge evaluatorUpdateSpanLlmAsJudge ->
+                        SpanLlmAsJudgeAutomationRuleEvaluatorModel.builder()
+                                .code(AutomationModelEvaluatorMapper.INSTANCE
+                                        .map(evaluatorUpdateSpanLlmAsJudge.getCode()))
+                                .lastUpdatedBy(userName)
+                                .build();
                 };
 
                 int resultEval = dao.updateEvaluator(id, modelUpdate);
@@ -294,6 +423,28 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
     }
 
     @Override
+    @Cacheable(name = "automation_rule_evaluators_find_all", key = "$projectId + '-' + $workspaceId", returnType = AutomationRuleEvaluatorSpan.class, wrapperType = List.class)
+    public <E, T extends AutomationRuleEvaluatorSpan<E>> List<T> findAllSpan(
+            @NonNull UUID projectId, @NonNull String workspaceId) {
+        log.info("Finding span AutomationRuleEvaluators, projectId '{}', workspaceId '{}'", projectId, workspaceId);
+        return template.inTransaction(READ_ONLY, handle -> {
+            var dao = handle.attach(AutomationRuleEvaluatorDAO.class);
+            var criteria = AutomationRuleEvaluatorCriteria.builder().build();
+            return dao.find(workspaceId, projectId, criteria)
+                    .stream()
+                    .filter(evaluator -> evaluator instanceof SpanLlmAsJudgeAutomationRuleEvaluatorModel)
+                    .map(evaluator -> switch (evaluator) {
+                        case SpanLlmAsJudgeAutomationRuleEvaluatorModel spanLlmAsJudge ->
+                            AutomationModelEvaluatorMapper.INSTANCE.map(spanLlmAsJudge);
+                        default -> null;
+                    })
+                    .filter(obj -> obj != null)
+                    .map(evaluator -> (T) evaluator)
+                    .toList();
+        });
+    }
+
+    @Override
     @CacheEvict(name = "automation_rule_evaluators_find_all", key = "$projectId + '-' + $workspaceId")
     public void delete(@NonNull Set<UUID> ids, UUID projectId, @NonNull String workspaceId) {
         if (ids.isEmpty()) {
@@ -357,6 +508,8 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
                             .map(evaluator -> switch (evaluator) {
                                 case LlmAsJudgeAutomationRuleEvaluatorModel llmAsJudge ->
                                     AutomationModelEvaluatorMapper.INSTANCE.map(llmAsJudge);
+                                case SpanLlmAsJudgeAutomationRuleEvaluatorModel spanLlmAsJudge ->
+                                    AutomationModelEvaluatorMapper.INSTANCE.map(spanLlmAsJudge);
                                 case UserDefinedMetricPythonAutomationRuleEvaluatorModel userDefinedMetricPython ->
                                     AutomationModelEvaluatorMapper.INSTANCE.map(userDefinedMetricPython);
                                 case TraceThreadLlmAsJudgeAutomationRuleEvaluatorModel traceThreadLlmAsJudge ->
@@ -391,6 +544,8 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
                     .map(evaluator -> switch (evaluator) {
                         case LlmAsJudgeAutomationRuleEvaluatorModel llmAsJudge ->
                             (T) AutomationModelEvaluatorMapper.INSTANCE.map(llmAsJudge);
+                        case SpanLlmAsJudgeAutomationRuleEvaluatorModel spanLlmAsJudge ->
+                            (T) AutomationModelEvaluatorMapper.INSTANCE.map(spanLlmAsJudge);
                         case UserDefinedMetricPythonAutomationRuleEvaluatorModel userDefinedMetricPython ->
                             (T) AutomationModelEvaluatorMapper.INSTANCE.map(userDefinedMetricPython);
                         case TraceThreadLlmAsJudgeAutomationRuleEvaluatorModel traceThreadLlmAsJudge ->

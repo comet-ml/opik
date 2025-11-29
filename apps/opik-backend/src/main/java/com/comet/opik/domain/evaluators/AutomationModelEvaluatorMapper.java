@@ -1,11 +1,13 @@
 package com.comet.opik.domain.evaluators;
 
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorLlmAsJudge;
+import com.comet.opik.api.evaluators.AutomationRuleEvaluatorSpanLlmAsJudge;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorTraceThreadLlmAsJudge;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorUserDefinedMetricPython;
 import com.comet.opik.api.evaluators.LlmAsJudgeMessage;
 import com.comet.opik.api.evaluators.LlmAsJudgeMessageContent;
+import com.comet.opik.api.filter.SpanFilter;
 import com.comet.opik.api.filter.TraceFilter;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -22,6 +24,9 @@ import java.util.stream.Collectors;
 interface AutomationModelEvaluatorMapper {
 
     AutomationModelEvaluatorMapper INSTANCE = Mappers.getMapper(AutomationModelEvaluatorMapper.class);
+
+    @Mapping(target = "code", expression = "java(map(model.code()))")
+    AutomationRuleEvaluatorSpanLlmAsJudge map(SpanLlmAsJudgeAutomationRuleEvaluatorModel model);
 
     @Mapping(target = "code", expression = "java(map(model.code()))")
     AutomationRuleEvaluatorLlmAsJudge map(LlmAsJudgeAutomationRuleEvaluatorModel model);
@@ -45,7 +50,15 @@ interface AutomationModelEvaluatorMapper {
     TraceThreadUserDefinedMetricPythonAutomationRuleEvaluatorModel map(
             AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython dto);
 
+    SpanLlmAsJudgeAutomationRuleEvaluatorModel map(AutomationRuleEvaluatorSpanLlmAsJudge dto);
+
     AutomationRuleEvaluatorLlmAsJudge.LlmAsJudgeCode map(LlmAsJudgeAutomationRuleEvaluatorModel.LlmAsJudgeCode detail);
+
+    AutomationRuleEvaluatorSpanLlmAsJudge.SpanLlmAsJudgeCode map(
+            SpanLlmAsJudgeAutomationRuleEvaluatorModel.SpanLlmAsJudgeCode code);
+
+    SpanLlmAsJudgeAutomationRuleEvaluatorModel.SpanLlmAsJudgeCode map(
+            AutomationRuleEvaluatorSpanLlmAsJudge.SpanLlmAsJudgeCode code);
 
     AutomationRuleEvaluatorTraceThreadLlmAsJudge.TraceThreadLlmAsJudgeCode map(
             TraceThreadLlmAsJudgeAutomationRuleEvaluatorModel.TraceThreadLlmAsJudgeCode code);
@@ -86,6 +99,28 @@ interface AutomationModelEvaluatorMapper {
             return JsonUtils.getMapper().writeValueAsString(filters);
         } catch (JsonProcessingException e) {
             throw new RuntimeException("Failed to serialize filters to JSON", e);
+        }
+    }
+
+    default List<SpanFilter> mapSpanFilters(String filtersJson) {
+        if (StringUtils.isBlank(filtersJson)) {
+            return List.of();
+        }
+        try {
+            return JsonUtils.getMapper().readValue(filtersJson, SpanFilter.LIST_TYPE_REFERENCE);
+        } catch (JsonProcessingException e) {
+            throw new RuntimeException("Failed to parse span filters JSON", e);
+        }
+    }
+
+    default String map(List<SpanFilter> filters) {
+        if (filters == null || filters.isEmpty()) {
+            return null;
+        }
+        try {
+            return JsonUtils.getMapper().writeValueAsString(filters);
+        } catch (JsonProcessingException e) {
+            throw new RuntimeException("Failed to serialize span filters to JSON", e);
         }
     }
 

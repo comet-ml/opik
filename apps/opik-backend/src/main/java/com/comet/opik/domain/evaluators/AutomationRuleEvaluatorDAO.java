@@ -28,6 +28,7 @@ import java.util.UUID;
 @RegisterConstructorMapper(UserDefinedMetricPythonAutomationRuleEvaluatorModel.class)
 @RegisterConstructorMapper(TraceThreadLlmAsJudgeAutomationRuleEvaluatorModel.class)
 @RegisterConstructorMapper(TraceThreadUserDefinedMetricPythonAutomationRuleEvaluatorModel.class)
+@RegisterConstructorMapper(SpanLlmAsJudgeAutomationRuleEvaluatorModel.class)
 @RegisterRowMapper(AutomationRuleEvaluatorRowMapper.class)
 public interface AutomationRuleEvaluatorDAO extends AutomationRuleDAO {
 
