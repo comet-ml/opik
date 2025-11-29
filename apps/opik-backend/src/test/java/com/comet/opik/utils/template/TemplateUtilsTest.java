@@ -156,18 +156,18 @@ class TemplateUtilsTest {
                             factoryMethod,
                             // The majority of ST should be collected
                             TOTAL_TEMPLATES,
-                            // Growth is typically 5-10MB in local isolated runs
-                            // But allowing 1 to 150 MB range for other environments and running with other tests
+                            // Growth is about 5MB in local isolated runs
+                            // But allowing 1 to 100 MB range for other environments and running with other tests
                             1,
-                            150),
+                            100),
                     arguments(
                             "preventGCAndCauseMemoryLeak",
                             directConstructor,
-                            // Growth is typically 2650 MB in local isolated runs
-                            // But allowing 2 to 4 GB range for other environments and running with other tests
+                            // Growth is about 2650 MB in local isolated runs
+                            // But allowing 2 to 3 GB range for other environments and running with other tests
                             TOTAL_TEMPLATES,
                             2000,
-                            4000));
+                            3000));
         }
 
         @ParameterizedTest(name = "{0}")
@@ -180,9 +180,8 @@ class TemplateUtilsTest {
                 long expectedUsedMemoryGrowthInMBMax) {
             var weakReferences = new ArrayList<WeakReference<ST>>();
 
-            // Perform initial GC and wait for memory to stabilize
-            performGCAndWaitForStability(testName, "before test");
-
+            // Suggest GC before test to start in a clean state
+            System.gc();
             var usedMemoryBefore = Runtime.getRuntime().totalMemory() - Runtime.getRuntime().freeMemory();
             logMemoryUsage(testName, "before template creation");
             for (var i = 0; i < TOTAL_TEMPLATES; i++) {
@@ -193,11 +192,9 @@ class TemplateUtilsTest {
                 weakReferences.add(new WeakReference<>(st));
             }
 
+            // Suggest GC after test
             logMemoryUsage(testName, "after template creation");
-
-            // Perform GC and wait for memory to stabilize using Awaitility
-            performGCAndWaitForStability(testName, "after template creation");
-
+            System.gc();
             logMemoryUsage(testName, "after GC");
 
             // Wait for GC to actually collect the objects and verify memory assertions
@@ -220,25 +217,6 @@ class TemplateUtilsTest {
                         assertThat(actualUsedMemoryGrowthInMB)
                                 .isBetween(expectedUsedMemoryGrowthInMBMin, expectedUsedMemoryGrowthInMBMax);
                     });
-        }
-        /**
-         * Triggers garbage collection multiple times with delays between attempts to encourage complete collection.
-         *
-         * @param testName The name of the test for logging purposes
-         * @param phase The phase of the test (e.g., "before test", "after template creation")
-         */
-        private void performGCAndWaitForStability(String testName, String phase) {
-            log.info("{} - Performing GC {}", testName, phase);
-            // Trigger GC multiple times with delays to help collection complete
-            for (int i = 0; i < 5; i++) {
-                System.gc();
-                try {
-                    Thread.sleep(100);
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
-                }
-            }
-            log.info("{} - GC completed {}", testName, phase);
         }
 
     }
