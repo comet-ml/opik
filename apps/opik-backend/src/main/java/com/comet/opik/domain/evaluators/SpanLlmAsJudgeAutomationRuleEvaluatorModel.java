@@ -26,7 +26,7 @@ public record SpanLlmAsJudgeAutomationRuleEvaluatorModel(
         Instant lastUpdatedAt,
         String lastUpdatedBy)
         implements
-            AutomationRuleEvaluatorSpanModel<SpanLlmAsJudgeCode> {
+            AutomationRuleEvaluatorModel<SpanLlmAsJudgeCode> {
 
     @Override
     public AutomationRuleEvaluatorType type() {

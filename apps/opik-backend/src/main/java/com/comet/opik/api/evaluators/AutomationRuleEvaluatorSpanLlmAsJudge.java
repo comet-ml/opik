@@ -18,14 +18,14 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
-import static com.comet.opik.api.evaluators.AutomationRuleEvaluatorSpanLlmAsJudge.SpanLlmAsJudgeCode;
-
 @SuperBuilder(toBuilder = true)
 @Data
 @EqualsAndHashCode(callSuper = true)
 @JsonIgnoreProperties(ignoreUnknown = true)
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
-public final class AutomationRuleEvaluatorSpanLlmAsJudge extends AutomationRuleEvaluatorSpan<SpanLlmAsJudgeCode> {
+public final class AutomationRuleEvaluatorSpanLlmAsJudge
+        extends
+            AutomationRuleEvaluator<AutomationRuleEvaluatorSpanLlmAsJudge.SpanLlmAsJudgeCode> {
 
     @Builder(toBuilder = true)
     @JsonIgnoreProperties(ignoreUnknown = true)

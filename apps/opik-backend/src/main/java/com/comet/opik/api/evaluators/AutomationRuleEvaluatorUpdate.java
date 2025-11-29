@@ -1,6 +1,6 @@
 package com.comet.opik.api.evaluators;
 
-import com.comet.opik.api.filter.TraceFilter;
+import com.comet.opik.api.filter.Filter;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonSubTypes;
@@ -27,20 +27,22 @@ import java.util.UUID;
         @JsonSubTypes.Type(value = AutomationRuleEvaluatorUpdateLlmAsJudge.class, name = AutomationRuleEvaluatorType.Constants.LLM_AS_JUDGE),
         @JsonSubTypes.Type(value = AutomationRuleEvaluatorUpdateUserDefinedMetricPython.class, name = AutomationRuleEvaluatorType.Constants.USER_DEFINED_METRIC_PYTHON),
         @JsonSubTypes.Type(value = AutomationRuleEvaluatorUpdateTraceThreadLlmAsJudge.class, name = AutomationRuleEvaluatorType.Constants.TRACE_THREAD_LLM_AS_JUDGE),
-        @JsonSubTypes.Type(value = AutomationRuleEvaluatorUpdateTraceThreadUserDefinedMetricPython.class, name = AutomationRuleEvaluatorType.Constants.TRACE_THREAD_USER_DEFINED_METRIC_PYTHON)
+        @JsonSubTypes.Type(value = AutomationRuleEvaluatorUpdateTraceThreadUserDefinedMetricPython.class, name = AutomationRuleEvaluatorType.Constants.TRACE_THREAD_USER_DEFINED_METRIC_PYTHON),
+        @JsonSubTypes.Type(value = AutomationRuleEvaluatorUpdateSpanLlmAsJudge.class, name = AutomationRuleEvaluatorType.Constants.SPAN_LLM_AS_JUDGE)
 })
 @Schema(name = "AutomationRuleEvaluatorUpdate", discriminatorProperty = "type", discriminatorMapping = {
         @DiscriminatorMapping(value = AutomationRuleEvaluatorType.Constants.LLM_AS_JUDGE, schema = AutomationRuleEvaluatorUpdateLlmAsJudge.class),
         @DiscriminatorMapping(value = AutomationRuleEvaluatorType.Constants.USER_DEFINED_METRIC_PYTHON, schema = AutomationRuleEvaluatorUpdateUserDefinedMetricPython.class),
         @DiscriminatorMapping(value = AutomationRuleEvaluatorType.Constants.TRACE_THREAD_LLM_AS_JUDGE, schema = AutomationRuleEvaluatorUpdateTraceThreadLlmAsJudge.class),
-        @DiscriminatorMapping(value = AutomationRuleEvaluatorType.Constants.TRACE_THREAD_USER_DEFINED_METRIC_PYTHON, schema = AutomationRuleEvaluatorUpdateTraceThreadUserDefinedMetricPython.class)
+        @DiscriminatorMapping(value = AutomationRuleEvaluatorType.Constants.TRACE_THREAD_USER_DEFINED_METRIC_PYTHON, schema = AutomationRuleEvaluatorUpdateTraceThreadUserDefinedMetricPython.class),
+        @DiscriminatorMapping(value = AutomationRuleEvaluatorType.Constants.SPAN_LLM_AS_JUDGE, schema = AutomationRuleEvaluatorUpdateSpanLlmAsJudge.class)
 })
 @JsonIgnoreProperties(ignoreUnknown = true)
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
 public abstract sealed class AutomationRuleEvaluatorUpdate<T> implements AutomationRuleUpdate
         permits AutomationRuleEvaluatorUpdateLlmAsJudge, AutomationRuleEvaluatorUpdateTraceThreadLlmAsJudge,
         AutomationRuleEvaluatorUpdateTraceThreadUserDefinedMetricPython,
-        AutomationRuleEvaluatorUpdateUserDefinedMetricPython {
+        AutomationRuleEvaluatorUpdateUserDefinedMetricPython, AutomationRuleEvaluatorUpdateSpanLlmAsJudge {
 
     @NotBlank private final String name;
 
@@ -50,7 +52,7 @@ public abstract sealed class AutomationRuleEvaluatorUpdate<T> implements Automat
     private final boolean enabled = true;
 
     @Builder.Default
-    private final List<TraceFilter> filters = List.of();
+    private final List<? extends Filter> filters = List.of();
 
     @JsonIgnore
     @NotNull private final T code;

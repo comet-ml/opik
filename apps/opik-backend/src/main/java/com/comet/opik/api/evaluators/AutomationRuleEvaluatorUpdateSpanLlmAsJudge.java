@@ -24,7 +24,7 @@ import static com.comet.opik.api.evaluators.AutomationRuleEvaluatorSpanLlmAsJudg
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
 public final class AutomationRuleEvaluatorUpdateSpanLlmAsJudge
         extends
-            AutomationRuleEvaluatorUpdateSpan<SpanLlmAsJudgeCode> {
+            AutomationRuleEvaluatorUpdate<SpanLlmAsJudgeCode> {
 
     @ConstructorProperties({"name", "samplingRate", "enabled", "filters", "code", "projectId"})
     public AutomationRuleEvaluatorUpdateSpanLlmAsJudge(

@@ -113,7 +113,7 @@ interface AutomationModelEvaluatorMapper {
         }
     }
 
-    default String map(List<SpanFilter> filters) {
+    default String mapSpanFilters(List<SpanFilter> filters) {
         if (filters == null || filters.isEmpty()) {
             return null;
         }
