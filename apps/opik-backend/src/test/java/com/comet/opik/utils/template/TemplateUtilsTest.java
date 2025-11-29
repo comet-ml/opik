@@ -222,8 +222,7 @@ class TemplateUtilsTest {
                     });
         }
         /**
-         * Performs garbage collection and waits for memory to stabilize.
-         * Uses Awaitility to retry GC until memory usage stops changing significantly.
+         * Triggers garbage collection multiple times with delays between attempts to encourage complete collection.
          *
          * @param testName The name of the test for logging purposes
          * @param phase The phase of the test (e.g., "before test", "after template creation")
