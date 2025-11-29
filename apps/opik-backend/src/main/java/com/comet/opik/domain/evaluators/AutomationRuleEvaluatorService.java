@@ -10,9 +10,13 @@ import com.comet.opik.api.evaluators.AutomationRuleEvaluatorTraceThreadLlmAsJudg
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorUpdate;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorUpdateLlmAsJudge;
+import com.comet.opik.api.evaluators.AutomationRuleEvaluatorUpdateSpanLlmAsJudge;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorUpdateTraceThreadLlmAsJudge;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorUpdateTraceThreadUserDefinedMetricPython;
+import com.comet.opik.api.evaluators.AutomationRuleEvaluatorUpdateUserDefinedMetricPython;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorUserDefinedMetricPython;
+import com.comet.opik.api.filter.SpanFilter;
+import com.comet.opik.api.filter.TraceFilter;
 import com.comet.opik.api.sorting.AutomationRuleEvaluatorSortingFactory;
 import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.domain.filter.FilterQueryBuilder;
@@ -193,7 +197,12 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
             var dao = handle.attach(AutomationRuleEvaluatorDAO.class);
 
             try {
-                String filtersJson = AutomationModelEvaluatorMapper.INSTANCE.map(evaluatorUpdate.getFilters());
+                String filtersJson = switch (evaluatorUpdate) {
+                    case AutomationRuleEvaluatorUpdateSpanLlmAsJudge s ->
+                        AutomationModelEvaluatorMapper.INSTANCE.mapSpanFilters((List<SpanFilter>) s.getFilters());
+                    default ->
+                        AutomationModelEvaluatorMapper.INSTANCE.map((List<TraceFilter>) evaluatorUpdate.getFilters());
+                };
                 int resultBase = dao.updateBaseRule(id, projectId, workspaceId, evaluatorUpdate.getName(),
                         evaluatorUpdate.getSamplingRate(), evaluatorUpdate.isEnabled(), filtersJson);
 
@@ -271,6 +280,8 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
                     .map(ruleEvaluator -> switch (ruleEvaluator) {
                         case LlmAsJudgeAutomationRuleEvaluatorModel llmAsJudge ->
                             AutomationModelEvaluatorMapper.INSTANCE.map(llmAsJudge);
+                        case SpanLlmAsJudgeAutomationRuleEvaluatorModel spanLlmAsJudge ->
+                            AutomationModelEvaluatorMapper.INSTANCE.map(spanLlmAsJudge);
                         case UserDefinedMetricPythonAutomationRuleEvaluatorModel userDefinedMetricPython ->
                             AutomationModelEvaluatorMapper.INSTANCE.map(userDefinedMetricPython);
                         case TraceThreadLlmAsJudgeAutomationRuleEvaluatorModel traceThreadLlmAsJudge ->
@@ -297,6 +308,8 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
                     .map(ruleEvaluator -> switch (ruleEvaluator) {
                         case LlmAsJudgeAutomationRuleEvaluatorModel llmAsJudge ->
                             AutomationModelEvaluatorMapper.INSTANCE.map(llmAsJudge);
+                        case SpanLlmAsJudgeAutomationRuleEvaluatorModel spanLlmAsJudge ->
+                            AutomationModelEvaluatorMapper.INSTANCE.map(spanLlmAsJudge);
                         case UserDefinedMetricPythonAutomationRuleEvaluatorModel userDefinedMetricPython ->
                             AutomationModelEvaluatorMapper.INSTANCE.map(userDefinedMetricPython);
                         case TraceThreadLlmAsJudgeAutomationRuleEvaluatorModel traceThreadLlmAsJudge ->

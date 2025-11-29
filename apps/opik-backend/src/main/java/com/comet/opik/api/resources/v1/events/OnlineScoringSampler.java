@@ -8,6 +8,7 @@ import com.comet.opik.api.evaluators.AutomationRuleEvaluatorUserDefinedMetricPyt
 import com.comet.opik.api.events.TraceToScoreLlmAsJudge;
 import com.comet.opik.api.events.TraceToScoreUserDefinedMetricPython;
 import com.comet.opik.api.events.TracesCreated;
+import com.comet.opik.api.filter.TraceFilter;
 import com.comet.opik.domain.evaluators.AutomationRuleEvaluatorService;
 import com.comet.opik.domain.evaluators.OnlineScorePublisher;
 import com.comet.opik.domain.evaluators.TraceFilterEvaluationService;
@@ -142,7 +143,7 @@ public class OnlineScoringSampler {
         }
 
         // Check if trace matches all filters
-        if (!filterEvaluationService.matchesAllFilters(evaluator.getFilters(), trace)) {
+        if (!filterEvaluationService.matchesAllFilters((List<TraceFilter>) evaluator.getFilters(), trace)) {
             // Important to set the workspaceId for logging purposes
             try (var logContext = createTraceLoggingContext(workspaceId, evaluator, trace)) {
                 userFacingLogger.info(

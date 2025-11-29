@@ -45,6 +45,12 @@ public final class AutomationRuleEvaluatorUpdateSpanLlmAsJudge
         return super.getCode();
     }
 
+    @JsonProperty
+    @Override
+    public List<SpanFilter> getFilters() {
+        return (List<SpanFilter>) super.getFilters();
+    }
+
     @Override
     public AutomationRuleEvaluatorType getType() {
         return AutomationRuleEvaluatorType.SPAN_LLM_AS_JUDGE;

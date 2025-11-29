@@ -146,6 +146,10 @@ class ManualEvaluationServiceImpl implements ManualEvaluationService {
                     traceThreadRules.add(traceThreadLlmAsJudge);
                 case AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython traceThreadPython ->
                     traceThreadRules.add(traceThreadPython);
+                default -> {
+                    // TODO(OPIK-3210): Implement evaluation logic for span-level automation rules
+                    log.warn("Unsupported automation rule type: {}", rule.getClass().getSimpleName());
+                }
             }
         }
 

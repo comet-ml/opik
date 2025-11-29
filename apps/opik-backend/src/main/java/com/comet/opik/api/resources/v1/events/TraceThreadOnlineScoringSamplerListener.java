@@ -215,7 +215,7 @@ public class TraceThreadOnlineScoringSamplerListener {
      * @return true if the thread matches all filters and should be sampled, false otherwise
      */
     private boolean shouldSampleTraceThread(AutomationRuleEvaluator<?> evaluator, TraceThreadModel thread) {
-        List<TraceFilter> traceFilters = evaluator.getFilters();
+        List<TraceFilter> traceFilters = (List<TraceFilter>) evaluator.getFilters();
         if (traceFilters.isEmpty()) {
             return true; // No filters means all threads should be sampled
         }

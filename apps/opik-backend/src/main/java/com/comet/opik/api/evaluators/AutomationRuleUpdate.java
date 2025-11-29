@@ -1,6 +1,6 @@
 package com.comet.opik.api.evaluators;
 
-import com.comet.opik.api.filter.TraceFilter;
+import com.comet.opik.api.filter.Filter;
 import com.fasterxml.jackson.annotation.JsonSubTypes;
 import com.fasterxml.jackson.annotation.JsonTypeInfo;
 import io.swagger.v3.oas.annotations.media.DiscriminatorMapping;
@@ -26,7 +26,7 @@ public sealed interface AutomationRuleUpdate permits AutomationRuleEvaluatorUpda
 
     boolean isEnabled();
 
-    List<TraceFilter> getFilters();
+    List<? extends Filter> getFilters();
 
     UUID getProjectId();
 }

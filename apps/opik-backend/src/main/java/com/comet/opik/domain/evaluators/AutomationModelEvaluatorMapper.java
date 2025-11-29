@@ -26,31 +26,118 @@ interface AutomationModelEvaluatorMapper {
     AutomationModelEvaluatorMapper INSTANCE = Mappers.getMapper(AutomationModelEvaluatorMapper.class);
 
     @Mapping(target = "code", expression = "java(map(model.code()))")
-    AutomationRuleEvaluatorSpanLlmAsJudge map(SpanLlmAsJudgeAutomationRuleEvaluatorModel model);
+    @Mapping(target = "filters", ignore = true)
+    AutomationRuleEvaluatorSpanLlmAsJudge mapBaseSpan(SpanLlmAsJudgeAutomationRuleEvaluatorModel model);
+
+    default AutomationRuleEvaluatorSpanLlmAsJudge map(SpanLlmAsJudgeAutomationRuleEvaluatorModel model) {
+        var base = mapBaseSpan(model);
+        return base.toBuilder()
+                .filters(mapSpanFilters(model.filters()))
+                .build();
+    }
 
     @Mapping(target = "code", expression = "java(map(model.code()))")
-    AutomationRuleEvaluatorLlmAsJudge map(LlmAsJudgeAutomationRuleEvaluatorModel model);
+    @Mapping(target = "filters", ignore = true)
+    AutomationRuleEvaluatorLlmAsJudge mapBaseLlm(LlmAsJudgeAutomationRuleEvaluatorModel model);
+
+    default AutomationRuleEvaluatorLlmAsJudge map(LlmAsJudgeAutomationRuleEvaluatorModel model) {
+        var base = mapBaseLlm(model);
+        return base.toBuilder()
+                .filters(map(model.filters()))
+                .build();
+    }
 
     @Mapping(target = "code", expression = "java(map(model.code()))")
-    AutomationRuleEvaluatorTraceThreadLlmAsJudge map(TraceThreadLlmAsJudgeAutomationRuleEvaluatorModel model);
+    @Mapping(target = "filters", ignore = true)
+    AutomationRuleEvaluatorTraceThreadLlmAsJudge mapBaseTrace(TraceThreadLlmAsJudgeAutomationRuleEvaluatorModel model);
+
+    default AutomationRuleEvaluatorTraceThreadLlmAsJudge map(TraceThreadLlmAsJudgeAutomationRuleEvaluatorModel model) {
+        var base = mapBaseTrace(model);
+        return base.toBuilder()
+                .filters(map(model.filters()))
+                .build();
+    }
 
     @Mapping(target = "code", expression = "java(map(model.code()))")
-    AutomationRuleEvaluatorUserDefinedMetricPython map(UserDefinedMetricPythonAutomationRuleEvaluatorModel model);
+    @Mapping(target = "filters", ignore = true)
+    AutomationRuleEvaluatorUserDefinedMetricPython mapBaseUdp(
+            UserDefinedMetricPythonAutomationRuleEvaluatorModel model);
+
+    default AutomationRuleEvaluatorUserDefinedMetricPython map(
+            UserDefinedMetricPythonAutomationRuleEvaluatorModel model) {
+        var base = mapBaseUdp(model);
+        return base.toBuilder()
+                .filters(map(model.filters()))
+                .build();
+    }
 
     @Mapping(target = "code", expression = "java(map(model.code()))")
-    AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython map(
+    @Mapping(target = "filters", ignore = true)
+    AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython mapBaseTtudp(
             TraceThreadUserDefinedMetricPythonAutomationRuleEvaluatorModel model);
 
-    LlmAsJudgeAutomationRuleEvaluatorModel map(AutomationRuleEvaluatorLlmAsJudge dto);
+    default AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython map(
+            TraceThreadUserDefinedMetricPythonAutomationRuleEvaluatorModel model) {
+        var base = mapBaseTtudp(model);
+        return base.toBuilder()
+                .filters(map(model.filters()))
+                .build();
+    }
 
-    TraceThreadLlmAsJudgeAutomationRuleEvaluatorModel map(AutomationRuleEvaluatorTraceThreadLlmAsJudge dto);
+    @Mapping(target = "filters", ignore = true)
+    LlmAsJudgeAutomationRuleEvaluatorModel mapBaseLlmModel(AutomationRuleEvaluatorLlmAsJudge dto);
 
-    UserDefinedMetricPythonAutomationRuleEvaluatorModel map(AutomationRuleEvaluatorUserDefinedMetricPython dto);
+    default LlmAsJudgeAutomationRuleEvaluatorModel map(AutomationRuleEvaluatorLlmAsJudge dto) {
+        var base = mapBaseLlmModel(dto);
+        return base.toBuilder()
+                .filters(map((List<TraceFilter>) dto.getFilters()))
+                .build();
+    }
 
-    TraceThreadUserDefinedMetricPythonAutomationRuleEvaluatorModel map(
+    @Mapping(target = "filters", ignore = true)
+    TraceThreadLlmAsJudgeAutomationRuleEvaluatorModel mapBaseTraceModel(
+            AutomationRuleEvaluatorTraceThreadLlmAsJudge dto);
+
+    default TraceThreadLlmAsJudgeAutomationRuleEvaluatorModel map(AutomationRuleEvaluatorTraceThreadLlmAsJudge dto) {
+        var base = mapBaseTraceModel(dto);
+        return base.toBuilder()
+                .filters(map((List<TraceFilter>) dto.getFilters()))
+                .build();
+    }
+
+    @Mapping(target = "filters", ignore = true)
+    UserDefinedMetricPythonAutomationRuleEvaluatorModel mapBaseUdpModel(
+            AutomationRuleEvaluatorUserDefinedMetricPython dto);
+
+    default UserDefinedMetricPythonAutomationRuleEvaluatorModel map(
+            AutomationRuleEvaluatorUserDefinedMetricPython dto) {
+        var base = mapBaseUdpModel(dto);
+        return base.toBuilder()
+                .filters(map((List<TraceFilter>) dto.getFilters()))
+                .build();
+    }
+
+    @Mapping(target = "filters", ignore = true)
+    TraceThreadUserDefinedMetricPythonAutomationRuleEvaluatorModel mapBaseTtudpModel(
             AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython dto);
 
-    SpanLlmAsJudgeAutomationRuleEvaluatorModel map(AutomationRuleEvaluatorSpanLlmAsJudge dto);
+    default TraceThreadUserDefinedMetricPythonAutomationRuleEvaluatorModel map(
+            AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython dto) {
+        var base = mapBaseTtudpModel(dto);
+        return base.toBuilder()
+                .filters(map((List<TraceFilter>) dto.getFilters()))
+                .build();
+    }
+
+    @Mapping(target = "filters", ignore = true)
+    SpanLlmAsJudgeAutomationRuleEvaluatorModel mapBaseSpanModel(AutomationRuleEvaluatorSpanLlmAsJudge dto);
+
+    default SpanLlmAsJudgeAutomationRuleEvaluatorModel map(AutomationRuleEvaluatorSpanLlmAsJudge dto) {
+        var base = mapBaseSpanModel(dto);
+        return base.toBuilder()
+                .filters(mapSpanFilters((List<SpanFilter>) dto.getFilters()))
+                .build();
+    }
 
     AutomationRuleEvaluatorLlmAsJudge.LlmAsJudgeCode map(LlmAsJudgeAutomationRuleEvaluatorModel.LlmAsJudgeCode detail);
 

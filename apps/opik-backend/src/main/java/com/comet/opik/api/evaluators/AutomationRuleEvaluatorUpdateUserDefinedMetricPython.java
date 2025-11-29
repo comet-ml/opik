@@ -45,6 +45,12 @@ public final class AutomationRuleEvaluatorUpdateUserDefinedMetricPython
         return super.getCode();
     }
 
+    @JsonProperty
+    @Override
+    public List<TraceFilter> getFilters() {
+        return (List<TraceFilter>) super.getFilters();
+    }
+
     @Override
     public AutomationRuleEvaluatorType getType() {
         return AutomationRuleEvaluatorType.USER_DEFINED_METRIC_PYTHON;
