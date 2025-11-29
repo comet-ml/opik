@@ -15,9 +15,9 @@ type DataTableRowHeightSelectorProps = {
 };
 
 const OPTIONS: DropdownOption<ROW_HEIGHT>[] = [
-  { value: ROW_HEIGHT.small, label: "Small" },
+  { value: ROW_HEIGHT.small, label: "Compact" },
   { value: ROW_HEIGHT.medium, label: "Medium" },
-  { value: ROW_HEIGHT.large, label: "Large" },
+  { value: ROW_HEIGHT.large, label: "Detailed" },
 ];
 
 const DataTableRowHeightSelector: React.FunctionComponent<
