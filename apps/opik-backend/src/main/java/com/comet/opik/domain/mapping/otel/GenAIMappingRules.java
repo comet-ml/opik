@@ -30,8 +30,17 @@ public final class GenAIMappingRules {
                     .rule("gen_ai.request.model").source(SOURCE).outcome(OpenTelemetryMappingRule.Outcome.MODEL)
                     .spanType(SpanType.llm).build(),
             OpenTelemetryMappingRule.builder()
+                    .rule("gen_ai.request.temperature").source(SOURCE).outcome(OpenTelemetryMappingRule.Outcome.METADATA)
+                    .spanType(SpanType.llm).build(),
+            OpenTelemetryMappingRule.builder()
+                    .rule("gen_ai.response.id").source(SOURCE).outcome(OpenTelemetryMappingRule.Outcome.METADATA)
+                    .spanType(SpanType.llm).build(),
+            OpenTelemetryMappingRule.builder()
                     .rule("gen_ai.response.model").source(SOURCE).outcome(OpenTelemetryMappingRule.Outcome.MODEL)
                     .spanType(SpanType.llm).build(),
+            OpenTelemetryMappingRule.builder()
+                    .rule("gen_ai.response.finish_reasons").source(SOURCE)
+                    .outcome(OpenTelemetryMappingRule.Outcome.METADATA).build(),
             OpenTelemetryMappingRule.builder()
                     .rule("gen_ai.system").source(SOURCE).outcome(OpenTelemetryMappingRule.Outcome.PROVIDER)
                     .spanType(SpanType.llm).build(),
@@ -43,7 +52,10 @@ public final class GenAIMappingRules {
                     .outcome(OpenTelemetryMappingRule.Outcome.INPUT).build(),
             OpenTelemetryMappingRule.builder()
                     .rule("gen_ai.response").isPrefix(true).source(SOURCE)
-                    .outcome(OpenTelemetryMappingRule.Outcome.OUTPUT).build());
+                    .outcome(OpenTelemetryMappingRule.Outcome.OUTPUT).build(),
+            OpenTelemetryMappingRule.builder()
+                    .rule("gen_ai.operation.name").source(SOURCE).outcome(OpenTelemetryMappingRule.Outcome.METADATA)
+                    .build());
 
     public static List<OpenTelemetryMappingRule> getRules() {
         return RULES;
