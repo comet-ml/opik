@@ -28,6 +28,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONLY;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
@@ -165,13 +166,29 @@ class DatasetVersionServiceImpl implements DatasetVersionService {
         String versionHash = CommitUtils.getCommit(versionId);
         log.info("Generated version hash '{}' for dataset '{}'", versionHash, datasetId);
 
-        // Create snapshot in ClickHouse (single query, no streaming needed)
-        Long itemCount = datasetItemVersionDAO.makeSnapshot(datasetId, versionId)
+        // Count items first to determine how many UUIDs we need to generate
+        Long itemCount = datasetItemDAO.getDraftItemIdsAndHashes(datasetId)
+                .contextWrite(ctx -> ctx
+                        .put(RequestContext.USER_NAME, userName)
+                        .put(RequestContext.WORKSPACE_ID, workspaceId))
+                .count()
+                .block();
+        log.info("Dataset '{}' has '{}' items to snapshot", datasetId, itemCount);
+
+        // Generate UUIDs in Java (double the count for safety)
+        int uuidCount = itemCount.intValue() * 2;
+        List<UUID> uuids = IntStream.range(0, uuidCount)
+                .mapToObj(i -> idGenerator.generateId())
+                .toList();
+        log.info("Generated '{}' UUIDs for dataset '{}' snapshot", uuidCount, datasetId);
+
+        // Create snapshot in ClickHouse using pre-generated UUIDs
+        Long snapshotCount = datasetItemVersionDAO.makeSnapshot(datasetId, versionId, uuids)
                 .contextWrite(ctx -> ctx
                         .put(RequestContext.USER_NAME, userName)
                         .put(RequestContext.WORKSPACE_ID, workspaceId))
                 .block();
-        log.info("Saved version snapshot with '{}' items for version '{}'", itemCount, versionId);
+        log.info("Saved version snapshot with '{}' items for version '{}'", snapshotCount, versionId);
 
         return template.inTransaction(WRITE, handle -> {
             var datasetVersionDAO = handle.attach(DatasetVersionDAO.class);

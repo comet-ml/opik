@@ -2,7 +2,6 @@ package com.comet.opik.domain;
 
 import com.comet.opik.api.Column;
 import com.comet.opik.api.DatasetItem.DatasetItemPage;
-import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.google.inject.ImplementedBy;
 import io.opentelemetry.instrumentation.annotations.WithSpan;
@@ -15,6 +14,7 @@ import lombok.extern.slf4j.Slf4j;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
+import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 
@@ -27,7 +27,7 @@ import static com.comet.opik.utils.AsyncUtils.makeMonoContextAware;
 
 @ImplementedBy(DatasetItemVersionDAOImpl.class)
 public interface DatasetItemVersionDAO {
-    Mono<Long> makeSnapshot(UUID datasetId, UUID versionId);
+    Mono<Long> makeSnapshot(UUID datasetId, UUID versionId, List<UUID> uuids);
 
     Mono<DatasetItemPage> getItems(DatasetItemSearchCriteria searchCriteria, int page, int size, UUID versionId);
 
@@ -63,7 +63,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 workspace_id
             )
             SELECT
-                (toFixedString(toString(generateUUIDv4()), 36)) as id,
+                arrayElement(:uuids, row_number() OVER ()) as id,
                 dataset_items.id as dataset_item_id,
                 dataset_id,
                 :versionId as dataset_version_id,
@@ -129,29 +129,37 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
             """;
 
     private final @NonNull TransactionTemplateAsync asyncTemplate;
-    private final @NonNull OpikConfiguration configuration;
 
     @Override
     @WithSpan
-    public Mono<Long> makeSnapshot(@NonNull UUID datasetId, @NonNull UUID versionId) {
-        log.info("Creating snapshot for dataset '{}', version '{}'", datasetId, versionId);
+    public Mono<Long> makeSnapshot(@NonNull UUID datasetId, @NonNull UUID versionId, @NonNull List<UUID> uuids) {
+        log.info("Creating snapshot for dataset '{}', version '{}' using '{}' pre-generated UUIDs",
+                datasetId, versionId, uuids.size());
 
         return asyncTemplate.nonTransaction(connection -> {
+            // Convert UUIDs to String array for ClickHouse binding
+            String[] uuidStrings = uuids.stream()
+                    .map(UUID::toString)
+                    .toArray(String[]::new);
+
             var statement = connection.createStatement(INSERT_SNAPSHOT)
                     .bind("datasetId", datasetId)
-                    .bind("versionId", versionId);
+                    .bind("versionId", versionId)
+                    .bind("uuids", uuidStrings);
 
             Segment segment = startSegment(DATASET_ITEM_VERSIONS, CLICKHOUSE, "create_version_snapshot");
 
             return makeMonoContextAware((userName, workspaceId) -> {
                 statement.bind("workspace_id", workspaceId);
-                log.debug("Executing snapshot INSERT for dataset '{}', version '{}', workspace '{}'",
+                log.debug("Creating snapshot: datasetId='{}', versionId='{}', workspaceId='{}'",
                         datasetId, versionId, workspaceId);
+
                 return Flux.from(statement.execute())
                         .flatMap(Result::getRowsUpdated)
                         .reduce(0L, Long::sum)
-                        .doOnSuccess(count -> log.info("Snapshot created: {} rows inserted for version '{}'", count,
-                                versionId))
+                        .doOnSuccess(insertedCount -> log.info(
+                                "Snapshot created: '{}' rows inserted for version '{}'",
+                                insertedCount, versionId))
                         .doFinally(signalType -> endSegment(segment));
             });
         });
