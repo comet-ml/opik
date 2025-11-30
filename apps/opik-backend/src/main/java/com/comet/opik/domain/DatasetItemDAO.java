@@ -56,9 +56,6 @@ public interface DatasetItemDAO {
 
     Mono<DatasetItemPage> getItems(DatasetItemSearchCriteria datasetItemSearchCriteria, int page, int size);
 
-    Mono<DatasetItemPage> getItems(DatasetItemSearchCriteria datasetItemSearchCriteria, int page, int size,
-            UUID versionId);
-
     Mono<DatasetItem> get(UUID id);
 
     Flux<DatasetItem> getItems(UUID datasetId, int limit, UUID lastRetrievedId);
@@ -96,18 +93,15 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
     private static final String MIN_DECIMAL_BOUND = "-999999999.999999999";
 
     private static final String INSERT_DATASET_ITEM = """
-            INSERT INTO <if(version)>dataset_item_versions<else>dataset_items<endif> (
+            INSERT INTO dataset_items (
                 id,
-                <if(version)>draft_item_id,<endif>
                 dataset_id,
-                <if(version)>version_id,<endif>
                 source,
                 trace_id,
                 span_id,
                 data,
                 tags,
                 created_at,
-                <if(version)>version_created_at<else>last_updated_at<endif>,
                 workspace_id,
                 created_by,
                 last_updated_by
@@ -116,15 +110,12 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                 <items:{item |
                     (
                          :id<item.index>,
-                         <if(version)>:draftItemId<item.index>,<endif>
-                         <if(version)>:datasetId<else>:datasetId<item.index><endif>,
-                         <if(version)>:versionId,<endif>
+                         :datasetId<item.index>,
                          :source<item.index>,
                          :traceId<item.index>,
                          :spanId<item.index>,
                          :data<item.index>,
                          :tags<item.index>,
-                         <if(version)>parseDateTime64BestEffort(:createdAt<item.index>, 9)<else>now64(9)<endif>,
                          now64(9),
                          :workspace_id,
                          :createdBy<item.index>,
@@ -173,7 +164,6 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
     private static final String SELECT_DATASET_ITEMS = """
             SELECT
                 id,
-                <if(version)>draft_item_id,<endif>
                 dataset_id,
                 <if(truncate)> mapApply((k, v) -> (k, substring(replaceRegexpAll(v, '<truncate>', '"[image]"'), 1, <truncationSize>)), data) as data <else> data <endif>,
                 trace_id,
@@ -185,9 +175,8 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                 created_by,
                 last_updated_by,
                 null AS experiment_items_array
-            FROM <if(version)>dataset_item_versions<else>dataset_items<endif>
+            FROM dataset_items
             WHERE dataset_id = :datasetId
-            <if(version)>AND version_id = :versionId<endif>
             AND workspace_id = :workspace_id
             <if(dataset_item_filters)>AND (<dataset_item_filters>)<endif>
             ORDER BY id DESC, last_updated_at DESC
@@ -217,12 +206,11 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                 SELECT
                     id,
                     data
-                FROM <if(version)>dataset_item_versions<else>dataset_items<endif>
+                FROM dataset_items
                 WHERE dataset_id = :datasetId
-                <if(version)>AND version_id = :versionId<endif>
                 AND workspace_id = :workspace_id
                 <if(dataset_item_filters)>AND (<dataset_item_filters>)<endif>
-                ORDER BY <if(version)>(workspace_id, dataset_id, version_id, id)<else>(workspace_id, dataset_id, source, trace_id, span_id, id)<endif> DESC, last_updated_at DESC
+                ORDER BY (workspace_id, dataset_id, source, trace_id, span_id, id) DESC, last_updated_at DESC
                 LIMIT 1 BY id
             ) AS lastRows
             ;
@@ -365,11 +353,10 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                 SELECT
                     id,
                     data
-                FROM <if(version)>dataset_item_versions<else>dataset_items<endif>
+                FROM dataset_items
                 WHERE dataset_id = :datasetId
-                <if(version)>AND version_id = :versionId<endif>
                 AND workspace_id = :workspace_id
-                ORDER BY <if(version)>(workspace_id, dataset_id, version_id, id)<else>(workspace_id, dataset_id, source, trace_id, span_id, id)<endif> DESC, last_updated_at DESC
+                ORDER BY (workspace_id, dataset_id, source, trace_id, span_id, id) DESC, last_updated_at DESC
                 LIMIT 1 BY id
             ) AS di ON di.id = ei.dataset_item_id
             <if(experiment_item_filters || feedback_scores_filters || feedback_scores_empty_filters)>
@@ -464,10 +451,9 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                 ORDER BY (workspace_id, experiment_id, dataset_item_id, trace_id, id) DESC, last_updated_at DESC
             	LIMIT 1 BY id
             ), dataset_items_final AS (
-            	SELECT * FROM <if(version)>dataset_item_versions<else>dataset_items<endif>
+            	SELECT * FROM dataset_items
             	WHERE workspace_id = :workspace_id
             	AND id IN (SELECT dataset_item_id FROM experiment_items_scope)
-            	<if(version)>AND version_id = :versionId<endif>
             	ORDER BY id DESC, last_updated_at DESC
             	LIMIT 1 BY id
             ), feedback_scores_combined_raw AS (
@@ -643,7 +629,6 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
             )
             SELECT
                 ei.dataset_item_id AS id,
-                <if(version)>di.draft_item_id AS draft_item_id,<endif>
                 :datasetId AS dataset_id,
                 <if(truncate)> mapApply((k, v) -> (k, substring(replaceRegexpAll(v, '<truncate>', '"[image]"'), 1, <truncationSize>)), COALESCE(di.data, map())) <else> COALESCE(di.data, map()) <endif> AS data_final,
                 COALESCE(di.data, map()) AS data,
@@ -1074,7 +1059,6 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
     private final @NonNull OpikConfiguration configuration;
     private final @NonNull SortingQueryBuilder sortingQueryBuilder;
     private final @NonNull SortingFactoryDatasets sortingFactory;
-    private final @NonNull IdGenerator idGenerator;
 
     @Override
     @WithSpan
@@ -1085,18 +1069,16 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
         }
 
         return asyncTemplate.nonTransaction(connection -> mapAndInsert(
-                datasetId, null, items, connection));
+                datasetId, items, connection, INSERT_DATASET_ITEM));
     }
 
     private Mono<Long> mapAndInsert(
-            UUID datasetId, UUID versionId, List<DatasetItem> items, Connection connection) {
+            UUID datasetId, List<DatasetItem> items, Connection connection, String sqlTemplate) {
 
-        boolean isVersion = versionId != null;
         List<QueryItem> queryItems = getQueryItemPlaceHolder(items.size());
 
-        var template = TemplateUtils.newST(INSERT_DATASET_ITEM)
-                .add("items", queryItems)
-                .add("version", isVersion);
+        var template = TemplateUtils.newST(sqlTemplate)
+                .add("items", queryItems);
 
         String sql = template.render();
 
@@ -1106,45 +1088,23 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
 
             statement.bind("workspace_id", workspaceId);
 
-            if (isVersion) {
-                statement.bind("datasetId", datasetId.toString());
-                statement.bind("versionId", versionId.toString());
-            }
-
             int i = 0;
             for (DatasetItem item : items) {
                 Map<String, JsonNode> data = new HashMap<>(Optional.ofNullable(item.data()).orElse(Map.of()));
 
-                if (isVersion) {
-                    // For versions: item.id() is the new versioned ID, draftItemId is in the data field
-                    statement.bind("id" + i, item.id().toString());
-                    statement.bind("draftItemId" + i, item.draftItemId().toString());
-                    statement.bind("createdAt" + i, item.createdAt().toString());
-                } else {
-                    // For drafts: item.id() is UUID, datasetId is per-item
-                    statement.bind("id" + i, item.id());
-                    statement.bind("datasetId" + i, datasetId);
-                }
-
+                statement.bind("id" + i, item.id());
+                statement.bind("datasetId" + i, datasetId);
                 statement.bind("source" + i, item.source().getValue());
                 statement.bind("traceId" + i, DatasetItemResultMapper.getOrDefault(item.traceId()));
                 statement.bind("spanId" + i, DatasetItemResultMapper.getOrDefault(item.spanId()));
                 statement.bind("data" + i, DatasetItemResultMapper.getOrDefault(data));
                 statement.bind("tags" + i, item.tags() != null ? item.tags().toArray(String[]::new) : new String[]{});
-
-                // For versions, preserve original creator information; for drafts, use fallback
-                if (isVersion) {
-                    statement.bind("createdBy" + i, item.createdBy());
-                    statement.bind("lastUpdatedBy" + i, item.lastUpdatedBy());
-                } else {
-                    statement.bind("createdBy" + i, Optional.ofNullable(item.createdBy()).orElse(userName));
-                    statement.bind("lastUpdatedBy" + i, Optional.ofNullable(item.lastUpdatedBy()).orElse(userName));
-                }
+                statement.bind("createdBy" + i, userName);
+                statement.bind("lastUpdatedBy" + i, userName);
                 i++;
             }
 
-            Segment segment = startSegment(DATASET_ITEMS, CLICKHOUSE,
-                    isVersion ? "insert_dataset_item_versions" : "insert_dataset_items");
+            Segment segment = startSegment(DATASET_ITEMS, CLICKHOUSE, "insert_dataset_items");
 
             return Flux.from(statement.execute())
                     .flatMap(Result::getRowsUpdated)
@@ -1341,38 +1301,22 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
     @WithSpan
     public Mono<DatasetItemPage> getItems(
             @NonNull DatasetItemSearchCriteria datasetItemSearchCriteria, int page, int size) {
-        return getItems(datasetItemSearchCriteria, page, size, null);
-    }
 
-    @Override
-    @WithSpan
-    public Mono<DatasetItemPage> getItems(
-            @NonNull DatasetItemSearchCriteria datasetItemSearchCriteria, int page, int size, UUID versionId) {
-
-        boolean isVersioned = versionId != null;
         boolean hasExperimentIds = CollectionUtils.isNotEmpty(datasetItemSearchCriteria.experimentIds());
 
-        // Versioned queries don't support experiments
-        Preconditions.checkArgument(!isVersioned || !hasExperimentIds,
-                "Versioned queries do not support experiment IDs");
-
-        // Choose the appropriate query and segment names based on experiment IDs and versioning
+        // Choose the appropriate query and segment names based on experiment IDs
         String query = hasExperimentIds ? SELECT_DATASET_ITEMS_WITH_EXPERIMENT_ITEMS : SELECT_DATASET_ITEMS;
-        String summarySegmentName = isVersioned
-                ? "select_versioned_dataset_items_filters_summary"
-                : (hasExperimentIds
-                        ? "select_dataset_items_experiments_filters_summary"
-                        : "select_dataset_items_filters_summary");
-        String contentSegmentName = isVersioned
-                ? "select_versioned_dataset_items_filters"
-                : (hasExperimentIds
-                        ? "select_dataset_items_experiments_filters"
-                        : "select_dataset_items_filters");
+        String summarySegmentName = hasExperimentIds
+                ? "select_dataset_items_experiments_filters_summary"
+                : "select_dataset_items_filters_summary";
+        String contentSegmentName = hasExperimentIds
+                ? "select_dataset_items_experiments_filters"
+                : "select_dataset_items_filters";
 
         Segment segment = startSegment(DATASET_ITEMS, CLICKHOUSE, summarySegmentName);
 
         Mono<Set<Column>> columnsMono = mapColumnsField(datasetItemSearchCriteria);
-        Mono<Long> countMono = getCount(datasetItemSearchCriteria, versionId);
+        Mono<Long> countMono = getCount(datasetItemSearchCriteria);
 
         return Mono.zip(countMono, columnsMono)
                 .doFinally(signalType -> endSegment(segment))
@@ -1384,12 +1328,11 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                     selectTemplate = ImageUtils.addTruncateToTemplate(selectTemplate,
                             datasetItemSearchCriteria.truncate());
                     selectTemplate = selectTemplate.add("truncationSize",
-                            configuration.getResponseFormatting().getTruncationSize())
-                            .add("version", isVersioned);
+                            configuration.getResponseFormatting().getTruncationSize());
 
-                    // Add sorting if present (not supported for versioned queries)
+                    // Add sorting if present
                     var finalTemplate = selectTemplate;
-                    if (!isVersioned && datasetItemSearchCriteria.sortingFields() != null) {
+                    if (datasetItemSearchCriteria.sortingFields() != null) {
                         Optional.ofNullable(sortingQueryBuilder.toOrderBySql(datasetItemSearchCriteria.sortingFields(),
                                 filterQueryBuilder
                                         .buildDatasetItemFieldMapping(datasetItemSearchCriteria.sortingFields())))
@@ -1400,21 +1343,13 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                                 });
                     }
 
-                    var hasDynamicKeys = !isVersioned && datasetItemSearchCriteria.sortingFields() != null
+                    var hasDynamicKeys = datasetItemSearchCriteria.sortingFields() != null
                             && sortingQueryBuilder.hasDynamicKeys(datasetItemSearchCriteria.sortingFields());
 
                     var selectStatement = connection.createStatement(finalTemplate.render())
-                            .bind("datasetId",
-                                    isVersioned
-                                            ? datasetItemSearchCriteria.datasetId().toString()
-                                            : datasetItemSearchCriteria.datasetId())
+                            .bind("datasetId", datasetItemSearchCriteria.datasetId())
                             .bind("limit", size)
                             .bind("offset", (page - 1) * size);
-
-                    // Bind versionId if versioned query
-                    if (isVersioned) {
-                        selectStatement = selectStatement.bind("versionId", versionId.toString());
-                    }
 
                     // Only bind experimentIds and entityType if we have experiment IDs
                     if (hasExperimentIds) {
@@ -1445,36 +1380,21 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                 }));
     }
 
-    private Mono<Long> getCount(DatasetItemSearchCriteria datasetItemSearchCriteria, UUID versionId) {
-        boolean isVersioned = versionId != null;
-        boolean hasExperimentIds = CollectionUtils.isNotEmpty(datasetItemSearchCriteria.experimentIds());
-
+    private Mono<Long> getCount(DatasetItemSearchCriteria datasetItemSearchCriteria) {
         // Choose the appropriate count query based on whether we have experiment IDs
+        boolean hasExperimentIds = CollectionUtils.isNotEmpty(datasetItemSearchCriteria.experimentIds());
         String countQuery = hasExperimentIds
                 ? SELECT_DATASET_ITEMS_WITH_EXPERIMENT_ITEMS_COUNT
                 : SELECT_DATASET_ITEMS_COUNT;
 
-        String segmentName = isVersioned
-                ? "select_versioned_dataset_items_count"
-                : "select_dataset_items_filters_columns";
-
-        Segment segment = startSegment(DATASET_ITEMS, CLICKHOUSE, segmentName);
+        Segment segment = startSegment(DATASET_ITEMS, CLICKHOUSE, "select_dataset_items_filters_columns");
 
         return asyncTemplate.nonTransaction(connection -> {
 
             var countTemplate = newFindTemplate(countQuery, datasetItemSearchCriteria);
-            countTemplate.add("version", isVersioned);
 
             var statement = connection.createStatement(countTemplate.render())
-                    .bind("datasetId",
-                            isVersioned
-                                    ? datasetItemSearchCriteria.datasetId().toString()
-                                    : datasetItemSearchCriteria.datasetId());
-
-            // Bind versionId if versioned query
-            if (isVersioned) {
-                statement = statement.bind("versionId", versionId.toString());
-            }
+                    .bind("datasetId", datasetItemSearchCriteria.datasetId());
 
             // Only bind experimentIds if we have them
             if (hasExperimentIds) {
