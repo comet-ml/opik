@@ -383,14 +383,16 @@ class DatasetVersionServiceImpl implements DatasetVersionService {
                 .orElse(null);
         var stats = calculateDiffStatistics(datasetId, fromVersionId, toVersionId);
 
+        String toVersionLabel = toHashOrTag != null ? toHashOrTag : "draft";
+
         log.info("Computed diff: from='{}', to='{}', added='{}', modified='{}', deleted='{}', unchanged='{}'",
-                fromHashOrTag, toHashOrTag,
+                fromHashOrTag, toVersionLabel,
                 stats.itemsAdded(), stats.itemsModified(),
                 stats.itemsDeleted(), stats.itemsUnchanged());
 
         return DatasetVersionDiff.builder()
                 .fromVersion(fromHashOrTag)
-                .toVersion(toHashOrTag)
+                .toVersion(toVersionLabel)
                 .statistics(stats)
                 .build();
     }

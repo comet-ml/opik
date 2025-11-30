@@ -860,7 +860,7 @@ class DatasetVersionResourceTest {
         }
 
         @Test
-        @DisplayName("Success: Compare two versions with diff endpoint")
+        @DisplayName("Success: Compare version with draft using diff endpoint")
         void compareVersions__whenTwoVersions__thenReturnDiffStatistics() {
             // Given - Create dataset with 3 items
             var datasetId = createDataset(UUID.randomUUID().toString());
@@ -884,7 +884,7 @@ class DatasetVersionResourceTest {
 
             datasetResourceClient.commitVersion(datasetId, versionCreate1, API_KEY, TEST_WORKSPACE);
 
-            // Modify items: delete 1, modify 1, add 2
+            // Modify items in draft: delete 1, modify 1, add 2
             var itemToDelete = createdItems.get(0);
             var itemToModify = createdItems.get(1);
 
@@ -907,22 +907,15 @@ class DatasetVersionResourceTest {
 
             datasetResourceClient.createDatasetItems(batch3, TEST_WORKSPACE, API_KEY);
 
-            // Commit second version
-            var versionCreate2 = DatasetVersionCreate.builder()
-                    .tag("v2")
-                    .build();
-
-            datasetResourceClient.commitVersion(datasetId, versionCreate2, API_KEY, TEST_WORKSPACE);
-
-            // When - Compare versions using diff endpoint
-            var diff = datasetResourceClient.compareVersions(datasetId, "v1", "v2", API_KEY, TEST_WORKSPACE);
+            // When - Compare latest version with draft using diff endpoint
+            var diff = datasetResourceClient.compareVersions(datasetId, null, null, API_KEY, TEST_WORKSPACE);
 
             // Then - Verify diff statistics
-            // v1: 3 items (item0, item1, item2)
-            // v2: 4 items (item1-modified, item2, newItem1, newItem2)
+            // latest (v1): 3 items (item0, item1, item2)
+            // draft: 4 items (item1-modified, item2, newItem1, newItem2)
             // Expected: 2 added, 1 modified, 1 deleted, 1 unchanged
-            assertThat(diff.fromVersion()).isEqualTo("v1");
-            assertThat(diff.toVersion()).isEqualTo("v2");
+            assertThat(diff.fromVersion()).isEqualTo(DatasetVersionService.LATEST_TAG);
+            assertThat(diff.toVersion()).isEqualTo("draft");
             assertThat(diff.statistics().itemsAdded()).isEqualTo(2)
                     .as("2 new items were added");
             assertThat(diff.statistics().itemsModified()).isEqualTo(1)
@@ -963,12 +956,12 @@ class DatasetVersionResourceTest {
 
             datasetResourceClient.createDatasetItems(batch2, TEST_WORKSPACE, API_KEY);
 
-            // When - Compare version with draft (omitting 'to' parameter defaults to draft)
-            var diff = datasetResourceClient.compareVersions(datasetId, "v1", null, API_KEY, TEST_WORKSPACE);
+            // When - Compare latest version with draft (no parameters needed)
+            var diff = datasetResourceClient.compareVersions(datasetId, null, null, API_KEY, TEST_WORKSPACE);
 
             // Then - Verify diff statistics
-            assertThat(diff.fromVersion()).isEqualTo("v1");
-            assertThat(diff.toVersion()).isEqualTo(null);
+            assertThat(diff.fromVersion()).isEqualTo(DatasetVersionService.LATEST_TAG);
+            assertThat(diff.toVersion()).isEqualTo("draft");
             assertThat(diff.statistics().itemsAdded()).isEqualTo(1)
                     .as("1 new item was added to draft");
             assertThat(diff.statistics().itemsModified()).isEqualTo(0)
@@ -978,13 +971,13 @@ class DatasetVersionResourceTest {
             assertThat(diff.statistics().itemsUnchanged()).isEqualTo(2)
                     .as("2 items remained unchanged");
 
-            // When - Compare using 'latest' tag with draft
-            var diff2 = datasetResourceClient.compareVersions(datasetId, DatasetVersionService.LATEST_TAG, null,
+            // When - Call again to verify consistency
+            var diff2 = datasetResourceClient.compareVersions(datasetId, null, null,
                     API_KEY, TEST_WORKSPACE);
 
             // Then - Verify same diff statistics
             assertThat(diff2.fromVersion()).isEqualTo(DatasetVersionService.LATEST_TAG);
-            assertThat(diff2.toVersion()).isEqualTo(null);
+            assertThat(diff2.toVersion()).isEqualTo("draft");
             assertThat(diff2.statistics().itemsAdded()).isEqualTo(1);
         }
     }

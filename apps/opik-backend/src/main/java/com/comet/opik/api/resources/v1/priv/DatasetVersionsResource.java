@@ -19,7 +19,6 @@ import jakarta.inject.Inject;
 import jakarta.inject.Provider;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Min;
-import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.DELETE;
@@ -140,23 +139,21 @@ public class DatasetVersionsResource {
 
     @GET
     @Path("/diff")
-    @Operation(operationId = "compareDatasetVersions", summary = "Compare two dataset versions", description = "Compare two dataset versions or a version with the current draft. If 'to' parameter is omitted, compares with the current draft.", responses = {
+    @Operation(operationId = "compareDatasetVersions", summary = "Compare latest version with draft", description = "Compare the latest committed dataset version with the current draft state. This endpoint provides insights into changes made since the last version was committed. The comparison calculates additions, modifications, deletions, and unchanged items between the latest version snapshot and current draft.", responses = {
             @ApiResponse(responseCode = "200", description = "Diff computed successfully", content = @Content(schema = @Schema(implementation = DatasetVersionDiff.class))),
             @ApiResponse(responseCode = "404", description = "Version not found")})
     @RateLimited
-    public Response compareVersions(
-            @QueryParam("from") @NotBlank String fromHashOrTag,
-            @QueryParam("to") String toHashOrTag) {
+    public Response compareVersions() {
 
         String workspaceId = requestContext.get().getWorkspaceId();
-        log.info("Comparing versions for dataset='{}', from='{}', to='{}', workspace='{}'",
-                datasetId, fromHashOrTag, toHashOrTag != null ? toHashOrTag : "draft", workspaceId);
+        log.info("Comparing latest version with draft for dataset='{}', workspace='{}'",
+                datasetId, workspaceId);
 
-        var diff = versionService.compareVersions(datasetId, fromHashOrTag, toHashOrTag);
+        var diff = versionService.compareVersions(datasetId, DatasetVersionService.LATEST_TAG, null);
 
         log.info(
-                "Computed diff for dataset='{}', from='{}', to='{}': stats='{}'", datasetId, fromHashOrTag,
-                toHashOrTag != null ? toHashOrTag : "draft", diff.statistics());
+                "Computed diff for dataset='{}', from='latest', to='draft': stats='{}'", datasetId,
+                diff.statistics());
 
         return Response.ok(diff).build();
     }

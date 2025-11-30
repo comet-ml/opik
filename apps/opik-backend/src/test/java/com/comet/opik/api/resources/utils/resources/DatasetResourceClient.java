@@ -518,8 +518,12 @@ public class DatasetResourceClient {
         WebTarget target = client.target(RESOURCE_PATH.formatted(baseURI))
                 .path(datasetId.toString())
                 .path("versions")
-                .path("diff")
-                .queryParam("from", fromHashOrTag);
+                .path("diff");
+
+        // Both parameters are now optional - when null, endpoint compares latest with draft
+        if (fromHashOrTag != null) {
+            target = target.queryParam("from", fromHashOrTag);
+        }
 
         if (toHashOrTag != null) {
             target = target.queryParam("to", toHashOrTag);
