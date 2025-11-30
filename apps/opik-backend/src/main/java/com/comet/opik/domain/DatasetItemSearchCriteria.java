@@ -17,5 +17,6 @@ public record DatasetItemSearchCriteria(
         List<? extends Filter> filters,
         List<SortingField> sortingFields,
         String search,
-        boolean truncate) {
+        boolean truncate,
+        String versionHashOrTag) {
 }
