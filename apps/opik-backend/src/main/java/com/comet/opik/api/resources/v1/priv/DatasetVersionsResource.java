@@ -155,10 +155,8 @@ public class DatasetVersionsResource {
         var diff = versionService.compareVersions(datasetId, fromHashOrTag, toHashOrTag);
 
         log.info(
-                "Computed diff for dataset='{}', from='{}', to='{}': added='{}', modified='{}', deleted='{}', unchanged='{}'",
-                datasetId, fromHashOrTag, toHashOrTag != null ? toHashOrTag : "draft",
-                diff.statistics().itemsAdded(), diff.statistics().itemsModified(),
-                diff.statistics().itemsDeleted(), diff.statistics().itemsUnchanged());
+                "Computed diff for dataset='{}', from='{}', to='{}': stats='{}'", datasetId, fromHashOrTag,
+                toHashOrTag != null ? toHashOrTag : "draft", diff.statistics());
 
         return Response.ok(diff).build();
     }

@@ -380,8 +380,8 @@ class DatasetItemServiceImpl implements DatasetItemService {
 
         if (StringUtils.isNotBlank(datasetItemSearchCriteria.versionHashOrTag())) {
             // Fetch versioned (immutable) items from dataset_item_versions table
-            log.info("Finding versioned dataset items by '{}', version '{}', page '{}', size '{}'",
-                    datasetItemSearchCriteria, datasetItemSearchCriteria.versionHashOrTag(), page, size);
+            log.info("Finding versioned dataset items by '{}', page '{}', size '{}'", datasetItemSearchCriteria, page,
+                    size);
 
             // Resolve version hash/tag to version ID
             UUID versionId = versionService.resolveVersionId(datasetItemSearchCriteria.datasetId(),
