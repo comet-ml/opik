@@ -60,6 +60,8 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 item_last_updated_by,
                 created_at,
                 last_updated_at,
+                created_by,
+                last_updated_by,
                 workspace_id
             )
             SELECT
@@ -79,6 +81,8 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 last_updated_by as item_last_updated_by,
                 now64(9) as created_at,
                 now64(9) as last_updated_at,
+                :user_name as created_by,
+                :user_name as last_updated_by,
                 workspace_id
             FROM dataset_items
             WHERE dataset_id = :datasetId
@@ -153,8 +157,9 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
 
             return makeMonoContextAware((userName, workspaceId) -> {
                 statement.bind("workspace_id", workspaceId);
-                log.debug("Creating snapshot: datasetId='{}', versionId='{}', workspaceId='{}'",
-                        datasetId, versionId, workspaceId);
+                statement.bind("user_name", userName);
+                log.debug("Creating snapshot: datasetId='{}', versionId='{}', workspaceId='{}', userName='{}'",
+                        datasetId, versionId, workspaceId, userName);
 
                 return Flux.from(statement.execute())
                         .flatMap(Result::getRowsUpdated)

@@ -20,6 +20,8 @@ CREATE TABLE IF NOT EXISTS ${ANALYTICS_DB_DATABASE_NAME}.dataset_item_versions O
     item_last_updated_by    String DEFAULT '',
     created_at              DateTime64(9, 'UTC') DEFAULT now64(9),
     last_updated_at         DateTime64(9, 'UTC') DEFAULT now64(9),
+    created_by              String DEFAULT '',
+    last_updated_by         String DEFAULT '',
     workspace_id            String,
     data_hash               UInt64 MATERIALIZED xxHash64(toString(data))
 )
