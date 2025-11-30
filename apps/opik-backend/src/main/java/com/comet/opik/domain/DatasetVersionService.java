@@ -579,7 +579,7 @@ class DatasetVersionServiceImpl implements DatasetVersionService {
     private Mono<BatchState> fetchAndRestoreBatch(UUID versionId, UUID datasetId, String workspaceId, String userName,
             int batchSize, UUID lastRetrievedId) {
 
-        return datasetItemDAO.getVersionItems(datasetId, versionId, batchSize, lastRetrievedId)
+        return datasetItemVersionDAO.getVersionItems(datasetId, versionId, batchSize, lastRetrievedId)
                 .collectList()
                 .flatMap(items -> {
                     if (items.isEmpty()) {
