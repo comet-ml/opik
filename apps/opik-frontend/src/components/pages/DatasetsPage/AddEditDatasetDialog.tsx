@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { SquareArrowOutUpRight } from "lucide-react";
 
 import useAppStore from "@/store/AppStore";
@@ -6,6 +6,7 @@ import useDatasetCreateMutation from "@/api/datasets/useDatasetCreateMutation";
 import useDatasetItemBatchMutation from "@/api/datasets/useDatasetItemBatchMutation";
 import useDatasetItemsFromCsvMutation from "@/api/datasets/useDatasetItemsFromCsvMutation";
 import useDatasetUpdateMutation from "@/api/datasets/useDatasetUpdateMutation";
+import useDatasetsList from "@/api/datasets/useDatasetsList";
 import { Button } from "@/components/ui/button";
 import { Description } from "@/components/ui/description";
 import {
@@ -85,6 +86,30 @@ const AddEditDatasetDialog: React.FunctionComponent<
     dataset ? dataset.description || "" : "",
   );
 
+  // Fetch existing datasets to validate name uniqueness
+  const { data: datasetsData } = useDatasetsList(
+    {
+      workspaceName,
+      page: 1,
+      size: 10000, // Fetch all datasets for validation
+    },
+    {
+      enabled: open, // Only fetch when dialog is open
+    },
+  );
+
+  // Check if the entered name already exists (excluding current dataset when editing)
+  const nameAlreadyExists = useMemo(() => {
+    if (!name.trim() || !datasetsData?.content) return false;
+
+    const trimmedName = name.trim();
+    return datasetsData.content.some(
+      (d) =>
+        d.name.toLowerCase() === trimmedName.toLowerCase() &&
+        d.id !== dataset?.id, // Exclude current dataset when editing
+    );
+  }, [name, datasetsData?.content, dataset?.id]);
+
   // Reset state when dialog closes or when dataset prop changes
   useEffect(() => {
     if (!open) {
@@ -111,9 +136,10 @@ const AddEditDatasetDialog: React.FunctionComponent<
 
   const isEdit = Boolean(dataset);
   const hasValidCsvFile = csvFile && !csvError;
-  // Validation: name is required, and CSV is required only if csvRequired is true
+  // Validation: name is required, not duplicate, and CSV is required only if csvRequired is true
   const isValid =
     Boolean(name.length) &&
+    !nameAlreadyExists &&
     (isEdit || hideUpload || !csvRequired || hasValidCsvFile);
   const title = isEdit ? "Edit dataset" : "Create a new dataset";
   const buttonText = isEdit ? "Update dataset" : "Create dataset";
@@ -348,6 +374,12 @@ const AddEditDatasetDialog: React.FunctionComponent<
               value={name}
               onChange={(event) => setName(event.target.value)}
             />
+            {nameAlreadyExists && (
+              <p className="comet-body-s text-destructive">
+                A dataset with this name already exists. Please choose a
+                different name.
+              </p>
+            )}
           </div>
           <div className="flex flex-col gap-2 pb-4">
             <Label htmlFor="datasetDescription">Description</Label>
