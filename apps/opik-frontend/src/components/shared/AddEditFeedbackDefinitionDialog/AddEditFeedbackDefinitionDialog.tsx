@@ -28,6 +28,11 @@ import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 
 const TYPE_OPTIONS = [
   {
+    value: FEEDBACK_DEFINITION_TYPE.boolean,
+    label: "Boolean",
+    description: 'Use binary labels (e.g. "Pass", "Fail") to evaluate outputs.',
+  },
+  {
     value: FEEDBACK_DEFINITION_TYPE.categorical,
     label: "Categorical",
     description:
@@ -38,12 +43,6 @@ const TYPE_OPTIONS = [
     label: "Numerical",
     description:
       "Use a numerical range (e.g. 1–5) to rate outputs quantitatively.",
-  },
-  {
-    value: FEEDBACK_DEFINITION_TYPE.boolean,
-    label: "Boolean",
-    description:
-      'Use binary labels (e.g. "Pass"/"Fail") to mark outputs as true or false.',
   },
 ];
 
@@ -91,7 +90,7 @@ const AddEditFeedbackDefinitionDialog: React.FunctionComponent<
     CreateFeedbackDefinition["description"]
   >(feedbackDefinition?.description ?? "");
   const [type, setType] = useState<CreateFeedbackDefinition["type"]>(
-    feedbackDefinition?.type ?? FEEDBACK_DEFINITION_TYPE.categorical,
+    feedbackDefinition?.type ?? FEEDBACK_DEFINITION_TYPE.boolean,
   );
   const [details, setDetails] = useState<
     CreateFeedbackDefinition["details"] | undefined
