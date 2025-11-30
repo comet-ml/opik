@@ -16,7 +16,7 @@ from ...reporting_utils import (
 )
 from ...api_objects import chat_prompt
 from ...optimization_result import OptimizationResult
-from ...optimizable_agent import OptimizableAgent
+from ...agents import OptimizableAgent
 from ...utils import (
     optimization_context,
     create_litellm_agent_class,

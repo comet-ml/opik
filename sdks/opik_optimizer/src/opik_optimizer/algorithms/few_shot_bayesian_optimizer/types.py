@@ -1,48 +1,12 @@
-"""Type definitions for the Reflective Optimizer."""
-
 from typing import Any
-from pydantic import BaseModel, create_model, ConfigDict
-
+from pydantic import BaseModel, ConfigDict, create_model
 from ...api_objects import types
 
 
-class FailureMode(BaseModel):
-    """Model for a single failure mode identified in evaluation."""
-
-    name: str
-    description: str
-    root_cause: str
-
-
-class RootCauseAnalysis(BaseModel):
-    """Model for root cause analysis response."""
-
-    failure_modes: list[FailureMode]
-
-
-class BatchAnalysis(BaseModel):
-    """Model for a single batch analysis result."""
-
-    batch_number: int
-    start_index: int
-    end_index: int
-    failure_modes: list[FailureMode]
-
-
-class HierarchicalRootCauseAnalysis(BaseModel):
-    """Model for the final hierarchical root cause analysis."""
-
-    total_test_cases: int
-    num_batches: int
-    unified_failure_modes: list[FailureMode]
-    synthesis_notes: str
-
-
-class ImprovedPrompt(BaseModel):
-    """Model for improved prompt response."""
-
-    reasoning: str
-    messages: list[types.Message]
+class FewShotPromptMessagesBase(BaseModel):
+    """Base model for few-shot prompt messages containing only the template field."""
+    model_config = ConfigDict(extra="forbid")
+    template: str
 
 
 def _fix_schema_for_openai(schema: dict[str, Any]) -> None:
@@ -86,29 +50,22 @@ def _fix_schema_for_openai(schema: dict[str, Any]) -> None:
                     _fix_schema_for_openai(sub)
 
 
-def create_improved_prompts_response_model(prompt_names: list[str]) -> type[BaseModel]:
+def create_few_shot_response_model(prompt_names: list[str]) -> type[BaseModel]:
     """
-    Create a dynamic Pydantic model for improved prompts response.
+    Create a dynamic Pydantic model for few-shot prompt responses.
     
-    Generates a model with explicit fields for each prompt name, where each field
-    contains the improved prompt (reasoning + messages) for that specific prompt.
-    
-    Args:
-        prompt_names: List of prompt names to create fields for
-        
-    Returns:
-        A dynamic Pydantic model class with fields for each prompt name
+    Generates a model with explicit fields for each prompt name, with a 
+    custom JSON schema that satisfies OpenAI's structured output requirements.
     """
-    # Create fields mapping prompt_name -> ImprovedPrompt
-    fields = {name: (ImprovedPrompt, ...) for name in prompt_names}
-    
+    fields = {name: (list[types.Message], ...) for name in prompt_names}
     DynamicModel = create_model(
-        'ImprovedPromptsResponse',
+        'FewShotPromptMessages',
+        __base__=FewShotPromptMessagesBase,
         **fields  # type: ignore[call-overload]
     )
     DynamicModel.model_config = ConfigDict(extra="forbid")
     
-    # Apply schema fixes for OpenAI compatibility
+    # Wrap schema generation to fix OpenAI compatibility issues
     original_schema = DynamicModel.model_json_schema
     
     def fixed_schema(cls: type[BaseModel], **kwargs: Any) -> dict[str, Any]:

@@ -14,24 +14,21 @@ import optuna.pruners
 
 import opik
 from opik import Dataset, opik_context
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 from ... import base_optimizer, _llm_calls, helpers
 from ...api_objects import chat_prompt
-from ...optimizable_agent import OptimizableAgent
+from ...agents import LiteLLMAgent, OptimizableAgent
 from ... import _throttle, optimization_result, task_evaluator, utils
-from . import reporting, prompts
+from . import reporting, prompts, types
+from . import prompts as few_shot_prompts
 from .columnar_search_space import ColumnarSearchSpace
+
+from typing import cast
 
 _limiter = _throttle.get_rate_limiter_for_current_opik_installation()
 
 logger = logging.getLogger(__name__)
-
-
-class FewShotPromptTemplate(BaseModel):
-    message_list_with_placeholder: list[dict[str, str]]
-    example_template: str
-
 
 class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
     """
@@ -143,32 +140,38 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
     def _create_fewshot_prompt_template(
         self,
         model: str,
-        prompt: chat_prompt.ChatPrompt,
+        prompts: dict[str, chat_prompt.ChatPrompt],
         few_shot_examples: list[dict[str, Any]],
-    ) -> FewShotPromptTemplate:
+    ) -> tuple[dict[str, chat_prompt.ChatPrompt], str]:
         """
         Generate a few-shot prompt template that can be used to insert examples into the prompt.
 
         Args:
             model: The model to use for generating the template
-            prompt: The base prompt to modify
+            prompt: The base prompts to modify
             few_shot_examples: List of example pairs with input and output fields
 
         Returns:
-            FewShotPromptTemplate containing the modified message list and example template
+            A tuple containing the updated prompts and the example template
         """
-        """
-        During this step we update the system prompt to include few-shot examples.
-        """
+        # During this step we update the system prompt to include few-shot examples.
         user_message = {
-            "message_list": prompt.get_messages(),
+            "prompts": [{
+                "name": name,
+                "messages": value.get_messages()
+            } for name, value in prompts.items()],
             "examples": few_shot_examples,
         }
 
         messages: list[dict[str, str]] = [
-            {"role": "system", "content": prompts.SYSTEM_PROMPT_TEMPLATE},
+            {"role": "system", "content": few_shot_prompts.SYSTEM_PROMPT_TEMPLATE},
             {"role": "user", "content": json.dumps(user_message)},
         ]
+
+        # Create dynamic response model with explicit fields for each prompt
+        DynamicFewShotPromptMessages = types.create_few_shot_response_model(
+            prompt_names=list(prompts.keys())
+        )
 
         logger.debug(f"fewshot_prompt_template - Calling LLM with: {messages}")
         response_content = _llm_calls.call_model(
@@ -176,20 +179,25 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             model=model,
             seed=self.seed,
             model_parameters=self.model_parameters,
+            response_model=DynamicFewShotPromptMessages,
         )
+        response_content = cast(DynamicFewShotPromptMessages, response_content)
         logger.debug(f"fewshot_prompt_template - LLM response: {response_content}")
 
-        try:
-            res = utils.json_to_dict(response_content)
-            return FewShotPromptTemplate(
-                message_list_with_placeholder=res["message_list_with_placeholder"],
-                example_template=res["example_template"],
-            )
-        except Exception as e:
-            logger.error(
-                f"Failed to compute few-shot prompt template: {e} - response: {response_content}"
-            )
-            raise
+        new_prompts: dict[str, chat_prompt.ChatPrompt] = {}
+        for prompt_name in prompts.keys():
+            try:
+                # Access field using getattr since field names are dynamic
+                messages = [x.model_dump(mode="json") for x in getattr(response_content, prompt_name)]
+                new_prompt = prompts[prompt_name].copy()
+                new_prompt.set_messages(messages)
+            except Exception as e:
+                logger.error(f"Couldn't create prompt with placeholder for {prompt_name}: {e}")
+                raise
+
+            new_prompts[prompt_name] = new_prompt
+
+        return new_prompts, str(response_content.template)
 
     def _stringify_column_value(self, value: Any) -> str | None:
         """Convert a dataset value to a string suitable for column grouping."""
@@ -352,8 +360,10 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
 
     def _run_optimization(
         self,
-        prompt: chat_prompt.ChatPrompt,
-        fewshot_prompt_template: FewShotPromptTemplate,
+        prompts: dict[str, chat_prompt.ChatPrompt],
+        original_prompts: dict[str, chat_prompt.ChatPrompt],
+        fewshot_prompt_template: str,
+        agent: OptimizableAgent,
         dataset: Dataset,
         validation_dataset: Dataset | None,
         metric: Callable,
@@ -362,6 +372,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         optimization_id: str | None = None,
         experiment_config: dict | None = None,
         n_samples: int | None = None,
+        is_single_prompt_optimization: bool = False,
     ) -> optimization_result.OptimizationResult:
         reporting.start_optimization_run(verbose=self.verbose)
 
@@ -396,12 +407,13 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             }
         )
         base_experiment_config = self._prepare_experiment_config(
-            prompt=prompt,
+            prompt=prompts,
             dataset=dataset,
             validation_dataset=validation_dataset,
             metric=metric,
             experiment_config=experiment_config,
             configuration_updates=configuration_updates,
+            is_single_prompt_optimization=is_single_prompt_optimization,
         )
 
         # Start Optuna Study
@@ -431,41 +443,29 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             # Process few shot examples
             demo_examples = [dataset_items[idx] for idx in example_indices]
 
-            processed_demo_examples = []
-            for example in demo_examples:
-                processed_example = {}
-                for key, value in example.items():
-                    processed_example[key] = str(value)
+            # Build few-shot examples string and processed examples for reporting
+            few_shot_examples, processed_demo_examples = self._build_few_shot_examples_string(
+                demo_examples=demo_examples,
+                fewshot_prompt_template=fewshot_prompt_template,
+            )
 
-                processed_demo_example = fewshot_prompt_template.example_template
-                for key, value in processed_example.items():
-                    try:
-                        processed_demo_example = processed_demo_example.replace(
-                            f"{{{key}}}", str(value)
-                        )
-                    except Exception:
-                        logger.error(
-                            f"Failed to format fewshot prompt template {fewshot_prompt_template} with example: {processed_example} "
-                        )
-                        raise
-                processed_demo_examples.append(processed_demo_example)
-            few_shot_examples = "\n\n".join(processed_demo_examples)
+            # Use the helper to build prompts with examples
+            prompts_with_examples = self._reconstruct_prompts_with_examples(
+                prompts_with_placeholder=prompts,
+                demo_examples=demo_examples,
+                fewshot_prompt_template=fewshot_prompt_template,
+            )
 
             llm_task = self._build_task_from_messages(
-                prompt=prompt,
-                messages=fewshot_prompt_template.message_list_with_placeholder,
+                agent=agent,
+                prompts=prompts,
                 few_shot_examples=few_shot_examples,
             )
 
-            messages_for_reporting = [
-                {
-                    "role": item["role"],
-                    "content": item["content"].replace(
-                        prompts.FEW_SHOT_EXAMPLE_PLACEHOLDER, few_shot_examples
-                    ),
-                }
-                for item in fewshot_prompt_template.message_list_with_placeholder
-            ]
+            # Build messages for reporting from the prompts with examples
+            messages_for_reporting = []
+            for prompt_obj in prompts_with_examples.values():
+                messages_for_reporting.extend(prompt_obj.get_messages())
 
             # Log trial config
             trial_config = copy.deepcopy(base_experiment_config)
@@ -483,28 +483,38 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             )
             logger.debug(f"Evaluating trial {trial.number}...")
 
-            with reporting.start_optimization_trial(
-                trial.number, n_trials, verbose=self.verbose
-            ) as trial_reporter:
-                trial_reporter.start_trial(messages_for_reporting)
-                score = task_evaluator.evaluate(
-                    dataset=evaluation_dataset,  # use right dataset for scoring
-                    dataset_item_ids=eval_dataset_item_ids,
-                    metric=metric,
-                    evaluated_task=llm_task,
-                    num_threads=self.n_threads,
-                    project_name=self.project_name,
-                    experiment_config=trial_config,
-                    optimization_id=optimization_id,
-                    verbose=self.verbose,
-                )
-                trial_reporter.set_score(baseline_score, score)
+            # Display trial start
+            reporting.display_trial_start(
+                trial_number=trial.number,
+                total_trials=n_trials,
+                messages=messages_for_reporting,
+                verbose=self.verbose,
+            )
+
+            score = task_evaluator.evaluate(
+                dataset=evaluation_dataset,  # use right dataset for scoring
+                dataset_item_ids=eval_dataset_item_ids,
+                metric=metric,
+                evaluated_task=llm_task,
+                num_threads=self.n_threads,
+                project_name=self.project_name,
+                experiment_config=trial_config,
+                optimization_id=optimization_id,
+                verbose=self.verbose,
+            )
+
+            # Display trial score
+            reporting.display_trial_score(
+                trial_number=trial.number,
+                baseline_score=baseline_score,
+                score=score,
+                verbose=self.verbose,
+            )
             logger.debug(f"Trial {trial.number} score: {score:.4f}")
 
             # Trial results
             trial_config = {
                 "demo_examples": demo_examples,
-                "message_list_with_placeholder": fewshot_prompt_template.message_list_with_placeholder,
                 "message_list": messages_for_reporting,
             }
             if columnar_choices:
@@ -591,43 +601,52 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         best_trial = study.best_trial
         best_score = best_trial.value
         best_example_indices = best_trial.user_attrs.get("example_indices", [])
+        best_demo_examples = best_trial.user_attrs.get("config", {}).get("demo_examples", [])
 
         if best_score <= baseline_score:
+            # Optimization didn't improve, return original prompts without placeholder
             best_score = baseline_score
-            best_prompt = prompt.get_messages()
+            best_prompts = original_prompts
         else:
-            best_prompt = best_trial.user_attrs["config"]["message_list"]
+            # Reconstruct the best prompts from the demo examples
+            best_prompts = self._reconstruct_prompts_with_examples(
+                prompts_with_placeholder=prompts,
+                demo_examples=best_demo_examples,
+                fewshot_prompt_template=fewshot_prompt_template,
+            )
 
         reporting.display_result(
             initial_score=baseline_score,
             best_score=best_score,
-            best_prompt=best_prompt,
+            prompt=best_prompts,
             verbose=self.verbose,
-            tools=getattr(prompt, "tools", None),
         )
+
+        # Handle single vs. dict of prompts for result
+        result_best_prompts: chat_prompt.ChatPrompt | dict[str, chat_prompt.ChatPrompt]
+        if is_single_prompt_optimization:
+            result_best_prompts = list(best_prompts.values())[0]
+            result_initial_prompts = list(original_prompts.values())[0]
+        else:
+            result_best_prompts = best_prompts
+            result_initial_prompts = original_prompts
 
         return optimization_result.OptimizationResult(
             optimizer=self.__class__.__name__,
-            prompt=best_prompt,
-            initial_prompt=prompt.get_messages(),
+            prompt=result_best_prompts,
+            initial_prompt=result_initial_prompts,
             initial_score=baseline_score,
             score=best_score,
             metric_name=metric.__name__,
             details={
                 "initial_score": baseline_score,
-                "chat_messages": (
-                    best_trial.user_attrs["config"]["message_list"]
-                    if best_trial.user_attrs["config"]
-                    else []
-                ),
-                "prompt_parameter": best_trial.user_attrs["config"],
-                # "n_examples": best_n_examples,
+                "prompt_parameter": best_trial.user_attrs.get("config", {}),
                 "example_indices": best_example_indices,
                 "trial_number": best_trial.number,
                 "total_trials": n_trials,
+                "total_rounds": n_trials,
                 "rounds": [],
                 "stopped_early": False,
-                "metric_name": metric.__name__,
                 "model": self.model,
                 "temperature": self.model_parameters.get("temperature"),
             },
@@ -640,13 +659,13 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
 
     def optimize_prompt(
         self,
-        prompt: chat_prompt.ChatPrompt,
+        prompt: chat_prompt.ChatPrompt | dict[str, chat_prompt.ChatPrompt],
         dataset: Dataset,
         metric: Callable,
+        agent: OptimizableAgent | None = None,
         experiment_config: dict | None = None,
         n_samples: int | None = None,
         auto_continue: bool = False,
-        agent_class: type[OptimizableAgent] | None = None,
         project_name: str = "Optimization",
         optimization_id: str | None = None,
         validation_dataset: Dataset | None = None,
@@ -673,11 +692,18 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             OptimizationResult: Result of the optimization
         """
         # Use base class validation and setup methods
-        self._validate_optimization_inputs(prompt, dataset, metric)
-        self.agent_class = self._setup_agent_class(prompt, agent_class)
+        if agent is None:
+            agent = LiteLLMAgent(project_name=project_name)
 
-        # Set project name from parameter
-        self.project_name = project_name
+        optimizable_prompts: dict[str, chat_prompt.ChatPrompt]
+        if isinstance(prompt, chat_prompt.ChatPrompt):
+            optimizable_prompts = {prompt.name: prompt}
+            is_single_prompt_optimization = True
+        else:
+            optimizable_prompts = prompt
+            is_single_prompt_optimization = False
+
+        self._validate_optimization_inputs(optimizable_prompts, dataset, metric)
 
         optimization = None
         try:
@@ -704,7 +730,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             verbose=self.verbose,
         )
         reporting.display_configuration(
-            prompt.get_messages(),
+            messages=[],
             optimizer_config={
                 "optimizer": self.__class__.__name__,
                 "metric": metric.__name__,
@@ -712,7 +738,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
                 "n_samples": n_samples,
             },
             verbose=self.verbose,
-            tools=getattr(prompt, "tools", None),
+            tools=None,
         )
 
         evaluation_dataset = (
@@ -726,35 +752,46 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             message="First we will establish the baseline performance:",
             verbose=self.verbose,
         ) as eval_report:
-            baseline_score = self._evaluate_prompt(
-                prompt=prompt,
-                dataset=evaluation_dataset,  # use right dataset for scoring
+            baseline_score = self.evaluate_prompt(
+                prompt=optimizable_prompts,
+                dataset=evaluation_dataset,
                 metric=metric,
+                agent=agent,
                 n_samples=n_samples,
-                optimization_id=(optimization.id if optimization is not None else None),
+                experiment_config=self._prepare_experiment_config(
+                    prompt=optimizable_prompts,
+                    dataset=evaluation_dataset,
+                    metric=metric,
+                    agent=agent,
+                    experiment_config=experiment_config,
+                    is_single_prompt_optimization=is_single_prompt_optimization,
+                ),
             )
 
             eval_report.set_score(baseline_score)
 
         # Step 2. Create the few-shot prompt template
-        with reporting.creation_few_shot_prompt_template(
-            verbose=self.verbose
-        ) as fewshot_template_report:
-            fewshot_template = self._create_fewshot_prompt_template(
-                model=self.model,
-                prompt=prompt,
-                few_shot_examples=[
-                    {k: v for k, v in item.items() if k != "id"}
-                    for item in dataset.get_items(nb_samples=10)
-                ],
-            )
+        prompts_with_placeholder, fewshot_template = self._create_fewshot_prompt_template(
+            model=self.model,
+            prompts=optimizable_prompts,
+            few_shot_examples=[
+                {k: v for k, v in item.items() if k != "id"}
+                for item in dataset.get_items(nb_samples=10)
+            ],
+        )
 
-            fewshot_template_report.set_fewshot_template(fewshot_template)
+        reporting.display_few_shot_prompt_template(
+            prompts_with_placeholder=prompts_with_placeholder,
+            fewshot_template=fewshot_template,
+            verbose=self.verbose,
+        )
 
         # Step 3. Start the optimization process
         result = self._run_optimization(
-            prompt=prompt,
+            prompts=prompts_with_placeholder,
+            original_prompts=optimizable_prompts,
             fewshot_prompt_template=fewshot_template,
+            agent=agent,
             dataset=dataset,
             validation_dataset=validation_dataset,
             metric=metric,
@@ -763,6 +800,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             experiment_config=experiment_config,
             n_trials=max_trials,
             n_samples=n_samples,
+            is_single_prompt_optimization=is_single_prompt_optimization,
         )
         if optimization:
             self._update_optimization(optimization, status="completed")
@@ -770,84 +808,12 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         utils.enable_experiment_reporting()
         return result
 
-    def _evaluate_prompt(
-        self,
-        prompt: chat_prompt.ChatPrompt,
-        dataset: opik.Dataset,
-        metric: Callable,
-        n_samples: int | None = None,
-        dataset_item_ids: list[str] | None = None,
-        experiment_config: dict | None = None,
-        optimization_id: str | None = None,
-        **kwargs: Any,
-    ) -> float:
-        """
-        Args:
-            dataset: Opik Dataset to evaluate the prompt on
-            metric: Metric function to evaluate on, should have the arguments `dataset_item` and `llm_output`
-            dataset_item_ids: Optional list of dataset item IDs to evaluate
-            experiment_config: Optional configuration for the experiment
-            optimization_id: Optional ID of the optimization
-            n_samples: Optional number of items to test in the dataset
-        Returns:
-            float: The evaluation score
-        """
-        llm_task = self._build_task_from_messages(prompt, prompt.get_messages())
-
-        if n_samples is not None:
-            if dataset_item_ids is not None:
-                raise Exception("Can't use n_samples and dataset_item_ids")
-
-            all_ids = [dataset_item["id"] for dataset_item in dataset.get_items()]
-            n_samples = min(n_samples, len(all_ids))
-            # FIXME: Use a centralized RNG function with seed and sampler across all optimizers
-            rng = self._make_rng("evaluate_prompt", n_samples)
-            dataset_item_ids = rng.sample(all_ids, n_samples)
-
-        configuration_updates = helpers.drop_none(
-            {
-                "n_samples": n_samples,
-                "dataset_item_ids": dataset_item_ids,
-            }
-        )
-        additional_metadata = (
-            {"optimization_id": optimization_id} if optimization_id else None
-        )
-        experiment_config = self._prepare_experiment_config(
-            prompt=prompt,
-            dataset=dataset,
-            metric=metric,
-            experiment_config=experiment_config,
-            configuration_updates=configuration_updates,
-            additional_metadata=additional_metadata,
-        )
-
-        logger.debug("Starting FewShotBayesian evaluation...")
-        score = task_evaluator.evaluate(
-            dataset=dataset,
-            dataset_item_ids=dataset_item_ids,
-            metric=metric,
-            evaluated_task=llm_task,
-            num_threads=self.n_threads,
-            project_name=experiment_config.get("project_name"),
-            experiment_config=experiment_config,
-            optimization_id=optimization_id,
-            verbose=self.verbose,
-        )
-        logger.debug(f"Evaluation score: {score:.4f}")
-
-        return score
-
     def _build_task_from_messages(
         self,
-        prompt: chat_prompt.ChatPrompt,
-        messages: list[dict[str, str]],
-        few_shot_examples: str | None = None,
+        agent: OptimizableAgent,
+        prompts: dict[str, chat_prompt.ChatPrompt],
+        few_shot_examples: str,        
     ) -> Callable[[dict[str, Any]], dict[str, Any]]:
-        new_prompt = prompt.copy()
-        new_prompt.set_messages(messages)
-        agent = self._instantiate_agent(new_prompt)
-
         def llm_task(dataset_item: dict[str, Any]) -> dict[str, Any]:
             """
             Process a single dataset item through the LLM task.
@@ -858,15 +824,23 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             Returns:
                 Dictionary containing the LLM's response
             """
-            messages = new_prompt.get_messages(dataset_item)
+            prompts_with_examples = {}
+            
+            for key, prompt in prompts.items():
+                new_prompt = prompt.copy()
+                new_messages = new_prompt.replace_in_messages(
+                    new_prompt.get_messages(),
+                    few_shot_prompts.FEW_SHOT_EXAMPLE_PLACEHOLDER,
+                    few_shot_examples
+                )
+                new_prompt.set_messages(new_messages)
+                prompts_with_examples[key] = new_prompt
 
-            if few_shot_examples:
-                for message in messages:
-                    message["content"] = message["content"].replace(
-                        prompts.FEW_SHOT_EXAMPLE_PLACEHOLDER, few_shot_examples
-                    )
-
-            result = agent.invoke(messages, seed=self.seed)
+            result = agent.invoke_agent(
+                prompts=prompts_with_examples,
+                dataset_item=dataset_item,
+                seed=self.seed,
+            )
 
             # Add tags to trace for optimization tracking
             if self.current_optimization_id:
@@ -877,3 +851,76 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             return {"llm_output": result}
 
         return llm_task
+
+    def _build_few_shot_examples_string(
+        self,
+        demo_examples: list[dict[str, Any]],
+        fewshot_prompt_template: str,
+    ) -> tuple[str, list[str]]:
+        """
+        Build the few-shot examples string from demo examples.
+        
+        Args:
+            demo_examples: List of example dictionaries from the dataset
+            fewshot_prompt_template: The template string for formatting each example
+            
+        Returns:
+            Tuple of (few_shot_examples_string, list_of_processed_examples)
+        """
+        processed_demo_examples = []
+        for example in demo_examples:
+            processed_example = {}
+            for key, value in example.items():
+                processed_example[key] = str(value)
+            
+            processed_demo_example = fewshot_prompt_template
+            for key, value in processed_example.items():
+                try:
+                    processed_demo_example = processed_demo_example.replace(
+                        f"{{{key}}}", str(value)
+                    )
+                except Exception:
+                    logger.error(
+                        f"Failed to format fewshot prompt template {fewshot_prompt_template} with example: {processed_example} "
+                    )
+                    raise
+            processed_demo_examples.append(processed_demo_example)
+        
+        few_shot_examples = "\n\n".join(processed_demo_examples)
+        return few_shot_examples, processed_demo_examples
+
+    def _reconstruct_prompts_with_examples(
+        self,
+        prompts_with_placeholder: dict[str, chat_prompt.ChatPrompt],
+        demo_examples: list[dict[str, Any]],
+        fewshot_prompt_template: str,
+    ) -> dict[str, chat_prompt.ChatPrompt]:
+        """
+        Reconstruct the prompts dict with few-shot examples filled in.
+        
+        Args:
+            prompts_with_placeholder: The template prompts with FEW_SHOT_EXAMPLE_PLACEHOLDER
+            demo_examples: List of example dictionaries from the dataset
+            fewshot_prompt_template: The template string for formatting each example
+            
+        Returns:
+            Dictionary of ChatPrompt objects with examples filled in
+        """
+        # Build the few_shot_examples string from demo_examples
+        few_shot_examples, _ = self._build_few_shot_examples_string(
+            demo_examples, fewshot_prompt_template
+        )
+        
+        # Fill in the placeholder in each prompt
+        result_prompts = {}
+        for key, prompt in prompts_with_placeholder.items():
+            new_prompt = prompt.copy()
+            new_messages = new_prompt.replace_in_messages(
+                new_prompt.get_messages(),
+                few_shot_prompts.FEW_SHOT_EXAMPLE_PLACEHOLDER,
+                few_shot_examples
+            )
+            new_prompt.set_messages(new_messages)
+            result_prompts[key] = new_prompt
+        
+        return result_prompts

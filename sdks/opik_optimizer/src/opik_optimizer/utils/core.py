@@ -20,9 +20,9 @@ import opik
 from opik.api_objects.opik_client import Opik
 from opik.api_objects.optimization import Optimization
 
+from ..agents import OptimizableAgent
 
 if TYPE_CHECKING:
-    from ..optimizable_agent import OptimizableAgent
     from ..api_objects import chat_prompt
 
 ALLOWED_URL_CHARACTERS: Final[str] = ":/&?="
@@ -338,7 +338,6 @@ def get_trial_compare_url(
 
 
 def create_litellm_agent_class(
-    prompt: "chat_prompt.ChatPrompt", optimizer_ref: Any = None
 ) -> type["OptimizableAgent"]:
     """
     Create an `OptimizableAgent` subclass scoped to the provided chat prompt.
@@ -352,52 +351,7 @@ def create_litellm_agent_class(
         and an invoke method that prefers the prompt's custom `invoke` callable while
         still routing default calls through `OptimizableAgent`.
     """
-    from opik_optimizer.optimizable_agent import OptimizableAgent
-
-    def _derive_class_name(name: str) -> str:
-        # Split on non-word characters to preserve original capitalization boundaries.
-        segments = [segment for segment in re.split(r"\W+", name) if segment]
-        if not segments:
-            return "LiteLLMAgent"
-
-        camel = "".join(segment[0].upper() + segment[1:] for segment in segments)
-
-        # Remove any leading digits so the identifier remains valid.
-        camel = camel.lstrip(string.digits)
-        return f"{camel}LiteLLMAgent" if camel else "LiteLLMAgent"
-
-    class LiteLLMAgent(OptimizableAgent):
-        optimizer = optimizer_ref
-
-        def __init__(
-            self, prompt: "chat_prompt.ChatPrompt", project_name: str | None = None
-        ) -> None:
-            # Get project_name from optimizer if available
-            resolved_project = project_name
-            if resolved_project is None and hasattr(self.optimizer, "project_name"):
-                resolved_project = self.optimizer.project_name
-            super().__init__(prompt, project_name=resolved_project)
-
-        def invoke(
-            self, messages: list[dict[str, str]], seed: int | None = None
-        ) -> str:
-            prompt_invoke = getattr(self.prompt, "invoke", None)
-            if callable(prompt_invoke):
-                optimizer_obj = getattr(self, "optimizer", None)
-                if optimizer_obj is not None and hasattr(
-                    optimizer_obj, "_increment_llm_counter"
-                ):
-                    optimizer_obj._increment_llm_counter()
-                return prompt_invoke(
-                    self.model,
-                    messages,
-                    getattr(self.prompt, "tools", None),
-                    **self.model_kwargs,
-                )  # type: ignore[arg-type]
-            return super().invoke(messages=messages, seed=seed)
-
-    LiteLLMAgent.__name__ = _derive_class_name(prompt.name)
-    return LiteLLMAgent
+    pass
 
 
 def function_to_tool_definition(

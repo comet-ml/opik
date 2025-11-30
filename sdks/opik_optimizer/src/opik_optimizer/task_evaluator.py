@@ -1,6 +1,6 @@
 import logging
 import math
-from typing import Any
+from typing import Any, overload, Literal
 from collections.abc import Callable
 
 import opik
@@ -51,6 +51,7 @@ def _create_metric_class(metric: Callable) -> base_metric.BaseMetric:
     return MetricClass()
 
 
+@overload
 def evaluate(
     dataset: opik.Dataset,
     evaluated_task: Callable[[dict[str, Any]], dict[str, Any]],
@@ -62,7 +63,39 @@ def evaluate(
     n_samples: int | None = None,
     experiment_config: dict[str, Any] | None = None,
     verbose: int = 1,
-) -> float:
+    return_evaluation_result: Literal[False] = False,
+) -> float: ...
+
+
+@overload
+def evaluate(
+    dataset: opik.Dataset,
+    evaluated_task: Callable[[dict[str, Any]], dict[str, Any]],
+    metric: Callable,
+    num_threads: int,
+    optimization_id: str | None = None,
+    dataset_item_ids: list[str] | None = None,
+    project_name: str | None = None,
+    n_samples: int | None = None,
+    experiment_config: dict[str, Any] | None = None,
+    verbose: int = 1,
+    return_evaluation_result: Literal[True] = True,
+) -> opik_evaluation_result.EvaluationResult: ...
+
+
+def evaluate(
+    dataset: opik.Dataset,
+    evaluated_task: Callable[[dict[str, Any]], dict[str, Any]],
+    metric: Callable,
+    num_threads: int,
+    optimization_id: str | None = None,
+    dataset_item_ids: list[str] | None = None,
+    project_name: str | None = None,
+    n_samples: int | None = None,
+    experiment_config: dict[str, Any] | None = None,
+    verbose: int = 1,
+    return_evaluation_result: bool = False,
+) -> float | opik_evaluation_result.EvaluationResult:
     """
     Evaluate a task on a dataset.
 
@@ -78,21 +111,15 @@ def evaluate(
         experiment_config: The dictionary with parameters that describe experiment
         optimization_id: Optional optimization ID for the experiment.
         verbose: Whether to print debug information.
+        return_evaluation_result: If True, return the full EvaluationResult instead of just the score.
 
     Returns:
-        float: The average score of the evaluated task.
+        float or EvaluationResult: The average score of the evaluated task, or the full result if return_evaluation_result=True.
 
     Note:
-        If you need access to the raw evaluation result, use `evaluate_with_result`.
+        If you need access to the raw evaluation result, use `evaluate_with_result` or set `return_evaluation_result=True`.
     """
-    # NOTE: GEPA needs both the aggregate score and the raw Opik result so it can map
-    # candidate trajectories back to GEPA's data structures. To avoid breaking every
-    # optimizer call site, we keep this helper returning only the float and expose a
-    # separate `evaluate_with_result` for the GEPA adapter. If more optimizers need
-    # access to the full result we should refactor both functions to return a typed
-    # dataclass (e.g., `EvaluationSummary` with `.score` and `.result`) or add an
-    # overload that keeps the return type stable.
-    score, _ = _evaluate_internal(
+    score, result = _evaluate_internal(
         dataset=dataset,
         evaluated_task=evaluated_task,
         metric=metric,
@@ -104,6 +131,11 @@ def evaluate(
         experiment_config=experiment_config,
         verbose=verbose,
     )
+    
+    if return_evaluation_result:
+        if result is None:
+            raise ValueError("EvaluationResult is None, cannot return it")
+        return result
     return score
 
 

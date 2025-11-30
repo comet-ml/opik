@@ -1,19 +1,15 @@
 import logging
-from typing import cast
 
 import opik
-from opik import opik_context
 from opik.evaluation.evaluation_result import EvaluationResult
-from opik.evaluation import evaluator as opik_evaluator
 
 from typing import Any
 from collections.abc import Callable
-from ... import _llm_calls, helpers
+from ... import _llm_calls
 from ...base_optimizer import BaseOptimizer
 from ...api_objects import chat_prompt
-from ...optimizable_agent import OptimizableAgent
+from ...agents import OptimizableAgent, LiteLLMAgent
 
-from opik_optimizer.task_evaluator import _create_metric_class
 from opik_optimizer.optimization_result import OptimizationResult
 from . import reporting
 from .hierarchical_root_cause_analyzer import HierarchicalRootCauseAnalyzer
@@ -115,97 +111,6 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
             else 0
         )
 
-    def _evaluate_prompt(
-        self,
-        prompt: chat_prompt.ChatPrompt,
-        dataset: opik.Dataset,
-        metric: Callable,
-        optimization_id: str,
-        n_samples: int | None = None,
-        experiment_config: dict | None = None,
-        **kwargs: Any,
-    ) -> EvaluationResult:
-        """
-        Args:
-            dataset: Opik Dataset to evaluate the prompt on
-            metric: Metric functions
-            use_full_dataset: Whether to use the full dataset or a subset
-            experiment_config: Optional configuration for the experiment, useful to log additional metadata
-            n_samples: Optional number of items to test in the dataset
-            optimization_id: Optional ID of the optimization
-            verbose: Controls internal logging/progress bars (0=off, 1=on).
-        Returns:
-            float: The evaluation score
-        """
-        logger.debug("Using full dataset for evaluation")
-
-        configuration_updates = helpers.drop_none({"n_samples": n_samples})
-        meta_metadata = helpers.drop_none(
-            {"optimization_id": optimization_id, "stage": "trial_evaluation"}
-        )
-        experiment_config = self._prepare_experiment_config(
-            prompt=prompt,
-            dataset=dataset,
-            metric=metric,
-            experiment_config=experiment_config,
-            configuration_updates=configuration_updates,
-            additional_metadata={"meta_prompt": meta_metadata}
-            if meta_metadata
-            else None,
-        )
-
-        def llm_task(dataset_item: dict[str, Any]) -> dict[str, str]:
-            new_prompt = prompt.copy()
-            messages = new_prompt.get_messages(dataset_item)
-            new_prompt.set_messages(messages)
-            agent = self._instantiate_agent(prompt=new_prompt)
-
-            try:
-                logger.debug(
-                    f"Calling LLM with prompt length: {sum(len(msg['content']) for msg in messages)}"
-                )
-                raw_model_output = agent.invoke(messages)
-                logger.debug(f"LLM raw response length: {len(raw_model_output)}")
-                logger.debug(f"LLM raw output: {raw_model_output}")
-            except Exception as e:
-                logger.error(f"Error calling model with prompt: {e}")
-                logger.error(f"Failed prompt: {messages}")
-                logger.error(
-                    f"Prompt length: {sum(len(msg['content']) for msg in messages)}"
-                )
-                raise
-
-            cleaned_model_output = raw_model_output.strip()
-
-            # Add tags to trace for optimization tracking
-            if self.current_optimization_id:
-                opik_context.update_current_trace(
-                    tags=[self.current_optimization_id, "Evaluation"]
-                )
-
-            result = {
-                "llm_output": cleaned_model_output,
-            }
-            return result
-
-        # Use dataset's get_items with limit for sampling
-        logger.debug(
-            f"Starting evaluation with {n_samples if n_samples else 'all'} samples for metric: {getattr(metric, '__name__', str(metric))}"
-        )
-        result = opik_evaluator.evaluate_optimization_trial(
-            optimization_id=optimization_id,
-            dataset=dataset,
-            task=llm_task,
-            scoring_metrics=[_create_metric_class(metric)],
-            task_threads=self.n_threads,
-            nb_samples=n_samples,
-            experiment_config=experiment_config,
-            verbose=self.verbose,
-            project_name=self.project_name,
-        )
-
-        return result
-
     def _hierarchical_root_cause_analysis(
         self, evaluation_result: EvaluationResult
     ) -> HierarchicalRootCauseAnalysis:
@@ -228,22 +133,32 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
         )
 
     def _improve_prompt(
-        self, prompt: chat_prompt.ChatPrompt, root_cause: FailureMode, attempt: int = 1
-    ) -> ImprovedPrompt:
+        self,
+        prompts: dict[str, chat_prompt.ChatPrompt],
+        root_cause: FailureMode,
+        attempt: int = 1
+    ) -> dict[str, ImprovedPrompt]:
         """
-        Improve the prompt based on the root cause analysis.
+        Improve all prompts in the dict based on the root cause analysis.
+        
+        Makes a single LLM call to improve all prompts at once for efficiency.
 
         Args:
-            prompt: Current prompt to improve
+            prompts: Dictionary of prompts to improve
             root_cause: The failure mode to address
             attempt: Attempt number (1-indexed). Used to vary seed for retries.
 
         Returns:
-            ImprovedPrompt with reasoning and improved messages
+            Dictionary mapping prompt names to ImprovedPrompt objects
         """
+        # Format all prompts into a single section
+        prompts_section = ""
+        for prompt_name, prompt in prompts.items():
+            prompts_section += f"\n--- Prompt: {prompt_name} ---\n"
+            prompts_section += f"```\n{prompt.get_messages()}\n```\n"
 
         improve_prompt_prompt = IMPROVE_PROMPT_TEMPLATE.format(
-            current_prompt=prompt.get_messages(),
+            prompts_section=prompts_section,
             failure_mode_name=root_cause.name,
             failure_mode_description=root_cause.description,
             failure_mode_root_cause=root_cause.root_cause,
@@ -258,47 +173,63 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
                 f"Retry attempt {attempt}: Using seed {attempt_seed} (base seed: {self.seed})"
             )
 
+        # Create dynamic response model for all prompts
+        from . import types as hierarchical_types
+        DynamicImprovedPromptsResponse = hierarchical_types.create_improved_prompts_response_model(
+            prompt_names=list(prompts.keys())
+        )
+
         improve_prompt_response = _llm_calls.call_model(
             messages=[{"role": "user", "content": improve_prompt_prompt}],
             model=self.model,
             seed=attempt_seed,
             model_parameters=self.model_parameters,
-            response_model=ImprovedPrompt,
+            response_model=DynamicImprovedPromptsResponse,
         )
 
-        return cast(ImprovedPrompt, improve_prompt_response)
+        # Extract improved prompts from response
+        improved_prompts = {}
+        for prompt_name in prompts.keys():
+            improved_prompts[prompt_name] = getattr(improve_prompt_response, prompt_name)
+
+        return improved_prompts
 
     def _generate_and_evaluate_improvement(
         self,
         root_cause: FailureMode,
-        best_prompt: chat_prompt.ChatPrompt,
+        best_prompts: dict[str, chat_prompt.ChatPrompt],
         best_score: float,
-        prompt: chat_prompt.ChatPrompt,
+        original_prompts: dict[str, chat_prompt.ChatPrompt],
         dataset: opik.Dataset,
         validation_dataset: opik.Dataset | None,
         metric: Callable,
+        agent: OptimizableAgent,
         optimization_id: str,
         n_samples: int | None,
         attempt: int,
         max_attempts: int,
-    ) -> tuple[chat_prompt.ChatPrompt, float, EvaluationResult]:
+    ) -> tuple[dict[str, chat_prompt.ChatPrompt], float, EvaluationResult]:
         """
         Generate and evaluate a single improvement attempt for a failure mode.
+        
+        Now works with dict of prompts and makes a single LLM call to improve all.
 
         Args:
             root_cause: The failure mode to address
-            best_prompt: The current best prompt to improve upon
+            best_prompts: The current best prompts to improve upon
             best_score: The current best score (for comparison)
-            prompt: The original prompt (for metadata like name and tools)
+            original_prompts: The original prompts (for metadata like name and tools)
             dataset: Dataset to evaluate on
+            validation_dataset: Optional validation dataset
             metric: Metric function
+            agent: Agent for executing prompts
             optimization_id: ID of the optimization
             n_samples: Optional number of samples
             attempt: Current attempt number (1-indexed)
             max_attempts: Total number of attempts
 
         Returns:
-            Tuple of (improved_prompt, improved_score, improved_experiment_result)
+            Tuple of (improved_prompts_dict, improved_score, improved_experiment_result)
         """
 
         # Logic on which dataset to use for scoring
@@ -310,20 +241,25 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
         with reporting.display_prompt_improvement(
             failure_mode_name=root_cause.name, verbose=self.verbose
         ) as improvement_reporter:
-            improved_prompt_response = self._improve_prompt(
-                prompt=best_prompt, root_cause=root_cause, attempt=attempt
+            improved_prompts_response = self._improve_prompt(
+                prompts=best_prompts, root_cause=root_cause, attempt=attempt
             )
-            improvement_reporter.set_reasoning(improved_prompt_response.reasoning)
+            # Display reasoning from first prompt
+            first_reasoning = list(improved_prompts_response.values())[0].reasoning
+            improvement_reporter.set_reasoning(first_reasoning)
 
-        # Convert to chat prompt
-        messages_as_dicts = [x.model_dump() for x in improved_prompt_response.messages]
-
-        improved_chat_prompt = chat_prompt.ChatPrompt(
-            name=prompt.name,
-            messages=messages_as_dicts,
-            tools=best_prompt.tools,
-            function_map=best_prompt.function_map,
-        )
+        # Convert ImprovedPrompt dict to ChatPrompt dict
+        improved_chat_prompts = {}
+        for prompt_name, improved_prompt in improved_prompts_response.items():
+            messages_as_dicts = [x.model_dump() for x in improved_prompt.messages]
+            original = original_prompts[prompt_name]
+            
+            improved_chat_prompts[prompt_name] = chat_prompt.ChatPrompt(
+                name=original.name,
+                messages=messages_as_dicts,
+                tools=best_prompts[prompt_name].tools,
+                function_map=best_prompts[prompt_name].function_map,
+            )
 
         # Evaluate improved prompt
         eval_message = f"Evaluating improvement for failure mode '{root_cause.name}'"
@@ -337,12 +273,14 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
             indent="│   ",
             baseline_score=best_score,  # Pass baseline for comparison
         ) as improved_reporter:
-            improved_experiment_result = self._evaluate_prompt(
-                prompt=improved_chat_prompt,
+            improved_experiment_result = self.evaluate_prompt(
+                prompt=improved_chat_prompts,
                 dataset=evaluation_dataset,  # use right dataset for scoring
                 metric=metric,
-                optimization_id=optimization_id,
+                agent=agent,
                 n_samples=n_samples,
+                n_threads=self.n_threads,
+                return_evaluation_result=True,
             )
 
             improved_score = sum(
@@ -353,17 +291,17 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
             ) / len(improved_experiment_result.test_results)
             improved_reporter.set_score(improved_score)
 
-        return improved_chat_prompt, improved_score, improved_experiment_result
+        return improved_chat_prompts, improved_score, improved_experiment_result
 
     def optimize_prompt(
         self,
-        prompt: chat_prompt.ChatPrompt,
+        prompt: chat_prompt.ChatPrompt | dict[str, chat_prompt.ChatPrompt],
         dataset: opik.Dataset,
         metric: Callable[..., Any],
+        agent: OptimizableAgent | None = None,
         experiment_config: dict | None = None,
         n_samples: int | None = None,
         auto_continue: bool = False,
-        agent_class: type[OptimizableAgent] | None = None,
         project_name: str = "Optimization",
         optimization_id: str | None = None,
         validation_dataset: opik.Dataset | None = None,
@@ -376,7 +314,7 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
         Optimize a prompt using hierarchical reflective refinement.
 
         Args:
-            prompt: The chat prompt to optimize.
+            prompt: The chat prompt(s) to optimize. Can be a single ChatPrompt or a dict of ChatPrompts.
             dataset: Dataset containing evaluation examples.
             metric: Callable that scores `(dataset_item, llm_output)`.
 
@@ -394,16 +332,22 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
                 the optimizer uses the training dataset for understanding failure modes and generating
                 improvements, then evaluates candidates on the validation dataset to prevent overfitting.
         """
+        # Convert single prompt to dict for internal processing
+        optimizable_prompts: dict[str, chat_prompt.ChatPrompt]
+        if isinstance(prompt, chat_prompt.ChatPrompt):
+            optimizable_prompts = {prompt.name: prompt}
+            is_single_prompt_optimization = True
+        else:
+            optimizable_prompts = prompt
+            is_single_prompt_optimization = False
+
         # Reset counters at the start of optimization
         self._validate_optimization_inputs(
-            prompt, dataset, metric, support_content_parts=True
+            optimizable_prompts, dataset, metric, support_content_parts=True
         )
 
         self._reset_counters()
         self._should_stop_optimization = False  # Reset stop flag
-
-        # Setup agent class
-        self.agent_class = self._setup_agent_class(prompt, agent_class)
 
         # Set project name from parameter
         self.project_name = project_name
@@ -424,8 +368,10 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
             dataset_id=dataset.id,
             verbose=self.verbose,
         )
+        display_messages: list[dict[str, str]] = []
+        display_tools = None
         reporting.display_configuration(
-            messages=prompt.get_messages(),
+            messages=display_messages,
             optimizer_config={
                 "optimizer": self.__class__.__name__,
                 "n_samples": n_samples,
@@ -435,21 +381,27 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
                 "convergence_threshold": self.convergence_threshold,
             },
             verbose=self.verbose,
-            tools=getattr(prompt, "tools", None),
+            tools=display_tools,
         )
 
         evaluation_dataset = (
             validation_dataset if validation_dataset is not None else dataset
         )
 
+        # Create agent for prompt execution
+        if agent is None:
+            agent = LiteLLMAgent(project_name=project_name)
+        
         # First we will evaluate the prompt on the dataset
         with reporting.display_evaluation(verbose=self.verbose) as baseline_reporter:
-            experiment_result = self._evaluate_prompt(
-                prompt=prompt,
+            experiment_result = self.evaluate_prompt(
+                prompt=optimizable_prompts,
                 dataset=evaluation_dataset,  # use right dataset for scoring
                 metric=metric,
-                optimization_id=optimization.id,
+                agent=agent,
                 n_samples=n_samples,
+                n_threads=self.n_threads,
+                return_evaluation_result=True,
             )
 
             avg_scores = sum(
@@ -460,11 +412,7 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
         # Track baseline and best scores
         initial_score = avg_scores
         best_score = initial_score
-        best_prompt = prompt
-        best_messages = prompt.get_messages()
-        initial_messages = list(
-            prompt.get_messages()
-        )  # Store copy of initial messages for diff
+        best_prompts = optimizable_prompts
 
         # Multi-iteration optimization loop
         iteration = 0
@@ -491,12 +439,14 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
                 with reporting.display_root_cause_analysis(
                     verbose=self.verbose
                 ) as analysis_reporter:
-                    train_dataset_experiment_result = self._evaluate_prompt(
-                        prompt=prompt,
+                    train_dataset_experiment_result = self.evaluate_prompt(
+                        prompt=best_prompts,
                         dataset=dataset,
                         metric=metric,
-                        optimization_id="",  # TODO: Hack so that it doesn't appear in the UI
+                        agent=agent,
                         n_samples=n_samples,
+                        n_threads=self.n_threads,
+                        return_evaluation_result=True,
                     )
                     hierarchical_analysis = self._hierarchical_root_cause_analysis(
                         train_dataset_experiment_result
@@ -530,7 +480,7 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
 
                     # Try multiple attempts if needed
                     max_attempts = max_retries + 1
-                    improved_chat_prompt = None
+                    improved_chat_prompts = None
                     improved_score = None
 
                     for attempt in range(1, max_attempts + 1):
@@ -545,17 +495,18 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
 
                         # Generate and evaluate improvement (this is 1 trial)
                         (
-                            improved_chat_prompt,
+                            improved_chat_prompts,
                             improved_score,
                             improved_experiment_result,
                         ) = self._generate_and_evaluate_improvement(
                             root_cause=root_cause,
-                            best_prompt=best_prompt,
+                            best_prompts=best_prompts,
                             best_score=best_score,
-                            prompt=prompt,
+                            original_prompts=optimizable_prompts,
                             dataset=dataset,
                             validation_dataset=validation_dataset,
                             metric=metric,
+                            agent=agent,
                             optimization_id=optimization.id,
                             n_samples=n_samples,
                             attempt=attempt,
@@ -590,7 +541,7 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
                     # Check if final result is an improvement
                     if (
                         improved_score is not None
-                        and improved_chat_prompt is not None
+                        and improved_chat_prompts is not None
                         and improved_score > best_score
                     ):
                         improvement = self._calculate_improvement(
@@ -607,8 +558,7 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
 
                         # Update best
                         best_score = improved_score
-                        best_prompt = improved_chat_prompt
-                        best_messages = improved_chat_prompt.get_messages()
+                        best_prompts = improved_chat_prompts
                         experiment_result = improved_experiment_result
                         logger.info(
                             f"Updated best prompt after addressing '{root_cause.name}'"
@@ -646,14 +596,20 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
             # Update previous score for next iteration
             previous_iteration_score = best_score
 
-        # Display final optimization result with diff
-        reporting.display_optimized_prompt_diff(
-            initial_messages=initial_messages,
-            optimized_messages=best_messages,
-            initial_score=initial_score,
-            best_score=best_score,
-            verbose=self.verbose,
-        )
+        # Display final optimization result with diff for all prompts
+        for prompt_name in optimizable_prompts:
+            initial_prompt = optimizable_prompts[prompt_name]
+            best_prompt = best_prompts[prompt_name]
+            initial_messages = list(initial_prompt.get_messages())
+            optimized_messages = list(best_prompt.get_messages())
+            reporting.display_optimized_prompt_diff(
+                prompt_name=prompt_name,
+                initial_messages=initial_messages,
+                optimized_messages=optimized_messages,
+                initial_score=initial_score,
+                best_score=best_score,
+                verbose=self.verbose,
+            )
 
         # Update optimization status to completed
         try:
@@ -662,10 +618,21 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
         except Exception as e:
             logger.warning(f"Failed to update optimization status: {e}")
 
+        # Convert result format based on input type
+        result_best_prompt: chat_prompt.ChatPrompt | dict[str, chat_prompt.ChatPrompt]
+        result_initial_prompt: chat_prompt.ChatPrompt | dict[str, chat_prompt.ChatPrompt]
+        if is_single_prompt_optimization:
+            result_best_prompt = list(best_prompts.values())[0]
+            result_initial_prompt = list(optimizable_prompts.values())[0]
+        else:
+            result_best_prompt = best_prompts
+            result_initial_prompt = optimizable_prompts
+
         # Prepare details for the result
+        first_best_prompt = list(best_prompts.values())[0]
         details = {
             "model": self.model,
-            "temperature": (best_prompt.model_kwargs or {}).get("temperature")
+            "temperature": (first_best_prompt.model_kwargs or {}).get("temperature")
             or self.model_parameters.get("temperature"),
             "n_threads": self.n_threads,
             "max_parallel_batches": self.max_parallel_batches,
@@ -679,20 +646,19 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
         }
 
         # Extract tool prompts if tools exist
-        final_tools = getattr(best_prompt, "tools", None)
+        final_tools = getattr(first_best_prompt, "tools", None)
         tool_prompts = self._extract_tool_prompts(final_tools)
 
         return OptimizationResult(
             optimizer=self.__class__.__name__,
-            prompt=best_messages,
+            prompt=result_best_prompt,
             score=best_score,
             metric_name=metric.__name__,
-            initial_prompt=prompt.get_messages(),
+            initial_prompt=result_initial_prompt,
             initial_score=initial_score,
             details=details,
             llm_calls=self.llm_call_counter,
             tool_calls=self.tool_call_counter,
             optimization_id=optimization.id,
             dataset_id=dataset.id,
-            tool_prompts=tool_prompts,
         )

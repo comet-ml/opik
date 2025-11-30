@@ -11,6 +11,7 @@ from rich.progress import track
 from rich.text import Text
 
 from .utils import get_optimization_run_url_by_id
+from .api_objects import chat_prompt
 
 PANEL_WIDTH = 70
 
@@ -266,20 +267,79 @@ def _format_tool_panel(tool: dict[str, Any]) -> Panel:
     )
 
 
-def _display_tools(tools: list[dict[str, Any]] | None) -> None:
+def _display_tools(tools: list[dict[str, Any]] | None, prefix: str = "") -> None:
+    """Display tools with optional prefix for each line."""
     if not tools:
         return
 
     console = get_console()
-    console.print(Text("\nTools registered:\n", style="bold"))
+    console.print(Text(f"{prefix}Tools registered:\n", style="bold"))
     for tool in tools:
         panel = _format_tool_panel(tool)
         with console.capture() as capture:
             console.print(panel)
         rendered_panel = capture.get()
         for line in rendered_panel.splitlines():
-            console.print(Text.from_ansi(line))
+            console.print(Text(prefix) + Text.from_ansi(line))
     console.print("")
+
+
+def _format_tool_summary(tool: dict[str, Any]) -> str:
+    """Format a concise tool summary showing only name and description."""
+    function_block = tool.get("function", {})
+    name = function_block.get("name") or tool.get("name", "unknown_tool")
+    description = function_block.get("description", "No description")
+    return f"  • {name}: {description}"
+
+
+def _display_chat_prompt_messages_and_tools(
+    chat_p: chat_prompt.ChatPrompt,
+    key: str | None = None,
+) -> list[RenderableType]:
+    """
+    Extract and format messages and tools from a ChatPrompt for display.
+    
+    Args:
+        chat_p: The ChatPrompt to display
+        key: Optional key name if this is part of a dictionary of prompts
+        
+    Returns:
+        List of Rich renderable items
+    """
+    items: list[RenderableType] = []
+    
+    # Add key header if provided
+    if key:
+        items.append(Text(f"\n[{key}]", style="bold yellow"))
+    
+    # Display messages
+    messages = chat_p.get_messages()
+    for msg in messages:
+        content_value: str | list[dict[str, Any]] = msg.get("content", "")
+        formatted_content = _format_message_content(content_value)
+        role = msg.get("role", "message")
+        
+        items.append(
+            Panel(
+                formatted_content,
+                title=role,
+                title_align="left",
+                border_style="dim",
+                width=PANEL_WIDTH,
+                padding=(1, 2),
+            )
+        )
+    
+    # Display tool summary if tools exist
+    if chat_p.tools:
+        tool_summary_lines = ["Tools:"]
+        for tool in chat_p.tools:
+            tool_summary_lines.append(_format_tool_summary(tool))
+        items.append(
+            Text("\n".join(tool_summary_lines), style="dim cyan")
+        )
+    
+    return items
 
 
 def get_link_text(
@@ -331,10 +391,18 @@ def display_header(
 def display_result(
     initial_score: float,
     best_score: float,
-    best_prompt: list[dict[str, str]],
+    prompt: dict[str, chat_prompt.ChatPrompt] | chat_prompt.ChatPrompt,
     verbose: int = 1,
-    tools: list[dict[str, Any]] | None = None,
 ) -> None:
+    """
+    Display optimization results including score improvement and optimized prompts.
+    
+    Args:
+        initial_score: The initial score before optimization
+        best_score: The best score achieved after optimization
+        prompt: Either a single ChatPrompt or a dictionary of ChatPrompts
+        verbose: Verbosity level (0 = silent, 1+ = display)
+    """
     if verbose < 1:
         return
 
@@ -343,6 +411,7 @@ def display_result(
 
     content: list[RenderableType] = []
 
+    # Display score comparison
     if best_score > initial_score:
         perc_change, has_percentage = safe_percentage_change(best_score, initial_score)
         if has_percentage:
@@ -368,22 +437,17 @@ def display_result(
         )
 
     content.append(Text("\nOptimized prompt:"))
-    for i, msg in enumerate(best_prompt):
-        # MessageDict requires content, but we use .get() for defensive programming
-        content_value: str | list[dict[str, Any]] = msg.get("content", "")
-        formatted_content = _format_message_content(content_value)
-        role = msg.get("role", "message")
-
-        content.append(
-            Panel(
-                formatted_content,
-                title=role,
-                title_align="left",
-                border_style="dim",
-                width=PANEL_WIDTH,
-                padding=(1, 2),
-            )
-        )
+    
+    # Handle both single ChatPrompt and dict of ChatPrompts
+    if isinstance(prompt, dict):
+        # Dictionary of prompts - display each with its key
+        for key, chat_p in prompt.items():
+            prompt_items = _display_chat_prompt_messages_and_tools(chat_p, key=key)
+            content.extend(prompt_items)
+    else:
+        # Single ChatPrompt
+        prompt_items = _display_chat_prompt_messages_and_tools(prompt, key=None)
+        content.extend(prompt_items)
 
     console.print(
         Panel(
@@ -395,9 +459,6 @@ def display_result(
             padding=(1, 2),
         )
     )
-
-    if tools:
-        _display_tools(tools)
 
 
 def display_configuration(

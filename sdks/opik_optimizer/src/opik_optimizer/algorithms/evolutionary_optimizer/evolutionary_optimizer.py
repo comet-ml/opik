@@ -19,7 +19,7 @@ from opik.environment import get_tqdm_for_current_environment
 from opik_optimizer.base_optimizer import BaseOptimizer, OptimizationRound
 from ...api_objects import chat_prompt
 from opik_optimizer.optimization_result import OptimizationResult
-from opik_optimizer.optimizable_agent import OptimizableAgent
+from opik_optimizer.agents import OptimizableAgent
 from opik_optimizer.mcp_utils.mcp_second_pass import MCPSecondPassCoordinator
 from opik_optimizer.mcp_utils.mcp_workflow import (
     MCPExecutionConfig,

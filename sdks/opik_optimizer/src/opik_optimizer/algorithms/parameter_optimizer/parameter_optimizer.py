@@ -14,7 +14,7 @@ from optuna.trial import Trial, TrialState
 from opik import Dataset
 
 from ...base_optimizer import BaseOptimizer
-from ...optimizable_agent import OptimizableAgent
+from ...agents import OptimizableAgent
 from ...api_objects import chat_prompt
 from ...optimization_result import OptimizationResult
 from .parameter_search_space import ParameterSearchSpace

@@ -88,10 +88,9 @@ def evaluate_prompt(
         coordinator = mcp_execution_config.coordinator
         coordinator.reset()
 
-        raw_model_output = agent.llm_invoke(
+        raw_model_output = agent.invoke(
             messages=messages,
-            seed=getattr(optimizer, "seed", None),
-            allow_tool_use=True,
+            seed=getattr(optimizer, "seed", None)
         )
 
         second_pass_messages = coordinator.build_second_pass_messages(
@@ -113,7 +112,7 @@ def evaluate_prompt(
                 )
 
         if second_pass_messages is not None:
-            final_response = agent.llm_invoke(
+            final_response = agent.invoke(
                 messages=second_pass_messages,
                 seed=getattr(optimizer, "seed", None),
                 allow_tool_use=mcp_execution_config.allow_tool_use_on_second_pass,
