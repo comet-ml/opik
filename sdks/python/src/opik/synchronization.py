@@ -40,15 +40,14 @@ def until(
     while True:
         try:
             if function():
-                break
+                return True
         except Exception:
             LOGGER.debug(
                 f"{function.__name__} raised error in 'until' function.", exc_info=True
             )
             if not allow_errors:
                 raise
-        finally:
-            if (time.time() - start_time) > max_try_seconds:
-                return False
-            time.sleep(sleep)
-    return True
+
+        if (time.time() - start_time) > max_try_seconds:
+            return False
+        time.sleep(sleep)
