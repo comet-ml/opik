@@ -9,20 +9,16 @@ import io.opentelemetry.proto.trace.v1.Span;
 import lombok.experimental.UtilityClass;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.codec.digest.DigestUtils;
+import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 
 import java.nio.ByteBuffer;
 import java.time.Duration;
 import java.time.Instant;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
-import java.util.UUID;
+import java.util.*;
 
 import static com.comet.opik.domain.mapping.OpenTelemetryEventsMapper.processEvents;
-import static com.comet.opik.domain.mapping.OpenTelemetryMappingUtils.extractToJsonColumn;
-import static com.comet.opik.domain.mapping.OpenTelemetryMappingUtils.extractUsageField;
+import static com.comet.opik.domain.mapping.OpenTelemetryMappingUtils.*;
 
 @UtilityClass
 @Slf4j
@@ -84,6 +80,7 @@ public class OpenTelemetryMapper {
         ObjectNode input = JsonUtils.createObjectNode();
         ObjectNode output = JsonUtils.createObjectNode();
         ObjectNode metadata = JsonUtils.createObjectNode();
+        Set<String> tags = new HashSet<>();
 
         if (StringUtils.isNotEmpty(integrationName)) {
             metadata.put("integration", integrationName);
@@ -122,6 +119,14 @@ public class OpenTelemetryMapper {
 
                         extractToJsonColumn(node, key, value);
                         break;
+
+                    case TAGS:
+                        List<String>span_tags = extractTags(value);
+                        if (CollectionUtils.isNotEmpty(span_tags)){
+                            tags.addAll(span_tags);
+                        }
+                        break;
+
                     case DROP :
                         // Explicitly drop this attribute
                         break;
@@ -147,6 +152,9 @@ public class OpenTelemetryMapper {
         }
         if (!usage.isEmpty()) {
             spanBuilder.usage(usage);
+        }
+        if (!tags.isEmpty()) {
+            spanBuilder.tags(tags);
         }
     }
 

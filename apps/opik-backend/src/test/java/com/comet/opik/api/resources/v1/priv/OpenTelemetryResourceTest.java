@@ -357,7 +357,14 @@ class OpenTelemetryResourceTest {
                     KeyValue.newBuilder().setKey(randomKeyJson)
                             .setValue(AnyValue.newBuilder().setStringValue("{\"key\": \"value\"}")).build(),
                     KeyValue.newBuilder().setKey(randomKeyInt)
-                            .setValue(AnyValue.newBuilder().setIntValue(3)).build());
+                            .setValue(AnyValue.newBuilder().setIntValue(3)).build(),
+
+                    KeyValue.newBuilder().setKey("opik.tags")
+                            .setValue(AnyValue.newBuilder()
+                                    .setStringValue("[\"machine-learning\", \"nlp\", \"chatbot\"]").build()).build(),
+                    KeyValue.newBuilder().setKey("opik.metadata")
+                            .setValue(AnyValue.newBuilder().setStringValue("{\"foo\": \"bar\"}").build()).build()
+            );
 
             var spanBuilder = com.comet.opik.api.Span.builder()
                     .id(UUID.randomUUID())
@@ -389,6 +396,14 @@ class OpenTelemetryResourceTest {
             assertThat(span.input().get("all_messages").isArray()).isEqualTo(Boolean.TRUE);
 
             assertThat(span.output().get("tool_responses").isArray()).isEqualTo(Boolean.TRUE);
+
+            // checks key-values for tags
+            assertThat(span.tags()).isNotEmpty();
+            assertThat(span.tags()).contains("machine-learning", "nlp", "chatbot");
+
+            // check metadata
+            assertThat(span.metadata()).isNotEmpty();
+            assertThat(span.metadata().get("opik.metadata").get("foo").asText()).isEqualTo("bar");
         }
 
         @Test

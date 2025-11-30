@@ -12,6 +12,7 @@ import java.util.Map;
 
 import static com.comet.opik.domain.mapping.OpenTelemetryMappingUtils.extractToJsonColumn;
 import static com.comet.opik.domain.mapping.OpenTelemetryMappingUtils.extractUsageField;
+import static com.comet.opik.domain.mapping.OpenTelemetryMappingUtils.extractTags;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -398,5 +399,255 @@ public class OpenTelemetryMappingUtilsTest {
         extractUsageField(usage, rule, key, value);
 
         assertThat(usage).isEmpty();
+    }
+
+    // Tests for extractTags method
+
+    @Test
+    void testExtractTags_CommaSeparatedString() {
+        // Test extracting tags from comma-separated string
+        String tagsString = "machine-learning, nlp, chatbot";
+        AnyValue value = AnyValue.newBuilder().setStringValue(tagsString).build();
+
+        var result = extractTags(value);
+
+        assertThat(result).containsExactly("machine-learning", "nlp", "chatbot");
+    }
+
+    @Test
+    void testExtractTags_CommaSeparatedStringWithSpaces() {
+        // Test extracting tags from comma-separated string with irregular spacing
+        String tagsString = "  machine-learning  ,nlp,  chatbot  , ai  ";
+        AnyValue value = AnyValue.newBuilder().setStringValue(tagsString).build();
+
+        var result = extractTags(value);
+
+        assertThat(result).containsExactly("machine-learning", "nlp", "chatbot", "ai");
+    }
+
+    @Test
+    void testExtractTags_CommaSeparatedStringWithEmptyValues() {
+        // Test extracting tags from comma-separated string with empty values
+        String tagsString = "machine-learning,,nlp,   ,chatbot,";
+        AnyValue value = AnyValue.newBuilder().setStringValue(tagsString).build();
+
+        var result = extractTags(value);
+
+        assertThat(result).containsExactly("machine-learning", "nlp", "chatbot");
+    }
+
+    @Test
+    void testExtractTags_SingleTag() {
+        // Test extracting single tag
+        String tagsString = "machine-learning";
+        AnyValue value = AnyValue.newBuilder().setStringValue(tagsString).build();
+
+        var result = extractTags(value);
+
+        assertThat(result).containsExactly("machine-learning");
+    }
+
+    @Test
+    void testExtractTags_EmptyString() {
+        // Test extracting tags from empty string
+        String tagsString = "";
+        AnyValue value = AnyValue.newBuilder().setStringValue(tagsString).build();
+
+        var result = extractTags(value);
+
+        assertThat(result).isEmpty();
+    }
+
+    @Test
+    void testExtractTags_OnlyCommasAndSpaces() {
+        // Test extracting tags from string with only commas and spaces
+        String tagsString = " , , ,   ";
+        AnyValue value = AnyValue.newBuilder().setStringValue(tagsString).build();
+
+        var result = extractTags(value);
+
+        assertThat(result).isEmpty();
+    }
+
+    @Test
+    void testExtractTags_JsonArrayString() {
+        // Test extracting tags from a JSON array string
+        String jsonArrayString = "[\"machine-learning\", \"nlp\", \"chatbot\"]";
+        AnyValue value = AnyValue.newBuilder().setStringValue(jsonArrayString).build();
+
+        var result = extractTags(value);
+
+        assertThat(result).containsExactly("machine-learning", "nlp", "chatbot");
+    }
+
+    @Test
+    void testExtractTags_JsonArrayStringWithSpaces() {
+        // Test extracting tags from a JSON array string with spaces in values
+        String jsonArrayString = "[\"  machine-learning  \", \"nlp\", \"  chatbot  \"]";
+        AnyValue value = AnyValue.newBuilder().setStringValue(jsonArrayString).build();
+
+        var result = extractTags(value);
+
+        assertThat(result).containsExactly("machine-learning", "nlp", "chatbot");
+    }
+
+    @Test
+    void testExtractTags_JsonArrayStringWithEmptyValues() {
+        // Test extracting tags from a JSON array string with empty values
+        String jsonArrayString = "[\"machine-learning\", \"\", \"nlp\", \"   \", \"chatbot\"]";
+        AnyValue value = AnyValue.newBuilder().setStringValue(jsonArrayString).build();
+
+        var result = extractTags(value);
+
+        assertThat(result).containsExactly("machine-learning", "nlp", "chatbot");
+    }
+
+    @Test
+    void testExtractTags_EmptyJsonArray() {
+        // Test extracting tags from an empty JSON array
+        String jsonArrayString = "[]";
+        AnyValue value = AnyValue.newBuilder().setStringValue(jsonArrayString).build();
+
+        var result = extractTags(value);
+
+        assertThat(result).isEmpty();
+    }
+
+    @Test
+    void testExtractTags_JsonArrayStringWithNonStringValues() {
+        // Test extracting tags from a JSON array string with non-string values (should be ignored)
+        String jsonArrayString = "[\"machine-learning\", 42, \"nlp\", true, \"chatbot\"]";
+        AnyValue value = AnyValue.newBuilder().setStringValue(jsonArrayString).build();
+
+        var result = extractTags(value);
+
+        assertThat(result).containsExactly("machine-learning", "nlp", "chatbot");
+    }
+
+    @Test
+    void testExtractTags_InvalidJsonArrayString_FallsBackToCommaSeparated() {
+        // Test extracting tags from invalid JSON array string - should fall back to comma-separated parsing
+        String invalidJsonArray = "[machine-learning, nlp, chatbot]";
+        AnyValue value = AnyValue.newBuilder().setStringValue(invalidJsonArray).build();
+
+        var result = extractTags(value);
+
+        assertThat(result).containsExactly("[machine-learning", "nlp", "chatbot]");
+    }
+
+    @Test
+    void testExtractTags_StringThatStartsWithBracketButNotArray() {
+        // Test extracting tags from a string that starts with [ but is not a valid array
+        String notArrayString = "[This is not an array";
+        AnyValue value = AnyValue.newBuilder().setStringValue(notArrayString).build();
+
+        var result = extractTags(value);
+
+        assertThat(result).containsExactly("[This is not an array");
+    }
+
+    @Test
+    void testExtractTags_ArrayValue() {
+        // Test extracting tags from OpenTelemetry ArrayValue
+        var arrayValue = io.opentelemetry.proto.common.v1.ArrayValue.newBuilder()
+                .addValues(AnyValue.newBuilder().setStringValue("machine-learning").build())
+                .addValues(AnyValue.newBuilder().setStringValue("nlp").build())
+                .addValues(AnyValue.newBuilder().setStringValue("chatbot").build())
+                .build();
+        AnyValue value = AnyValue.newBuilder().setArrayValue(arrayValue).build();
+
+        var result = extractTags(value);
+
+        assertThat(result).containsExactly("machine-learning", "nlp", "chatbot");
+    }
+
+    @Test
+    void testExtractTags_ArrayValueWithSpaces() {
+        // Test extracting tags from OpenTelemetry ArrayValue with spaces
+        var arrayValue = io.opentelemetry.proto.common.v1.ArrayValue.newBuilder()
+                .addValues(AnyValue.newBuilder().setStringValue("  machine-learning  ").build())
+                .addValues(AnyValue.newBuilder().setStringValue("nlp").build())
+                .addValues(AnyValue.newBuilder().setStringValue("  chatbot  ").build())
+                .build();
+        AnyValue value = AnyValue.newBuilder().setArrayValue(arrayValue).build();
+
+        var result = extractTags(value);
+
+        assertThat(result).containsExactly("machine-learning", "nlp", "chatbot");
+    }
+
+    @Test
+    void testExtractTags_ArrayValueWithEmptyValues() {
+        // Test extracting tags from OpenTelemetry ArrayValue with empty values
+        var arrayValue = io.opentelemetry.proto.common.v1.ArrayValue.newBuilder()
+                .addValues(AnyValue.newBuilder().setStringValue("machine-learning").build())
+                .addValues(AnyValue.newBuilder().setStringValue("").build())
+                .addValues(AnyValue.newBuilder().setStringValue("nlp").build())
+                .addValues(AnyValue.newBuilder().setStringValue("   ").build())
+                .addValues(AnyValue.newBuilder().setStringValue("chatbot").build())
+                .build();
+        AnyValue value = AnyValue.newBuilder().setArrayValue(arrayValue).build();
+
+        var result = extractTags(value);
+
+        assertThat(result).containsExactly("machine-learning", "nlp", "chatbot");
+    }
+
+    @Test
+    void testExtractTags_ArrayValueWithNonStringValues() {
+        // Test extracting tags from OpenTelemetry ArrayValue with non-string values (should be ignored)
+        var arrayValue = io.opentelemetry.proto.common.v1.ArrayValue.newBuilder()
+                .addValues(AnyValue.newBuilder().setStringValue("machine-learning").build())
+                .addValues(AnyValue.newBuilder().setIntValue(42).build())
+                .addValues(AnyValue.newBuilder().setStringValue("nlp").build())
+                .addValues(AnyValue.newBuilder().setBoolValue(true).build())
+                .addValues(AnyValue.newBuilder().setStringValue("chatbot").build())
+                .build();
+        AnyValue value = AnyValue.newBuilder().setArrayValue(arrayValue).build();
+
+        var result = extractTags(value);
+
+        assertThat(result).containsExactly("machine-learning", "nlp", "chatbot");
+    }
+
+    @Test
+    void testExtractTags_EmptyArrayValue() {
+        // Test extracting tags from empty OpenTelemetry ArrayValue
+        var arrayValue = io.opentelemetry.proto.common.v1.ArrayValue.newBuilder().build();
+        AnyValue value = AnyValue.newBuilder().setArrayValue(arrayValue).build();
+
+        var result = extractTags(value);
+
+        assertThat(result).isEmpty();
+    }
+
+    @Test
+    void testExtractTags_UnsupportedValueType() {
+        // Test extracting tags from an unsupported value type (should return an empty list)
+        AnyValue value = AnyValue.newBuilder().setIntValue(42).build();
+
+        var result = extractTags(value);
+
+        assertThat(result).isEmpty();
+    }
+
+    @Test
+    void testExtractTags_BooleanValue() {
+        // Test extracting tags from boolean value (should return an empty list)
+        AnyValue value = AnyValue.newBuilder().setBoolValue(true).build();
+
+        var result = extractTags(value);
+
+        assertThat(result).isEmpty();
+    }
+
+    @Test
+    void testExtractTags_DoubleValue() {
+        // Test extracting tags from double value (should return an empty list)
+        AnyValue value = AnyValue.newBuilder().setDoubleValue(3.14).build();
+
+        var result = extractTags(value);
+
+        assertThat(result).isEmpty();
     }
 }

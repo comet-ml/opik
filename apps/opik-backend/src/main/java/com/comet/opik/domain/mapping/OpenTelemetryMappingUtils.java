@@ -9,7 +9,10 @@ import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 
 import java.io.UncheckedIOException;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
+import java.util.stream.Stream;
 
 /**
  * Utility class for mapping and extracting fields in the context of OpenTelemetry data.
@@ -97,6 +100,62 @@ public class OpenTelemetryMappingUtils {
 
         // extracting from a JSON object
         tryExtractUsageFromJsonObject(usage, key, value.getStringValue());
+    }
+
+    /**
+     * Extracts tags from an AnyValue and returns them as a list of strings.
+     * Supports extracting tags from string values (comma-separated), array values, and JSON arrays.
+     *
+     * @param value the AnyValue containing tag data
+     * @return a list of extracted tag strings, empty if no valid tags found
+     */
+    public static List<String> extractTags(@NonNull AnyValue value) {
+        switch (value.getValueCase()) {
+            case STRING_VALUE -> {
+                var stringValue = value.getStringValue();
+
+                // Check if it's a JSON array string
+                if (stringValue.startsWith("[") && stringValue.endsWith("]")) {
+                    try {
+                        JsonNode arrayNode = JsonUtils.getJsonNodeFromString(stringValue);
+                        if (arrayNode.isArray()) {
+                            List<String> tags = new ArrayList<>();
+                            arrayNode.forEach(node -> {
+                                if (node.isTextual()) {
+                                    String tag = node.asText().trim();
+                                    if (!tag.isEmpty()) {
+                                        tags.add(tag);
+                                    }
+                                }
+                            });
+                            return tags;
+                        }
+                    } catch (UncheckedIOException e) {
+                        log.debug("Failed to parse JSON array for tags: {}. Treating as comma-separated string.", e.getMessage());
+                    }
+                }
+
+                // Treat as a comma-separated string
+                return Stream.of(stringValue.split(","))
+                        .map(String::trim)
+                        .filter(tag -> !tag.isEmpty())
+                        .toList();
+            }
+
+            case ARRAY_VALUE -> {
+                return value.getArrayValue().getValuesList().stream()
+                        .filter(AnyValue::hasStringValue)
+                        .map(AnyValue::getStringValue)
+                        .map(String::trim)
+                        .filter(tag -> !tag.isEmpty())
+                        .toList();
+            }
+
+            default -> {
+                log.warn("Unsupported value type for tags extraction: {}", value.getValueCase());
+                return List.of();
+            }
+        }
     }
 
     /**
