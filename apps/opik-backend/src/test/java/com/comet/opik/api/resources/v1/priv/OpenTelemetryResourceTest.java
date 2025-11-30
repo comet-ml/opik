@@ -197,7 +197,7 @@ class OpenTelemetryResourceTest {
                     .setEndTimeUnixNano(System.currentTimeMillis() * 1_000_000L)
                     .build());
 
-            var batchSize = RandomUtils.insecure().nextInt(4, 9);
+            var batchSize = RandomUtils.insecure().randomInt(4, 9);
             IntStream.range(0, batchSize)
                     .mapToObj(i -> Span.newBuilder()
                             .setName("span " + i)
