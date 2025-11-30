@@ -25,7 +25,8 @@ public final class GeneralMappingRules {
             OpenTelemetryMappingRule.builder()
                     .rule("opik.tags").source(SOURCE).outcome(OpenTelemetryMappingRule.Outcome.TAGS).build(),
             OpenTelemetryMappingRule.builder()
-                    .rule("opik.metadata").source(SOURCE).outcome(OpenTelemetryMappingRule.Outcome.METADATA).build());
+                    .rule("opik.metadata").isPrefix(true).source(SOURCE)
+                    .outcome(OpenTelemetryMappingRule.Outcome.METADATA).build());
 
     public static List<OpenTelemetryMappingRule> getRules() {
         return RULES;

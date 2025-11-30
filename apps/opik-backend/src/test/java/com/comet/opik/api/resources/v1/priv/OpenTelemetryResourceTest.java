@@ -363,7 +363,9 @@ class OpenTelemetryResourceTest {
                             .setValue(AnyValue.newBuilder()
                                     .setStringValue("[\"machine-learning\", \"nlp\", \"chatbot\"]").build()).build(),
                     KeyValue.newBuilder().setKey("opik.metadata")
-                            .setValue(AnyValue.newBuilder().setStringValue("{\"foo\": \"bar\"}").build()).build()
+                            .setValue(AnyValue.newBuilder().setStringValue("{\"foo\": \"bar\"}").build()).build(),
+                    KeyValue.newBuilder().setKey("opik.metadata.inline")
+                            .setValue(AnyValue.newBuilder().setStringValue("inline_value").build()).build()
             );
 
             var spanBuilder = com.comet.opik.api.Span.builder()
@@ -404,6 +406,7 @@ class OpenTelemetryResourceTest {
             // check metadata
             assertThat(span.metadata()).isNotEmpty();
             assertThat(span.metadata().get("opik.metadata").get("foo").asText()).isEqualTo("bar");
+            assertThat(span.metadata().get("opik.metadata.inline").asText()).isEqualTo("inline_value");
         }
 
         @Test
