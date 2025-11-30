@@ -225,8 +225,9 @@ class DatasetServiceImpl implements DatasetService {
                 }
             } catch (UnableToExecuteStatementException e) {
                 if (e.getCause() instanceof SQLIntegrityConstraintViolationException) {
-                    log.info(DATASET_ALREADY_EXISTS);
-                    throw new EntityAlreadyExistsException(new ErrorMessage(List.of(DATASET_ALREADY_EXISTS)));
+                    String message = "Dataset with name '%s' already exists".formatted(dataset.name());
+                    log.info(message);
+                    throw new EntityAlreadyExistsException(new ErrorMessage(List.of(message)));
                 } else {
                     throw e;
                 }

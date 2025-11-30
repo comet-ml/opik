@@ -345,7 +345,6 @@ const AddEditDatasetDialog: React.FunctionComponent<
             <Input
               id="datasetName"
               placeholder="Dataset name"
-              disabled={isEdit}
               value={name}
               onChange={(event) => setName(event.target.value)}
             />
