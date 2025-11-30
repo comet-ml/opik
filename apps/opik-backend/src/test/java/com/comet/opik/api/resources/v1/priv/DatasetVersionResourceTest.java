@@ -984,6 +984,239 @@ class DatasetVersionResourceTest {
     }
 
     @Nested
+    @DisplayName("Has Draft Detection:")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class HasDraftDetection {
+
+        @Test
+        @DisplayName("Success: No items in draft and no version -> hasDraft = false")
+        void getItems__whenNoItemsAndNoVersion__thenHasDraftFalse() {
+            // Given - Empty dataset with no version
+            var datasetId = createDataset(UUID.randomUUID().toString());
+
+            // When - Get draft items
+            var draftItems = datasetResourceClient.getDatasetItems(datasetId, 1, 10, null, API_KEY, TEST_WORKSPACE);
+
+            // Then - hasDraft should be false (no items, no changes)
+            assertThat(draftItems.hasDraft()).isFalse();
+            assertThat(draftItems.content()).isEmpty();
+            assertThat(draftItems.total()).isEqualTo(0);
+        }
+
+        @Test
+        @DisplayName("Success: Items in draft and no version -> hasDraft = true")
+        void getItems__whenItemsInDraftAndNoVersion__thenHasDraftTrue() {
+            // Given - Dataset with items but no version
+            var datasetId = createDataset(UUID.randomUUID().toString());
+            createDatasetItems(datasetId, 3);
+
+            // When - Get draft items
+            var draftItems = datasetResourceClient.getDatasetItems(datasetId, 1, 10, null, API_KEY, TEST_WORKSPACE);
+
+            // Then - hasDraft should be true (items exist, no version to compare against)
+            assertThat(draftItems.hasDraft()).isTrue();
+            assertThat(draftItems.content()).hasSize(3);
+            assertThat(draftItems.total()).isEqualTo(3);
+        }
+
+        @Test
+        @DisplayName("Success: Create version -> hasDraft = false")
+        void getItems__whenVersionCreated__thenHasDraftFalse() {
+            // Given - Dataset with items
+            var datasetId = createDataset(UUID.randomUUID().toString());
+            createDatasetItems(datasetId, 2);
+
+            // Verify hasDraft is true before version
+            var draftBeforeVersion = datasetResourceClient.getDatasetItems(datasetId, 1, 10, null, API_KEY,
+                    TEST_WORKSPACE);
+            assertThat(draftBeforeVersion.hasDraft()).isTrue();
+
+            // When - Commit version
+            var versionCreate = DatasetVersionCreate.builder()
+                    .tag("v1")
+                    .changeDescription("First version")
+                    .build();
+
+            datasetResourceClient.commitVersion(datasetId, versionCreate, API_KEY, TEST_WORKSPACE);
+
+            // Then - Get draft items after version
+            var draftAfterVersion = datasetResourceClient.getDatasetItems(datasetId, 1, 10, null, API_KEY,
+                    TEST_WORKSPACE);
+
+            // hasDraft should be false (draft matches latest version)
+            assertThat(draftAfterVersion.hasDraft()).isFalse();
+            assertThat(draftAfterVersion.content()).hasSize(2);
+            assertThat(draftAfterVersion.total()).isEqualTo(2);
+        }
+
+        @Test
+        @DisplayName("Success: Create version then change draft -> hasDraft = true")
+        void getItems__whenVersionCreatedThenDraftChanged__thenHasDraftTrue() {
+            // Given - Dataset with items and committed version
+            var datasetId = createDataset(UUID.randomUUID().toString());
+            createDatasetItems(datasetId, 2);
+
+            var versionCreate = DatasetVersionCreate.builder()
+                    .tag("v1")
+                    .build();
+
+            datasetResourceClient.commitVersion(datasetId, versionCreate, API_KEY, TEST_WORKSPACE);
+
+            // Verify hasDraft is false after version
+            var draftAfterVersion = datasetResourceClient.getDatasetItems(datasetId, 1, 10, null, API_KEY,
+                    TEST_WORKSPACE);
+            assertThat(draftAfterVersion.hasDraft()).isFalse();
+
+            // When - Modify draft by adding new item
+            createDatasetItems(datasetId, 1);
+
+            // Then - Get draft items after modification
+            var draftAfterChange = datasetResourceClient.getDatasetItems(datasetId, 1, 10, null, API_KEY,
+                    TEST_WORKSPACE);
+
+            // hasDraft should be true (draft has changed from latest version)
+            assertThat(draftAfterChange.hasDraft()).isTrue();
+            assertThat(draftAfterChange.content()).hasSize(3);
+            assertThat(draftAfterChange.total()).isEqualTo(3);
+        }
+
+        @Test
+        @DisplayName("Success: Delete item from draft -> hasDraft = true")
+        void getItems__whenItemDeletedFromDraft__thenHasDraftTrue() {
+            // Given - Dataset with version
+            var datasetId = createDataset(UUID.randomUUID().toString());
+            createDatasetItems(datasetId, 3);
+
+            datasetResourceClient.commitVersion(
+                    datasetId,
+                    DatasetVersionCreate.builder().tag("v1").build(),
+                    API_KEY,
+                    TEST_WORKSPACE);
+
+            // Get draft items to obtain IDs
+            var draftItems = datasetResourceClient.getDatasetItems(datasetId, 1, 10, null, API_KEY, TEST_WORKSPACE);
+            assertThat(draftItems.hasDraft()).isFalse();
+
+            var itemToDelete = draftItems.content().get(0);
+
+            // When - Delete an item
+            deleteDatasetItem(datasetId, itemToDelete.id());
+
+            // Then - hasDraft should be true
+            var draftAfterDelete = datasetResourceClient.getDatasetItems(datasetId, 1, 10, null, API_KEY,
+                    TEST_WORKSPACE);
+            assertThat(draftAfterDelete.hasDraft()).isTrue();
+            assertThat(draftAfterDelete.content()).hasSize(2);
+        }
+
+        @Test
+        @DisplayName("Success: Modify item in draft -> hasDraft = true")
+        void getItems__whenItemModifiedInDraft__thenHasDraftTrue() {
+            // Given - Dataset with version
+            var datasetId = createDataset(UUID.randomUUID().toString());
+            var items = generateDatasetItems(2);
+            var batch = DatasetItemBatch.builder()
+                    .datasetId(datasetId)
+                    .items(items)
+                    .build();
+
+            datasetResourceClient.createDatasetItems(batch, TEST_WORKSPACE, API_KEY);
+
+            datasetResourceClient.commitVersion(
+                    datasetId,
+                    DatasetVersionCreate.builder().tag("v1").build(),
+                    API_KEY,
+                    TEST_WORKSPACE);
+
+            // Get draft items
+            var draftItems = datasetResourceClient.getDatasetItems(datasetId, 1, 10, null, API_KEY, TEST_WORKSPACE);
+            assertThat(draftItems.hasDraft()).isFalse();
+
+            var itemToModify = draftItems.content().get(0);
+
+            // When - Modify an item
+            var modifiedItem = itemToModify.toBuilder()
+                    .data(Map.of("modified", JsonUtils.getJsonNodeFromString("true")))
+                    .build();
+
+            datasetResourceClient.patchDatasetItem(itemToModify.id(), modifiedItem, API_KEY, TEST_WORKSPACE);
+
+            // Then - hasDraft should be true
+            var draftAfterModify = datasetResourceClient.getDatasetItems(datasetId, 1, 10, null, API_KEY,
+                    TEST_WORKSPACE);
+            assertThat(draftAfterModify.hasDraft()).isTrue();
+            assertThat(draftAfterModify.content()).hasSize(2);
+        }
+
+        @Test
+        @DisplayName("Success: Restore to latest version (revert) -> hasDraft = false")
+        void getItems__whenRestoredToLatest__thenHasDraftFalse() {
+            // Given - Dataset with version and modified draft
+            var datasetId = createDataset(UUID.randomUUID().toString());
+            createDatasetItems(datasetId, 2);
+
+            datasetResourceClient.commitVersion(
+                    datasetId,
+                    DatasetVersionCreate.builder().tag("v1").build(),
+                    API_KEY,
+                    TEST_WORKSPACE);
+
+            // Modify draft
+            createDatasetItems(datasetId, 2);
+
+            // Verify hasDraft is true after modification
+            var draftBeforeRestore = datasetResourceClient.getDatasetItems(datasetId, 1, 10, null, API_KEY,
+                    TEST_WORKSPACE);
+            assertThat(draftBeforeRestore.hasDraft()).isTrue();
+
+            // When - Restore to latest version (revert changes)
+            datasetResourceClient.restoreVersion(datasetId, DatasetVersionService.LATEST_TAG, API_KEY, TEST_WORKSPACE);
+
+            // Then - hasDraft should be false (draft matches version again)
+            var draftAfterRestore = datasetResourceClient.getDatasetItems(datasetId, 1, 10, null, API_KEY,
+                    TEST_WORKSPACE);
+            assertThat(draftAfterRestore.hasDraft()).isFalse();
+            assertThat(draftAfterRestore.content()).hasSize(2);
+        }
+
+        @Test
+        @DisplayName("Success: Multiple changes then commit -> hasDraft = false")
+        void getItems__whenMultipleChangesThenCommit__thenHasDraftFalse() {
+            // Given - Dataset with initial version
+            var datasetId = createDataset(UUID.randomUUID().toString());
+            createDatasetItems(datasetId, 2);
+
+            datasetResourceClient.commitVersion(
+                    datasetId,
+                    DatasetVersionCreate.builder().tag("v1").build(),
+                    API_KEY,
+                    TEST_WORKSPACE);
+
+            // When - Make multiple changes
+            createDatasetItems(datasetId, 1); // Add
+            var draftItems1 = datasetResourceClient.getDatasetItems(datasetId, 1, 10, null, API_KEY, TEST_WORKSPACE);
+            assertThat(draftItems1.hasDraft()).isTrue();
+
+            createDatasetItems(datasetId, 1); // Add more
+            var draftItems2 = datasetResourceClient.getDatasetItems(datasetId, 1, 10, null, API_KEY, TEST_WORKSPACE);
+            assertThat(draftItems2.hasDraft()).isTrue();
+
+            // Commit new version
+            datasetResourceClient.commitVersion(
+                    datasetId,
+                    DatasetVersionCreate.builder().tag("v2").build(),
+                    API_KEY,
+                    TEST_WORKSPACE);
+
+            // Then - hasDraft should be false after committing
+            var draftAfterCommit = datasetResourceClient.getDatasetItems(datasetId, 1, 10, null, API_KEY,
+                    TEST_WORKSPACE);
+            assertThat(draftAfterCommit.hasDraft()).isFalse();
+            assertThat(draftAfterCommit.content()).hasSize(4);
+        }
+    }
+
+    @Nested
     @DisplayName("Restore Dataset Version:")
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
     class RestoreVersion {

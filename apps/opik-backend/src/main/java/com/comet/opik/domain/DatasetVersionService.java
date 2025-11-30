@@ -106,6 +106,16 @@ public interface DatasetVersionService {
     Optional<DatasetVersion> getLatestVersion(UUID datasetId);
 
     /**
+     * Retrieves the most recently created version for the specified dataset in a given workspace.
+     * This is used internally for reactive flows where RequestContext is not available.
+     *
+     * @param datasetId the unique identifier of the dataset
+     * @param workspaceId the workspace identifier
+     * @return an Optional containing the latest version if any versions exist, empty otherwise
+     */
+    Optional<DatasetVersion> findLatestVersion(UUID datasetId, String workspaceId);
+
+    /**
      * Adds a tag to an existing dataset version for easy reference.
      *
      * @param datasetId the unique identifier of the dataset
@@ -308,6 +318,16 @@ class DatasetVersionServiceImpl implements DatasetVersionService {
     @Override
     public Optional<DatasetVersion> getLatestVersion(@NonNull UUID datasetId) {
         return getVersionByTag(datasetId, LATEST_TAG);
+    }
+
+    @Override
+    public Optional<DatasetVersion> findLatestVersion(@NonNull UUID datasetId, @NonNull String workspaceId) {
+        log.info("Getting latest version for dataset: '{}', workspace: '{}'", datasetId, workspaceId);
+
+        return template.inTransaction(READ_ONLY, handle -> {
+            var dao = handle.attach(DatasetVersionDAO.class);
+            return dao.findByTag(datasetId, LATEST_TAG, workspaceId);
+        });
     }
 
     @Override
@@ -588,10 +608,10 @@ class DatasetVersionServiceImpl implements DatasetVersionService {
 
                     log.debug("Restoring batch of '{}' items from version: '{}'", items.size(), versionId);
 
-                    // Convert versioned items to draft items (generate new IDs, remove version-specific fields)
+                    // Convert versioned items to draft items (preserve original IDs from draftItemId)
                     List<com.comet.opik.api.DatasetItem> draftItems = items.stream()
                             .map(item -> item.toBuilder()
-                                    .id(idGenerator.generateId()) // Generate new ID for draft item
+                                    .id(item.draftItemId()) // Preserve original draft item ID
                                     .draftItemId(null) // Not applicable for draft items
                                     .build())
                             .toList();

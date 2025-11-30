@@ -38,6 +38,8 @@ public interface DatasetItemVersionDAO {
 
     Flux<com.comet.opik.api.DatasetItem> getVersionItems(UUID datasetId, UUID versionId, int limit,
             UUID lastRetrievedId);
+
+    Mono<ItemsHash> getVersionItemsHashAgg(UUID datasetId, UUID versionId);
 }
 
 @Singleton
@@ -155,6 +157,21 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
             ;
             """;
 
+    private static final String SELECT_VERSION_ITEMS_HASH = """
+            SELECT
+                groupBitXor(xxHash64(dataset_item_id)) as id_hash,
+                groupBitXor(data_hash) as data_hash
+            FROM (
+                SELECT data_hash, id, dataset_item_id
+                FROM dataset_item_versions
+                WHERE dataset_id = :datasetId
+                AND dataset_version_id = :versionId
+                AND workspace_id = :workspace_id
+                ORDER BY id
+                LIMIT 1 BY id
+            )
+            """;
+
     private final @NonNull TransactionTemplateAsync asyncTemplate;
 
     @Override
@@ -247,7 +264,8 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                                 .doFinally(signalType -> endSegment(segment))
                                 .flatMap(DatasetItemResultMapper::mapItem)
                                 .collectList()
-                                .map(items -> new DatasetItemPage(items, page, items.size(), total, columns, null));
+                                .map(items -> new DatasetItemPage(items, page, items.size(), total, columns, null,
+                                        null));
                     });
                 });
     }
@@ -296,6 +314,32 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
             return makeFluxContextAware(bindWorkspaceIdToFlux(statement))
                     .doFinally(signalType -> endSegment(segment))
                     .flatMap(DatasetItemResultMapper::mapItem);
+        });
+    }
+
+    @Override
+    @WithSpan
+    public Mono<ItemsHash> getVersionItemsHashAgg(@NonNull UUID datasetId, @NonNull UUID versionId) {
+        log.debug("Computing hash for version items of dataset: '{}', version: '{}'", datasetId, versionId);
+
+        Segment segment = startSegment(DATASET_ITEM_VERSIONS, CLICKHOUSE, "get_version_items_hash_agg");
+
+        return asyncTemplate.nonTransaction(connection -> {
+            var statement = connection.createStatement(SELECT_VERSION_ITEMS_HASH)
+                    .bind("datasetId", datasetId)
+                    .bind("versionId", versionId);
+
+            return makeFluxContextAware(bindWorkspaceIdToFlux(statement))
+                    .doFinally(signalType -> endSegment(segment))
+                    .flatMap(result -> result.map((row, metadata) -> {
+                        Long idHash = row.get("id_hash", Long.class);
+                        Long dataHash = row.get("data_hash", Long.class);
+                        return new ItemsHash(
+                                idHash != null ? idHash : 0L,
+                                dataHash != null ? dataHash : 0L);
+                    }))
+                    .singleOrEmpty()
+                    .defaultIfEmpty(new ItemsHash(0L, 0L));
         });
     }
 }

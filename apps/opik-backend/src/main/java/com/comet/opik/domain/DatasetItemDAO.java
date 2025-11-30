@@ -75,6 +75,8 @@ public interface DatasetItemDAO {
             boolean mergeTags);
 
     Flux<DatasetItemIdAndHash> getDraftItemIdsAndHashes(UUID datasetId);
+
+    Mono<ItemsHash> getDraftItemsHashAgg(UUID datasetId);
 }
 
 @Singleton
@@ -885,6 +887,20 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
             LIMIT 1 BY id
             """;
 
+    private static final String SELECT_DRAFT_ITEMS_HASH = """
+            SELECT
+                groupBitXor(xxHash64(id)) as id_hash,
+                groupBitXor(data_hash) as data_hash
+            FROM (
+                SELECT data_hash, id
+                FROM dataset_items FINAL
+                WHERE dataset_id = :datasetId
+                AND workspace_id = :workspace_id
+                ORDER BY id
+                LIMIT 1 BY id
+            )
+            """;
+
     private static final String SELECT_DATASET_ITEMS_WITH_EXPERIMENT_ITEMS_STATS = String.format(
             """
                     WITH feedback_scores_combined_raw AS (
@@ -1385,7 +1401,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                             .onErrorResume(e -> handleSqlError(e, List.of()))
                             .flatMap(
                                     items -> Mono.just(new DatasetItemPage(items, page, items.size(), total, columns,
-                                            sortingFactory.getSortableFields())));
+                                            sortingFactory.getSortableFields(), null)));
                 }));
     }
 
@@ -1642,6 +1658,31 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                     .flatMap(Result::getRowsUpdated)
                     .reduce(0L, Long::sum)
                     .doFinally(signalType -> endSegment(segment));
+        });
+    }
+
+    @Override
+    @WithSpan
+    public Mono<ItemsHash> getDraftItemsHashAgg(@NonNull UUID datasetId) {
+        log.debug("Computing hash for draft items of dataset: '{}'", datasetId);
+
+        Segment segment = startSegment(DATASET_ITEMS, CLICKHOUSE, "get_draft_items_hash_agg");
+
+        return asyncTemplate.nonTransaction(connection -> {
+            var statement = connection.createStatement(SELECT_DRAFT_ITEMS_HASH)
+                    .bind("datasetId", datasetId);
+
+            return makeFluxContextAware(bindWorkspaceIdToFlux(statement))
+                    .doFinally(signalType -> endSegment(segment))
+                    .flatMap(result -> result.map((row, metadata) -> {
+                        Long idHash = row.get("id_hash", Long.class);
+                        Long dataHash = row.get("data_hash", Long.class);
+                        return new ItemsHash(
+                                idHash != null ? idHash : 0L,
+                                dataHash != null ? dataHash : 0L);
+                    }))
+                    .singleOrEmpty()
+                    .defaultIfEmpty(new ItemsHash(0L, 0L));
         });
     }
 }
