@@ -80,20 +80,23 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 now64(9) as created_at,
                 now64(9) as last_updated_at,
                 workspace_id
-            FROM dataset_items FINAL
+            FROM dataset_items
             WHERE dataset_id = :datasetId
             AND workspace_id = :workspace_id
+            ORDER BY (workspace_id, dataset_id, source, trace_id, span_id, dataset_items.id) DESC, last_updated_at DESC
+            LIMIT 1 BY dataset_items.id
             """;
 
     private static final String SELECT_ITEM_IDS_AND_HASHES = """
             SELECT
-                dataset_item_id as id,
+                dataset_item_id,
                 data_hash
-            FROM dataset_item_versions FINAL
+            FROM dataset_item_versions
             WHERE dataset_id = :datasetId
             AND dataset_version_id = :versionId
             AND workspace_id = :workspace_id
-            LIMIT 1 BY dataset_item_id
+            ORDER BY (workspace_id, dataset_id, dataset_version_id, id) DESC, last_updated_at DESC
+            LIMIT 1 BY id
             """;
 
     private static final String SELECT_DATASET_ITEM_VERSIONS = """
@@ -115,13 +118,12 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
             WHERE dataset_id = :datasetId
             AND dataset_version_id = :versionId
             AND workspace_id = :workspace_id
-            ORDER BY (workspace_id, dataset_id, dataset_version_id, id) DESC
-            LIMIT 1 BY id
+            ORDER BY (workspace_id, dataset_id, dataset_version_id, id) DESC, last_updated_at DESC
             LIMIT :limit OFFSET :offset
             """;
 
     private static final String SELECT_DATASET_ITEM_VERSIONS_COUNT = """
-            SELECT count(id) as count
+            SELECT count(DISTINCT id) as count
             FROM dataset_item_versions
             WHERE dataset_id = :datasetId
             AND dataset_version_id = :versionId
@@ -180,11 +182,11 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
             return makeFluxContextAware(bindWorkspaceIdToFlux(statement))
                     .doFinally(signalType -> endSegment(segment))
                     .flatMap(result -> result.map((row, metadata) -> {
-                        var id = UUID.fromString(row.get("id", String.class));
+                        var datasetItemId = UUID.fromString(row.get("dataset_item_id", String.class));
                         var hash = row.get("data_hash", Long.class);
-                        log.debug("Retrieved versioned item: dataset_item_id='{}', hash='{}'", id, hash);
+                        log.debug("Retrieved versioned item: dataset_item_id='{}', hash='{}'", datasetItemId, hash);
                         return DatasetItemIdAndHash.builder()
-                                .itemId(id)
+                                .itemId(datasetItemId)
                                 .dataHash(hash)
                                 .build();
                     }))
