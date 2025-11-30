@@ -1,21 +1,16 @@
 package com.comet.opik.domain;
 
 import com.comet.opik.api.Span.SpanBuilder;
-import com.comet.opik.domain.mapping.OpenTelemetryMappingRule;
 import com.comet.opik.domain.mapping.OpenTelemetryMappingRuleFactory;
 import com.comet.opik.utils.JsonUtils;
-import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
-import io.opentelemetry.proto.common.v1.AnyValue;
 import io.opentelemetry.proto.common.v1.KeyValue;
 import io.opentelemetry.proto.trace.v1.Span;
-import jakarta.ws.rs.BadRequestException;
 import lombok.experimental.UtilityClass;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.codec.digest.DigestUtils;
 import org.apache.commons.lang3.StringUtils;
 
-import java.io.UncheckedIOException;
 import java.nio.ByteBuffer;
 import java.time.Duration;
 import java.time.Instant;
@@ -27,14 +22,11 @@ import java.util.UUID;
 
 import static com.comet.opik.domain.mapping.OpenTelemetryEventsMapper.processEvents;
 import static com.comet.opik.domain.mapping.OpenTelemetryMappingUtils.extractToJsonColumn;
+import static com.comet.opik.domain.mapping.OpenTelemetryMappingUtils.extractUsageField;
 
 @UtilityClass
 @Slf4j
 public class OpenTelemetryMapper {
-
-    private static final Map<String, String> USAGE_KEYS_MAPPING = Map.of(
-            "input_tokens", "prompt_tokens",
-            "output_tokens", "completion_tokens");
 
     /**
      * Converts an OpenTelemetry Span into an Opik Span. Despite similar conceptually, but require some translation
@@ -155,44 +147,6 @@ public class OpenTelemetryMapper {
         }
         if (!usage.isEmpty()) {
             spanBuilder.usage(usage);
-        }
-    }
-
-    private static void extractUsageField(Map<String, Integer> usage, OpenTelemetryMappingRule rule, String key,
-            AnyValue value) {
-        // usage might appear as single int values or an json object
-        if (value.hasIntValue()) {
-            var actualKey = key.substring(rule.getRule().length());
-            usage.put(USAGE_KEYS_MAPPING.getOrDefault(actualKey, actualKey), (int) value.getIntValue());
-        } else {
-            try {
-                JsonNode usageNode = JsonUtils.getJsonNodeFromString(value.getStringValue());
-                if (usageNode.isTextual()) {
-                    try {
-                        usageNode = JsonUtils.getJsonNodeFromString(usageNode.asText());
-                    } catch (UncheckedIOException e) {
-                        log.warn(
-                                "Failed to parse nested JSON string for usage field {}: {}. Skipping usage extraction.",
-                                key, e.getMessage());
-                        return;
-                    }
-                }
-
-                // we expect only integers for usage fields
-                usageNode.properties().forEach(entry -> {
-                    if (entry.getValue().isNumber()) {
-                        usage.put(USAGE_KEYS_MAPPING.getOrDefault(entry.getKey(), entry.getKey()),
-                                entry.getValue().intValue());
-                    } else {
-                        log.warn("Unrecognized usage attribute {} -> {}", entry.getKey(), entry.getValue());
-                    }
-                });
-            } catch (UncheckedIOException ex) {
-                log.warn("Failed to parse JSON string for usage field {}: {}. Skipping usage extraction.", key,
-                        ex.getMessage());
-                throw new BadRequestException(
-                        "Failed to parse JSON string for usage field " + key + " ->" + ex.getMessage());
-            }
         }
     }
 

@@ -3,12 +3,18 @@ package com.comet.opik.domain.mapping;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import io.opentelemetry.proto.common.v1.AnyValue;
+import jakarta.ws.rs.BadRequestException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.util.HashMap;
+import java.util.Map;
+
 import static com.comet.opik.domain.mapping.OpenTelemetryMappingUtils.extractToJsonColumn;
+import static com.comet.opik.domain.mapping.OpenTelemetryMappingUtils.extractUsageField;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.data.Offset.offset;
 
 public class OpenTelemetryMappingUtilsTest {
@@ -168,5 +174,229 @@ public class OpenTelemetryMappingUtilsTest {
 
         assertThat(testNode.has("testKey")).isTrue();
         assertThat(testNode.get("testKey").asText()).isEqualTo("{Analyze: \"value\"}");
+    }
+
+    // Tests for extractUsageField method
+
+    @Test
+    void testExtractUsageField_IntegerValue() {
+        // Test extracting usage from integer value
+        Map<String, Integer> usage = new HashMap<>();
+        OpenTelemetryMappingRule rule = OpenTelemetryMappingRule.builder()
+                .rule("gen_ai.usage.")
+                .isPrefix(true)
+                .source("GenAI")
+                .outcome(OpenTelemetryMappingRule.Outcome.USAGE)
+                .build();
+
+        String key = "gen_ai.usage.input_tokens";
+        AnyValue value = AnyValue.newBuilder().setIntValue(42).build();
+
+        extractUsageField(usage, rule, key, value);
+
+        assertThat(usage).containsEntry("prompt_tokens", 42);
+    }
+
+    @Test
+    void testExtractUsageField_IntegerValue_OutputTokens() {
+        // Test extracting usage from integer value for output tokens
+        Map<String, Integer> usage = new HashMap<>();
+        OpenTelemetryMappingRule rule = OpenTelemetryMappingRule.builder()
+                .rule("gen_ai.usage.")
+                .isPrefix(true)
+                .source("GenAI")
+                .outcome(OpenTelemetryMappingRule.Outcome.USAGE)
+                .build();
+
+        String key = "gen_ai.usage.output_tokens";
+        AnyValue value = AnyValue.newBuilder().setIntValue(24).build();
+
+        extractUsageField(usage, rule, key, value);
+
+        assertThat(usage).containsEntry("completion_tokens", 24);
+    }
+
+    @Test
+    void testExtractUsageField_IntegerValue_UnmappedKey() {
+        // Test extracting usage from integer value for unmapped key
+        Map<String, Integer> usage = new HashMap<>();
+        OpenTelemetryMappingRule rule = OpenTelemetryMappingRule.builder()
+                .rule("gen_ai.usage.")
+                .isPrefix(true)
+                .source("GenAI")
+                .outcome(OpenTelemetryMappingRule.Outcome.USAGE)
+                .build();
+
+        String key = "gen_ai.usage.total_tokens";
+        AnyValue value = AnyValue.newBuilder().setIntValue(66).build();
+
+        extractUsageField(usage, rule, key, value);
+
+        assertThat(usage).containsEntry("total_tokens", 66);
+    }
+
+    @Test
+    void testExtractUsageField_StringValueValidInteger() {
+        // Test extracting usage from string value that contains valid integer
+        Map<String, Integer> usage = new HashMap<>();
+        OpenTelemetryMappingRule rule = OpenTelemetryMappingRule.builder()
+                .rule("gen_ai.usage.")
+                .isPrefix(true)
+                .source("GenAI")
+                .outcome(OpenTelemetryMappingRule.Outcome.USAGE)
+                .build();
+
+        String key = "gen_ai.usage.input_tokens";
+        AnyValue value = AnyValue.newBuilder().setStringValue("12").build();
+
+        extractUsageField(usage, rule, key, value);
+
+        assertThat(usage).containsEntry("prompt_tokens", 12);
+    }
+
+    @Test
+    void testExtractUsageField_StringValueValidInteger_OutputTokens() {
+        // Test extracting usage from string value for output tokens
+        Map<String, Integer> usage = new HashMap<>();
+        OpenTelemetryMappingRule rule = OpenTelemetryMappingRule.builder()
+                .rule("gen_ai.usage.")
+                .isPrefix(true)
+                .source("GenAI")
+                .outcome(OpenTelemetryMappingRule.Outcome.USAGE)
+                .build();
+
+        String key = "gen_ai.usage.output_tokens";
+        AnyValue value = AnyValue.newBuilder().setStringValue("36").build();
+
+        extractUsageField(usage, rule, key, value);
+
+        assertThat(usage).containsEntry("completion_tokens", 36);
+    }
+
+    @Test
+    void testExtractUsageField_StringValueInvalidInteger_FallsBackToJsonParsing() {
+        // Test extracting usage from string value that's not a valid integer - should fall back to JSON parsing
+        Map<String, Integer> usage = new HashMap<>();
+        OpenTelemetryMappingRule rule = OpenTelemetryMappingRule.builder()
+                .rule("gen_ai.usage.")
+                .isPrefix(true)
+                .source("GenAI")
+                .outcome(OpenTelemetryMappingRule.Outcome.USAGE)
+                .build();
+
+        String key = "gen_ai.usage.metrics";
+        String jsonString = "{\"input_tokens\": 20, \"output_tokens\": 30}";
+        AnyValue value = AnyValue.newBuilder().setStringValue(jsonString).build();
+
+        extractUsageField(usage, rule, key, value);
+
+        assertThat(usage).containsEntry("prompt_tokens", 20);
+        assertThat(usage).containsEntry("completion_tokens", 30);
+    }
+
+    @Test
+    void testExtractUsageField_JsonObjectWithUsageData() {
+        // Test extracting usage from JSON object string
+        Map<String, Integer> usage = new HashMap<>();
+        OpenTelemetryMappingRule rule = OpenTelemetryMappingRule.builder()
+                .rule("gen_ai.usage.")
+                .isPrefix(true)
+                .source("GenAI")
+                .outcome(OpenTelemetryMappingRule.Outcome.USAGE)
+                .build();
+
+        String key = "gen_ai.usage.details";
+        String jsonString = "{\"input_tokens\": 100, \"output_tokens\": 50, \"total_tokens\": 150}";
+        AnyValue value = AnyValue.newBuilder().setStringValue(jsonString).build();
+
+        extractUsageField(usage, rule, key, value);
+
+        assertThat(usage).containsEntry("prompt_tokens", 100);
+        assertThat(usage).containsEntry("completion_tokens", 50);
+        assertThat(usage).containsEntry("total_tokens", 150);
+    }
+
+    @Test
+    void testExtractUsageField_JsonObjectWithMixedTypes() {
+        // Test extracting usage from JSON object string with mixed types (should only extract integers)
+        Map<String, Integer> usage = new HashMap<>();
+        OpenTelemetryMappingRule rule = OpenTelemetryMappingRule.builder()
+                .rule("gen_ai.usage.")
+                .isPrefix(true)
+                .source("GenAI")
+                .outcome(OpenTelemetryMappingRule.Outcome.USAGE)
+                .build();
+
+        String key = "gen_ai.usage.mixed";
+        String jsonString = "{\"input_tokens\": 75, \"model_name\": \"gpt-4\", \"output_tokens\": 25}";
+        AnyValue value = AnyValue.newBuilder().setStringValue(jsonString).build();
+
+        extractUsageField(usage, rule, key, value);
+
+        assertThat(usage).containsEntry("prompt_tokens", 75);
+        assertThat(usage).containsEntry("completion_tokens", 25);
+        assertThat(usage).hasSize(2); // Only the integer values should be extracted
+    }
+
+    @Test
+    void testExtractUsageField_NestedJsonString() {
+        // Test extracting usage from nested JSON string (string containing JSON string)
+        Map<String, Integer> usage = new HashMap<>();
+        OpenTelemetryMappingRule rule = OpenTelemetryMappingRule.builder()
+                .rule("gen_ai.usage.")
+                .isPrefix(true)
+                .source("GenAI")
+                .outcome(OpenTelemetryMappingRule.Outcome.USAGE)
+                .build();
+
+        String key = "gen_ai.usage.nested";
+        String innerJson = "{\"input_tokens\": 80, \"output_tokens\": 40}";
+        String nestedJson = "\"" + innerJson.replace("\"", "\\\"") + "\"";
+        AnyValue value = AnyValue.newBuilder().setStringValue(nestedJson).build();
+
+        extractUsageField(usage, rule, key, value);
+
+        assertThat(usage).containsEntry("prompt_tokens", 80);
+        assertThat(usage).containsEntry("completion_tokens", 40);
+    }
+
+    @Test
+    void testExtractUsageField_InvalidJsonString_ThrowsBadRequestException() {
+        // Test extracting usage from invalid JSON string - should throw BadRequestException
+        Map<String, Integer> usage = new HashMap<>();
+        OpenTelemetryMappingRule rule = OpenTelemetryMappingRule.builder()
+                .rule("gen_ai.usage.")
+                .isPrefix(true)
+                .source("GenAI")
+                .outcome(OpenTelemetryMappingRule.Outcome.USAGE)
+                .build();
+
+        String key = "gen_ai.usage.invalid";
+        String invalidJson = "not a valid integer and not valid json {";
+        AnyValue value = AnyValue.newBuilder().setStringValue(invalidJson).build();
+
+        assertThatThrownBy(() -> extractUsageField(usage, rule, key, value))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessageContaining("Failed to parse JSON string for usage field");
+    }
+
+    @Test
+    void testExtractUsageField_EmptyJsonObject() {
+        // Test extracting usage from empty JSON object
+        Map<String, Integer> usage = new HashMap<>();
+        OpenTelemetryMappingRule rule = OpenTelemetryMappingRule.builder()
+                .rule("gen_ai.usage.")
+                .isPrefix(true)
+                .source("GenAI")
+                .outcome(OpenTelemetryMappingRule.Outcome.USAGE)
+                .build();
+
+        String key = "gen_ai.usage.empty";
+        String emptyJson = "{}";
+        AnyValue value = AnyValue.newBuilder().setStringValue(emptyJson).build();
+
+        extractUsageField(usage, rule, key, value);
+
+        assertThat(usage).isEmpty();
     }
 }
