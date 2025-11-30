@@ -73,49 +73,57 @@ def test_metaprompt_optimizer() -> None:
         f"Initial score should be between 0-1, got {results.initial_score}"
     )
 
-    # Initial prompt validation - should have same structure as optimized prompt
-    assert isinstance(results.initial_prompt, list), (
-        f"Initial prompt should be a list, got {type(results.initial_prompt)}"
-    )
-    assert len(results.initial_prompt) > 0, "Initial prompt should not be empty"
+    # Initial prompt validation - should be ChatPrompt or dict[str, ChatPrompt]
+    assert results.initial_prompt is not None, "Initial prompt should not be None"
+    
+    if isinstance(results.initial_prompt, dict):
+        # Dictionary of ChatPrompts
+        assert len(results.initial_prompt) > 0, "Initial prompt dict should not be empty"
+        for key, chat_p in results.initial_prompt.items():
+            assert isinstance(key, str), f"Prompt key should be string, got {type(key)}"
+            assert isinstance(chat_p, opik_optimizer.ChatPrompt), (
+                f"Each initial prompt value should be ChatPrompt, got {type(chat_p)}"
+            )
+            messages = chat_p.get_messages()
+            assert len(messages) > 0, f"Initial prompt [{key}] should have messages"
+            for msg in messages:
+                assert "role" in msg, f"Initial prompt [{key}] message should have 'role'"
+                assert "content" in msg, f"Initial prompt [{key}] message should have 'content'"
+    else:
+        # Single ChatPrompt
+        assert isinstance(results.initial_prompt, opik_optimizer.ChatPrompt), (
+            f"Initial prompt should be ChatPrompt, got {type(results.initial_prompt)}"
+        )
+        messages = results.initial_prompt.get_messages()
+        assert len(messages) > 0, "Initial prompt should have messages"
+        for msg in messages:
+            assert "role" in msg, "Initial prompt message should have 'role' field"
+            assert "content" in msg, "Initial prompt message should have 'content' field"
 
-    # Validate initial prompt messages structure
-    for msg in results.initial_prompt:
-        assert isinstance(msg, dict), (
-            f"Each initial prompt message should be a dict, got {type(msg)}"
+    # Optimized prompt structure validation - should be ChatPrompt or dict[str, ChatPrompt]
+    if isinstance(results.prompt, dict):
+        # Dictionary of ChatPrompts
+        assert len(results.prompt) > 0, "Prompt dict should not be empty"
+        for key, chat_p in results.prompt.items():
+            assert isinstance(key, str), f"Prompt key should be string, got {type(key)}"
+            assert isinstance(chat_p, opik_optimizer.ChatPrompt), (
+                f"Each prompt value should be ChatPrompt, got {type(chat_p)}"
+            )
+            messages = chat_p.get_messages()
+            assert len(messages) > 0, f"Prompt [{key}] should have messages"
+            for msg in messages:
+                assert "role" in msg, f"Prompt [{key}] message should have 'role'"
+                assert "content" in msg, f"Prompt [{key}] message should have 'content'"
+    else:
+        # Single ChatPrompt
+        assert isinstance(results.prompt, opik_optimizer.ChatPrompt), (
+            f"Prompt should be ChatPrompt, got {type(results.prompt)}"
         )
-        assert "role" in msg, "Initial prompt message should have 'role' field"
-        assert "content" in msg, "Initial prompt message should have 'content' field"
-        assert msg["role"] in [
-            "system",
-            "user",
-            "assistant",
-        ], f"Invalid role in initial prompt: {msg['role']}"
-        assert isinstance(msg["content"], str), (
-            f"Initial prompt content should be string, got {type(msg['content'])}"
-        )
-
-    # Optimized prompt structure validation
-    assert isinstance(results.prompt, list), (
-        f"Prompt should be a list, got {type(results.prompt)}"
-    )
-    assert len(results.prompt) > 0, "Prompt should not be empty"
-
-    # Validate optimized prompt messages structure
-    for msg in results.prompt:
-        assert isinstance(msg, dict), (
-            f"Each prompt message should be a dict, got {type(msg)}"
-        )
-        assert "role" in msg, "Prompt message should have 'role' field"
-        assert "content" in msg, "Prompt message should have 'content' field"
-        assert msg["role"] in [
-            "system",
-            "user",
-            "assistant",
-        ], f"Invalid role: {msg['role']}"
-        assert isinstance(msg["content"], str), (
-            f"Content should be string, got {type(msg['content'])}"
-        )
+        messages = results.prompt.get_messages()
+        assert len(messages) > 0, "Prompt should have messages"
+        for msg in messages:
+            assert "role" in msg, "Prompt message should have 'role' field"
+            assert "content" in msg, "Prompt message should have 'content' field"
 
     # Details validation
     assert isinstance(results.details, dict), (
@@ -124,19 +132,6 @@ def test_metaprompt_optimizer() -> None:
     assert "rounds" in results.details, "Details should contain 'rounds'"
     assert len(results.details["rounds"]) > 0, (
         "Should have at least one optimization round"
-    )
-
-    # Validate model configuration in details
-    assert "model" in results.details, "Details should contain 'model'"
-    assert results.details["model"] == optimizer.model, (
-        f"Expected {optimizer.model}, got {results.details['model']}"
-    )
-
-    assert "temperature" in results.details, "Details should contain 'temperature'"
-    assert (
-        results.details["temperature"] == optimizer.model_parameters["temperature"]
-    ), (
-        f"Expected temperature {optimizer.model_parameters['temperature']}, got {results.details['temperature']}"
     )
 
     # History validation - MetaPrompt uses details['rounds'] instead of history

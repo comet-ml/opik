@@ -524,8 +524,8 @@ def preview_second_pass(
     agent = agent_factory(prompt)
     base_messages = prompt.get_messages(dataset_item)
 
-    raw_output = agent.llm_invoke(
-        messages=base_messages, seed=seed, allow_tool_use=True
+    raw_output = agent.invoke(
+        messages=base_messages, seed=seed
     )
     logger.debug("Raw model output: %s", raw_output)
 
@@ -536,10 +536,9 @@ def preview_second_pass(
 
     if second_pass_messages:
         logger.debug("Second-pass messages: %s", second_pass_messages)
-        final_output = agent.llm_invoke(
+        final_output = agent.invoke(
             messages=second_pass_messages,
-            seed=seed,
-            allow_tool_use=True,
+            seed=seed
         )
     else:
         final_output = raw_output

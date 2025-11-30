@@ -100,21 +100,15 @@ def create_round_data(
 def create_result(
     optimizer_class_name: str,
     metric: Callable,
-    initial_prompt: list[dict[str, str]],
-    best_prompt: list[dict[str, str]],
+    prompt: dict[str, chat_prompt.ChatPrompt] | chat_prompt.ChatPrompt,
+    initial_prompt: dict[str, chat_prompt.ChatPrompt] | chat_prompt.ChatPrompt,
     best_score: float,
     initial_score: float,
     rounds: list[OptimizationRound],
     dataset_id: str | None,
     optimization_id: str | None,
-    best_tools: list[dict[str, Any]] | None,
     llm_call_counter: int,
     tool_call_counter: int,
-    model: str,
-    model_parameters: dict[str, Any],
-    extract_tool_prompts_fn: Callable,
-    final_bundle_prompts: dict[str, list[dict[str, Any]]] | None = None,
-    best_bundle_prompts_obj: dict[str, chat_prompt.ChatPrompt] | None = None,
 ) -> OptimizationResult:
     """
     Create the final OptimizationResult object.
@@ -132,34 +126,19 @@ def create_result(
         best_tools: Optional list of tools
         llm_call_counter: Count of LLM calls
         tool_call_counter: Count of tool calls
-        model: Model name
-        model_parameters: Model parameters
-        extract_tool_prompts_fn: Function to extract tool prompts
 
     Returns:
         OptimizationResult object
     """
     details = {
-        "final_prompt": best_prompt,
-        "final_score": best_score,
         "rounds": rounds,
         "total_rounds": len(rounds),
         "metric_name": getattr(metric, "__name__", str(metric)),
-        "model": model,
-        "temperature": model_parameters.get("temperature"),
     }
-
-    if best_tools:
-        details["final_tools"] = best_tools
-    if final_bundle_prompts:
-        details["final_bundle_prompts"] = final_bundle_prompts
-        details["best_prompts"] = best_bundle_prompts_obj or final_bundle_prompts
-
-    tool_prompts = extract_tool_prompts_fn(best_tools)
 
     return OptimizationResult(
         optimizer=optimizer_class_name,
-        prompt=best_prompt,
+        prompt=prompt,
         score=best_score,
         initial_prompt=initial_prompt,
         initial_score=initial_score,
@@ -169,5 +148,4 @@ def create_result(
         tool_calls=tool_call_counter,
         dataset_id=dataset_id,
         optimization_id=optimization_id,
-        tool_prompts=tool_prompts,
     )

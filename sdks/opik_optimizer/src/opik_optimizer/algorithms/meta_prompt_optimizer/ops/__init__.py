@@ -10,12 +10,11 @@ This module contains extracted operations from the main optimizer:
 """
 
 from .halloffame_ops import HallOfFameEntry, PromptHallOfFame
-from . import evaluation_ops, candidate_ops, context_ops, result_ops, halloffame_ops
+from . import candidate_ops, context_ops, result_ops, halloffame_ops
 
 __all__ = [
     "HallOfFameEntry",
     "PromptHallOfFame",
-    "evaluation_ops",
     "candidate_ops",
     "context_ops",
     "result_ops",

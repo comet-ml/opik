@@ -84,12 +84,21 @@ def test_hierarchical_reflective_optimizer() -> None:
     )
 
     # Initial prompt validation
-    assert isinstance(results.initial_prompt, list), (
-        f"Initial prompt should be a list, got {type(results.initial_prompt)}"
+    assert isinstance(results.initial_prompt, (opik_optimizer.ChatPrompt, dict)), (
+        f"Initial prompt should be a ChatPrompt or dict, got {type(results.initial_prompt)}"
     )
-    assert len(results.initial_prompt) > 0, "Initial prompt should not be empty"
+    
+    # Extract messages from initial prompt for validation
+    if isinstance(results.initial_prompt, opik_optimizer.ChatPrompt):
+        initial_messages = results.initial_prompt.get_messages()
+    else:
+        # If dict, get messages from first prompt
+        first_prompt = list(results.initial_prompt.values())[0]
+        initial_messages = first_prompt.get_messages()
+    
+    assert len(initial_messages) > 0, "Initial prompt messages should not be empty"
 
-    for msg in results.initial_prompt:
+    for msg in initial_messages:
         assert isinstance(msg, dict), (
             f"Each initial prompt message should be a dict, got {type(msg)}"
         )
@@ -100,12 +109,21 @@ def test_hierarchical_reflective_optimizer() -> None:
         )
 
     # Optimized prompt validation
-    assert isinstance(results.prompt, list), (
-        f"Prompt should be a list, got {type(results.prompt)}"
+    assert isinstance(results.prompt, (opik_optimizer.ChatPrompt, dict)), (
+        f"Prompt should be a ChatPrompt or dict, got {type(results.prompt)}"
     )
-    assert len(results.prompt) > 0, "Prompt should not be empty"
+    
+    # Extract messages from optimized prompt for validation
+    if isinstance(results.prompt, opik_optimizer.ChatPrompt):
+        optimized_messages = results.prompt.get_messages()
+    else:
+        # If dict, get messages from first prompt
+        first_prompt = list(results.prompt.values())[0]
+        optimized_messages = first_prompt.get_messages()
+    
+    assert len(optimized_messages) > 0, "Optimized prompt messages should not be empty"
 
-    for msg in results.prompt:
+    for msg in optimized_messages:
         assert isinstance(msg, dict), (
             f"Each prompt message should be a dict, got {type(msg)}"
         )

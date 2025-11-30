@@ -210,7 +210,7 @@ def display_prompt_candidate_scoring_report(
     # Create a simple object with a method to set the score
     class Reporter:
         def set_generated_prompts(
-            self, candidate_count: int, prompt: chat_prompt.ChatPrompt
+            self, candidate_count: int, prompts: dict[str, chat_prompt.ChatPrompt]
         ) -> None:
             if verbose >= 1:
                 console.print(
@@ -224,7 +224,10 @@ def display_prompt_candidate_scoring_report(
                             style="dim",
                         )
                     )
-                display_messages(prompt.get_messages(), "│         ")
+                for name, prompt in prompts.items():
+                    console.print(Text(f"│         {name}:"))
+                    display_messages(prompt.get_messages(), "│         ")
+                    console.print(Text("│"))
 
         def set_final_score(self, best_score: float, score: float) -> None:
             if verbose >= 1:

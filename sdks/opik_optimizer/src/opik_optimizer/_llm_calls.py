@@ -7,6 +7,8 @@ from types import FrameType
 
 import litellm
 from litellm.exceptions import BadRequestError
+from opik.evaluation.models.litellm import opik_monitor as opik_litellm_monitor
+from opik.integrations.litellm import track_completion
 
 from . import _throttle
 from . import utils as _utils
@@ -18,7 +20,7 @@ logger = logging.getLogger(__name__)
 _limiter = _throttle.get_rate_limiter_for_current_opik_installation()
 
 
-def _increment_llm_counter_if_needed() -> None:
+def _increment_llm_counter_if_in_optimizer() -> None:
     """
     Walk up the call stack and increment the first optimizer's counter if found.
     """
@@ -36,6 +38,28 @@ def _increment_llm_counter_if_needed() -> None:
         optimizer_candidate = frame.f_locals.get("self")
         if isinstance(optimizer_candidate, BaseOptimizer):
             optimizer_candidate._increment_llm_counter()
+            break
+        frame = frame.f_back
+
+
+def _increment_tool_counter_if_in_optimizer() -> None:
+    """
+    Walk up the call stack and increment the first optimizer's counter if found.
+    """
+    try:
+        from .base_optimizer import BaseOptimizer
+    except Exception:
+        return
+
+    try:
+        frame: FrameType | None = sys._getframe()
+    except ValueError:
+        return
+
+    while frame is not None:
+        optimizer_candidate = frame.f_locals.get("self")
+        if isinstance(optimizer_candidate, BaseOptimizer):
+            optimizer_candidate._increment_tool_counter()
             break
         frame = frame.f_back
 
@@ -254,7 +278,7 @@ def call_model(
         If response_model is provided, returns an instance of that model.
         Otherwise, returns the raw string response.
     """
-    _increment_llm_counter_if_needed()
+    _increment_llm_counter_if_in_optimizer()
 
     # Build dict of call-time LiteLLM parameter overrides (non-None only)
     call_time_params = _build_call_time_params(
@@ -278,8 +302,7 @@ def call_model(
         optimization_id,
     )
 
-    litellm_decorator = litellm_integration.track_completion()
-    response = litellm_decorator(litellm.completion)(
+    response = track_completion()(litellm.completion)(
         model=model,
         messages=messages,
         seed=seed,
@@ -332,7 +355,7 @@ async def call_model_async(
         If response_model is provided, returns an instance of that model.
         Otherwise, returns the raw string response.
     """
-    _increment_llm_counter_if_needed()
+    _increment_llm_counter_if_in_optimizer()
 
     # Build dict of call-time LiteLLM parameter overrides (non-None only)
     call_time_params = _build_call_time_params(

@@ -17,6 +17,8 @@ class PropertySchema(pydantic.BaseModel):
 class ToolParameters(pydantic.BaseModel):
     """JSON Schema for tool/function parameters (OpenAI function calling format)."""
 
+    model_config = pydantic.ConfigDict(extra="forbid")
+    
     type: Literal["object"] | None = None
     properties: dict[str, PropertySchema] | None = None
     required: list[str] | None = None
@@ -24,12 +26,16 @@ class ToolParameters(pydantic.BaseModel):
 
 
 class FunctionTool(pydantic.BaseModel):
+    model_config = pydantic.ConfigDict(extra="forbid")
+    
     name: str
     description: str
     parameters: ToolParameters
 
 
 class Tool(pydantic.BaseModel):
+    model_config = pydantic.ConfigDict(extra="forbid")
+    
     type: Literal["function"]
     function: FunctionTool
 
@@ -37,6 +43,8 @@ class Tool(pydantic.BaseModel):
 class ImageURL(pydantic.BaseModel):
     """Image URL content part for OpenAI messages."""
 
+    model_config = pydantic.ConfigDict(extra="forbid")
+    
     url: str
     detail: Literal["low", "high", "auto"] | None = None
 
@@ -44,6 +52,8 @@ class ImageURL(pydantic.BaseModel):
 class TextContentPart(pydantic.BaseModel):
     """Text content part for OpenAI messages."""
 
+    model_config = pydantic.ConfigDict(extra="forbid")
+    
     type: Literal["text"]
     text: str
 
@@ -51,6 +61,8 @@ class TextContentPart(pydantic.BaseModel):
 class ImageContentPart(pydantic.BaseModel):
     """Image content part for OpenAI messages."""
 
+    model_config = pydantic.ConfigDict(extra="forbid")
+    
     type: Literal["image_url"]
     image_url: ImageURL
 
@@ -60,6 +72,8 @@ Content = Union[str, list[ContentPart]]
 
 
 class Message(pydantic.BaseModel):
+    model_config = pydantic.ConfigDict(extra="forbid")
+    
     role: Literal["user", "assistant", "system"]
     content: Content
 

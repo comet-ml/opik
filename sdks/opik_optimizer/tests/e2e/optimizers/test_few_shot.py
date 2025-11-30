@@ -77,49 +77,111 @@ def test_few_shot_optimizer() -> None:
         f"Initial score should be between 0-1, got {results.initial_score}"
     )
 
-    # Initial prompt validation - should have same structure as optimized prompt
-    assert isinstance(results.initial_prompt, list), (
-        f"Initial prompt should be a list, got {type(results.initial_prompt)}"
+    # Initial prompt validation - should be ChatPrompt or dict[str, ChatPrompt]
+    from opik_optimizer.api_objects.chat_prompt import ChatPrompt
+    
+    assert results.initial_prompt is not None, "Initial prompt should not be None"
+    
+    # Handle both single ChatPrompt and dict of ChatPrompts for initial_prompt
+    if isinstance(results.initial_prompt, dict):
+        # Dictionary of ChatPrompts
+        assert len(results.initial_prompt) > 0, "Initial prompt dict should not be empty"
+        for key, chat_prompt in results.initial_prompt.items():
+            assert isinstance(chat_prompt, ChatPrompt), (
+                f"Each initial prompt value should be a ChatPrompt, got {type(chat_prompt)}"
+            )
+            messages = chat_prompt.get_messages()
+            assert len(messages) > 0, f"Initial prompt [{key}] should have messages"
+            for msg in messages:
+                assert isinstance(msg, dict), (
+                    f"Each initial prompt message should be a dict, got {type(msg)}"
+                )
+                assert "role" in msg, "Initial prompt message should have 'role' field"
+                assert "content" in msg, "Initial prompt message should have 'content' field"
+                assert msg["role"] in [
+                    "system",
+                    "user",
+                    "assistant",
+                ], f"Invalid role in initial prompt: {msg['role']}"
+    else:
+        # Single ChatPrompt
+        assert isinstance(results.initial_prompt, ChatPrompt), (
+            f"Initial prompt should be a ChatPrompt, got {type(results.initial_prompt)}"
+        )
+        messages = results.initial_prompt.get_messages()
+        assert len(messages) > 0, "Initial prompt should have messages"
+        for msg in messages:
+            assert isinstance(msg, dict), (
+                f"Each initial prompt message should be a dict, got {type(msg)}"
+            )
+            assert "role" in msg, "Initial prompt message should have 'role' field"
+            assert "content" in msg, "Initial prompt message should have 'content' field"
+            assert msg["role"] in [
+                "system",
+                "user",
+                "assistant",
+            ], f"Invalid role in initial prompt: {msg['role']}"
+
+    # Optimized prompt structure validation - should be ChatPrompt or dict[str, ChatPrompt]
+    # Also validate that optimized prompts don't contain the few-shot placeholder string
+    from opik_optimizer.algorithms.few_shot_bayesian_optimizer.prompts import (
+        FEW_SHOT_EXAMPLE_PLACEHOLDER,
     )
-    assert len(results.initial_prompt) > 0, "Initial prompt should not be empty"
-
-    # Validate initial prompt messages structure
-    for msg in results.initial_prompt:
-        assert isinstance(msg, dict), (
-            f"Each initial prompt message should be a dict, got {type(msg)}"
+    
+    if isinstance(results.prompt, dict):
+        # Dictionary of ChatPrompts
+        assert len(results.prompt) > 0, "Prompt dict should not be empty"
+        for key, chat_prompt in results.prompt.items():
+            assert isinstance(chat_prompt, ChatPrompt), (
+                f"Each prompt value should be a ChatPrompt, got {type(chat_prompt)}"
+            )
+            messages = chat_prompt.get_messages()
+            assert len(messages) > 0, f"Prompt [{key}] should have messages"
+            for msg in messages:
+                assert isinstance(msg, dict), (
+                    f"Each prompt message should be a dict, got {type(msg)}"
+                )
+                assert "role" in msg, "Prompt message should have 'role' field"
+                assert "content" in msg, "Prompt message should have 'content' field"
+                assert msg["role"] in [
+                    "system",
+                    "user",
+                    "assistant",
+                ], f"Invalid role: {msg['role']}"
+                
+                # Check that the few-shot placeholder was replaced
+                content = msg["content"]
+                if isinstance(content, str):
+                    assert FEW_SHOT_EXAMPLE_PLACEHOLDER not in content, (
+                        f"Optimized prompt [{key}] still contains placeholder '{FEW_SHOT_EXAMPLE_PLACEHOLDER}' "
+                        f"in {msg['role']} message. The placeholder should be replaced with actual examples."
+                    )
+    else:
+        # Single ChatPrompt
+        assert isinstance(results.prompt, ChatPrompt), (
+            f"Prompt should be a ChatPrompt, got {type(results.prompt)}"
         )
-        assert "role" in msg, "Initial prompt message should have 'role' field"
-        assert "content" in msg, "Initial prompt message should have 'content' field"
-        assert msg["role"] in [
-            "system",
-            "user",
-            "assistant",
-        ], f"Invalid role in initial prompt: {msg['role']}"
-        assert isinstance(msg["content"], str), (
-            f"Initial prompt content should be string, got {type(msg['content'])}"
-        )
-
-    # Optimized prompt structure validation
-    assert isinstance(results.prompt, list), (
-        f"Prompt should be a list, got {type(results.prompt)}"
-    )
-    assert len(results.prompt) > 0, "Prompt should not be empty"
-
-    # Validate optimized prompt messages structure
-    for msg in results.prompt:
-        assert isinstance(msg, dict), (
-            f"Each prompt message should be a dict, got {type(msg)}"
-        )
-        assert "role" in msg, "Prompt message should have 'role' field"
-        assert "content" in msg, "Prompt message should have 'content' field"
-        assert msg["role"] in [
-            "system",
-            "user",
-            "assistant",
-        ], f"Invalid role: {msg['role']}"
-        assert isinstance(msg["content"], str), (
-            f"Content should be string, got {type(msg['content'])}"
-        )
+        messages = results.prompt.get_messages()
+        assert len(messages) > 0, "Prompt should have messages"
+        for msg in messages:
+            assert isinstance(msg, dict), (
+                f"Each prompt message should be a dict, got {type(msg)}"
+            )
+            assert "role" in msg, "Prompt message should have 'role' field"
+            assert "content" in msg, "Prompt message should have 'content' field"
+            assert msg["role"] in [
+                "system",
+                "user",
+                "assistant",
+            ], f"Invalid role: {msg['role']}"
+            
+            # Check that the few-shot placeholder was replaced
+            content = msg["content"]
+            if isinstance(content, str):
+                assert FEW_SHOT_EXAMPLE_PLACEHOLDER not in content, (
+                    f"Optimized prompt still contains placeholder '{FEW_SHOT_EXAMPLE_PLACEHOLDER}' "
+                    f"in {msg['role']} message. The placeholder should be replaced with actual examples."
+                )
 
     # Details validation - FewShot specific
     assert isinstance(results.details, dict), (
