@@ -93,13 +93,11 @@ public class OpenTelemetryMappingUtils {
             usage.put(USAGE_KEYS_MAPPING.getOrDefault(actualKey, actualKey), (int) value.getIntValue());
         } else if (value.hasStringValue()) {
             boolean extracted = tryExtractUsageFromString(usage, rule, key, value.getStringValue());
-            if (extracted) {
-                return;
+            if (!extracted) {
+                // extracting from a JSON object
+                tryExtractUsageFromJsonObject(usage, key, value.getStringValue());
             }
         }
-
-        // extracting from a JSON object
-        tryExtractUsageFromJsonObject(usage, key, value.getStringValue());
     }
 
     /**
@@ -131,7 +129,8 @@ public class OpenTelemetryMappingUtils {
                             return tags;
                         }
                     } catch (UncheckedIOException e) {
-                        log.debug("Failed to parse JSON array for tags: {}. Treating as comma-separated string.", e.getMessage());
+                        log.debug("Failed to parse JSON array for tags: {}. Treating as comma-separated string.",
+                                e.getMessage());
                     }
                 }
 
@@ -167,7 +166,7 @@ public class OpenTelemetryMappingUtils {
      * @param stringValue the string value to parse
      * @return true if the string was successfully parsed and added, false otherwise
      */
-    static boolean tryExtractUsageFromString(Map<String, Integer> usage, OpenTelemetryMappingRule rule,
+    private static boolean tryExtractUsageFromString(Map<String, Integer> usage, OpenTelemetryMappingRule rule,
             String key, String stringValue) {
         try {
             int intValue = Integer.parseInt(stringValue);
@@ -188,7 +187,7 @@ public class OpenTelemetryMappingUtils {
      * @param stringValue the JSON string to parse
      * @throws BadRequestException if JSON parsing fails critically
      */
-    static void tryExtractUsageFromJsonObject(Map<String, Integer> usage, String key, String stringValue) {
+    private static void tryExtractUsageFromJsonObject(Map<String, Integer> usage, String key, String stringValue) {
         try {
             JsonNode usageNode = JsonUtils.getJsonNodeFromString(stringValue);
             if (usageNode.isTextual()) {
@@ -209,14 +208,14 @@ public class OpenTelemetryMappingUtils {
                             USAGE_KEYS_MAPPING.getOrDefault(entry.getKey(), entry.getKey()),
                             entry.getValue().intValue());
                 } else {
-                    log.warn("Unrecognized usage attribute {} -> {}", entry.getKey(), entry.getValue());
+                    log.warn("Unrecognized usage attribute {}: {}", entry.getKey(), entry.getValue());
                 }
             });
         } catch (UncheckedIOException ex) {
             log.warn("Failed to parse JSON string for usage field {}: {}. Skipping usage extraction.", key,
                     ex.getMessage());
             throw new BadRequestException(
-                    "Failed to parse JSON string for usage field " + key + " ->" + ex.getMessage());
+                    "Failed to parse JSON string for usage field " + key + ": " + ex.getMessage());
         }
     }
 }

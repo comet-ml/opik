@@ -30,7 +30,8 @@ public final class GenAIMappingRules {
                     .rule("gen_ai.request.model").source(SOURCE).outcome(OpenTelemetryMappingRule.Outcome.MODEL)
                     .spanType(SpanType.llm).build(),
             OpenTelemetryMappingRule.builder()
-                    .rule("gen_ai.request.temperature").source(SOURCE).outcome(OpenTelemetryMappingRule.Outcome.METADATA)
+                    .rule("gen_ai.request.temperature").source(SOURCE)
+                    .outcome(OpenTelemetryMappingRule.Outcome.METADATA)
                     .spanType(SpanType.llm).build(),
             OpenTelemetryMappingRule.builder()
                     .rule("gen_ai.response.id").source(SOURCE).outcome(OpenTelemetryMappingRule.Outcome.METADATA)

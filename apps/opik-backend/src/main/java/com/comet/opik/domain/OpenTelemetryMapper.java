@@ -15,7 +15,13 @@ import org.apache.commons.lang3.StringUtils;
 import java.nio.ByteBuffer;
 import java.time.Duration;
 import java.time.Instant;
-import java.util.*;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
+import java.util.UUID;
 
 import static com.comet.opik.domain.mapping.OpenTelemetryEventsMapper.processEvents;
 import static com.comet.opik.domain.mapping.OpenTelemetryMappingUtils.*;
@@ -120,9 +126,9 @@ public class OpenTelemetryMapper {
                         extractToJsonColumn(node, key, value);
                         break;
 
-                    case TAGS:
-                        List<String>span_tags = extractTags(value);
-                        if (CollectionUtils.isNotEmpty(span_tags)){
+                    case TAGS :
+                        List<String> span_tags = extractTags(value);
+                        if (CollectionUtils.isNotEmpty(span_tags)) {
                             tags.addAll(span_tags);
                         }
                         break;

@@ -10,9 +10,9 @@ import org.junit.jupiter.api.Test;
 import java.util.HashMap;
 import java.util.Map;
 
+import static com.comet.opik.domain.mapping.OpenTelemetryMappingUtils.extractTags;
 import static com.comet.opik.domain.mapping.OpenTelemetryMappingUtils.extractToJsonColumn;
 import static com.comet.opik.domain.mapping.OpenTelemetryMappingUtils.extractUsageField;
-import static com.comet.opik.domain.mapping.OpenTelemetryMappingUtils.extractTags;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
