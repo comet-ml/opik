@@ -90,12 +90,12 @@ public class OnlineScoringSpanLlmAsJudgeScorer extends OnlineScoringBaseScorer<S
             userFacingLogger.info("Sending spanId '{}' to LLM using the following input:\n\n{}",
                     span.id(), scoreRequest);
 
-            ChatResponse chatResponse;
+            ChatResponse score;
             try {
                 // Reuse scoreTrace method as it's generic enough - it just takes a ChatRequest and calls the LLM
-                chatResponse = aiProxyService.scoreTrace(
+                score = aiProxyService.scoreTrace(
                         scoreRequest, message.llmAsJudgeCode().model(), message.workspaceId());
-                userFacingLogger.info("Received response for spanId '{}':\n\n{}", span.id(), chatResponse);
+                userFacingLogger.info("Received response for spanId '{}':\n\n{}", span.id(), score);
             } catch (Exception exception) {
                 String errorMessage = Optional.ofNullable(exception.getCause())
                         .map(Throwable::getMessage)
@@ -107,7 +107,7 @@ public class OnlineScoringSpanLlmAsJudgeScorer extends OnlineScoringBaseScorer<S
             }
 
             try {
-                List<FeedbackScoreBatchItem> scores = OnlineScoringEngine.toFeedbackScores(chatResponse).stream()
+                List<FeedbackScoreBatchItem> scores = OnlineScoringEngine.toFeedbackScores(score).stream()
                         .map(item -> (FeedbackScoreBatchItem) item.toBuilder()
                                 .id(span.id())
                                 .projectId(span.projectId())

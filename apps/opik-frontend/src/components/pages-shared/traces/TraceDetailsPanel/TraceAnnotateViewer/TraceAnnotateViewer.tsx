@@ -34,7 +34,7 @@ const TraceAnnotateViewer: React.FunctionComponent<
   // Only show feedback scores for the current entity type
   // When showing a trace, only show trace feedback scores (not span scores)
   // When showing a span, only show span feedback scores (not trace scores)
-  const allFeedbackScores = useMemo(
+  const filteredFeedbackScores = useMemo(
     () => data.feedback_scores || [],
     [data.feedback_scores],
   );
@@ -53,7 +53,7 @@ const TraceAnnotateViewer: React.FunctionComponent<
       let targetSpanId = spanIdToDelete ?? spanId;
       if (isTrace && !spanIdToDelete) {
         // Look up the score to extract span_id from value_by_author
-        const score = allFeedbackScores.find((s) => s.name === name);
+        const score = filteredFeedbackScores.find((s) => s.name === name);
         if (score?.value_by_author) {
           const metadata = extractSpanMetadataFromValueByAuthor(
             score.value_by_author,
@@ -63,7 +63,7 @@ const TraceAnnotateViewer: React.FunctionComponent<
       }
       feedbackScoreDelete({ name, traceId, spanId: targetSpanId, author });
     },
-    [isTrace, spanId, allFeedbackScores, feedbackScoreDelete, traceId],
+    [isTrace, spanId, filteredFeedbackScores, feedbackScoreDelete, traceId],
   );
 
   return (
@@ -81,7 +81,7 @@ const TraceAnnotateViewer: React.FunctionComponent<
               {scoresSectionTitle}
             </div>
             <div className="flex flex-wrap gap-2 px-6 py-2">
-              {allFeedbackScores.map((score) => (
+              {filteredFeedbackScores.map((score) => (
                 <FeedbackScoreTag
                   key={score.name}
                   label={score.name}
@@ -98,7 +98,7 @@ const TraceAnnotateViewer: React.FunctionComponent<
         )}
         <FeedbackScoresEditor
           key={`${traceId}-${spanId}`}
-          feedbackScores={allFeedbackScores}
+          feedbackScores={filteredFeedbackScores}
           onUpdateFeedbackScore={onUpdateFeedbackScore}
           onDeleteFeedbackScore={onDeleteFeedbackScore}
           className="mt-4"

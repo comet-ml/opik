@@ -2,9 +2,12 @@ package com.comet.opik.api.resources.v1.events;
 
 import com.comet.opik.api.PromptType;
 import com.comet.opik.api.ScoreSource;
+import com.comet.opik.api.Span;
 import com.comet.opik.api.Trace;
+import com.comet.opik.api.evaluators.AutomationRuleEvaluatorSpanLlmAsJudge;
 import com.comet.opik.api.evaluators.LlmAsJudgeMessage;
 import com.comet.opik.api.evaluators.LlmAsJudgeMessageContent;
+import com.comet.opik.api.evaluators.LlmAsJudgeOutputSchema;
 import com.comet.opik.domain.evaluators.python.TraceThreadPythonEvaluatorRequest;
 import com.comet.opik.domain.llm.structuredoutput.StructuredOutputStrategy;
 import com.comet.opik.utils.JsonUtils;
@@ -88,8 +91,8 @@ public class OnlineScoringEngine {
      * @return a request to trigger to any supported provider with a ChatLanguageModel
      */
     public static ChatRequest prepareSpanLlmRequest(
-            @NotNull com.comet.opik.api.evaluators.AutomationRuleEvaluatorSpanLlmAsJudge.SpanLlmAsJudgeCode evaluatorCode,
-            @NotNull com.comet.opik.api.Span span,
+            @NotNull AutomationRuleEvaluatorSpanLlmAsJudge.SpanLlmAsJudgeCode evaluatorCode,
+            @NotNull Span span,
             @NotNull StructuredOutputStrategy structuredOutputStrategy) {
         var renderedMessages = renderMessages(evaluatorCode.messages(), evaluatorCode.variables(), span);
         return buildChatRequest(renderedMessages, evaluatorCode.schema(), structuredOutputStrategy);
@@ -101,7 +104,7 @@ public class OnlineScoringEngine {
      */
     private static ChatRequest buildChatRequest(
             List<ChatMessage> renderedMessages,
-            List<com.comet.opik.api.evaluators.LlmAsJudgeOutputSchema> schema,
+            List<LlmAsJudgeOutputSchema> schema,
             StructuredOutputStrategy structuredOutputStrategy) {
         var chatRequestBuilder = ChatRequest.builder().messages(renderedMessages);
         return structuredOutputStrategy.apply(chatRequestBuilder, renderedMessages, schema).build();
@@ -224,7 +227,7 @@ public class OnlineScoringEngine {
      * @return a list of AI messages, with templates rendered
      */
     static List<ChatMessage> renderMessages(
-            List<LlmAsJudgeMessage> templateMessages, Map<String, String> variablesMap, com.comet.opik.api.Span span) {
+            List<LlmAsJudgeMessage> templateMessages, Map<String, String> variablesMap, Span span) {
         Map<String, String> replacements = toReplacements(variablesMap, span);
         return renderMessagesWithReplacements(templateMessages, replacements);
     }
@@ -297,7 +300,7 @@ public class OnlineScoringEngine {
         });
     }
 
-    public static Map<String, String> toReplacements(Map<String, String> variables, com.comet.opik.api.Span span) {
+    public static Map<String, String> toReplacements(Map<String, String> variables, Span span) {
         return toReplacements(variables, section -> switch (section) {
             case INPUT -> span.input();
             case OUTPUT -> span.output();

@@ -73,6 +73,12 @@ public class OnlineScoringSpanSampler {
      */
     @Subscribe
     public void onSpansCreated(SpansCreated spansBatch) {
+        // Check if feature is enabled before processing spans
+        if (!serviceTogglesConfig.isSpanLlmAsJudgeEnabled()) {
+            log.debug("Span LLM as Judge evaluator is disabled. Skipping span sampling.");
+            return;
+        }
+
         var spansByProject = spansBatch.spans().stream().collect(Collectors.groupingBy(Span::projectId));
 
         var countMap = spansByProject.entrySet().stream()
@@ -87,14 +93,9 @@ public class OnlineScoringSpanSampler {
             log.info("Fetching evaluators for '{}' spans, project '{}' on workspace '{}'",
                     spans.size(), projectId, spansBatch.workspaceId());
 
+            // Fetch only span-level evaluators by filtering at database level
             List<? extends AutomationRuleEvaluator<?, ?>> evaluators = ruleEvaluatorService.findAll(
-                    projectId, spansBatch.workspaceId());
-
-            // Filter to only span-level evaluators
-            List<AutomationRuleEvaluator<SpanLlmAsJudgeCode, SpanFilter>> spanEvaluators = evaluators.stream()
-                    .filter(evaluator -> evaluator.getType() == AutomationRuleEvaluatorType.SPAN_LLM_AS_JUDGE)
-                    .map(evaluator -> (AutomationRuleEvaluator<SpanLlmAsJudgeCode, SpanFilter>) evaluator)
-                    .toList();
+                    projectId, spansBatch.workspaceId(), AutomationRuleEvaluatorType.SPAN_LLM_AS_JUDGE);
 
             if (spanEvaluators.isEmpty()) {
                 log.debug("No span-level evaluators found for project '{}' on workspace '{}'",
@@ -106,14 +107,6 @@ public class OnlineScoringSpanSampler {
             evaluators.parallelStream().forEach(evaluator -> {
                 switch (evaluator) {
                     case AutomationRuleEvaluatorSpanLlmAsJudge rule -> {
-
-                        if (!serviceTogglesConfig.isSpanLlmAsJudgeEnabled()) {
-                            log.warn(
-                                    "Span LLM as Judge evaluator is disabled. Skipping sampling for evaluator type '{}'",
-                                    evaluator.getType());
-                            return;
-                        }
-
                         // samples spans for this rule
                         var samples = spans.stream()
                                 .filter(span -> shouldSampleSpan(rule, spansBatch.workspaceId(), span))
