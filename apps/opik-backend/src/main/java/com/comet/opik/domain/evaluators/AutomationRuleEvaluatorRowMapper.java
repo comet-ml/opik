@@ -7,10 +7,10 @@ import org.jdbi.v3.core.statement.StatementContext;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 
-public class AutomationRuleEvaluatorRowMapper implements RowMapper<AutomationRuleModel> {
+public class AutomationRuleEvaluatorRowMapper implements RowMapper<AutomationRuleEvaluatorModel<?>> {
 
     @Override
-    public AutomationRuleModel map(ResultSet rs, StatementContext ctx) throws SQLException {
+    public AutomationRuleEvaluatorModel<?> map(ResultSet rs, StatementContext ctx) throws SQLException {
         var type = AutomationRuleEvaluatorType.fromString(rs.getString("type"));
         var mapperClass = switch (type) {
             case LLM_AS_JUDGE -> LlmAsJudgeAutomationRuleEvaluatorModel.class;
