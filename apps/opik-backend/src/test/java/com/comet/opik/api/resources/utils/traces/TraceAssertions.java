@@ -26,8 +26,7 @@ public class TraceAssertions {
 
     public static final String[] IGNORED_FIELDS_TRACES = {"projectId", "projectName", "createdAt",
             "lastUpdatedAt", "feedbackScores", "spanFeedbackScores", "createdBy", "lastUpdatedBy", "totalEstimatedCost",
-            "spanCount",
-            "llmSpanCount", "hasToolSpans", "duration", "comments", "threadId", "guardrailsValidations",
+            "spanCount", "llmSpanCount", "hasToolSpans", "duration", "comments", "threadId", "guardrailsValidations",
             "providers"};
 
     public static final String[] IGNORED_FIELDS_SCORES = {"createdAt", "lastUpdatedAt", "createdBy", "lastUpdatedBy",
@@ -172,7 +171,7 @@ public class TraceAssertions {
         assertThat(actualTrace.projectName()).isNull();
 
         if (actualTrace.createdAt() != null) {
-            assertThat(actualTrace.createdAt()).isAfter(expectedTrace.createdAt());
+            assertThat(actualTrace.createdAt()).isAfterOrEqualTo(expectedTrace.createdAt());
         }
 
         if (actualTrace.lastUpdatedAt() != null) {

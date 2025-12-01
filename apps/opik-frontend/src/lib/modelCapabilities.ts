@@ -7,7 +7,16 @@ type ModelPricingEntry = {
   [key: string]: unknown;
 };
 
-const normalizeModelName = (value: string) => value.trim().toLowerCase();
+/**
+ * Normalizes model names for consistent lookup.
+ * - Converts to lowercase
+ * - Trims whitespace
+ * - Replaces dots with hyphens (fixes issue #4114 for vision capability detection)
+ *
+ * This ensures "claude-3.5-sonnet" matches "claude-3-5-sonnet" in the pricing database.
+ */
+const normalizeModelName = (value: string) =>
+  value.trim().toLowerCase().replace(/\./g, "-");
 
 const modelEntries = modelPricing as Record<string, ModelPricingEntry>;
 
