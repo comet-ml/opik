@@ -25,8 +25,8 @@ import jakarta.validation.constraints.NotNull;
 import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.DELETE;
 import jakarta.ws.rs.DefaultValue;
+import jakarta.ws.rs.ForbiddenException;
 import jakarta.ws.rs.GET;
-import jakarta.ws.rs.NotFoundException;
 import jakarta.ws.rs.POST;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.PathParam;
@@ -191,8 +191,8 @@ public class DatasetVersionsResource {
 
     private void checkFeatureEnabled() {
         if (!config.getServiceToggles().isDatasetVersioningEnabled()) {
-            log.warn("Dataset versioning feature is disabled, returning 404");
-            throw new NotFoundException("Dataset versioning feature is not enabled");
+            log.warn("Dataset versioning feature is disabled, returning 403");
+            throw new ForbiddenException("Dataset versioning feature is not enabled");
         }
     }
 }
