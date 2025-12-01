@@ -2,7 +2,7 @@ import logging
 import time
 from typing import Any, Callable, Dict, List, Optional, Union, cast
 
-from .. import Prompt
+from ..api_objects.prompt import Prompt
 from ..api_objects import opik_client
 from ..api_objects import dataset, experiment
 from ..api_objects.experiment import helpers as experiment_helpers
