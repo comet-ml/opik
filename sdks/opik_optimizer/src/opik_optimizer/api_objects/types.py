@@ -71,6 +71,50 @@ ContentPart = Union[TextContentPart, ImageContentPart]
 Content = Union[str, list[ContentPart]]
 
 
+def extract_text_from_content(content: Content) -> str:
+    """Extract text from Content (str or list of ContentParts).
+
+    Assumes at most one text part per message.
+
+    Args:
+        content: Message content, either a string or a list of content parts.
+
+    Returns:
+        The text content as a string.
+    """
+    if isinstance(content, str):
+        return content
+    for part in content:
+        if isinstance(part, dict) and part.get("type") == "text":
+            return part.get("text", "")
+    return ""
+
+
+def rebuild_content_with_new_text(original_content: Content, new_text: str) -> Content:
+    """Replace text part with new_text, preserving non-text parts (images/video).
+
+    Assumes at most one text part per message.
+
+    Args:
+        original_content: The original content (string or list of parts).
+        new_text: The new text to replace the text part with.
+
+    Returns:
+        Updated content with the same structure as the original.
+    """
+    import copy
+
+    if isinstance(original_content, str):
+        return new_text
+    result: list[dict[str, Any]] = []
+    for part in original_content:
+        if isinstance(part, dict) and part.get("type") == "text":
+            result.append({"type": "text", "text": new_text})
+        else:
+            result.append(copy.deepcopy(part))
+    return result  # type: ignore[return-value]
+
+
 class Message(pydantic.BaseModel):
     model_config = pydantic.ConfigDict(extra="forbid")
     

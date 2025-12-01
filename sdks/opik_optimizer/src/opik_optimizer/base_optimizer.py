@@ -643,7 +643,7 @@ class BaseOptimizer(ABC):
 
         # Ensure num_threads has a default value if None
         if n_threads is None:
-            n_threads = 1
+            n_threads = 12
 
         result = task_evaluator.evaluate(
             dataset=dataset,
