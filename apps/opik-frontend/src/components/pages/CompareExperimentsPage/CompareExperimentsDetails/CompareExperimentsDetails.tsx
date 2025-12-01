@@ -15,6 +15,44 @@ import NavigationTag from "@/components/shared/NavigationTag";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import ExperimentTag from "@/components/shared/ExperimentTag/ExperimentTag";
 import { RESOURCE_TYPE } from "@/components/shared/ResourceLink/ResourceLink";
+import { AggregatedFeedbackScore } from "@/types/shared";
+
+type ExperimentScoreTagsProps = {
+  experiment: Experiment;
+};
+
+const ExperimentScoreTags: React.FunctionComponent<
+  ExperimentScoreTagsProps
+> = ({ experiment }) => {
+  const markScores = (
+    scores: AggregatedFeedbackScore[] | undefined,
+    isFeedbackScore: boolean,
+  ) =>
+    (scores ?? []).map((score) => ({
+      ...score,
+      isFeedbackScore,
+    }));
+
+  const allScores = sortBy(
+    [
+      ...markScores(experiment?.feedback_scores, true),
+      ...markScores(experiment?.experiment_scores, false),
+    ],
+    "name",
+  );
+
+  return (
+    <>
+      {allScores.map((score) => (
+        <FeedbackScoreTag
+          key={score.name + score.value}
+          label={score.isFeedbackScore ? `${score.name} (avg)` : score.name}
+          value={score.value}
+        />
+      ))}
+    </>
+  );
+};
 
 type CompareExperimentsDetailsProps = {
   experimentsIds: string[];
@@ -103,32 +141,7 @@ const CompareExperimentsDetails: React.FunctionComponent<
             <PenLine className="size-4 shrink-0" />
           </TooltipWrapper>
           <div className="flex gap-1 overflow-x-auto">
-            {(() => {
-              const markScores = (
-                scores: typeof experiment.feedback_scores,
-                isFeedbackScore: boolean,
-              ) =>
-                (scores ?? []).map((score) => ({
-                  ...score,
-                  isFeedbackScore,
-                }));
-
-              return sortBy(
-                [
-                  ...markScores(experiment?.feedback_scores, true),
-                  ...markScores(experiment?.experiment_scores, false),
-                ],
-                "name",
-              ).map((score) => (
-                <FeedbackScoreTag
-                  key={score.name + score.value}
-                  label={
-                    score.isFeedbackScore ? `${score.name} (avg)` : score.name
-                  }
-                  value={score.value}
-                />
-              ));
-            })()}
+            <ExperimentScoreTags experiment={experiment} />
           </div>
         </div>
       );

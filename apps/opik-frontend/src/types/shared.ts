@@ -82,6 +82,7 @@ export type ColumnData<T> = {
   accessorFn?: (row: T) => string | number | object | boolean | undefined;
   size?: number;
   type?: COLUMN_TYPE;
+  scoreType?: ScoreType;
   customMeta?: object;
   iconType?: HeaderIconType;
   header?: Header<T, unknown>;

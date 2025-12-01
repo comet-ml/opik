@@ -6,13 +6,13 @@ import { ChartData } from "@/components/pages-shared/experiments/FeedbackScoresC
 
 type FeedbackScoresChartsWrapperProps = {
   chartsData: ChartData[];
-  isAverageScores?: boolean;
+  isAggregationScores?: boolean;
   noDataComponent?: React.ReactNode;
 };
 
 const FeedbackScoresChartsWrapper = ({
   chartsData,
-  isAverageScores = false,
+  isAggregationScores = false,
   noDataComponent,
 }: FeedbackScoresChartsWrapperProps) => {
   const chartClassName =
@@ -33,7 +33,7 @@ const FeedbackScoresChartsWrapper = ({
               chartData={chartsData[index]}
               chartId={data.id}
               chartName={data.name}
-              subtitle={isAverageScores ? "Average scores" : undefined}
+              subtitle={isAggregationScores ? "Aggregation scores" : undefined}
             />
           ))}
     </div>

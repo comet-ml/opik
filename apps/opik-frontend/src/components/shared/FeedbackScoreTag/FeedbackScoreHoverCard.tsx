@@ -7,17 +7,22 @@ import { TraceFeedbackScore } from "@/types/traces";
 import React from "react";
 import ColoredTagNew from "../ColoredTag/ColoredTagNew";
 import { cn } from "@/lib/utils";
+import {
+  SCORE_TYPE_EXPERIMENT,
+  SCORE_TYPE_FEEDBACK,
+  ScoreType,
+} from "@/types/shared";
 
 type FeedbackScoreHoverCardProps = {
   title?: string;
-  isAverageScores?: boolean;
+  scoreType?: ScoreType;
   scores: TraceFeedbackScore[];
   children: React.ReactNode;
   hidden?: boolean;
 };
 const FeedbackScoreHoverCard: React.FC<FeedbackScoreHoverCardProps> = ({
   title,
-  isAverageScores,
+  scoreType,
   scores,
   children,
   hidden,
@@ -45,9 +50,12 @@ const FeedbackScoreHoverCard: React.FC<FeedbackScoreHoverCardProps> = ({
               <div className="comet-body-xs-accented truncate leading-none text-foreground">
                 {title}
               </div>
-              {isAverageScores && (
+              {scoreType && (
                 <div className="comet-body-xs leading-none text-slate-400">
-                  Average scores
+                  {scoreType === SCORE_TYPE_EXPERIMENT &&
+                    "Experiment Aggregation scores"}
+                  {scoreType === SCORE_TYPE_FEEDBACK &&
+                    "Feedback average scores"}
                 </div>
               )}
             </div>
