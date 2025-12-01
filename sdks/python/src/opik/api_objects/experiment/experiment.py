@@ -1,8 +1,7 @@
 import functools
 import logging
-from typing import List, Optional
+from typing import List, Optional, TYPE_CHECKING
 
-from opik.evaluation.metrics import score_result
 from opik.message_processing.batching import sequence_splitter
 from opik.message_processing import messages, streamer
 from opik.rest_api import client as rest_api_client
@@ -11,6 +10,8 @@ from . import experiment_item, experiments_client
 from .. import constants, helpers
 from ...api_objects.prompt import Prompt
 
+if TYPE_CHECKING:
+    from opik.evaluation.metrics import score_result
 
 LOGGER = logging.getLogger(__name__)
 
