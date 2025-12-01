@@ -28,6 +28,7 @@ import CommentsCell from "@/components/shared/DataTableCells/CommentsCell";
 import FeedbackScoreListCell from "@/components/shared/DataTableCells/FeedbackScoreListCell";
 import TextCell from "@/components/shared/DataTableCells/TextCell";
 import useAppStore from "@/store/AppStore";
+import { transformExperimentScores } from "@/lib/experimentScoreUtils";
 import useGroupedExperimentsList, {
   GroupedExperiment,
 } from "@/hooks/useGroupedExperimentsList";
@@ -39,9 +40,11 @@ import {
   COLUMN_ID_ID,
   COLUMN_FEEDBACK_SCORES_ID,
   COLUMN_COMMENTS_ID,
+  SCORE_TYPE_FEEDBACK,
+  COLUMN_EXPERIMENT_SCORES_ID,
+  SCORE_TYPE_EXPERIMENT,
 } from "@/types/shared";
 import { formatDate } from "@/lib/date";
-import { formatNumericData } from "@/lib/utils";
 import { RESOURCE_TYPE } from "@/components/shared/ResourceLink/ResourceLink";
 import { Separator } from "@/components/ui/separator";
 import MultiResourceCell from "@/components/shared/DataTableCells/MultiResourceCell";
@@ -63,6 +66,7 @@ import { useExpandingConfig } from "@/components/pages-shared/experiments/useExp
 import PageBodyStickyContainer from "@/components/layout/PageBodyStickyContainer/PageBodyStickyContainer";
 import PageBodyStickyTableWrapper from "@/components/layout/PageBodyStickyTableWrapper/PageBodyStickyTableWrapper";
 import DataTablePagination from "@/components/shared/DataTablePagination/DataTablePagination";
+import ExperimentScoreListCell from "@/components/shared/DataTableCells/ExperimentScoreListCell";
 
 const STORAGE_KEY_PREFIX = "prompt-experiments";
 const PAGINATION_SIZE_KEY = "prompt-experiments-pagination-size";
@@ -176,19 +180,29 @@ export const DEFAULT_COLUMNS: ColumnData<GroupedExperiment>[] = [
     },
   },
   {
-    id: COLUMN_FEEDBACK_SCORES_ID,
-    label: "Feedback scores (avg.)",
+    id: COLUMN_EXPERIMENT_SCORES_ID,
+    label: "Experiment Scores",
     type: COLUMN_TYPE.numberDictionary,
-    accessorFn: (row) =>
-      get(row, "feedback_scores", []).map((score) => ({
-        ...score,
-        value: formatNumericData(score.value),
-      })),
+    accessorFn: transformExperimentScores,
+    cell: ExperimentScoreListCell as never,
+    aggregatedCell: ExperimentScoreListCell.Aggregation as never,
+    customMeta: {
+      getHoverCardName: (row: GroupedExperiment) => row.name,
+      scoreType: SCORE_TYPE_EXPERIMENT,
+      aggregationKey: "experiment_scores",
+    },
+    explainer: EXPLAINERS_MAP[EXPLAINER_ID.what_are_experiment_scores],
+  },
+  {
+    id: COLUMN_FEEDBACK_SCORES_ID,
+    label: "Feedback Scores",
+    type: COLUMN_TYPE.numberDictionary,
+    accessorFn: transformExperimentScores,
     cell: FeedbackScoreListCell as never,
     aggregatedCell: FeedbackScoreListCell.Aggregation as never,
     customMeta: {
       getHoverCardName: (row: GroupedExperiment) => row.name,
-      isAverageScores: true,
+      scoreType: SCORE_TYPE_FEEDBACK,
       aggregationKey: "feedback_scores",
     },
     explainer: EXPLAINERS_MAP[EXPLAINER_ID.what_are_feedback_scores],

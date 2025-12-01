@@ -3,6 +3,7 @@ import { Explainer } from "@/types/shared";
 export enum EXPLAINER_ID {
   visible_scores = "visible_scores",
   what_do_you_use_projects_for = "what_do_you_use_projects_for",
+  what_are_experiment_scores = "what_are_experiment_scores",
   what_are_feedback_scores = "what_are_feedback_scores",
   i_created_a_project_now_what = "i_created_a_project_now_what",
   what_are_traces = "what_are_traces",
@@ -96,6 +97,11 @@ export const EXPLAINERS_MAP: Record<EXPLAINER_ID, Explainer> = {
     id: EXPLAINER_ID.what_are_feedback_scores,
     description:
       "Feedback scores are evaluations of your LLM outputs, obtained via human review, online evaluation rules, or the SDK",
+  },
+  [EXPLAINER_ID.what_are_experiment_scores]: {
+    id: EXPLAINER_ID.what_are_experiment_scores,
+    description:
+      "Experiment scores are the scores of the experiment items, aggregated by the experiment metrics.",
   },
   [EXPLAINER_ID.i_created_a_project_now_what]: {
     id: EXPLAINER_ID.i_created_a_project_now_what,

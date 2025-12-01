@@ -18,6 +18,9 @@ import {
   COLUMN_TYPE,
   COLUMN_DATASET_ID,
   COLUMN_METADATA_ID,
+  AggregatedFeedbackScore,
+  SCORE_TYPE_FEEDBACK,
+  SCORE_TYPE_EXPERIMENT,
 } from "@/types/shared";
 import { convertColumnDataToColumn, isColumnSortable } from "@/lib/table";
 import {
@@ -117,32 +120,67 @@ export const useExperimentsTableConfig = <
   }, []);
 
   const scoresColumnsData = useMemo(() => {
+    const getScoreByName = (
+      scores: AggregatedFeedbackScore[] | undefined,
+      scoreName: string,
+    ) => scores?.find((f) => f.name === scoreName);
+
     return [
       ...dynamicScoresColumns.map(
-        ({ label, id, columnType }) =>
-          ({
+        ({ label, id, columnType, type: scoreType }) => {
+          const actualType = scoreType || SCORE_TYPE_FEEDBACK;
+          const isExperimentScore = actualType === SCORE_TYPE_EXPERIMENT;
+
+          // Extract conditional values
+          const displayLabel = isExperimentScore ? label : `${label} (avg)`;
+          const scoresKey = isExperimentScore
+            ? "experiment_scores"
+            : "feedback_scores";
+
+          // Common fields
+          const columnData: ColumnData<T> = {
             id,
-            label,
+            label: displayLabel,
             type: columnType,
+            scoreType: actualType,
             header: FeedbackScoreHeader as never,
             cell: FeedbackScoreCell as never,
             aggregatedCell: FeedbackScoreCell.Aggregation as never,
-            accessorFn: (row: T) =>
-              (
-                row as T & { feedback_scores?: Array<{ name: string }> }
-              ).feedback_scores?.find((f) => f.name === label),
-            customMeta: {
-              accessorFn: (aggregation: ExperimentsAggregations) =>
-                (
-                  aggregation as ExperimentsAggregations & {
-                    feedback_scores?: Array<{ name: string }>;
-                  }
-                ).feedback_scores?.find((f) => f.name === label)?.value,
+            accessorFn: (row: T) => {
+              const rowWithScores = row as T & {
+                feedback_scores?: AggregatedFeedbackScore[];
+                experiment_scores?: AggregatedFeedbackScore[];
+              };
+              const scores = rowWithScores[scoresKey];
+              return getScoreByName(scores, label);
             },
-          }) as ColumnData<T>,
+            customMeta: {
+              accessorFn: (aggregation: ExperimentsAggregations) => {
+                const aggWithScores = aggregation as ExperimentsAggregations & {
+                  feedback_scores?: AggregatedFeedbackScore[];
+                  experiment_scores?: AggregatedFeedbackScore[];
+                };
+                const scores = aggWithScores[scoresKey];
+                return getScoreByName(scores, label)?.value;
+              },
+            },
+          };
+
+          return columnData;
+        },
       ),
     ];
   }, [dynamicScoresColumns]);
+
+  const experimentScoresColumnsData = useMemo(() => {
+    return scoresColumnsData.filter(
+      (c) => c.scoreType === SCORE_TYPE_EXPERIMENT,
+    );
+  }, [scoresColumnsData]);
+
+  const feedbackScoresColumnsData = useMemo(() => {
+    return scoresColumnsData.filter((c) => c.scoreType === SCORE_TYPE_FEEDBACK);
+  }, [scoresColumnsData]);
 
   const selectedRows = useMemo(() => {
     return experiments.filter(
@@ -238,7 +276,12 @@ export const useExperimentsTableConfig = <
         selectedColumns,
         sortableColumns: sortableBy,
       }),
-      ...convertColumnDataToColumn<T, T>(scoresColumnsData, {
+      ...convertColumnDataToColumn<T, T>(experimentScoresColumnsData, {
+        columnsOrder: scoresColumnsOrder,
+        selectedColumns,
+        sortableColumns: sortableBy,
+      }),
+      ...convertColumnDataToColumn<T, T>(feedbackScoresColumnsData, {
         columnsOrder: scoresColumnsOrder,
         selectedColumns,
         sortableColumns: sortableBy,
@@ -255,14 +298,15 @@ export const useExperimentsTableConfig = <
 
     return baseColumns;
   }, [
-    checkboxClickHandler,
-    sortableBy,
     groups,
+    sortableBy,
+    checkboxClickHandler,
+    defaultColumns,
     columnsOrder,
     selectedColumns,
-    scoresColumnsData,
+    experimentScoresColumnsData,
     scoresColumnsOrder,
-    defaultColumns,
+    feedbackScoresColumnsData,
     actionsCell,
   ]);
 
@@ -301,13 +345,24 @@ export const useExperimentsTableConfig = <
   const columnSections = useMemo(() => {
     return [
       {
+        title: "Experiment scores",
+        columns: experimentScoresColumnsData,
+        order: scoresColumnsOrder,
+        onOrderChange: setScoresColumnsOrder,
+      },
+      {
         title: "Feedback scores",
-        columns: scoresColumnsData,
+        columns: feedbackScoresColumnsData,
         order: scoresColumnsOrder,
         onOrderChange: setScoresColumnsOrder,
       },
     ];
-  }, [scoresColumnsData, scoresColumnsOrder, setScoresColumnsOrder]);
+  }, [
+    experimentScoresColumnsData,
+    feedbackScoresColumnsData,
+    scoresColumnsOrder,
+    setScoresColumnsOrder,
+  ]);
 
   return {
     // State
