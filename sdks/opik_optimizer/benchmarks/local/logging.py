@@ -411,18 +411,31 @@ class BenchmarkLogger:
         # Display final prompt
         if task_detail_data.optimized_prompt:
             prompt_elements = []
-            for msg in task_detail_data.optimized_prompt.get_messages():
-                style = Style()
-                if msg.get("role") == "system":
-                    style = Style(color="blue", bold=True)
-                elif msg.get("role") == "user":
-                    style = Style(color="green", bold=True)
-                elif msg.get("role") == "assistant":
-                    style = Style(color="magenta", bold=True)
-                else:
-                    style = Style(dim=True)
-                prompt_elements.append(Text(f"{msg.get('role')}: ", style=style))
-                prompt_elements.append(Text(msg.get("content", ""), overflow="fold"))
+
+            def _render_chat_prompt(chat_prompt: Any, prefix: str = "") -> None:
+                """Render a single ChatPrompt's messages."""
+                if prefix:
+                    prompt_elements.append(Text(f"\n[{prefix}]", style=Style(color="yellow", bold=True)))
+                for msg in chat_prompt.get_messages():
+                    style = Style()
+                    if msg.get("role") == "system":
+                        style = Style(color="blue", bold=True)
+                    elif msg.get("role") == "user":
+                        style = Style(color="green", bold=True)
+                    elif msg.get("role") == "assistant":
+                        style = Style(color="magenta", bold=True)
+                    else:
+                        style = Style(dim=True)
+                    prompt_elements.append(Text(f"{msg.get('role')}: ", style=style))
+                    prompt_elements.append(Text(msg.get("content", ""), overflow="fold"))
+
+            # Handle both single ChatPrompt and dict of ChatPrompts
+            if isinstance(task_detail_data.optimized_prompt, dict):
+                for key, chat_prompt in task_detail_data.optimized_prompt.items():
+                    _render_chat_prompt(chat_prompt, prefix=key)
+            else:
+                _render_chat_prompt(task_detail_data.optimized_prompt)
+
             prompt_content_display = (
                 Group(*prompt_elements)
                 if prompt_elements
@@ -839,8 +852,6 @@ def log_console_output_to_file() -> Callable:
                     sys.stderr = TeeOutput(f, original_stderr)  # type: ignore
 
                     return func(*args, **kwargs)
-            except Exception:
-                return None
             finally:
                 opik_optimizer_logger.setLevel(original_level)
 

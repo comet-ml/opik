@@ -578,14 +578,26 @@ def collect_dataset_metadata(bundle: DatasetBundle) -> dict[str, DatasetMetadata
 def evaluate_prompt_on_dataset(
     *,
     optimizer: BaseOptimizer,
-    prompt: ChatPrompt,
+    prompt: ChatPrompt | dict[str, ChatPrompt],
     dataset: Any,
     dataset_name: str,
     dataset_role: str,
     metrics: list[Callable],
     n_threads: int,
+    agent: Any | None = None,
 ) -> TaskEvaluationResult:
-    """Run all metrics for a prompt on a dataset and return a structured result."""
+    """Run all metrics for a prompt on a dataset and return a structured result.
+
+    Args:
+        optimizer: The optimizer instance to use for evaluation.
+        prompt: Either a single ChatPrompt or a dict of ChatPrompts for multi-prompt agents.
+        dataset: The dataset to evaluate on.
+        dataset_name: Name of the dataset.
+        dataset_role: Role of the dataset (train/validation/test).
+        metrics: List of metric functions to evaluate.
+        n_threads: Number of threads for parallel evaluation.
+        agent: Optional agent instance for multi-prompt/compound AI system evaluation.
+    """
     start_time = time.time()
     metric_entries = []
     for metric_fn in metrics:
@@ -595,6 +607,7 @@ def evaluate_prompt_on_dataset(
             dataset=dataset,
             metric=metric_fn,
             n_threads=n_threads,
+            agent=agent,
         )
         metric_entries.append(
             {
@@ -635,8 +648,8 @@ def execute_task(
 ) -> TaskResult:
     """Shared execution path used by local and Modal runners."""
     timestamp_start = time.time()
-    initial_prompt = None
-    optimized_prompt = None
+    initial_prompt: ChatPrompt | dict[str, ChatPrompt] | None = None
+    optimized_prompt: ChatPrompt | dict[str, ChatPrompt] | None = None
     optimize_kwargs: dict[str, Any] | None = None
     constructor_kwargs: dict[str, Any] | None = None
     test_initial_evaluation: TaskEvaluationResult | None = None
@@ -696,16 +709,35 @@ def execute_task(
                 **constructor_kwargs,
             )
 
-            messages = prompt_messages or _resolve_initial_prompt(bundle.train_name)
-            # Bind the optimizer's model/model_parameters to the prompt so evaluations
-            # use the requested model instead of ChatPrompt defaults.
-            initial_prompt = ChatPrompt(
-                messages=messages,  # type: ignore[arg-type]
-                model=getattr(optimizer, "model", model_name),
-                model_parameters=getattr(
-                    optimizer, "model_parameters", model_parameters
-                ),
-            )
+            # Check if this dataset uses a custom agent (multi-prompt / compound AI system)
+            agent = None
+            if dataset_name.startswith("hotpot"):
+                from benchmarks.agents.hotpot_multihop_agent import (
+                    HotpotMultiHopAgent,
+                    get_initial_prompts,
+                )
+
+                agent = HotpotMultiHopAgent(
+                    model=model_name,
+                    model_parameters=model_parameters,
+                )
+                initial_prompt = get_initial_prompts()
+                logger.info(
+                    "Created HotpotMultiHopAgent for dataset %s",
+                    dataset_name,
+                )
+            else:
+                # Standard single-prompt benchmark
+                messages = prompt_messages or _resolve_initial_prompt(bundle.train_name)
+                # Bind the optimizer's model/model_parameters to the prompt so evaluations
+                # use the requested model instead of ChatPrompt defaults.
+                initial_prompt = ChatPrompt(
+                    messages=messages,  # type: ignore[arg-type]
+                    model=getattr(optimizer, "model", model_name),
+                    model_parameters=getattr(
+                        optimizer, "model_parameters", model_parameters
+                    ),
+                )
 
             initial_evaluation = evaluate_prompt_on_dataset(
                 optimizer=optimizer,
@@ -715,6 +747,7 @@ def execute_task(
                 dataset_role=bundle.evaluation_role,
                 metrics=metrics_resolved,
                 n_threads=4,
+                agent=agent,
             )
             steps.append(
                 {
@@ -738,6 +771,7 @@ def execute_task(
                     dataset_role="test",
                     metrics=metrics_resolved,
                     n_threads=4,
+                    agent=agent,
                 )
                 steps.append(
                     {
@@ -760,15 +794,20 @@ def execute_task(
                 dataset=bundle.train,
                 validation_dataset=bundle.validation,
                 metric=metrics_resolved[0],
+                agent=agent,
                 **optimize_kwargs,
             )
-            optimized_prompt = ChatPrompt(
-                messages=optimization_results.prompt,  # type: ignore[arg-type]
-                model=getattr(optimizer, "model", model_name),
-                model_parameters=getattr(
-                    optimizer, "model_parameters", model_parameters
-                ),
-            )
+            # Handle the optimized prompt - may be dict for multi-prompt agents
+            if isinstance(optimization_results.prompt, dict):
+                optimized_prompt = optimization_results.prompt
+            else:
+                optimized_prompt = ChatPrompt(
+                    messages=optimization_results.prompt,  # type: ignore[arg-type]
+                    model=getattr(optimizer, "model", model_name),
+                    model_parameters=getattr(
+                        optimizer, "model_parameters", model_parameters
+                    ),
+                )
 
             optimized_evaluation = evaluate_prompt_on_dataset(
                 optimizer=optimizer,
@@ -778,6 +817,7 @@ def execute_task(
                 dataset_role=bundle.evaluation_role,
                 metrics=metrics_resolved,
                 n_threads=4,
+                agent=agent,
             )
             steps.append(
                 {
@@ -802,6 +842,7 @@ def execute_task(
                     dataset_role="test",
                     metrics=metrics_resolved,
                     n_threads=4,
+                    agent=agent,
                 )
                 steps.append(
                     {
