@@ -77,6 +77,8 @@ public interface DatasetItemDAO {
     Flux<DatasetItemIdAndHash> getDraftItemIdsAndHashes(UUID datasetId);
 
     Mono<ItemsHash> getDraftItemsHashAgg(UUID datasetId);
+
+    Mono<Long> restoreFromVersion(UUID datasetId, UUID versionId);
 }
 
 @Singleton
@@ -901,6 +903,44 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
             )
             """;
 
+    private static final String RESTORE_FROM_VERSION = """
+            INSERT INTO dataset_items (
+                id,
+                dataset_id,
+                data,
+                metadata,
+                source,
+                trace_id,
+                span_id,
+                tags,
+                created_at,
+                last_updated_at,
+                created_by,
+                last_updated_by,
+                workspace_id
+            )
+            SELECT
+                dataset_item_id as id,
+                dataset_id,
+                data,
+                metadata,
+                source,
+                trace_id,
+                span_id,
+                tags,
+                item_created_at as created_at,
+                now64(9) as last_updated_at,
+                item_created_by as created_by,
+                :user_name as last_updated_by,
+                workspace_id
+            FROM dataset_item_versions
+            WHERE dataset_id = :datasetId
+            AND dataset_version_id = :versionId
+            AND workspace_id = :workspace_id
+            ORDER BY (workspace_id, dataset_id, dataset_version_id, id) DESC, last_updated_at DESC
+            LIMIT 1 BY id
+            """;
+
     private static final String SELECT_DATASET_ITEMS_WITH_EXPERIMENT_ITEMS_STATS = String.format(
             """
                     WITH feedback_scores_combined_raw AS (
@@ -1683,6 +1723,35 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                     }))
                     .singleOrEmpty()
                     .defaultIfEmpty(new ItemsHash(0L, 0L));
+        });
+    }
+
+    @Override
+    @WithSpan
+    public Mono<Long> restoreFromVersion(@NonNull UUID datasetId, @NonNull UUID versionId) {
+        log.info("Restoring draft items from version '{}' for dataset '{}'", versionId, datasetId);
+
+        return asyncTemplate.nonTransaction(connection -> {
+            var statement = connection.createStatement(RESTORE_FROM_VERSION)
+                    .bind("datasetId", datasetId)
+                    .bind("versionId", versionId);
+
+            Segment segment = startSegment(DATASET_ITEMS, CLICKHOUSE, "restore_from_version");
+
+            return makeMonoContextAware((userName, workspaceId) -> {
+                statement.bind("workspace_id", workspaceId);
+                statement.bind("user_name", userName);
+                log.debug("Restoring items: datasetId='{}', versionId='{}', workspaceId='{}', userName='{}'",
+                        datasetId, versionId, workspaceId, userName);
+
+                return Flux.from(statement.execute())
+                        .flatMap(Result::getRowsUpdated)
+                        .reduce(0L, Long::sum)
+                        .doOnSuccess(insertedCount -> log.info(
+                                "Restored '{}' items from version '{}' to dataset '{}'",
+                                insertedCount, versionId, datasetId))
+                        .doFinally(signalType -> endSegment(segment));
+            });
         });
     }
 }

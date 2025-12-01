@@ -21,7 +21,6 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
-import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
@@ -549,8 +548,12 @@ class DatasetVersionServiceImpl implements DatasetVersionService {
 
         log.info("Deleted '{}' draft items for dataset '{}'", deletedCount, datasetId);
 
-        // Step 2: Copy items from version to draft
-        Long restoredCount = restoreVersionItemsStreaming(versionId, datasetId, workspaceId, userName);
+        // Step 2: Copy items from version to draft using bulk INSERT INTO ... SELECT
+        Long restoredCount = datasetItemDAO.restoreFromVersion(datasetId, versionId)
+                .contextWrite(ctx -> ctx
+                        .put(RequestContext.USER_NAME, userName)
+                        .put(RequestContext.WORKSPACE_ID, workspaceId))
+                .block();
         log.info("Restored '{}' items from version '{}' to draft for dataset '{}'",
                 restoredCount, versionRef, datasetId);
 
@@ -565,110 +568,5 @@ class DatasetVersionServiceImpl implements DatasetVersionService {
             log.info("Restored to latest version '{}' for dataset '{}' (revert scenario)", versionRef, datasetId);
             return versionToRestore;
         }
-    }
-
-    /**
-     * Streams items from a version and restores them as draft items in batches.
-     *
-     * @param versionId the version ID to restore items from
-     * @param datasetId the dataset ID to restore items to
-     * @param workspaceId the workspace ID for context
-     * @param userName the user name for context
-     * @return the total number of items restored
-     */
-    private Long restoreVersionItemsStreaming(UUID versionId, UUID datasetId, String workspaceId, String userName) {
-        log.info("Restoring version items using streaming for version: '{}', dataset: '{}'", versionId, datasetId);
-
-        return processItemsInBatches(
-                (batchSize, lastRetrievedId) -> fetchAndRestoreBatch(versionId, datasetId, workspaceId, userName,
-                        batchSize, lastRetrievedId),
-                workspaceId, userName);
-    }
-
-    /**
-     * Fetches a batch of items from a version, restores them as draft items, and returns the batch state.
-     *
-     * @param versionId the version ID to restore items from
-     * @param datasetId the dataset ID to restore items to
-     * @param workspaceId the workspace ID for context
-     * @param userName the user name for context
-     * @param batchSize the number of items to fetch per batch
-     * @param lastRetrievedId the ID of the last retrieved item for pagination (null for first batch)
-     * @return Mono containing the batch state (items processed and last ID), or empty if no more items
-     */
-    private Mono<BatchState> fetchAndRestoreBatch(UUID versionId, UUID datasetId, String workspaceId, String userName,
-            int batchSize, UUID lastRetrievedId) {
-
-        return datasetItemVersionDAO.getVersionItems(datasetId, versionId, batchSize, lastRetrievedId)
-                .collectList()
-                .flatMap(items -> {
-                    if (items.isEmpty()) {
-                        return Mono.empty();
-                    }
-
-                    log.debug("Restoring batch of '{}' items from version: '{}'", items.size(), versionId);
-
-                    // Convert versioned items to draft items (preserve original IDs from draftItemId)
-                    List<com.comet.opik.api.DatasetItem> draftItems = items.stream()
-                            .map(item -> item.toBuilder()
-                                    .id(item.draftItemId()) // Preserve original draft item ID
-                                    .draftItemId(null) // Not applicable for draft items
-                                    .build())
-                            .toList();
-
-                    // Save as draft items
-                    return datasetItemDAO.save(datasetId, draftItems)
-                            .map(count -> {
-                                UUID lastId = items.get(items.size() - 1).id();
-                                return new BatchState(lastId, (long) items.size());
-                            });
-                })
-                .contextWrite(ctx -> ctx
-                        .put(RequestContext.USER_NAME, userName)
-                        .put(RequestContext.WORKSPACE_ID, workspaceId));
-    }
-
-    /**
-     * Generic method to process items in batches using reactive streaming.
-     * This avoids code duplication between save and restore operations.
-     *
-     * @param batchProcessor function that processes a single batch given batch size and last retrieved ID
-     * @param workspaceId the workspace ID for context
-     * @param userName the user name for context
-     * @return the total number of items processed
-     */
-    private Long processItemsInBatches(BatchProcessor batchProcessor, String workspaceId, String userName) {
-        final int batchSize = 1000;
-
-        return Flux.defer(() -> batchProcessor.process(batchSize, null))
-                .expand(state -> {
-                    if (state.lastRetrievedId() == null) {
-                        return Mono.empty();
-                    }
-                    return batchProcessor.process(batchSize, state.lastRetrievedId());
-                })
-                .reduce(0L, (total, state) -> total + state.itemsProcessed())
-                .doOnSuccess(total -> log.info("Finished processing all items. Total processed: '{}'", total))
-                .contextWrite(ctx -> ctx
-                        .put(RequestContext.USER_NAME, userName)
-                        .put(RequestContext.WORKSPACE_ID, workspaceId))
-                .block();
-    }
-
-    /**
-     * Functional interface for batch processing operations.
-     */
-    @FunctionalInterface
-    private interface BatchProcessor {
-        Mono<BatchState> process(int batchSize, UUID lastRetrievedId);
-    }
-
-    /**
-     * Internal record to track batch processing state for reactive streaming.
-     *
-     * @param lastRetrievedId the ID of the last retrieved item for pagination (null if no more items)
-     * @param itemsProcessed the number of items processed in this batch
-     */
-    private record BatchState(UUID lastRetrievedId, long itemsProcessed) {
     }
 }
