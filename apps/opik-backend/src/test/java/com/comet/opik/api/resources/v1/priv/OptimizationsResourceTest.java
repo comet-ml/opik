@@ -880,6 +880,47 @@ class OptimizationsResourceTest {
         }
 
         @Test
+        @DisplayName("Studio config is preserved after status update")
+        void studioConfigPreservedAfterStatusUpdate() {
+            var studioConfig = createStudioConfig();
+            var optimization = optimizationResourceClient.createPartialOptimization()
+                    .studioConfig(studioConfig)
+                    .build();
+
+            var id = optimizationResourceClient.create(optimization, API_KEY, TEST_WORKSPACE_NAME);
+
+            // Verify initial state - should have studio_config and INITIALIZED status
+            var initialOptimization = optimizationResourceClient.getStudio(id, API_KEY, TEST_WORKSPACE_NAME, 200);
+            assertThat(initialOptimization.studioConfig()).isNotNull();
+            assertThat(initialOptimization.studioConfig()).isEqualTo(studioConfig);
+            assertThat(initialOptimization.status()).isEqualTo(OptimizationStatus.INITIALIZED);
+
+            // Update status to RUNNING
+            var runningUpdate = OptimizationUpdate.builder()
+                    .status(OptimizationStatus.RUNNING)
+                    .build();
+            optimizationResourceClient.update(id, runningUpdate, API_KEY, TEST_WORKSPACE_NAME, 204);
+
+            // Verify studio_config is preserved after RUNNING update
+            var runningOptimization = optimizationResourceClient.getStudio(id, API_KEY, TEST_WORKSPACE_NAME, 200);
+            assertThat(runningOptimization.status()).isEqualTo(OptimizationStatus.RUNNING);
+            assertThat(runningOptimization.studioConfig()).isNotNull();
+            assertThat(runningOptimization.studioConfig()).isEqualTo(studioConfig);
+
+            // Update status to COMPLETED
+            var completedUpdate = OptimizationUpdate.builder()
+                    .status(OptimizationStatus.COMPLETED)
+                    .build();
+            optimizationResourceClient.update(id, completedUpdate, API_KEY, TEST_WORKSPACE_NAME, 204);
+
+            // Verify studio_config is still preserved after COMPLETED update
+            var completedOptimization = optimizationResourceClient.getStudio(id, API_KEY, TEST_WORKSPACE_NAME, 200);
+            assertThat(completedOptimization.status()).isEqualTo(OptimizationStatus.COMPLETED);
+            assertThat(completedOptimization.studioConfig()).isNotNull();
+            assertThat(completedOptimization.studioConfig()).isEqualTo(studioConfig);
+        }
+
+        @Test
         @DisplayName("Cancel Studio optimization returns NOT_IMPLEMENTED")
         void cancelStudioOptimization__returnsNotImplemented() {
             var studioConfig = createStudioConfig();
