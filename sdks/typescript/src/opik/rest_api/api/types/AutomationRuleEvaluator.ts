@@ -24,8 +24,7 @@ export namespace AutomationRuleEvaluator {
     }
 
     export interface TraceThreadUserDefinedMetricPython
-        extends OpikApi.AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython,
-            _Base {
+        extends OpikApi.AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython, _Base {
         type: "trace_thread_user_defined_metric_python";
     }
 

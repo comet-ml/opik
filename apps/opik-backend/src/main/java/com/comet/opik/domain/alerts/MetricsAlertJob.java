@@ -21,6 +21,9 @@ import com.comet.opik.utils.NumberUtils;
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonValue;
 import io.dropwizard.jobs.Job;
+import io.opentelemetry.api.GlobalOpenTelemetry;
+import io.opentelemetry.api.metrics.LongCounter;
+import io.opentelemetry.api.metrics.Meter;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import lombok.Getter;
@@ -69,7 +72,6 @@ import static com.comet.opik.api.AlertTriggerConfig.WINDOW_CONFIG_KEY;
 @Slf4j
 @Singleton
 @DisallowConcurrentExecution
-@RequiredArgsConstructor(onConstructor_ = @Inject)
 public class MetricsAlertJob extends Job implements InterruptableJob {
 
     public static final EnumSet<AlertEventType> SUPPORTED_EVENT_TYPES = EnumSet.of(
@@ -81,13 +83,52 @@ public class MetricsAlertJob extends Job implements InterruptableJob {
     private static final BigDecimal MILLISECONDS_PER_SECOND = BigDecimal.valueOf(1000);
     private volatile boolean interrupted = false;
 
-    private final @NonNull @Config WebhookConfig webhookConfig;
+    private final @NonNull WebhookConfig webhookConfig;
     private final @NonNull LockService lockService;
     private final @NonNull AlertService alertService;
     private final @NonNull ProjectMetricsDAO projectMetricsDAO;
     private final @NonNull ProjectService projectService;
     private final @NonNull IdGenerator idGenerator;
     private final @NonNull AlertWebhookSender alertWebhookSender;
+
+    // OpenTelemetry metrics for monitoring alerts
+    private final LongCounter alertsFired;
+    private final LongCounter alertsSkipped;
+    private final LongCounter alertsErrors;
+
+    @Inject
+    public MetricsAlertJob(@NonNull @Config WebhookConfig webhookConfig,
+            @NonNull LockService lockService,
+            @NonNull AlertService alertService,
+            @NonNull ProjectMetricsDAO projectMetricsDAO,
+            @NonNull ProjectService projectService,
+            @NonNull IdGenerator idGenerator,
+            @NonNull AlertWebhookSender alertWebhookSender) {
+        this.webhookConfig = webhookConfig;
+        this.lockService = lockService;
+        this.alertService = alertService;
+        this.projectMetricsDAO = projectMetricsDAO;
+        this.projectService = projectService;
+        this.idGenerator = idGenerator;
+        this.alertWebhookSender = alertWebhookSender;
+
+        Meter meter = GlobalOpenTelemetry.get().getMeter("opik.alerts");
+
+        this.alertsFired = meter
+                .counterBuilder("opik.alerts.fired")
+                .setDescription("Number of alerts sent to configured webhooks")
+                .build();
+
+        this.alertsSkipped = meter
+                .counterBuilder("opik.alerts.skipped")
+                .setDescription("Number of alerts evaluated but not triggered")
+                .build();
+
+        this.alertsErrors = meter
+                .counterBuilder("opik.alerts.errors")
+                .setDescription("Number of errors during alerts processing")
+                .build();
+    }
 
     @Override
     public void doJob(JobExecutionContext context) {
@@ -157,6 +198,7 @@ public class MetricsAlertJob extends Job implements InterruptableJob {
                             .then();
                 })
                 .onErrorResume(error -> {
+                    alertsErrors.add(1);
                     log.error("Failed to process alert '{}' (id: '{}'): {}",
                             alert.name(), alert.id(), error.getMessage(), error);
                     return Mono.empty();
@@ -168,11 +210,26 @@ public class MetricsAlertJob extends Job implements InterruptableJob {
             log.info("Skipping trigger evaluation due to job interruption for alert '{}'", alert.id());
             return Mono.empty();
         }
-        // Extract configuration from trigger
-        TriggerConfig config = extractTriggerConfig(trigger);
+        // Extract all configurations from trigger
+        List<TriggerConfig> configs = extractTriggerConfig(trigger);
+        if (configs.isEmpty()) {
+            log.warn("No trigger configs found for alert '{}' (id: '{}'), trigger: '{}'",
+                    alert.name(), alert.id(), trigger.eventType());
+            return Mono.empty();
+        }
 
+        log.info("Evaluating '{}' config(s) for alert '{}' (id: '{}'), event type: '{}'",
+                configs.size(), alert.name(), alert.id(), trigger.eventType());
+
+        // Evaluate all configs and fire alerts for each one that triggers
+        return Flux.fromIterable(configs)
+                .flatMap(config -> evaluateSingleConfig(alert, trigger, config))
+                .then();
+    }
+
+    private Mono<Void> evaluateSingleConfig(Alert alert, AlertTrigger trigger, TriggerConfig config) {
         log.info(
-                "Evaluating trigger for alert '{}' (id: '{}'), event type: '{}', name: '{}', operator: '{}', threshold: '{}', window: '{}'s",
+                "Evaluating config for alert '{}' (id: '{}'), event type: '{}', name: '{}', operator: '{}', threshold: '{}', window: '{}'s",
                 alert.name(), alert.id(), trigger.eventType(), config.name(), config.operator(), config.threshold(),
                 config.windowSeconds());
 
@@ -217,12 +274,15 @@ public class MetricsAlertJob extends Job implements InterruptableJob {
 
         return metricValueMono
                 .doOnNext(
-                        value -> log.info("Metric value retrieved: '{}', for workspace '{}', alert '{}', trigger: '{}'",
-                                value, alert.workspaceId(), alert.name(), trigger.eventType()))
+                        value -> log.info(
+                                "Metric value retrieved: '{}', for workspace '{}', alert '{}', trigger: '{}', name: '{}'",
+                                value, alert.workspaceId(), alert.name(), trigger.eventType(), config.name()))
                 .doOnError(error -> log.error(
-                        "Error retrieving metric value: '{}', for workspace '{}', alert '{}', trigger: '{}'",
-                        error.getMessage(), alert.workspaceId(), alert.name(), trigger.eventType(), error))
+                        "Error retrieving metric value: '{}', for workspace '{}', alert '{}', trigger: '{}', name: '{}'",
+                        error.getMessage(), alert.workspaceId(), alert.name(), trigger.eventType(), config.name(),
+                        error))
                 .switchIfEmpty(Mono.defer(() -> {
+                    alertsSkipped.add(1);
                     log.info("No metric data found for alert '{}' (id: '{}'), trigger: '{}', name: '{}' in time window",
                             alert.name(), alert.id(), trigger.eventType(), config.name());
                     return Mono.empty();
@@ -230,9 +290,11 @@ public class MetricsAlertJob extends Job implements InterruptableJob {
                 .flatMap(metricValue -> {
                     // Compare with threshold
                     if (compareMetric(metricValue, thresholdForComparison, config.operator())) {
-                        log.info("Alert '{}' (id: '{}') triggered: {} = '{}', threshold = '{}'",
-                                alert.name(), alert.id(), trigger.eventType(), metricValue, thresholdForComparison);
+                        log.info("Alert '{}' (id: '{}') triggered: {} = '{}', threshold = '{}', name: '{}'",
+                                alert.name(), alert.id(), trigger.eventType(), metricValue, thresholdForComparison,
+                                config.name());
 
+                        alertsFired.add(1);
                         var metricValueFinal = trigger.eventType() == AlertEventType.TRACE_LATENCY
                                 ? metricValue.divide(MILLISECONDS_PER_SECOND, 9, RoundingMode.HALF_UP) // Convert back to seconds for payload
                                 : metricValue;
@@ -248,6 +310,7 @@ public class MetricsAlertJob extends Job implements InterruptableJob {
                                     .metricValue(NumberUtils.formatDecimal(metricValueFinal))
                                     .threshold(NumberUtils.formatDecimal(config.threshold()))
                                     .windowSeconds(config.windowSeconds())
+                                    .feedbackScoreName(config.name())
                                     .projectIds(config.projectIds() != null
                                             ? config.projectIds().stream().map(UUID::toString)
                                                     .collect(Collectors.joining(","))
@@ -274,8 +337,10 @@ public class MetricsAlertJob extends Job implements InterruptableJob {
                                         List.of("system"))); // System user for automated alerts
                     }
 
-                    log.debug("Alert '{}' (id: '{}') not triggered: {} = '{}', threshold = '{}'",
-                            alert.name(), alert.id(), trigger.eventType(), metricValue, thresholdForComparison);
+                    alertsSkipped.add(1);
+                    log.debug("Alert '{}' (id: '{}') not triggered: {} = '{}', threshold = '{}', name: '{}'",
+                            alert.name(), alert.id(), trigger.eventType(), metricValue, thresholdForComparison,
+                            config.name());
                     return Mono.<Void>empty();
                 })
                 .contextWrite(context -> AsyncUtils.setRequestContext(context, "system", alert.workspaceId()))
@@ -289,12 +354,12 @@ public class MetricsAlertJob extends Job implements InterruptableJob {
         };
     }
 
-    private TriggerConfig extractTriggerConfig(AlertTrigger trigger) {
+    private List<TriggerConfig> extractTriggerConfig(AlertTrigger trigger) {
         if (CollectionUtils.isEmpty(trigger.triggerConfigs())) {
             throw new IllegalArgumentException("Trigger must have configuration for metrics alerts");
         }
 
-        // Extract project IDs from SCOPE_PROJECT config type
+        // Extract project IDs from SCOPE_PROJECT config type (same for all configs)
         var projectIdsString = trigger.triggerConfigs().stream()
                 .filter(c -> c.type() == AlertTriggerConfigType.SCOPE_PROJECT)
                 .findFirst()
@@ -317,35 +382,52 @@ public class MetricsAlertJob extends Job implements InterruptableJob {
                     "Unsupported event type for metrics alerts: '%s'".formatted(trigger.eventType()));
         };
 
-        // Extract threshold from the appropriate config type
-        var thresholdString = extractConfigValue(trigger, thresholdConfigType, THRESHOLD_CONFIG_KEY);
-        BigDecimal threshold = new BigDecimal(thresholdString);
-
-        // Extract window from the same threshold config type
-        var windowString = extractConfigValue(trigger, thresholdConfigType, WINDOW_CONFIG_KEY);
-        long windowSeconds = Long.parseLong(windowString);
-
-        // Extract name for feedback score alerts
-        String name = null;
-        Operator operator = Operator.GREATER_THAN;
-        if (trigger.eventType() == AlertEventType.TRACE_FEEDBACK_SCORE
-                || trigger.eventType() == AlertEventType.TRACE_THREAD_FEEDBACK_SCORE) {
-            name = extractConfigValue(trigger, thresholdConfigType, NAME_CONFIG_KEY);
-            operator = Operator.fromString(extractConfigValue(trigger, thresholdConfigType, OPERATOR_CONFIG_KEY));
-        }
-
-        return new TriggerConfig(projectIds, threshold, windowSeconds, name, operator);
-    }
-
-    private String extractConfigValue(AlertTrigger trigger, AlertTriggerConfigType configType, String key) {
+        // Extract ALL threshold configs of the appropriate type (not just the first one)
+        final List<UUID> finalProjectIds = projectIds;
         return trigger.triggerConfigs().stream()
-                .filter(c -> c.type() == configType)
-                .findFirst()
-                .map(AlertTriggerConfig::configValue)
-                .map(v -> v.get(key))
-                .orElseThrow(() -> new IllegalArgumentException(
-                        "Missing config value for key '%s' in trigger of type '%s'"
-                                .formatted(key, configType)));
+                .filter(c -> c.type() == thresholdConfigType)
+                .map(config -> {
+                    // Extract threshold
+                    var thresholdString = config.configValue().get(THRESHOLD_CONFIG_KEY);
+                    if (thresholdString == null) {
+                        throw new IllegalArgumentException(
+                                "Missing config value for key '%s' in trigger of type '%s'"
+                                        .formatted(THRESHOLD_CONFIG_KEY, thresholdConfigType));
+                    }
+                    BigDecimal threshold = new BigDecimal(thresholdString);
+
+                    // Extract window
+                    var windowString = config.configValue().get(WINDOW_CONFIG_KEY);
+                    if (windowString == null) {
+                        throw new IllegalArgumentException(
+                                "Missing config value for key '%s' in trigger of type '%s'"
+                                        .formatted(WINDOW_CONFIG_KEY, thresholdConfigType));
+                    }
+                    long windowSeconds = Long.parseLong(windowString);
+
+                    // Extract name and operator for feedback score alerts
+                    String name = null;
+                    Operator operator = Operator.GREATER_THAN;
+                    if (trigger.eventType() == AlertEventType.TRACE_FEEDBACK_SCORE
+                            || trigger.eventType() == AlertEventType.TRACE_THREAD_FEEDBACK_SCORE) {
+                        name = config.configValue().get(NAME_CONFIG_KEY);
+                        if (name == null) {
+                            throw new IllegalArgumentException(
+                                    "Missing config value for key '%s' in trigger of type '%s'"
+                                            .formatted(NAME_CONFIG_KEY, thresholdConfigType));
+                        }
+                        var operatorString = config.configValue().get(OPERATOR_CONFIG_KEY);
+                        if (operatorString == null) {
+                            throw new IllegalArgumentException(
+                                    "Missing config value for key '%s' in trigger of type '%s'"
+                                            .formatted(OPERATOR_CONFIG_KEY, thresholdConfigType));
+                        }
+                        operator = Operator.fromString(operatorString);
+                    }
+
+                    return new TriggerConfig(finalProjectIds, threshold, windowSeconds, name, operator);
+                })
+                .collect(Collectors.toList());
     }
 
     private record TriggerConfig(List<UUID> projectIds, BigDecimal threshold, long windowSeconds, String name,

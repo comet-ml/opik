@@ -30,6 +30,10 @@ export const Trace: core.serialization.ObjectSchema<serializers.Trace.Raw, OpikA
     createdBy: core.serialization.property("created_by", core.serialization.string().optional()),
     lastUpdatedBy: core.serialization.property("last_updated_by", core.serialization.string().optional()),
     feedbackScores: core.serialization.property("feedback_scores", core.serialization.list(FeedbackScore).optional()),
+    spanFeedbackScores: core.serialization.property(
+        "span_feedback_scores",
+        core.serialization.list(FeedbackScore).optional(),
+    ),
     comments: core.serialization.list(Comment).optional(),
     guardrailsValidations: core.serialization.property(
         "guardrails_validations",
@@ -41,6 +45,7 @@ export const Trace: core.serialization.ObjectSchema<serializers.Trace.Raw, OpikA
     threadId: core.serialization.property("thread_id", core.serialization.string().optional()),
     visibilityMode: core.serialization.property("visibility_mode", TraceVisibilityMode.optional()),
     llmSpanCount: core.serialization.property("llm_span_count", core.serialization.number().optional()),
+    hasToolSpans: core.serialization.property("has_tool_spans", core.serialization.boolean().optional()),
     providers: core.serialization.list(core.serialization.string()).optional(),
 });
 
@@ -63,6 +68,7 @@ export declare namespace Trace {
         created_by?: string | null;
         last_updated_by?: string | null;
         feedback_scores?: FeedbackScore.Raw[] | null;
+        span_feedback_scores?: FeedbackScore.Raw[] | null;
         comments?: Comment.Raw[] | null;
         guardrails_validations?: GuardrailsValidation.Raw[] | null;
         total_estimated_cost?: number | null;
@@ -71,6 +77,7 @@ export declare namespace Trace {
         thread_id?: string | null;
         visibility_mode?: TraceVisibilityMode.Raw | null;
         llm_span_count?: number | null;
+        has_tool_spans?: boolean | null;
         providers?: string[] | null;
     }
 }

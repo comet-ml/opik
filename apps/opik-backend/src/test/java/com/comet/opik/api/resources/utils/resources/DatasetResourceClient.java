@@ -7,6 +7,9 @@ import com.comet.opik.api.Dataset;
 import com.comet.opik.api.DatasetIdentifier;
 import com.comet.opik.api.DatasetItem;
 import com.comet.opik.api.DatasetItemBatch;
+import com.comet.opik.api.DatasetVersion;
+import com.comet.opik.api.DatasetVersionCreate;
+import com.comet.opik.api.DatasetVersionTag;
 import com.comet.opik.api.PromptVersion;
 import com.comet.opik.utils.JsonUtils;
 import com.google.common.net.HttpHeaders;
@@ -55,6 +58,20 @@ public class DatasetResourceClient {
             assertThat(id.version()).isEqualTo(7);
 
             return id;
+        }
+    }
+
+    public Dataset getDatasetById(UUID datasetId, String apiKey, String workspaceName) {
+        try (var actualResponse = client.target(RESOURCE_PATH.formatted(baseURI))
+                .path(datasetId.toString())
+                .request()
+                .accept(MediaType.APPLICATION_JSON_TYPE)
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .get()) {
+
+            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
+            return actualResponse.readEntity(Dataset.class);
         }
     }
 
@@ -335,5 +352,111 @@ public class DatasetResourceClient {
             assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
             return response.readEntity(com.comet.opik.api.ProjectStats.class);
         }
+    }
+
+    public DatasetVersion commitVersion(UUID datasetId, DatasetVersionCreate versionCreate, String apiKey,
+            String workspaceName) {
+        try (var response = client.target(RESOURCE_PATH.formatted(baseURI))
+                .path(datasetId.toString())
+                .path("versions")
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .post(Entity.json(versionCreate))) {
+
+            assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
+            return response.readEntity(DatasetVersion.class);
+        }
+    }
+
+    public DatasetVersion.DatasetVersionPage listVersions(UUID datasetId, String apiKey, String workspaceName) {
+        return listVersions(datasetId, apiKey, workspaceName, null, null);
+    }
+
+    public DatasetVersion.DatasetVersionPage listVersions(UUID datasetId, String apiKey, String workspaceName,
+            Integer page, Integer size) {
+        var webTarget = client.target(RESOURCE_PATH.formatted(baseURI))
+                .path(datasetId.toString())
+                .path("versions");
+
+        if (page != null) {
+            webTarget = webTarget.queryParam("page", page);
+        }
+        if (size != null) {
+            webTarget = webTarget.queryParam("size", size);
+        }
+
+        try (var response = webTarget
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .get()) {
+
+            assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
+            return response.readEntity(DatasetVersion.DatasetVersionPage.class);
+        }
+    }
+
+    public void createVersionTag(UUID datasetId, String versionHash, DatasetVersionTag tag, String apiKey,
+            String workspaceName) {
+
+        try (var response = callCreateVersionTag(datasetId, versionHash, tag, apiKey, workspaceName)) {
+            assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_NO_CONTENT);
+        }
+    }
+
+    public void deleteVersionTag(UUID datasetId, String versionHash, String tag, String apiKey, String workspaceName) {
+        try (var response = client.target(RESOURCE_PATH.formatted(baseURI))
+                .path(datasetId.toString())
+                .path("versions")
+                .path(versionHash)
+                .path("tags")
+                .path(tag)
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .delete()) {
+
+            assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_NO_CONTENT);
+        }
+    }
+
+    public Response callCommitVersion(UUID datasetId, DatasetVersionCreate versionCreate, String apiKey,
+            String workspaceName) {
+        return client.target(RESOURCE_PATH.formatted(baseURI))
+                .path(datasetId.toString())
+                .path("versions")
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .post(Entity.json(versionCreate));
+    }
+
+    public Response callCreateVersionTag(UUID datasetId, String versionHash, DatasetVersionTag tag, String apiKey,
+            String workspaceName) {
+        return client.target(RESOURCE_PATH.formatted(baseURI))
+                .path(datasetId.toString())
+                .path("versions")
+                .path("hash")
+                .path(versionHash)
+                .path("tags")
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .post(Entity.json(tag));
+    }
+
+    public Response callDeleteVersionTag(UUID datasetId, String versionHash, String tag, String apiKey,
+            String workspaceName) {
+        return client.target(RESOURCE_PATH.formatted(baseURI))
+                .path(datasetId.toString())
+                .path("versions")
+                .path(versionHash)
+                .path("tags")
+                .path(tag)
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .delete();
     }
 }

@@ -30,6 +30,7 @@ import com.comet.opik.domain.DatasetExpansionService;
 import com.comet.opik.domain.DatasetItemSearchCriteria;
 import com.comet.opik.domain.DatasetItemService;
 import com.comet.opik.domain.DatasetService;
+import com.comet.opik.domain.DatasetVersionService;
 import com.comet.opik.domain.EntityType;
 import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.domain.Streamer;
@@ -100,6 +101,7 @@ public class DatasetsResource {
     private final @NonNull DatasetService service;
     private final @NonNull DatasetItemService itemService;
     private final @NonNull DatasetExpansionService expansionService;
+    private final @NonNull DatasetVersionService versionService;
     private final @NonNull Provider<RequestContext> requestContext;
     private final @NonNull FiltersFactory filtersFactory;
     private final @NonNull IdGenerator idGenerator;
@@ -137,7 +139,7 @@ public class DatasetsResource {
             @QueryParam("with_experiments_only") boolean withExperimentsOnly,
             @QueryParam("with_optimizations_only") boolean withOptimizationsOnly,
             @QueryParam("prompt_id") UUID promptId,
-            @QueryParam("name") String name,
+            @QueryParam("name") @Schema(description = "Filter datasets by name (partial match, case insensitive)") String name,
             @QueryParam("sorting") String sorting,
             @QueryParam("filters") String filters) {
 
@@ -684,5 +686,17 @@ public class DatasetsResource {
                 datasetId, experimentIds, workspaceId);
 
         return Response.ok(columns).build();
+    }
+
+    /**
+     * Sub-resource locator for dataset version operations.
+     * Delegates all requests under /{id}/versions to DatasetVersionsResource.
+     *
+     * @param datasetId the dataset ID from the path parameter
+     * @return a new instance of DatasetVersionsResource configured for this dataset
+     */
+    @Path("/{id}/versions")
+    public DatasetVersionsResource versions(@PathParam("id") UUID datasetId) {
+        return new DatasetVersionsResource(datasetId, versionService, requestContext);
     }
 }

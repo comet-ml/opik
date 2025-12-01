@@ -334,6 +334,10 @@ class TraceDAOImpl implements TraceDAO {
             ;
             """;
 
+    // Build value_by_author map with composite keys (author_spanId) for span feedback scores.
+    // The composite key format ensures uniqueness when multiple spans have the same author.
+    // Format: if span_id exists, use 'author_spanId', otherwise use 'author'.
+    // The tuple contains: (value, reason, category_name, source, last_updated_at, span_type, span_id)
     private static final String SELECT_BY_IDS = """
             WITH feedback_scores_combined_raw AS (
                 SELECT workspace_id,
@@ -438,6 +442,149 @@ class TraceDAOImpl implements TraceDAO {
                      arrayMin(created_ats) AS created_at,
                      arrayMax(last_updated_ats) AS last_updated_at
                  FROM feedback_scores_combined_grouped
+            ), span_feedback_scores_combined_raw AS (
+                SELECT workspace_id,
+                       project_id,
+                       entity_id,
+                       name,
+                       category_name,
+                       value,
+                       reason,
+                       source,
+                       created_by,
+                       last_updated_by,
+                       created_at,
+                       last_updated_at,
+                       feedback_scores.last_updated_by AS author
+                FROM feedback_scores FINAL
+                WHERE entity_type = 'span'
+                   AND workspace_id = :workspace_id
+                   AND entity_id IN (SELECT id FROM spans WHERE workspace_id = :workspace_id AND trace_id IN :ids)
+                UNION ALL
+                SELECT workspace_id,
+                       project_id,
+                       entity_id,
+                       name,
+                       category_name,
+                       value,
+                       reason,
+                       source,
+                       created_by,
+                       last_updated_by,
+                       created_at,
+                       last_updated_at,
+                       author
+                FROM authored_feedback_scores FINAL
+                WHERE entity_type = 'span'
+                  AND workspace_id = :workspace_id
+                  AND entity_id IN (SELECT id FROM spans WHERE workspace_id = :workspace_id AND trace_id IN :ids)
+            ), span_feedback_scores_with_ranking AS (
+                SELECT workspace_id,
+                       project_id,
+                       entity_id,
+                       name,
+                       category_name,
+                       value,
+                       reason,
+                       source,
+                       created_by,
+                       last_updated_by,
+                       created_at,
+                       last_updated_at,
+                       author,
+                       ROW_NUMBER() OVER (
+                           PARTITION BY workspace_id, project_id, entity_id, name, author
+                           ORDER BY last_updated_at DESC
+                       ) as rn
+                FROM span_feedback_scores_combined_raw
+            ), span_feedback_scores_combined AS (
+                SELECT workspace_id,
+                       project_id,
+                       entity_id,
+                       name,
+                       category_name,
+                       value,
+                       reason,
+                       source,
+                       created_by,
+                       last_updated_by,
+                       created_at,
+                       last_updated_at,
+                       author
+                FROM span_feedback_scores_with_ranking
+                WHERE rn = 1
+            ), span_feedback_scores_with_trace_id AS (
+                SELECT workspace_id,
+                       project_id,
+                       s.trace_id,
+                       s.id AS span_id,
+                       name,
+                       category_name,
+                       value,
+                       reason,
+                       source,
+                       created_by,
+                       last_updated_by,
+                       created_at,
+                       last_updated_at,
+                       author,
+                       s.type AS span_type
+                FROM span_feedback_scores_combined sfs
+                INNER JOIN (
+                    SELECT id, trace_id, type
+                    FROM spans FINAL
+                    WHERE workspace_id = :workspace_id
+                      AND trace_id IN :ids
+                    ORDER BY (workspace_id, project_id, trace_id, parent_span_id, id) DESC, last_updated_at DESC
+                    LIMIT 1 BY id
+                ) AS s ON sfs.entity_id = s.id
+            ), span_feedback_scores_combined_grouped AS (
+                SELECT
+                    workspace_id,
+                    project_id,
+                    trace_id,
+                    name,
+                    groupArray(value) AS values,
+                    groupArray(reason) AS reasons,
+                    groupArray(category_name) AS categories,
+                    groupArray(author) AS authors,
+                    groupArray(source) AS sources,
+                    groupArray(created_by) AS created_bies,
+                    groupArray(last_updated_by) AS updated_bies,
+                    groupArray(created_at) AS created_ats,
+                    groupArray(last_updated_at) AS last_updated_ats,
+                    groupArray(span_type) AS span_types,
+                    groupArray(span_id) AS span_ids
+                FROM span_feedback_scores_with_trace_id
+                GROUP BY workspace_id, project_id, trace_id, name
+            ), span_feedback_scores_final AS (
+                SELECT
+                    workspace_id,
+                    project_id,
+                    trace_id,
+                    name,
+                    arrayStringConcat(categories, ', ') AS category_name,
+                    IF(length(values) = 1, arrayElement(values, 1), toDecimal64(arrayAvg(values), 9)) AS value,
+                    IF(length(reasons) = 1,
+                        arrayElement(reasons, 1),
+                        arrayStringConcat(
+                            arrayFilter(x -> x != '' AND x != '<no reason>', reasons),
+                            ', '
+                        )
+                    ) AS reason,
+                    arrayElement(sources, 1) AS source,
+                    mapFromArrays(
+                            arrayMap(i -> if(span_ids[i] IS NULL OR span_ids[i] = '', authors[i], concat(authors[i], '_', toString(span_ids[i]))), arrayEnumerate(authors)),
+                            arrayMap(
+                                    i -> tuple(values[i], reasons[i], categories[i], sources[i], last_updated_ats[i], span_types[i], span_ids[i]),
+                                    arrayEnumerate(values)
+                            )
+                    ) AS value_by_author,
+                    arrayStringConcat(created_bies, ', ') AS created_by,
+                    arrayStringConcat(updated_bies, ', ') AS last_updated_by,
+                    arrayMin(created_ats) AS created_at,
+                    arrayMax(last_updated_ats) AS last_updated_at
+                FROM span_feedback_scores_combined_grouped
             )
             SELECT
                 t.*,
@@ -447,9 +594,11 @@ class TraceDAOImpl implements TraceDAO {
                 sum(s.total_estimated_cost) as total_estimated_cost,
                 COUNT(s.id) AS span_count,
                 toInt64(countIf(s.type = 'llm')) AS llm_span_count,
+                countIf(s.type = 'tool') > 0 AS has_tool_spans,
                 arraySort(groupUniqArrayIf(s.provider, s.provider != '')) as providers,
                 groupUniqArrayArray(c.comments_array) as comments,
                 any(fs.feedback_scores_list) as feedback_scores_list,
+                any(sfs.span_feedback_scores_list) as span_feedback_scores_list,
                 any(gr.guardrails) as guardrails_validations
             FROM (
                 SELECT
@@ -521,6 +670,24 @@ class TraceDAOImpl implements TraceDAO {
                 FROM feedback_scores_final
                 GROUP BY workspace_id, project_id, entity_id
             ) AS fs ON t.id = fs.entity_id
+            LEFT JOIN (
+                SELECT
+                    trace_id,
+                    groupArray(tuple(
+                        name,
+                        category_name,
+                        value,
+                        reason,
+                        source,
+                        value_by_author,
+                        created_at,
+                        last_updated_at,
+                        created_by,
+                        last_updated_by
+                    )) AS span_feedback_scores_list
+                FROM span_feedback_scores_final
+                GROUP BY workspace_id, project_id, trace_id
+            ) AS sfs ON t.id = sfs.trace_id
             LEFT JOIN (
                 SELECT
                     workspace_id,
@@ -713,6 +880,7 @@ class TraceDAOImpl implements TraceDAO {
                     sum(total_estimated_cost) as total_estimated_cost,
                     COUNT(DISTINCT id) as span_count,
                     toInt64(countIf(type = 'llm')) as llm_span_count,
+                    countIf(type = 'tool') > 0 as has_tool_spans,
                     arraySort(groupUniqArrayIf(provider, provider != '')) as providers
                 FROM spans final
                 WHERE workspace_id = :workspace_id
@@ -844,6 +1012,7 @@ class TraceDAOImpl implements TraceDAO {
                   <if(!exclude_guardrails_validations)>, gagg.guardrails_list as guardrails_validations<endif>
                   <if(!exclude_span_count)>, s.span_count AS span_count<endif>
                   <if(!exclude_llm_span_count)>, s.llm_span_count AS llm_span_count<endif>
+                  <if(!exclude_has_tool_spans)>, s.has_tool_spans AS has_tool_spans<endif>
                   , s.providers AS providers
              FROM traces_final t
              LEFT JOIN feedback_scores_agg fsagg ON fsagg.entity_id = t.id
@@ -2638,7 +2807,14 @@ class TraceDAOImpl implements TraceDAO {
 
     private <T> T getValue(Set<Trace.TraceField> exclude, Trace.TraceField field, Row row, String fieldName,
             Class<T> clazz) {
-        return exclude.contains(field) ? null : row.get(fieldName, clazz);
+        if (exclude.contains(field)) {
+            return null;
+        }
+        // Check if column exists in result set (some queries don't include all columns)
+        if (!row.getMetadata().contains(fieldName)) {
+            return null;
+        }
+        return row.get(fieldName, clazz);
     }
 
     private Publisher<Trace> mapToDto(Result result, Set<Trace.TraceField> exclude) {
@@ -2688,6 +2864,14 @@ class TraceDAOImpl implements TraceDAO {
                         .map(FeedbackScoreMapper::mapFeedbackScores)
                         .filter(not(List::isEmpty))
                         .orElse(null))
+                .spanFeedbackScores(Optional
+                        .ofNullable(getValue(exclude, Trace.TraceField.SPAN_FEEDBACK_SCORES, row,
+                                "span_feedback_scores_list",
+                                List.class))
+                        .filter(not(List::isEmpty))
+                        .map(FeedbackScoreMapper::mapFeedbackScores)
+                        .filter(not(List::isEmpty))
+                        .orElse(null))
                 .guardrailsValidations(Optional
                         .ofNullable(getValue(exclude, Trace.TraceField.GUARDRAILS_VALIDATIONS, row,
                                 "guardrails_validations", List.class))
@@ -2702,6 +2886,10 @@ class TraceDAOImpl implements TraceDAO {
                         .ofNullable(getValue(exclude, Trace.TraceField.LLM_SPAN_COUNT, row, "llm_span_count",
                                 Integer.class))
                         .orElse(0))
+                .hasToolSpans(Optional
+                        .ofNullable(getValue(exclude, Trace.TraceField.HAS_TOOL_SPANS, row, "has_tool_spans",
+                                Boolean.class))
+                        .orElse(false))
                 .providers(providers)
                 .usage(getValue(exclude, Trace.TraceField.USAGE, row, "usage", Map.class))
                 .totalEstimatedCost(Optional
@@ -2885,6 +3073,8 @@ class TraceDAOImpl implements TraceDAO {
                         template.add("exclude_span_count", fields.contains(Trace.TraceField.SPAN_COUNT.getValue()));
                         template.add("exclude_llm_span_count",
                                 fields.contains(Trace.TraceField.LLM_SPAN_COUNT.getValue()));
+                        template.add("exclude_has_tool_spans",
+                                fields.contains(Trace.TraceField.HAS_TOOL_SPANS.getValue()));
                     }
                 });
     }

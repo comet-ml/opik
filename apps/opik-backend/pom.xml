@@ -27,7 +27,7 @@
         <clickhouse-java.version>0.9.0</clickhouse-java.version>
         <google-protobuf.version>4.33.1</google-protobuf.version>
         <org.mapstruct.version>1.6.3</org.mapstruct.version>
-        <testcontainers.version>2.0.1</testcontainers.version>
+        <testcontainers.version>2.0.2</testcontainers.version>
         <uuid.java.generator.version>5.1.0</uuid.java.generator.version>
         <wiremock.version>3.13.1</wiremock.version>
         <redisson.version>3.52.0</redisson.version>
@@ -63,7 +63,7 @@
             <dependency>
                 <groupId>dev.langchain4j</groupId>
                 <artifactId>langchain4j-bom</artifactId>
-                <version>1.8.0</version>
+                <version>1.9.1</version>
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>
@@ -286,7 +286,7 @@
         <dependency>
             <groupId>dev.langchain4j</groupId>
             <artifactId>langchain4j-http-client-jdk</artifactId>
-            <version>1.8.0</version>
+            <version>1.9.1</version>
         </dependency>
         <dependency>
             <groupId>org.apache.commons</groupId>
@@ -436,7 +436,7 @@
                 <plugin>
                     <groupId>org.apache.maven.plugins</groupId>
                     <artifactId>maven-source-plugin</artifactId>
-                    <version>3.3.1</version>
+                    <version>3.4.0</version>
                 </plugin>
                 <plugin>
                     <groupId>org.apache.maven.plugins</groupId>
