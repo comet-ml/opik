@@ -73,6 +73,16 @@ Experiment items store the input, expected output, actual output and feedback sc
   <img src="/img/evaluation/experiment_items.png" />
 </Frame>
 
+### Experiment-Level Metrics
+
+In addition to per-item metrics, you can compute experiment-level aggregate metrics that are calculated across all test results. These experiment scores are displayed in the Opik UI alongside feedback scores and can be used for sorting and filtering experiments.
+
+Experiment scores are computed after all test results are collected using custom functions that take a list of test results and return aggregate metrics. Common use cases include computing maximum, minimum, or mean values across all test cases, or calculating custom statistics specific to your evaluation needs.
+
+<Tip>
+  Learn more about how to compute experiment-level metrics in the [Evaluate your LLM application](/evaluation/evaluate_your_llm#computing-experiment-level-metrics) guide.
+</Tip>
+
 ### Multi-Value Feedback Scores for Experiment Items
 
 The experiment interface supports multiple evaluators scoring the same experiment items. Each item can receive independent scores from different team members, with all ratings preserved and aggregated in the interface.
