@@ -267,7 +267,7 @@ component:
       requests:
         ephemeral-storage: 10Gi
     volumeMounts:
-    - mountPath: /etc/nginx/conf.d/
+    - mountPath: /etc/nginx/templates/
       name: opik-frontend-nginx
     volumes:
     - name: opik-frontend-nginx
@@ -275,7 +275,7 @@ component:
         name: opik-frontend-nginx
         items:
         - key: default.conf
-          path: default.conf
+          path: default.conf.template
     service:
       type: ClusterIP
       ports:
