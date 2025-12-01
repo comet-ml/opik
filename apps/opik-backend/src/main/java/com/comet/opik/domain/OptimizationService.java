@@ -154,9 +154,6 @@ class OptimizationServiceImpl implements OptimizationService {
                     var newOptimization = builder.build();
 
                     return makeMonoContextAware((userName, workspaceId) -> Mono.deferContextual(ctx -> {
-                        String opikApiKey = ctx.getOrDefault(RequestContext.API_KEY, null);
-                        String workspaceName = workspaceNameService.getWorkspaceName(workspaceId,
-                                config.getAuthentication().getReactService().url());
 
                         return optimizationDAO.upsert(newOptimization)
                                 .thenReturn(newOptimization.id())
@@ -166,6 +163,21 @@ class OptimizationServiceImpl implements OptimizationService {
 
                                     // If Studio optimization, enqueue job to Redis RQ
                                     if (isStudioOptimization) {
+                                        String workspaceName = ctx.getOrDefault(RequestContext.WORKSPACE_NAME, null);
+                                        if (StringUtils.isBlank(workspaceName)) {
+                                            try {
+                                                workspaceName = workspaceNameService.getWorkspaceName(workspaceId,
+                                                        config.getAuthentication().getReactService().url());
+                                            } catch (Exception e) {
+                                                log.warn(
+                                                        "Failed to get workspace name for workspaceId '{}', using workspaceId as name: {}",
+                                                        workspaceId, e.getMessage());
+                                                workspaceName = workspaceId;
+                                            }
+                                        }
+                                        
+                                        String opikApiKey = ctx.getOrDefault(RequestContext.API_KEY, null);
+
                                         enqueueStudioOptimizationJob(newOptimization, workspaceId, workspaceName,
                                                 opikApiKey);
                                     }

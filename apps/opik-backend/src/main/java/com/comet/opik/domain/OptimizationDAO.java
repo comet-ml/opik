@@ -116,7 +116,7 @@ class OptimizationDAOImpl implements OptimizationDAO {
                 <if(name)>AND ilike(name, CONCAT('%%', :name ,'%%'))<endif>
                 <if(dataset_id)>AND dataset_id = :dataset_id <endif>
                 <if(dataset_deleted)>AND dataset_deleted = :dataset_deleted<endif>
-                <if(studio_only)>AND studio_config IS NOT NULL<endif>
+                <if(studio_only)>AND studio_config != ''<endif>
                 <if(filters)>AND <filters><endif>
                 ORDER BY id DESC, last_updated_at DESC
                 LIMIT 1 BY id
@@ -252,7 +252,7 @@ class OptimizationDAOImpl implements OptimizationDAO {
                 <if(name)>AND ilike(name, CONCAT('%%', :name ,'%%'))<endif>
                 <if(dataset_id)>AND dataset_id = :dataset_id <endif>
                 <if(dataset_deleted)>AND dataset_deleted = :dataset_deleted<endif>
-                <if(studio_only)>AND studio_config IS NOT NULL<endif>
+                <if(studio_only)>AND studio_config != ''<endif>
                 <if(filters)>AND <filters><endif>
                 ORDER BY id DESC, last_updated_at DESC
                 LIMIT 1 BY id

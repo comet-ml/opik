@@ -40,8 +40,7 @@ public record OptimizationStudioConfig(
     @Builder(toBuilder = true)
     @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
     public record StudioLlmModel(
-            @NotBlank String provider,
-            @NotBlank String name,
+            @NotBlank String model,
             JsonNode parameters) {
     }
 
