@@ -156,6 +156,7 @@ services:
       OTEL_EXPORTER_OTLP_METRICS_DEFAULT_HISTOGRAM_AGGREGATION: BASE2_EXPONENTIAL_BUCKET_HISTOGRAM
       OTEL_EXPERIMENTAL_RESOURCE_DISABLED_KEYS: process.command_args
       OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE: delta
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4317
       OPIK_USAGE_REPORT_ENABLED: ${OPIK_USAGE_REPORT_ENABLED:-true}
       AWS_ACCESS_KEY_ID: ${MINIO_ROOT_USER:-THAAIOSFODNN7EXAMPLE}
       AWS_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD:-LESlrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY}
@@ -202,6 +203,9 @@ services:
     hostname: python-backend
     privileged: true # Required for Docker-in-Docker, so it can launch containers
     environment:
+      OPIK_OTEL_SDK_ENABLED: false
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4317
+      OTEL_VERSION: 2.16.0
       PYTHON_CODE_EXECUTOR_IMAGE_TAG: ${OPIK_VERSION:-latest}
       PYTHON_CODE_EXECUTOR_STRATEGY: ${PYTHON_CODE_EXECUTOR_STRATEGY:-process}
       PYTHON_CODE_EXECUTOR_CONTAINERS_NUM: 5
@@ -271,7 +275,7 @@ services:
 
   frontend: &frontend
     image: ghcr.io/comet-ml/opik/opik-frontend:${OPIK_VERSION:-latest}
-    pull_policy: missing
+    pull_policy: build
     profiles:
       - opik
       - local-be
@@ -315,43 +319,35 @@ services:
     depends_on:
       backend:
         condition: service_healthy
-      otel-collector:
+      jaeger:
         condition: service_healthy
     volumes:
       - ./nginx_${OPIK_FRONTEND_FLAVOR:-default}_otel.conf:/etc/nginx/templates/default.conf.template:ro
     environment:
       OPIK_VERSION: ${OPIK_VERSION:-latest}
       OTEL_TRACE: ${OTEL_TRACE:-on}
-      OTEL_COLLECTOR_HOST: ${OTEL_COLLECTOR_HOST:-otel-collector}
+      OTEL_COLLECTOR_HOST: ${OTEL_COLLECTOR_HOST:-jaeger}
       OTEL_COLLECTOR_PORT: ${OTEL_COLLECTOR_PORT:-4317}
       NGINX_PORT: ${NGINX_PORT:-8080}
-      SYSLOG_SERVER_HOST: ${OTEL_COLLECTOR_HOST:-otel-collector}
-      SYSLOG_SERVER_PORT: ${SYSLOG_SERVER_PORT:-5140}
+      
 
-
-  # OpenTelemetry Collector - receives logs, traces, and metrics via OTLP
-  otel-collector:
-    image: otel/opentelemetry-collector-contrib:0.139.0
-    pull_policy: missing
+  # Jaeger - receives traces via OTLP
+  jaeger:
+    image: jaegertracing/all-in-one:latest
     profiles:
       - opik-otel
-    hostname: otel-collector
-    volumes:
-      - ./otel-collector-config.yaml:/etc/otelcol/config.yaml:ro
+    hostname: jaeger
     ports:
-      - "4317:4317" # OTLP gRPC receiver
-      - "4318:4318" # OTLP HTTP receiver
-      - "13133:13133" # Health check endpoint
-      - "5140:5140/udp" # Syslog UDP receiver
-    command: ["--config=/etc/otelcol/config.yaml"]
+      - "16686:16686" # UI
+      - "4317:4317"   # OTLP gRPC
+      - "4318:4318"   # OTLP HTTP
+    environment:
+      - COLLECTOR_OTLP_ENABLED=true
     healthcheck:
-      # Use the OpenTelemetry collector's health check endpoint on port 13133
-      # The health_check extension is configured in otel-collector-config.yaml
-      test: [ "CMD", "/otelcol-contrib", "--config=/etc/otelcol/config.yaml", "validate" ]
-      interval: 10s
+      test: [ "CMD", "wget", "--spider", "-q", "http://localhost:14269/" ]
+      interval: 5s
       timeout: 5s
       retries: 3
-      start_period: 10s
 
 networks:
   default:

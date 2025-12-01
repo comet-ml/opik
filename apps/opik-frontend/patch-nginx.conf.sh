@@ -5,32 +5,14 @@ echo "🚀 Starting Opik Frontend..."
 
 # Set default values for environment variables
 export NGINX_PID="${NGINX_PID:-/run/nginx.pid}"
-export OTEL_COLLECTOR_HOST="${OTEL_COLLECTOR_HOST:-otel-collector}"
+export OTEL_COLLECTOR_HOST="${OTEL_COLLECTOR_HOST:-jaeger}"
 # Nginx OpenTelemetry module uses gRPC (HTTP/2), so use port 4317, not 4318 (HTTP)
 export OTEL_COLLECTOR_PORT="${OTEL_COLLECTOR_PORT:-4317}"
 export NGINX_PORT="${NGINX_PORT:-8080}"
 export OTEL_TRACE="${OTEL_TRACE:-off}"
-# Default SYSLOG_SERVER_HOST to OTEL_COLLECTOR_HOST if not set explicitly, otherwise default to otel-collector
-export SYSLOG_SERVER_HOST="${SYSLOG_SERVER_HOST:-${OTEL_COLLECTOR_HOST}}"
-export SYSLOG_SERVER_PORT="${SYSLOG_SERVER_PORT:-5140}"
 
-# Set OpenTelemetry module load directive based on OTEL_TRACE
-if [ "${OTEL_TRACE}" = "on" ]; then
-    export OTEL_COMMENT_OUT=""
-    # Enable syslog logging if OTEL_TRACE is on
-    export NGINX_ACCESS_LOG_SYSLOG="access_log  syslog:server=${SYSLOG_SERVER_HOST}:${SYSLOG_SERVER_PORT},facility=local7 logger-json;"
-    
-    # Prepare variable for json-log template substitution
-    export OTEL_TRACE_ID_JSON=', "otel_trace_id": "$otel_trace_id"'
-else
-    export OTEL_COMMENT_OUT="# (OTEL_TRACE=off)"
-    # Disable syslog logging if OTEL_TRACE is off
-    export NGINX_ACCESS_LOG_SYSLOG="# access_log syslog disabled (OTEL_TRACE=off)"
-    
-    export OTEL_TRACE_ID_JSON=""
-fi
 
-VARS='$NGINX_PID $NGINX_PORT $OTEL_TRACE $OTEL_COLLECTOR_HOST $OTEL_TRACE_ID_JSON $OTEL_COLLECTOR_PORT $OTEL_COMMENT_OUT $SYSLOG_SERVER_HOST $SYSLOG_SERVER_PORT $NGINX_ACCESS_LOG_SYSLOG'
+VARS='$NGINX_PID $NGINX_PORT $OTEL_TRACE $OTEL_COLLECTOR_HOST $OTEL_COLLECTOR_PORT'
     
 echo "patch configs already updated on 20-envsubst-on-templates.sh..."
 for template in /etc/nginx/conf.d/*.conf; do

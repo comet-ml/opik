@@ -30,7 +30,7 @@ ARG BUILD_MODE=production
 LABEL build.mode="${BUILD_MODE}"
 
 # Upgrade system packages to fix vulnerabilities
-RUN apk upgrade --no-cache
+RUN apk add --no-cache busybox=1.37.0-r20 libpng=1.6.51-r0 curl=8.14.1-r2 
 
 # Copy custom Nginx configuration
 COPY --chown=nginx:nginx nginx /etc/nginx
