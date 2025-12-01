@@ -22,10 +22,11 @@ tracer = trace.get_tracer(__name__)
 
 def _validate_api_keys():
     """Validate that LLM API keys are available."""   
-    available_keys = {name: bool(value) for name, value in LLM_API_KEYS.items()}
-    logger.info(f"LLM API Keys availability: {available_keys}")
+    has_keys = any(bool(value) for value in LLM_API_KEYS.values())
     
-    if not any(available_keys.values()):
+    if has_keys:
+        logger.info("At least one LLM API key is available.")
+    else:
         logger.warning("No LLM API keys found. Optimization may fail.")
 
 
