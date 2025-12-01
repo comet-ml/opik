@@ -3,11 +3,9 @@ import json
 import os
 import copy
 
-from opik.opik_context import get_current_span_data
 
 import litellm
-from litellm.integrations.opik.opik import OpikLogger
-
+from opik.integrations import litellm as litellm_integration
 from . import _throttle
 
 _limiter = _throttle.get_rate_limiter_for_current_opik_installation()
@@ -64,8 +62,11 @@ class OptimizableAgent:
         # Litellm bug requires this (maybe problematic if multi-threaded)
         if "OPIK_PROJECT_NAME" not in os.environ:
             os.environ["OPIK_PROJECT_NAME"] = str(self.project_name)
-        self.opik_logger = OpikLogger()
-        litellm.callbacks = [self.opik_logger]
+        # self.opik_logger = OpikLogger()
+        # litellm.callbacks = [self.opik_logger]
+        self.litellm_decorator = litellm_integration.track_completion(
+            project_name=self.project_name
+        )
 
     def init_agent(self, prompt: "chat_prompt.ChatPrompt") -> None:
         """Bind the runtime prompt and snapshot its model configuration."""
@@ -85,17 +86,11 @@ class OptimizableAgent:
         tools: list[dict[str, str]] | None,
         seed: int | None = None,
     ) -> Any:
-        response = litellm.completion(
+        response = self.litellm_decorator(litellm.completion)(
             model=self.model,
             messages=messages,
             seed=seed,
             tools=tools,
-            metadata={
-                "opik": {
-                    "current_span_data": get_current_span_data(),
-                    "project_name": self.project_name,
-                },
-            },
             **self.model_kwargs,
         )
         return response

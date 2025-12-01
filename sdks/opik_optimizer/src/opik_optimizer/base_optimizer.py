@@ -158,7 +158,8 @@ class BaseOptimizer(ABC):
 
         if not callable(metric):
             raise ValueError(
-                "Metric must be a function that takes `dataset_item` and `llm_output` as arguments."
+                "Metric must be a callable that takes `dataset_item` and `llm_output` as arguments, "
+                "and optionally `task_span` for metrics that need access to span information."
             )
 
         if prompt._has_content_parts() and not support_content_parts:
