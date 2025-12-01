@@ -26,9 +26,11 @@ import { RESOURCE_TYPE } from "@/components/shared/ResourceLink/ResourceLink";
 import Loader from "@/components/shared/Loader/Loader";
 import useAppStore from "@/store/AppStore";
 import { formatDate } from "@/lib/date";
+import { transformExperimentScores } from "@/lib/experimentScoreUtils";
 import {
   COLUMN_COMMENTS_ID,
   COLUMN_DATASET_ID,
+  COLUMN_EXPERIMENT_SCORES_ID,
   COLUMN_FEEDBACK_SCORES_ID,
   COLUMN_ID_ID,
   COLUMN_METADATA_ID,
@@ -65,7 +67,6 @@ import {
 import { calculateGroupLabel, isGroupFullyExpanded } from "@/lib/groups";
 import MultiResourceCell from "@/components/shared/DataTableCells/MultiResourceCell";
 import FeedbackScoreListCell from "@/components/shared/DataTableCells/FeedbackScoreListCell";
-import { formatNumericData } from "@/lib/utils";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 import ExplainerDescription from "@/components/shared/ExplainerDescription/ExplainerDescription";
 import FiltersButton from "@/components/shared/FiltersButton/FiltersButton";
@@ -77,6 +78,7 @@ import { ChartData } from "@/components/pages-shared/experiments/FeedbackScoresC
 import GroupsButton from "@/components/shared/GroupsButton/GroupsButton";
 import useQueryParamAndLocalStorageState from "@/hooks/useQueryParamAndLocalStorageState";
 import TextCell from "@/components/shared/DataTableCells/TextCell";
+import ExperimentScoreListCell from "@/components/shared/DataTableCells/ExperimentScoreListCell";
 
 const STORAGE_KEY_PREFIX = "experiments";
 const PAGINATION_SIZE_KEY = "experiments-pagination-size";
@@ -190,19 +192,27 @@ export const DEFAULT_COLUMNS: ColumnData<GroupedExperiment>[] = [
     },
   },
   {
-    id: COLUMN_FEEDBACK_SCORES_ID,
-    label: "Feedback scores (avg.)",
+    id: COLUMN_EXPERIMENT_SCORES_ID,
+    label: "Experiment Scores",
     type: COLUMN_TYPE.numberDictionary,
-    accessorFn: (row) =>
-      get(row, "feedback_scores", []).map((score) => ({
-        ...score,
-        value: formatNumericData(score.value),
-      })),
+    accessorFn: transformExperimentScores,
+    cell: ExperimentScoreListCell as never,
+    aggregatedCell: ExperimentScoreListCell.Aggregation as never,
+    customMeta: {
+      getHoverCardName: (row: GroupedExperiment) => row.name,
+      aggregationKey: "experiment_scores",
+    },
+    explainer: EXPLAINERS_MAP[EXPLAINER_ID.what_are_experiment_scores],
+  },
+  {
+    id: COLUMN_FEEDBACK_SCORES_ID,
+    label: "Feedback Scores",
+    type: COLUMN_TYPE.numberDictionary,
+    accessorFn: transformExperimentScores,
     cell: FeedbackScoreListCell as never,
     aggregatedCell: FeedbackScoreListCell.Aggregation as never,
     customMeta: {
       getHoverCardName: (row: GroupedExperiment) => row.name,
-      isAverageScores: true,
       aggregationKey: "feedback_scores",
     },
     explainer: EXPLAINERS_MAP[EXPLAINER_ID.what_are_feedback_scores],
@@ -496,22 +506,52 @@ const ExperimentsPage: React.FC = () => {
           lines: [],
         };
       }
+
+      const createScoresMap = (
+        scores: Array<{ name: string; value: number }> | undefined,
+        addAvgSuffix: boolean,
+      ): Record<string, number> =>
+        (scores || []).reduce<Record<string, number>>((acc, score) => {
+          const key = addAvgSuffix ? `${score.name} (avg)` : score.name;
+          acc[key] = score.value;
+          return acc;
+        }, {});
+
+      const getScoreNames = (
+        scores: Array<{ name: string }> | undefined,
+        addAvgSuffix: boolean,
+      ): string[] =>
+        (scores || []).map((s) => (addAvgSuffix ? `${s.name} (avg)` : s.name));
+
       groupExperiments.forEach((experiment) => {
+        const feedbackScoresMap = createScoresMap(
+          experiment.feedback_scores,
+          true,
+        );
+        const experimentScoresMap = createScoresMap(
+          experiment.experiment_scores,
+          false,
+        );
+
         groupsMap[groupKey].data.unshift({
           entityId: experiment.id,
           entityName: experiment.name,
           createdDate: formatDate(experiment.created_at),
-          scores: (experiment.feedback_scores || []).reduce<
-            Record<string, number>
-          >((acc, score) => {
-            acc[score.name] = score.value;
-            return acc;
-          }, {}),
+          scores: { ...feedbackScoresMap, ...experimentScoresMap },
         });
 
+        const feedbackScoreNames = getScoreNames(
+          experiment.feedback_scores,
+          true,
+        );
+        const experimentScoreNames = getScoreNames(
+          experiment.experiment_scores,
+          false,
+        );
         groupsMap[groupKey].lines = uniq([
           ...groupsMap[groupKey].lines,
-          ...(experiment.feedback_scores || []).map((s) => s.name),
+          ...feedbackScoreNames,
+          ...experimentScoreNames,
         ]);
       });
     });
@@ -566,7 +606,7 @@ const ExperimentsPage: React.FC = () => {
                 </div>
               </Card>
             }
-            isAverageScores
+            areAggregatedScores
           />
         </PageBodyStickyContainer>
       )}

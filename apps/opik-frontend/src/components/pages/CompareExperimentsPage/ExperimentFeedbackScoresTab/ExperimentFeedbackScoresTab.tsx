@@ -8,6 +8,9 @@ import {
   AggregatedFeedbackScore,
   COLUMN_TYPE,
   ColumnData,
+  SCORE_TYPE_FEEDBACK,
+  SCORE_TYPE_EXPERIMENT,
+  ScoreType,
 } from "@/types/shared";
 import DataTable from "@/components/shared/DataTable/DataTable";
 import DataTableNoData from "@/components/shared/DataTableNoData/DataTableNoData";
@@ -25,6 +28,7 @@ interface GetFeedbackScoreMapArguments {
   experiments: {
     id: string;
     feedback_scores?: AggregatedFeedbackScore[];
+    experiment_scores?: AggregatedFeedbackScore[];
   }[];
 }
 
@@ -40,13 +44,16 @@ export const getFeedbackScoreMap = ({
   experiments,
 }: GetFeedbackScoreMapArguments): FeedbackScoreMap => {
   return experiments.reduce<FeedbackScoreMap>((acc, e) => {
-    acc[e.id] = (e.feedback_scores || [])?.reduce<Record<string, number>>(
-      (a, f) => {
-        a[f.name] = f.value;
-        return a;
-      },
-      {},
-    );
+    // Combine feedback_scores and experiment_scores into a single map
+    const allScores = [
+      ...(e.feedback_scores || []),
+      ...(e.experiment_scores || []),
+    ];
+
+    acc[e.id] = allScores.reduce<Record<string, number>>((a, f) => {
+      a[f.name] = f.value;
+      return a;
+    }, {});
 
     return acc;
   }, {});
@@ -55,11 +62,17 @@ export const getFeedbackScoreMap = ({
 interface GetFeedbackScoresForExperimentsAsRowsArguments {
   feedbackScoresMap: FeedbackScoreMap;
   experimentsIds: string[];
+  experiments: {
+    id: string;
+    feedback_scores?: AggregatedFeedbackScore[];
+    experiment_scores?: AggregatedFeedbackScore[];
+  }[];
 }
 
 export const getFeedbackScoresForExperimentsAsRows = ({
   feedbackScoresMap,
   experimentsIds,
+  experiments,
 }: GetFeedbackScoresForExperimentsAsRowsArguments) => {
   const keys = uniq(
     Object.values(feedbackScoresMap).reduce<string[]>(
@@ -67,6 +80,25 @@ export const getFeedbackScoresForExperimentsAsRows = ({
       [],
     ),
   ).sort();
+
+  // Determine which scores are feedback_scores vs experiment_scores
+  const scoreTypeMap = new Map<string, ScoreType>();
+
+  const addScoresToMap = (
+    type: ScoreType,
+    scores?: AggregatedFeedbackScore[],
+  ) => {
+    scores?.forEach((score) => {
+      if (!scoreTypeMap.has(score.name)) {
+        scoreTypeMap.set(score.name, type);
+      }
+    });
+  };
+
+  experiments.forEach((experiment) => {
+    addScoresToMap(SCORE_TYPE_FEEDBACK, experiment.feedback_scores);
+    addScoresToMap(SCORE_TYPE_EXPERIMENT, experiment.experiment_scores);
+  });
 
   return keys.map((key) => {
     const data = experimentsIds.reduce<Record<string, FiledValue>>(
@@ -77,8 +109,9 @@ export const getFeedbackScoresForExperimentsAsRows = ({
       {},
     );
 
+    const isFeedbackScore = scoreTypeMap.get(key) === SCORE_TYPE_FEEDBACK;
     return {
-      name: key,
+      name: isFeedbackScore ? `${key} (avg)` : key,
       ...data,
     } as FeedbackScoreData;
   });
@@ -152,8 +185,9 @@ const ExperimentFeedbackScoresTab: React.FunctionComponent<
     return getFeedbackScoresForExperimentsAsRows({
       feedbackScoresMap,
       experimentsIds,
+      experiments,
     });
-  }, [feedbackScoresMap, experimentsIds]);
+  }, [feedbackScoresMap, experimentsIds, experiments]);
 
   const noDataText = isCompare
     ? "These experiments have no feedback scores"
