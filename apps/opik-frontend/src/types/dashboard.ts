@@ -1,16 +1,22 @@
 import { Filter } from "@/types/filters";
 import { DateRangeSerializedValue } from "@/components/shared/DateRangeSelect";
+import { TRACE_DATA_TYPE } from "@/constants/traces";
 
 export enum WIDGET_TYPE {
-  CHART_METRIC = "chart",
-  STAT_CARD = "stat_card",
+  PROJECT_METRICS = "project_metrics",
+  PROJECT_STATS_CARD = "project_stats_card",
   TEXT_MARKDOWN = "text_markdown",
-  COST_SUMMARY = "cost_summary",
+}
+
+export enum WIDGET_CATEGORY {
+  OBSERVABILITY = "observability",
+  EVALUATION = "evaluation",
+  GENERAL = "general",
 }
 
 // Widget-specific type definitions with discriminator
-export interface ChartMetricWidget {
-  type: WIDGET_TYPE.CHART_METRIC;
+export interface ProjectMetricsWidget {
+  type: WIDGET_TYPE.PROJECT_METRICS;
   config: {
     projectId?: string;
     metricType: string;
@@ -27,10 +33,10 @@ export interface TextMarkdownWidget {
   } & Record<string, unknown>;
 }
 
-export interface StatCardWidget {
-  type: WIDGET_TYPE.STAT_CARD;
+export interface ProjectStatsCardWidget {
+  type: WIDGET_TYPE.PROJECT_STATS_CARD;
   config: {
-    source: "traces" | "spans";
+    source: TRACE_DATA_TYPE;
     projectId: string;
     metric: string;
     traceFilters?: Filter[];
@@ -38,23 +44,11 @@ export interface StatCardWidget {
   } & Record<string, unknown>;
 }
 
-export interface CostSummaryWidget {
-  type: WIDGET_TYPE.COST_SUMMARY;
-  config?: {
-    projectIds?: string[];
-  } & Record<string, unknown>;
-}
-
 // Unified widget config type
 export type AddWidgetConfig = {
   title: string;
   subtitle?: string;
-} & (
-  | ChartMetricWidget
-  | TextMarkdownWidget
-  | StatCardWidget
-  | CostSummaryWidget
-);
+} & (ProjectMetricsWidget | TextMarkdownWidget | ProjectStatsCardWidget);
 
 // Update config with optional fields
 export type UpdateWidgetConfig = {
@@ -62,20 +56,16 @@ export type UpdateWidgetConfig = {
   subtitle?: string;
 } & (
   | {
-      type: WIDGET_TYPE.CHART_METRIC;
-      config?: Partial<ChartMetricWidget["config"]>;
+      type: WIDGET_TYPE.PROJECT_METRICS;
+      config?: Partial<ProjectMetricsWidget["config"]>;
     }
   | {
       type: WIDGET_TYPE.TEXT_MARKDOWN;
       config?: Partial<NonNullable<TextMarkdownWidget["config"]>>;
     }
   | {
-      type: WIDGET_TYPE.STAT_CARD;
-      config?: Partial<StatCardWidget["config"]>;
-    }
-  | {
-      type: WIDGET_TYPE.COST_SUMMARY;
-      config?: Partial<NonNullable<CostSummaryWidget["config"]>>;
+      type: WIDGET_TYPE.PROJECT_STATS_CARD;
+      config?: Partial<ProjectStatsCardWidget["config"]>;
     }
   | {
       type?: undefined;
@@ -89,10 +79,9 @@ export type DashboardWidget = {
   title: string;
   subtitle?: string;
 } & (
-  | ChartMetricWidget
+  | ProjectMetricsWidget
   | TextMarkdownWidget
-  | StatCardWidget
-  | CostSummaryWidget
+  | ProjectStatsCardWidget
   | {
       type: string;
       config: Record<string, unknown>;
@@ -175,11 +164,21 @@ export type WidgetEditorComponent = React.ForwardRefExoticComponent<
   WidgetEditorProps & React.RefAttributes<WidgetEditorHandle>
 >;
 
+export interface WidgetMetadata {
+  title: string;
+  description: string;
+  icon: React.ReactNode;
+  category: WIDGET_CATEGORY;
+  iconColor?: string;
+  disabled?: boolean;
+}
+
 export interface WidgetComponents {
   Widget: React.ComponentType<DashboardWidgetComponentProps>;
   Editor: WidgetEditorComponent | null;
   getDefaultConfig: () => Record<string, unknown>;
   calculateTitle: (config: Record<string, unknown>) => string;
+  metadata: WidgetMetadata;
 }
 
 export type WidgetResolver = (type: string) => WidgetComponents;
@@ -195,13 +194,4 @@ export interface WidgetConfigDialogProps {
   sectionId: string;
   widgetId?: string;
   onSave: (widgetData: Partial<DashboardWidget>) => void;
-}
-
-export interface WidgetOption {
-  id: string;
-  title: string;
-  description: string;
-  icon: React.ReactNode;
-  category: "general" | "charts" | "stats" | "experiments" | "cost";
-  disabled?: boolean;
 }

@@ -2,6 +2,11 @@ import { BASE_TRACE_DATA_TYPE, SPAN_TYPE } from "@/types/traces";
 
 export const TRACE_TYPE_FOR_TREE = "trace";
 
+export enum TRACE_DATA_TYPE {
+  traces = "traces",
+  spans = "spans",
+}
+
 export const METADATA_AGENT_GRAPH_KEY = "_opik_graph_definition";
 
 export const SPANS_COLORS_MAP: Record<BASE_TRACE_DATA_TYPE, string> = {

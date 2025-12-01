@@ -24,6 +24,7 @@ import AddSectionButton from "@/components/shared/Dashboard/DashboardSection/Add
 import { WidgetConfigDialog } from "@/components/shared/Dashboard/WidgetConfigDialog";
 import Loader from "@/components/shared/Loader/Loader";
 import useNavigationBlocker from "@/hooks/useNavigationBlocker";
+import { Separator } from "@/components/ui/separator";
 import { useDashboardSave } from "./useDashboardSave";
 import DashboardSaveActions from "./DashboardSaveActions";
 import {
@@ -192,6 +193,9 @@ const DashboardPage: React.FunctionComponent = () => {
             onSave={save}
             onDiscard={discard}
           />
+          {hasUnsavedChanges && (
+            <Separator orientation="vertical" className="mx-2 h-4" />
+          )}
           <MetricDateRangeSelect
             value={dateRange}
             onChangeValue={handleDateRangeChange}

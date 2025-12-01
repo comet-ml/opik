@@ -7,8 +7,8 @@ const DashboardWidgetDragHandle: React.FC = () => {
   return (
     <TooltipWrapper content="Drag to reposition">
       {/* eslint-disable-next-line tailwindcss/no-custom-classname */}
-      <div className="drag-handle cursor-grab text-light-slate hover:text-foreground active:cursor-grabbing">
-        <GripHorizontal className="size-4" />
+      <div className="drag-handle flex w-full cursor-grab items-center justify-center text-light-slate hover:text-foreground active:cursor-grabbing">
+        <GripHorizontal className="size-3" />
       </div>
     </TooltipWrapper>
   );

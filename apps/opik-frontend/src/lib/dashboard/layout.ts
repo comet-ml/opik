@@ -18,9 +18,9 @@ export const getDefaultWidgetSize = (
   type: string,
 ): { w: number; h: number } => {
   switch (type) {
-    case WIDGET_TYPE.CHART_METRIC:
+    case WIDGET_TYPE.PROJECT_METRICS:
       return { w: 2, h: 2 };
-    case WIDGET_TYPE.STAT_CARD:
+    case WIDGET_TYPE.PROJECT_STATS_CARD:
       return { w: 1, h: 1 };
     case WIDGET_TYPE.TEXT_MARKDOWN:
       return { w: 2, h: 2 };

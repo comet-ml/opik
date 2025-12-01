@@ -78,7 +78,7 @@ const DashboardWidgetGrid: React.FunctionComponent<
     >
       {widgets.map((widget) => {
         const widgetComponents = widgetResolver?.(
-          widget.type || WIDGET_TYPE.CHART_METRIC,
+          widget.type || WIDGET_TYPE.PROJECT_METRICS,
         );
 
         if (!widgetComponents) return null;

@@ -1,14 +1,17 @@
 import { z } from "zod";
 import { FiltersArraySchema } from "../shared/ProjectWidgetFiltersSection/schema";
+import { TRACE_DATA_TYPE } from "@/constants/traces";
 
-export const StatCardWidgetSchema = z.object({
+export const ProjectStatsCardWidgetSchema = z.object({
   title: z.string().min(1, "Title is required"),
   subtitle: z.string().optional(),
-  source: z.enum(["traces", "spans"]),
+  source: z.nativeEnum(TRACE_DATA_TYPE),
   projectId: z.string().min(1, "Project is required"),
   metric: z.string().min(1, "Metric is required"),
   traceFilters: FiltersArraySchema.optional(),
   spanFilters: FiltersArraySchema.optional(),
 });
 
-export type StatCardWidgetFormData = z.infer<typeof StatCardWidgetSchema>;
+export type ProjectStatsCardWidgetFormData = z.infer<
+  typeof ProjectStatsCardWidgetSchema
+>;

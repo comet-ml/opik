@@ -1,5 +1,6 @@
 import React from "react";
 import { Plus, LineChart } from "lucide-react";
+import { Button } from "@/components/ui/button";
 
 interface DashboardWidgetGridEmptyProps {
   onAddWidget: () => void;
@@ -19,13 +20,15 @@ const DashboardWidgetGridEmpty: React.FunctionComponent<
           <p className="pb-1 text-center text-sm text-muted-slate">
             Add widgets to monitor key metrics.
           </p>
-          <button
+          <Button
+            variant="link"
+            size="sm"
             onClick={() => onAddWidget()}
-            className="flex items-center gap-1 text-sm text-primary hover:underline"
+            className="gap-1"
           >
             <Plus className="size-3.5" />
             Add widget
-          </button>
+          </Button>
         </div>
       </div>
       <div className="min-h-[327px] rounded-md border border-dashed border-border bg-background" />
