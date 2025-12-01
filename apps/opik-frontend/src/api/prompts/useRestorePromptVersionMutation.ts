@@ -43,9 +43,11 @@ const useRestorePromptVersionMutation = () => {
         description: `Version ${versionId} has been restored successfully`,
       });
     },
-    onSettled: () => {
+    onSettled: (_, __, { promptId }) => {
       queryClient.invalidateQueries({ queryKey: ["prompt-versions"] });
-      return queryClient.invalidateQueries({ queryKey: ["prompts"] });
+      queryClient.invalidateQueries({ queryKey: ["prompts"] });
+      // Invalidate the specific prompt to update latest_version
+      return queryClient.invalidateQueries({ queryKey: ["prompt", { promptId }] });
     },
   });
 };
