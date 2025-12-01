@@ -73,8 +73,8 @@ public class CostService {
      * @param provider The provider name (e.g., "anthropic")
      * @return ModelPrice for the model, or DEFAULT_COST if not found
      */
-    private static ModelPrice findModelPrice(@Nullable String modelName, @Nullable String provider) {
-        if (modelName == null || provider == null) {
+    private static ModelPrice findModelPrice(String modelName, String provider) {
+        if (StringUtils.isBlank(modelName) || StringUtils.isBlank(provider)) {
             return DEFAULT_COST;
         }
 
@@ -85,9 +85,9 @@ public class CostService {
             return exactMatch;
         }
 
-        // Try normalized model name (replace dots with hyphens)
+        // Try normalized model name (replace dots with hyphens and lowercase)
         String normalizedModelName = normalizeModelName(modelName);
-        if (!normalizedModelName.equals(modelName)) {
+        if (!normalizedModelName.equalsIgnoreCase(modelName)) {
             String normalizedKey = createModelProviderKey(normalizedModelName, provider);
             ModelPrice normalizedMatch = modelProviderPrices.get(normalizedKey);
             if (normalizedMatch != null) {
@@ -102,16 +102,16 @@ public class CostService {
     }
 
     /**
-     * Normalizes model names by replacing dots with hyphens.
+     * Normalizes model names by replacing dots with hyphens and converting to lowercase.
      * This handles common naming variations where users specify model names
-     * like "claude-3.5-sonnet" but the pricing database uses "claude-3-5-sonnet".
+     * like "claude-3.5-sonnet" or "Claude-3.5-Sonnet" but the pricing database
+     * uses "claude-3-5-sonnet".
      *
-     * @param modelName The original model name (must not be null or blank)
-     * @return Normalized model name with dots replaced by hyphens
+     * @param modelName The original model name (caller guarantees non-null and non-blank)
+     * @return Normalized model name with dots replaced by hyphens and lowercase
      */
     private static String normalizeModelName(String modelName) {
-        // Caller guarantees modelName is non-null and non-blank
-        return modelName.replace('.', '-');
+        return modelName.replace('.', '-').toLowerCase(java.util.Locale.ROOT);
     }
 
     public static BigDecimal getCostFromMetadata(JsonNode metadata) {

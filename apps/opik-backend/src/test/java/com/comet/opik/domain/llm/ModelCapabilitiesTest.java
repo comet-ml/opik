@@ -1,87 +1,15 @@
 package com.comet.opik.domain.llm;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
+
+import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 class ModelCapabilitiesTest {
-
-    @Test
-    void supportsVisionReturnsTrueForKnownVisionModels() {
-        assertThat(ModelCapabilities.supportsVision("gpt-4-vision-preview")).isTrue();
-        assertThat(ModelCapabilities.supportsVision("gpt-4o")).isTrue();
-        assertThat(ModelCapabilities.supportsVision("claude-3-5-sonnet-20241022")).isTrue();
-        assertThat(ModelCapabilities.supportsVision("gemini-1.5-pro")).isTrue();
-    }
-
-    @Test
-    void supportsVisionReturnsFalseForNonVisionModels() {
-        assertThat(ModelCapabilities.supportsVision("gpt-3.5-turbo")).isFalse();
-        assertThat(ModelCapabilities.supportsVision("gpt-4")).isFalse();
-    }
-
-    @Test
-    void supportsVisionReturnsFalseForUnknownModels() {
-        assertThat(ModelCapabilities.supportsVision("unknown-model-12345")).isFalse();
-    }
-
-    @Test
-    void supportsVisionReturnsFalseForBlankModelName() {
-        assertThat(ModelCapabilities.supportsVision("")).isFalse();
-        assertThat(ModelCapabilities.supportsVision("   ")).isFalse();
-        assertThat(ModelCapabilities.supportsVision(null)).isFalse();
-    }
-
-    @Test
-    void supportsVisionReturnsTrueForModelsThatMatchVisionPattern() {
-        // Should be true because it matches the vision pattern
-        assertThat(ModelCapabilities.supportsVision("qwen/qwen2.5-vl-32b-instruct")).isTrue();
-        assertThat(ModelCapabilities.supportsVision("deepinfra/Qwen/Qwen2.5-VL-32B-Instruct")).isTrue();
-        // Should be false because it doesn't match the vision pattern
-        assertThat(ModelCapabilities.supportsVision("openrouter/qwen/qwen-2.5-coder-32b-instruct")).isFalse();
-    }
-
-    @Test
-    void supportsVisionIsCaseInsensitive() {
-        assertThat(ModelCapabilities.supportsVision("GPT-4-VISION-PREVIEW")).isTrue();
-        assertThat(ModelCapabilities.supportsVision("Gpt-4o")).isTrue();
-        assertThat(ModelCapabilities.supportsVision("CLAUDE-3-5-SONNET-20241022")).isTrue();
-    }
-
-    @Test
-    void supportsVisionMatchesModelWithoutProviderPrefix() {
-        // If stored as "provider/model", it should also match just "model"
-        assertThat(ModelCapabilities.supportsVision("gpt-4o")).isTrue();
-        assertThat(ModelCapabilities.supportsVision("openai/gpt-4o")).isTrue();
-    }
-
-    @Test
-    void supportsVisionHandlesWhitespace() {
-        assertThat(ModelCapabilities.supportsVision("  gpt-4o  ")).isTrue();
-        assertThat(ModelCapabilities.supportsVision("\tgpt-4o\n")).isTrue();
-    }
-
-    @Test
-    void supportsVisionHandlesColonSuffixes() {
-        // Colon suffixes are automatically stripped and matched to base model
-
-        // ✓ "qwen/qwen2.5-vl-32b-instruct:free" has explicit mapping
-        assertThat(ModelCapabilities.supportsVision("qwen/qwen2.5-vl-32b-instruct:free")).isTrue();
-
-        // ✓ "gpt-4o:free" falls back to "gpt-4o" (which exists in JSON and supports vision)
-        assertThat(ModelCapabilities.supportsVision("gpt-4o:free")).isTrue();
-
-        // ✗ "gpt-3.5-turbo:free" falls back to "gpt-3.5-turbo" (exists but doesn't support vision)
-        assertThat(ModelCapabilities.supportsVision("gpt-3.5-turbo:free")).isFalse();
-    }
-
-    @Test
-    void supportsVisionReturnsFalseForNonVisionModelVariations() {
-        // Even with different prefixes, non-vision models should return false
-        assertThat(ModelCapabilities.supportsVision("gpt-3.5-turbo")).isFalse();
-        assertThat(ModelCapabilities.supportsVision("openai/gpt-3.5-turbo")).isFalse();
-        assertThat(ModelCapabilities.supportsVision("GPT-3.5-TURBO")).isFalse();
-    }
 
     @Test
     void supportsVisionHandlesDotNotation_issue4114() {
@@ -99,5 +27,71 @@ class ModelCapabilitiesTest {
         // Qwen models with dots (also matches vision pattern)
         assertThat(ModelCapabilities.supportsVision("qwen2.5-vl-32b-instruct")).isTrue();
         assertThat(ModelCapabilities.supportsVision("qwen2-5-vl-32b-instruct")).isTrue(); // Both should work
+    }
+
+    /**
+     * Parameterized test for vision support across various model names.
+     * Consolidates existing tests and adds new cases for issue #4114.
+     */
+    @ParameterizedTest
+    @MethodSource("provideModelNamesForVisionSupport")
+    void supportsVision_shouldReturnCorrectResult(String modelName, boolean expectedResult, String description) {
+        assertThat(ModelCapabilities.supportsVision(modelName))
+                .as(description)
+                .isEqualTo(expectedResult);
+    }
+
+    private static Stream<Arguments> provideModelNamesForVisionSupport() {
+        return Stream.of(
+                // Known vision models
+                Arguments.of("gpt-4-vision-preview", true, "GPT-4 Vision Preview supports vision"),
+                Arguments.of("gpt-4o", true, "GPT-4o supports vision"),
+                Arguments.of("claude-3-5-sonnet-20241022", true, "Claude 3.5 Sonnet supports vision"),
+                Arguments.of("gemini-1.5-pro", true, "Gemini 1.5 Pro supports vision"),
+
+                // Non-vision models
+                Arguments.of("gpt-3.5-turbo", false, "GPT-3.5 Turbo does not support vision"),
+                Arguments.of("gpt-4", false, "GPT-4 (base) does not support vision"),
+
+                // Unknown models
+                Arguments.of("unknown-model-12345", false, "Unknown model should return false"),
+
+                // Blank/null models
+                Arguments.of("", false, "Empty string should return false"),
+                Arguments.of("   ", false, "Whitespace only should return false"),
+                Arguments.of(null, false, "Null should return false"),
+
+                // Vision pattern matches
+                Arguments.of("qwen/qwen2.5-vl-32b-instruct", true, "Qwen VL model supports vision"),
+                Arguments.of("deepinfra/Qwen/Qwen2.5-VL-32B-Instruct", true, "Deepinfra Qwen VL supports vision"),
+                Arguments.of("openrouter/qwen/qwen-2.5-coder-32b-instruct", false,
+                        "Qwen Coder does not support vision"),
+
+                // Case insensitivity
+                Arguments.of("GPT-4-VISION-PREVIEW", true, "Uppercase vision model should work"),
+                Arguments.of("Gpt-4o", true, "Mixed case vision model should work"),
+                Arguments.of("CLAUDE-3-5-SONNET-20241022", true, "Uppercase Claude should work"),
+
+                // Provider prefix handling
+                Arguments.of("openai/gpt-4o", true, "Model with provider prefix should work"),
+
+                // Whitespace handling
+                Arguments.of("  gpt-4o  ", true, "Model with leading/trailing spaces should work"),
+                Arguments.of("\tgpt-4o\n", true, "Model with tabs/newlines should work"),
+
+                // Colon suffixes
+                Arguments.of("qwen/qwen2.5-vl-32b-instruct:free", true, "Model with :free suffix should work"),
+                Arguments.of("gpt-4o:free", true, "GPT-4o with :free suffix should work"),
+                Arguments.of("gpt-3.5-turbo:free", false, "Non-vision model with :free suffix should not work"),
+
+                // Non-vision model variations
+                Arguments.of("openai/gpt-3.5-turbo", false, "Non-vision with provider prefix should not work"),
+                Arguments.of("GPT-3.5-TURBO", false, "Uppercase non-vision should not work"),
+
+                // Dot notation (issue #4114)
+                Arguments.of("claude-3.5-sonnet-20241022", true, "Claude with dots should work"),
+                Arguments.of("gemini-1-5-pro", true, "Gemini without dots should work"),
+                Arguments.of("qwen2.5-vl-32b-instruct", true, "Qwen VL with dots should work"),
+                Arguments.of("qwen2-5-vl-32b-instruct", true, "Qwen VL without dots should work"));
     }
 }
