@@ -1,20 +1,22 @@
 import logging
+from datetime import datetime, timezone
+
 from opentelemetry import trace
+from opik_optimizer import ChatPrompt
 
 from opik_backend.studio import (
     LLM_API_KEYS,
     OptimizationJobContext,
     OptimizationConfig,
+    OptimizationResult,
     JobMessageParseError,
-    initialize_opik_client,
-    create_status_manager,
+    OptimizationStatusManager,
     optimization_lifecycle,
+    MetricFactory,
+    OptimizerFactory,
+    initialize_opik_client,
     load_and_validate_dataset,
-    build_prompt,
-    build_metric_function,
-    build_optimizer,
     run_optimization,
-    build_success_response,
 )
 
 logger = logging.getLogger(__name__)
@@ -110,7 +112,7 @@ def process_optimizer_job(*args, **kwargs):
         
         # Initialize Opik SDK client and status manager
         client = initialize_opik_client(context)
-        status_manager = create_status_manager(client, context.optimization_id)
+        status_manager = OptimizationStatusManager(client, context.optimization_id)
         
         # Use context manager for automatic status lifecycle management
         with optimization_lifecycle(status_manager):
@@ -118,9 +120,27 @@ def process_optimizer_job(*args, **kwargs):
             dataset = load_and_validate_dataset(client, opt_config.dataset_name)
             
             # Build optimization components
-            prompt = build_prompt(opt_config)
-            metric_fn = build_metric_function(opt_config)
-            optimizer = build_optimizer(opt_config)
+            prompt = ChatPrompt(
+                    messages=opt_config.prompt_messages,
+                    model=opt_config.model,
+                    model_parameters=opt_config.model_params
+            )            
+
+            # Build metric function
+            metric_fn = MetricFactory.build(
+                metric_type=opt_config.metric_type,
+                metric_params=opt_config.metric_params,
+                model=opt_config.model
+            )
+
+            optimizer = OptimizerFactory.build(
+                optimizer_type=opt_config.optimizer_type,
+                model=opt_config.model,
+                model_params=opt_config.model_params,
+                optimizer_params=opt_config.optimizer_params
+            )
+            
+            logger.info(f"Starting optimization with {opt_config.optimizer_type} optimizer")
             
             # Run optimization
             result = run_optimization(
@@ -132,6 +152,13 @@ def process_optimizer_job(*args, **kwargs):
             )
             
             # Build and return success response
-            optimization_result = build_success_response(context.optimization_id, result)
+            optimization_result = OptimizationResult(
+                optimization_id=context.optimization_id,
+                final_score=result.score,
+                initial_score=result.initial_score,
+                metric_name=result.metric_name,
+                timestamp=datetime.now(timezone.utc).isoformat(),
+            )
+
             return optimization_result.to_dict()
 

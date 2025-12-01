@@ -10,6 +10,7 @@ from opik.evaluation.metrics import (
     StructuredOutputCompliance,
 )
 from .config import DEFAULT_REFERENCE_KEY, DEFAULT_CASE_SENSITIVE
+from .exceptions import InvalidMetricError
 
 logger = logging.getLogger(__name__)
 
@@ -57,12 +58,12 @@ class MetricFactory:
             A callable metric function(dataset_item, llm_output) -> ScoreResult
             
         Raises:
-            ValueError: If metric_type is not registered
+            InvalidMetricError: If metric_type is not registered
         """
         if metric_type not in cls._BUILDERS:
             available = ", ".join(sorted(cls._BUILDERS.keys()))
-            raise ValueError(
-                f"Unknown metric type: '{metric_type}'. "
+            raise InvalidMetricError(
+                metric_type,
                 f"Available metrics: {available}"
             )
         
@@ -172,11 +173,11 @@ def _build_json_schema_validator_metric(params: Dict[str, Any], model: str) -> C
         Metric function
         
     Raises:
-        ValueError: If json_schema parameter is missing
+        InvalidMetricError: If json_schema parameter is missing
     """
     schema = params.get("json_schema")
     if not schema:
-        raise ValueError("json_schema_validator metric requires 'json_schema' parameter")
+        raise InvalidMetricError("json_schema_validator", "requires 'json_schema' parameter")
     
     structured_metric = StructuredOutputCompliance(
         model=model,

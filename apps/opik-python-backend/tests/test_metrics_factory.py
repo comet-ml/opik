@@ -4,17 +4,18 @@ import pytest
 from unittest.mock import MagicMock, patch
 
 from opik_backend.studio.metrics import MetricFactory
+from opik_backend.studio.exceptions import InvalidMetricError
 
 
 class TestMetricFactory:
     """Tests for MetricFactory.build() and metric builders."""
 
     def test_build_unknown_metric_raises_error(self):
-        """Test that building an unknown metric type raises ValueError."""
-        with pytest.raises(ValueError) as exc_info:
+        """Test that building an unknown metric type raises InvalidMetricError."""
+        with pytest.raises(InvalidMetricError) as exc_info:
             MetricFactory.build("unknown_metric", {}, "openai/gpt-4o")
         
-        assert "Unknown metric type: 'unknown_metric'" in str(exc_info.value)
+        assert "unknown_metric" in str(exc_info.value)
         assert "Available metrics:" in str(exc_info.value)
 
     def test_build_equals_metric(self):
@@ -69,8 +70,8 @@ class TestMetricFactory:
         assert callable(metric_fn)
 
     def test_build_json_schema_validator_without_schema_raises_error(self):
-        """Test that json_schema_validator without schema raises ValueError."""
-        with pytest.raises(ValueError) as exc_info:
+        """Test that json_schema_validator without schema raises InvalidMetricError."""
+        with pytest.raises(InvalidMetricError) as exc_info:
             MetricFactory.build("json_schema_validator", {}, "openai/gpt-4o")
         
         assert "json_schema" in str(exc_info.value)

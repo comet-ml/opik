@@ -7,6 +7,8 @@ from opik_optimizer.algorithms.gepa_optimizer.gepa_optimizer import GepaOptimize
 from opik_optimizer.algorithms.evolutionary_optimizer.evolutionary_optimizer import EvolutionaryOptimizer
 from opik_optimizer.algorithms.hierarchical_reflective_optimizer.hierarchical_reflective_optimizer import HierarchicalReflectiveOptimizer
 
+from .exceptions import InvalidOptimizerError
+
 logger = logging.getLogger(__name__)
 
 
@@ -43,14 +45,14 @@ class OptimizerFactory:
             Initialized optimizer instance
             
         Raises:
-            ValueError: If optimizer_type is not recognized
+            InvalidOptimizerError: If optimizer_type is not recognized
         """
         optimizer_type = optimizer_type.lower()
         
         if optimizer_type not in cls._OPTIMIZERS:
             available = ", ".join(sorted(cls._OPTIMIZERS.keys()))
-            raise ValueError(
-                f"Unknown optimizer type: '{optimizer_type}'. "
+            raise InvalidOptimizerError(
+                optimizer_type,
                 f"Available optimizers: {available}"
             )
         

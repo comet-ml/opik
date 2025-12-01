@@ -32,13 +32,8 @@ from .metrics import MetricFactory
 from .optimizers import OptimizerFactory
 from .helpers import (
     initialize_opik_client,
-    create_status_manager,
     load_and_validate_dataset,
-    build_prompt,
-    build_metric_function,
-    build_optimizer,
     run_optimization,
-    build_success_response,
 )
 
 __all__ = [
@@ -68,12 +63,7 @@ __all__ = [
     "OptimizerFactory",
     # Helpers
     "initialize_opik_client",
-    "create_status_manager",
     "load_and_validate_dataset",
-    "build_prompt",
-    "build_metric_function",
-    "build_optimizer",
     "run_optimization",
-    "build_success_response",
 ]
 
