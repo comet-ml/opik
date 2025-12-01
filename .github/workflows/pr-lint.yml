@@ -74,7 +74,7 @@ jobs:
               const isNATicket = title.startsWith("[NA]");
               if (issuesContent !== null && !isNATicket && !issuesRegex.test(issuesContent)) {
                  errors.push(
-                   "❌ **Incomplete Issues Section.** You must reference at least one GitHub issue (`#xxxx`), Jira ticket (`OPIK-xxxx`), (`CUST-xxxx`) or DEV ticket (`DEV-xxxx`), (`DND-xxxx`) under the `## Issues` section."
+                   "❌ **Incomplete Issues Section.** You must reference at least one GitHub issue (`#xxxx`), Jira ticket (`OPIK-xxxx`), CUST ticket (`CUST-xxxx`), DEV ticket (`DEV-xxxx`), or DND ticket (`DND-xxxx`) under the `## Issues` section."
                  );
               }
             }
