@@ -39,8 +39,8 @@ import OptimizationsPage from "@/components/pages/OptimizationsPage/Optimization
 import OptimizationPage from "@/components/pages/OptimizationPage/OptimizationPage";
 import CompareOptimizationsPage from "@/components/pages/CompareOptimizationsPage/CompareOptimizationsPage";
 import CompareTrialsPage from "@/components/pages/CompareTrialsPage/CompareTrialsPage";
-import AddEditAlertPage from "@/components/pages/ConfigurationPage/AlertsTab/AddEditAlertPage/AddEditAlertPage";
-import AlertNestedRoute from "@/components/pages/ConfigurationPage/AlertsTab/AddEditAlertPage/AlertNestedRoute";
+import AddEditAlertPage from "@/components/pages/AlertsPage/AddEditAlertPage/AddEditAlertPage";
+import AlertsRouteWrapper from "@/components/pages/AlertsPage/AlertsRouteWrapper";
 
 declare module "@tanstack/react-router" {
   interface StaticDataRouteOption {
@@ -370,11 +370,11 @@ const configurationRoute = createRoute({
 
 const alertsRoute = createRoute({
   path: "/alerts",
-  getParentRoute: () => configurationRoute,
+  getParentRoute: () => workspaceRoute,
   staticData: {
     title: "Alerts",
   },
-  component: AlertNestedRoute,
+  component: AlertsRouteWrapper,
 });
 
 const alertNewRoute = createRoute({
@@ -476,9 +476,8 @@ const routeTree = rootRoute.addChildren([
         redirectDatasetsRoute,
       ]),
       playgroundRoute,
-      configurationRoute.addChildren([
-        alertsRoute.addChildren([alertNewRoute, alertEditRoute]),
-      ]),
+      configurationRoute,
+      alertsRoute.addChildren([alertNewRoute, alertEditRoute]),
       onlineEvaluationRoute,
       annotationQueuesRoute.addChildren([
         annotationQueuesListRoute,

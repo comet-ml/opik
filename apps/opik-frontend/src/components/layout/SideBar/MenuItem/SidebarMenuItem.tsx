@@ -36,6 +36,7 @@ interface SidebarMenuItemProps {
   item: MenuItem;
   expanded: boolean;
   count?: number;
+  compact?: boolean;
 }
 
 interface GetItemElementProps {
@@ -93,6 +94,7 @@ const SidebarMenuItem: React.FunctionComponent<SidebarMenuItemProps> = ({
   item,
   expanded,
   count,
+  compact = false,
 }) => {
   const { activeWorkspaceName: workspaceName } = useAppStore();
   const hasCount = item.count && isNumber(count);
@@ -107,7 +109,7 @@ const SidebarMenuItem: React.FunctionComponent<SidebarMenuItemProps> = ({
       <item.icon className="size-4 shrink-0" />
       {expanded && (
         <>
-          <div className="ml-1 grow truncate">{item.label}</div>
+          <div className="grow truncate">{item.label}</div>
           {hasCount && <div className="h-6 shrink-0 leading-6">{count}</div>}
         </>
       )}
@@ -115,8 +117,17 @@ const SidebarMenuItem: React.FunctionComponent<SidebarMenuItemProps> = ({
   );
 
   const linkClasses = cn(
-    "comet-body-s flex h-9 w-full items-center gap-2 text-foreground rounded-md hover:bg-primary-foreground data-[status=active]:bg-primary-100 data-[status=active]:text-primary",
-    expanded ? "pl-[10px] pr-3" : "w-9 justify-center",
+    "comet-body-s flex w-full items-center gap-2 rounded-md hover:bg-primary-foreground data-[status=active]:bg-primary-100 data-[status=active]:text-primary",
+    compact
+      ? "h-8 text-muted-slate data-[status=active]:text-muted-slate data-[status=active]:bg-muted"
+      : "h-9 text-foreground",
+    compact
+      ? expanded
+        ? "px-2.5"
+        : "w-8 justify-center"
+      : expanded
+        ? "pl-[10px] pr-3"
+        : "w-9 justify-center",
   );
 
   const itemElement = getItemElementByType({
