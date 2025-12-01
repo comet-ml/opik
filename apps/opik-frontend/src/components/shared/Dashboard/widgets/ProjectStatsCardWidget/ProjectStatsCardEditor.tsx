@@ -6,11 +6,12 @@ import React, {
 } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import get from "lodash/get";
+import { get } from "lodash";
+import { cn } from "@/lib/utils";
 
 import {
   AddWidgetConfig,
-  ProjectMetricsWidget,
+  ProjectStatsCardWidget,
   WidgetEditorHandle,
 } from "@/types/dashboard";
 import {
@@ -23,129 +24,90 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Description } from "@/components/ui/description";
-import { cn } from "@/lib/utils";
 import SelectBox from "@/components/shared/SelectBox/SelectBox";
-import { METRIC_NAME_TYPE } from "@/api/projects/useProjectMetric";
 import { useDashboardStore } from "@/store/DashboardStore";
 import { ProjectDashboardConfig } from "@/types/dashboard";
 import ProjectsSelectBox from "@/components/pages-shared/automations/ProjectsSelectBox";
 import ProjectWidgetFiltersSection from "@/components/shared/Dashboard/widgets/shared/ProjectWidgetFiltersSection";
 import {
-  ProjectMetricsWidgetSchema,
-  ProjectMetricsWidgetFormData,
+  ProjectStatsCardWidgetSchema,
+  ProjectStatsCardWidgetFormData,
 } from "./schema";
+import { getAllMetricOptions } from "./metrics";
+import useTracesOrSpansScoresColumns from "@/hooks/useTracesOrSpansScoresColumns";
+import { TRACE_DATA_TYPE } from "@/constants/traces";
 
-type ProjectMetricsEditorProps = AddWidgetConfig & {
+type ProjectStatsCardEditorProps = AddWidgetConfig & {
   onChange: (data: Partial<AddWidgetConfig>) => void;
   onValidationChange?: (isValid: boolean) => void;
 };
 
-const METRIC_OPTIONS = [
-  {
-    value: METRIC_NAME_TYPE.FEEDBACK_SCORES,
-    label: "Trace feedback scores",
-    filterType: "trace" as const,
-  },
-  {
-    value: METRIC_NAME_TYPE.TRACE_COUNT,
-    label: "Number of traces",
-    filterType: "trace" as const,
-  },
-  {
-    value: METRIC_NAME_TYPE.TRACE_DURATION,
-    label: "Trace duration",
-    filterType: "trace" as const,
-  },
-  {
-    value: METRIC_NAME_TYPE.TOKEN_USAGE,
-    label: "Token usage",
-    filterType: "trace" as const,
-  },
-  {
-    value: METRIC_NAME_TYPE.COST,
-    label: "Estimated cost",
-    filterType: "trace" as const,
-  },
-  {
-    value: METRIC_NAME_TYPE.FAILED_GUARDRAILS,
-    label: "Failed guardrails",
-    filterType: "trace" as const,
-  },
-  {
-    value: METRIC_NAME_TYPE.THREAD_COUNT,
-    label: "Number of threads",
-    filterType: "thread" as const,
-  },
-  {
-    value: METRIC_NAME_TYPE.THREAD_DURATION,
-    label: "Thread duration",
-    filterType: "thread" as const,
-  },
-  {
-    value: METRIC_NAME_TYPE.THREAD_FEEDBACK_SCORES,
-    label: "Thread feedback scores",
-    filterType: "thread" as const,
-  },
+const SOURCE_OPTIONS = [
+  { value: TRACE_DATA_TYPE.traces, label: "Traces stats" },
+  { value: TRACE_DATA_TYPE.spans, label: "Spans stats" },
 ];
 
-const CHART_TYPE_OPTIONS = [
-  { value: "line", label: "Line chart" },
-  { value: "bar", label: "Bar chart" },
-];
-
-const ProjectMetricsEditor = forwardRef<
+const ProjectStatsCardEditor = forwardRef<
   WidgetEditorHandle,
-  ProjectMetricsEditorProps
+  ProjectStatsCardEditorProps
 >(({ title, subtitle, config, onChange }, ref) => {
-  const widgetConfig = config as ProjectMetricsWidget["config"];
-  const metricType = widgetConfig?.metricType || "";
-  const chartType = widgetConfig?.chartType || "line";
+  const widgetConfig = config as ProjectStatsCardWidget["config"];
+  const source = widgetConfig?.source || TRACE_DATA_TYPE.traces;
+  const metric = widgetConfig?.metric || "";
   const localProjectId = widgetConfig?.projectId;
 
   const traceFilters = useMemo(
     () => widgetConfig?.traceFilters || [],
     [widgetConfig?.traceFilters],
   );
-  const threadFilters = useMemo(
-    () => widgetConfig?.threadFilters || [],
-    [widgetConfig?.threadFilters],
+  const spanFilters = useMemo(
+    () => widgetConfig?.spanFilters || [],
+    [widgetConfig?.spanFilters],
   );
 
   const projectConfig = useDashboardStore(
     (state) => state.config as ProjectDashboardConfig | null,
   );
   const projectId = localProjectId || projectConfig?.projectId || "";
+  const isTraceSource = source === TRACE_DATA_TYPE.traces;
 
-  const selectedMetric = METRIC_OPTIONS.find((m) => m.value === metricType);
-  const isTraceMetric = !metricType || selectedMetric?.filterType === "trace";
-  const isThreadMetric = metricType && selectedMetric?.filterType === "thread";
+  const { data, isPending } = useTracesOrSpansScoresColumns(
+    {
+      projectId,
+      type: source,
+    },
+    {},
+  );
 
-  const form = useForm<ProjectMetricsWidgetFormData>({
-    resolver: zodResolver(ProjectMetricsWidgetSchema),
+  const metricOptions = useMemo(() => {
+    const scoreNames = data?.scores.map((s) => s.name) || [];
+    return getAllMetricOptions(source, scoreNames);
+  }, [source, data?.scores]);
+
+  const form = useForm<ProjectStatsCardWidgetFormData>({
+    resolver: zodResolver(ProjectStatsCardWidgetSchema),
     mode: "onTouched",
     defaultValues: {
       title,
       subtitle: subtitle || "",
-      metricType,
-      chartType,
+      source,
+      metric,
       projectId: localProjectId,
       traceFilters,
-      threadFilters,
+      spanFilters,
     },
   });
 
-  const currentFilters = isTraceMetric
+  const currentFilters = isTraceSource
     ? form.watch("traceFilters") || []
-    : form.watch("threadFilters") || [];
+    : form.watch("spanFilters") || [];
 
   useEffect(() => {
-    if (isTraceMetric && form.formState.errors.traceFilters) {
-      form.clearErrors("traceFilters");
+    const filterKey = isTraceSource ? "traceFilters" : "spanFilters";
+    if (form.formState.errors[filterKey]) {
+      form.clearErrors(filterKey);
     }
-    if (isThreadMetric && form.formState.errors.threadFilters) {
-      form.clearErrors("threadFilters");
-    }
-  }, [currentFilters.length, form, isTraceMetric, isThreadMetric]);
+  }, [currentFilters.length, form, isTraceSource]);
 
   useImperativeHandle(ref, () => ({
     submit: async () => {
@@ -157,11 +119,11 @@ const ProjectMetricsEditor = forwardRef<
           subtitle: values.subtitle,
           config: {
             ...config,
-            metricType: values.metricType,
-            chartType: values.chartType,
+            source: values.source,
             projectId: values.projectId,
+            metric: values.metric,
             traceFilters: values.traceFilters,
-            threadFilters: values.threadFilters,
+            spanFilters: values.spanFilters,
           },
         });
       }
@@ -174,20 +136,20 @@ const ProjectMetricsEditor = forwardRef<
     form.reset({
       title,
       subtitle: subtitle || "",
-      metricType,
-      chartType,
+      source,
+      metric,
       projectId: localProjectId,
       traceFilters,
-      threadFilters,
+      spanFilters,
     });
   }, [
     title,
     subtitle,
-    metricType,
-    chartType,
+    source,
+    metric,
     localProjectId,
     traceFilters,
-    threadFilters,
+    spanFilters,
     form,
   ]);
 
@@ -199,20 +161,11 @@ const ProjectMetricsEditor = forwardRef<
     onChange({ subtitle: value });
   };
 
-  const handleMetricTypeChange = (value: string) => {
+  const handleSourceChange = (value: string) => {
     onChange({
       config: {
         ...config,
-        metricType: value,
-      },
-    });
-  };
-
-  const handleChartTypeChange = (value: string) => {
-    onChange({
-      config: {
-        ...config,
-        chartType: value as "line" | "bar",
+        source: value as TRACE_DATA_TYPE,
       },
     });
   };
@@ -222,6 +175,15 @@ const ProjectMetricsEditor = forwardRef<
       config: {
         ...config,
         projectId,
+      },
+    });
+  };
+
+  const handleMetricChange = (value: string) => {
+    onChange({
+      config: {
+        ...config,
+        metric: value,
       },
     });
   };
@@ -320,9 +282,45 @@ const ProjectMetricsEditor = forwardRef<
 
           <FormField
             control={form.control}
-            name="metricType"
+            name="source"
             render={({ field, formState }) => {
-              const validationErrors = get(formState.errors, ["metricType"]);
+              const validationErrors = get(formState.errors, ["source"]);
+              return (
+                <FormItem>
+                  <FormLabel>Stats source</FormLabel>
+                  <FormControl>
+                    <SelectBox
+                      className={cn({
+                        "border-destructive": Boolean(
+                          validationErrors?.message,
+                        ),
+                      })}
+                      value={field.value}
+                      onChange={(value) => {
+                        field.onChange(value);
+                        handleSourceChange(value);
+                      }}
+                      options={SOURCE_OPTIONS}
+                      placeholder="Select source"
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              );
+            }}
+          />
+
+          <FormField
+            control={form.control}
+            name="metric"
+            render={({ field, formState }) => {
+              const validationErrors = get(formState.errors, ["metric"]);
+              const placeholder = !projectId
+                ? "Select a project first"
+                : isPending
+                  ? "Loading available metrics..."
+                  : "Select a metric";
+
               return (
                 <FormItem>
                   <FormLabel>Metric</FormLabel>
@@ -336,10 +334,11 @@ const ProjectMetricsEditor = forwardRef<
                       value={field.value}
                       onChange={(value) => {
                         field.onChange(value);
-                        handleMetricTypeChange(value);
+                        handleMetricChange(value);
                       }}
-                      options={METRIC_OPTIONS}
-                      placeholder="Select a metric"
+                      options={metricOptions}
+                      placeholder={placeholder}
+                      disabled={isPending || !projectId}
                     />
                   </FormControl>
                   <Description>
@@ -353,48 +352,18 @@ const ProjectMetricsEditor = forwardRef<
 
           <ProjectWidgetFiltersSection
             control={form.control}
-            fieldName={isTraceMetric ? "traceFilters" : "threadFilters"}
+            fieldName={isTraceSource ? "traceFilters" : "spanFilters"}
             projectId={projectId}
-            filterType={isTraceMetric ? "trace" : "thread"}
+            filterType={isTraceSource ? "trace" : "span"}
             onFiltersChange={(filters) => {
               onChange({
                 config: {
                   ...config,
-                  ...(isTraceMetric
+                  ...(isTraceSource
                     ? { traceFilters: filters }
-                    : { threadFilters: filters }),
+                    : { spanFilters: filters }),
                 },
               });
-            }}
-          />
-
-          <FormField
-            control={form.control}
-            name="chartType"
-            render={({ field, formState }) => {
-              const validationErrors = get(formState.errors, ["chartType"]);
-              return (
-                <FormItem>
-                  <FormLabel>Chart type</FormLabel>
-                  <FormControl>
-                    <SelectBox
-                      className={cn({
-                        "border-destructive": Boolean(
-                          validationErrors?.message,
-                        ),
-                      })}
-                      value={field.value}
-                      onChange={(value) => {
-                        field.onChange(value);
-                        handleChartTypeChange(value);
-                      }}
-                      options={CHART_TYPE_OPTIONS}
-                      placeholder="Select chart type"
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              );
             }}
           />
         </div>
@@ -403,6 +372,6 @@ const ProjectMetricsEditor = forwardRef<
   );
 });
 
-ProjectMetricsEditor.displayName = "ProjectMetricsEditor";
+ProjectStatsCardEditor.displayName = "ProjectStatsCardEditor";
 
-export default ProjectMetricsEditor;
+export default ProjectStatsCardEditor;

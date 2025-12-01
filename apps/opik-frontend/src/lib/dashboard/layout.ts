@@ -4,28 +4,28 @@ import {
   DashboardWidget,
   WIDGET_TYPE,
   WidgetSize,
+  WidgetSizeConfig,
 } from "@/types/dashboard";
 import isEmpty from "lodash/isEmpty";
 
 export const GRID_COLUMNS = 6;
-export const ROW_HEIGHT = 155;
+export const ROW_HEIGHT = 75;
 export const GRID_MARGIN: [number, number] = [16, 16];
-export const MAX_WIDGET_HEIGHT = 6;
+export const CONTAINER_PADDING: [number, number] = [0, 0];
+export const MAX_WIDGET_HEIGHT = 12;
 export const MIN_WIDGET_WIDTH = 1;
 export const MIN_WIDGET_HEIGHT = 1;
 
-export const getDefaultWidgetSize = (
-  type: string,
-): { w: number; h: number } => {
+export const getWidgetSizeConfig = (type: string): WidgetSizeConfig => {
   switch (type) {
-    case WIDGET_TYPE.CHART_METRIC:
-      return { w: 2, h: 2 };
-    case WIDGET_TYPE.STAT_CARD:
-      return { w: 1, h: 1 };
+    case WIDGET_TYPE.PROJECT_METRICS:
+      return { w: 2, h: 4, minW: 2, minH: 4 };
+    case WIDGET_TYPE.PROJECT_STATS_CARD:
+      return { w: 1, h: 2, minW: 1, minH: 2 };
     case WIDGET_TYPE.TEXT_MARKDOWN:
-      return { w: 2, h: 2 };
+      return { w: 2, h: 4, minW: 1, minH: 4 };
     default:
-      return { w: 2, h: 2 };
+      return { w: 2, h: 2, minW: MIN_WIDGET_WIDTH, minH: MIN_WIDGET_HEIGHT };
   }
 };
 
@@ -70,7 +70,9 @@ export const calculateLayoutForAddingWidget = (
   widget: DashboardWidget,
   size?: WidgetSize,
 ): DashboardLayout => {
-  const { w, h } = size || getDefaultWidgetSize(widget.type);
+  const sizeConfig = getWidgetSizeConfig(widget.type);
+  const { w, h } = size || { w: sizeConfig.w, h: sizeConfig.h };
+  const { minW, minH } = sizeConfig;
 
   const newItem: DashboardLayoutItem = {
     i: widget.id,
@@ -78,8 +80,8 @@ export const calculateLayoutForAddingWidget = (
     y: 0,
     w,
     h,
-    minW: MIN_WIDGET_WIDTH,
-    minH: MIN_WIDGET_HEIGHT,
+    minW,
+    minH,
     maxW: GRID_COLUMNS,
     maxH: MAX_WIDGET_HEIGHT,
   };
@@ -97,18 +99,28 @@ export const calculateLayoutForAddingWidget = (
   return [...layout, newItem];
 };
 
-export const normalizeLayout = (layout: DashboardLayout): DashboardLayout => {
-  return layout.map((item) => ({
-    i: item.i,
-    x: Math.max(0, Math.min(item.x, GRID_COLUMNS - item.w)),
-    y: Math.max(0, item.y),
-    w: Math.max(MIN_WIDGET_WIDTH, Math.min(item.w, GRID_COLUMNS)),
-    h: Math.max(MIN_WIDGET_HEIGHT, Math.min(item.h, MAX_WIDGET_HEIGHT)),
-    minW: MIN_WIDGET_WIDTH,
-    minH: MIN_WIDGET_HEIGHT,
-    maxW: GRID_COLUMNS,
-    maxH: MAX_WIDGET_HEIGHT,
-  }));
+export const normalizeLayout = (
+  layout: DashboardLayout,
+  widgets?: DashboardWidget[],
+): DashboardLayout => {
+  return layout.map((item) => {
+    const widget = widgets?.find((w) => w.id === item.i);
+    const { minW, minH } = widget
+      ? getWidgetSizeConfig(widget.type)
+      : { minW: MIN_WIDGET_WIDTH, minH: MIN_WIDGET_HEIGHT };
+
+    return {
+      i: item.i,
+      x: Math.max(0, Math.min(item.x, GRID_COLUMNS - item.w)),
+      y: Math.max(0, item.y),
+      w: Math.max(minW, Math.min(item.w, GRID_COLUMNS)),
+      h: Math.max(minH, Math.min(item.h, MAX_WIDGET_HEIGHT)),
+      minW,
+      minH,
+      maxW: GRID_COLUMNS,
+      maxH: MAX_WIDGET_HEIGHT,
+    };
+  });
 };
 
 export const removeWidgetFromLayout = (

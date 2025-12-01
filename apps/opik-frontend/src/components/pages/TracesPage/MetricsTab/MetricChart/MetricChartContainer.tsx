@@ -7,6 +7,8 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import isNil from "lodash/isNil";
+import isNumber from "lodash/isNumber";
+import { formatNumericData } from "@/lib/utils";
 
 import { ProjectMetricValue, TransformedData } from "@/types/projects";
 import { getDefaultHashedColorsChartConfig } from "@/lib/charts";
@@ -22,8 +24,14 @@ import { Filter } from "@/types/filters";
 import MetricLineChart from "./MetricLineChart";
 import MetricBarChart from "./MetricBarChart";
 
-const renderTooltipValue = ({ value }: ChartTooltipRenderValueArguments) =>
-  value;
+const MAX_DECIMAL_PLACES = 4;
+
+const renderTooltipValue = ({ value }: ChartTooltipRenderValueArguments) => {
+  if (isNumber(value)) {
+    return formatNumericData(value, MAX_DECIMAL_PLACES);
+  }
+  return value;
+};
 
 interface MetricContainerChartProps {
   name: string;

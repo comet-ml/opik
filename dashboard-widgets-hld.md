@@ -97,11 +97,11 @@ MySQL (dashboard config as opaque JSON) + ClickHouse (metrics data)
 - Schema-driven form generation
 
 **4. Widget Types** (Phases 1-3)
-- Stat Cards (1 type)
-- Project Metric Charts (9 types)
-- Experiment Charts (3 types)
-- Cost Widgets (2 types)
-- Text/Markdown (1 type)
+- Project Stats Cards (1 type) - ✅ Renamed, type definitions updated
+- Project Metric Charts (9 types) - ✅ Fully implemented with ProjectMetricsWidget
+- Experiment Charts (3 types) - ⏳ TODO
+- Cost Widgets (2 types) - ⏳ TODO  
+- Text/Markdown (1 type) - ✅ Fully implemented with TextMarkdownWidget
 
 ### Data Model
 

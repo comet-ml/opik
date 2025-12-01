@@ -12,6 +12,7 @@ import {
   GRID_COLUMNS,
   ROW_HEIGHT,
   GRID_MARGIN,
+  CONTAINER_PADDING,
   normalizeLayout,
   areLayoutsEqual,
 } from "@/lib/dashboard/layout";
@@ -48,10 +49,10 @@ const DashboardWidgetGrid: React.FunctionComponent<
   const handleLayoutChange = useCallback(
     (newLayout: Layout[]) => {
       if (newLayout.length === 0) return;
-      const normalizedLayout = normalizeLayout(newLayout);
+      const normalizedLayout = normalizeLayout(newLayout, widgets);
       updateLayout(sectionId, normalizedLayout);
     },
-    [sectionId, updateLayout],
+    [sectionId, updateLayout, widgets],
   );
 
   if (isEmpty(widgets)) {
@@ -66,7 +67,7 @@ const DashboardWidgetGrid: React.FunctionComponent<
       cols={GRID_COLUMNS}
       rowHeight={ROW_HEIGHT}
       margin={GRID_MARGIN}
-      containerPadding={[0, 0]}
+      containerPadding={CONTAINER_PADDING}
       onLayoutChange={handleLayoutChange}
       draggableHandle=".drag-handle"
       useCSSTransforms
@@ -78,7 +79,7 @@ const DashboardWidgetGrid: React.FunctionComponent<
     >
       {widgets.map((widget) => {
         const widgetComponents = widgetResolver?.(
-          widget.type || WIDGET_TYPE.CHART_METRIC,
+          widget.type || WIDGET_TYPE.PROJECT_METRICS,
         );
 
         if (!widgetComponents) return null;

@@ -773,3 +773,13 @@ div.cm-theme div.cm-search.cm-panel {
   background-color: rgb(59, 130, 246) !important;
   opacity: 0.2;
 }
+
+/* Dashboard widget resize handle styles */
+.react-grid-item > .react-resizable-handle::after {
+  border-color: hsl(var(--light-slate)) !important;
+  transition: border-color 0.2s ease-in-out;
+}
+
+.react-grid-item:hover > .react-resizable-handle::after {
+  border-color: hsl(var(--muted-slate)) !important;
+}

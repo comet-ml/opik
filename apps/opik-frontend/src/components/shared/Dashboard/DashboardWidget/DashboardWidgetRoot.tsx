@@ -14,7 +14,10 @@ const DashboardWidgetRoot: React.FC<DashboardWidgetRootProps> = ({
   return (
     <div className="group h-full">
       <Card
-        className={cn("flex h-full flex-col gap-2 rounded-md p-2", className)}
+        className={cn(
+          "flex h-full flex-col gap-2 rounded-md px-2 pb-2 pt-1",
+          className,
+        )}
       >
         {children}
       </Card>
