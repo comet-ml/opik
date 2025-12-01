@@ -19,6 +19,8 @@ import {
   COLUMN_DATASET_ID,
   COLUMN_METADATA_ID,
   AggregatedFeedbackScore,
+  SCORE_TYPE_FEEDBACK,
+  SCORE_TYPE_EXPERIMENT,
 } from "@/types/shared";
 import { convertColumnDataToColumn, isColumnSortable } from "@/lib/table";
 import {
@@ -126,8 +128,8 @@ export const useExperimentsTableConfig = <
     return [
       ...dynamicScoresColumns.map(
         ({ label, id, columnType, type: scoreType }) => {
-          const actualType = scoreType || "feedback_scores";
-          const isExperimentScore = actualType === "experiment_scores";
+          const actualType = scoreType || SCORE_TYPE_FEEDBACK;
+          const isExperimentScore = actualType === SCORE_TYPE_EXPERIMENT;
 
           return {
             id,

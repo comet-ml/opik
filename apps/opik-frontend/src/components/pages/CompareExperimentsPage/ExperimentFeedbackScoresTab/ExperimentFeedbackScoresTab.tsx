@@ -8,6 +8,9 @@ import {
   AggregatedFeedbackScore,
   COLUMN_TYPE,
   ColumnData,
+  SCORE_TYPE_FEEDBACK,
+  SCORE_TYPE_EXPERIMENT,
+  ScoreType,
 } from "@/types/shared";
 import DataTable from "@/components/shared/DataTable/DataTable";
 import DataTableNoData from "@/components/shared/DataTableNoData/DataTableNoData";
@@ -79,13 +82,10 @@ export const getFeedbackScoresForExperimentsAsRows = ({
   ).sort();
 
   // Determine which scores are feedback_scores vs experiment_scores
-  const scoreTypeMap = new Map<
-    string,
-    "feedback_scores" | "experiment_scores"
-  >();
+  const scoreTypeMap = new Map<string, ScoreType>();
 
   const addScoresToMap = (
-    type: "feedback_scores" | "experiment_scores",
+    type: ScoreType,
     scores?: AggregatedFeedbackScore[],
   ) => {
     scores?.forEach((score) => {
@@ -96,8 +96,8 @@ export const getFeedbackScoresForExperimentsAsRows = ({
   };
 
   experiments.forEach((experiment) => {
-    addScoresToMap("feedback_scores", experiment.feedback_scores);
-    addScoresToMap("experiment_scores", experiment.experiment_scores);
+    addScoresToMap(SCORE_TYPE_FEEDBACK, experiment.feedback_scores);
+    addScoresToMap(SCORE_TYPE_EXPERIMENT, experiment.experiment_scores);
   });
 
   return keys.map((key) => {
@@ -109,7 +109,7 @@ export const getFeedbackScoresForExperimentsAsRows = ({
       {},
     );
 
-    const isFeedbackScore = scoreTypeMap.get(key) === "feedback_scores";
+    const isFeedbackScore = scoreTypeMap.get(key) === SCORE_TYPE_FEEDBACK;
     return {
       name: isFeedbackScore ? `${key} (avg)` : key,
       ...data,

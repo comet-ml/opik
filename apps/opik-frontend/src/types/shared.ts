@@ -20,8 +20,16 @@ export const COLUMN_NAME_ID = "name";
 export const COLUMN_ACTIONS_ID = "actions";
 export const COLUMN_METADATA_ID = "metadata";
 export const COLUMN_FEEDBACK_SCORES_ID = "feedback_scores";
+export const COLUMN_EXPERIMENT_SCORES_ID = "experiment_scores";
 export const COLUMN_SPAN_FEEDBACK_SCORES_ID = "span_feedback_scores";
 export const COLUMN_USAGE_ID = "usage";
+
+// Score type constants
+export const SCORE_TYPE_FEEDBACK = "feedback_scores" as const;
+export const SCORE_TYPE_EXPERIMENT = "experiment_scores" as const;
+export type ScoreType =
+  | typeof SCORE_TYPE_FEEDBACK
+  | typeof SCORE_TYPE_EXPERIMENT;
 export const COLUMN_COMMENTS_ID = "comments";
 export const COLUMN_GUARDRAILS_ID = "guardrails";
 export const COLUMN_CREATED_AT_ID = "created_at";
@@ -93,7 +101,7 @@ export type DynamicColumn = {
   id: string;
   label: string;
   columnType: COLUMN_TYPE;
-  type?: "feedback_scores" | "experiment_scores";
+  type?: ScoreType;
 };
 
 export enum ROW_HEIGHT {
@@ -110,7 +118,7 @@ export enum CELL_VERTICAL_ALIGNMENT {
 
 export interface FeedbackScoreName {
   name: string;
-  type?: "feedback_scores" | "experiment_scores";
+  type?: ScoreType;
 }
 
 export enum STATISTIC_AGGREGATION_TYPE {

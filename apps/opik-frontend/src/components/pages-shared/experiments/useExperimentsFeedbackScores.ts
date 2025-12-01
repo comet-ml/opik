@@ -2,9 +2,11 @@ import { useMemo } from "react";
 import { keepPreviousData } from "@tanstack/react-query";
 
 import {
+  COLUMN_EXPERIMENT_SCORES_ID,
   COLUMN_FEEDBACK_SCORES_ID,
   COLUMN_TYPE,
   DynamicColumn,
+  SCORE_TYPE_EXPERIMENT,
 } from "@/types/shared";
 import useExperimentsFeedbackScoresNames from "@/api/datasets/useExperimentsFeedbackScoresNames";
 
@@ -23,8 +25,8 @@ export const useExperimentsFeedbackScores = () => {
       .sort((c1, c2) => c1.name.localeCompare(c2.name))
       .map<DynamicColumn>((c) => {
         const prefix =
-          c.type === "experiment_scores"
-            ? "experiment_scores"
+          c.type === SCORE_TYPE_EXPERIMENT
+            ? COLUMN_EXPERIMENT_SCORES_ID
             : COLUMN_FEEDBACK_SCORES_ID;
         return {
           id: `${prefix}.${c.name}`,

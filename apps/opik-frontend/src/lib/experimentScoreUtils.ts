@@ -1,6 +1,10 @@
 import get from "lodash/get";
 import { formatNumericData } from "@/lib/utils";
-import { AggregatedFeedbackScore } from "@/types/shared";
+import {
+  AggregatedFeedbackScore,
+  SCORE_TYPE_FEEDBACK,
+  SCORE_TYPE_EXPERIMENT,
+} from "@/types/shared";
 
 /**
  * Formatted score with string value for display purposes.
@@ -33,7 +37,7 @@ export const transformExperimentScores = (
     }));
 
   return [
-    ...formatScores("feedback_scores", true),
-    ...formatScores("experiment_scores", false),
+    ...formatScores(SCORE_TYPE_FEEDBACK, true),
+    ...formatScores(SCORE_TYPE_EXPERIMENT, false),
   ];
 };
