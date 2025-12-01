@@ -105,8 +105,9 @@ const DashboardSectionTitle: React.FunctionComponent<
             <Check />
           </Button>
           <Button
-            variant="destructive"
+            variant="ghost"
             size="icon-xs"
+            className="text-destructive hover:text-destructive active:text-destructive"
             onClick={(e) => {
               e.stopPropagation();
               handleCancelEdit();

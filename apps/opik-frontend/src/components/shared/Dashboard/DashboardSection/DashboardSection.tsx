@@ -14,6 +14,7 @@ import { useDashboardStore } from "@/store/DashboardStore";
 import { cn } from "@/lib/utils";
 import DashboardSectionHeader from "./DashboardSectionHeader";
 import DashboardWidgetGrid from "./DashboardWidgetGrid";
+import { useSectionCollapseStorage } from "@/lib/dashboard/sectionCollapseStorage";
 import get from "lodash/get";
 
 interface DashboardSectionProps {
@@ -38,17 +39,19 @@ const DashboardSection: React.FunctionComponent<DashboardSectionProps> = ({
   onAddSectionBelow,
   isDragPreview = false,
 }) => {
-  const { sectionTitle, sectionExpanded, widgets, layout } = useDashboardStore(
+  const { sectionTitle, widgets, layout } = useDashboardStore(
     useShallow((state) => {
       const section = state.sections.find((s) => s.id === sectionId);
       return {
         sectionTitle: section?.title ?? "Untitled Section",
-        sectionExpanded: section?.expanded ?? false,
         widgets: get(section, "widgets", []),
         layout: get(section, "layout", []),
       };
     }),
   );
+
+  const [collapseState, setCollapseState] = useSectionCollapseStorage();
+  const sectionExpanded = collapseState[sectionId] ?? true;
 
   const {
     attributes,
@@ -72,9 +75,12 @@ const DashboardSection: React.FunctionComponent<DashboardSectionProps> = ({
   const handleValueChange = useCallback(
     (value: string) => {
       const newExpanded = value === sectionId;
-      onUpdateSection(sectionId, { expanded: newExpanded });
+      setCollapseState((prev) => ({
+        ...prev,
+        [sectionId]: newExpanded,
+      }));
     },
-    [sectionId, onUpdateSection],
+    [sectionId, setCollapseState],
   );
 
   const handleUpdateTitle = useCallback(

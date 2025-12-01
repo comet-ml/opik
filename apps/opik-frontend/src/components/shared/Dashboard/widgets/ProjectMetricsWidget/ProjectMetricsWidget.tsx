@@ -1,4 +1,4 @@
-import React, { memo, useMemo } from "react";
+import React, { memo, useMemo, useCallback } from "react";
 import { useShallow } from "zustand/react/shallow";
 
 import DashboardWidget from "@/components/shared/Dashboard/DashboardWidget";
@@ -14,7 +14,14 @@ import {
 import { Filter } from "@/types/filters";
 import { isFilterValid } from "@/lib/filters";
 import MetricContainerChart from "@/components/pages/TracesPage/MetricsTab/MetricChart/MetricChartContainer";
-import { INTERVAL_DESCRIPTIONS } from "@/components/pages/TracesPage/MetricsTab/utils";
+import {
+  INTERVAL_DESCRIPTIONS,
+  renderDurationTooltipValue,
+  durationYTickFormatter,
+  renderCostTooltipValue,
+  costYTickFormatter,
+  tokenYTickFormatter,
+} from "@/components/pages/TracesPage/MetricsTab/utils";
 import { calculateIntervalConfig } from "@/components/pages-shared/traces/MetricDateRangeSelect/utils";
 import { DateRangeSerializedValue } from "@/components/shared/DateRangeSelect";
 
@@ -40,6 +47,16 @@ const ProjectMetricsWidget: React.FunctionComponent<
   const previewWidget = useDashboardStore(selectPreviewWidget);
   const widget = preview ? previewWidget : storeWidget;
 
+  const onAddEditWidgetCallback = useDashboardStore(
+    (state) => state.onAddEditWidgetCallback,
+  );
+
+  const handleEdit = useCallback(() => {
+    if (sectionId && widgetId) {
+      onAddEditWidgetCallback?.({ sectionId, widgetId });
+    }
+  }, [sectionId, widgetId, onAddEditWidgetCallback]);
+
   const widgetProjectId = widget?.config?.projectId as string | undefined;
 
   const { projectId, interval, intervalStart, intervalEnd } = useMemo(() => {
@@ -57,21 +74,33 @@ const ProjectMetricsWidget: React.FunctionComponent<
     };
   }, [widgetProjectId, globalConfig.projectId, globalConfig.dateRange]);
 
+  const metricType = widget?.config?.metricType as string | undefined;
+  const metricName = metricType as METRIC_NAME_TYPE | undefined;
+  const isCostMetric = metricName === METRIC_NAME_TYPE.COST;
+  const isDurationMetric =
+    metricName === METRIC_NAME_TYPE.TRACE_DURATION ||
+    metricName === METRIC_NAME_TYPE.THREAD_DURATION;
+  const isCountMetric =
+    metricName === METRIC_NAME_TYPE.TOKEN_USAGE ||
+    metricName === METRIC_NAME_TYPE.TRACE_COUNT ||
+    metricName === METRIC_NAME_TYPE.THREAD_COUNT;
+
   if (!widget) {
     return null;
   }
 
   const renderChartContent = () => {
-    const metricType = widget?.config?.metricType as string | undefined;
-    const chartType = (widget?.config?.chartType as "line" | "bar") || "line";
-    const traceFilters = widget?.config?.traceFilters as Filter[] | undefined;
-    const threadFilters = widget?.config?.threadFilters as Filter[] | undefined;
+    const chartType = (widget.config?.chartType as "line" | "bar") || "line";
+    const traceFilters = widget.config?.traceFilters as Filter[] | undefined;
+    const threadFilters = widget.config?.threadFilters as Filter[] | undefined;
 
     if (!metricType || !projectId || !interval) {
       return (
         <DashboardWidget.EmptyState
           title="No metric selected"
           message="Please configure this widget to display a metric"
+          onAction={!preview ? handleEdit : undefined}
+          actionLabel="Configure widget"
         />
       );
     }
@@ -79,7 +108,6 @@ const ProjectMetricsWidget: React.FunctionComponent<
     const validTraceFilters = traceFilters?.filter(isFilterValid);
     const validThreadFilters = threadFilters?.filter(isFilterValid);
 
-    const metricName = metricType as METRIC_NAME_TYPE;
     const intervalType = interval as INTERVAL_TYPE;
     const description = interval
       ? INTERVAL_DESCRIPTIONS.TOTALS[intervalType] || ""
@@ -95,7 +123,7 @@ const ProjectMetricsWidget: React.FunctionComponent<
           key={`${widgetId}_chart`}
           name={widget.title}
           description={description}
-          metricName={metricName}
+          metricName={metricName!}
           interval={intervalType}
           intervalStart={intervalStart}
           intervalEnd={intervalEnd}
@@ -103,6 +131,22 @@ const ProjectMetricsWidget: React.FunctionComponent<
           chartType={chartType}
           traceFilters={validTraceFilters}
           threadFilters={validThreadFilters}
+          renderValue={
+            isCostMetric
+              ? renderCostTooltipValue
+              : isDurationMetric
+                ? renderDurationTooltipValue
+                : undefined
+          }
+          customYTickFormatter={
+            isCostMetric
+              ? costYTickFormatter
+              : isDurationMetric
+                ? durationYTickFormatter
+                : isCountMetric
+                  ? tokenYTickFormatter
+                  : undefined
+          }
           chartOnly
         />
       </div>

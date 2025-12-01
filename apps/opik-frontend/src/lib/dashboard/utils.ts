@@ -26,7 +26,6 @@ export const generateEmptySection = (
   return {
     id: generateId(),
     title,
-    expanded: true,
     widgets: [],
     layout: [],
   };
@@ -87,7 +86,6 @@ export const areSectionsEqual = (
   return (
     prev.id === next.id &&
     prev.title === next.title &&
-    // Exclude expanded state from comparison - it's UI-only and shouldn't trigger save/discard
     areWidgetArraysEqual(prev.widgets, next.widgets) &&
     areLayoutsEqual(prev.layout, next.layout)
   );

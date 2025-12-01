@@ -23,6 +23,11 @@ import {
 } from "@/types/dashboard";
 import { createDefaultWidgetConfig } from "@/lib/dashboard/utils";
 
+enum DialogStep {
+  ADD = "add",
+  EDIT = "edit",
+}
+
 const convertWidgetToAddConfig = (widget: DashboardWidget): AddWidgetConfig => {
   return {
     type: widget.type as WIDGET_TYPE,
@@ -39,40 +44,36 @@ const WidgetConfigDialog: React.FunctionComponent<WidgetConfigDialogProps> = ({
   widgetId,
   onSave,
 }) => {
-  const mode = widgetId ? "edit" : "create";
-  const [currentStep, setCurrentStep] = useState<"add" | "edit">(
-    mode === "create" ? "add" : "edit",
+  const isEditMode = !!widgetId;
+  const [currentStep, setCurrentStep] = useState<DialogStep>(
+    isEditMode ? DialogStep.EDIT : DialogStep.ADD,
   );
-  const [widgetData, setWidgetData] = useState<AddWidgetConfig>({
-    type: WIDGET_TYPE.TEXT_MARKDOWN,
-    title: "",
-    subtitle: "",
-    config: {},
-  });
+  const [widgetData, setWidgetData] = useState<AddWidgetConfig | null>(null);
   const editorRef = useRef<WidgetEditorHandle>(null);
 
   const widgetResolver = useDashboardStore(selectWidgetResolver);
   const getWidgetById = useDashboardStore((state) => state.getWidgetById);
   const setPreviewWidget = useDashboardStore(selectSetPreviewWidget);
 
-  const editorComponent = widgetData.type
-    ? widgetResolver?.(widgetData.type)?.Editor || null
-    : null;
+  const editorComponent =
+    widgetData?.type && widgetResolver
+      ? widgetResolver(widgetData.type)?.Editor || null
+      : null;
 
   useEffect(() => {
-    if (mode === "create" && open) {
-      setCurrentStep("add");
-    } else if (mode === "edit" && widgetId) {
-      setCurrentStep("edit");
+    if (!isEditMode && open) {
+      setCurrentStep(DialogStep.ADD);
+    } else if (isEditMode && widgetId) {
+      setCurrentStep(DialogStep.EDIT);
       const widget = getWidgetById(sectionId, widgetId);
       if (widget) {
         setWidgetData(convertWidgetToAddConfig(widget));
       }
     }
-  }, [mode, open, widgetId, sectionId, getWidgetById]);
+  }, [isEditMode, open, widgetId, sectionId, getWidgetById]);
 
   useEffect(() => {
-    if (open && currentStep === "edit") {
+    if (open && currentStep === DialogStep.EDIT && widgetData) {
       const previewWidget: DashboardWidget = {
         id: "preview",
         title: widgetData.title || "",
@@ -87,29 +88,33 @@ const WidgetConfigDialog: React.FunctionComponent<WidgetConfigDialogProps> = ({
   useEffect(() => {
     if (!open) {
       setPreviewWidget(null);
+      setWidgetData(null);
+      setCurrentStep(isEditMode ? DialogStep.EDIT : DialogStep.ADD);
     }
-  }, [open, setPreviewWidget]);
+  }, [open, setPreviewWidget, isEditMode]);
 
   const handleSelectWidget = (widgetType: string) => {
     const newData = createDefaultWidgetConfig(widgetType, widgetResolver);
     setWidgetData(newData);
-    setCurrentStep("edit");
+    setCurrentStep(DialogStep.EDIT);
   };
 
   const handleBack = () => {
-    if (currentStep === "edit" && mode === "create") {
-      setCurrentStep("add");
+    if (currentStep === DialogStep.EDIT && !isEditMode) {
+      setCurrentStep(DialogStep.ADD);
     }
   };
 
   const handleChange = (data: Partial<AddWidgetConfig>) => {
     setWidgetData((prev) => {
+      if (!prev) return prev;
       const merged = { ...prev, ...data };
       return merged as AddWidgetConfig;
     });
   };
 
   const handleSave = async () => {
+    if (!widgetData) return;
     const isValid = await editorRef.current?.submit();
     if (isValid) {
       onSave(widgetData);
@@ -121,13 +126,13 @@ const WidgetConfigDialog: React.FunctionComponent<WidgetConfigDialogProps> = ({
     onOpenChange(false);
   };
 
-  const dialogTitle = mode === "create" ? "Add widget" : "Edit widget";
+  const dialogTitle = isEditMode ? "Edit widget" : "Add widget";
   const dialogDescription =
-    currentStep === "add"
-      ? "Choose a widget type to add to your dashboard"
-      : mode === "create"
-        ? "Adjust the data, visualization, or settings for this widget."
-        : "Adjust the data, visualization, or settings for this widget. Changes will update the dashboard automatically.";
+    currentStep === DialogStep.ADD
+      ? "Choose the type of widget you want to add. Widgets can use project metrics, or simple text to add context."
+      : isEditMode
+        ? "Adjust the data, visualization, or settings for this widget. Changes will update the dashboard automatically."
+        : "Adjust the data, visualization, or settings for this widget.";
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -137,14 +142,11 @@ const WidgetConfigDialog: React.FunctionComponent<WidgetConfigDialogProps> = ({
           <DialogDescription>{dialogDescription}</DialogDescription>
         </DialogHeader>
 
-        {currentStep === "add" && (
-          <WidgetConfigDialogAddStep
-            selectedWidgetType={widgetData.type}
-            onSelectWidget={handleSelectWidget}
-          />
+        {currentStep === DialogStep.ADD && (
+          <WidgetConfigDialogAddStep onSelectWidget={handleSelectWidget} />
         )}
 
-        {currentStep === "edit" && (
+        {currentStep === DialogStep.EDIT && widgetData && (
           <WidgetConfigDialogEditStep
             widgetData={widgetData}
             onChange={handleChange}
@@ -155,7 +157,7 @@ const WidgetConfigDialog: React.FunctionComponent<WidgetConfigDialogProps> = ({
 
         <div className="flex justify-between gap-2 pt-4">
           <div>
-            {currentStep === "edit" && mode === "create" && (
+            {currentStep === DialogStep.EDIT && !isEditMode && (
               <Button variant="outline" onClick={handleBack}>
                 Back
               </Button>
@@ -165,9 +167,9 @@ const WidgetConfigDialog: React.FunctionComponent<WidgetConfigDialogProps> = ({
             <Button variant="outline" onClick={handleCancel}>
               Cancel
             </Button>
-            {currentStep === "edit" && (
+            {currentStep === DialogStep.EDIT && (
               <Button onClick={handleSave}>
-                {mode === "create" ? "Add widget" : "Save changes"}
+                {isEditMode ? "Save changes" : "Add widget"}
               </Button>
             )}
           </div>

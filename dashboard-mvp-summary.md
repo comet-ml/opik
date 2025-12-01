@@ -36,9 +36,9 @@ Custom dashboards for Opik workspace with drag-drop widgets showing metrics, cha
 
 ## 2. Widget Types (16 Total)
 
-### Stats Widgets (1)
+### Stats Widgets (1) - ✅ RENAMED
 
-Single **Stat Card** widget that displays live metrics from three stats endpoints.
+Single **Project Stats Card** widget (renamed from Stat Card) that displays live metrics from three stats endpoints.
 
 #### Available Stats Endpoints
 
@@ -67,11 +67,13 @@ Single **Stat Card** widget that displays live metrics from three stats endpoint
 - **Error rate** - Percentage of failed spans
 - **Duration percentiles** - Span-level performance
 
-### Text Widgets (1)
+### Text Widgets (1) - ✅ COMPLETED
 
-| Widget        | Description         | Data Source   |
-| ------------- | ------------------- | ------------- |
-| Text/Markdown | Custom text content | Frontend only |
+| Widget        | Description         | Data Source   | Status  |
+| ------------- | ------------------- | ------------- | ------- |
+| Text/Markdown | Custom text content | Frontend only | ✅ Done |
+
+**Implementation Status:** TextMarkdownWidget fully implemented with CodeMirror editor
 
 **Use Cases:**
 
@@ -80,19 +82,27 @@ Single **Stat Card** widget that displays live metrics from three stats endpoint
 - Custom notes and instructions
 - Formatted content with Markdown
 
-### Chart Widgets - Project Metrics (9)
+### Chart Widgets - Project Metrics (9) - ✅ COMPLETED
 
-| Widget                 | Metric Type               | Charts        |
-| ---------------------- | ------------------------- | ------------- |
-| Feedback Scores        | `FEEDBACK_SCORES`         | Line/Bar/Area |
-| Trace Count            | `TRACE_COUNT`             | Line/Bar/Area |
-| Token Usage            | `TOKEN_USAGE`             | Line/Bar/Area |
-| Duration               | `DURATION`                | Line/Bar/Area |
-| Cost                   | `COST`                    | Line/Bar/Area |
-| Guardrails Failed      | `GUARDRAILS_FAILED_COUNT` | Line/Bar/Area |
-| Thread Count           | `THREAD_COUNT`            | Line/Bar/Area |
-| Thread Duration        | `THREAD_DURATION`         | Line/Bar/Area |
-| Thread Feedback Scores | `THREAD_FEEDBACK_SCORES`  | Line/Bar/Area |
+| Widget                 | Metric Type               | Charts   | Status  |
+| ---------------------- | ------------------------- | -------- | ------- |
+| Feedback Scores        | `FEEDBACK_SCORES`         | Line/Bar | ✅ Done |
+| Trace Count            | `TRACE_COUNT`             | Line/Bar | ✅ Done |
+| Token Usage            | `TOKEN_USAGE`             | Line/Bar | ✅ Done |
+| Duration               | `DURATION`                | Line/Bar | ✅ Done |
+| Cost                   | `COST`                    | Line/Bar | ✅ Done |
+| Guardrails Failed      | `GUARDRAILS_FAILED_COUNT` | Line/Bar | ✅ Done |
+| Thread Count           | `THREAD_COUNT`            | Line/Bar | ✅ Done |
+| Thread Duration        | `THREAD_DURATION`         | Line/Bar | ✅ Done |
+| Thread Feedback Scores | `THREAD_FEEDBACK_SCORES`  | Line/Bar | ✅ Done |
+
+**Implementation Status:** ProjectMetricsWidget fully implemented with:
+
+- Full filtering support (trace/thread filters)
+- Chart type selector (line/bar)
+- Project selector with fallback to dashboard project
+- Global/local date range toggle
+- Widget config dialog with live preview
 
 **All use existing backend API**
 
@@ -158,31 +168,31 @@ Single **Stat Card** widget that displays live metrics from three stats endpoint
 
 ### Delivery Phases (Incremental User Value)
 
-| Phase       | What Users Get                                   | Days           | Deliverable?                           | Components                        |
-| ----------- | ------------------------------------------------ | -------------- | -------------------------------------- | --------------------------------- |
-| **Phase 0** | **Infrastructure**                               | **3**          | ❌ **Not deliverable alone**           | Setup only, no user value         |
-|             | - Dashboard list page with CRUD + clone          | 1              | Includes API integration               |
-|             | - React Grid Layout + sections                   | 1.5            | -                                      |
-|             | - Widget framework (types, registry)             | 0.5            | -                                      |
-| **Phase 1** | **Widget Config Dialog + First 3 Widgets**       | **4.5**        | ✅ **DEMO READY**                      | Config UI + Basic widgets         |
-|             | 0. Widget config dialog with live preview        | 1.5            | Reusable settings panel + preview pane |
-|             | 1. Stat Card (with filters, date range)          | 0.75           | Full config: metric, project, filters  |
-|             | 2. Text/Markdown (CodeMirror + viewer)           | 0.5            | Editor + preview (reuse existing)      |
-|             | 3. Cost Summary (with project filter)            | 1.25           | Full config: projects, date range      |
-|             | - Testing & bug fixes                            | 0.5            | Test all Phase 1 widgets               |
-| **Phase 2** | **All 9 Metric Charts (Same Component)**         | **4.25**       | ✅ **PRODUCTION READY**                | All project metrics with settings |
-|             | 4. Feedback Scores chart (base + 3 chart types)  | 1.5            | Reusable component (line/bar/area)     |
-|             | 5-12. Remaining 8 charts (config only)           | 2              | Schema + testing (0.25 each)           |
-|             | _Same component, different metric configs_       |                | Copy-paste efficiency                  |
-|             | - Testing & bug fixes                            | 0.75           | Test all chart variations              |
-| **Phase 3** | **Experiment & Cost Widgets (Fully Configured)** | **2.25**       | ✅ **FEATURE COMPLETE**                | Experiments + cost with settings  |
-|             | 13. Experiment Feedback Scores (reuse existing)  | 0.75           | Wrap existing component + config       |
-|             | 14. Experiment Radar Chart (reuse existing)      | 0.5            | Wrap existing component + config       |
-|             | 15. Experiment Bar Chart (reuse existing)        | 0.5            | Wrap existing component + config       |
-|             | 16. Cost Trend chart                             | 0.5            | Config: projects, chart type, date     |
-| **Phase 4** | **Documentation**                                | **0.5**        | ✅ **MVP LAUNCH**                      | Ready for production              |
-|             | - Documentation                                  | 0.5            | User guides, widget docs               |
-|             | **TOTAL:**                                       | **14 days**    |                                        | **~3 weeks**                      |
+| Phase       | What Users Get                                   | Days        | Deliverable?                           | Components                        |
+| ----------- | ------------------------------------------------ | ----------- | -------------------------------------- | --------------------------------- |
+| **Phase 0** | **Infrastructure**                               | **3**       | ❌ **Not deliverable alone**           | Setup only, no user value         |
+|             | - Dashboard list page with CRUD + clone          | 1           | Includes API integration               |
+|             | - React Grid Layout + sections                   | 1.5         | -                                      |
+|             | - Widget framework (types, registry)             | 0.5         | -                                      |
+| **Phase 1** | **Widget Config Dialog + First 3 Widgets**       | **4.5**     | ✅ **DEMO READY**                      | Config UI + Basic widgets         |
+|             | 0. Widget config dialog with live preview        | 1.5         | Reusable settings panel + preview pane |
+|             | 1. Stat Card (with filters, date range)          | 0.75        | Full config: metric, project, filters  |
+|             | 2. Text/Markdown (CodeMirror + viewer)           | 0.5         | Editor + preview (reuse existing)      |
+|             | 3. Cost Summary (with project filter)            | 1.25        | Full config: projects, date range      |
+|             | - Testing & bug fixes                            | 0.5         | Test all Phase 1 widgets               |
+| **Phase 2** | **All 9 Metric Charts (Same Component)**         | **4.25**    | ✅ **PRODUCTION READY**                | All project metrics with settings |
+|             | 4. Feedback Scores chart (base + 3 chart types)  | 1.5         | Reusable component (line/bar/area)     |
+|             | 5-12. Remaining 8 charts (config only)           | 2           | Schema + testing (0.25 each)           |
+|             | _Same component, different metric configs_       |             | Copy-paste efficiency                  |
+|             | - Testing & bug fixes                            | 0.75        | Test all chart variations              |
+| **Phase 3** | **Experiment & Cost Widgets (Fully Configured)** | **2.25**    | ✅ **FEATURE COMPLETE**                | Experiments + cost with settings  |
+|             | 13. Experiment Feedback Scores (reuse existing)  | 0.75        | Wrap existing component + config       |
+|             | 14. Experiment Radar Chart (reuse existing)      | 0.5         | Wrap existing component + config       |
+|             | 15. Experiment Bar Chart (reuse existing)        | 0.5         | Wrap existing component + config       |
+|             | 16. Cost Trend chart                             | 0.5         | Config: projects, chart type, date     |
+| **Phase 4** | **Documentation**                                | **0.5**     | ✅ **MVP LAUNCH**                      | Ready for production              |
+|             | - Documentation                                  | 0.5         | User guides, widget docs               |
+|             | **TOTAL:**                                       | **14 days** |                                        | **~3 weeks**                      |
 
 ### Delivery Strategy
 

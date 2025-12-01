@@ -30,17 +30,23 @@ const DashboardWidgetHeader: React.FC<DashboardWidgetHeaderProps> = ({
   return (
     <div
       className={cn(
-        "relative flex flex-col gap-0.5 rounded px-2 pb-0.5 pt-1",
+        "relative flex flex-col gap-0.5 rounded px-2 pb-0.5",
+        showDragHandle ? "pt-1" : "pt-2",
         className,
       )}
     >
-      <div className="flex items-center gap-2">
+      {showDragHandle && (
         <div
           className={cn(
-            "flex min-w-0 flex-1 flex-col gap-0.5 transition-[padding-right]",
-            actionsWithHandler && (menuOpen ? "pr-14" : "group-hover:pr-14"),
+            "flex w-full items-center justify-center pb-0.5 transition-opacity",
+            menuOpen ? "opacity-100" : "opacity-0 group-hover:opacity-100",
           )}
         >
+          {dragHandle}
+        </div>
+      )}
+      <div className="flex items-start gap-2">
+        <div className="flex min-w-0 flex-1 flex-col gap-0.5">
           <div className="truncate text-xs font-medium text-foreground">
             {title}
           </div>
@@ -53,17 +59,11 @@ const DashboardWidgetHeader: React.FC<DashboardWidgetHeaderProps> = ({
         {actionsWithHandler && (
           <div
             className={cn(
-              "absolute right-2 top-1 flex items-center gap-2 transition-opacity",
+              "flex shrink-0 items-center gap-2 transition-opacity",
               menuOpen ? "opacity-100" : "opacity-0 group-hover:opacity-100",
             )}
           >
             {actionsWithHandler}
-            {showDragHandle && (
-              <>
-                <div className="h-4 w-px bg-muted" />
-                {dragHandle}
-              </>
-            )}
           </div>
         )}
       </div>

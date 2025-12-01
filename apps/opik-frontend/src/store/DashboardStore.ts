@@ -24,7 +24,6 @@ import {
 import {
   calculateLayoutForAddingWidget,
   removeWidgetFromLayout,
-  normalizeLayout,
 } from "@/lib/dashboard/layout";
 import { migrateDashboardConfig } from "@/lib/dashboard/migrations";
 
@@ -446,11 +445,10 @@ export const useDashboardStore = create<DashboardStore<BaseDashboardConfig>>()(
         },
 
         updateLayout: (sectionId: string, layout: DashboardLayout) => {
-          const normalizedLayout = normalizeLayout(layout);
           set(
             (state) => ({
               sections: state.sections.map((s) =>
-                s.id === sectionId ? { ...s, layout: normalizedLayout } : s,
+                s.id === sectionId ? { ...s, layout } : s,
               ),
               lastModified: Date.now(),
             }),
