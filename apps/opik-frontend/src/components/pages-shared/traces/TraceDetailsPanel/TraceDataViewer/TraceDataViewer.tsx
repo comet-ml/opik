@@ -95,7 +95,16 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
     type !== TRACE_TYPE_FOR_TREE && isSpansLazyLoading;
   const entityType = type === TRACE_TYPE_FOR_TREE ? "trace" : "span";
   const isTrace = type === TRACE_TYPE_FOR_TREE;
-  const traceData = isTrace ? (data as Trace) : undefined;
+
+  /**
+   * Type guard function to safely check if data is a Trace.
+   * Traces have type === "trace" or no type field, while Spans have type in SPAN_TYPE enum.
+   */
+  const isTraceType = (data: Trace | Span): data is Trace => {
+    return type === TRACE_TYPE_FOR_TREE;
+  };
+
+  const traceData = isTraceType(data) ? data : undefined;
   const hasSpanFeedbackScores = Boolean(
     traceData?.span_feedback_scores?.length,
   );
@@ -219,6 +228,21 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
                 </div>
               </FeedbackScoreHoverCard>
             )}
+            {isTrace &&
+              traceData &&
+              Boolean(traceData.span_feedback_scores?.length) && (
+                <FeedbackScoreHoverCard
+                  scores={traceData.span_feedback_scores!}
+                >
+                  <div
+                    className="comet-body-xs-accented flex items-center gap-1 text-muted-slate"
+                    data-testid="data-viewer-span-scores"
+                  >
+                    <PenLine className="size-3 shrink-0" />{" "}
+                    {traceData.span_feedback_scores!.length} span scores
+                  </div>
+                </FeedbackScoreHoverCard>
+              )}
             {Boolean(data.comments?.length) && (
               <UserCommentHoverList commentsList={data.comments}>
                 <div

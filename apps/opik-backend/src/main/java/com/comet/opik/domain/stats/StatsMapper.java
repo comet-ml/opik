@@ -21,6 +21,7 @@ public class StatsMapper {
 
     public static final String USAGE = "usage";
     public static final String FEEDBACK_SCORE = "feedback_scores";
+    public static final String SPAN_FEEDBACK_SCORE = "span_feedback_scores";
     public static final String TOTAL_ESTIMATED_COST = "total_estimated_cost";
     public static final String TOTAL_ESTIMATED_COST_AVG = "total_estimated_cost_avg";
     public static final String TOTAL_ESTIMATED_COST_SUM = "total_estimated_cost_sum";
@@ -78,6 +79,10 @@ public class StatsMapper {
 
         addMapStats(row, USAGE, stats);
         addMapStats(row, FEEDBACK_SCORE, stats);
+        // Only add span feedback scores statistics for traces (not spans)
+        if (entityCountLabel.equals("trace_count") && row.getMetadata().contains(SPAN_FEEDBACK_SCORE)) {
+            addMapStats(row, SPAN_FEEDBACK_SCORE, stats);
+        }
 
         // spans cannot accept guardrails and therefore will not have guardrails_failed_count in the result set
         if (row.getMetadata().contains("guardrails_failed_count")) {
