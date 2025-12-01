@@ -88,7 +88,7 @@ public class ProjectsResource {
     public Response find(
             @QueryParam("page") @Min(1) @DefaultValue("1") int page,
             @QueryParam("size") @Min(1) @DefaultValue(PAGE_SIZE) int size,
-            @QueryParam("name") String name,
+            @QueryParam("name") @Schema(description = "Filter projects by name (partial match, case insensitive)") String name,
             @QueryParam("sorting") String sorting) {
 
         var criteria = ProjectCriteria.builder()
@@ -289,7 +289,7 @@ public class ProjectsResource {
     public Response getProjectStats(
             @QueryParam("page") @Min(1) @DefaultValue("1") int page,
             @QueryParam("size") @Min(1) @DefaultValue(PAGE_SIZE) int size,
-            @QueryParam("name") String name,
+            @QueryParam("name") @Schema(description = "Filter projects by name (partial match, case insensitive)") String name,
             @QueryParam("sorting") String sorting) {
 
         var criteria = ProjectCriteria.builder()

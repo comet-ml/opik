@@ -94,17 +94,42 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
   const isSpanInputOutputLoading =
     type !== TRACE_TYPE_FOR_TREE && isSpansLazyLoading;
   const entityType = type === TRACE_TYPE_FOR_TREE ? "trace" : "span";
+  const isTrace = type === TRACE_TYPE_FOR_TREE;
+
+  /**
+   * Type guard function to safely check if data is a Trace.
+   * Traces have type === "trace" or no type field, while Spans have type in SPAN_TYPE enum.
+   */
+  const isTraceType = (data: Trace | Span): data is Trace => {
+    return type === TRACE_TYPE_FOR_TREE;
+  };
+
+  const traceData = isTraceType(data) ? data : undefined;
+  const hasSpanFeedbackScores = Boolean(
+    traceData?.span_feedback_scores?.length,
+  );
 
   const feedbackScoreDeleteMutation = useTraceFeedbackScoreDeleteMutation();
 
   const onDeleteFeedbackScore = useCallback(
-    (name: string, author?: string) => {
-      feedbackScoreDeleteMutation.mutate({
-        traceId,
-        spanId,
-        name,
-        author,
-      });
+    (name: string, author?: string, spanIdToDelete?: string) => {
+      // If spanIdToDelete is provided (child row grouped by type), delete for that specific span
+      if (spanIdToDelete) {
+        feedbackScoreDeleteMutation.mutate({
+          traceId,
+          spanId: spanIdToDelete,
+          name,
+          author,
+        });
+      } else {
+        // Regular deletion (trace or single span)
+        feedbackScoreDeleteMutation.mutate({
+          traceId,
+          spanId,
+          name,
+          author,
+        });
+      }
     },
     [traceId, spanId, feedbackScoreDeleteMutation],
   );
@@ -203,6 +228,21 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
                 </div>
               </FeedbackScoreHoverCard>
             )}
+            {isTrace &&
+              traceData &&
+              Boolean(traceData.span_feedback_scores?.length) && (
+                <FeedbackScoreHoverCard
+                  scores={traceData.span_feedback_scores!}
+                >
+                  <div
+                    className="comet-body-xs-accented flex items-center gap-1 text-muted-slate"
+                    data-testid="data-viewer-span-scores"
+                  >
+                    <PenLine className="size-3 shrink-0" />{" "}
+                    {traceData.span_feedback_scores!.length} span scores
+                  </div>
+                </FeedbackScoreHoverCard>
+              )}
             {Boolean(data.comments?.length) && (
               <UserCommentHoverList commentsList={data.comments}>
                 <div
@@ -275,14 +315,34 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
             />
           </TabsContent>
           <TabsContent value="feedback_scores">
-            <ConfigurableFeedbackScoreTable
-              feedbackScores={data.feedback_scores}
-              onDeleteFeedbackScore={onDeleteFeedbackScore}
-              onAddHumanReview={() =>
-                setActiveSection(DetailsActionSection.Annotations)
-              }
-              entityType={entityType}
-            />
+            <div className="space-y-6">
+              <div>
+                <ConfigurableFeedbackScoreTable
+                  title={isTrace ? "Trace scores" : "Span scores"}
+                  feedbackScores={data.feedback_scores}
+                  onDeleteFeedbackScore={onDeleteFeedbackScore}
+                  onAddHumanReview={() =>
+                    setActiveSection(DetailsActionSection.Annotations)
+                  }
+                  entityType={entityType}
+                  isAggregatedSpanScores={false}
+                />
+              </div>
+              {isTrace && hasSpanFeedbackScores && traceData && (
+                <div>
+                  <ConfigurableFeedbackScoreTable
+                    title="Span scores"
+                    feedbackScores={traceData.span_feedback_scores}
+                    onDeleteFeedbackScore={onDeleteFeedbackScore}
+                    onAddHumanReview={() =>
+                      setActiveSection(DetailsActionSection.Annotations)
+                    }
+                    entityType="span"
+                    isAggregatedSpanScores={true}
+                  />
+                </div>
+              )}
+            </div>
           </TabsContent>
           <TabsContent value="metadata">
             <MetadataTab data={data} search={search} />

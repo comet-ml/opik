@@ -21,6 +21,8 @@ export interface TracePublic {
     createdBy?: string;
     lastUpdatedBy?: string;
     feedbackScores?: OpikApi.FeedbackScorePublic[];
+    /** Aggregated feedback scores from all spans in this trace, averaged by score name */
+    spanFeedbackScores?: OpikApi.FeedbackScorePublic[];
     comments?: OpikApi.CommentPublic[];
     guardrailsValidations?: OpikApi.GuardrailsValidationPublic[];
     totalEstimatedCost?: number;

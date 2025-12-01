@@ -5,6 +5,7 @@ import NameCell from "./cells/NameCell";
 import ValueCell from "./cells/ValueCell";
 import ReasonCell from "./cells/ReasonCell";
 import AuthorCell from "./cells/AuthorCell";
+import TypeCell from "./cells/TypeCell";
 
 export enum FeedbackScoreTableColumns {
   SOURCE = "source",
@@ -12,12 +13,43 @@ export enum FeedbackScoreTableColumns {
   VALUE = "value",
   REASON = "reason",
   CREATED_BY = "created_by",
+  TYPE = "type",
 }
 
 export const DEFAULT_SELECTED_COLUMNS = [
   FeedbackScoreTableColumns.VALUE,
   FeedbackScoreTableColumns.REASON,
 ];
+
+/**
+ * Default columns for aggregated span scores at trace level.
+ * Includes Type column to show span types (LLM, Tool, etc.)
+ */
+export const DEFAULT_SELECTED_COLUMNS_WITH_TYPE = [
+  FeedbackScoreTableColumns.TYPE,
+  FeedbackScoreTableColumns.VALUE,
+  FeedbackScoreTableColumns.CREATED_BY,
+];
+
+/**
+ * Filters out Type column from configurable columns.
+ * Used when Type column should not be available (trace scores, individual span scores).
+ */
+export const getConfigurableColumnsWithoutType = () =>
+  CONFIGURABLE_COLUMNS.filter(
+    (col) => col.id !== FeedbackScoreTableColumns.TYPE,
+  );
+
+/**
+ * Gets the storage key type based on entityType and isAggregatedSpanScores.
+ * Aggregated span scores use "span" storage, otherwise use entityType.
+ */
+export const getStorageKeyType = (
+  entityType: string,
+  isAggregatedSpanScores: boolean,
+): string => {
+  return isAggregatedSpanScores ? "span" : entityType;
+};
 
 export enum FEEDBACK_SCORE_ROW_TYPE {
   SINGLE = "single",
@@ -37,21 +69,22 @@ export type EntityTypeStorageValues = {
   columnSizing: string;
 };
 
-// Map entity types to localStorage keys - trace and span share the same keys
+// Map entity types to localStorage keys
+// "trace" = trace scores table
+// "span" = span scores table (when shown at trace level as aggregated scores)
 export const ENTITY_TYPE_TO_STORAGE_KEYS: Record<
   string,
   EntityTypeStorageValues
 > = {
-  // trace and span share the same localStorage keys
   trace: {
     selectedColumns: `trace-${SELECTED_COLUMNS_KEY}`,
     columnsOrder: `trace-${COLUMNS_ORDER_KEY}`,
     columnSizing: `trace-${COLUMN_SIZING_KEY}`,
   },
   span: {
-    selectedColumns: `trace-${SELECTED_COLUMNS_KEY}`,
-    columnsOrder: `trace-${COLUMNS_ORDER_KEY}`,
-    columnSizing: `trace-${COLUMN_SIZING_KEY}`,
+    selectedColumns: `span-${SELECTED_COLUMNS_KEY}`,
+    columnsOrder: `span-${COLUMNS_ORDER_KEY}`,
+    columnSizing: `span-${COLUMN_SIZING_KEY}`,
   },
   // thread and experiment have their own keys
   thread: {
@@ -84,6 +117,13 @@ export const CONFIGURABLE_COLUMNS: ColumnData<ExpandingFeedbackScoreRow>[] = [
     type: COLUMN_TYPE.string,
     size: 100,
     cell: SourceCell as never,
+  },
+  {
+    id: FeedbackScoreTableColumns.TYPE,
+    label: "Type",
+    type: COLUMN_TYPE.string,
+    size: 100,
+    cell: TypeCell as never,
   },
   {
     id: FeedbackScoreTableColumns.VALUE,
