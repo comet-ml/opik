@@ -175,7 +175,7 @@ class OptimizationServiceImpl implements OptimizationService {
                                                 workspaceName = workspaceId;
                                             }
                                         }
-                                        
+
                                         String opikApiKey = ctx.getOrDefault(RequestContext.API_KEY, null);
 
                                         enqueueStudioOptimizationJob(newOptimization, workspaceId, workspaceName,
