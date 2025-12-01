@@ -19,7 +19,7 @@ const BooleanFeedbackDefinitionDetails: React.FunctionComponent<
 > = ({ onChange, details }) => {
   const [booleanDetails, setBooleanDetails] = useState<
     BooleanFeedbackDefinition["details"]
-  >(details ?? { true_label: "", false_label: "" });
+  >(details ?? { true_label: "Pass", false_label: "Fail" });
 
   useEffect(() => {
     const isValid =
