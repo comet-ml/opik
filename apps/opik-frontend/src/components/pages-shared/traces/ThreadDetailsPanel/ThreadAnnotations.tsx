@@ -66,7 +66,7 @@ const ThreadAnnotations: React.FC<ThreadAnnotationsProps> = ({
         {hasFeedbackScores && (
           <>
             <div className="comet-body-s-accented truncate px-6 pt-4">
-              All scores Thread scores
+              Thread scores
             </div>
             <div className="flex flex-wrap gap-2 px-6 py-2">
               {feedbackScores.map((score) => {

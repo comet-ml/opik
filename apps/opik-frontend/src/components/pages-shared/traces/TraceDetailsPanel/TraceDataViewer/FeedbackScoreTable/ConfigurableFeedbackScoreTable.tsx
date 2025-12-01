@@ -67,12 +67,12 @@ const ConfigurableFeedbackScoreTable: React.FunctionComponent<
   return (
     <>
       {title ? (
-        <div className="mb-4 flex items-center justify-between">
+        <div className="mb-2 flex items-center justify-between">
           <div className="comet-body-s-accented">{title}</div>
           {columnsButton}
         </div>
       ) : (
-        <div className="mb-4 flex justify-end">{columnsButton}</div>
+        <div className="mb-2 flex justify-end">{columnsButton}</div>
       )}
 
       <FeedbackScoreTable

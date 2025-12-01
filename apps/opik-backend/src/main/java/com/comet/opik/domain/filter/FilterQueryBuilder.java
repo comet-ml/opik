@@ -199,6 +199,13 @@ public class FilterQueryBuilder {
                             FieldType.ERROR_CONTAINER,
                             "notEmpty(%1$s)")))
                     .build());
+  
+    private static final Set<Field> FEEDBACK_SCORE_FIELDS = Set.of(
+            TraceField.FEEDBACK_SCORES,
+            TraceField.SPAN_FEEDBACK_SCORES,
+            SpanField.FEEDBACK_SCORES,
+            TraceThreadField.FEEDBACK_SCORES,
+            ExperimentsComparisonValidKnownField.FEEDBACK_SCORES);
 
     private static final Map<TraceField, String> TRACE_FIELDS_MAP = new EnumMap<>(
             ImmutableMap.<TraceField, String>builder()
@@ -627,10 +634,7 @@ public class FilterQueryBuilder {
     }
 
     private static boolean isFeedbackScore(Filter filter) {
-        Set<Field> feedbackScoreFields = Set.of(TraceField.FEEDBACK_SCORES, TraceField.SPAN_FEEDBACK_SCORES,
-                SpanField.FEEDBACK_SCORES, TraceThreadField.FEEDBACK_SCORES,
-                ExperimentsComparisonValidKnownField.FEEDBACK_SCORES);
-        return feedbackScoreFields.contains(filter.field());
+        return FEEDBACK_SCORE_FIELDS.contains(filter.field());
     }
 
     private String toAnalyticsDbFilter(Filter filter, int i, FilterStrategy filterStrategy) {

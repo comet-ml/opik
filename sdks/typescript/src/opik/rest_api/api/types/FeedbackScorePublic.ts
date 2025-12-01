@@ -4,6 +4,9 @@
 
 import * as OpikApi from "../index";
 
+/**
+ * Aggregated feedback scores from all spans in this trace, averaged by score name
+ */
 export interface FeedbackScorePublic {
     name: string;
     categoryName?: string;

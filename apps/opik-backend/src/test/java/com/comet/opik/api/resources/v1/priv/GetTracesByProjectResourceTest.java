@@ -2883,6 +2883,18 @@ class GetTracesByProjectResourceTest {
             return value.setScale(9, RoundingMode.HALF_UP).toString();
         }
 
+        /**
+         * Determines the span feedback scores for a trace.
+         * Trace 1 has no span feedback scores (placeholder with BigDecimal.ZERO), so it returns null.
+         * Other traces return their actual scores if available.
+         */
+        private List<FeedbackScore> determineSpanFeedbackScores(UUID traceId, UUID trace1Id, FeedbackScore score) {
+            if (traceId.equals(trace1Id) && score != null && score.value().equals(BigDecimal.ZERO)) {
+                return null;
+            }
+            return score != null ? List.of(score) : null;
+        }
+
         private List<Span> createSpansForTrace(Trace trace, String projectName) {
             return List.of(
                     factory.manufacturePojo(Span.class).toBuilder()
@@ -2955,7 +2967,7 @@ class GetTracesByProjectResourceTest {
             var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
             var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
                     .stream()
-                    .limit(4) // Ensure exactly 4 traces for the test (PodamFactoryUtils always creates 5)
+                    .limit(4) // Limit to exactly 4 traces for this test scenario
                     .map(trace -> setCommonTraceDefaults(trace.toBuilder())
                             .projectName(projectName)
                             .build())
@@ -2984,8 +2996,9 @@ class GetTracesByProjectResourceTest {
             spanResourceClient.batchCreateSpans(trace1Spans, apiKey, workspaceName);
             traceIdToSpansMap.put(trace1.id(), trace1Spans);
             // Trace 1 has no span feedback scores, so it won't match any filter
+            // No feedback scores added for trace1, as it should not match any filter.
             traceIdToSpanFeedbackScoresMap.put(trace1.id(),
-                    createFeedbackScore(templateScore, BigDecimal.ZERO)); // Placeholder, won't be used
+                    createFeedbackScore(templateScore, BigDecimal.ZERO));
 
             // Now process traces 2 and 3: generate random values in [70, 80] range
             for (int i = 2; i < traces.size(); i++) {
@@ -3011,11 +3024,7 @@ class GetTracesByProjectResourceTest {
             traces = traces.stream()
                     .map(trace -> {
                         var score = traceIdToSpanFeedbackScoresMap.get(trace.id());
-                        // Trace 1 has no span feedback scores, so set to null
-                        var spanFeedbackScores = (trace.id().equals(trace1Id)
-                                && score != null && score.value().equals(BigDecimal.ZERO))
-                                        ? null
-                                        : (score != null ? List.of(score) : null);
+                        var spanFeedbackScores = determineSpanFeedbackScores(trace.id(), trace1Id, score);
                         var spans = traceIdToSpansMap.get(trace.id());
                         var spanCount = spans != null ? spans.size() : 0;
                         var llmSpanCount = spans != null

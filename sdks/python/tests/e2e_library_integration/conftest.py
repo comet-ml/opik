@@ -7,6 +7,7 @@ import opik.api_objects.opik_client
 from .. import testlib
 from ..conftest import random_chars
 
+
 OPIK_E2E_LIB_INTEGRATION_TESTS_PROJECT_NAME: Final[str] = (
     "e2e-libraries-integration-tests"
 )
