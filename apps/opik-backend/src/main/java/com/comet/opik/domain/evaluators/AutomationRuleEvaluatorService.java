@@ -420,7 +420,8 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
     @Cacheable(name = "automation_rule_evaluators_find_all", key = "$projectId + '-' + $workspaceId + '-' + ($type != null ? $type : 'all')", returnType = AutomationRuleEvaluator.class, wrapperType = List.class)
     public <E, F extends Filter, T extends AutomationRuleEvaluator<E, F>> List<T> findAll(
             @NonNull UUID projectId, @NonNull String workspaceId, AutomationRuleEvaluatorType type) {
-        log.info("Finding AutomationRuleEvaluators, projectId '{}', workspaceId '{}', type '{}'", projectId, workspaceId, type);
+        log.info("Finding AutomationRuleEvaluators, projectId '{}', workspaceId '{}', type '{}'", projectId,
+                workspaceId, type);
         return template.inTransaction(READ_ONLY, handle -> {
             var dao = handle.attach(AutomationRuleEvaluatorDAO.class);
             var criteria = AutomationRuleEvaluatorCriteria.builder().type(type).build();

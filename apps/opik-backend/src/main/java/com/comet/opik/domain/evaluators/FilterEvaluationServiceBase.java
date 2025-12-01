@@ -98,6 +98,8 @@ public abstract class FilterEvaluationServiceBase<E> {
 
     /**
      * Extracts a string value from a JSON object/string.
+     * Note: JSON operations are blocking. For reactive contexts, consider wrapping calls in Mono.fromCallable()
+     * and using subscribeOn(Schedulers.boundedElastic()) to offload blocking operations.
      */
     protected String extractStringFromJson(Object jsonValue) {
         if (jsonValue == null) {
@@ -107,6 +109,7 @@ public abstract class FilterEvaluationServiceBase<E> {
             return str;
         }
         try {
+            // Use JsonUtils.getMapper() which provides a thread-safe shared ObjectMapper instance
             return JsonUtils.getMapper().writeValueAsString(jsonValue);
         } catch (JsonProcessingException e) {
             log.warn("Failed to convert value to string: {}", e.getMessage());
@@ -116,6 +119,8 @@ public abstract class FilterEvaluationServiceBase<E> {
 
     /**
      * Extracts a nested value from a JSON object using a key.
+     * Note: JSON operations are blocking. For reactive contexts, consider wrapping calls in Mono.fromCallable()
+     * and using subscribeOn(Schedulers.boundedElastic()) to offload blocking operations.
      */
     protected Object extractNestedValue(Object jsonValue, String key) {
         if (ObjectUtils.anyNull(jsonValue, key)) {
@@ -125,6 +130,7 @@ public abstract class FilterEvaluationServiceBase<E> {
         try {
             JsonNode node;
             if (jsonValue instanceof String str) {
+                // Use JsonUtils.getMapper() which provides a thread-safe shared ObjectMapper instance
                 node = JsonUtils.getMapper().readTree(str);
             } else {
                 node = JsonUtils.getMapper().valueToTree(jsonValue);

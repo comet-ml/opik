@@ -137,7 +137,7 @@ public class OnlineScoringSpanSampler {
     }
 
     private boolean shouldSampleSpan(AutomationRuleEvaluator<?, SpanFilter> evaluator,
-                String workspaceId, Span span) {
+            String workspaceId, Span span) {
         // Check if rule is enabled first
         if (!evaluator.isEnabled()) {
             // Important to set the workspaceId for logging purposes
