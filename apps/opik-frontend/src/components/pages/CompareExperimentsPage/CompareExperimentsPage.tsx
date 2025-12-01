@@ -14,6 +14,7 @@ import { Experiment } from "@/types/datasets";
 import CompareExperimentsDetails from "@/components/pages/CompareExperimentsPage/CompareExperimentsDetails/CompareExperimentsDetails";
 import ExplainerIcon from "@/components/shared/ExplainerIcon/ExplainerIcon";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
+import { SCORE_TYPE_EXPERIMENT, SCORE_TYPE_FEEDBACK } from "@/types/shared";
 
 const CompareExperimentsPage: React.FunctionComponent = () => {
   const [tab = "items", setTab] = useQueryParam("tab", StringParam, {
@@ -64,6 +65,13 @@ const CompareExperimentsPage: React.FunctionComponent = () => {
             <TabsTrigger variant="underline" value="config">
               Configuration
             </TabsTrigger>
+            <TabsTrigger variant="underline" value="experiment-scores">
+              Experiment scores
+              <ExplainerIcon
+                className="ml-1"
+                {...EXPLAINERS_MAP[EXPLAINER_ID.what_are_experiment_scores]}
+              />
+            </TabsTrigger>
             <TabsTrigger variant="underline" value="scores">
               Feedback scores
               <ExplainerIcon
@@ -86,11 +94,20 @@ const CompareExperimentsPage: React.FunctionComponent = () => {
             isPending={isPending}
           />
         </TabsContent>
+        <TabsContent value="experiment-scores">
+          <ExperimentFeedbackScoresTab
+            experimentsIds={experimentsIds}
+            experiments={memorizedExperiments}
+            isPending={isPending}
+            type={SCORE_TYPE_EXPERIMENT}
+          />
+        </TabsContent>
         <TabsContent value="scores">
           <ExperimentFeedbackScoresTab
             experimentsIds={experimentsIds}
             experiments={memorizedExperiments}
             isPending={isPending}
+            type={SCORE_TYPE_FEEDBACK}
           />
         </TabsContent>
       </Tabs>

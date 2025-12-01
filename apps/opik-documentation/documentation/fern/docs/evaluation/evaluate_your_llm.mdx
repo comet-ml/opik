@@ -542,6 +542,113 @@ You can create aggregated statistics for each metric by calling its `aggregate_e
 Aggregated statistics can help analyze evaluation results and are useful for comparing the
 performance of different models or different versions of the same model, for example.
 
+### Computing experiment-level metrics
+
+In addition to per-item metrics, you can compute experiment-level aggregate metrics that are calculated across all test results. These experiment scores are displayed in the Opik UI alongside feedback scores and can be used for sorting and filtering experiments.
+
+Experiment scores are computed after all test results are collected. You define experiment score functions that take a list of `TestResult` objects and return a list of `ScoreResult` objects representing aggregate metrics.
+
+<CodeBlocks>
+```python title="Python" language="python"
+from typing import List
+from opik.evaluation import evaluate, test_result
+from opik.evaluation.metrics import Hallucination, score_result
+
+# Define an experiment score function
+def compute_hallucination_max(
+    test_results: List[test_result.TestResult],
+) -> List[score_result.ScoreResult]:
+    """Compute the maximum hallucination score across all test results."""
+    hallucination_scores = [
+        result.score_results[0].value 
+        for result in test_results 
+        if result.score_results and len(result.score_results) > 0
+    ]
+    
+    if not hallucination_scores:
+        return []
+    
+    return [
+        score_result.ScoreResult(
+            name="hallucination_metric (max)",
+            value=max(hallucination_scores),
+            reason=f"Maximum hallucination score across {len(hallucination_scores)} test cases"
+        )
+    ]
+
+# Run evaluation with experiment scores
+evaluation = evaluate(
+    dataset=dataset,
+    task=evaluation_task,
+    scoring_metrics=[Hallucination()],
+    experiment_scoring_functions=[compute_hallucination_max],
+    experiment_name="My experiment"
+)
+
+# Access experiment scores from the result
+print(f"Experiment scores: {evaluation.experiment_scores}")
+```
+
+</CodeBlocks>
+
+<Tip>
+Experiment scores are displayed in the Opik UI in the experiments table alongside feedback scores. They can be used for sorting and filtering experiments, making it easy to compare experiments based on aggregate metrics.
+</Tip>
+
+You can define multiple experiment score functions to compute different aggregate metrics:
+
+<CodeBlocks>
+```python title="Python" language="python"
+from typing import List
+from opik.evaluation import evaluate, test_result
+from opik.evaluation.metrics import Equals, score_result
+
+def compute_accuracy_stats(
+    test_results: List[test_result.TestResult],
+) -> List[score_result.ScoreResult]:
+    """Compute accuracy statistics across all test results."""
+    accuracy_scores = [
+        result.score_results[0].value 
+        for result in test_results 
+        if result.score_results and len(result.score_results) > 0
+    ]
+    
+    if not accuracy_scores:
+        return []
+    
+    return [
+        score_result.ScoreResult(
+            name="accuracy (mean)",
+            value=sum(accuracy_scores) / len(accuracy_scores),
+            reason=f"Mean accuracy across {len(accuracy_scores)} test cases"
+        ),
+        score_result.ScoreResult(
+            name="accuracy (min)",
+            value=min(accuracy_scores),
+            reason=f"Minimum accuracy across {len(accuracy_scores)} test cases"
+        ),
+        score_result.ScoreResult(
+            name="accuracy (max)",
+            value=max(accuracy_scores),
+            reason=f"Maximum accuracy across {len(accuracy_scores)} test cases"
+        ),
+    ]
+
+evaluation = evaluate(
+    dataset=dataset,
+    task=evaluation_task,
+    scoring_metrics=[Equals()],
+    experiment_scoring_functions=[compute_accuracy_stats],
+    experiment_name="My experiment"
+)
+```
+
+</CodeBlocks>
+
+<Warning>
+Experiment score functions receive all test results after evaluation completes. Make sure your functions handle edge cases like empty test results or missing score values gracefully.
+</Warning>
+
 ### Python SDK
 
 #### Using async evaluation tasks
