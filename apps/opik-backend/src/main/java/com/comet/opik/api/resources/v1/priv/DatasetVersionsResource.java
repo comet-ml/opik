@@ -7,6 +7,7 @@ import com.comet.opik.api.DatasetVersionDiff;
 import com.comet.opik.api.DatasetVersionRestore;
 import com.comet.opik.api.DatasetVersionTag;
 import com.comet.opik.domain.DatasetVersionService;
+import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.ratelimit.RateLimited;
 import com.fasterxml.jackson.annotation.JsonView;
@@ -25,6 +26,7 @@ import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.DELETE;
 import jakarta.ws.rs.DefaultValue;
 import jakarta.ws.rs.GET;
+import jakarta.ws.rs.NotFoundException;
 import jakarta.ws.rs.POST;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.PathParam;
@@ -50,6 +52,7 @@ public class DatasetVersionsResource {
     private final @NonNull UUID datasetId;
     private final @NonNull DatasetVersionService versionService;
     private final @NonNull Provider<RequestContext> requestContext;
+    private final @NonNull OpikConfiguration config;
 
     @POST
     @Operation(operationId = "createDatasetVersion", summary = "Create dataset version", description = "Create a new immutable version of the dataset by snapshotting the current state", responses = {
@@ -63,6 +66,7 @@ public class DatasetVersionsResource {
     public Response createVersion(
             @RequestBody(content = @Content(schema = @Schema(implementation = DatasetVersionCreate.class))) @Valid @NotNull DatasetVersionCreate request) {
 
+        checkFeatureEnabled();
         String workspaceId = requestContext.get().getWorkspaceId();
 
         log.info("Creating version for dataset '{}' on workspace '{}'", datasetId, workspaceId);
@@ -82,6 +86,7 @@ public class DatasetVersionsResource {
             @QueryParam("page") @Min(1) @DefaultValue("1") int page,
             @QueryParam("size") @Min(1) @DefaultValue("10") int size) {
 
+        checkFeatureEnabled();
         String workspaceId = requestContext.get().getWorkspaceId();
 
         log.info("Listing versions for dataset '{}', page '{}', size '{}' on workspace '{}'", datasetId, page, size,
@@ -106,6 +111,7 @@ public class DatasetVersionsResource {
             @PathParam("versionHash") String versionHash,
             @RequestBody(content = @Content(schema = @Schema(implementation = DatasetVersionTag.class))) @Valid @NotNull DatasetVersionTag tag) {
 
+        checkFeatureEnabled();
         String workspaceId = requestContext.get().getWorkspaceId();
 
         log.info("Creating tag '{}' for version '{}' of dataset '{}' on workspace '{}'", tag.tag(), versionHash,
@@ -127,6 +133,7 @@ public class DatasetVersionsResource {
             @PathParam("versionHash") String versionHash,
             @PathParam("tag") String tag) {
 
+        checkFeatureEnabled();
         String workspaceId = requestContext.get().getWorkspaceId();
 
         log.info("Deleting tag '{}' for version '{}' from dataset '{}' on workspace '{}'", tag, versionHash, datasetId,
@@ -146,6 +153,7 @@ public class DatasetVersionsResource {
     @RateLimited
     public Response compareVersions() {
 
+        checkFeatureEnabled();
         String workspaceId = requestContext.get().getWorkspaceId();
         log.info("Comparing latest version with draft for dataset='{}', workspace='{}'",
                 datasetId, workspaceId);
@@ -169,6 +177,7 @@ public class DatasetVersionsResource {
     public Response restoreVersion(
             @RequestBody(content = @Content(schema = @Schema(implementation = DatasetVersionRestore.class))) @Valid @NotNull DatasetVersionRestore request) {
 
+        checkFeatureEnabled();
         String workspaceId = requestContext.get().getWorkspaceId();
 
         log.info("Restoring dataset '{}' to version '{}' on workspace '{}'", datasetId, request.versionRef(),
@@ -178,5 +187,12 @@ public class DatasetVersionsResource {
                 workspaceId);
 
         return Response.ok(version).build();
+    }
+
+    private void checkFeatureEnabled() {
+        if (!config.getServiceToggles().isDatasetVersioningEnabled()) {
+            log.warn("Dataset versioning feature is disabled, returning 404");
+            throw new NotFoundException("Dataset versioning feature is not enabled");
+        }
     }
 }
