@@ -460,12 +460,12 @@ export const LLM_PROMPT_TRACE_TEMPLATES: LLMPromptTemplate[] = [
           "## Rules\n" +
           "1. Focus only on the factual equivalence of the core answer. Ignore style, grammar, or verbosity.\n" +
           "2. Accept aliases, synonyms, paraphrases, or equivalent expressions.\n" +
-          "   Examples: \"NYC\" ≈ \"New York City\"; \"Da Vinci\" ≈ \"Leonardo da Vinci\".\n" +
+          '   Examples: "NYC" ≈ "New York City"; "Da Vinci" ≈ "Leonardo da Vinci".\n' +
           "3. Ignore case, punctuation, and formatting differences.\n" +
           "4. Extra contextual details are acceptable **only if they don't change or contradict** the main answer.\n" +
           "5. If the OUTPUT includes the correct answer along with additional unrelated or incorrect alternatives → FALSE.\n" +
           "6. Uncertain, hedged, or incomplete answers → FALSE.\n" +
-          "7. Treat numeric and textual forms as equivalent (e.g., \"100\" = \"one hundred\").\n" +
+          '7. Treat numeric and textual forms as equivalent (e.g., "100" = "one hundred").\n' +
           "8. Ignore whitespace, articles, and small typos that don't change meaning.\n" +
           "\n" +
           "## Output Format\n" +
@@ -503,8 +503,7 @@ export const LLM_PROMPT_TRACE_TEMPLATES: LLMPromptTemplate[] = [
     schema: [
       {
         name: "Meaning Match",
-        description:
-          "Whether the output semantically matches the ground truth",
+        description: "Whether the output semantically matches the ground truth",
         type: LLM_SCHEMA_TYPE.BOOLEAN,
         unsaved: false,
       },
