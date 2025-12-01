@@ -234,8 +234,7 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
                 <if(experiment_ids)>
                 AND id IN :experiment_ids
                 <endif>
-                -- TODO: Add full primary key for better performance (workspace_id, id, last_updated_at, ...)
-                ORDER BY id DESC, last_updated_at DESC
+                ORDER BY (workspace_id, dataset_id, id) DESC, last_updated_at DESC
                 LIMIT 1 BY id
             ) AS e
             ARRAY JOIN JSONExtractArrayRaw(e.experiment_scores) AS score

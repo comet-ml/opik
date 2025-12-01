@@ -206,7 +206,9 @@ class FeedbackScoreServiceImpl implements FeedbackScoreService {
         }
 
         return dao.getTraceFeedbackScoreNames(projectId)
-                .map(names -> names.stream().map(FeedbackScoreNames.ScoreName::new).toList())
+                .map(names -> names.stream()
+                        .map(name -> FeedbackScoreNames.ScoreName.builder().name(name).build())
+                        .toList())
                 .map(FeedbackScoreNames::new);
     }
 
@@ -215,7 +217,9 @@ class FeedbackScoreServiceImpl implements FeedbackScoreService {
         // Will throw an error in case we try to get private project with public visibility
         projectService.get(projectId);
         return dao.getSpanFeedbackScoreNames(projectId, type)
-                .map(names -> names.stream().map(FeedbackScoreNames.ScoreName::new).toList())
+                .map(names -> names.stream()
+                        .map(name -> FeedbackScoreNames.ScoreName.builder().name(name).build())
+                        .toList())
                 .map(FeedbackScoreNames::new);
     }
 
@@ -234,7 +238,9 @@ class FeedbackScoreServiceImpl implements FeedbackScoreService {
     @Override
     public Mono<FeedbackScoreNames> getProjectsFeedbackScoreNames(Set<UUID> projectIds) {
         return dao.getProjectsFeedbackScoreNames(projectIds)
-                .map(names -> names.stream().map(FeedbackScoreNames.ScoreName::new).toList())
+                .map(names -> names.stream()
+                        .map(name -> FeedbackScoreNames.ScoreName.builder().name(name).build())
+                        .toList())
                 .map(FeedbackScoreNames::new);
     }
 
@@ -273,7 +279,9 @@ class FeedbackScoreServiceImpl implements FeedbackScoreService {
     @Override
     public Mono<FeedbackScoreNames> getTraceThreadsFeedbackScoreNames(UUID projectId) {
         return dao.getProjectsTraceThreadsFeedbackScoreNames(projectId == null ? List.of() : List.of(projectId))
-                .map(names -> names.stream().map(FeedbackScoreNames.ScoreName::new).toList())
+                .map(names -> names.stream()
+                        .map(name -> FeedbackScoreNames.ScoreName.builder().name(name).build())
+                        .toList())
                 .map(FeedbackScoreNames::new);
     }
 
