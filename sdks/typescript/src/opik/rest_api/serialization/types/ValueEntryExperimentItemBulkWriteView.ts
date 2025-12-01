@@ -16,6 +16,8 @@ export const ValueEntryExperimentItemBulkWriteView: core.serialization.ObjectSch
     categoryName: core.serialization.property("category_name", core.serialization.string().optional()),
     source: ValueEntryExperimentItemBulkWriteViewSource.optional(),
     lastUpdatedAt: core.serialization.property("last_updated_at", core.serialization.date().optional()),
+    spanType: core.serialization.property("span_type", core.serialization.string().optional()),
+    spanId: core.serialization.property("span_id", core.serialization.string().optional()),
 });
 
 export declare namespace ValueEntryExperimentItemBulkWriteView {
@@ -25,5 +27,7 @@ export declare namespace ValueEntryExperimentItemBulkWriteView {
         category_name?: string | null;
         source?: ValueEntryExperimentItemBulkWriteViewSource.Raw | null;
         last_updated_at?: string | null;
+        span_type?: string | null;
+        span_id?: string | null;
     }
 }

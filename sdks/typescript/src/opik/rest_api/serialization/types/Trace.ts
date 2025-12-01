@@ -30,6 +30,10 @@ export const Trace: core.serialization.ObjectSchema<serializers.Trace.Raw, OpikA
     createdBy: core.serialization.property("created_by", core.serialization.string().optional()),
     lastUpdatedBy: core.serialization.property("last_updated_by", core.serialization.string().optional()),
     feedbackScores: core.serialization.property("feedback_scores", core.serialization.list(FeedbackScore).optional()),
+    spanFeedbackScores: core.serialization.property(
+        "span_feedback_scores",
+        core.serialization.list(FeedbackScore).optional(),
+    ),
     comments: core.serialization.list(Comment).optional(),
     guardrailsValidations: core.serialization.property(
         "guardrails_validations",
@@ -64,6 +68,7 @@ export declare namespace Trace {
         created_by?: string | null;
         last_updated_by?: string | null;
         feedback_scores?: FeedbackScore.Raw[] | null;
+        span_feedback_scores?: FeedbackScore.Raw[] | null;
         comments?: Comment.Raw[] | null;
         guardrails_validations?: GuardrailsValidation.Raw[] | null;
         total_estimated_cost?: number | null;

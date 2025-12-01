@@ -10,6 +10,10 @@ from .value_entry_public import ValueEntryPublic
 
 
 class FeedbackScorePublic(UniversalBaseModel):
+    """
+    Aggregated feedback scores from all spans in this trace, averaged by score name
+    """
+
     name: str
     category_name: typing.Optional[str] = None
     value: float

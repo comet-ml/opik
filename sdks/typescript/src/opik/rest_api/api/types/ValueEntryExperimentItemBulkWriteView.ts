@@ -10,4 +10,6 @@ export interface ValueEntryExperimentItemBulkWriteView {
     categoryName?: string;
     source?: OpikApi.ValueEntryExperimentItemBulkWriteViewSource;
     lastUpdatedAt?: Date;
+    spanType?: string;
+    spanId?: string;
 }

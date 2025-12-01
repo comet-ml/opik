@@ -33,6 +33,10 @@ export const TracePublic: core.serialization.ObjectSchema<serializers.TracePubli
             "feedback_scores",
             core.serialization.list(FeedbackScorePublic).optional(),
         ),
+        spanFeedbackScores: core.serialization.property(
+            "span_feedback_scores",
+            core.serialization.list(FeedbackScorePublic).optional(),
+        ),
         comments: core.serialization.list(CommentPublic).optional(),
         guardrailsValidations: core.serialization.property(
             "guardrails_validations",
@@ -66,6 +70,7 @@ export declare namespace TracePublic {
         created_by?: string | null;
         last_updated_by?: string | null;
         feedback_scores?: FeedbackScorePublic.Raw[] | null;
+        span_feedback_scores?: FeedbackScorePublic.Raw[] | null;
         comments?: CommentPublic.Raw[] | null;
         guardrails_validations?: GuardrailsValidationPublic.Raw[] | null;
         total_estimated_cost?: number | null;

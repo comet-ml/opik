@@ -35,6 +35,11 @@ class Trace(UniversalBaseModel):
     created_by: typing.Optional[str] = None
     last_updated_by: typing.Optional[str] = None
     feedback_scores: typing.Optional[typing.List[FeedbackScore]] = None
+    span_feedback_scores: typing.Optional[typing.List[FeedbackScore]] = pydantic.Field(default=None)
+    """
+    Aggregated feedback scores from all spans in this trace, averaged by score name
+    """
+
     comments: typing.Optional[typing.List[Comment]] = None
     guardrails_validations: typing.Optional[typing.List[GuardrailsValidation]] = None
     total_estimated_cost: typing.Optional[float] = None
