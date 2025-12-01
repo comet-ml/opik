@@ -30,6 +30,8 @@ export interface ProfileImages {
   large: string;
 }
 
+export const ORGANIZATION_PLAN_ENTERPRISE = "enterprise_organization";
+
 export enum ORGANIZATION_ROLE_TYPE {
   admin = "ADMIN",
   member = "MEMBER",
