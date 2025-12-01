@@ -3,9 +3,9 @@ from __future__ import annotations
 import asyncio
 from typing import Any
 
-from opik import track
+from opik import track  # noqa: E402
 from opik_optimizer import ChatPrompt, OptimizableAgent
-from opik_optimizer.utils import search_wikipedia
+from opik_optimizer.utils.tools.wikipedia import search_wikipedia
 from opik_optimizer.utils.llm_logger import LLMLogger
 from agent_framework.openai import OpenAIChatClient
 
@@ -20,7 +20,7 @@ logger.info("[bold green]═══ Microsoft Agent Framework loaded ═══[/b
 def search_wikipedia_tracked(query: str) -> list[str]:
     """Search Wikipedia for information about a topic."""
     with logger.log_tool("search_wikipedia", query):
-        return search_wikipedia(query, use_api=True)
+        return search_wikipedia(query, search_type="api")
 
 
 class MicrosoftAgentFrameworkAgent(OptimizableAgent):

@@ -94,14 +94,14 @@ def ensured_hf_cache(
 @pytest.mark.parametrize("spec", CURATED_SPECS, ids=lambda spec: spec.name)
 def test_hf_sources_resolve_one_record(
     spec: DatasetSpec, ensured_hf_cache: Path
-) -> None:  # noqa: ARG001
+) -> None:
     """
     Ensure each curated dataset can fetch at least one record directly from Hugging Face.
 
     We bypass the Opik client entirely so this test exercises the HF integration only,
     preventing accidental dataset creation in shared environments.
     """
-    # Fixture used for side effects (env + cache); keep lint happy
+    # Ensure fixture side-effect (cache path exists) is exercised to avoid unused warning
     assert ensured_hf_cache.exists()
 
     handle = DatasetHandle(spec)

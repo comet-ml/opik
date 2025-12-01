@@ -31,10 +31,10 @@ def calculate_improvement(current_score: float, previous_score: float) -> float:
 
 def create_round_data(
     round_num: int,
-    current_best_prompt: chat_prompt.ChatPrompt,
+    current_best_prompt: Any,
     current_best_score: float,
-    best_prompt_overall: chat_prompt.ChatPrompt,
-    evaluated_candidates: list[tuple[chat_prompt.ChatPrompt, float]],
+    best_prompt_overall: Any,
+    evaluated_candidates: list[tuple[Any, float]],
     previous_best_score: float,
     improvement_this_round: float,
 ) -> OptimizationRound:
@@ -53,6 +53,18 @@ def create_round_data(
     Returns:
         OptimizationRound object
     """
+    # For bundle prompts (dict), keep a representative prompt for logging/validation.
+    current_prompt_repr = (
+        next(iter(current_best_prompt.values()))
+        if isinstance(current_best_prompt, dict) and current_best_prompt
+        else current_best_prompt
+    )
+    best_prompt_repr = (
+        next(iter(best_prompt_overall.values()))
+        if isinstance(best_prompt_overall, dict) and best_prompt_overall
+        else best_prompt_overall
+    )
+
     generated_prompts_log: list[dict[str, Any]] = []
     for prompt, score in evaluated_candidates:
         improvement_vs_prev = calculate_improvement(score, previous_best_score)
@@ -60,9 +72,14 @@ def create_round_data(
         if getattr(prompt, "tools", None):
             tool_entries = copy.deepcopy(list(prompt.tools or []))
 
+        if isinstance(prompt, dict):
+            prompt_payload: Any = {name: p.get_messages() for name, p in prompt.items()}
+        else:
+            prompt_payload = prompt.get_messages()
+
         generated_prompts_log.append(
             {
-                "prompt": prompt.get_messages(),
+                "prompt": prompt_payload,
                 "tools": tool_entries,
                 "score": score,
                 "improvement": improvement_vs_prev,
@@ -71,10 +88,10 @@ def create_round_data(
 
     return OptimizationRound(
         round_number=round_num + 1,
-        current_prompt=current_best_prompt,
+        current_prompt=current_prompt_repr,
         current_score=current_best_score,
         generated_prompts=generated_prompts_log,
-        best_prompt=best_prompt_overall,
+        best_prompt=best_prompt_repr,
         best_score=current_best_score,
         improvement=improvement_this_round,
     )
@@ -96,6 +113,8 @@ def create_result(
     model: str,
     model_parameters: dict[str, Any],
     extract_tool_prompts_fn: Callable,
+    final_bundle_prompts: dict[str, list[dict[str, Any]]] | None = None,
+    best_bundle_prompts_obj: dict[str, chat_prompt.ChatPrompt] | None = None,
 ) -> OptimizationResult:
     """
     Create the final OptimizationResult object.
@@ -132,6 +151,9 @@ def create_result(
 
     if best_tools:
         details["final_tools"] = best_tools
+    if final_bundle_prompts:
+        details["final_bundle_prompts"] = final_bundle_prompts
+        details["best_prompts"] = best_bundle_prompts_obj or final_bundle_prompts
 
     tool_prompts = extract_tool_prompts_fn(best_tools)
 
