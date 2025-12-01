@@ -36,7 +36,7 @@ const TYPE_OPTIONS = [
     value: FEEDBACK_DEFINITION_TYPE.categorical,
     label: "Categorical",
     description:
-      'Use labels (e.g. "Good", "Bad") to classify outputs qualitatively.',
+      'Use labels (e.g. "Helpful", "Neutral", "Unhelpful") to classify outputs.',
   },
   {
     value: FEEDBACK_DEFINITION_TYPE.numerical,
