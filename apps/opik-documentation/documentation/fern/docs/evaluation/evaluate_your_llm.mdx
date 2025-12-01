@@ -581,7 +581,7 @@ evaluation = evaluate(
     dataset=dataset,
     task=evaluation_task,
     scoring_metrics=[Hallucination()],
-    experiment_scores=[compute_hallucination_max],
+    experiment_scoring_functions=[compute_hallucination_max],
     experiment_name="My experiment"
 )
 
@@ -638,7 +638,7 @@ evaluation = evaluate(
     dataset=dataset,
     task=evaluation_task,
     scoring_metrics=[Equals()],
-    experiment_scores=[compute_accuracy_stats],
+    experiment_scoring_functions=[compute_accuracy_stats],
     experiment_name="My experiment"
 )
 ```
