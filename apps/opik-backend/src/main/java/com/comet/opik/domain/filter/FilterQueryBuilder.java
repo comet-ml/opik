@@ -101,6 +101,17 @@ public class FilterQueryBuilder {
     private static final String SAMPLING_RATE_DB = "sampling_rate";
     private static final String TYPE_DB = "type";
 
+    /**
+     * Set of all feedback score fields across different entity types (Trace, Span, TraceThread, etc.).
+     * Used to identify feedback score filters that require special handling in query building.
+     */
+    private static final Set<Field> FEEDBACK_SCORE_FIELDS = Set.of(
+            TraceField.FEEDBACK_SCORES,
+            TraceField.SPAN_FEEDBACK_SCORES,
+            SpanField.FEEDBACK_SCORES,
+            TraceThreadField.FEEDBACK_SCORES,
+            ExperimentsComparisonValidKnownField.FEEDBACK_SCORES);
+
     // Table alias prefixes for AutomationRuleEvaluator queries
     private static final String AUTOMATION_RULE_TABLE_ALIAS = "rule.%s";
     private static final String AUTOMATION_EVALUATOR_TABLE_ALIAS = "evaluator.%s";
@@ -627,10 +638,7 @@ public class FilterQueryBuilder {
     }
 
     private static boolean isFeedbackScore(Filter filter) {
-        Set<Field> feedbackScoreFields = Set.of(TraceField.FEEDBACK_SCORES, TraceField.SPAN_FEEDBACK_SCORES,
-                SpanField.FEEDBACK_SCORES, TraceThreadField.FEEDBACK_SCORES,
-                ExperimentsComparisonValidKnownField.FEEDBACK_SCORES);
-        return feedbackScoreFields.contains(filter.field());
+        return FEEDBACK_SCORE_FIELDS.contains(filter.field());
     }
 
     private String toAnalyticsDbFilter(Filter filter, int i, FilterStrategy filterStrategy) {

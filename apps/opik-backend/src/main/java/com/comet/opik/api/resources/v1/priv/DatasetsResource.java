@@ -139,7 +139,7 @@ public class DatasetsResource {
             @QueryParam("with_experiments_only") boolean withExperimentsOnly,
             @QueryParam("with_optimizations_only") boolean withOptimizationsOnly,
             @QueryParam("prompt_id") UUID promptId,
-            @QueryParam("name") String name,
+            @QueryParam("name") @Schema(description = "Filter datasets by name (partial match, case insensitive)") String name,
             @QueryParam("sorting") String sorting,
             @QueryParam("filters") String filters) {
 
@@ -367,10 +367,16 @@ public class DatasetsResource {
             @PathParam("id") UUID id,
             @QueryParam("page") @Min(1) @DefaultValue("1") int page,
             @QueryParam("size") @Min(1) @DefaultValue("10") int size,
+            @QueryParam("version") @Schema(description = "Version hash or tag to fetch specific dataset version") String version,
             @QueryParam("filters") String filters,
             @QueryParam("truncate") @Schema(description = "Truncate image included in either input, output or metadata") boolean truncate) {
 
         var queryFilters = filtersFactory.newFilters(filters, DatasetItemFilter.LIST_TYPE_REFERENCE);
+        String workspaceId = requestContext.get().getWorkspaceId();
+
+        log.info(
+                "Finding dataset items by id '{}', version '{}', page '{}', size '{}', filters '{}' on workspace_id '{}'",
+                id, version, page, size, filters, workspaceId);
 
         var datasetItemSearchCriteria = DatasetItemSearchCriteria.builder()
                 .datasetId(id)
@@ -378,15 +384,13 @@ public class DatasetsResource {
                 .filters(queryFilters)
                 .entityType(EntityType.TRACE)
                 .truncate(truncate)
+                .versionHashOrTag(version)
                 .build();
 
-        String workspaceId = requestContext.get().getWorkspaceId();
-        log.info("Finding dataset items by id '{}', page '{}', size '{}', filters '{}' on workspace_id '{}'", id, page,
-                size, filters, workspaceId);
-
-        DatasetItem.DatasetItemPage datasetItemPage = itemService.getItems(page, size, datasetItemSearchCriteria)
+        var datasetItemPage = itemService.getItems(page, size, datasetItemSearchCriteria)
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
+
         log.info("Found dataset items by id '{}', count '{}', page '{}', size '{}' on workspace_id '{}'", id,
                 datasetItemPage.content().size(), page, size, workspaceId);
 
@@ -599,6 +603,7 @@ public class DatasetsResource {
                 .search(search)
                 .entityType(EntityType.TRACE)
                 .truncate(truncate)
+                .versionHashOrTag(null) // Get draft items
                 .build();
 
         String workspaceId = requestContext.get().getWorkspaceId();

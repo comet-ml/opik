@@ -98,7 +98,7 @@ public class PromptResource {
     public Response getPrompts(
             @QueryParam("page") @Min(1) @DefaultValue("1") int page,
             @QueryParam("size") @Min(1) @DefaultValue("10") int size,
-            @QueryParam("name") String name,
+            @QueryParam("name") @Schema(description = "Filter prompts by name (partial match, case insensitive)") String name,
             @QueryParam("sorting") String sorting,
             @QueryParam("filters") String filters) {
 
