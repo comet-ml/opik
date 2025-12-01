@@ -35,6 +35,7 @@ export const DEFAULT_HIERARCHICAL_REFLECTIVE_OPTIMIZER_CONFIGS = {
 
 export const DEFAULT_EQUALS_METRIC_CONFIGS = {
   CASE_SENSITIVE: false,
+  REFERENCE_KEY: ""
 };
 
 export const DEFAULT_JSON_SCHEMA_VALIDATOR_METRIC_CONFIGS = {
@@ -44,6 +45,11 @@ export const DEFAULT_JSON_SCHEMA_VALIDATOR_METRIC_CONFIGS = {
 export const DEFAULT_G_EVAL_METRIC_CONFIGS = {
   TASK_INTRODUCTION: "",
   EVALUATION_CRITERIA: "",
+};
+
+export const DEFAULT_LEVENSHTEIN_METRIC_CONFIGS = {
+  CASE_SENSITIVE: false,
+  REFERENCE_KEY: ""
 };
 
 export type OptimizationTemplate = Partial<Optimization> & {
@@ -63,7 +69,7 @@ export const DEMO_TEMPLATES: OptimizationTemplate[] = [
       prompt: {
         messages: [
           { role: LLM_MESSAGE_ROLE.system, content: "You are helpful." },
-          { role: LLM_MESSAGE_ROLE.user, content: "Q: {question}" },
+          { role: LLM_MESSAGE_ROLE.user, content: "Q: {{question}}" },
         ],
       },
       llm_model: {
@@ -105,7 +111,7 @@ export const DEMO_TEMPLATES: OptimizationTemplate[] = [
       prompt: {
         messages: [
           { role: LLM_MESSAGE_ROLE.system, content: "You are helpful." },
-          { role: LLM_MESSAGE_ROLE.user, content: "Q: {question}" },
+          { role: LLM_MESSAGE_ROLE.user, content: "Q: {{question}}" },
         ],
       },
       llm_model: {
@@ -133,4 +139,61 @@ export const DEMO_TEMPLATES: OptimizationTemplate[] = [
       },
     },
   },
+  // {
+  //   id: "evolutionary-levenshtein",
+  //   title: "Evolutionary + Levenshtein",
+  //   description: "Genetic algorithm optimization with fuzzy text matching",
+  //   dataset_id: "",
+  //   studio_config: {
+  //     dataset_name: "",
+  //     prompt: {
+  //       messages: [
+  //         { role: LLM_MESSAGE_ROLE.system, content: "You are helpful." },
+  //         { role: LLM_MESSAGE_ROLE.user, content: "Q: {{question}}" },
+  //       ],
+  //     },
+  //     llm_model: {
+  //       provider: "openai",
+  //       name: "openai/gpt-4o-mini",
+  //       parameters: { temperature: 0.7 },
+  //     },
+  //     evaluation: {
+  //       metrics: [
+  //         {
+  //           type: METRIC_TYPE.LAVENSHTEIN,
+  //           parameters: {
+  //             case_sensitive: DEFAULT_LEVENSHTEIN_METRIC_CONFIGS.CASE_SENSITIVE,
+  //             reference_key: DEFAULT_LEVENSHTEIN_METRIC_CONFIGS.REFERENCE_KEY,
+  //           },
+  //         },
+  //       ],
+  //     },
+  //     optimizer: {
+  //       type: OPTIMIZER_TYPE.EVOLUTIONARY,
+  //       parameters: {
+  //         population_size:
+  //           DEFAULT_EVOLUTIONARY_OPTIMIZER_CONFIGS.POPULATION_SIZE,
+  //         num_generations:
+  //           DEFAULT_EVOLUTIONARY_OPTIMIZER_CONFIGS.NUM_GENERATIONS,
+  //         mutation_rate: DEFAULT_EVOLUTIONARY_OPTIMIZER_CONFIGS.MUTATION_RATE,
+  //         crossover_rate: DEFAULT_EVOLUTIONARY_OPTIMIZER_CONFIGS.CROSSOVER_RATE,
+  //         tournament_size:
+  //           DEFAULT_EVOLUTIONARY_OPTIMIZER_CONFIGS.TOURNAMENT_SIZE,
+  //         elitism_size: DEFAULT_EVOLUTIONARY_OPTIMIZER_CONFIGS.ELITISM_SIZE,
+  //         adaptive_mutation:
+  //           DEFAULT_EVOLUTIONARY_OPTIMIZER_CONFIGS.ADAPTIVE_MUTATION,
+  //         enable_moo: DEFAULT_EVOLUTIONARY_OPTIMIZER_CONFIGS.ENABLE_MOO,
+  //         enable_llm_crossover:
+  //           DEFAULT_EVOLUTIONARY_OPTIMIZER_CONFIGS.ENABLE_LLM_CROSSOVER,
+  //         output_style_guidance:
+  //           DEFAULT_EVOLUTIONARY_OPTIMIZER_CONFIGS.OUTPUT_STYLE_GUIDANCE,
+  //         infer_output_style:
+  //           DEFAULT_EVOLUTIONARY_OPTIMIZER_CONFIGS.INFER_OUTPUT_STYLE,
+  //         n_threads: DEFAULT_EVOLUTIONARY_OPTIMIZER_CONFIGS.N_THREADS,
+  //         verbose: DEFAULT_EVOLUTIONARY_OPTIMIZER_CONFIGS.VERBOSE,
+  //         seed: DEFAULT_EVOLUTIONARY_OPTIMIZER_CONFIGS.SEED,
+  //       },
+  //     },
+  //   },
+  // },
 ];

@@ -1,12 +1,10 @@
 import React, { useCallback, useEffect, useMemo, useRef } from "react";
-import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { Link, useNavigate } from "@tanstack/react-router";
+import { useFormContext } from "react-hook-form";
+import { Link } from "@tanstack/react-router";
 import { SquareArrowOutUpRight } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
-  Form,
   FormControl,
   FormField,
   FormItem,
@@ -16,17 +14,14 @@ import {
 import SelectBox from "@/components/shared/SelectBox/SelectBox";
 import useAppStore from "@/store/AppStore";
 import { useOptimizationStudioContext } from "../OptimizationStudioContext";
-import LLMDatasetSelectBox from "@/components/pages-shared/llm/LLMDatasetSelectBox/LLMDatasetSelectBox";
+import DatasetSelectBox from "@/components/pages-shared/llm/DatasetSelectBox/DatasetSelectBox";
 import PromptModelSelect from "@/components/pages-shared/llm/PromptModelSelect/PromptModelSelect";
 import PromptModelConfigs from "@/components/pages-shared/llm/PromptModelSettings/PromptModelConfigs";
 import LLMPromptMessages from "@/components/pages-shared/llm/LLMPromptMessages/LLMPromptMessages";
 import AlgorithmConfigs from "@/components/pages-shared/optimizations/AlgorithmSettings/AlgorithmConfigs";
 import MetricConfigs from "@/components/pages-shared/optimizations/MetricSettings/MetricConfigs";
 import {
-  OptimizationConfigSchema,
   OptimizationConfigFormType,
-  convertOptimizationToFormData,
-  convertFormDataToStudioConfig,
 } from "./schema";
 import {
   OPTIMIZER_TYPE,
@@ -40,7 +35,6 @@ import {
   COMPOSED_PROVIDER_TYPE,
   LLMPromptConfigsType,
 } from "@/types/providers";
-import { parseComposedProviderType } from "@/lib/provider";
 import { LLM_MESSAGE_ROLE, LLMMessage } from "@/types/llm";
 import { LLM_MESSAGE_ROLE_NAME_MAP } from "@/constants/llm";
 import { generateDefaultLLMPromptMessage } from "@/lib/llm";
@@ -48,7 +42,6 @@ import {
   getDefaultOptimizerConfig,
   getDefaultMetricConfig,
 } from "@/lib/optimizations";
-import useOptimizationCreateMutation from "@/api/optimizations/useOptimizationCreateMutation";
 import useDatasetsList from "@/api/datasets/useDatasetsList";
 
 const MESSAGE_TYPE_OPTIONS = [
@@ -68,9 +61,8 @@ const MESSAGE_TYPE_OPTIONS = [
 
 const ConfigureOptimizationSection: React.FC = () => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
-  const navigate = useNavigate();
-  const { activeOptimization, templateData } = useOptimizationStudioContext();
-  const createOptimizationMutation = useOptimizationCreateMutation();
+  const { activeOptimization } = useOptimizationStudioContext();
+  const form = useFormContext<OptimizationConfigFormType>();
 
   const disableForm =
     activeOptimization?.status === OPTIMIZATION_STATUS.RUNNING;
@@ -79,7 +71,7 @@ const ConfigureOptimizationSection: React.FC = () => {
     Record<OPTIMIZER_TYPE, Partial<OptimizerParameters>>
   >({
     [OPTIMIZER_TYPE.GEPA]: {},
-    [OPTIMIZER_TYPE.EVOLUTIONARY]: {},
+    [OPTIMIZER_TYPE.EVOLUTIONARY]: {}, // Commented out from UI options below
     [OPTIMIZER_TYPE.HIERARCHICAL_REFLECTIVE]: {},
   });
 
@@ -89,26 +81,10 @@ const ConfigureOptimizationSection: React.FC = () => {
     [METRIC_TYPE.EQUALS]: {},
     [METRIC_TYPE.JSON_SCHEMA_VALIDATOR]: {},
     [METRIC_TYPE.G_EVAL]: {},
+    [METRIC_TYPE.LAVENSHTEIN]: {},
   });
 
-  const defaultValues: OptimizationConfigFormType = useMemo(() => {
-    return convertOptimizationToFormData(
-      activeOptimization || templateData || null,
-    );
-  }, [activeOptimization, templateData]);
-
-  const form = useForm<OptimizationConfigFormType>({
-    resolver: zodResolver(OptimizationConfigSchema),
-    defaultValues,
-  });
-
-  useEffect(() => {
-    form.reset(
-      convertOptimizationToFormData(activeOptimization || templateData || null),
-    );
-  }, [activeOptimization, templateData, form]);
-
-  const datasetId = form.watch("datasetId");
+  const datasetName = form.watch("datasetName");
   const optimizerType = form.watch("optimizerType");
   const metricType = form.watch("metricType");
   const model = form.watch("modelName") as PROVIDER_MODEL_TYPE | "";
@@ -116,8 +92,6 @@ const ConfigureOptimizationSection: React.FC = () => {
 
   const {
     data: datasetsData,
-    isLoading: isLoadingDatasets,
-    isFetching: isFetchingDatasets,
   } = useDatasetsList({
     workspaceName,
     page: 1,
@@ -128,24 +102,21 @@ const ConfigureOptimizationSection: React.FC = () => {
     () => datasetsData?.content || [],
     [datasetsData?.content],
   );
-  const datasetName = datasets?.find((ds) => ds.id === datasetId)?.name || null;
 
-  useEffect(() => {
-    if (datasetId && !isLoadingDatasets && !isFetchingDatasets) {
-      const datasetExists = datasets.some((ds) => ds.id === datasetId);
-      if (!datasetExists) {
-        form.setValue("datasetId", "");
-      }
-    }
-  }, [datasetId, datasets, isLoadingDatasets, isFetchingDatasets, form]);
+  const selectedDataset = useMemo(
+    () => datasets.find((ds) => ds.name === datasetName),
+    [datasets, datasetName],
+  );
 
   const calculateModelProvider = useCallback(
     (modelValue: PROVIDER_MODEL_TYPE | ""): COMPOSED_PROVIDER_TYPE | "" => {
       if (!modelValue) {
         return "";
       }
-      const result = parseComposedProviderType(modelValue);
-      return result[0];
+      // ALEX
+      const result = "openai";
+
+      return result;
     },
     [],
   );
@@ -231,40 +202,9 @@ const ConfigureOptimizationSection: React.FC = () => {
     }
   }, [model, config, form]);
 
-  const onSubmit = useCallback(
-    async (data: OptimizationConfigFormType) => {
-      if (!datasetName) {
-        console.error("Dataset name not available when submitting form");
-        return;
-      }
-
-      const studioConfig = convertFormDataToStudioConfig(data, datasetName);
-
-      const optimizationPayload = {
-        dataset_name: datasetName,
-        objective_name: "Accuracy",
-        status: OPTIMIZATION_STATUS.RUNNING,
-        studio_config: studioConfig,
-      };
-
-      const result = await createOptimizationMutation.mutateAsync({
-        optimization: optimizationPayload,
-      });
-
-      if (result?.id) {
-        navigate({
-          to: "/$workspaceName/optimization-studio/run",
-          params: { workspaceName },
-          search: { optimizationId: result.id },
-        });
-      }
-    },
-    [datasetName, createOptimizationMutation, navigate, workspaceName],
-  );
-
   const optimizerOptions = [
     { value: OPTIMIZER_TYPE.GEPA, label: "GEPA" },
-    { value: OPTIMIZER_TYPE.EVOLUTIONARY, label: "Evolutionary" },
+    // { value: OPTIMIZER_TYPE.EVOLUTIONARY, label: "Evolutionary" },
     {
       value: OPTIMIZER_TYPE.HIERARCHICAL_REFLECTIVE,
       label: "Hierarchical Reflective",
@@ -278,11 +218,11 @@ const ConfigureOptimizationSection: React.FC = () => {
       label: "JSON Schema Validator",
     },
     { value: METRIC_TYPE.G_EVAL, label: "Custom (G-Eval)" },
+    { value: METRIC_TYPE.LAVENSHTEIN, label: "Levenshtein" },
   ];
 
   return (
-    <Form {...form}>
-      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+      <form className="space-y-4">
         <Card>
           <CardHeader className="space-y-0.5 px-4 pt-3">
             <CardTitle className="comet-body-s-accented">
@@ -292,17 +232,17 @@ const ConfigureOptimizationSection: React.FC = () => {
           <CardContent className="space-y-4 p-6">
             <FormField
               control={form.control}
-              name="datasetId"
+              name="datasetName"
               render={({ field }) => (
                 <FormItem>
                   <div className="mb-2 flex items-center justify-between">
                     <FormLabel className="comet-body-s">Dataset</FormLabel>
-                    {datasetId && (
+                    {selectedDataset && (
                       <Link
                         to="/$workspaceName/datasets/$datasetId/items"
                         params={{
                           workspaceName,
-                          datasetId,
+                          datasetId: selectedDataset.id,
                         }}
                         target="_blank"
                       >
@@ -313,16 +253,21 @@ const ConfigureOptimizationSection: React.FC = () => {
                           className="h-auto p-0 text-xs"
                         >
                           <SquareArrowOutUpRight className="mr-1 size-3" />
-                          View DS
+                          Open dataset
                         </Button>
                       </Link>
                     )}
                   </div>
                   <FormControl>
-                    <LLMDatasetSelectBox
-                      value={field.value || null}
-                      onChange={(value) => field.onChange(value || "")}
+                    <DatasetSelectBox
+                      value={selectedDataset?.id || null}
+                      onChange={(id) => {
+                        const dataset = datasets.find((ds) => ds.id === id);
+                        field.onChange(dataset?.name || "");
+                      }}
+                      workspaceName={workspaceName}
                       disabled={disableForm}
+                      showClearButton={false}
                       buttonClassName="h-8 w-full"
                     />
                   </FormControl>
@@ -423,6 +368,8 @@ const ConfigureOptimizationSection: React.FC = () => {
                           if (m) {
                             field.onChange(m);
                             const providerType = calculateModelProvider(m);
+                            console.log(m, providerType, "m, providerType");
+
                             form.setValue("modelProvider", providerType);
                           }
                         }}
@@ -431,7 +378,7 @@ const ConfigureOptimizationSection: React.FC = () => {
                         workspaceName={workspaceName}
                         onAddProvider={handleAddProvider}
                         onDeleteProvider={handleDeleteProvider}
-                        disabled={disableForm}
+                        disabled={true}
                       />
 
                       <FormField
@@ -456,7 +403,11 @@ const ConfigureOptimizationSection: React.FC = () => {
                 </FormItem>
               )}
             />
+          </CardContent>
+        </Card>
 
+        <Card>
+          <CardContent className="space-y-4 p-6">
             <FormField
               control={form.control}
               name="messages"
@@ -470,7 +421,7 @@ const ConfigureOptimizationSection: React.FC = () => {
                       messages={messages}
                       possibleTypes={MESSAGE_TYPE_OPTIONS}
                       hidePromptActions={true}
-                      disableImages={true}
+                      disableMedia
                       disabled={disableForm}
                       onChange={(messages: LLMMessage[]) => {
                         field.onChange(messages);
@@ -489,22 +440,9 @@ const ConfigureOptimizationSection: React.FC = () => {
                 );
               }}
             />
-
-            <div className="flex justify-end pt-2">
-              <Button
-                type="submit"
-                size="sm"
-                disabled={disableForm || createOptimizationMutation.isPending}
-              >
-                {createOptimizationMutation.isPending
-                  ? "Starting..."
-                  : "Run optimization"}
-              </Button>
-            </div>
           </CardContent>
         </Card>
       </form>
-    </Form>
   );
 };
 

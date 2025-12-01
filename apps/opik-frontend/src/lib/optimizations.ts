@@ -12,6 +12,7 @@ import {
   DEFAULT_EQUALS_METRIC_CONFIGS,
   DEFAULT_JSON_SCHEMA_VALIDATOR_METRIC_CONFIGS,
   DEFAULT_G_EVAL_METRIC_CONFIGS,
+  DEFAULT_LEVENSHTEIN_METRIC_CONFIGS,
 } from "@/constants/optimizations";
 import { COLUMN_TYPE } from "@/types/shared";
 import { Filters } from "@/types/filters";
@@ -84,6 +85,11 @@ export const getDefaultMetricConfig = (
       return {
         task_introduction: DEFAULT_G_EVAL_METRIC_CONFIGS.TASK_INTRODUCTION,
         evaluation_criteria: DEFAULT_G_EVAL_METRIC_CONFIGS.EVALUATION_CRITERIA,
+      };
+    case METRIC_TYPE.LAVENSHTEIN:
+      return {
+        case_sensitive: DEFAULT_LEVENSHTEIN_METRIC_CONFIGS.CASE_SENSITIVE,
+        reference_key: DEFAULT_LEVENSHTEIN_METRIC_CONFIGS.REFERENCE_KEY,
       };
     default:
       return {};

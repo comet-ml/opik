@@ -4,6 +4,8 @@ export enum OPTIMIZATION_STATUS {
   RUNNING = "running",
   COMPLETED = "completed",
   CANCELLED = "cancelled",
+  INITIALIZED = "initialized",
+  ERROR = "error",
 }
 
 export interface StudioMessage {
@@ -24,7 +26,8 @@ export interface StudioLlmModel {
 export enum METRIC_TYPE {
   EQUALS = "equals",
   JSON_SCHEMA_VALIDATOR = "json_schema_validator",
-  G_EVAL = "g_eval",
+  G_EVAL = "geval",
+  LAVENSHTEIN = "levenshtein_ratio",
 }
 
 export interface EqualsMetricParameters {
@@ -41,10 +44,16 @@ export interface GEvalMetricParameters {
   evaluation_criteria?: string;
 }
 
+export interface LevenshteinMetricParameters {
+  case_sensitive?: boolean;
+  reference_key?: string;
+}
+
 export type MetricParameters =
   | EqualsMetricParameters
   | JsonSchemaValidatorMetricParameters
-  | GEvalMetricParameters;
+  | GEvalMetricParameters
+  | LevenshteinMetricParameters;
 
 export interface StudioMetric {
   type: METRIC_TYPE;
@@ -128,4 +137,8 @@ export interface Optimization {
   created_by: string;
   last_updated_at: string;
   last_updated_by: string;
+}
+
+export interface OptimizationStudio extends Optimization {
+  studio_config: OptimizationStudioConfig;
 }

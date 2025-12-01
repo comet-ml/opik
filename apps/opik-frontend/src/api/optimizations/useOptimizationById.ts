@@ -8,15 +8,10 @@ import { Optimization } from "@/types/optimizations";
 
 export const getOptimizationById = async (
   { signal }: QueryFunctionContext,
-  { optimizationId, includeStudioConfig }: UseOptimizationByIdParams,
+  { optimizationId }: UseOptimizationByIdParams,
 ) => {
   const { data } = await api.get(OPTIMIZATIONS_REST_ENDPOINT + optimizationId, {
     signal,
-    params: {
-      ...(includeStudioConfig && {
-        include_studio_config: includeStudioConfig,
-      }),
-    },
   });
 
   return data;
@@ -24,7 +19,6 @@ export const getOptimizationById = async (
 
 type UseOptimizationByIdParams = {
   optimizationId: string;
-  includeStudioConfig?: boolean;
 };
 
 export default function useOptimizationById(

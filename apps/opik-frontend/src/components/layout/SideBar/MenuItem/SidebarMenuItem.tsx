@@ -127,7 +127,7 @@ const SidebarMenuItem: React.FunctionComponent<SidebarMenuItemProps> = ({
   );
 
   const linkClasses = cn(
-    "comet-body-s flex w-full items-center gap-2 rounded-md hover:bg-primary-foreground data-[status=active]:bg-primary-100 data-[status=active]:text-primary",
+    "comet-body-s relative flex w-full items-center gap-2 rounded-md hover:bg-primary-foreground data-[status=active]:bg-primary-100 data-[status=active]:text-primary",
     compact
       ? "h-8 text-muted-slate data-[status=active]:text-muted-slate data-[status=active]:bg-muted"
       : "h-9 text-foreground",

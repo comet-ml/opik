@@ -292,7 +292,7 @@ const optimizationStudioRoute = createRoute({
   getParentRoute: () => workspaceRoute,
   component: () => <Outlet />,
   staticData: {
-    title: "Optimization Studio",
+    title: "Optimization studio",
   },
 });
 
