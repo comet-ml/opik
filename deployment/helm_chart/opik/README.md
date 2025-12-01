@@ -292,10 +292,10 @@ Call opik api on http://localhost:5173/api
 | component.frontend.serviceAccount.name | string | `"opik-frontend"` |  |
 | component.frontend.throttling | object | `{}` |  |
 | component.frontend.upstreamConfig | object | `{}` |  |
-| component.frontend.volumeMounts[0].mountPath | string | `"/etc/nginx/conf.d/"` |  |
+| component.frontend.volumeMounts[0].mountPath | string | `"/etc/nginx/templates/"` |  |
 | component.frontend.volumeMounts[0].name | string | `"opik-frontend-nginx"` |  |
 | component.frontend.volumes[0].configMap.items[0].key | string | `"default.conf"` |  |
-| component.frontend.volumes[0].configMap.items[0].path | string | `"default.conf"` |  |
+| component.frontend.volumes[0].configMap.items[0].path | string | `"default.conf.template"` |  |
 | component.frontend.volumes[0].configMap.name | string | `"opik-frontend-nginx"` |  |
 | component.frontend.volumes[0].name | string | `"opik-frontend-nginx"` |  |
 | component.python-backend.autoscaling.enabled | bool | `false` |  |
