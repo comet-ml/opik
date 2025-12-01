@@ -87,7 +87,7 @@ public class OptimizationResourceClient {
             UUID datasetId, String name, Boolean datasetDeleted, int expectedStatus) {
         return find(apiKey, workspaceName, page, size, datasetId, name, datasetDeleted, null, expectedStatus);
     }
-    
+
     public Optimization.OptimizationPage find(String apiKey, String workspaceName, int page, int size,
             UUID datasetId, String name, Boolean datasetDeleted, List<? extends Filter> filters, int expectedStatus) {
         WebTarget webTarget = client.target(RESOURCE_PATH.formatted(baseURI))
