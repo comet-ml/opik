@@ -78,6 +78,8 @@ public interface DatasetItemDAO {
 
     Mono<ItemsHash> getDraftItemsHashAgg(UUID datasetId);
 
+    Mono<Long> countDraftItems(UUID datasetId);
+
     Mono<Long> restoreFromVersion(UUID datasetId, UUID versionId);
 }
 
@@ -883,9 +885,10 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
             SELECT
                 id,
                 data_hash
-            FROM dataset_items FINAL
+            FROM dataset_items
             WHERE dataset_id = :datasetId
             AND workspace_id = :workspace_id
+            ORDER BY (workspace_id, dataset_id, id) DESC, last_updated_at DESC
             LIMIT 1 BY id
             """;
 
@@ -899,6 +902,18 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                 WHERE dataset_id = :datasetId
                 AND workspace_id = :workspace_id
                 ORDER BY id
+                LIMIT 1 BY id
+            )
+            """;
+
+    private static final String COUNT_DRAFT_ITEMS = """
+            SELECT count() as count
+            FROM (
+                SELECT id
+                FROM dataset_items
+                WHERE dataset_id = :datasetId
+                AND workspace_id = :workspace_id
+                ORDER BY (workspace_id, dataset_id, id) DESC, last_updated_at DESC
                 LIMIT 1 BY id
             )
             """;
@@ -1723,6 +1738,25 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                     }))
                     .singleOrEmpty()
                     .defaultIfEmpty(new ItemsHash(0L, 0L));
+        });
+    }
+
+    @Override
+    @WithSpan
+    public Mono<Long> countDraftItems(@NonNull UUID datasetId) {
+        log.debug("Counting draft items for dataset: '{}'", datasetId);
+
+        Segment segment = startSegment(DATASET_ITEMS, CLICKHOUSE, "count_draft_items");
+
+        return asyncTemplate.nonTransaction(connection -> {
+            var statement = connection.createStatement(COUNT_DRAFT_ITEMS)
+                    .bind("datasetId", datasetId);
+
+            return makeFluxContextAware(bindWorkspaceIdToFlux(statement))
+                    .doFinally(signalType -> endSegment(segment))
+                    .flatMap(result -> result.map((row, metadata) -> row.get("count", Long.class)))
+                    .singleOrEmpty()
+                    .defaultIfEmpty(0L);
         });
     }
 

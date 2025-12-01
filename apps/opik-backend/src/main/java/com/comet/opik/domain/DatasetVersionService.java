@@ -184,11 +184,10 @@ class DatasetVersionServiceImpl implements DatasetVersionService {
         log.info("Generated version hash '{}' for dataset '{}'", versionHash, datasetId);
 
         // Count items first to determine how many UUIDs we need to generate
-        Long itemCount = datasetItemDAO.getDraftItemIdsAndHashes(datasetId)
+        Long itemCount = datasetItemDAO.countDraftItems(datasetId)
                 .contextWrite(ctx -> ctx
                         .put(RequestContext.USER_NAME, userName)
                         .put(RequestContext.WORKSPACE_ID, workspaceId))
-                .count()
                 .block();
         log.info("Dataset '{}' has '{}' items to snapshot", datasetId, itemCount);
 
