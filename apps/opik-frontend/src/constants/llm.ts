@@ -620,6 +620,75 @@ export const LLM_PROMPT_THREAD_TEMPLATES: LLMPromptTemplate[] = [
       },
     ],
   },
+  {
+    label: "Meaning Match",
+    description:
+      "Evaluates semantic equivalence between output and ground truth",
+    value: LLM_JUDGE.meaning_match,
+    messages: [
+      {
+        id: "kYZITG7",
+        role: LLM_MESSAGE_ROLE.user,
+        content:
+          "You are an expert semantic equivalence judge. Your task is to decide whether the OUTPUT conveys the same essential answer as the GROUND_TRUTH, regardless of phrasing or formatting.\n" +
+          "\n" +
+          "## What to judge\n" +
+          "- TRUE if the OUTPUT expresses the same core fact/entity/value as the GROUND_TRUTH.\n" +
+          "- FALSE if the OUTPUT contradicts, differs from, or fails to include the core fact/value in GROUND_TRUTH.\n" +
+          "\n" +
+          "## Rules\n" +
+          "1. Focus only on the factual equivalence of the core answer. Ignore style, grammar, or verbosity.\n" +
+          "2. Accept aliases, synonyms, paraphrases, or equivalent expressions.\n" +
+          "   Examples: \"NYC\" ≈ \"New York City\"; \"Da Vinci\" ≈ \"Leonardo da Vinci\".\n" +
+          "3. Ignore case, punctuation, and formatting differences.\n" +
+          "4. Extra contextual details are acceptable **only if they don't change or contradict** the main answer.\n" +
+          "5. If the OUTPUT includes the correct answer along with additional unrelated or incorrect alternatives → FALSE.\n" +
+          "6. Uncertain, hedged, or incomplete answers → FALSE.\n" +
+          "7. Treat numeric and textual forms as equivalent (e.g., \"100\" = \"one hundred\").\n" +
+          "8. Ignore whitespace, articles, and small typos that don't change meaning.\n" +
+          "\n" +
+          "## Output Format\n" +
+          "Your response **must** be a single JSON object in the following format:\n" +
+          "{\n" +
+          '  "score": true or false,\n' +
+          '  "reason": ["short reason for the response"]\n' +
+          "}\n" +
+          "\n" +
+          "## Example\n" +
+          'INPUT: "Who painted the Mona Lisa?"\n' +
+          'GROUND_TRUTH: "Leonardo da Vinci"\n' +
+          "\n" +
+          'OUTPUT: "It was painted by Leonardo da Vinci."\n' +
+          '→ {"score": true, "reason": ["Output conveys the same factual answer as the ground truth."]}\n' +
+          "\n" +
+          'OUTPUT: "Pablo Picasso"\n' +
+          '→ {"score": false, "reason": ["Output names a different painter than the ground truth."]}\n' +
+          "\n" +
+          "INPUT:\n" +
+          "{{input}}\n" +
+          "\n" +
+          "GROUND_TRUTH:\n" +
+          "{{ground_truth}}\n" +
+          "\n" +
+          "OUTPUT:\n" +
+          "{{output}}",
+      },
+    ],
+    variables: {
+      input: "",
+      ground_truth: "",
+      output: "",
+    },
+    schema: [
+      {
+        name: "Meaning Match",
+        description:
+          "Whether the output semantically matches the ground truth",
+        type: LLM_SCHEMA_TYPE.BOOLEAN,
+        unsaved: false,
+      },
+    ],
+  },
 ];
 
 export const LLM_PROMPT_TEMPLATES: Record<
