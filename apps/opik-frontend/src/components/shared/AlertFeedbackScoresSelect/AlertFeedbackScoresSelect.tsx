@@ -125,6 +125,8 @@ const AlertFeedbackScoresSelect: React.FC<AlertFeedbackScoresSelectProps> = ({
       optionsCount={DEFAULT_LOADED_FEEDBACK_DEFINITION_ITEMS}
       placeholder="Select score"
       showTooltip
+      contentWidth={280}
+      align="start"
     />
   );
 };

@@ -35,6 +35,8 @@ interface BaseLoadableSelectBoxProps {
   buttonClassName?: string;
   actionPanel?: ReactElement;
   minWidth?: number;
+  contentWidth?: number;
+  align?: "start" | "end" | "center";
   emptyState?: ReactElement;
   showTooltip?: boolean;
 }
@@ -73,6 +75,8 @@ export const LoadableSelectBox = ({
   renderTitle: parentRenderTitle,
   actionPanel,
   minWidth = 0,
+  contentWidth,
+  align = "end",
   multiselect = false,
   showTooltip = false,
   emptyState,
@@ -255,13 +259,17 @@ export const LoadableSelectBox = ({
         <PopoverTrigger asChild>{buttonElement}</PopoverTrigger>
       )}
       <PopoverContent
-        align="end"
+        align={align}
         style={
-          width
+          contentWidth
             ? {
-                width: `${Math.max(width, minWidth)}px`,
+                width: `${contentWidth}px`,
               }
-            : {}
+            : width
+              ? {
+                  width: `${Math.max(width, minWidth)}px`,
+                }
+              : {}
         }
         className="relative p-1 pt-12"
         hideWhenDetached
