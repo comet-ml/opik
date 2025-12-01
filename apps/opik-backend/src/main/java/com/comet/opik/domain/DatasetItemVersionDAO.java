@@ -1,10 +1,8 @@
 package com.comet.opik.domain;
 
 import com.comet.opik.api.Column;
-import com.comet.opik.api.DatasetItem;
 import com.comet.opik.api.DatasetItem.DatasetItemPage;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
-import com.comet.opik.utils.template.TemplateUtils;
 import com.google.inject.ImplementedBy;
 import io.opentelemetry.instrumentation.annotations.WithSpan;
 import io.r2dbc.spi.Result;
@@ -13,7 +11,6 @@ import jakarta.inject.Singleton;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.stringtemplate.v4.ST;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
@@ -35,9 +32,6 @@ public interface DatasetItemVersionDAO {
     Mono<DatasetItemPage> getItems(DatasetItemSearchCriteria searchCriteria, int page, int size, UUID versionId);
 
     Flux<DatasetItemIdAndHash> getItemIdsAndHashes(UUID datasetId, UUID versionId);
-
-    Flux<com.comet.opik.api.DatasetItem> getVersionItems(UUID datasetId, UUID versionId, int limit,
-            UUID lastRetrievedId);
 
     Mono<ItemsHash> getVersionItemsHashAgg(UUID datasetId, UUID versionId);
 }
@@ -140,21 +134,6 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
             WHERE dataset_id = :datasetId
             AND dataset_version_id = :versionId
             AND workspace_id = :workspace_id
-            """;
-
-    private static final String SELECT_DATASET_ITEMS_STREAM_VERSION = """
-            SELECT
-                *,
-                null AS experiment_items_array
-            FROM dataset_item_versions
-            WHERE dataset_id = :datasetId
-            AND dataset_version_id = :versionId
-            AND workspace_id = :workspace_id
-            <if(lastRetrievedId)>AND id \\< :lastRetrievedId <endif>
-            ORDER BY id DESC, last_updated_at DESC
-            LIMIT 1 BY id
-            LIMIT :limit
-            ;
             """;
 
     private static final String SELECT_VERSION_ITEMS_HASH = """
@@ -282,38 +261,6 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                     .doFinally(signalType -> endSegment(segment))
                     .flatMap(result -> result.map((row, meta) -> row.get("count", Long.class)))
                     .reduce(0L, Long::sum);
-        });
-    }
-
-    @Override
-    @WithSpan
-    public Flux<DatasetItem> getVersionItems(@NonNull UUID datasetId, @NonNull UUID versionId, int limit,
-            UUID lastRetrievedId) {
-        log.info("Getting versioned dataset items by datasetId '{}', versionId '{}', limit '{}', lastRetrievedId '{}'",
-                datasetId, versionId, limit, lastRetrievedId);
-
-        ST template = TemplateUtils.newST(SELECT_DATASET_ITEMS_STREAM_VERSION);
-
-        if (lastRetrievedId != null) {
-            template.add("lastRetrievedId", lastRetrievedId);
-        }
-
-        return asyncTemplate.stream(connection -> {
-
-            var statement = connection.createStatement(template.render())
-                    .bind("datasetId", datasetId)
-                    .bind("versionId", versionId)
-                    .bind("limit", limit);
-
-            if (lastRetrievedId != null) {
-                statement.bind("lastRetrievedId", lastRetrievedId);
-            }
-
-            Segment segment = startSegment(DATASET_ITEM_VERSIONS, CLICKHOUSE, "select_version_items_stream");
-
-            return makeFluxContextAware(bindWorkspaceIdToFlux(statement))
-                    .doFinally(signalType -> endSegment(segment))
-                    .flatMap(DatasetItemResultMapper::mapItem);
         });
     }
 

@@ -408,8 +408,11 @@ class DatasetItemServiceImpl implements DatasetItemService {
         return Mono.deferContextual(ctx -> {
             String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
 
-            return Mono.fromCallable(() -> versionService.findLatestVersion(datasetId, workspaceId))
-                    .subscribeOn(Schedulers.boundedElastic())
+            // Call DAO directly with workspaceId to avoid RequestContext issues in reactive context
+            return Mono.fromCallable(() -> template.inTransaction(READ_ONLY, handle -> {
+                var dao = handle.attach(DatasetVersionDAO.class);
+                return dao.findByTag(datasetId, DatasetVersionService.LATEST_TAG, workspaceId);
+            })).subscribeOn(Schedulers.boundedElastic())
                     .flatMap(latestVersionOpt -> {
                         if (latestVersionOpt.isEmpty()) {
                             // No version exists yet, has draft if any items exist
