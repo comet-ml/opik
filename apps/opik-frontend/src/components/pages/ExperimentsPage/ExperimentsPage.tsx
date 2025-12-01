@@ -606,7 +606,7 @@ const ExperimentsPage: React.FC = () => {
                 </div>
               </Card>
             }
-            isAggregationScores
+            areAggregatedScores
           />
         </PageBodyStickyContainer>
       )}

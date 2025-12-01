@@ -53,9 +53,9 @@ const FeedbackScoreHoverCard: React.FC<FeedbackScoreHoverCardProps> = ({
               {scoreType && (
                 <div className="comet-body-xs leading-none text-slate-400">
                   {scoreType === SCORE_TYPE_EXPERIMENT &&
-                    "Experiment Aggregation scores"}
+                    "Aggregated experiment scores"}
                   {scoreType === SCORE_TYPE_FEEDBACK &&
-                    "Feedback average scores"}
+                    "Average feedback scores"}
                 </div>
               )}
             </div>
