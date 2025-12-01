@@ -125,38 +125,54 @@ pytest --cov=opik
 
 ### **Test Output Management**
 
-To efficiently analyze test results without re-running tests, always capture test output to log files.
+To efficiently analyze test results without re-running tests, always capture test output to log files in a temporary directory.
+
+**Setup:**
+
+```bash
+# Create temp directory for test logs (do this once at the start of testing)
+mkdir -p /tmp/opik-test-logs
+```
 
 **Best Practices:**
 
 ```bash
-# ✅ DO: Capture test output to a log file
-mvn test | tee test-output.log
-npm test 2>&1 | tee test-output.log
-pytest tests/ 2>&1 | tee test-output.log
+# ✅ DO: Capture test output to a log file in temp directory
+mvn test 2>&1 | tee /tmp/opik-test-logs/test-output.log
+npm test 2>&1 | tee /tmp/opik-test-logs/test-output.log
+pytest tests/ 2>&1 | tee /tmp/opik-test-logs/test-output.log
 
 # ✅ DO: Search log files instead of re-running tests
-grep "FAILED" test-output.log
-grep -A 5 "AssertionError" test-output.log
-grep -i "error" test-output.log
+grep "FAILED" /tmp/opik-test-logs/test-output.log
+grep -A 5 "AssertionError" /tmp/opik-test-logs/test-output.log
+grep -i "error" /tmp/opik-test-logs/test-output.log
 
 # ✅ DO: Use descriptive log file names for multiple test runs
-mvn test -Dtest="UserServiceTest" | tee user-service-test.log
-pytest tests/unit/ | tee unit-tests.log
-pytest tests/integration/ | tee integration-tests.log
+mvn test -Dtest="UserServiceTest" 2>&1 | tee /tmp/opik-test-logs/user-service-test.log
+pytest tests/unit/ 2>&1 | tee /tmp/opik-test-logs/unit-tests.log
+pytest tests/integration/ 2>&1 | tee /tmp/opik-test-logs/integration-tests.log
+
+# ✅ DO: Use timestamps for multiple runs of the same test suite
+mvn test 2>&1 | tee /tmp/opik-test-logs/test-output-$(date +%Y%m%d-%H%M%S).log
 
 # ❌ DON'T: Re-run tests just to search output
 mvn test | grep "FAILED"  # Wastes time re-running all tests
 pytest tests/ | grep "error"  # Unnecessary re-execution
+
+# ❌ DON'T: Store log files in the project directory
+mvn test | tee test-output.log  # Clutters workspace
 ```
 
 **Rules:**
 
-1. **Always log test output**: Use `tee` to both display and save output
-2. **Search logs, not tests**: Use `grep` on log files to find specific information
-3. **Only re-run after code changes**: Never re-run tests unless you've modified code or test files
-4. **Use descriptive names**: Name log files based on test scope (unit, integration, specific class)
-5. **Redirect stderr**: Use `2>&1` to capture both stdout and stderr in logs
+1. **Use temp directory**: Always store test logs in `/tmp/opik-test-logs/` to keep workspace clean
+2. **Create directory first**: Ensure the temp directory exists before running tests
+3. **Always log test output**: Use `tee` to both display and save output
+4. **Search logs, not tests**: Use `grep` on log files to find specific information
+5. **Only re-run after code changes**: Never re-run tests unless you've modified code or test files
+6. **Use descriptive names**: Name log files based on test scope (unit, integration, specific class)
+7. **Redirect stderr**: Always use `2>&1` to capture both stdout and stderr in logs
+8. **Add timestamps**: For repeated test runs, append timestamps to avoid overwriting logs
 
 ---
 
