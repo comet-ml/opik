@@ -33,7 +33,7 @@ class OptimizationStatusManager:
             status: New status ("running", "completed", "error", etc.)
         """
         logger.info(f"Updating optimization {self.optimization_id} status to '{status}'")
-        self.client._rest_client.optimizations.update_optimizations_by_id(
+        self.client.rest_client.optimizations.update_optimizations_by_id(
             self.optimization_id,
             status=status
         )
@@ -50,6 +50,14 @@ class OptimizationStatusManager:
     def mark_error(self) -> None:
         """Mark optimization as failed."""
         self.update_status("error")
+
+    def close(self) -> None:
+        """Close the Opik client and release resources."""
+        try:
+            self.client.end()
+            logger.debug(f"Opik client closed for optimization {self.optimization_id}")
+        except Exception as e:
+            logger.warning(f"Failed to close Opik client: {e}")
 
 
 @contextmanager
@@ -89,4 +97,6 @@ def optimization_lifecycle(status_manager: OptimizationStatusManager):
                 exc_info=True
             )
         raise  # Re-raise the original exception
+    finally:
+        status_manager.close()
 
