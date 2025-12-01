@@ -101,6 +101,10 @@ public class FilterQueryBuilder {
     private static final String SAMPLING_RATE_DB = "sampling_rate";
     private static final String TYPE_DB = "type";
 
+    /**
+     * Set of all feedback score fields across different entity types (Trace, Span, TraceThread, etc.).
+     * Used to identify feedback score filters that require special handling in query building.
+     */
     private static final Set<Field> FEEDBACK_SCORE_FIELDS = Set.of(
             TraceField.FEEDBACK_SCORES,
             TraceField.SPAN_FEEDBACK_SCORES,
