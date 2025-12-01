@@ -11,6 +11,7 @@ import com.comet.opik.api.filter.Field;
 import com.comet.opik.api.filter.FieldType;
 import com.comet.opik.api.filter.Filter;
 import com.comet.opik.api.filter.Operator;
+import com.comet.opik.api.filter.OptimizationField;
 import com.comet.opik.api.filter.PromptField;
 import com.comet.opik.api.filter.SpanField;
 import com.comet.opik.api.filter.TraceField;
@@ -272,6 +273,13 @@ public class FilterQueryBuilder {
                     .put(ExperimentField.METADATA, METADATA_ANALYTICS_DB)
                     .put(ExperimentField.DATASET_ID, DATASET_ID_ANALYTICS_DB)
                     .put(ExperimentField.PROMPT_IDS, PROMPT_IDS_ANALYTICS_DB)
+                    .build());
+
+    private static final Map<OptimizationField, String> OPTIMIZATION_FIELDS_MAP = new EnumMap<>(
+            ImmutableMap.<OptimizationField, String>builder()
+                    .put(OptimizationField.METADATA, METADATA_ANALYTICS_DB)
+                    .put(OptimizationField.DATASET_ID, DATASET_ID_ANALYTICS_DB)
+                    .put(OptimizationField.STATUS, STATUS_DB)
                     .build());
 
     private static final Map<PromptField, String> PROMPT_FIELDS_MAP = new EnumMap<>(
@@ -543,6 +551,11 @@ public class FilterQueryBuilder {
                 AutomationRuleEvaluatorField.CREATED_BY,
                 AutomationRuleEvaluatorField.LAST_UPDATED_BY));
 
+        map.put(FilterStrategy.OPTIMIZATION, Set.of(
+                OptimizationField.METADATA,
+                OptimizationField.DATASET_ID,
+                OptimizationField.STATUS));
+
         return map;
     }
 
@@ -642,6 +655,7 @@ public class FilterQueryBuilder {
             case AlertField alertField -> ALERT_FIELDS_MAP.get(alertField);
             case AutomationRuleEvaluatorField automationRuleEvaluatorField ->
                 AUTOMATION_RULE_EVALUATOR_FIELDS_MAP.get(automationRuleEvaluatorField);
+            case OptimizationField optimizationField -> OPTIMIZATION_FIELDS_MAP.get(optimizationField);
             default -> {
 
                 if (field.isDynamic(filterStrategy)) {

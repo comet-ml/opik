@@ -4,10 +4,15 @@ import com.clickhouse.client.ClickHouseException;
 import com.comet.opik.api.Dataset;
 import com.comet.opik.api.DatasetLastOptimizationCreated;
 import com.comet.opik.api.Optimization;
+import com.comet.opik.api.OptimizationStatus;
+import com.comet.opik.api.OptimizationStudioLog;
 import com.comet.opik.api.OptimizationUpdate;
 import com.comet.opik.api.events.OptimizationCreated;
 import com.comet.opik.api.events.OptimizationsDeleted;
+import com.comet.opik.domain.attachment.PreSignerService;
 import com.comet.opik.infrastructure.auth.RequestContext;
+import com.comet.opik.infrastructure.queues.Queue;
+import com.comet.opik.infrastructure.queues.QueueProducer;
 import com.google.common.base.Preconditions;
 import com.google.common.eventbus.EventBus;
 import com.google.inject.ImplementedBy;
@@ -24,6 +29,7 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
@@ -42,6 +48,8 @@ public interface OptimizationService {
 
     Mono<Optimization> getById(UUID id);
 
+    Mono<Optimization> getById(UUID id, boolean includeStudioConfig);
+
     Mono<Optimization.OptimizationPage> find(int page, int size, OptimizationSearchCriteria searchCriteria);
 
     Mono<Void> delete(@NonNull Set<UUID> ids);
@@ -51,6 +59,9 @@ public interface OptimizationService {
     Mono<Long> update(UUID commentId, OptimizationUpdate update);
 
     Mono<Long> updateDatasetDeleted(Set<UUID> datasetIds);
+
+    // Studio methods
+    Mono<OptimizationStudioLog> generateStudioLogsResponse(UUID optimizationId);
 }
 
 @Singleton
@@ -63,15 +74,30 @@ class OptimizationServiceImpl implements OptimizationService {
     private final @NonNull IdGenerator idGenerator;
     private final @NonNull NameGenerator nameGenerator;
     private final @NonNull EventBus eventBus;
+    private final @NonNull PreSignerService preSignerService;
+    private final @NonNull QueueProducer queueProducer;
 
     @Override
     @WithSpan
     public Mono<Optimization> getById(@NonNull UUID id) {
-        log.info("Getting optimization by id '{}'", id);
+        return getById(id, false);
+    }
+
+    @Override
+    @WithSpan
+    public Mono<Optimization> getById(@NonNull UUID id, boolean includeStudioConfig) {
+        log.info("Getting optimization by id '{}', includeStudioConfig: '{}'", id, includeStudioConfig);
         return optimizationDAO.getById(id)
                 .flatMap(optimization -> Mono.deferContextual(ctx -> {
                     String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
-                    return Mono.just(enrichOptimizations(List.of(optimization), workspaceId).getFirst());
+                    var enriched = enrichOptimizations(List.of(optimization), workspaceId).getFirst();
+
+                    // Scrub studioConfig unless explicitly requested
+                    if (!includeStudioConfig) {
+                        enriched = enriched.toBuilder().studioConfig(null).build();
+                    }
+
+                    return Mono.just(enriched);
                 }))
                 .switchIfEmpty(Mono.defer(
                         () -> Mono.error(new NotFoundException("Not found optimization with id '%s'".formatted(id)))));
@@ -84,8 +110,17 @@ class OptimizationServiceImpl implements OptimizationService {
         return optimizationDAO.find(page, size, searchCriteria)
                 .flatMap(optimizationPage -> Mono.deferContextual(ctx -> {
                     String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
+                    var enrichedOptimizations = enrichOptimizations(optimizationPage.content(), workspaceId);
+
+                    // Scrub studioConfig unless explicitly requesting Studio-only optimizations
+                    var finalOptimizations = Boolean.TRUE.equals(searchCriteria.studioOnly())
+                            ? enrichedOptimizations
+                            : enrichedOptimizations.stream()
+                                    .map(opt -> opt.toBuilder().studioConfig(null).build())
+                                    .toList();
+
                     return Mono.just(optimizationPage.toBuilder()
-                            .content(enrichOptimizations(optimizationPage.content(), workspaceId)).build());
+                            .content(finalOptimizations).build());
                 }));
     }
 
@@ -96,19 +131,42 @@ class OptimizationServiceImpl implements OptimizationService {
         IdGenerator.validateVersion(id, "Optimization");
         var name = StringUtils.getIfBlank(optimization.name(), nameGenerator::generateName);
 
+        // Detect if this is a Studio optimization
+        boolean isStudioOptimization = optimization.studioConfig() != null;
+
         return datasetService.getOrCreateDataset(optimization.datasetName())
                 .flatMap(datasetId -> {
-                    var newOptimization = optimization.toBuilder()
+                    var builder = optimization.toBuilder()
                             .id(id)
                             .name(name)
-                            .datasetId(datasetId)
-                            .build();
+                            .datasetId(datasetId);
 
-                    return makeMonoContextAware((userName, workspaceId) -> optimizationDAO.upsert(newOptimization)
-                            .thenReturn(newOptimization.id())
-                            // The event is posted only when the experiment is successfully created.
-                            .doOnSuccess(experimentId -> postOptimizationCreatedEvent(newOptimization, workspaceId,
-                                    userName)))
+                    // Force INITIALIZED status for Studio optimizations
+                    if (isStudioOptimization) {
+                        builder.status(OptimizationStatus.INITIALIZED);
+                        log.info("Force INITIALIZED (was '{}') status for Studio optimization id '{}'",
+                                optimization.status(), id);
+                    }
+
+                    var newOptimization = builder.build();
+
+                    return makeMonoContextAware((userName, workspaceId) -> Mono.deferContextual(ctx -> {
+                        String opikApiKey = ctx.getOrDefault(RequestContext.API_KEY, null);
+                        String workspaceName = ctx.get(RequestContext.WORKSPACE_NAME);
+
+                        return optimizationDAO.upsert(newOptimization)
+                                .thenReturn(newOptimization.id())
+                                // The event is posted only when the experiment is successfully created.
+                                .doOnSuccess(experimentId -> {
+                                    postOptimizationCreatedEvent(newOptimization, workspaceId, userName);
+
+                                    // If Studio optimization, enqueue job to Redis RQ
+                                    if (isStudioOptimization) {
+                                        enqueueStudioOptimizationJob(newOptimization, workspaceId, workspaceName,
+                                                opikApiKey);
+                                    }
+                                });
+                    }))
                             .subscribeOn(Schedulers.boundedElastic());
                 })
                 // If a conflict occurs, we just return the id of the existing experiment.
@@ -184,6 +242,53 @@ class OptimizationServiceImpl implements OptimizationService {
                 newOptimization.id(), newOptimization.datasetId(), workspaceId);
     }
 
+    private void enqueueStudioOptimizationJob(Optimization optimization, String workspaceId, String workspaceName,
+            String opikApiKey) {
+        if (workspaceName == null) {
+            log.error(
+                    "Cannot enqueue Studio optimization job for id: '{}' - workspaceName is null, marking as CANCELLED",
+                    optimization.id());
+            cancelOptimization(optimization.id(), workspaceId);
+            return;
+        }
+
+        log.info("Enqueuing Optimization Studio job for id: '{}', workspace: '{}' (name: '{}')",
+                optimization.id(), workspaceId, workspaceName);
+
+        // Build job message (use workspace name for SDK)
+        var jobMessage = OptimizationStudioJobMessage.builder()
+                .optimizationId(optimization.id())
+                .workspaceName(workspaceName)
+                .config(optimization.studioConfig())
+                .opikApiKey(opikApiKey)
+                .build();
+
+        // Enqueue to Redis RQ
+        queueProducer.enqueue(Queue.OPTIMIZER_CLOUD, jobMessage)
+                .doOnSuccess(
+                        jobId -> log.info("Studio optimization job enqueued successfully for id: '{}', jobId: '{}'",
+                                optimization.id(), jobId))
+                .doOnError(error -> {
+                    log.error("Failed to enqueue Studio optimization job for id: '{}', marking as CANCELLED",
+                            optimization.id(), error);
+                    cancelOptimization(optimization.id(), workspaceId);
+                })
+                .subscribe();
+    }
+
+    private void cancelOptimization(UUID optimizationId, String workspaceId) {
+        var optimizationUpdate = OptimizationUpdate.builder()
+                .status(OptimizationStatus.CANCELLED)
+                .build();
+
+        update(optimizationId, optimizationUpdate)
+                .contextWrite(ctx -> ctx.put(RequestContext.WORKSPACE_ID, workspaceId))
+                .subscribeOn(Schedulers.boundedElastic())
+                .subscribe(
+                        unused -> log.info("Cancelled optimization '{}'", optimizationId),
+                        error -> log.error("Failed to cancel optimization '{}'", optimizationId, error));
+    }
+
     private List<Optimization> enrichOptimizations(List<Optimization> optimizations, String workspaceId) {
         var ids = optimizations.stream().map(Optimization::datasetId).collect(Collectors.toUnmodifiableSet());
         var datasetMap = datasetService.findByIds(ids, workspaceId)
@@ -197,5 +302,34 @@ class OptimizationServiceImpl implements OptimizationService {
                                 .orElse(null))
                         .build())
                 .toList();
+    }
+
+    // ==================== Studio Methods ====================
+
+    @Override
+    public Mono<OptimizationStudioLog> generateStudioLogsResponse(@NonNull UUID optimizationId) {
+        return Mono.deferContextual(ctx -> {
+            String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
+            log.debug("Generating logs response for Studio optimization: '{}' in workspace: '{}'", optimizationId,
+                    workspaceId);
+
+            // Build S3 key from workspace_id and optimization_id
+            String s3Key = String.format("logs/%s/%s.log", workspaceId, optimizationId);
+
+            // TODO: Check if log file exists in S3 and get last modified
+            // For now, return null for lastModified (file doesn't exist yet for new optimizations)
+            Instant lastModified = null;
+
+            // Generate presigned URL and calculate expiration
+            String presignedUrl = preSignerService.presignDownloadUrl(s3Key);
+            long expirationSeconds = preSignerService.getPresignedUrlExpirationSeconds();
+            Instant expiresAt = Instant.now().plus(Duration.ofSeconds(expirationSeconds));
+
+            return Mono.just(OptimizationStudioLog.builder()
+                    .url(presignedUrl)
+                    .lastModified(lastModified)
+                    .expiresAt(expiresAt)
+                    .build());
+        });
     }
 }
