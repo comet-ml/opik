@@ -595,8 +595,8 @@ class OptimizationDAOImpl implements OptimizationDAO {
                 String studioConfigJson = JsonUtils.writeValueAsString(optimization.studioConfig());
                 statement.bind("studio_config", studioConfigJson);
             } catch (Exception e) {
-                log.error("Failed to serialize studio_config for optimization: '{}'", optimization.id(), e);
-                statement.bindNull("studio_config", String.class);
+                throw new IllegalStateException(
+                        "Failed to serialize studio_config for optimization: '%s'".formatted(optimization.id()), e);
             }
         } else {
             statement.bindNull("studio_config", String.class);
