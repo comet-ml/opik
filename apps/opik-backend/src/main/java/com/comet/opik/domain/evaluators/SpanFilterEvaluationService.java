@@ -65,7 +65,7 @@ public class SpanFilterEvaluationService extends FilterEvaluationServiceBase<Spa
             case INPUT -> extractStringFromJson(span.input());
             case OUTPUT -> extractStringFromJson(span.output());
             case INPUT_JSON -> key != null ? extractNestedValue(span.input(), key) : span.input();
-            case OUTPUT_JSON -> span.output();
+            case OUTPUT_JSON -> key != null ? extractNestedValue(span.output(), key) : span.output();
             case METADATA -> key != null ? extractNestedValue(span.metadata(), key) : span.metadata();
             case MODEL -> span.model();
             case PROVIDER -> span.provider();
