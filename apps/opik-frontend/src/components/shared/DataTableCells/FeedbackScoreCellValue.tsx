@@ -63,7 +63,9 @@ const FeedbackScoreCellValue = ({
         open={openHoverCard}
         onOpenChange={setOpenHoverCard}
       >
-        <div className="truncate">{value}</div>
+        <div className="truncate">
+          {category ? `${category} (${value})` : value}
+        </div>
       </MultiValueFeedbackScoreHoverCard>
     </div>
   );
