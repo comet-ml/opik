@@ -66,14 +66,6 @@ const TraceAnnotateViewer: React.FunctionComponent<
     [isTrace, spanId, allFeedbackScores, feedbackScoreDelete, traceId],
   );
 
-  // Only show feedback scores for the current entity type
-  // When showing a trace, only show trace feedback scores (not span scores)
-  // When showing a span, only show span feedback scores (not trace scores)
-  const allFeedbackScores = useMemo(
-    () => data.feedback_scores || [],
-    [data.feedback_scores],
-  );
-
   return (
     <DetailsActionSectionLayout
       title={title}

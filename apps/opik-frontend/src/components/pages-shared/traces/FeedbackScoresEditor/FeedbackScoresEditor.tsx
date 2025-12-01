@@ -12,7 +12,6 @@ import { cn } from "@/lib/utils";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 import ExplainerIcon from "@/components/shared/ExplainerIcon/ExplainerIcon";
 import { UpdateFeedbackScoreData } from "../TraceDetailsPanel/TraceAnnotateViewer/types";
-import { extractSpanMetadataFromValueByAuthor } from "../TraceDetailsPanel/TraceDataViewer/FeedbackScoreTable/utils";
 
 type FeedbackScoresEditorProps = {
   feedbackScores: TraceFeedbackScore[];
@@ -26,7 +25,6 @@ type FeedbackScoresEditorProps = {
   header?: React.ReactNode;
   footer?: React.ReactNode;
   feedbackDefinitionNames?: string[];
-  isSpanFeedbackScores?: boolean;
 };
 
 type FeedbackScoreRow = {
@@ -118,7 +116,6 @@ const FeedbackScoresEditor = ({
   header,
   footer,
   feedbackDefinitionNames,
-  isSpanFeedbackScores = false,
 }: FeedbackScoresEditorProps) => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const { data: feedbackDefinitionsData } = useFeedbackDefinitionsList({
@@ -168,27 +165,16 @@ const FeedbackScoresEditor = ({
     <div className={cn("flex flex-col px-6", className)}>
       {header}
       <div className="grid max-w-full grid-cols-[minmax(0,5fr)_minmax(0,5fr)__36px_30px] border-b border-border empty:border-transparent">
-        {rows.map((row) => {
-          // Extract span_id from feedback score if it's a span feedback score
-          const spanIdForDelete = isSpanFeedbackScores
-            ? extractSpanMetadataFromValueByAuthor(
-                row.feedbackScore?.value_by_author,
-              ).span_id
-            : undefined;
-
-          return (
-            <AnnotateRow
-              key={row.name}
-              name={row.name}
-              feedbackDefinition={row.feedbackDefinition}
-              feedbackScore={row.feedbackScore}
-              onUpdateFeedbackScore={onUpdateFeedbackScore}
-              onDeleteFeedbackScore={(name: string) => {
-                onDeleteFeedbackScore(name, undefined, spanIdForDelete);
-              }}
-            />
-          );
-        })}
+        {rows.map((row) => (
+          <AnnotateRow
+            key={row.name}
+            name={row.name}
+            feedbackDefinition={row.feedbackDefinition}
+            feedbackScore={row.feedbackScore}
+            onUpdateFeedbackScore={onUpdateFeedbackScore}
+            onDeleteFeedbackScore={onDeleteFeedbackScore}
+          />
+        ))}
       </div>
       {footer}
     </div>

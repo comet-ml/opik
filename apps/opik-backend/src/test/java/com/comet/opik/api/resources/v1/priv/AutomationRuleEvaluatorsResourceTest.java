@@ -230,10 +230,10 @@ class AutomationRuleEvaluatorsResourceTest {
             +
             "\"Technical Accuracy\":{\"score\":0,\"reason\":\"The summary accurately describes the experimental approach involving data mixtures, proportions, and sources, reflecting the technical details of the study.\"}}";
 
-    private static final String USER = "user-" + RandomStringUtils.randomAlphanumeric(20);
+    private static final String USER = "user-" + RandomStringUtils.secure().nextAlphanumeric(20);
     private static final String API_KEY = UUID.randomUUID().toString();
     private static final String WORKSPACE_ID = UUID.randomUUID().toString();
-    private static final String WORKSPACE_NAME = "workspace-" + RandomStringUtils.randomAlphanumeric(20);
+    private static final String WORKSPACE_NAME = "workspace-" + RandomStringUtils.secure().nextAlphanumeric(20);
 
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
@@ -604,7 +604,7 @@ class AutomationRuleEvaluatorsResourceTest {
             when(llmProviderFactory.getLanguageModel(anyString(), any())
                     .chat(any(ChatRequest.class)))
                     .thenAnswer(invocationOnMock -> chatResponse);
-            var projectName = "project-" + RandomStringUtils.randomAlphanumeric(36);
+            var projectName = "project-" + RandomStringUtils.secure().nextAlphanumeric(36);
             var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
             var evaluator = factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class).toBuilder()
                     .code(OBJECT_MAPPER.readValue(LLM_AS_A_JUDGE_EVALUATOR,
@@ -957,7 +957,7 @@ class AutomationRuleEvaluatorsResourceTest {
             when(llmProviderFactory.getLanguageModel(anyString(), any())
                     .chat(any(ChatRequest.class)))
                     .thenAnswer(invocationOnMock -> chatResponse);
-            var projectName = "project-" + RandomStringUtils.randomAlphanumeric(36);
+            var projectName = "project-" + RandomStringUtils.secure().nextAlphanumeric(36);
             var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
             var evaluator = factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class).toBuilder()
                     .code(OBJECT_MAPPER.readValue(LLM_AS_A_JUDGE_EVALUATOR,

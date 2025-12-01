@@ -101,6 +101,13 @@ public class FilterQueryBuilder {
     private static final String SAMPLING_RATE_DB = "sampling_rate";
     private static final String TYPE_DB = "type";
 
+    private static final Set<Field> FEEDBACK_SCORE_FIELDS = Set.of(
+            TraceField.FEEDBACK_SCORES,
+            TraceField.SPAN_FEEDBACK_SCORES,
+            SpanField.FEEDBACK_SCORES,
+            TraceThreadField.FEEDBACK_SCORES,
+            ExperimentsComparisonValidKnownField.FEEDBACK_SCORES);
+
     // Table alias prefixes for AutomationRuleEvaluator queries
     private static final String AUTOMATION_RULE_TABLE_ALIAS = "rule.%s";
     private static final String AUTOMATION_EVALUATOR_TABLE_ALIAS = "evaluator.%s";
@@ -199,13 +206,6 @@ public class FilterQueryBuilder {
                             FieldType.ERROR_CONTAINER,
                             "notEmpty(%1$s)")))
                     .build());
-  
-    private static final Set<Field> FEEDBACK_SCORE_FIELDS = Set.of(
-            TraceField.FEEDBACK_SCORES,
-            TraceField.SPAN_FEEDBACK_SCORES,
-            SpanField.FEEDBACK_SCORES,
-            TraceThreadField.FEEDBACK_SCORES,
-            ExperimentsComparisonValidKnownField.FEEDBACK_SCORES);
 
     private static final Map<TraceField, String> TRACE_FIELDS_MAP = new EnumMap<>(
             ImmutableMap.<TraceField, String>builder()
