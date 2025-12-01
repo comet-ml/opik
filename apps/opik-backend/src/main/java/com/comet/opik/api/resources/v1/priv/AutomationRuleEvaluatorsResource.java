@@ -99,7 +99,7 @@ public class AutomationRuleEvaluatorsResource {
         log.info("Looking for automated evaluators by '{}' on workspaceId '{}' (page {})", searchCriteria,
                 workspaceId, page);
 
-        Page<AutomationRuleEvaluator<?>> evaluatorPage = service.find(page, size, searchCriteria, workspaceId,
+        Page<AutomationRuleEvaluator<?, ?>> evaluatorPage = service.find(page, size, searchCriteria, workspaceId,
                 sortableBy);
 
         log.info("Found {} automated evaluators by '{}' on workspaceId '{}' (page {}, total {})",
@@ -120,7 +120,7 @@ public class AutomationRuleEvaluatorsResource {
         String workspaceId = requestContext.get().getWorkspaceId();
 
         log.info("Looking for automated evaluator: id '{}' on project_id '{}'", projectId, workspaceId);
-        AutomationRuleEvaluator<?> evaluator = service.findById(evaluatorId, projectId, workspaceId);
+        AutomationRuleEvaluator<?, ?> evaluator = service.findById(evaluatorId, projectId, workspaceId);
         log.info("Found automated evaluator: id '{}' on project_id '{}'", projectId, workspaceId);
 
         return Response.ok().entity(evaluator).build();
@@ -134,7 +134,7 @@ public class AutomationRuleEvaluatorsResource {
     })
     @RateLimited
     public Response createEvaluator(
-            @RequestBody(content = @Content(schema = @Schema(implementation = AutomationRuleEvaluator.class))) @JsonView(View.Write.class) @NotNull @Valid AutomationRuleEvaluator<?> evaluator,
+            @RequestBody(content = @Content(schema = @Schema(implementation = AutomationRuleEvaluator.class))) @JsonView(View.Write.class) @NotNull @Valid AutomationRuleEvaluator<?, ?> evaluator,
             @Context UriInfo uriInfo) {
 
         String workspaceId = requestContext.get().getWorkspaceId();
@@ -143,7 +143,7 @@ public class AutomationRuleEvaluatorsResource {
         UUID projectId = evaluator.getProjectId();
         log.info("Creating {} evaluator for project_id '{}' on workspace_id '{}'", evaluator.getType(),
                 evaluator.getProjectId(), workspaceId);
-        AutomationRuleEvaluator<?> savedEvaluator = service.save(evaluator, projectId, workspaceId, userName);
+        AutomationRuleEvaluator<?, ?> savedEvaluator = service.save(evaluator, projectId, workspaceId, userName);
         log.info("Created {} evaluator '{}' for project_id '{}' on workspace_id '{}'", savedEvaluator.getType(),
                 savedEvaluator.getId(), savedEvaluator.getProjectId(), workspaceId);
 
@@ -162,7 +162,7 @@ public class AutomationRuleEvaluatorsResource {
     })
     @RateLimited
     public Response updateEvaluator(@PathParam("id") UUID id,
-            @RequestBody(content = @Content(schema = @Schema(implementation = AutomationRuleEvaluatorUpdate.class))) @NotNull @Valid AutomationRuleEvaluatorUpdate<?> evaluatorUpdate) {
+            @RequestBody(content = @Content(schema = @Schema(implementation = AutomationRuleEvaluatorUpdate.class))) @NotNull @Valid AutomationRuleEvaluatorUpdate<?, ?> evaluatorUpdate) {
 
         var workspaceId = requestContext.get().getWorkspaceId();
         var userName = requestContext.get().getUserName();

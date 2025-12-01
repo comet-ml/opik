@@ -2,9 +2,12 @@ package com.comet.opik.api.resources.v1.events;
 
 import com.comet.opik.api.PromptType;
 import com.comet.opik.api.ScoreSource;
+import com.comet.opik.api.Span;
 import com.comet.opik.api.Trace;
+import com.comet.opik.api.evaluators.AutomationRuleEvaluatorSpanLlmAsJudge;
 import com.comet.opik.api.evaluators.LlmAsJudgeMessage;
 import com.comet.opik.api.evaluators.LlmAsJudgeMessageContent;
+import com.comet.opik.api.evaluators.LlmAsJudgeOutputSchema;
 import com.comet.opik.domain.evaluators.python.TraceThreadPythonEvaluatorRequest;
 import com.comet.opik.domain.llm.structuredoutput.StructuredOutputStrategy;
 import com.comet.opik.utils.JsonUtils;
@@ -76,9 +79,35 @@ public class OnlineScoringEngine {
     public static ChatRequest prepareLlmRequest(
             @NotNull LlmAsJudgeCode evaluatorCode, Trace trace, StructuredOutputStrategy structuredOutputStrategy) {
         var renderedMessages = renderMessages(evaluatorCode.messages(), evaluatorCode.variables(), trace);
-        var chatRequestBuilder = ChatRequest.builder().messages(renderedMessages);
+        return buildChatRequest(renderedMessages, evaluatorCode.schema(), structuredOutputStrategy);
+    }
 
-        return structuredOutputStrategy.apply(chatRequestBuilder, renderedMessages, evaluatorCode.schema()).build();
+    /**
+     * Prepare a request to a LLM-as-Judge evaluator (a ChatLanguageModel) rendering
+     * the template messages with Span variables and with the proper structured output format.
+     *
+     * @param evaluatorCode the LLM-as-Judge 'code'
+     * @param span          the sampled Span to be scored
+     * @return a request to trigger to any supported provider with a ChatLanguageModel
+     */
+    public static ChatRequest prepareSpanLlmRequest(
+            @NotNull AutomationRuleEvaluatorSpanLlmAsJudge.SpanLlmAsJudgeCode evaluatorCode,
+            @NotNull Span span,
+            @NotNull StructuredOutputStrategy structuredOutputStrategy) {
+        var renderedMessages = renderMessages(evaluatorCode.messages(), evaluatorCode.variables(), span);
+        return buildChatRequest(renderedMessages, evaluatorCode.schema(), structuredOutputStrategy);
+    }
+
+    /**
+     * Common implementation for building ChatRequest from rendered messages.
+     * Extracted to reduce duplication between prepareLlmRequest, prepareSpanLlmRequest, and prepareThreadLlmRequest.
+     */
+    private static ChatRequest buildChatRequest(
+            List<ChatMessage> renderedMessages,
+            List<LlmAsJudgeOutputSchema> schema,
+            StructuredOutputStrategy structuredOutputStrategy) {
+        var chatRequestBuilder = ChatRequest.builder().messages(renderedMessages);
+        return structuredOutputStrategy.apply(chatRequestBuilder, renderedMessages, schema).build();
     }
 
     /**
@@ -96,9 +125,7 @@ public class OnlineScoringEngine {
             @NotNull StructuredOutputStrategy structuredOutputStrategy) {
         var renderedMessages = renderThreadMessages(evaluatorCode.messages(),
                 Map.of(TraceThreadLlmAsJudgeCode.CONTEXT_VARIABLE_NAME, ""), traces);
-        var chatRequestBuilder = ChatRequest.builder().messages(renderedMessages);
-
-        return structuredOutputStrategy.apply(chatRequestBuilder, renderedMessages, evaluatorCode.schema()).build();
+        return buildChatRequest(renderedMessages, evaluatorCode.schema(), structuredOutputStrategy);
     }
 
     static List<ChatMessage> renderThreadMessages(
@@ -186,8 +213,31 @@ public class OnlineScoringEngine {
      */
     static List<ChatMessage> renderMessages(
             List<LlmAsJudgeMessage> templateMessages, Map<String, String> variablesMap, Trace trace) {
-        // prepare the map of replacements to use in all messages
         Map<String, String> replacements = toReplacements(variablesMap, trace);
+        return renderMessagesWithReplacements(templateMessages, replacements);
+    }
+
+    /**
+     * Render the rule evaluator message template using the values from an actual span.
+     * Similar to renderMessages but for spans.
+     *
+     * @param templateMessages a list of messages with variables to fill with a Span value
+     * @param variablesMap     a map of template variable to a path to a value into a Span
+     * @param span             the span with value to use to replace template variables
+     * @return a list of AI messages, with templates rendered
+     */
+    static List<ChatMessage> renderMessages(
+            List<LlmAsJudgeMessage> templateMessages, Map<String, String> variablesMap, Span span) {
+        Map<String, String> replacements = toReplacements(variablesMap, span);
+        return renderMessagesWithReplacements(templateMessages, replacements);
+    }
+
+    /**
+     * Common implementation for rendering messages with replacements.
+     * This method handles the actual message rendering logic that is shared between traces and spans.
+     */
+    private static List<ChatMessage> renderMessagesWithReplacements(
+            List<LlmAsJudgeMessage> templateMessages, Map<String, String> replacements) {
         // render the message templates from evaluator rule
         return templateMessages.stream()
                 .map(templateMessage -> {
@@ -234,19 +284,44 @@ public class OnlineScoringEngine {
                 .toList();
     }
 
+    /**
+     * Functional interface to extract JSON sections (input/output/metadata) from an entity.
+     */
+    @FunctionalInterface
+    private interface JsonSectionExtractor {
+        JsonNode extract(TraceSection section);
+    }
+
     public static Map<String, String> toReplacements(Map<String, String> variables, Trace trace) {
+        return toReplacements(variables, section -> switch (section) {
+            case INPUT -> trace.input();
+            case OUTPUT -> trace.output();
+            case METADATA -> trace.metadata();
+        });
+    }
+
+    public static Map<String, String> toReplacements(Map<String, String> variables, Span span) {
+        return toReplacements(variables, section -> switch (section) {
+            case INPUT -> span.input();
+            case OUTPUT -> span.output();
+            case METADATA -> span.metadata();
+        });
+    }
+
+    /**
+     * Common implementation for converting variables to replacements.
+     * Works for both Trace and Span by accepting a function to extract JSON sections.
+     */
+    private static Map<String, String> toReplacements(
+            Map<String, String> variables, JsonSectionExtractor sectionExtractor) {
         var parsedVariables = toVariableMapping(variables);
-        // extract the actual value from the Trace
+        // extract the actual value from the entity
         return parsedVariables.stream().map(mapper -> {
-            var traceSection = switch (mapper.traceSection()) {
-                case INPUT -> trace.input();
-                case OUTPUT -> trace.output();
-                case METADATA -> trace.metadata();
-                case null -> null;
-            };
-            // if no trace section, there's no replacement and the literal value is taken
-            var valueToReplace = traceSection != null
-                    ? extractFromJson(traceSection, mapper.jsonPath())
+            var section = mapper.traceSection();
+            var jsonSection = section != null ? sectionExtractor.extract(section) : null;
+            // if no section, there's no replacement and the literal value is taken
+            var valueToReplace = jsonSection != null
+                    ? extractFromJson(jsonSection, mapper.jsonPath())
                     : mapper.valueToReplace;
             return mapper.toBuilder()
                     .valueToReplace(valueToReplace)

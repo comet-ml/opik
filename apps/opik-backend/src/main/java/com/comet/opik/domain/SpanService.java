@@ -12,6 +12,7 @@ import com.comet.opik.api.SpansCountResponse;
 import com.comet.opik.api.attachment.AttachmentInfo;
 import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.api.error.IdentifierMismatchException;
+import com.comet.opik.api.events.SpansCreated;
 import com.comet.opik.domain.attachment.AttachmentReinjectorService;
 import com.comet.opik.domain.attachment.AttachmentService;
 import com.comet.opik.domain.attachment.AttachmentStripperService;
@@ -21,6 +22,7 @@ import com.comet.opik.infrastructure.lock.LockService;
 import com.comet.opik.utils.BinaryOperatorUtils;
 import com.comet.opik.utils.WorkspaceUtils;
 import com.google.common.base.Preconditions;
+import com.google.common.eventbus.EventBus;
 import io.opentelemetry.instrumentation.annotations.WithSpan;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
@@ -65,6 +67,7 @@ public class SpanService {
     private final @NonNull AttachmentService attachmentService;
     private final @NonNull AttachmentStripperService attachmentStripperService;
     private final @NonNull AttachmentReinjectorService attachmentReinjectorService;
+    private final @NonNull EventBus eventBus;
 
     @WithSpan
     public Mono<Span.SpanPage> find(int page, int size, @NonNull SpanSearchCriteria searchCriteria) {
@@ -178,7 +181,15 @@ public class SpanService {
                         log.info("Inserting span with id '{}' , projectId '{}' , traceId '{}' , parentSpanId '{}'",
                                 processedSpan.id(), processedSpan.projectId(), processedSpan.traceId(),
                                 processedSpan.parentSpanId());
-                        return spanDAO.insert(processedSpan).thenReturn(processedSpan.id());
+                        return spanDAO.insert(processedSpan)
+                                .doOnSuccess(__ -> {
+                                    var savedSpan = processedSpan.toBuilder()
+                                            .projectId(project.id())
+                                            .projectName(projectName)
+                                            .build();
+                                    eventBus.post(new SpansCreated(List.of(savedSpan), workspaceId, userName));
+                                })
+                                .thenReturn(processedSpan.id());
                     });
         });
     }
@@ -336,11 +347,6 @@ public class SpanService {
 
         log.info("Creating batch of spans for projects '{}'", projectNames);
 
-        Mono<List<Span>> resolveProjects = Flux.fromIterable(projectNames)
-                .flatMap(projectService::getOrCreate)
-                .collectList()
-                .map(projects -> bindSpanToProjectAndId(dedupedSpans, projects));
-
         // Delete only auto-stripped attachments for all spans in the batch before processing
         // This prevents duplicate auto-stripped attachments when the SDK sends the same span data multiple times
         // while preserving user-uploaded attachments
@@ -350,9 +356,22 @@ public class SpanService {
                 .collect(Collectors.toSet());
 
         return attachmentService.deleteAutoStrippedAttachments(SPAN, spanIds)
-                .then(resolveProjects)
-                .flatMap(this::stripAttachmentsFromSpanBatch)
-                .flatMap(spanDAO::batchInsert);
+                .then(Mono.deferContextual(ctx -> {
+                    String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
+                    String userName = ctx.get(RequestContext.USER_NAME);
+
+                    Mono<List<Span>> resolveProjects = Flux.fromIterable(projectNames)
+                            .flatMap(projectService::getOrCreate)
+                            .collectList()
+                            .map(projects -> bindSpanToProjectAndId(dedupedSpans, projects));
+
+                    return resolveProjects
+                            .flatMap(this::stripAttachmentsFromSpanBatch)
+                            .flatMap(spans -> spanDAO.batchInsert(spans)
+                                    .doOnSuccess(__ -> {
+                                        eventBus.post(new SpansCreated(spans, workspaceId, userName));
+                                    }));
+                }));
     }
 
     private Mono<List<Span>> stripAttachmentsFromSpanBatch(List<Span> spans) {

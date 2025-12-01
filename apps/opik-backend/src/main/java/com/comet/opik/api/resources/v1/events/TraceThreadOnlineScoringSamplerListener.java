@@ -106,7 +106,7 @@ public class TraceThreadOnlineScoringSamplerListener {
             return;
         }
 
-        List<AutomationRuleEvaluator<?>> rules = ruleEvaluatorService.findAll(projectId, workspaceId)
+        List<AutomationRuleEvaluator<?, ?>> rules = ruleEvaluatorService.findAll(projectId, workspaceId)
                 .stream()
                 .filter(evaluator -> SUPPORTED_EVALUATOR_TYPES.contains(evaluator.getType()))
                 .collect(toList());
@@ -139,7 +139,7 @@ public class TraceThreadOnlineScoringSamplerListener {
     }
 
     private List<TraceThreadSampling> sampleTraceThreads(Map<UUID, TraceThreadModel> traceThreadModelMap,
-            List<AutomationRuleEvaluator<?>> rules, String workspaceId) {
+            List<AutomationRuleEvaluator<?, ?>> rules, String workspaceId) {
         return traceThreadModelMap.keySet()
                 .parallelStream()
                 .flatMap(traceThreadModelId -> {
@@ -214,8 +214,9 @@ public class TraceThreadOnlineScoringSamplerListener {
      * @param thread the thread to evaluate
      * @return true if the thread matches all filters and should be sampled, false otherwise
      */
-    private boolean shouldSampleTraceThread(AutomationRuleEvaluator<?> evaluator, TraceThreadModel thread) {
-        List<TraceFilter> traceFilters = evaluator.getFilters();
+    private boolean shouldSampleTraceThread(AutomationRuleEvaluator<?, ?> evaluator, TraceThreadModel thread) {
+        // Filter to only TraceFilter instances since TraceFilterEvaluationService expects TraceFilter
+        List<TraceFilter> traceFilters = (List<TraceFilter>) evaluator.getFilters();
         if (traceFilters.isEmpty()) {
             return true; // No filters means all threads should be sampled
         }
@@ -302,7 +303,7 @@ public class TraceThreadOnlineScoringSamplerListener {
     }
 
     private LogContextAware.Closable createThreadLoggingContext(String workspaceId,
-            AutomationRuleEvaluator<?> evaluator, UUID traceThreadModelId) {
+            AutomationRuleEvaluator<?, ?> evaluator, UUID traceThreadModelId) {
         return wrapWithMdc(Map.of(
                 UserLog.MARKER, UserLog.AUTOMATION_RULE_EVALUATOR.name(),
                 UserLog.WORKSPACE_ID, workspaceId,

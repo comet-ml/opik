@@ -22,7 +22,9 @@ import static com.comet.opik.api.evaluators.AutomationRuleEvaluatorLlmAsJudge.Ll
 @Data
 @JsonIgnoreProperties(ignoreUnknown = true)
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
-public final class AutomationRuleEvaluatorUpdateLlmAsJudge extends AutomationRuleEvaluatorUpdate<LlmAsJudgeCode> {
+public final class AutomationRuleEvaluatorUpdateLlmAsJudge
+        extends
+            AutomationRuleEvaluatorUpdate<LlmAsJudgeCode, TraceFilter> {
 
     @ConstructorProperties({"name", "samplingRate", "enabled", "filters", "code", "projectId"})
     public AutomationRuleEvaluatorUpdateLlmAsJudge(
@@ -41,6 +43,12 @@ public final class AutomationRuleEvaluatorUpdateLlmAsJudge extends AutomationRul
     @Override
     public LlmAsJudgeCode getCode() {
         return super.getCode();
+    }
+
+    @JsonProperty
+    @Override
+    public List<TraceFilter> getFilters() {
+        return super.filters;
     }
 
     @Override

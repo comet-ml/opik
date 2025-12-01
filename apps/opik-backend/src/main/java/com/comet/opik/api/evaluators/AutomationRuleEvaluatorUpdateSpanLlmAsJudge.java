@@ -1,6 +1,6 @@
 package com.comet.opik.api.evaluators;
 
-import com.comet.opik.api.filter.TraceThreadFilter;
+import com.comet.opik.api.filter.SpanFilter;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
@@ -15,21 +15,21 @@ import java.beans.ConstructorProperties;
 import java.util.List;
 import java.util.UUID;
 
-import static com.comet.opik.api.evaluators.AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython.TraceThreadUserDefinedMetricPythonCode;
+import static com.comet.opik.api.evaluators.AutomationRuleEvaluatorSpanLlmAsJudge.SpanLlmAsJudgeCode;
 
 @SuperBuilder(toBuilder = true)
 @EqualsAndHashCode(callSuper = true)
 @Data
 @JsonIgnoreProperties(ignoreUnknown = true)
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
-public final class AutomationRuleEvaluatorUpdateTraceThreadUserDefinedMetricPython
+public final class AutomationRuleEvaluatorUpdateSpanLlmAsJudge
         extends
-            AutomationRuleEvaluatorUpdate<TraceThreadUserDefinedMetricPythonCode, TraceThreadFilter> {
+            AutomationRuleEvaluatorUpdate<SpanLlmAsJudgeCode, SpanFilter> {
 
     @ConstructorProperties({"name", "samplingRate", "enabled", "filters", "code", "projectId"})
-    public AutomationRuleEvaluatorUpdateTraceThreadUserDefinedMetricPython(
-            @NotBlank String name, float samplingRate, boolean enabled, List<TraceThreadFilter> filters,
-            @NotNull TraceThreadUserDefinedMetricPythonCode code,
+    public AutomationRuleEvaluatorUpdateSpanLlmAsJudge(
+            @NotBlank String name, float samplingRate, boolean enabled, List<SpanFilter> filters,
+            @NotNull SpanLlmAsJudgeCode code,
             @NotNull UUID projectId) {
         super(name, samplingRate, enabled, filters, code, projectId);
     }
@@ -41,18 +41,18 @@ public final class AutomationRuleEvaluatorUpdateTraceThreadUserDefinedMetricPyth
      */
     @JsonProperty
     @Override
-    public TraceThreadUserDefinedMetricPythonCode getCode() {
+    public SpanLlmAsJudgeCode getCode() {
         return super.getCode();
     }
 
     @JsonProperty
     @Override
-    public List<TraceThreadFilter> getFilters() {
+    public List<SpanFilter> getFilters() {
         return super.filters;
     }
 
     @Override
     public AutomationRuleEvaluatorType getType() {
-        return AutomationRuleEvaluatorType.TRACE_THREAD_USER_DEFINED_METRIC_PYTHON;
+        return AutomationRuleEvaluatorType.SPAN_LLM_AS_JUDGE;
     }
 }
