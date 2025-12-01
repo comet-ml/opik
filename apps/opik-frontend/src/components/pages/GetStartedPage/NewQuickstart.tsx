@@ -6,38 +6,19 @@ import {
   ONBOARDING_STEP_KEY,
 } from "@/components/shared/OnboardingOverlay/OnboardingOverlayContext";
 import useLocalStorageState from "use-local-storage-state";
-import useOrganizations from "@/plugins/comet/useOrganizations";
-import useAllWorkspaces from "@/plugins/comet/useAllWorkspaces";
-import useUser from "@/plugins/comet/useUser";
-import useAppStore from "@/store/AppStore";
-import { ORGANIZATION_PLAN_ENTERPRISE } from "@/plugins/comet/types";
 
-const NewQuickstartPage: React.FunctionComponent = () => {
+export interface NewQuickstartProps {
+  shouldSkipQuestions?: boolean;
+}
+
+const NewQuickstart: React.FunctionComponent<NewQuickstartProps> = ({
+  shouldSkipQuestions = false,
+}) => {
   const [currentOnboardingStep] = useLocalStorageState(ONBOARDING_STEP_KEY);
-  const workspaceName = useAppStore((state) => state.activeWorkspaceName);
-
-  const { data: user } = useUser();
-  const { data: organizations } = useOrganizations({
-    enabled: !!user?.loggedIn,
-  });
-  const { data: allWorkspaces } = useAllWorkspaces({
-    enabled: !!user?.loggedIn,
-  });
-
-  const currentWorkspace = allWorkspaces?.find(
-    (workspace) => workspace.workspaceName === workspaceName,
-  );
-
-  const currentOrganization = organizations?.find((org) => {
-    return org.id === currentWorkspace?.organizationId;
-  });
-
-  const isEnterpriseCustomer =
-    currentOrganization?.paymentPlan === ORGANIZATION_PLAN_ENTERPRISE;
 
   if (
     currentOnboardingStep !== ONBOARDING_STEP_FINISHED &&
-    !isEnterpriseCustomer
+    !shouldSkipQuestions
   ) {
     return <OnboardingOverlay />;
   }
@@ -82,4 +63,4 @@ const NewQuickstartPage: React.FunctionComponent = () => {
   );
 };
 
-export default NewQuickstartPage;
+export default NewQuickstart;

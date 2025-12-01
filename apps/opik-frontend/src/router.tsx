@@ -30,7 +30,7 @@ import RedirectDatasets from "@/components/redirect/RedirectDatasets";
 import PlaygroundPage from "@/components/pages/PlaygroundPage/PlaygroundPage";
 import useAppStore from "@/store/AppStore";
 import ConfigurationPage from "@/components/pages/ConfigurationPage/ConfigurationPage";
-import NewQuickstartPage from "@/components/pages/NewQuickstartPage/NewQuickstartPage";
+import GetStartedPage from "@/components/pages/GetStartedPage/GetStartedPage";
 import AutomationLogsPage from "@/components/pages/AutomationLogsPage/AutomationLogsPage";
 import OnlineEvaluationPage from "@/components/pages/OnlineEvaluationPage/OnlineEvaluationPage";
 import AnnotationQueuesPage from "@/components/pages/AnnotationQueuesPage/AnnotationQueuesPage";
@@ -128,7 +128,7 @@ const quickstartRoute = createRoute({
 const getStartedRoute = createRoute({
   path: "/$workspaceName/get-started",
   getParentRoute: () => workspaceGuardPartialLayoutRoute,
-  component: NewQuickstartPage,
+  component: GetStartedPage,
   staticData: {
     hideUpgradeButton: true,
   },
