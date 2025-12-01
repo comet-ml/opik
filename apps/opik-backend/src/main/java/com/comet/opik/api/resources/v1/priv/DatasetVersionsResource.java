@@ -3,6 +3,7 @@ package com.comet.opik.api.resources.v1.priv;
 import com.comet.opik.api.DatasetVersion;
 import com.comet.opik.api.DatasetVersion.DatasetVersionPage;
 import com.comet.opik.api.DatasetVersionCreate;
+import com.comet.opik.api.DatasetVersionDiff;
 import com.comet.opik.api.DatasetVersionTag;
 import com.comet.opik.domain.DatasetVersionService;
 import com.comet.opik.infrastructure.auth.RequestContext;
@@ -134,5 +135,26 @@ public class DatasetVersionsResource {
                 workspaceId);
 
         return Response.noContent().build();
+    }
+
+    @GET
+    @Path("/diff")
+    @Operation(operationId = "compareDatasetVersions", summary = "Compare latest version with draft", description = "Compare the latest committed dataset version with the current draft state. This endpoint provides insights into changes made since the last version was committed. The comparison calculates additions, modifications, deletions, and unchanged items between the latest version snapshot and current draft.", responses = {
+            @ApiResponse(responseCode = "200", description = "Diff computed successfully", content = @Content(schema = @Schema(implementation = DatasetVersionDiff.class))),
+            @ApiResponse(responseCode = "404", description = "Version not found")})
+    @RateLimited
+    public Response compareVersions() {
+
+        String workspaceId = requestContext.get().getWorkspaceId();
+        log.info("Comparing latest version with draft for dataset='{}', workspace='{}'",
+                datasetId, workspaceId);
+
+        var diff = versionService.compareVersions(datasetId, DatasetVersionService.LATEST_TAG, null);
+
+        log.info(
+                "Computed diff for dataset='{}', from='latest', to='draft': stats='{}'", datasetId,
+                diff.statistics());
+
+        return Response.ok(diff).build();
     }
 }

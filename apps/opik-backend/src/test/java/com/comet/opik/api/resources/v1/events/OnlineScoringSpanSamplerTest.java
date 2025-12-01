@@ -115,6 +115,8 @@ class OnlineScoringSpanSamplerTest {
             sampler.onSpansCreated(event);
 
             // Then
+            // When toggle is disabled, findAll is never called since we return early
+            verify(ruleEvaluatorService, never()).findAll(any(), any(), any());
             verify(onlineScorePublisher, never()).enqueueMessage(any(), any());
         }
 
@@ -130,7 +132,7 @@ class OnlineScoringSpanSamplerTest {
             List<AutomationRuleEvaluatorSpanLlmAsJudge> evaluators = List.of(evaluator);
 
             when(ruleEvaluatorService.<SpanLlmAsJudgeCode, SpanFilter, AutomationRuleEvaluatorSpanLlmAsJudge>findAll(
-                    projectId, workspaceId))
+                    projectId, workspaceId, AutomationRuleEvaluatorType.SPAN_LLM_AS_JUDGE))
                     .thenReturn(evaluators);
             // Empty filters list means all spans match (matchesAllFilters returns true for empty list)
             // The implementation calls matchesAllFilters even with empty list, so we need to stub it
@@ -170,7 +172,7 @@ class OnlineScoringSpanSamplerTest {
             // Create a non-span evaluator (would be LLM_AS_JUDGE or other type)
             List<AutomationRuleEvaluatorSpanLlmAsJudge> evaluators = List.of(spanEvaluator);
             when(ruleEvaluatorService.<SpanLlmAsJudgeCode, SpanFilter, AutomationRuleEvaluatorSpanLlmAsJudge>findAll(
-                    projectId, workspaceId)).thenReturn(evaluators);
+                    projectId, workspaceId, AutomationRuleEvaluatorType.SPAN_LLM_AS_JUDGE)).thenReturn(evaluators);
 
             // Empty filters list means all spans match (matchesAllFilters returns true for empty list)
             // Need to stub since the mock needs to return true for empty filter lists
@@ -197,7 +199,7 @@ class OnlineScoringSpanSamplerTest {
 
             List<AutomationRuleEvaluatorSpanLlmAsJudge> evaluators = List.of(disabledEvaluator);
             when(ruleEvaluatorService.<SpanLlmAsJudgeCode, SpanFilter, AutomationRuleEvaluatorSpanLlmAsJudge>findAll(
-                    projectId, workspaceId)).thenReturn(evaluators);
+                    projectId, workspaceId, AutomationRuleEvaluatorType.SPAN_LLM_AS_JUDGE)).thenReturn(evaluators);
 
             // When
             sampler.onSpansCreated(event);
@@ -225,7 +227,7 @@ class OnlineScoringSpanSamplerTest {
             List<AutomationRuleEvaluatorSpanLlmAsJudge> evaluators = List.of(evaluator);
 
             when(ruleEvaluatorService.<SpanLlmAsJudgeCode, SpanFilter, AutomationRuleEvaluatorSpanLlmAsJudge>findAll(
-                    projectId, workspaceId)).thenReturn(evaluators);
+                    projectId, workspaceId, AutomationRuleEvaluatorType.SPAN_LLM_AS_JUDGE)).thenReturn(evaluators);
             when(filterEvaluationService.matchesAllFilters(any(), any())).thenReturn(false);
 
             // When
@@ -253,7 +255,7 @@ class OnlineScoringSpanSamplerTest {
 
             List<AutomationRuleEvaluatorSpanLlmAsJudge> evaluators = List.of(evaluator);
             when(ruleEvaluatorService.<SpanLlmAsJudgeCode, SpanFilter, AutomationRuleEvaluatorSpanLlmAsJudge>findAll(
-                    projectId, workspaceId)).thenReturn(evaluators);
+                    projectId, workspaceId, AutomationRuleEvaluatorType.SPAN_LLM_AS_JUDGE)).thenReturn(evaluators);
             when(filterEvaluationService.matchesAllFilters(any(), any())).thenReturn(true);
 
             // When
@@ -292,7 +294,7 @@ class OnlineScoringSpanSamplerTest {
 
             List<AutomationRuleEvaluatorSpanLlmAsJudge> evaluators = List.of(evaluator);
             when(ruleEvaluatorService.<SpanLlmAsJudgeCode, SpanFilter, AutomationRuleEvaluatorSpanLlmAsJudge>findAll(
-                    projectId, workspaceId)).thenReturn(evaluators);
+                    projectId, workspaceId, AutomationRuleEvaluatorType.SPAN_LLM_AS_JUDGE)).thenReturn(evaluators);
             when(filterEvaluationService.matchesAllFilters(any(), any())).thenReturn(true);
 
             // When
@@ -318,7 +320,7 @@ class OnlineScoringSpanSamplerTest {
 
             List<AutomationRuleEvaluatorSpanLlmAsJudge> evaluators = List.of(evaluator);
             when(ruleEvaluatorService.<SpanLlmAsJudgeCode, SpanFilter, AutomationRuleEvaluatorSpanLlmAsJudge>findAll(
-                    projectId, workspaceId)).thenReturn(evaluators);
+                    projectId, workspaceId, AutomationRuleEvaluatorType.SPAN_LLM_AS_JUDGE)).thenReturn(evaluators);
             // Empty filters list means all spans match (matchesAllFilters returns true for empty list)
             // No need to stub since empty list returns true immediately, and with sampling rate 0.0,
             // the span won't be sampled anyway
@@ -354,9 +356,9 @@ class OnlineScoringSpanSamplerTest {
             List<AutomationRuleEvaluatorSpanLlmAsJudge> evaluators2 = List.of(evaluator2);
 
             when(ruleEvaluatorService.<SpanLlmAsJudgeCode, SpanFilter, AutomationRuleEvaluatorSpanLlmAsJudge>findAll(
-                    projectId, workspaceId)).thenReturn(evaluators1);
+                    projectId, workspaceId, AutomationRuleEvaluatorType.SPAN_LLM_AS_JUDGE)).thenReturn(evaluators1);
             when(ruleEvaluatorService.<SpanLlmAsJudgeCode, SpanFilter, AutomationRuleEvaluatorSpanLlmAsJudge>findAll(
-                    projectId2, workspaceId)).thenReturn(evaluators2);
+                    projectId2, workspaceId, AutomationRuleEvaluatorType.SPAN_LLM_AS_JUDGE)).thenReturn(evaluators2);
             // Empty filters list means all spans match (matchesAllFilters returns true for empty list)
             // Need to stub since the mock needs to return true for empty filter lists
             lenient().when(filterEvaluationService.matchesAllFilters(any(), any()))
@@ -366,8 +368,10 @@ class OnlineScoringSpanSamplerTest {
             sampler.onSpansCreated(event);
 
             // Then
-            verify(ruleEvaluatorService, times(1)).findAll(projectId, workspaceId);
-            verify(ruleEvaluatorService, times(1)).findAll(projectId2, workspaceId);
+            verify(ruleEvaluatorService, times(1)).findAll(projectId, workspaceId,
+                    AutomationRuleEvaluatorType.SPAN_LLM_AS_JUDGE);
+            verify(ruleEvaluatorService, times(1)).findAll(projectId2, workspaceId,
+                    AutomationRuleEvaluatorType.SPAN_LLM_AS_JUDGE);
             verify(onlineScorePublisher, times(2)).enqueueMessage(any(),
                     eq(AutomationRuleEvaluatorType.SPAN_LLM_AS_JUDGE));
         }
@@ -387,7 +391,7 @@ class OnlineScoringSpanSamplerTest {
             sampler.onSpansCreated(event);
 
             // Then
-            verify(ruleEvaluatorService, never()).findAll(any(), any());
+            verify(ruleEvaluatorService, never()).findAll(any(), any(), any());
             verify(onlineScorePublisher, never()).enqueueMessage(any(), any());
         }
 
@@ -395,12 +399,13 @@ class OnlineScoringSpanSamplerTest {
         @DisplayName("Should handle no evaluators found")
         void shouldHandleNoEvaluatorsFound() {
             // Given
+            when(serviceTogglesConfig.isSpanLlmAsJudgeEnabled()).thenReturn(true);
             Span span = createTestSpan();
             SpansCreated event = new SpansCreated(List.of(span), workspaceId, userName);
 
             List<AutomationRuleEvaluatorSpanLlmAsJudge> emptyList = List.of();
             when(ruleEvaluatorService.<SpanLlmAsJudgeCode, SpanFilter, AutomationRuleEvaluatorSpanLlmAsJudge>findAll(
-                    projectId, workspaceId)).thenReturn(emptyList);
+                    projectId, workspaceId, AutomationRuleEvaluatorType.SPAN_LLM_AS_JUDGE)).thenReturn(emptyList);
 
             // When
             sampler.onSpansCreated(event);
@@ -434,7 +439,7 @@ class OnlineScoringSpanSamplerTest {
 
             List<AutomationRuleEvaluatorSpanLlmAsJudge> evaluators = List.of(evaluator);
             when(ruleEvaluatorService.<SpanLlmAsJudgeCode, SpanFilter, AutomationRuleEvaluatorSpanLlmAsJudge>findAll(
-                    projectId, workspaceId)).thenReturn(evaluators);
+                    projectId, workspaceId, AutomationRuleEvaluatorType.SPAN_LLM_AS_JUDGE)).thenReturn(evaluators);
             when(filterEvaluationService.matchesAllFilters(any(), any())).thenReturn(true);
 
             // When
