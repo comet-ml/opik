@@ -16,8 +16,7 @@ export namespace AutomationRuleEvaluatorWrite {
     }
 
     export interface UserDefinedMetricPython
-        extends OpikApi.AutomationRuleEvaluatorUserDefinedMetricPythonWrite,
-            _Base {
+        extends OpikApi.AutomationRuleEvaluatorUserDefinedMetricPythonWrite, _Base {
         type: "user_defined_metric_python";
     }
 
@@ -26,8 +25,7 @@ export namespace AutomationRuleEvaluatorWrite {
     }
 
     export interface TraceThreadUserDefinedMetricPython
-        extends OpikApi.AutomationRuleEvaluatorTraceThreadUserDefinedMetricPythonWrite,
-            _Base {
+        extends OpikApi.AutomationRuleEvaluatorTraceThreadUserDefinedMetricPythonWrite, _Base {
         type: "trace_thread_user_defined_metric_python";
     }
 

@@ -29,9 +29,11 @@ const TypeCell = (context: CellContext<ExpandingFeedbackScoreRow, string>) => {
       metadata={context.column.columnDef.meta}
       tableMetadata={context.table.options.meta}
     >
-      <div className="flex items-center gap-1.5">
+      <div className="flex w-full min-w-0 items-center gap-1.5">
         <BaseTraceDataTypeIcon type={spanType} />
-        <span className="comet-body-s">{typeLabel}</span>
+        <span className="comet-body-s min-w-0 flex-1 truncate">
+          {typeLabel}
+        </span>
       </div>
     </CellWrapper>
   );

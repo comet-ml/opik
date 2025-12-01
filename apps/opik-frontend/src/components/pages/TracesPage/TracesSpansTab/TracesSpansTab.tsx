@@ -110,6 +110,22 @@ const getRowId = (d: Trace | Span) => d.id;
 
 const REFETCH_INTERVAL = 30000;
 
+const SPAN_FEEDBACK_SCORE_SUFFIX = " (span)";
+
+/**
+ * Formats a score name with the span suffix for display in column labels
+ */
+const formatSpanScoreLabel = (scoreName: string): string => {
+  return `${scoreName}${SPAN_FEEDBACK_SCORE_SUFFIX}`;
+};
+
+/**
+ * Extracts the score name from a label by removing the span suffix
+ */
+const parseSpanScoreName = (label: string): string => {
+  return label.replace(SPAN_FEEDBACK_SCORE_SUFFIX, "");
+};
+
 const SHARED_COLUMNS: ColumnData<BaseTraceData>[] = [
   {
     id: "name",
@@ -566,7 +582,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
   });
 
   const dynamicScoresColumns = useMemo(() => {
-    return (feedbackScoresData?.scores ?? [])
+    return (feedbackScoresData?.scores?.slice() ?? [])
       .sort((c1, c2) => c1.name.localeCompare(c2.name))
       .map<DynamicColumn>((c) => ({
         id: `${COLUMN_FEEDBACK_SCORES_ID}.${c.name}`,
@@ -577,11 +593,11 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
 
   const dynamicSpanScoresColumns = useMemo(() => {
     if (type !== TRACE_DATA_TYPE.traces) return [];
-    return (spanFeedbackScoresData?.scores ?? [])
+    return (spanFeedbackScoresData?.scores?.slice() ?? [])
       .sort((c1, c2) => c1.name.localeCompare(c2.name))
       .map<DynamicColumn>((c) => ({
         id: `${COLUMN_SPAN_FEEDBACK_SCORES_ID}.${c.name}`,
-        label: `${c.name} (span)`,
+        label: formatSpanScoreLabel(c.name),
         columnType: COLUMN_TYPE.number,
       }));
   }, [spanFeedbackScoresData?.scores, type]);
@@ -635,7 +651,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
       const spanFeedbackScoresColumns = dynamicSpanScoresColumns.map(
         ({ label, id, columnType }) => {
           // Extract the score name without the "(span)" suffix for matching
-          const scoreName = label.replace(" (span)", "");
+          const scoreName = parseSpanScoreName(label);
           return {
             id,
             label,

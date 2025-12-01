@@ -7,6 +7,7 @@ import {
   Clock,
   Coins,
   Copy,
+  Download,
   Hash,
   MessageCircleMore,
   MessageCircleOff,
@@ -16,11 +17,24 @@ import {
   Trash,
 } from "lucide-react";
 import copy from "clipboard-copy";
+import FileSaver from "file-saver";
+import { json2csv } from "json-2-csv";
+import get from "lodash/get";
 import isBoolean from "lodash/isBoolean";
 import isFunction from "lodash/isFunction";
 import isUndefined from "lodash/isUndefined";
+import uniq from "lodash/uniq";
 
-import { COLUMN_TYPE, OnChangeFn } from "@/types/shared";
+import {
+  COLUMN_FEEDBACK_SCORES_ID,
+  COLUMN_TYPE,
+  OnChangeFn,
+} from "@/types/shared";
+import {
+  mapRowDataForExport,
+  TRACE_EXPORT_COLUMNS,
+  THREAD_EXPORT_COLUMNS,
+} from "@/lib/traces/exportUtils";
 import { Trace } from "@/types/traces";
 import { Filter } from "@/types/filters";
 import { formatDate, formatDuration } from "@/lib/date";
@@ -72,6 +86,8 @@ import { WORKSPACE_PREFERENCE_TYPE } from "@/components/pages/ConfigurationPage/
 import { WORKSPACE_PREFERENCES_QUERY_PARAMS } from "@/components/pages/ConfigurationPage/WorkspacePreferencesTab/constants";
 import AddToDropdown from "@/components/pages-shared/traces/AddToDropdown/AddToDropdown";
 import ConfigurableFeedbackScoreTable from "../TraceDetailsPanel/TraceDataViewer/FeedbackScoreTable/ConfigurableFeedbackScoreTable";
+import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
+import { FeatureToggleKeys } from "@/types/feature-toggles";
 
 type ThreadDetailsPanelProps = {
   projectId: string;
@@ -116,6 +132,8 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
   });
   const [activeSection, setActiveSection] =
     useDetailsActionSectionState("lastThreadSection");
+
+  const isExportEnabled = useIsFeatureEnabled(FeatureToggleKeys.EXPORT_ENABLED);
 
   const { mutate: threadFeedbackScoreDelete } =
     useThreadFeedbackScoreDeleteMutation();
@@ -230,6 +248,105 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
       author,
     });
   };
+
+  const exportColumns = useMemo(() => {
+    const feedbackScoreNames = uniq(
+      (thread?.feedback_scores ?? []).map(
+        (score) => `${COLUMN_FEEDBACK_SCORES_ID}.${score.name}`,
+      ),
+    );
+
+    return [...THREAD_EXPORT_COLUMNS, ...feedbackScoreNames];
+  }, [thread]);
+
+  const traceExportColumns = useMemo(() => {
+    const feedbackScoreNames = uniq(
+      traces.reduce<string[]>((acc, trace) => {
+        return acc.concat(
+          (trace.feedback_scores ?? []).map(
+            (score) => `${COLUMN_FEEDBACK_SCORES_ID}.${score.name}`,
+          ),
+        );
+      }, []),
+    );
+
+    return [...TRACE_EXPORT_COLUMNS, ...feedbackScoreNames];
+  }, [traces]);
+
+  const handleExportCSV = useCallback(async () => {
+    try {
+      if (!thread) return;
+
+      const mappedData = await mapRowDataForExport([thread], exportColumns);
+      const mappedTraces = await mapRowDataForExport(
+        traces,
+        traceExportColumns,
+      );
+
+      const dataWithConversationHistory = [
+        {
+          ...mappedData[0],
+          conversation_history: JSON.stringify(mappedTraces),
+        },
+      ];
+
+      const csv = json2csv(dataWithConversationHistory);
+      const fileName = `${threadId}-thread.csv`;
+      const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+      FileSaver.saveAs(blob, fileName);
+
+      toast({
+        title: "Export successful",
+        description: "Exported thread to CSV",
+      });
+    } catch (error) {
+      toast({
+        title: "Export failed",
+        description: get(error, "message", "Failed to export"),
+        variant: "destructive",
+      });
+    }
+  }, [thread, threadId, exportColumns, traces, traceExportColumns]);
+
+  const handleExportJSON = useCallback(async () => {
+    try {
+      if (!thread) return;
+
+      const mappedThreadData = await mapRowDataForExport(
+        [thread],
+        exportColumns,
+      );
+      const mappedTraces = await mapRowDataForExport(
+        traces,
+        traceExportColumns,
+      );
+
+      const dataWithConversationHistory = {
+        ...mappedThreadData[0],
+        conversation_history: mappedTraces,
+      };
+
+      const fileName = `${threadId}-thread.json`;
+      const blob = new Blob(
+        [JSON.stringify(dataWithConversationHistory, null, 2)],
+        {
+          type: "application/json;charset=utf-8",
+        },
+      );
+      FileSaver.saveAs(blob, fileName);
+
+      toast({
+        title: "Export successful",
+        description: "Exported thread to JSON",
+      });
+    } catch (error) {
+      toast({
+        title: "Export failed",
+        description: get(error, "message", "Failed to export"),
+        variant: "destructive",
+      });
+    }
+  }, [thread, threadId, exportColumns, traces, traceExportColumns]);
 
   const horizontalNavigation = useMemo(
     () =>
@@ -572,6 +689,49 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
                   Copy thread ID
                 </DropdownMenuItem>
               </TooltipWrapper>
+              <DropdownMenuSeparator />
+              {!isExportEnabled ? (
+                <TooltipWrapper
+                  content="Export functionality is disabled for this installation"
+                  side="left"
+                >
+                  <div>
+                    <DropdownMenuItem
+                      onClick={handleExportCSV}
+                      disabled={!isExportEnabled}
+                    >
+                      <Download className="mr-2 size-4" />
+                      Export as CSV
+                    </DropdownMenuItem>
+                  </div>
+                </TooltipWrapper>
+              ) : (
+                <DropdownMenuItem onClick={handleExportCSV}>
+                  <Download className="mr-2 size-4" />
+                  Export as CSV
+                </DropdownMenuItem>
+              )}
+              {!isExportEnabled ? (
+                <TooltipWrapper
+                  content="Export functionality is disabled for this installation"
+                  side="left"
+                >
+                  <div>
+                    <DropdownMenuItem
+                      onClick={handleExportJSON}
+                      disabled={!isExportEnabled}
+                    >
+                      <Download className="mr-2 size-4" />
+                      Export as JSON
+                    </DropdownMenuItem>
+                  </div>
+                </TooltipWrapper>
+              ) : (
+                <DropdownMenuItem onClick={handleExportJSON}>
+                  <Download className="mr-2 size-4" />
+                  Export as JSON
+                </DropdownMenuItem>
+              )}
               <DropdownMenuSeparator />
               <DropdownMenuItem onClick={() => setPopupOpen(true)}>
                 <Trash className="mr-2 size-4" />
