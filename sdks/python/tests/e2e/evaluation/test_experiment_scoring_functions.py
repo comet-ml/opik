@@ -84,8 +84,7 @@ def test_experiment_scoring_functions__standard_deviation__computed_and_logged(
         f"Full score object: {evaluation_result.experiment_scores[0]}"
     )
 
-    # Expected stdev for scores [1.0, 1.0, 0.0] is approximately 0.5773502691896257
-    expected_stdev = 0.5773502691896257
+    expected_stdev = statistics.stdev([1.0, 1.0, 0.0])
     assert evaluation_result.experiment_scores[0].value == pytest.approx(
         expected_stdev, abs=0.0001
     ), (
