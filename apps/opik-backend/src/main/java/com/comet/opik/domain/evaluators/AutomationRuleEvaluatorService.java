@@ -6,11 +6,13 @@ import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluator;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorLlmAsJudge;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorSpanLlmAsJudge;
+import com.comet.opik.api.evaluators.AutomationRuleEvaluatorSpanUserDefinedMetricPython;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorTraceThreadLlmAsJudge;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorUpdate;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorUpdateLlmAsJudge;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorUpdateSpanLlmAsJudge;
+import com.comet.opik.api.evaluators.AutomationRuleEvaluatorUpdateSpanUserDefinedMetricPython;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorUpdateTraceThreadLlmAsJudge;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorUpdateTraceThreadUserDefinedMetricPython;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorUpdateUserDefinedMetricPython;
@@ -163,6 +165,19 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
 
                     yield AutomationModelEvaluatorMapper.INSTANCE.map(definition);
                 }
+                case AutomationRuleEvaluatorSpanUserDefinedMetricPython spanUserDefinedMetricPython -> {
+                    if (!opikConfiguration.getServiceToggles().isPythonEvaluatorEnabled()) {
+                        throw new ServerErrorException("Python evaluator is disabled", 501);
+                    }
+                    var definition = spanUserDefinedMetricPython.toBuilder()
+                            .id(id)
+                            .projectId(projectId)
+                            .createdBy(userName)
+                            .lastUpdatedBy(userName)
+                            .build();
+
+                    yield AutomationModelEvaluatorMapper.INSTANCE.map(definition);
+                }
             };
 
             try {
@@ -239,6 +254,16 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
                                         .map(evaluatorUpdateSpanLlmAsJudge.getCode()))
                                 .lastUpdatedBy(userName)
                                 .build();
+                    case AutomationRuleEvaluatorUpdateSpanUserDefinedMetricPython evaluatorUpdateSpanUserDefinedMetricPython -> {
+                        if (!opikConfiguration.getServiceToggles().isPythonEvaluatorEnabled()) {
+                            throw new ServerErrorException("Python evaluator is disabled", 501);
+                        }
+                        yield SpanUserDefinedMetricPythonAutomationRuleEvaluatorModel.builder()
+                                .code(AutomationModelEvaluatorMapper.INSTANCE
+                                        .map(evaluatorUpdateSpanUserDefinedMetricPython.getCode()))
+                                .lastUpdatedBy(userName)
+                                .build();
+                    }
                 };
 
                 int resultEval = dao.updateEvaluator(id, modelUpdate);
@@ -283,6 +308,8 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
                             AutomationModelEvaluatorMapper.INSTANCE.map(traceThreadUserDefinedMetricPython);
                         case SpanLlmAsJudgeAutomationRuleEvaluatorModel spanLlmAsJudge ->
                             AutomationModelEvaluatorMapper.INSTANCE.map(spanLlmAsJudge);
+                        case SpanUserDefinedMetricPythonAutomationRuleEvaluatorModel spanUserDefinedMetricPython ->
+                            AutomationModelEvaluatorMapper.INSTANCE.map(spanUserDefinedMetricPython);
                     })
                     .map(evaluator -> (T) evaluator)
                     .orElseThrow(this::newNotFoundException);
@@ -312,6 +339,8 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
                             AutomationModelEvaluatorMapper.INSTANCE.map(traceThreadUserDefinedMetricPython);
                         case SpanLlmAsJudgeAutomationRuleEvaluatorModel spanLlmAsJudge ->
                             AutomationModelEvaluatorMapper.INSTANCE.map(spanLlmAsJudge);
+                        case SpanUserDefinedMetricPythonAutomationRuleEvaluatorModel spanUserDefinedMetricPython ->
+                            AutomationModelEvaluatorMapper.INSTANCE.map(spanUserDefinedMetricPython);
                     })
                     .map(evaluator -> (T) evaluator)
                     .toList();
@@ -390,6 +419,8 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
                                     AutomationModelEvaluatorMapper.INSTANCE.map(traceThreadUserDefinedMetricPython);
                                 case SpanLlmAsJudgeAutomationRuleEvaluatorModel spanLlmAsJudge ->
                                     AutomationModelEvaluatorMapper.INSTANCE.map(spanLlmAsJudge);
+                                case SpanUserDefinedMetricPythonAutomationRuleEvaluatorModel spanUserDefinedMetricPython ->
+                                    AutomationModelEvaluatorMapper.INSTANCE.map(spanUserDefinedMetricPython);
                             })
                             .toList());
 
@@ -426,6 +457,8 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
                             (T) AutomationModelEvaluatorMapper.INSTANCE.map(traceThreadUserDefinedMetricPython);
                         case SpanLlmAsJudgeAutomationRuleEvaluatorModel spanLlmAsJudge ->
                             (T) AutomationModelEvaluatorMapper.INSTANCE.map(spanLlmAsJudge);
+                        case SpanUserDefinedMetricPythonAutomationRuleEvaluatorModel spanUserDefinedMetricPython ->
+                            (T) AutomationModelEvaluatorMapper.INSTANCE.map(spanUserDefinedMetricPython);
                     })
                     .toList();
         });
