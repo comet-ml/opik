@@ -131,42 +131,56 @@ export const useExperimentsTableConfig = <
           const actualType = scoreType || SCORE_TYPE_FEEDBACK;
           const isExperimentScore = actualType === SCORE_TYPE_EXPERIMENT;
 
-          return {
+          // Extract conditional values
+          const displayLabel = isExperimentScore ? label : `${label} (avg)`;
+          const scoresKey = isExperimentScore
+            ? "experiment_scores"
+            : "feedback_scores";
+
+          // Common fields
+          const columnData: ColumnData<T> = {
             id,
-            label: isExperimentScore ? label : `${label} (avg)`,
+            label: displayLabel,
             type: columnType,
+            scoreType: actualType,
             header: FeedbackScoreHeader as never,
             cell: FeedbackScoreCell as never,
             aggregatedCell: FeedbackScoreCell.Aggregation as never,
             accessorFn: (row: T) => {
-              const scores = isExperimentScore
-                ? (row as T & { experiment_scores?: AggregatedFeedbackScore[] })
-                    .experiment_scores
-                : (row as T & { feedback_scores?: AggregatedFeedbackScore[] })
-                    .feedback_scores;
+              const rowWithScores = row as T & {
+                feedback_scores?: AggregatedFeedbackScore[];
+                experiment_scores?: AggregatedFeedbackScore[];
+              };
+              const scores = rowWithScores[scoresKey];
               return getScoreByName(scores, label);
             },
             customMeta: {
               accessorFn: (aggregation: ExperimentsAggregations) => {
-                const scores = isExperimentScore
-                  ? (
-                      aggregation as ExperimentsAggregations & {
-                        experiment_scores?: AggregatedFeedbackScore[];
-                      }
-                    ).experiment_scores
-                  : (
-                      aggregation as ExperimentsAggregations & {
-                        feedback_scores?: AggregatedFeedbackScore[];
-                      }
-                    ).feedback_scores;
+                const aggWithScores = aggregation as ExperimentsAggregations & {
+                  feedback_scores?: AggregatedFeedbackScore[];
+                  experiment_scores?: AggregatedFeedbackScore[];
+                };
+                const scores = aggWithScores[scoresKey];
                 return getScoreByName(scores, label)?.value;
               },
             },
-          } as ColumnData<T>;
+          };
+
+          return columnData;
         },
       ),
     ];
   }, [dynamicScoresColumns]);
+
+  const experimentScoresColumnsData = useMemo(() => {
+    return scoresColumnsData.filter(
+      (c) => c.scoreType === SCORE_TYPE_EXPERIMENT,
+    );
+  }, [scoresColumnsData]);
+
+  const feedbackScoresColumnsData = useMemo(() => {
+    return scoresColumnsData.filter((c) => c.scoreType === SCORE_TYPE_FEEDBACK);
+  }, [scoresColumnsData]);
 
   const selectedRows = useMemo(() => {
     return experiments.filter(
@@ -262,7 +276,12 @@ export const useExperimentsTableConfig = <
         selectedColumns,
         sortableColumns: sortableBy,
       }),
-      ...convertColumnDataToColumn<T, T>(scoresColumnsData, {
+      ...convertColumnDataToColumn<T, T>(experimentScoresColumnsData, {
+        columnsOrder: scoresColumnsOrder,
+        selectedColumns,
+        sortableColumns: sortableBy,
+      }),
+      ...convertColumnDataToColumn<T, T>(feedbackScoresColumnsData, {
         columnsOrder: scoresColumnsOrder,
         selectedColumns,
         sortableColumns: sortableBy,
@@ -279,14 +298,15 @@ export const useExperimentsTableConfig = <
 
     return baseColumns;
   }, [
-    checkboxClickHandler,
-    sortableBy,
     groups,
+    sortableBy,
+    checkboxClickHandler,
+    defaultColumns,
     columnsOrder,
     selectedColumns,
-    scoresColumnsData,
+    experimentScoresColumnsData,
     scoresColumnsOrder,
-    defaultColumns,
+    feedbackScoresColumnsData,
     actionsCell,
   ]);
 
@@ -325,13 +345,24 @@ export const useExperimentsTableConfig = <
   const columnSections = useMemo(() => {
     return [
       {
+        title: "Experiment scores",
+        columns: experimentScoresColumnsData,
+        order: scoresColumnsOrder,
+        onOrderChange: setScoresColumnsOrder,
+      },
+      {
         title: "Feedback scores",
-        columns: scoresColumnsData,
+        columns: feedbackScoresColumnsData,
         order: scoresColumnsOrder,
         onOrderChange: setScoresColumnsOrder,
       },
     ];
-  }, [scoresColumnsData, scoresColumnsOrder, setScoresColumnsOrder]);
+  }, [
+    experimentScoresColumnsData,
+    feedbackScoresColumnsData,
+    scoresColumnsOrder,
+    setScoresColumnsOrder,
+  ]);
 
   return {
     // State
