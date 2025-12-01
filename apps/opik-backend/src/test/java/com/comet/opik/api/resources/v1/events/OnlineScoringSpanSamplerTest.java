@@ -105,12 +105,6 @@ class OnlineScoringSpanSamplerTest {
             Span span = createTestSpan();
             SpansCreated event = new SpansCreated(List.of(span), workspaceId, userName);
 
-            AutomationRuleEvaluatorSpanLlmAsJudge evaluator = createTestEvaluator(true, 1.0f, List.of());
-
-            List<AutomationRuleEvaluatorSpanLlmAsJudge> evaluators = List.of(evaluator);
-            when(ruleEvaluatorService.<SpanLlmAsJudgeCode, SpanFilter, AutomationRuleEvaluatorSpanLlmAsJudge>findAll(
-                    projectId, workspaceId)).thenReturn(evaluators);
-
             // When
             sampler.onSpansCreated(event);
 
