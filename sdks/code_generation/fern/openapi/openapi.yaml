@@ -8123,6 +8123,10 @@ components:
         last_updated_at:
           type: string
           format: date-time
+        span_type:
+          type: string
+        span_id:
+          type: string
       readOnly: true
     DatasetItemBatch_Write:
       required:
@@ -8616,6 +8620,10 @@ components:
         last_updated_at:
           type: string
           format: date-time
+        span_type:
+          type: string
+        span_id:
+          type: string
       readOnly: true
     DatasetPage_Public:
       type: object
@@ -9549,6 +9557,13 @@ components:
           readOnly: true
           items:
             $ref: "#/components/schemas/FeedbackScore"
+        span_feedback_scores:
+          type: array
+          description: "Aggregated feedback scores from all spans in this trace, averaged\
+            \ by score name"
+          readOnly: true
+          items:
+            $ref: "#/components/schemas/FeedbackScore"
         comments:
           type: array
           readOnly: true
@@ -9829,6 +9844,10 @@ components:
         last_updated_at:
           type: string
           format: date-time
+        span_type:
+          type: string
+        span_id:
+          type: string
       readOnly: true
     Comment_Public:
       required:
@@ -12338,6 +12357,8 @@ components:
           additionalProperties:
             $ref: "#/components/schemas/ValueEntry_Public"
           readOnly: true
+      description: "Aggregated feedback scores from all spans in this trace, averaged\
+        \ by score name"
       readOnly: true
     Span_Public:
       required:
@@ -12451,6 +12472,10 @@ components:
         last_updated_at:
           type: string
           format: date-time
+        span_type:
+          type: string
+        span_id:
+          type: string
       readOnly: true
     SpanPage_Public:
       type: object
@@ -12893,6 +12918,13 @@ components:
           readOnly: true
         feedback_scores:
           type: array
+          readOnly: true
+          items:
+            $ref: "#/components/schemas/FeedbackScore_Public"
+        span_feedback_scores:
+          type: array
+          description: "Aggregated feedback scores from all spans in this trace, averaged\
+            \ by score name"
           readOnly: true
           items:
             $ref: "#/components/schemas/FeedbackScore_Public"
