@@ -15,7 +15,7 @@ import OptimizationStudioActions from "./OptimizationStudioActions";
 import ConfigureOptimizationSection from "./ConfigureOptimizationSection/ConfigureOptimizationSection";
 import ObserveOptimizationSection from "@/components/pages/OptimizationStudioPage/ObserveOptimizationSection/ObserveOptimizationSection";
 import { DEMO_TEMPLATES } from "@/constants/optimizations";
-
+import useOptimizationStudioById from "@/api/optimizations/useOptimizationStudioById";
 const REFETCH_INTERVAL = 30000;
 const MAX_EXPERIMENTS_LOADED = 1000;
 
@@ -24,14 +24,17 @@ const OptimizationStudioRunPageContent = () => {
   const setBreadcrumbParam = useBreadcrumbsStore((state) => state.setParam);
   const [optimizationId] = useQueryParam("optimizationId", StringParam);
   const [templateId] = useQueryParam("template", StringParam);
-  const { setActiveOptimization, setExperiments, setTemplateData } =
-    useOptimizationStudioContext();
+  const {
+    setActiveOptimization,
+    setExperiments,
+    setTemplateData,
+    activeOptimization,
+  } = useOptimizationStudioContext();
 
-  const { data: optimization, isPending: isOptimizationPending } =
-    useOptimizationById(
+  const { data: optimizationStudio, isPending: isOptimizationPending } =
+    useOptimizationStudioById(
       {
         optimizationId: optimizationId!,
-        includeStudioConfig: true,
       },
       {
         enabled: Boolean(optimizationId),
@@ -39,6 +42,7 @@ const OptimizationStudioRunPageContent = () => {
         refetchInterval: optimizationId ? REFETCH_INTERVAL : false,
       },
     );
+
 
   const { data: experimentsData, isPending: isExperimentsPending } =
     useExperimentsList(
@@ -62,9 +66,20 @@ const OptimizationStudioRunPageContent = () => {
   );
 
   useEffect(() => {
-    setBreadcrumbParam("optimizationStudioRun", "run", "Optimization studio");
     return () => setBreadcrumbParam("optimizationStudioRun", "run", "");
   }, [setBreadcrumbParam]);
+
+  useEffect(() => {
+    if (activeOptimization?.name) {
+      setBreadcrumbParam(
+        "optimizationStudioRun",
+        "run",
+        `${activeOptimization.name}`,
+      );
+    } else {
+      setBreadcrumbParam("optimizationStudioRun", "run", "Start optimization");
+    }
+  }, [activeOptimization?.name]);
 
   useEffect(() => {
     if (templateId) {
@@ -76,8 +91,8 @@ const OptimizationStudioRunPageContent = () => {
   }, [templateId, setTemplateData]);
 
   useEffect(() => {
-    setActiveOptimization(optimization || null);
-  }, [optimization, setActiveOptimization]);
+    setActiveOptimization(optimizationStudio || null);
+  }, [optimizationStudio, setActiveOptimization]);
 
   useEffect(() => {
     setExperiments(experiments);

@@ -1,60 +1,66 @@
 import React from "react";
 import { Button } from "@/components/ui/button";
-import { useNavigate } from "@tanstack/react-router";
+import { Link } from "@tanstack/react-router";
+import { useFormContext } from "react-hook-form";
 import { useOptimizationStudioContext } from "./OptimizationStudioContext";
 import { OPTIMIZATION_STATUS } from "@/types/optimizations";
 import useAppStore from "@/store/AppStore";
 
 const OptimizationStudioActions: React.FC = () => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
-  const navigate = useNavigate();
-  const { activeOptimization } = useOptimizationStudioContext();
+  const { activeOptimization, isSubmitting, submitOptimization } =
+    useOptimizationStudioContext();
+  const form = useFormContext();
+  const isFormValid = form.formState.isValid;
 
-  const handleViewTrials = () => {
-    if (!activeOptimization) return;
+  const isRunning = activeOptimization?.status === OPTIMIZATION_STATUS.RUNNING;
+  const showViewTrials = Boolean(activeOptimization?.id);
 
-    navigate({
-      to: "/$workspaceName/optimizations/$datasetId/$optimizationId/compare",
-      params: {
-        workspaceName,
-        datasetId: activeOptimization.dataset_id,
-        optimizationId: activeOptimization.id,
-      },
-      search: {
-        optimizations: [activeOptimization.id],
-      },
-    });
-  };
-
-  if (!activeOptimization) {
-    return null;
-  }
-
-  // Optimization in progress - show "Stop optimization" (outlined) + "View trials" (primary)
-  if (activeOptimization.status === OPTIMIZATION_STATUS.RUNNING) {
-    return (
-      <div className="flex gap-2">
+  const renderActionButton = () => {
+    if (isRunning) {
+      return (
         <Button size="sm" variant="outline" className="h-8">
           Stop optimization
         </Button>
-        <Button size="sm" className="h-8" onClick={handleViewTrials}>
-          View trials
-        </Button>
-      </div>
-    );
-  }
+      );
+    }
 
-  // Optimization completed - show "View trials" (outlined) + "New optimization" (primary)
-  return (
-    <div className="flex gap-2">
+    return (
       <Button
         size="sm"
-        variant="outline"
         className="h-8"
-        onClick={handleViewTrials}
+        onClick={submitOptimization}
+        disabled={!isFormValid || isSubmitting}
       >
-        View trials
+        {isSubmitting ? "Starting..." : "Run optimization"}
       </Button>
+    );
+  };
+
+  return (
+    <div className="flex gap-2">
+      {showViewTrials && (
+        <Button
+          size="sm"
+          variant={isRunning ? "default" : "outline"}
+          className="h-8"
+          asChild
+        >
+          <Link
+            to="/$workspaceName/optimizations/$datasetId/compare"
+            params={{
+              workspaceName,
+              datasetId: activeOptimization!.dataset_id,
+            }}
+            search={{
+              optimizations: [activeOptimization!.id],
+            }}
+          >
+            View trials
+          </Link>
+        </Button>
+      )}
+      {renderActionButton()}
     </div>
   );
 };

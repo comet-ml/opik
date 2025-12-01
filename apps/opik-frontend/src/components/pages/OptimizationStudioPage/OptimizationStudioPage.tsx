@@ -95,9 +95,6 @@ const OptimizationStudioPage = () => {
                       <span className="rounded bg-secondary px-2 py-1">
                         {template.studio_config?.evaluation.metrics[0]?.type}
                       </span>
-                      <span className="rounded bg-secondary px-2 py-1">
-                        {template.studio_config?.llm_model.name.split("/")[1]}
-                      </span>
                     </div>
                   </CardContent>
                 </Link>

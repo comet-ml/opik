@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Database, Plus, X } from "lucide-react";
+
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import LoadableSelectBox from "@/components/shared/LoadableSelectBox/LoadableSelectBox";
@@ -8,7 +9,6 @@ import AddEditDatasetDialog from "@/components/pages/DatasetsPage/AddEditDataset
 import useDatasetsList from "@/api/datasets/useDatasetsList";
 import { Dataset } from "@/types/datasets";
 import { cn } from "@/lib/utils";
-import useAppStore from "@/store/AppStore";
 
 const DEFAULT_LOADED_DATASETS = 1000;
 const MAX_LOADED_DATASETS = 10000;
@@ -26,22 +26,26 @@ export const DatasetEmptyState = () => {
   );
 };
 
-interface LLMDatasetSelectBoxProps {
+interface DatasetSelectBoxProps {
   value: string | null;
   onChange: (id: string | null) => void;
+  workspaceName: string;
   disabled?: boolean;
   showClearButton?: boolean;
   buttonClassName?: string;
+  /** Callback to handle additional actions when dataset changes (like resetting state) */
+  onDatasetChangeExtra?: () => void;
 }
 
-const LLMDatasetSelectBox: React.FC<LLMDatasetSelectBoxProps> = ({
+const DatasetSelectBox: React.FC<DatasetSelectBoxProps> = ({
   value,
   onChange,
+  workspaceName,
   disabled = false,
   showClearButton = true,
   buttonClassName,
+  onDatasetChangeExtra,
 }) => {
-  const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const [isLoadedMore, setIsLoadedMore] = useState(false);
   const [isDatasetDialogOpen, setIsDatasetDialogOpen] = useState(false);
   const [isDatasetDropdownOpen, setIsDatasetDropdownOpen] = useState(false);
@@ -69,9 +73,13 @@ const LLMDatasetSelectBox: React.FC<LLMDatasetSelectBoxProps> = ({
     return datasets.map((ds) => ({
       label: ds.name,
       value: ds.id,
+      action: {
+        href: `/${workspaceName}/datasets/${ds.id}`,
+      },
     }));
-  }, [datasets]);
+  }, [datasets, workspaceName]);
 
+  // Clear value if the selected dataset no longer exists
   useEffect(() => {
     if (value && !isLoadingDatasets && !isFetchingDatasets) {
       const datasetExists = datasets.some((ds) => ds.id === value);
@@ -85,9 +93,10 @@ const LLMDatasetSelectBox: React.FC<LLMDatasetSelectBoxProps> = ({
     (id: string | null) => {
       if (value !== id) {
         onChange(id);
+        onDatasetChangeExtra?.();
       }
     },
-    [onChange, value],
+    [onChange, value, onDatasetChangeExtra],
   );
 
   const handleDatasetCreated = useCallback(
@@ -127,7 +136,7 @@ const LLMDatasetSelectBox: React.FC<LLMDatasetSelectBoxProps> = ({
           isLoading={isLoadingDatasets}
           optionsCount={DEFAULT_LOADED_DATASETS}
           buttonClassName={cn(
-            "w-[310px]",
+            "w-[220px]",
             {
               "rounded-r-none": !!value && showClearButton,
             },
@@ -160,6 +169,7 @@ const LLMDatasetSelectBox: React.FC<LLMDatasetSelectBoxProps> = ({
             </div>
           }
           disabled={disabled}
+          showTooltip
         />
 
         {value && showClearButton && (
@@ -184,4 +194,5 @@ const LLMDatasetSelectBox: React.FC<LLMDatasetSelectBoxProps> = ({
   );
 };
 
-export default LLMDatasetSelectBox;
+export default DatasetSelectBox;
+

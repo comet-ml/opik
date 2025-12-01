@@ -7,6 +7,7 @@ import {
   EqualsMetricParameters,
   JsonSchemaValidatorMetricParameters,
   GEvalMetricParameters,
+  LevenshteinMetricParameters,
 } from "@/types/optimizations";
 import {
   DropdownMenu,
@@ -17,6 +18,7 @@ import { Button, ButtonProps } from "@/components/ui/button";
 import EqualsMetricConfigs from "@/components/pages-shared/optimizations/MetricSettings/metricConfigs/EqualsMetricConfigs";
 import JsonSchemaValidatorMetricConfigs from "@/components/pages-shared/optimizations/MetricSettings/metricConfigs/JsonSchemaValidatorMetricConfigs";
 import GEvalMetricConfigs from "@/components/pages-shared/optimizations/MetricSettings/metricConfigs/GEvalMetricConfigs";
+import LevenshteinMetricConfigs from "@/components/pages-shared/optimizations/MetricSettings/metricConfigs/LevenshteinMetricConfigs";
 
 interface MetricConfigsProps {
   metricType: METRIC_TYPE;
@@ -56,6 +58,15 @@ const MetricConfigs = ({
       return (
         <GEvalMetricConfigs
           configs={configs as Partial<GEvalMetricParameters>}
+          onChange={onChange}
+        />
+      );
+    }
+
+    if (metricType === METRIC_TYPE.LAVENSHTEIN) {
+      return (
+        <LevenshteinMetricConfigs
+          configs={configs as Partial<LevenshteinMetricParameters>}
           onChange={onChange}
         />
       );

@@ -15,9 +15,10 @@ const OptimizationLogs: React.FC<OptimizationLogsProps> = ({
 
   const logs = optimization
     ? [
-        "Evaluating prompt candidates",
-        "Best prompt score: 0.39",
-        "Generating new samples",
+        "Logs",
+        "are",
+        "not",
+        "available",
         "...",
         "...",
         "Optimization finished.",
@@ -35,17 +36,16 @@ const OptimizationLogs: React.FC<OptimizationLogsProps> = ({
           ) : (
             <>
               {logs.map((log, index) => (
-                <div key={index} className="comet-body-s text-primary">
+                <div key={log} className="comet-body-s text-muted-slate">
                   {log}
                 </div>
               ))}
               {optimization && (
                 <Link
-                  to="/$workspaceName/optimizations/$datasetId/$optimizationId/compare"
+                  to="/$workspaceName/optimizations/$datasetId/compare"
                   params={{
                     workspaceName,
                     datasetId: optimization.dataset_id,
-                    optimizationId: optimization.id,
                   }}
                   search={{ optimizations: [optimization.id] }}
                   target="_blank"

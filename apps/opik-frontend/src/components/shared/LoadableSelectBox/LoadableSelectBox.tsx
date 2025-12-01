@@ -330,6 +330,8 @@ export const LoadableSelectBox = ({
                       </div>
                     )}
 
+                    <TooltipWrapper content={option.label}>
+
                     <div className="min-w-0 flex-1">
                       <div className="comet-body-s truncate">
                         {option.label}
@@ -340,6 +342,7 @@ export const LoadableSelectBox = ({
                         </div>
                       )}
                     </div>
+                  </TooltipWrapper>
 
                     {option.action && (
                       <TooltipWrapper content="Open in a new tab">
