@@ -35,7 +35,6 @@ interface BaseLoadableSelectBoxProps {
   buttonClassName?: string;
   actionPanel?: ReactElement;
   minWidth?: number;
-  contentWidth?: number;
   align?: "start" | "end" | "center";
   emptyState?: ReactElement;
   showTooltip?: boolean;
@@ -75,7 +74,6 @@ export const LoadableSelectBox = ({
   renderTitle: parentRenderTitle,
   actionPanel,
   minWidth = 0,
-  contentWidth,
   align = "end",
   multiselect = false,
   showTooltip = false,
@@ -261,15 +259,11 @@ export const LoadableSelectBox = ({
       <PopoverContent
         align={align}
         style={
-          contentWidth
+          width || minWidth
             ? {
-                width: `${contentWidth}px`,
+                width: `${Math.max(width || 0, minWidth)}px`,
               }
-            : width
-              ? {
-                  width: `${Math.max(width, minWidth)}px`,
-                }
-              : {}
+            : {}
         }
         className="relative p-1 pt-12"
         hideWhenDetached
