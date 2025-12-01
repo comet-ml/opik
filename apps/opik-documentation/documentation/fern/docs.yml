@@ -217,6 +217,9 @@ navigation:
               - page: Moderation
                 path: docs/evaluation/metrics/moderation.mdx
                 slug: moderation
+              - page: Meaning Match
+                path: docs/evaluation/metrics/meaning_match.mdx
+                slug: meaning_match
               - page: Usefulness
                 path: docs/evaluation/metrics/usefulness.mdx
                 slug: usefulness

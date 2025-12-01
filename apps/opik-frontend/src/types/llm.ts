@@ -55,6 +55,7 @@ export enum LLM_JUDGE {
   conversational_coherence = "conversational_coherence",
   session_completeness = "session_completeness",
   user_frustration = "user_frustration",
+  meaning_match = "meaning_match",
 }
 
 export type LLMPromptTemplate = {
