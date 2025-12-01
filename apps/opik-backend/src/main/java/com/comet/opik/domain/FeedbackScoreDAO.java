@@ -4,6 +4,7 @@ import com.comet.opik.api.DeleteFeedbackScore;
 import com.comet.opik.api.FeedbackScore;
 import com.comet.opik.api.FeedbackScoreItem;
 import com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItemThread;
+import com.comet.opik.api.FeedbackScoreNames;
 import com.comet.opik.api.ScoreSource;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.utils.template.TemplateUtils;
@@ -56,10 +57,7 @@ public interface FeedbackScoreDAO {
 
     Mono<List<String>> getSpanFeedbackScoreNames(@NonNull UUID projectId, SpanType type);
 
-    Mono<List<ScoreNameWithType>> getExperimentsFeedbackScoreNames(Set<UUID> experimentIds);
-
-    record ScoreNameWithType(String name, String type) {
-    }
+    Mono<List<FeedbackScoreNames.ScoreName>> getExperimentsFeedbackScoreNames(Set<UUID> experimentIds);
 
     Mono<List<String>> getProjectsFeedbackScoreNames(Set<UUID> projectIds);
 
@@ -236,6 +234,7 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
                 <if(experiment_ids)>
                 AND id IN :experiment_ids
                 <endif>
+                -- TODO: Add full primary key for better performance (workspace_id, id, last_updated_at, ...)
                 ORDER BY id DESC, last_updated_at DESC
                 LIMIT 1 BY id
             ) AS e
@@ -539,7 +538,7 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
 
     @Override
     @WithSpan
-    public Mono<List<ScoreNameWithType>> getExperimentsFeedbackScoreNames(Set<UUID> experimentIds) {
+    public Mono<List<FeedbackScoreNames.ScoreName>> getExperimentsFeedbackScoreNames(Set<UUID> experimentIds) {
         return asyncTemplate.nonTransaction(connection -> {
             var template = TemplateUtils.newST(SELECT_FEEDBACK_SCORE_NAMES);
             bindTemplateParam(null, true, experimentIds, true, template);
@@ -548,9 +547,10 @@ class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
             bindStatementParam(null, experimentIds, statement, EntityType.TRACE);
 
             return makeMonoContextAware(bindWorkspaceIdToMono(statement))
-                    .flatMapMany(result -> result.map((row, rowMetadata) -> new ScoreNameWithType(
-                            row.get("name", String.class),
-                            row.get("type", String.class))))
+                    .flatMapMany(result -> result.map((row, rowMetadata) -> FeedbackScoreNames.ScoreName.builder()
+                            .name(row.get("name", String.class))
+                            .type(row.get("type", String.class))
+                            .build()))
                     .collect(Collectors.toList());
         });
     }

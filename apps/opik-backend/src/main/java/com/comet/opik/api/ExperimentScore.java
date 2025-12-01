@@ -18,6 +18,6 @@ public record ExperimentScore(
         @NotBlank String name,
         @NotNull BigDecimal value) {
 
-    public static final TypeReference<List<ExperimentScore>> LIST_TYPE_REFERENCE = new TypeReference<List<ExperimentScore>>() {
+    public static final TypeReference<List<ExperimentScore>> LIST_TYPE_REFERENCE = new TypeReference<>() {
     };
 }

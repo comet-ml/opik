@@ -155,9 +155,8 @@ class TemplateUtilsTest {
                             // The majority of ST should be collected
                             TOTAL_TEMPLATES,
                             // Growth is about 5MB in local isolated runs
-                            // But allowing -50 to 100 MB range for other environments and running with other tests
-                            // Negative values can occur when GC collects more memory than test creates
-                            -50,
+                            // But allowing 1 to 100 MB range for other environments and running with other tests
+                            1,
                             100),
                     arguments(
                             "preventGCAndCauseMemoryLeak",

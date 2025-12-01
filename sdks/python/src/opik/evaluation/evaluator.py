@@ -54,7 +54,11 @@ def _compute_experiment_scores(
     for score_function in experiment_scoring_functions:
         try:
             scores = score_function(test_results)
-            all_scores.extend(scores)
+            # Handle Union[ScoreResult, List[ScoreResult]]
+            if isinstance(scores, list):
+                all_scores.extend(scores)
+            else:
+                all_scores.append(scores)
         except Exception as e:
             LOGGER.warning(
                 "Failed to compute experiment score: %s",

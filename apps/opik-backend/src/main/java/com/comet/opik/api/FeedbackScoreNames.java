@@ -16,8 +16,5 @@ public record FeedbackScoreNames(List<ScoreName> scores) {
     @JsonIgnoreProperties(ignoreUnknown = true)
     @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
     public record ScoreName(String name, String type) {
-        public ScoreName(String name) {
-            this(name, null);
-        }
     }
 }

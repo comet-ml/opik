@@ -8,5 +8,6 @@ LLMTask = Callable[[Dict[str, Any]], Dict[str, Any]]
 ScoringKeyMappingType = Dict[str, Union[str, Callable[[Dict[str, Any]], Any]]]
 
 ExperimentScoreFunction = Callable[
-    [List[test_result.TestResult]], List[score_result.ScoreResult]
+    [List[test_result.TestResult]],
+    Union[score_result.ScoreResult, List[score_result.ScoreResult]],
 ]

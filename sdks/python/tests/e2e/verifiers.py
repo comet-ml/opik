@@ -227,6 +227,7 @@ def verify_experiment(
     feedback_scores_amount: int,
     traces_amount: int,
     prompts: Optional[List[Prompt]] = None,
+    experiment_scores: Optional[Dict[str, float]] = None,
 ):
     rest_client = (
         opik_client._rest_client
@@ -265,6 +266,8 @@ def verify_experiment(
     ), f"{actual_trace_count} != {traces_amount}"
 
     _verify_experiment_prompts(experiment_content, prompts)
+    
+    _verify_experiment_scores(experiment_content, experiment_scores)
 
 
 def verify_attachments(
@@ -414,6 +417,46 @@ def _verify_experiment_prompts(
         assert (
             experiment_prompts[prompt.name] == prompt.prompt
         ), f"{experiment_prompts[prompt.name]} != {prompt.prompt}"
+
+
+def _verify_experiment_scores(
+    experiment_content: ExperimentPublic,
+    experiment_scores: Optional[Dict[str, float]],
+):
+    """Verify experiment-level scores match expected values."""
+    if experiment_scores is None:
+        return
+    
+    actual_experiment_scores = experiment_content.experiment_scores
+    
+    assert actual_experiment_scores is not None, (
+        f"Expected experiment_scores to be set, but got None. "
+        f"Experiment ID: {experiment_content.id}, "
+        f"Expected scores: {experiment_scores}"
+    )
+    
+    # Create a dict of actual scores for easy comparison
+    actual_scores_dict = {
+        score.name: score.value for score in actual_experiment_scores
+    }
+    
+    assert len(actual_scores_dict) == len(experiment_scores), (
+        f"Expected {len(experiment_scores)} experiment scores, "
+        f"but got {len(actual_scores_dict)}. "
+        f"Expected: {experiment_scores}, "
+        f"Actual: {actual_scores_dict}"
+    )
+    
+    for expected_name, expected_value in experiment_scores.items():
+        assert expected_name in actual_scores_dict, (
+            f"Expected experiment score '{expected_name}' not found. "
+            f"Available scores: {list(actual_scores_dict.keys())}"
+        )
+        
+        assert actual_scores_dict[expected_name] == expected_value, (
+            f"Expected experiment score '{expected_name}' to have value {expected_value}, "
+            f"but got {actual_scores_dict[expected_name]}"
+        )
 
 
 def verify_optimization(

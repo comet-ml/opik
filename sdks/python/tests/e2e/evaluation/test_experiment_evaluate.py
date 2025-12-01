@@ -1013,7 +1013,7 @@ def test_experiment_creation_via_evaluate_function__with_experiment_scoring_func
         "Fixed score of 0.8" in evaluation_result.experiment_scores[0].reason
     ), f"Expected reason to contain 'Fixed score of 0.8', but got: '{evaluation_result.experiment_scores[0].reason}'"
 
-    # Verify experiment was created
+    # Verify experiment was created with experiment scores
     verifiers.verify_experiment(
         opik_client=opik_client,
         id=evaluation_result.experiment_id,
@@ -1021,31 +1021,5 @@ def test_experiment_creation_via_evaluate_function__with_experiment_scoring_func
         experiment_metadata={"model_name": "gpt-3.5"},
         traces_amount=3,  # one trace per dataset item
         feedback_scores_amount=1,
-    )
-
-    # Verify experiment scores are logged to backend by retrieving the experiment
-    retrieved_experiment = opik_client.get_experiment_by_id(
-        evaluation_result.experiment_id
-    )
-    experiment_data = retrieved_experiment.get_experiment_data()
-
-    # Check that experiment scores are present in the experiment data
-    assert experiment_data.experiment_scores is not None, (
-        f"Expected experiment_scores to be set in experiment data, but got None. "
-        f"Experiment ID: {evaluation_result.experiment_id}, "
-        f"Experiment name: {evaluation_result.experiment_name}, "
-        f"Experiment data fields: {dir(experiment_data)}, "
-        f"Experiment data: {experiment_data}"
-    )
-    assert len(experiment_data.experiment_scores) == 1, (
-        f"Expected 1 experiment score in backend, but got {len(experiment_data.experiment_scores) if experiment_data.experiment_scores else 0}. "
-        f"Experiment scores: {experiment_data.experiment_scores}"
-    )
-    assert experiment_data.experiment_scores[0].name == "fixed_number", (
-        f"Expected experiment score name 'fixed_number' in backend, but got '{experiment_data.experiment_scores[0].name}'. "
-        f"Full score object: {experiment_data.experiment_scores[0]}"
-    )
-    assert experiment_data.experiment_scores[0].value == 0.8, (
-        f"Expected experiment score value 0.8 in backend, but got {experiment_data.experiment_scores[0].value}. "
-        f"Full score object: {experiment_data.experiment_scores[0]}"
+        experiment_scores={"fixed_number": 0.8},
     )

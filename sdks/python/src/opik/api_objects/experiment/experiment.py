@@ -1,17 +1,16 @@
 import functools
 import logging
-from typing import TYPE_CHECKING, List, Optional
+from typing import List, Optional
 
+from opik.evaluation.metrics import score_result
 from opik.message_processing.batching import sequence_splitter
 from opik.message_processing import messages, streamer
 from opik.rest_api import client as rest_api_client
-from opik.rest_api.types import experiment_public, ExperimentScore
+from opik.rest_api import types as rest_api_types
 from . import experiment_item, experiments_client
 from .. import constants, helpers
 from ...api_objects.prompt import Prompt
 
-if TYPE_CHECKING:
-    from ...evaluation.metrics import score_result
 
 LOGGER = logging.getLogger(__name__)
 
@@ -132,13 +131,13 @@ class Experiment:
         score_results: List["score_result.ScoreResult"],
     ) -> None:
         """Log experiment-level scores to the backend."""
-        experiment_scores: List[ExperimentScore] = []
+        experiment_scores: List[rest_api_types.ExperimentScore] = []
 
         for score_result_ in score_results:
             if score_result_.scoring_failed:
                 continue
 
-            experiment_score = ExperimentScore(
+            experiment_score = rest_api_types.ExperimentScore(
                 name=score_result_.name,
                 value=score_result_.value,
             )
