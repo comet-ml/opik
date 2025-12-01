@@ -10,6 +10,7 @@ import com.comet.opik.api.OptimizationUpdate;
 import com.comet.opik.api.events.OptimizationCreated;
 import com.comet.opik.api.events.OptimizationsDeleted;
 import com.comet.opik.domain.attachment.PreSignerService;
+import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.queues.Queue;
 import com.comet.opik.infrastructure.queues.QueueProducer;
@@ -76,6 +77,8 @@ class OptimizationServiceImpl implements OptimizationService {
     private final @NonNull EventBus eventBus;
     private final @NonNull PreSignerService preSignerService;
     private final @NonNull QueueProducer queueProducer;
+    private final @NonNull WorkspaceNameService workspaceNameService;
+    private final @NonNull OpikConfiguration config;
 
     @Override
     @WithSpan
@@ -152,7 +155,8 @@ class OptimizationServiceImpl implements OptimizationService {
 
                     return makeMonoContextAware((userName, workspaceId) -> Mono.deferContextual(ctx -> {
                         String opikApiKey = ctx.getOrDefault(RequestContext.API_KEY, null);
-                        String workspaceName = ctx.get(RequestContext.WORKSPACE_NAME);
+                        String workspaceName = workspaceNameService.getWorkspaceName(workspaceId,
+                                config.getAuthentication().getReactService().url());
 
                         return optimizationDAO.upsert(newOptimization)
                                 .thenReturn(newOptimization.id())

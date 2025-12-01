@@ -22,6 +22,7 @@ import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.reactivestreams.Publisher;
 import org.stringtemplate.v4.ST;
 import reactor.core.publisher.Flux;
@@ -627,7 +628,7 @@ class OptimizationDAOImpl implements OptimizationDAO {
         return result.map((row, rowMetadata) -> {
             OptimizationStudioConfig studioConfig = null;
             String studioConfigJson = row.get("studio_config", String.class);
-            if (studioConfigJson != null && !studioConfigJson.isBlank()) {
+            if (StringUtils.isNotEmpty(studioConfigJson)) {
                 try {
                     studioConfig = JsonUtils.readValue(studioConfigJson, OptimizationStudioConfig.class);
                 } catch (Exception e) {
