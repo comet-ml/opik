@@ -4,6 +4,7 @@ import com.comet.opik.api.Span;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluator;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorLlmAsJudge;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorSpanLlmAsJudge;
+import com.comet.opik.api.evaluators.AutomationRuleEvaluatorSpanUserDefinedMetricPython;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorTraceThreadLlmAsJudge;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorType;
@@ -125,6 +126,8 @@ public class OnlineScoringSpanSampler {
                     case AutomationRuleEvaluatorUserDefinedMetricPython rule -> logUnsupportedEvaluatorType(rule);
                     case AutomationRuleEvaluatorTraceThreadLlmAsJudge rule -> logUnsupportedEvaluatorType(rule);
                     case AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython rule ->
+                        logUnsupportedEvaluatorType(rule);
+                    case AutomationRuleEvaluatorSpanUserDefinedMetricPython rule ->
                         logUnsupportedEvaluatorType(rule);
                 }
             });

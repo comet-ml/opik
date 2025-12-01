@@ -5,12 +5,15 @@ import com.comet.opik.api.ManualEvaluationResponse;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluator;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorLlmAsJudge;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorSpanLlmAsJudge;
+import com.comet.opik.api.evaluators.AutomationRuleEvaluatorSpanUserDefinedMetricPython;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorTraceThreadLlmAsJudge;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorUserDefinedMetricPython;
+import com.comet.opik.api.events.SpanToScoreUserDefinedMetricPython;
 import com.comet.opik.api.events.TraceToScoreLlmAsJudge;
 import com.comet.opik.api.events.TraceToScoreUserDefinedMetricPython;
 import com.comet.opik.domain.ProjectService;
+import com.comet.opik.domain.SpanService;
 import com.comet.opik.domain.TraceService;
 import com.comet.opik.domain.threads.TraceThreadService;
 import com.comet.opik.infrastructure.ServiceTogglesConfig;
@@ -60,6 +63,7 @@ class ManualEvaluationServiceImpl implements ManualEvaluationService {
     private final AutomationRuleEvaluatorService automationRuleEvaluatorService;
     private final OnlineScorePublisher onlineScorePublisher;
     private final TraceService traceService;
+    private final SpanService spanService;
     private final ProjectService projectService;
     private final TraceThreadService traceThreadService;
     private final ServiceTogglesConfig serviceTogglesConfig;
@@ -68,12 +72,14 @@ class ManualEvaluationServiceImpl implements ManualEvaluationService {
     public ManualEvaluationServiceImpl(@NonNull AutomationRuleEvaluatorService automationRuleEvaluatorService,
             @NonNull OnlineScorePublisher onlineScorePublisher,
             @NonNull TraceService traceService,
+            @NonNull SpanService spanService,
             @NonNull ProjectService projectService,
             @NonNull TraceThreadService traceThreadService,
             @NonNull @Config("serviceToggles") ServiceTogglesConfig serviceTogglesConfig) {
         this.automationRuleEvaluatorService = automationRuleEvaluatorService;
         this.onlineScorePublisher = onlineScorePublisher;
         this.traceService = traceService;
+        this.spanService = spanService;
         this.projectService = projectService;
         this.traceThreadService = traceThreadService;
         this.serviceTogglesConfig = serviceTogglesConfig;
@@ -138,6 +144,7 @@ class ManualEvaluationServiceImpl implements ManualEvaluationService {
         List<AutomationRuleEvaluatorLlmAsJudge> spanLevelLlmAsJudgeRules = new ArrayList<>();
         List<AutomationRuleEvaluatorSpanLlmAsJudge> spanLlmAsJudgeRules = new ArrayList<>();
         List<AutomationRuleEvaluatorUserDefinedMetricPython> spanLevelPythonRules = new ArrayList<>();
+        List<AutomationRuleEvaluatorSpanUserDefinedMetricPython> spanPythonRules = new ArrayList<>();
         List<AutomationRuleEvaluator<?, ?>> traceThreadRules = new ArrayList<>();
 
         for (AutomationRuleEvaluator<?, ?> rule : rules) {
@@ -155,14 +162,17 @@ class ManualEvaluationServiceImpl implements ManualEvaluationService {
                         log.info("Span LLM as Judge evaluator is disabled, skipping rule '{}'", rule.getId());
                     }
                 }
+                case AutomationRuleEvaluatorSpanUserDefinedMetricPython spanPython ->
+                    spanPythonRules.add(spanPython);
             }
         }
 
         // Handle span-level evaluators - need to fetch full traces
         Mono<Void> spanLevelMono = Mono.empty();
-        if (!spanLevelLlmAsJudgeRules.isEmpty() || !spanLlmAsJudgeRules.isEmpty() || !spanLevelPythonRules.isEmpty()) {
+        if (!spanLevelLlmAsJudgeRules.isEmpty() || !spanLlmAsJudgeRules.isEmpty() || !spanLevelPythonRules.isEmpty()
+                || !spanPythonRules.isEmpty()) {
             spanLevelMono = enqueueSpanLevelEvaluations(traceIds, spanLevelLlmAsJudgeRules, spanLlmAsJudgeRules,
-                    spanLevelPythonRules, projectId, workspaceId, userName);
+                    spanLevelPythonRules, spanPythonRules, projectId, workspaceId, userName);
         }
 
         // Handle trace-thread evaluators - can use IDs directly
@@ -185,12 +195,13 @@ class ManualEvaluationServiceImpl implements ManualEvaluationService {
     }
 
     /**
-     * Enqueues span-level evaluations by fetching full trace objects and creating messages.
-     */
+    * Enqueues span-level evaluations by fetching full trace objects and creating messages.
+    */
     private Mono<Void> enqueueSpanLevelEvaluations(List<UUID> traceIds,
             List<AutomationRuleEvaluatorLlmAsJudge> llmAsJudgeRules,
             List<AutomationRuleEvaluatorSpanLlmAsJudge> spanLlmAsJudgeRules,
             List<AutomationRuleEvaluatorUserDefinedMetricPython> pythonRules,
+            List<AutomationRuleEvaluatorSpanUserDefinedMetricPython> spanPythonRules,
             UUID projectId, String workspaceId, String userName) {
 
         log.info("Fetching '{}' traces for span-level evaluation", traceIds.size());
@@ -277,6 +288,45 @@ class ManualEvaluationServiceImpl implements ManualEvaluationService {
                         log.info("Enqueued '{}' span-level Python messages for rule '{}'", messages.size(),
                                 rule.getId());
                     });
+
+                    // Enqueue Span Python evaluations (if enabled)
+                    if (!spanPythonRules.isEmpty()) {
+                        if (!serviceTogglesConfig.isPythonEvaluatorEnabled()) {
+                            log.warn("Span Python evaluator is disabled, skipping '{}' rules", spanPythonRules.size());
+                            return Mono.empty();
+                        }
+
+                        // Fetch all spans for the traces
+                        return spanService.getByTraceIds(new HashSet<>(traceIds))
+                                .collectList()
+                                .doOnNext(spans -> {
+                                    if (ListUtils.emptyIfNull(spans).isEmpty()) {
+                                        log.warn("No spans found for span Python evaluation");
+                                        return;
+                                    }
+
+                                    log.info("Successfully fetched '{}' spans for Python evaluation", spans.size());
+
+                                    // Enqueue messages for each span Python rule
+                                    spanPythonRules.forEach(rule -> {
+                                        List<SpanToScoreUserDefinedMetricPython> messages = spans.stream()
+                                                .map(span -> SpanToScoreUserDefinedMetricPython.builder()
+                                                        .span(span.toBuilder().projectName(project.name()).build())
+                                                        .ruleId(rule.getId())
+                                                        .ruleName(rule.getName())
+                                                        .code(rule.getCode())
+                                                        .workspaceId(workspaceId)
+                                                        .userName(userName)
+                                                        .build())
+                                                .toList();
+
+                                        onlineScorePublisher.enqueueMessage(messages, rule.getType());
+                                        log.info("Enqueued '{}' span Python messages for rule '{}'", messages.size(),
+                                                rule.getId());
+                                    });
+                                })
+                                .then();
+                    }
 
                     return Mono.empty();
                 });
