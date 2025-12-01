@@ -1,6 +1,6 @@
 package com.comet.opik.api.evaluators;
 
-import com.comet.opik.api.filter.TraceThreadFilter;
+import com.comet.opik.api.filter.SpanFilter;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonView;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
@@ -15,57 +15,65 @@ import lombok.experimental.SuperBuilder;
 import java.beans.ConstructorProperties;
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
-import static com.comet.opik.api.evaluators.AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython.TraceThreadUserDefinedMetricPythonCode;
+import static com.comet.opik.api.evaluators.AutomationRuleEvaluatorSpanLlmAsJudge.SpanLlmAsJudgeCode;
 
 @SuperBuilder(toBuilder = true)
 @Data
 @EqualsAndHashCode(callSuper = true)
 @JsonIgnoreProperties(ignoreUnknown = true)
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
-public final class AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython
+public final class AutomationRuleEvaluatorSpanLlmAsJudge
         extends
-            AutomationRuleEvaluator<TraceThreadUserDefinedMetricPythonCode, TraceThreadFilter> {
+            AutomationRuleEvaluator<SpanLlmAsJudgeCode, SpanFilter> {
 
     @Builder(toBuilder = true)
     @JsonIgnoreProperties(ignoreUnknown = true)
     @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
-    public record TraceThreadUserDefinedMetricPythonCode(
+    public record SpanLlmAsJudgeCode(
             @JsonView( {
-                    View.Public.class, View.Write.class}) @NotNull String metric){
-
-        public static final String CONTEXT_ARG_NAME = "context";
+                    View.Public.class, View.Write.class}) @NotNull LlmAsJudgeModelParameters model,
+            @JsonView({View.Public.class, View.Write.class}) @NotNull List<LlmAsJudgeMessage> messages,
+            @JsonView({View.Public.class, View.Write.class}) @NotNull Map<String, String> variables,
+            @JsonView({View.Public.class, View.Write.class}) @NotNull List<LlmAsJudgeOutputSchema> schema){
     }
 
     @ConstructorProperties({"id", "projectId", "projectName", "name", "samplingRate", "enabled", "filters", "code",
             "createdAt",
             "createdBy",
             "lastUpdatedAt", "lastUpdatedBy"})
-    public AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython(UUID id, @NotNull UUID projectId,
-            String projectName,
-            @NotBlank String name, float samplingRate, boolean enabled, List<TraceThreadFilter> filters,
-            @NotNull TraceThreadUserDefinedMetricPythonCode code,
-            Instant createdAt, String createdBy, Instant lastUpdatedAt, String lastUpdatedBy) {
+    public AutomationRuleEvaluatorSpanLlmAsJudge(UUID id, @NotNull UUID projectId, String projectName,
+            @NotBlank String name,
+            float samplingRate,
+            boolean enabled,
+            List<SpanFilter> filters,
+            @NotNull SpanLlmAsJudgeCode code, Instant createdAt, String createdBy, Instant lastUpdatedAt,
+            String lastUpdatedBy) {
         super(id, projectId, projectName, name, samplingRate, enabled, code, createdAt, createdBy, lastUpdatedAt,
                 lastUpdatedBy, filters);
     }
 
+    /**
+     * Two purposes:
+     * - Makes the polymorphic T code available for serialization.
+     * - Provides the specific type T for Open API and Fern.
+     */
     @JsonView({View.Public.class, View.Write.class})
     @Override
-    public TraceThreadUserDefinedMetricPythonCode getCode() {
+    public SpanLlmAsJudgeCode getCode() {
         return super.getCode();
     }
 
     @JsonView({View.Public.class, View.Write.class})
     @Override
-    public List<TraceThreadFilter> getFilters() {
+    public List<SpanFilter> getFilters() {
         return super.filters;
     }
 
     @Override
     public AutomationRuleEvaluatorType getType() {
-        return AutomationRuleEvaluatorType.TRACE_THREAD_USER_DEFINED_METRIC_PYTHON;
+        return AutomationRuleEvaluatorType.SPAN_LLM_AS_JUDGE;
     }
-
 }

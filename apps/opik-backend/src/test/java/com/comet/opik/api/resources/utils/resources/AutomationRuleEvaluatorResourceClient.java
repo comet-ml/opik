@@ -30,7 +30,7 @@ public class AutomationRuleEvaluatorResourceClient {
     private final ClientSupport client;
     private final String baseURI;
 
-    public UUID createEvaluator(AutomationRuleEvaluator<?> evaluator, String workspaceName, String apiKey) {
+    public UUID createEvaluator(AutomationRuleEvaluator<?, ?> evaluator, String workspaceName, String apiKey) {
         try (var actualResponse = createEvaluator(evaluator, workspaceName, apiKey, HttpStatus.SC_CREATED)) {
             assertThat(actualResponse.hasEntity()).isFalse();
             return TestUtils.getIdFromLocation(actualResponse.getLocation());
@@ -38,7 +38,7 @@ public class AutomationRuleEvaluatorResourceClient {
     }
 
     public Response createEvaluator(
-            AutomationRuleEvaluator<?> evaluator, String workspaceName, String apiKey, int expectedStatus) {
+            AutomationRuleEvaluator<?, ?> evaluator, String workspaceName, String apiKey, int expectedStatus) {
         var actualResponse = client.target(RESOURCE_PATH.formatted(baseURI))
                 .request()
                 .accept(MediaType.APPLICATION_JSON_TYPE)
@@ -134,7 +134,7 @@ public class AutomationRuleEvaluatorResourceClient {
     public Response updateEvaluator(
             UUID evaluatorId,
             String workspaceName,
-            AutomationRuleEvaluatorUpdate<?> updatedEvaluator,
+            AutomationRuleEvaluatorUpdate<?, ?> updatedEvaluator,
             String apiKey,
             int expectedStatus) {
         var actualResponse = client.target(RESOURCE_PATH.formatted(baseURI))
@@ -187,7 +187,7 @@ public class AutomationRuleEvaluatorResourceClient {
     // Session token authentication methods
 
     public Response createEvaluatorWithSessionToken(
-            AutomationRuleEvaluator<?> evaluator, String sessionToken, String workspaceName) {
+            AutomationRuleEvaluator<?, ?> evaluator, String sessionToken, String workspaceName) {
         return client.target(RESOURCE_PATH.formatted(baseURI))
                 .request()
                 .cookie(SESSION_COOKIE, sessionToken)
@@ -229,7 +229,7 @@ public class AutomationRuleEvaluatorResourceClient {
     }
 
     public Response updateEvaluatorWithSessionToken(
-            UUID evaluatorId, AutomationRuleEvaluatorUpdate<?> updatedEvaluator,
+            UUID evaluatorId, AutomationRuleEvaluatorUpdate<?, ?> updatedEvaluator,
             String sessionToken, String workspaceName) {
         return client.target(RESOURCE_PATH.formatted(baseURI))
                 .path(evaluatorId.toString())

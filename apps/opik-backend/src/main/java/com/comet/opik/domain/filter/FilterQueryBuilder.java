@@ -95,17 +95,22 @@ public class FilterQueryBuilder {
     private static final String SPAN_ID_DB = "span_id";
     public static final String ANNOTATION_QUEUE_IDS_ANALYTICS_DB = "taqi.annotation_queue_ids";
     public static final String THREAD_ANNOTATION_QUEUE_IDS_ANALYTICS_DB = "ttaqi.annotation_queue_ids";
+    private static final String WEBHOOK_URL_DB = "webhook_url";
+    private static final String ALERT_TYPE_DB = "alert_type";
+    private static final String ENABLED_DB = "enabled";
+    private static final String SAMPLING_RATE_DB = "sampling_rate";
+    private static final String TYPE_DB = "type";
+
+    /**
+     * Set of all feedback score fields across different entity types (Trace, Span, TraceThread, etc.).
+     * Used to identify feedback score filters that require special handling in query building.
+     */
     private static final Set<Field> FEEDBACK_SCORE_FIELDS = Set.of(
             TraceField.FEEDBACK_SCORES,
             TraceField.SPAN_FEEDBACK_SCORES,
             SpanField.FEEDBACK_SCORES,
             TraceThreadField.FEEDBACK_SCORES,
             ExperimentsComparisonValidKnownField.FEEDBACK_SCORES);
-    private static final String WEBHOOK_URL_DB = "webhook_url";
-    private static final String ALERT_TYPE_DB = "alert_type";
-    private static final String ENABLED_DB = "enabled";
-    private static final String SAMPLING_RATE_DB = "sampling_rate";
-    private static final String TYPE_DB = "type";
 
     // Table alias prefixes for AutomationRuleEvaluator queries
     private static final String AUTOMATION_RULE_TABLE_ALIAS = "rule.%s";
