@@ -4,16 +4,19 @@ import com.comet.opik.api.DeleteIdsHolder;
 import com.comet.opik.api.Optimization;
 import com.comet.opik.api.OptimizationStatus;
 import com.comet.opik.api.OptimizationUpdate;
+import com.comet.opik.api.filter.Filter;
 import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.google.common.net.HttpHeaders;
 import jakarta.ws.rs.client.Entity;
 import jakarta.ws.rs.client.WebTarget;
 import lombok.RequiredArgsConstructor;
+import org.apache.commons.collections4.CollectionUtils;
 import org.apache.http.HttpStatus;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import uk.co.jemos.podam.api.PodamFactory;
 
+import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 
@@ -30,9 +33,10 @@ public class OptimizationResourceClient {
 
     public Optimization.OptimizationBuilder createPartialOptimization() {
         return podamFactory.manufacturePojo(Optimization.class).toBuilder()
-                .status(OptimizationStatus.RUNNING)
+                .status(OptimizationStatus.INITIALIZED)
                 .numTrials(0L)
-                .feedbackScores(null);
+                .feedbackScores(null)
+                .studioConfig(null);
     }
 
     public UUID create(Optimization optimization, String apiKey, String workspaceName) {
@@ -63,16 +67,8 @@ public class OptimizationResourceClient {
     }
 
     public Optimization get(UUID id, String apiKey, String workspaceName, int expectedStatus) {
-        return get(id, apiKey, workspaceName, expectedStatus, false);
-    }
-
-    public Optimization get(UUID id, String apiKey, String workspaceName, int expectedStatus,
-            boolean includeStudioConfig) {
-        WebTarget webTarget = client.target(RESOURCE_PATH.formatted(baseURI))
+        try (var response = client.target(RESOURCE_PATH.formatted(baseURI))
                 .path(id.toString())
-                .queryParam("include_studio_config", includeStudioConfig);
-
-        try (var response = webTarget
                 .request()
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .header(RequestContext.WORKSPACE_HEADER, workspaceName)
@@ -93,7 +89,7 @@ public class OptimizationResourceClient {
     }
 
     public Optimization.OptimizationPage find(String apiKey, String workspaceName, int page, int size,
-            UUID datasetId, String name, Boolean datasetDeleted, Boolean studioOnly, int expectedStatus) {
+            UUID datasetId, String name, Boolean datasetDeleted, List<? extends Filter> filters, int expectedStatus) {
         WebTarget webTarget = client.target(RESOURCE_PATH.formatted(baseURI))
                 .queryParam("page", page)
                 .queryParam("size", size);
@@ -110,8 +106,8 @@ public class OptimizationResourceClient {
             webTarget = webTarget.queryParam("dataset_deleted", datasetDeleted);
         }
 
-        if (studioOnly != null) {
-            webTarget = webTarget.queryParam("studio_only", studioOnly);
+        if (CollectionUtils.isNotEmpty(filters)) {
+            webTarget = webTarget.queryParam("filters", TestUtils.toURLEncodedQueryParam(filters));
         }
 
         try (var response = webTarget
@@ -167,6 +163,75 @@ public class OptimizationResourceClient {
             }
 
             return null;
+        }
+    }
+
+    public Optimization.OptimizationPage findStudio(String apiKey, String workspaceName, int page, int size,
+            UUID datasetId, String name, List<? extends Filter> filters, int expectedStatus) {
+        WebTarget webTarget = client.target(RESOURCE_PATH.formatted(baseURI))
+                .path("studio")
+                .queryParam("page", page)
+                .queryParam("size", size);
+
+        if (datasetId != null) {
+            webTarget = webTarget.queryParam("dataset_id", datasetId);
+        }
+
+        if (name != null) {
+            webTarget = webTarget.queryParam("name", name);
+        }
+
+        if (CollectionUtils.isNotEmpty(filters)) {
+            webTarget = webTarget.queryParam("filters", TestUtils.toURLEncodedQueryParam(filters));
+        }
+
+        try (var response = webTarget
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(RequestContext.WORKSPACE_HEADER, workspaceName)
+                .get()) {
+
+            assertThat(response.getStatus()).isEqualTo(expectedStatus);
+            return response.readEntity(Optimization.OptimizationPage.class);
+        }
+    }
+
+    // Overloaded method without filters for backward compatibility
+    public Optimization.OptimizationPage findStudio(String apiKey, String workspaceName, int page, int size,
+            UUID datasetId, String name, int expectedStatus) {
+        return findStudio(apiKey, workspaceName, page, size, datasetId, name, null, expectedStatus);
+    }
+
+    public Optimization getStudio(UUID id, String apiKey, String workspaceName, int expectedStatus) {
+        try (var response = client.target(RESOURCE_PATH.formatted(baseURI))
+                .path("studio")
+                .path(id.toString())
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(RequestContext.WORKSPACE_HEADER, workspaceName)
+                .get()) {
+
+            assertThat(response.getStatus()).isEqualTo(expectedStatus);
+
+            if (expectedStatus == HttpStatus.SC_OK) {
+                return response.readEntity(Optimization.class);
+            }
+
+            return null;
+        }
+    }
+
+    public void cancelStudio(UUID id, String apiKey, String workspaceName, int expectedStatus) {
+        try (var response = client.target(RESOURCE_PATH.formatted(baseURI))
+                .path("studio")
+                .path(id.toString())
+                .path("cancel")
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(RequestContext.WORKSPACE_HEADER, workspaceName)
+                .get()) {
+
+            assertThat(response.getStatus()).isEqualTo(expectedStatus);
         }
     }
 }

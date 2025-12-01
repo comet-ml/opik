@@ -136,11 +136,19 @@ class OptimizationServiceImpl implements OptimizationService {
 
         return datasetService.getOrCreateDataset(optimization.datasetName())
                 .flatMap(datasetId -> {
-                    var newOptimization = optimization.toBuilder()
+                    var builder = optimization.toBuilder()
                             .id(id)
                             .name(name)
-                            .datasetId(datasetId)
-                            .build();
+                            .datasetId(datasetId);
+
+                    // Force INITIALIZED status for Studio optimizations
+                    if (isStudioOptimization) {
+                        builder.status(OptimizationStatus.INITIALIZED);
+                        log.info("Force INITIALIZED (was '{}') status for Studio optimization id '{}'",
+                                optimization.status(), id);
+                    }
+
+                    var newOptimization = builder.build();
 
                     return makeMonoContextAware((userName, workspaceId) -> Mono.deferContextual(ctx -> {
                         String opikApiKey = ctx.getOrDefault(RequestContext.API_KEY, null);

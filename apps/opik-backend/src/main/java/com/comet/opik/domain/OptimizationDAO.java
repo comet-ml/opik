@@ -5,6 +5,8 @@ import com.comet.opik.api.Optimization;
 import com.comet.opik.api.OptimizationStatus;
 import com.comet.opik.api.OptimizationStudioConfig;
 import com.comet.opik.api.OptimizationUpdate;
+import com.comet.opik.domain.filter.FilterQueryBuilder;
+import com.comet.opik.domain.filter.FilterStrategy;
 import com.comet.opik.utils.JsonUtils;
 import com.comet.opik.utils.template.TemplateUtils;
 import com.google.common.base.Function;
@@ -114,6 +116,7 @@ class OptimizationDAOImpl implements OptimizationDAO {
                 <if(dataset_id)>AND dataset_id = :dataset_id <endif>
                 <if(dataset_deleted)>AND dataset_deleted = :dataset_deleted<endif>
                 <if(studio_only)>AND studio_config IS NOT NULL<endif>
+                <if(filters)>AND <filters><endif>
                 ORDER BY id DESC, last_updated_at DESC
                 LIMIT 1 BY id
             ), experiments_final AS (
@@ -249,6 +252,7 @@ class OptimizationDAOImpl implements OptimizationDAO {
                 <if(dataset_id)>AND dataset_id = :dataset_id <endif>
                 <if(dataset_deleted)>AND dataset_deleted = :dataset_deleted<endif>
                 <if(studio_only)>AND studio_config IS NOT NULL<endif>
+                <if(filters)>AND <filters><endif>
                 ORDER BY id DESC, last_updated_at DESC
                 LIMIT 1 BY id
             )
@@ -361,6 +365,7 @@ class OptimizationDAOImpl implements OptimizationDAO {
             """;
 
     private final @NonNull ConnectionFactory connectionFactory;
+    private final @NonNull FilterQueryBuilder filterQueryBuilder;
 
     @Override
     public Mono<Void> upsert(@NonNull Optimization optimization) {
@@ -543,8 +548,12 @@ class OptimizationDAOImpl implements OptimizationDAO {
                 .ifPresent(name -> template.add("name", name));
 
         Optional.ofNullable(searchCriteria.studioOnly())
-                .filter(studioOnly -> studioOnly)
-                .ifPresent(studioOnly -> template.add("studio_only", studioOnly.toString()));
+                .filter(Boolean.TRUE::equals)
+                .ifPresent(studioOnly -> template.add("studio_only", "true"));
+
+        Optional.ofNullable(searchCriteria.filters())
+                .flatMap(filters -> filterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.OPTIMIZATION))
+                .ifPresent(optimizationFilters -> template.add("filters", optimizationFilters));
 
         Optional.ofNullable(searchCriteria.entityType())
                 .ifPresent(entityType -> template.add("entity_type", EntityType.TRACE.getType()));
@@ -561,6 +570,9 @@ class OptimizationDAOImpl implements OptimizationDAO {
         Optional.ofNullable(searchCriteria.name())
                 .ifPresent(name -> statement.bind("name", name));
 
+        Optional.ofNullable(searchCriteria.filters())
+                .ifPresent(filters -> filterQueryBuilder.bind(statement, filters, FilterStrategy.OPTIMIZATION));
+
         if (isFindQuery) {
             Optional.ofNullable(searchCriteria.entityType())
                     .ifPresent(entityType -> statement.bind("entity_type", EntityType.TRACE.getType()));
@@ -568,14 +580,6 @@ class OptimizationDAOImpl implements OptimizationDAO {
     }
 
     private Publisher<? extends Result> upsert(Optimization optimization, Connection connection) {
-        String studioConfigJson = "";
-        if (optimization.studioConfig() != null) {
-            try {
-                studioConfigJson = JsonUtils.writeValueAsString(optimization.studioConfig());
-            } catch (Exception e) {
-                log.error("Failed to serialize studio_config for optimization: '{}'", optimization.id(), e);
-            }
-        }
 
         var statement = connection.createStatement(UPSERT)
                 .bind("id", optimization.id())
@@ -583,8 +587,19 @@ class OptimizationDAOImpl implements OptimizationDAO {
                 .bind("name", optimization.name())
                 .bind("objective_name", optimization.objectiveName())
                 .bind("status", optimization.status().getValue())
-                .bind("metadata", getStringOrDefault(optimization.metadata()))
-                .bind("studio_config", studioConfigJson);
+                .bind("metadata", getStringOrDefault(optimization.metadata()));
+
+        if (optimization.studioConfig() != null) {
+            try {
+                String studioConfigJson = JsonUtils.writeValueAsString(optimization.studioConfig());
+                statement.bind("studio_config", studioConfigJson);
+            } catch (Exception e) {
+                log.error("Failed to serialize studio_config for optimization: '{}'", optimization.id(), e);
+                statement.bindNull("studio_config", String.class);
+            }
+        } else {
+            statement.bindNull("studio_config", String.class);
+        }
 
         if (optimization.lastUpdatedAt() != null) {
             statement.bind("last_updated_at", optimization.lastUpdatedAt().toString());

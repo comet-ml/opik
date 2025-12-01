@@ -15,6 +15,9 @@ import com.comet.opik.api.Project;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.events.OptimizationCreated;
 import com.comet.opik.api.events.OptimizationsDeleted;
+import com.comet.opik.api.filter.Operator;
+import com.comet.opik.api.filter.OptimizationField;
+import com.comet.opik.api.filter.OptimizationFilter;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
 import com.comet.opik.api.resources.utils.ClientSupportUtils;
@@ -472,7 +475,7 @@ class OptimizationsResourceTest {
 
             // Find optimizations with default parameters
             var optimizationPage = optimizationResourceClient.find(
-                    apiKey, workspaceName, 1, 10, null, null, false, 200);
+                    apiKey, workspaceName, 1, 10, null, null, null, null, 200);
 
             // Verify results
             assertOptimizationPage(optimizationPage, 1, 2,
@@ -501,7 +504,7 @@ class OptimizationsResourceTest {
 
             // Find optimizations by name
             var optimizationPage = optimizationResourceClient.find(
-                    apiKey, workspaceName, 1, 1, null, uniqueName, false, 200);
+                    apiKey, workspaceName, 1, 1, null, uniqueName, null, null, 200);
 
             // Verify results
             assertOptimizationPage(optimizationPage, 1, 1, 1, List.of(optimization));
@@ -532,7 +535,7 @@ class OptimizationsResourceTest {
 
             // Find optimizations by dataset ID
             var optimizationPage = optimizationResourceClient.find(
-                    apiKey, workspaceName, 1, 10, dataset.id(), null, false, 200);
+                    apiKey, workspaceName, 1, 10, dataset.id(), null, null, null, 200);
 
             // Verify results
             assertOptimizationPage(optimizationPage, 1, 1, 1, List.of(optimization));
@@ -564,11 +567,11 @@ class OptimizationsResourceTest {
 
             // Find first page with size 2
             var page1 = optimizationResourceClient.find(
-                    apiKey, workspaceName, 1, 2, null, null, false, 200);
+                    apiKey, workspaceName, 1, 2, null, null, null, null, 200);
 
             // Find second page with size 2
             var page2 = optimizationResourceClient.find(
-                    apiKey, workspaceName, 2, 2, null, null, false, 200);
+                    apiKey, workspaceName, 2, 2, null, null, null, null, 200);
 
             // Verify pagination
             assertOptimizationPage(page1, 1, 2, 2, optimizations.reversed().subList(0, 2));
@@ -588,7 +591,7 @@ class OptimizationsResourceTest {
             // Find optimizations with non-existent name
             var nonExistentName = "NonExistentName-" + UUID.randomUUID();
             var optimizationPage = optimizationResourceClient.find(
-                    apiKey, workspaceName, 1, 10, null, nonExistentName, false, 200);
+                    apiKey, workspaceName, 1, 10, null, nonExistentName, null, null, 200);
 
             // Verify empty results
             assertOptimizationPage(optimizationPage, 1, 0, 0, List.of());
@@ -699,7 +702,7 @@ class OptimizationsResourceTest {
 
             // Find optimization
             var optimizationPage = optimizationResourceClient.find(
-                    apiKey, workspaceName, 1, 10, dataset.id(), null, false, 200);
+                    apiKey, workspaceName, 1, 10, dataset.id(), null, null, null, 200);
 
             // Verify results with feedback scores
             assertOptimizationPage(optimizationPage, 1, 1, 1, List.of(optimization));
@@ -804,67 +807,6 @@ class OptimizationsResourceTest {
         }
 
         @Test
-        @DisplayName("Get Studio optimization with studioConfig")
-        void getStudioOptimization__withStudioConfigIncluded() {
-            var studioConfig = createStudioConfig();
-            var optimization = optimizationResourceClient.createPartialOptimization()
-                    .studioConfig(studioConfig)
-                    .build();
-
-            var id = optimizationResourceClient.create(optimization, API_KEY, TEST_WORKSPACE_NAME);
-
-            // Get with include_studio_config=true
-            var actualOptimization = optimizationResourceClient.get(id, API_KEY, TEST_WORKSPACE_NAME, 200, true);
-            assertThat(actualOptimization.studioConfig()).isNotNull();
-            assertThat(actualOptimization.studioConfig()).isEqualTo(studioConfig);
-        }
-
-        @Test
-        @DisplayName("Get Studio optimization without studioConfig")
-        void getStudioOptimization__withStudioConfigScrubbed() {
-            var studioConfig = createStudioConfig();
-            var optimization = optimizationResourceClient.createPartialOptimization()
-                    .studioConfig(studioConfig)
-                    .build();
-
-            var id = optimizationResourceClient.create(optimization, API_KEY, TEST_WORKSPACE_NAME);
-
-            // Get without include_studio_config (default)
-            var actualOptimization = optimizationResourceClient.get(id, API_KEY, TEST_WORKSPACE_NAME, 200);
-            assertThat(actualOptimization.studioConfig()).isNull(); // Scrubbed
-        }
-
-        @Test
-        @DisplayName("Find Optimization Studio runs")
-        void findOptimizations__withStudioOnlyFlag() {
-            // Mock target workspace
-            String apiKey = UUID.randomUUID().toString();
-            String workspaceName = "test-workspace-" + UUID.randomUUID();
-            String workspaceId = UUID.randomUUID().toString();
-
-            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
-
-            // Create a regular optimization
-            var regularOptimization = optimizationResourceClient.createPartialOptimization().build();
-            optimizationResourceClient.create(regularOptimization, apiKey, workspaceName);
-
-            // Create a Studio optimization
-            var studioConfig = createStudioConfig();
-            var studioOptimization = optimizationResourceClient.createPartialOptimization()
-                    .studioConfig(studioConfig)
-                    .build();
-            optimizationResourceClient.create(studioOptimization, apiKey, workspaceName);
-
-            // Find with studioOnly=true
-            var page = optimizationResourceClient.find(apiKey, workspaceName, 1, 10, null, null, null, true,
-                    200);
-
-            // Should only return Studio optimizations
-            assertThat(page.content()).isNotEmpty();
-            assertThat(page.content()).allMatch(opt -> opt.studioConfig() != null);
-        }
-
-        @Test
         @DisplayName("Get Studio optimization logs")
         void getStudioOptimizationLogs() {
             var studioConfig = createStudioConfig();
@@ -881,6 +823,363 @@ class OptimizationsResourceTest {
             assertThat(logs.url()).contains(id.toString());
             assertThat(logs.expiresAt()).isNotNull();
             assertThat(logs.expiresAt()).isAfter(Instant.now());
+        }
+
+        @Test
+        @DisplayName("Find Studio optimizations using dedicated endpoint")
+        void findStudioOptimizations() {
+            // Mock target workspace
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+            String workspaceId = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            // Create a regular optimization (without studio config)
+            var regularOptimization = optimizationResourceClient.createPartialOptimization()
+                    .studioConfig(null)
+                    .build();
+            var regularId = optimizationResourceClient.create(regularOptimization, apiKey, workspaceName);
+
+            // Create a Studio optimization
+            var studioConfig = createStudioConfig();
+            var studioOptimization = optimizationResourceClient.createPartialOptimization()
+                    .studioConfig(studioConfig)
+                    .build();
+            var studioId = optimizationResourceClient.create(studioOptimization, apiKey, workspaceName);
+
+            // Find using dedicated Studio endpoint
+            var page = optimizationResourceClient.findStudio(apiKey, workspaceName, 1, 10, null, null, null, 200);
+
+            // Should only return Studio optimizations
+            assertThat(page.content()).isNotEmpty();
+            assertThat(page.content()).hasSize(1);
+            assertThat(page.content().get(0).id()).isEqualTo(studioId);
+            // Studio config should be included by default in studio endpoint
+            assertThat(page.content().get(0).studioConfig()).isNotNull();
+        }
+
+        @Test
+        @DisplayName("Get Studio optimization by ID using dedicated endpoint")
+        void getStudioOptimizationById() {
+            var studioConfig = createStudioConfig();
+            var optimization = optimizationResourceClient.createPartialOptimization()
+                    .studioConfig(studioConfig)
+                    .build();
+
+            var id = optimizationResourceClient.create(optimization, API_KEY, TEST_WORKSPACE_NAME);
+
+            // Get using dedicated Studio endpoint
+            var actualOptimization = optimizationResourceClient.getStudio(id, API_KEY, TEST_WORKSPACE_NAME, 200);
+
+            // Studio config should be included by default
+            assertThat(actualOptimization).isNotNull();
+            assertThat(actualOptimization.id()).isEqualTo(id);
+            assertThat(actualOptimization.studioConfig()).isNotNull();
+            assertThat(actualOptimization.studioConfig()).isEqualTo(studioConfig);
+        }
+
+        @Test
+        @DisplayName("Cancel Studio optimization returns NOT_IMPLEMENTED")
+        void cancelStudioOptimization__returnsNotImplemented() {
+            var studioConfig = createStudioConfig();
+            var optimization = optimizationResourceClient.createPartialOptimization()
+                    .studioConfig(studioConfig)
+                    .build();
+
+            var id = optimizationResourceClient.create(optimization, API_KEY, TEST_WORKSPACE_NAME);
+
+            // Cancel should return 501 NOT_IMPLEMENTED
+            optimizationResourceClient.cancelStudio(id, API_KEY, TEST_WORKSPACE_NAME, 501);
+        }
+
+        @Test
+        @DisplayName("Filter optimizations by status on generic endpoint")
+        void filterOptimizationsByStatus() {
+            // Create optimizations with different statuses
+            var completedOpt = optimizationResourceClient.createPartialOptimization()
+                    .status(OptimizationStatus.COMPLETED)
+                    .build();
+            var runningOpt = optimizationResourceClient.createPartialOptimization()
+                    .status(OptimizationStatus.RUNNING)
+                    .build();
+
+            optimizationResourceClient.create(completedOpt, API_KEY, TEST_WORKSPACE_NAME);
+            optimizationResourceClient.create(runningOpt, API_KEY, TEST_WORKSPACE_NAME);
+
+            // Filter by completed status
+            var filter = OptimizationFilter.builder()
+                    .field(OptimizationField.STATUS)
+                    .operator(Operator.EQUAL)
+                    .value("completed")
+                    .build();
+
+            var page = optimizationResourceClient.find(API_KEY, TEST_WORKSPACE_NAME, 1, 10,
+                    null, null, null, List.of(filter), 200);
+
+            // Should only return completed optimizations
+            assertThat(page.content()).isNotEmpty();
+            assertThat(page.content()).allMatch(opt -> opt.status() == OptimizationStatus.COMPLETED);
+        }
+
+        @Test
+        @DisplayName("Filter optimizations by status - comprehensive test")
+        void filterOptimizationsByStatus__comprehensive() {
+            // Create isolated workspace for this test
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+            String workspaceId = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var studioConfig = createStudioConfig();
+
+            // Create 3 optimizations:
+            // 1. Studio with INITIALIZED (forced by service layer)
+            var studioOpt = optimizationResourceClient.createPartialOptimization()
+                    .studioConfig(studioConfig)
+                    .build();
+            var studioOptId = optimizationResourceClient.create(studioOpt, apiKey, workspaceName);
+
+            // 2. Regular with INITIALIZED (explicitly set)
+            var regularInitOpt = optimizationResourceClient.createPartialOptimization()
+                    .studioConfig(null)
+                    .status(OptimizationStatus.INITIALIZED)
+                    .build();
+            var regularInitOptId = optimizationResourceClient.create(regularInitOpt, apiKey, workspaceName);
+
+            // 3. Regular with COMPLETED
+            var regularCompletedOpt = optimizationResourceClient.createPartialOptimization()
+                    .studioConfig(null)
+                    .status(OptimizationStatus.COMPLETED)
+                    .build();
+            var regularCompletedOptId = optimizationResourceClient.create(regularCompletedOpt, apiKey, workspaceName);
+
+            // Test 1: Filter by INITIALIZED status - should get 2 (studio + regular)
+            var initializedFilter = OptimizationFilter.builder()
+                    .field(OptimizationField.STATUS)
+                    .operator(Operator.EQUAL)
+                    .value("initialized")
+                    .build();
+
+            var initializedPage = optimizationResourceClient.find(apiKey, workspaceName, 1, 10,
+                    null, null, null, List.of(initializedFilter), 200);
+
+            assertThat(initializedPage.content()).hasSize(2);
+            assertThat(initializedPage.content()).allMatch(opt -> opt.status() == OptimizationStatus.INITIALIZED);
+            assertThat(initializedPage.content()).extracting(Optimization::id)
+                    .containsExactlyInAnyOrder(studioOptId, regularInitOptId);
+
+            // Test 2: Filter by COMPLETED status - should get 1 (regular only)
+            var completedFilter = OptimizationFilter.builder()
+                    .field(OptimizationField.STATUS)
+                    .operator(Operator.EQUAL)
+                    .value("completed")
+                    .build();
+
+            var completedPage = optimizationResourceClient.find(apiKey, workspaceName, 1, 10,
+                    null, null, null, List.of(completedFilter), 200);
+
+            assertThat(completedPage.content()).hasSize(1);
+            assertThat(completedPage.content().get(0).id()).isEqualTo(regularCompletedOptId);
+            assertThat(completedPage.content().get(0).status()).isEqualTo(OptimizationStatus.COMPLETED);
+
+            // Test 3: Filter by INITIALIZED + studio_only - should get 1 (studio only)
+            var studioInitializedPage = optimizationResourceClient.findStudio(apiKey, workspaceName, 1, 10,
+                    null, null, List.of(initializedFilter), 200);
+
+            assertThat(studioInitializedPage.content()).hasSize(1);
+            assertThat(studioInitializedPage.content().get(0).id()).isEqualTo(studioOptId);
+            assertThat(studioInitializedPage.content().get(0).status()).isEqualTo(OptimizationStatus.INITIALIZED);
+            assertThat(studioInitializedPage.content().get(0).studioConfig()).isNotNull();
+
+            // Test 4: Filter by COMPLETED + studio_only - should get 0 (no completed studio optimizations)
+            var studioCompletedPage = optimizationResourceClient.findStudio(apiKey, workspaceName, 1, 10,
+                    null, null, List.of(completedFilter), 200);
+
+            assertThat(studioCompletedPage.content()).isEmpty();
+        }
+
+        @Test
+        @DisplayName("Filter optimizations by dataset_id")
+        void filterOptimizationsByDatasetId() {
+            // Create isolated workspace for this test
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+            String workspaceId = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            // Create datasets
+            var dataset1 = podamFactory.manufacturePojo(Dataset.class).toBuilder().build();
+            var dataset1Id = datasetResourceClient.createDataset(dataset1, apiKey, workspaceName);
+
+            var dataset2 = podamFactory.manufacturePojo(Dataset.class).toBuilder().build();
+            var dataset2Id = datasetResourceClient.createDataset(dataset2, apiKey, workspaceName);
+
+            // Create optimizations for different datasets
+            var opt1 = optimizationResourceClient.createPartialOptimization()
+                    .datasetId(dataset1Id)
+                    .build();
+            var opt2 = optimizationResourceClient.createPartialOptimization()
+                    .datasetId(dataset2Id)
+                    .build();
+
+            var opt1Id = optimizationResourceClient.create(opt1, apiKey, workspaceName);
+            var opt2Id = optimizationResourceClient.create(opt2, apiKey, workspaceName);
+
+            // Retrieve the actual optimizations to get the correct datasetId
+            var actualOpt1 = optimizationResourceClient.get(opt1Id, apiKey, workspaceName, 200);
+            var actualOpt2 = optimizationResourceClient.get(opt2Id, apiKey, workspaceName, 200);
+
+            // Filter by dataset1 - use the actual datasetId from the retrieved optimization
+            var filter = OptimizationFilter.builder()
+                    .field(OptimizationField.DATASET_ID)
+                    .operator(Operator.EQUAL)
+                    .value(actualOpt1.datasetId().toString())
+                    .build();
+
+            var page = optimizationResourceClient.find(apiKey, workspaceName, 1, 10,
+                    null, null, null, List.of(filter), 200);
+
+            // Should only return optimizations for dataset1
+            assertThat(page.content()).isNotEmpty();
+            assertThat(page.content()).hasSize(1);
+            assertThat(page.content()).allMatch(opt -> opt.datasetId().equals(actualOpt1.datasetId()));
+        }
+
+        @Test
+        @DisplayName("Filter optimizations by metadata")
+        void filterOptimizationsByMetadata() {
+            // Create isolated workspace for this test
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+            String workspaceId = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            // Create optimizations with different metadata
+            var metadata1 = JsonUtils.getJsonNodeFromString(
+                    JsonUtils.writeValueAsString(java.util.Map.of("version", "1.0", "env", "prod")));
+            var metadata2 = JsonUtils.getJsonNodeFromString(
+                    JsonUtils.writeValueAsString(java.util.Map.of("version", "2.0", "env", "dev")));
+
+            var opt1 = optimizationResourceClient.createPartialOptimization()
+                    .metadata(metadata1)
+                    .build();
+            var opt2 = optimizationResourceClient.createPartialOptimization()
+                    .metadata(metadata2)
+                    .build();
+
+            optimizationResourceClient.create(opt1, apiKey, workspaceName);
+            optimizationResourceClient.create(opt2, apiKey, workspaceName);
+
+            // Filter by metadata version = "2.0"
+            var filter = OptimizationFilter.builder()
+                    .field(OptimizationField.METADATA)
+                    .operator(Operator.EQUAL)
+                    .key("version")
+                    .value("2.0")
+                    .build();
+
+            var page = optimizationResourceClient.find(apiKey, workspaceName, 1, 10,
+                    null, null, null, List.of(filter), 200);
+
+            // Should only return optimizations with version 2.0
+            assertThat(page.content()).isNotEmpty();
+            assertThat(page.content()).hasSize(1);
+            assertThat(page.content())
+                    .allMatch(opt -> opt.metadata() != null && opt.metadata().get("version").asText().equals("2.0"));
+        }
+
+        @Test
+        @DisplayName("Filter optimizations with multiple filters - status + metadata")
+        void filterOptimizationsWithMultipleFilters() {
+            // Create isolated workspace for this test
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+            String workspaceId = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var studioConfig = createStudioConfig();
+            var metadataProd = JsonUtils.getJsonNodeFromString(
+                    JsonUtils.writeValueAsString(java.util.Map.of("env", "prod")));
+            var metadataDev = JsonUtils.getJsonNodeFromString(
+                    JsonUtils.writeValueAsString(java.util.Map.of("env", "dev")));
+
+            // Create optimizations:
+            // 1. Studio with INITIALIZED + prod metadata
+            var studioInitProdOpt = optimizationResourceClient.createPartialOptimization()
+                    .studioConfig(studioConfig)
+                    .metadata(metadataProd)
+                    .build();
+            var studioInitProdId = optimizationResourceClient.create(studioInitProdOpt, apiKey, workspaceName);
+
+            // 2. Regular with INITIALIZED + prod metadata
+            var regularInitProdOpt = optimizationResourceClient.createPartialOptimization()
+                    .studioConfig(null)
+                    .status(OptimizationStatus.INITIALIZED)
+                    .metadata(metadataProd)
+                    .build();
+            var regularInitProdId = optimizationResourceClient.create(regularInitProdOpt, apiKey, workspaceName);
+
+            // 3. Regular with COMPLETED + prod metadata
+            var regularCompletedProdOpt = optimizationResourceClient.createPartialOptimization()
+                    .studioConfig(null)
+                    .status(OptimizationStatus.COMPLETED)
+                    .metadata(metadataProd)
+                    .build();
+            var regularCompletedProdId = optimizationResourceClient.create(regularCompletedProdOpt, apiKey,
+                    workspaceName);
+
+            // 4. Regular with COMPLETED + dev metadata
+            var regularCompletedDevOpt = optimizationResourceClient.createPartialOptimization()
+                    .studioConfig(null)
+                    .status(OptimizationStatus.COMPLETED)
+                    .metadata(metadataDev)
+                    .build();
+            optimizationResourceClient.create(regularCompletedDevOpt, apiKey, workspaceName);
+
+            // Test: Filter by status=INITIALIZED AND metadata.env=prod
+            // Should return 2 optimizations (studio + regular, both with INITIALIZED + prod)
+            var statusFilter = OptimizationFilter.builder()
+                    .field(OptimizationField.STATUS)
+                    .operator(Operator.EQUAL)
+                    .value("initialized")
+                    .build();
+
+            var metadataFilter = OptimizationFilter.builder()
+                    .field(OptimizationField.METADATA)
+                    .operator(Operator.EQUAL)
+                    .key("env")
+                    .value("prod")
+                    .build();
+
+            var page = optimizationResourceClient.find(apiKey, workspaceName, 1, 10,
+                    null, null, null, List.of(statusFilter, metadataFilter), 200);
+
+            assertThat(page.content()).hasSize(2);
+            assertThat(page.content()).extracting(Optimization::id)
+                    .containsExactlyInAnyOrder(studioInitProdId, regularInitProdId);
+            assertThat(page.content()).allMatch(opt -> opt.status() == OptimizationStatus.INITIALIZED);
+            assertThat(page.content()).allMatch(opt -> opt.metadata().get("env").asText().equals("prod"));
+
+            // Test: Filter by status=COMPLETED AND metadata.env=prod
+            // Should return 1 optimization (regular with COMPLETED + prod)
+            var completedFilter = OptimizationFilter.builder()
+                    .field(OptimizationField.STATUS)
+                    .operator(Operator.EQUAL)
+                    .value("completed")
+                    .build();
+
+            var completedPage = optimizationResourceClient.find(apiKey, workspaceName, 1, 10,
+                    null, null, null, List.of(completedFilter, metadataFilter), 200);
+
+            assertThat(completedPage.content()).hasSize(1);
+            assertThat(completedPage.content().get(0).id()).isEqualTo(regularCompletedProdId);
+            assertThat(completedPage.content().get(0).status()).isEqualTo(OptimizationStatus.COMPLETED);
+            assertThat(completedPage.content().get(0).metadata().get("env").asText()).isEqualTo("prod");
         }
     }
 }
