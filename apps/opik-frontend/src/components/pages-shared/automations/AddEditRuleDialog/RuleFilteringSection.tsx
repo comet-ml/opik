@@ -22,7 +22,10 @@ import {
   COLUMN_CUSTOM_ID,
 } from "@/types/shared";
 import { TRACE_DATA_TYPE } from "@/hooks/useTracesOrSpansList";
-import { CUSTOM_FILTER_VALIDATION_REGEXP } from "@/constants/filters";
+import {
+  CUSTOM_FILTER_VALIDATION_REGEXP,
+  OPERATORS_MAP,
+} from "@/constants/filters";
 import { createFilter } from "@/lib/filters";
 import { ThreadStatus } from "@/types/thread";
 import FiltersContent from "@/components/shared/FiltersContent/FiltersContent";
@@ -33,6 +36,14 @@ import { EVALUATORS_RULE_SCOPE } from "@/types/automations";
 import { EvaluationRuleFormType } from "./schema";
 import ExplainerIcon from "@/components/shared/ExplainerIcon/ExplainerIcon";
 import { Description } from "@/components/ui/description";
+import { SPAN_TYPE } from "@/types/traces";
+import { SPAN_TYPE_LABELS_MAP } from "@/constants/traces";
+import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
+import { FeatureToggleKeys } from "@/types/feature-toggles";
+import { DropdownOption } from "@/types/shared";
+import { FilterOperator } from "@/types/filters";
+import { SelectItem } from "@/components/ui/select";
+import BaseTraceDataTypeIcon from "@/components/pages-shared/traces/TraceDetailsPanel/BaseTraceDataTypeIcon";
 
 // Trace-specific columns for automation rule filtering
 export const TRACE_FILTER_COLUMNS: ColumnData<TRACE_DATA_TYPE>[] = [
@@ -139,6 +150,96 @@ export const THREAD_FILTER_COLUMNS: ColumnData<TRACE_DATA_TYPE>[] = [
   },
 ];
 
+// Span-specific columns for automation rule filtering
+export const SPAN_FILTER_COLUMNS: ColumnData<TRACE_DATA_TYPE>[] = [
+  {
+    id: "id",
+    label: "ID",
+    type: COLUMN_TYPE.string,
+  },
+  {
+    id: "name",
+    label: "Name",
+    type: COLUMN_TYPE.string,
+  },
+  {
+    id: "input",
+    label: "Input",
+    type: COLUMN_TYPE.string,
+  },
+  {
+    id: "output",
+    label: "Output",
+    type: COLUMN_TYPE.string,
+  },
+  {
+    id: "duration",
+    label: "Duration",
+    type: COLUMN_TYPE.duration,
+  },
+  {
+    id: COLUMN_METADATA_ID,
+    label: "Metadata",
+    type: COLUMN_TYPE.dictionary,
+  },
+  {
+    id: "tags",
+    label: "Tags",
+    type: COLUMN_TYPE.list,
+    iconType: "tags",
+  },
+  {
+    id: "type",
+    label: "Type",
+    type: COLUMN_TYPE.category,
+  },
+  {
+    id: "model",
+    label: "Model",
+    type: COLUMN_TYPE.string,
+  },
+  {
+    id: "provider",
+    label: "Provider",
+    type: COLUMN_TYPE.string,
+  },
+  {
+    id: "usage.total_tokens",
+    label: "Total tokens",
+    type: COLUMN_TYPE.number,
+  },
+  {
+    id: "usage.prompt_tokens",
+    label: "Total input tokens",
+    type: COLUMN_TYPE.number,
+  },
+  {
+    id: "usage.completion_tokens",
+    label: "Total output tokens",
+    type: COLUMN_TYPE.number,
+  },
+  {
+    id: "total_estimated_cost",
+    label: "Estimated cost",
+    type: COLUMN_TYPE.cost,
+  },
+  {
+    id: "error_info",
+    label: "Errors",
+    type: COLUMN_TYPE.errors,
+  },
+  {
+    id: COLUMN_FEEDBACK_SCORES_ID,
+    label: "Feedback scores",
+    type: COLUMN_TYPE.numberDictionary,
+  },
+  {
+    id: COLUMN_CUSTOM_ID,
+    label: "Custom filter",
+    type: COLUMN_TYPE.dictionary,
+  },
+];
+
 // Exported for backward compatibility
 export const AUTOMATION_RULE_FILTER_COLUMNS = TRACE_FILTER_COLUMNS;
 
@@ -156,17 +257,39 @@ const RuleFilteringSection: React.FC<RuleFilteringSectionProps> = ({
   const scope = form.watch("scope");
   const isTraceScope = scope === EVALUATORS_RULE_SCOPE.trace;
   const isThreadScope = scope === EVALUATORS_RULE_SCOPE.thread;
+  const isSpanScope = scope === EVALUATORS_RULE_SCOPE.span;
   const filters = form.watch("filters");
+  const isGuardrailsEnabled = useIsFeatureEnabled(
+    FeatureToggleKeys.GUARDRAILS_ENABLED,
+  );
 
   const currentFilterColumns = useMemo(() => {
-    return isThreadScope ? THREAD_FILTER_COLUMNS : TRACE_FILTER_COLUMNS;
-  }, [isThreadScope]);
+    if (isThreadScope) return THREAD_FILTER_COLUMNS;
+    if (isSpanScope) return SPAN_FILTER_COLUMNS;
+    return TRACE_FILTER_COLUMNS;
+  }, [isThreadScope, isSpanScope]);
 
   useEffect(() => {
     if (form.formState.errors.filters) {
       form.clearErrors("filters");
     }
   }, [filters.length, form]);
+
+  // Rule-specific operators for dictionary filters (includes is_empty and is_not_empty)
+  const ruleDictionaryOperators: DropdownOption<FilterOperator>[] = useMemo(
+    () => [
+      ...(OPERATORS_MAP[COLUMN_TYPE.dictionary] || []),
+      {
+        label: "is empty",
+        value: "is_empty",
+      },
+      {
+        label: "is not empty",
+        value: "is_not_empty",
+      },
+    ],
+    [],
+  );
 
   const filtersConfig = useMemo(
     () => ({
@@ -180,10 +303,11 @@ const RuleFilteringSection: React.FC<RuleFilteringSectionProps> = ({
           keyComponentProps: {
             rootKeys: ["metadata"],
             projectId,
-            type: TRACE_DATA_TYPE.traces,
+            type: isSpanScope ? TRACE_DATA_TYPE.spans : TRACE_DATA_TYPE.traces,
             placeholder: "key",
             excludeRoot: true,
           },
+          operators: ruleDictionaryOperators,
         },
         [COLUMN_CUSTOM_ID]: {
           keyComponent: TracesOrSpansPathsAutocomplete as React.FC<unknown> & {
@@ -194,10 +318,11 @@ const RuleFilteringSection: React.FC<RuleFilteringSectionProps> = ({
           keyComponentProps: {
             rootKeys: ["input", "output"],
             projectId,
-            type: TRACE_DATA_TYPE.traces,
+            type: isSpanScope ? TRACE_DATA_TYPE.spans : TRACE_DATA_TYPE.traces,
             placeholder: "key",
             excludeRoot: false,
           },
+          operators: ruleDictionaryOperators,
           validateFilter: (filter: Filter) => {
             if (
               filter.key &&
@@ -217,7 +342,7 @@ const RuleFilteringSection: React.FC<RuleFilteringSectionProps> = ({
             },
           keyComponentProps: {
             projectId,
-            type: TRACE_DATA_TYPE.traces,
+            type: isSpanScope ? TRACE_DATA_TYPE.spans : TRACE_DATA_TYPE.traces,
             placeholder: "Select score",
           },
         },
@@ -234,9 +359,61 @@ const RuleFilteringSection: React.FC<RuleFilteringSectionProps> = ({
               },
             }
           : {}),
+        ...(isSpanScope
+          ? {
+              type: {
+                keyComponentProps: {
+                  options: [
+                    {
+                      value: SPAN_TYPE.general,
+                      label: SPAN_TYPE_LABELS_MAP[SPAN_TYPE.general],
+                    },
+                    {
+                      value: SPAN_TYPE.tool,
+                      label: SPAN_TYPE_LABELS_MAP[SPAN_TYPE.tool],
+                    },
+                    {
+                      value: SPAN_TYPE.llm,
+                      label: SPAN_TYPE_LABELS_MAP[SPAN_TYPE.llm],
+                    },
+                    ...(isGuardrailsEnabled
+                      ? [
+                          {
+                            value: SPAN_TYPE.guardrail,
+                            label: SPAN_TYPE_LABELS_MAP[SPAN_TYPE.guardrail],
+                          },
+                        ]
+                      : []),
+                  ],
+                  placeholder: "Select type",
+                  renderOption: (option: DropdownOption<SPAN_TYPE>) => {
+                    return (
+                      <SelectItem
+                        key={option.value}
+                        value={option.value}
+                        withoutCheck
+                        wrapperAsChild={true}
+                      >
+                        <div className="flex w-full items-center gap-1.5">
+                          <BaseTraceDataTypeIcon type={option.value} />
+                          {option.label}
+                        </div>
+                      </SelectItem>
+                    );
+                  },
+                },
+              },
+            }
+          : {}),
       },
     }),
-    [projectId, isThreadScope],
+    [
+      projectId,
+      isThreadScope,
+      isSpanScope,
+      isGuardrailsEnabled,
+      ruleDictionaryOperators,
+    ],
   );
 
   const handleAddFilter = useCallback(() => {
@@ -276,7 +453,9 @@ const RuleFilteringSection: React.FC<RuleFilteringSectionProps> = ({
               description={
                 isTraceScope
                   ? "Apply filters and sampling to select which traces will be evaluated by this rule"
-                  : "Use sampling rate to control how frequently this rule is applied to threads"
+                  : isThreadScope
+                    ? "Use sampling rate to control how frequently this rule is applied to threads"
+                    : "Apply filters and sampling to select which spans will be evaluated by this rule"
               }
             />
           </div>
@@ -286,10 +465,19 @@ const RuleFilteringSection: React.FC<RuleFilteringSectionProps> = ({
             <Description>
               Use sampling rate to control how frequently this rule is applied.
               You can also add filters to select specific{" "}
-              {scope === EVALUATORS_RULE_SCOPE.trace ? "traces" : "threads"}{" "}
+              {scope === EVALUATORS_RULE_SCOPE.trace
+                ? "traces"
+                : scope === EVALUATORS_RULE_SCOPE.thread
+                  ? "threads"
+                  : "spans"}{" "}
               based on their properties. If nothing is defined, the rule will
               evaluate all{" "}
-              {scope === EVALUATORS_RULE_SCOPE.trace ? "traces" : "threads"}.
+              {scope === EVALUATORS_RULE_SCOPE.trace
+                ? "traces"
+                : scope === EVALUATORS_RULE_SCOPE.thread
+                  ? "threads"
+                  : "spans"}
+              .
             </Description>
 
             <FormField
