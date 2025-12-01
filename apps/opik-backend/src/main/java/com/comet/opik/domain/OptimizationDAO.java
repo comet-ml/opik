@@ -280,7 +280,7 @@ class OptimizationDAOImpl implements OptimizationDAO {
 
     private static final String UPDATE_BY_ID = """
             INSERT INTO optimizations (
-            	id, dataset_id, name, workspace_id, objective_name, status, metadata, created_at, created_by, last_updated_by
+            	id, dataset_id, name, workspace_id, objective_name, status, metadata, created_at, created_by, last_updated_by, studio_config
             )
             SELECT
                 id,
@@ -292,7 +292,8 @@ class OptimizationDAOImpl implements OptimizationDAO {
                 metadata,
                 created_at,
                 created_by,
-                :user_name as last_updated_by
+                :user_name as last_updated_by,
+                studio_config
             FROM optimizations
             WHERE id = :id
             AND workspace_id = :workspace_id
@@ -303,7 +304,7 @@ class OptimizationDAOImpl implements OptimizationDAO {
 
     private static final String SET_DATASET_DELETED_TO_TRUE_BY_DATASET_ID = """
             INSERT INTO optimizations (
-            	id, dataset_id, name, workspace_id, objective_name, status, metadata, created_at, created_by, last_updated_at, last_updated_by, dataset_deleted
+            	id, dataset_id, name, workspace_id, objective_name, status, metadata, created_at, created_by, last_updated_at, last_updated_by, dataset_deleted, studio_config
             )
             SELECT
                 id,
@@ -317,7 +318,8 @@ class OptimizationDAOImpl implements OptimizationDAO {
                 created_by,
                 last_updated_at,
                 last_updated_by,
-                true as dataset_deleted
+                true as dataset_deleted,
+                studio_config
             FROM optimizations
             WHERE workspace_id = :workspace_id
             AND dataset_id IN :dataset_ids
