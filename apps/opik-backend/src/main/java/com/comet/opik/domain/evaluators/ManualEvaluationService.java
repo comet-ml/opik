@@ -155,9 +155,15 @@ class ManualEvaluationServiceImpl implements ManualEvaluationService {
                     traceThreadRules.add(traceThreadLlmAsJudge);
                 case AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython traceThreadPython ->
                     traceThreadRules.add(traceThreadPython);
-                default -> {
-                    log.warn("Invalid rule type '{}' for trace evaluation, skipping", rule.getType());
-                }
+                // Reject span-level rules for trace evaluation
+                case AutomationRuleEvaluatorSpanLlmAsJudge spanLlmRule ->
+                    throw new BadRequestException(
+                            String.format("Rule '%s' of type '%s' cannot be used for TRACE evaluation",
+                                    spanLlmRule.getId(), spanLlmRule.getType()));
+                case AutomationRuleEvaluatorSpanUserDefinedMetricPython spanPythonRule ->
+                    throw new BadRequestException(
+                            String.format("Rule '%s' of type '%s' cannot be used for TRACE evaluation",
+                                    spanPythonRule.getId(), spanPythonRule.getType()));
             }
         }
 
@@ -274,9 +280,23 @@ class ManualEvaluationServiceImpl implements ManualEvaluationService {
                     spanLlmAsJudgeRules.add(spanLlmAsJudge);
                 case AutomationRuleEvaluatorSpanUserDefinedMetricPython spanPython ->
                     spanPythonRules.add(spanPython);
-                default -> {
-                    log.warn("Invalid rule type '{}' for span evaluation, skipping", rule.getType());
-                }
+                // Reject all non-span rules with clear error
+                case AutomationRuleEvaluatorLlmAsJudge llmRule ->
+                    throw new BadRequestException(
+                            String.format("Rule '%s' of type '%s' cannot be used for SPAN evaluation",
+                                    llmRule.getId(), llmRule.getType()));
+                case AutomationRuleEvaluatorUserDefinedMetricPython pythonRule ->
+                    throw new BadRequestException(
+                            String.format("Rule '%s' of type '%s' cannot be used for SPAN evaluation",
+                                    pythonRule.getId(), pythonRule.getType()));
+                case AutomationRuleEvaluatorTraceThreadLlmAsJudge threadLlmRule ->
+                    throw new BadRequestException(
+                            String.format("Rule '%s' of type '%s' cannot be used for SPAN evaluation",
+                                    threadLlmRule.getId(), threadLlmRule.getType()));
+                case AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython threadPythonRule ->
+                    throw new BadRequestException(
+                            String.format("Rule '%s' of type '%s' cannot be used for SPAN evaluation",
+                                    threadPythonRule.getId(), threadPythonRule.getType()));
             }
         }
 
@@ -352,6 +372,35 @@ class ManualEvaluationServiceImpl implements ManualEvaluationService {
             UUID projectId,
             String workspaceId, String userName) {
         log.info("Evaluating '{}' threads with '{}' rules", threadModelIds.size(), rules.size());
+
+        // Validate that all rules are thread-level rules
+        for (AutomationRuleEvaluator<?, ?> rule : rules) {
+            switch (rule) {
+                case AutomationRuleEvaluatorTraceThreadLlmAsJudge threadLlmRule -> {
+                    // Valid thread rule
+                }
+                case AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython threadPythonRule -> {
+                    // Valid thread rule
+                }
+                // Reject trace and span-level rules for thread evaluation
+                case AutomationRuleEvaluatorLlmAsJudge llmRule ->
+                    throw new BadRequestException(
+                            String.format("Rule '%s' of type '%s' cannot be used for THREAD evaluation",
+                                    llmRule.getId(), llmRule.getType()));
+                case AutomationRuleEvaluatorUserDefinedMetricPython pythonRule ->
+                    throw new BadRequestException(
+                            String.format("Rule '%s' of type '%s' cannot be used for THREAD evaluation",
+                                    pythonRule.getId(), pythonRule.getType()));
+                case AutomationRuleEvaluatorSpanLlmAsJudge spanLlmRule ->
+                    throw new BadRequestException(
+                            String.format("Rule '%s' of type '%s' cannot be used for THREAD evaluation",
+                                    spanLlmRule.getId(), spanLlmRule.getType()));
+                case AutomationRuleEvaluatorSpanUserDefinedMetricPython spanPythonRule ->
+                    throw new BadRequestException(
+                            String.format("Rule '%s' of type '%s' cannot be used for THREAD evaluation",
+                                    spanPythonRule.getId(), spanPythonRule.getType()));
+            }
+        }
 
         // Fetch thread IDs from thread model IDs
         return traceThreadService.getThreadIdsByThreadModelIds(threadModelIds)
