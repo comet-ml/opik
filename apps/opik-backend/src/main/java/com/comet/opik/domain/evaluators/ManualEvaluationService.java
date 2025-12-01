@@ -2,6 +2,7 @@ package com.comet.opik.domain.evaluators;
 
 import com.comet.opik.api.ManualEvaluationRequest;
 import com.comet.opik.api.ManualEvaluationResponse;
+import com.comet.opik.api.Span;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluator;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorLlmAsJudge;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorSpanLlmAsJudge;
@@ -122,6 +123,7 @@ class ManualEvaluationServiceImpl implements ManualEvaluationService {
                     return switch (request.entityType()) {
                         case TRACE -> evaluateTraces(request.entityIds(), rules, projectId, workspaceId, userName);
                         case THREAD -> evaluateThreads(request.entityIds(), rules, projectId, workspaceId, userName);
+                        case SPAN -> evaluateSpans(request.entityIds(), rules, projectId, workspaceId, userName);
                     };
                 })
                 .map(evaluatedCount -> {
@@ -330,6 +332,122 @@ class ManualEvaluationServiceImpl implements ManualEvaluationService {
 
                     return Mono.empty();
                 });
+    }
+
+    /**
+     * Evaluates spans by enqueueing evaluation messages for span-level rules.
+     * Works directly with span IDs and fetches span objects.
+     */
+    private Mono<Integer> evaluateSpans(List<UUID> spanIds, List<AutomationRuleEvaluator<?, ?>> rules, UUID projectId,
+            String workspaceId, String userName) {
+        log.info("Evaluating '{}' spans with '{}' rules", spanIds.size(), rules.size());
+
+        // Separate rules by type - only span-level rules are valid
+        List<AutomationRuleEvaluatorSpanLlmAsJudge> spanLlmAsJudgeRules = new ArrayList<>();
+        List<AutomationRuleEvaluatorSpanUserDefinedMetricPython> spanPythonRules = new ArrayList<>();
+
+        for (AutomationRuleEvaluator<?, ?> rule : rules) {
+            switch (rule) {
+                case AutomationRuleEvaluatorSpanLlmAsJudge spanLlmAsJudge ->
+                    spanLlmAsJudgeRules.add(spanLlmAsJudge);
+                case AutomationRuleEvaluatorSpanUserDefinedMetricPython spanPython ->
+                    spanPythonRules.add(spanPython);
+                default -> {
+                    log.warn("Invalid rule type '{}' for span evaluation, skipping", rule.getType());
+                }
+            }
+        }
+
+        if (spanLlmAsJudgeRules.isEmpty() && spanPythonRules.isEmpty()) {
+            log.warn("No valid span-level rules found for span evaluation");
+            return Mono.just(0);
+        }
+
+        // Fetch project to get project name
+        var project = projectService.get(projectId, workspaceId);
+
+        // Fetch all spans by their IDs
+        return spanService.getByIds(new HashSet<>(spanIds))
+                .collectList()
+                .flatMap(spans -> {
+                    if (ListUtils.emptyIfNull(spans).isEmpty()) {
+                        log.warn("No spans found to enqueue for span evaluation");
+                        return Mono.just(0);
+                    }
+
+                    log.info("Successfully fetched '{}' spans for evaluation", spans.size());
+
+                    // Enqueue Span LLM as Judge evaluations
+                    spanLlmAsJudgeRules.forEach(rule -> {
+                        // Convert SpanLlmAsJudgeCode to LlmAsJudgeCode for TraceToScoreLlmAsJudge
+                        var spanCode = rule.getCode();
+                        var llmAsJudgeCode = AutomationRuleEvaluatorLlmAsJudge.LlmAsJudgeCode.builder()
+                                .model(spanCode.model())
+                                .messages(spanCode.messages())
+                                .variables(spanCode.variables())
+                                .schema(spanCode.schema())
+                                .build();
+
+                        List<TraceToScoreLlmAsJudge> messages = spans.stream()
+                                .map(span -> TraceToScoreLlmAsJudge.builder()
+                                        .trace(convertSpanToTrace(span, project.name()))
+                                        .ruleId(rule.getId())
+                                        .ruleName(rule.getName())
+                                        .llmAsJudgeCode(llmAsJudgeCode)
+                                        .workspaceId(workspaceId)
+                                        .userName(userName)
+                                        .build())
+                                .toList();
+
+                        onlineScorePublisher.enqueueMessage(messages, rule.getType());
+                        log.info("Enqueued '{}' span LLM as Judge messages for rule '{}'", messages.size(),
+                                rule.getId());
+                    });
+
+                    // Enqueue Span Python evaluations (if enabled)
+                    spanPythonRules.forEach(rule -> {
+                        if (!serviceTogglesConfig.isPythonEvaluatorEnabled()) {
+                            log.warn("Span Python evaluator is disabled, skipping rule '{}'", rule.getId());
+                            return;
+                        }
+
+                        List<SpanToScoreUserDefinedMetricPython> messages = spans.stream()
+                                .map(span -> SpanToScoreUserDefinedMetricPython.builder()
+                                        .span(span.toBuilder().projectName(project.name()).build())
+                                        .ruleId(rule.getId())
+                                        .ruleName(rule.getName())
+                                        .code(rule.getCode())
+                                        .workspaceId(workspaceId)
+                                        .userName(userName)
+                                        .build())
+                                .toList();
+
+                        onlineScorePublisher.enqueueMessage(messages, rule.getType());
+                        log.info("Enqueued '{}' span Python messages for rule '{}'", messages.size(),
+                                rule.getId());
+                    });
+
+                    return Mono.just(spanIds.size());
+                });
+    }
+
+    /**
+     * Converts a Span to a Trace for LLM-as-Judge evaluation.
+     * This is needed because span LLM-as-Judge uses the same message structure as trace LLM-as-Judge.
+     */
+    private com.comet.opik.api.Trace convertSpanToTrace(Span span, String projectName) {
+        return com.comet.opik.api.Trace.builder()
+                .id(span.traceId())
+                .projectId(span.projectId())
+                .projectName(projectName)
+                .name(span.name())
+                .startTime(span.startTime())
+                .endTime(span.endTime())
+                .input(span.input())
+                .output(span.output())
+                .metadata(span.metadata())
+                .tags(span.tags())
+                .build();
     }
 
     /**
