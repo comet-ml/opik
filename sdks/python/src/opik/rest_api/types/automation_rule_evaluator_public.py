@@ -7,7 +7,6 @@ import typing
 
 import pydantic
 from ..core.pydantic_utilities import IS_PYDANTIC_V2, UniversalBaseModel
-from .filter_public import FilterPublic
 from .llm_as_judge_code_public import LlmAsJudgeCodePublic
 from .span_filter_public import SpanFilterPublic
 from .span_llm_as_judge_code_public import SpanLlmAsJudgeCodePublic
@@ -29,7 +28,6 @@ class Base(UniversalBaseModel):
     created_by: typing.Optional[str] = None
     last_updated_at: typing.Optional[dt.datetime] = None
     last_updated_by: typing.Optional[str] = None
-    filters: typing.List[FilterPublic]
     action: typing.Literal["evaluator"] = "evaluator"
 
     if IS_PYDANTIC_V2:

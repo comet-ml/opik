@@ -41,14 +41,19 @@ public final class AutomationRuleEvaluatorUpdateTraceThreadUserDefinedMetricPyth
      */
     @JsonProperty
     @Override
-    public TraceThreadUserDefinedMetricPythonCode getCode() {
-        return super.getCode();
+    public List<TraceThreadFilter> getFilters() {
+        return super.getFilters();
     }
 
+    /**
+     * Two purposes:
+     * - Makes the polymorphic T code available for serialization.
+     * - Provides the specific type T for Open API and Fern.
+     */
     @JsonProperty
     @Override
-    public List<TraceThreadFilter> getFilters() {
-        return super.filters;
+    public TraceThreadUserDefinedMetricPythonCode getCode() {
+        return super.getCode();
     }
 
     @Override

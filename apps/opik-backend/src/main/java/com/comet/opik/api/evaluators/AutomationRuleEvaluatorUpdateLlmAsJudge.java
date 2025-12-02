@@ -41,14 +41,19 @@ public final class AutomationRuleEvaluatorUpdateLlmAsJudge
      */
     @JsonProperty
     @Override
-    public LlmAsJudgeCode getCode() {
-        return super.getCode();
+    public List<TraceFilter> getFilters() {
+        return super.getFilters();
     }
 
+    /**
+     * Two purposes:
+     * - Makes the polymorphic T code available for serialization.
+     * - Provides the specific type T for Open API and Fern.
+     */
     @JsonProperty
     @Override
-    public List<TraceFilter> getFilters() {
-        return super.filters;
+    public LlmAsJudgeCode getCode() {
+        return super.getCode();
     }
 
     @Override

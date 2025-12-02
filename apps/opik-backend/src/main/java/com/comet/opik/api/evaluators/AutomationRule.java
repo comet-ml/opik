@@ -1,6 +1,5 @@
 package com.comet.opik.api.evaluators;
 
-import com.comet.opik.api.filter.Filter;
 import com.fasterxml.jackson.annotation.JsonSubTypes;
 import com.fasterxml.jackson.annotation.JsonTypeInfo;
 import com.fasterxml.jackson.annotation.JsonValue;
@@ -12,7 +11,6 @@ import lombok.RequiredArgsConstructor;
 
 import java.time.Instant;
 import java.util.Arrays;
-import java.util.List;
 import java.util.UUID;
 
 @JsonTypeInfo(use = JsonTypeInfo.Id.NAME, include = JsonTypeInfo.As.EXISTING_PROPERTY, property = "action", visible = true)
@@ -31,7 +29,6 @@ public sealed interface AutomationRule permits AutomationRuleEvaluator {
     AutomationRuleAction getAction();
     float getSamplingRate();
     boolean isEnabled();
-    <E extends Filter> List<E> getFilters();
 
     Instant getCreatedAt();
     String getCreatedBy();

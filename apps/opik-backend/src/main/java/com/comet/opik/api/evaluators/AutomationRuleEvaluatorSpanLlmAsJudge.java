@@ -51,8 +51,20 @@ public final class AutomationRuleEvaluatorSpanLlmAsJudge
             List<SpanFilter> filters,
             @NotNull SpanLlmAsJudgeCode code, Instant createdAt, String createdBy, Instant lastUpdatedAt,
             String lastUpdatedBy) {
-        super(id, projectId, projectName, name, samplingRate, enabled, code, createdAt, createdBy, lastUpdatedAt,
-                lastUpdatedBy, filters);
+        super(id, projectId, projectName, name, samplingRate, enabled, filters, code, createdAt, createdBy,
+                lastUpdatedAt,
+                lastUpdatedBy);
+    }
+
+    /**
+     * Two purposes:
+     * - Makes the polymorphic T code available for serialization.
+     * - Provides the specific type T for Open API and Fern.
+     */
+    @JsonView({View.Public.class, View.Write.class})
+    @Override
+    public List<SpanFilter> getFilters() {
+        return super.getFilters();
     }
 
     /**
@@ -64,12 +76,6 @@ public final class AutomationRuleEvaluatorSpanLlmAsJudge
     @Override
     public SpanLlmAsJudgeCode getCode() {
         return super.getCode();
-    }
-
-    @JsonView({View.Public.class, View.Write.class})
-    @Override
-    public List<SpanFilter> getFilters() {
-        return super.filters;
     }
 
     @Override
