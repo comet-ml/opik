@@ -147,7 +147,7 @@ class OnlineScoringSpanUserDefinedMetricPythonScorerTest {
             // If no exception is thrown, the scorer handled the disabled state gracefully
             // The actual behavior is that super.start() is not called
             // Verify Redis stream was never accessed
-            verify(redissonClient, never()).getStream(any(), any());
+            verify(redissonClient, never()).getStream(any(org.redisson.api.options.PlainOptions.class));
         }
     }
 
