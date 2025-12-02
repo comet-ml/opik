@@ -1,6 +1,6 @@
 package com.comet.opik.api.evaluators;
 
-import com.comet.opik.api.filter.TraceFilter;
+import com.comet.opik.api.filter.TraceThreadFilter;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonView;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
@@ -26,7 +26,7 @@ import static com.comet.opik.api.evaluators.AutomationRuleEvaluatorTraceThreadUs
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
 public final class AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython
         extends
-            AutomationRuleEvaluator<TraceThreadUserDefinedMetricPythonCode> {
+            AutomationRuleEvaluator<TraceThreadUserDefinedMetricPythonCode, TraceThreadFilter> {
 
     @Builder(toBuilder = true)
     @JsonIgnoreProperties(ignoreUnknown = true)
@@ -44,18 +44,23 @@ public final class AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython
             "lastUpdatedAt", "lastUpdatedBy"})
     public AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython(UUID id, @NotNull UUID projectId,
             String projectName,
-            @NotBlank String name, float samplingRate, boolean enabled, List<TraceFilter> filters,
+            @NotBlank String name, float samplingRate, boolean enabled, List<TraceThreadFilter> filters,
             @NotNull TraceThreadUserDefinedMetricPythonCode code,
             Instant createdAt, String createdBy, Instant lastUpdatedAt, String lastUpdatedBy) {
-        super(id, projectId, projectName, name, samplingRate, enabled, filters, code, createdAt, createdBy,
-                lastUpdatedAt,
-                lastUpdatedBy);
+        super(id, projectId, projectName, name, samplingRate, enabled, code, createdAt, createdBy, lastUpdatedAt,
+                lastUpdatedBy, filters);
     }
 
     @JsonView({View.Public.class, View.Write.class})
     @Override
     public TraceThreadUserDefinedMetricPythonCode getCode() {
         return super.getCode();
+    }
+
+    @JsonView({View.Public.class, View.Write.class})
+    @Override
+    public List<TraceThreadFilter> getFilters() {
+        return super.filters;
     }
 
     @Override

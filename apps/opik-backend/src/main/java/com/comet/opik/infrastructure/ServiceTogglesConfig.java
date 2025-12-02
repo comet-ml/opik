@@ -12,6 +12,8 @@ public class ServiceTogglesConfig {
     @JsonProperty
     @NotNull boolean traceThreadPythonEvaluatorEnabled;
     @JsonProperty
+    @NotNull boolean spanLlmAsJudgeEnabled;
+    @JsonProperty
     @NotNull boolean guardrailsEnabled;
     @JsonProperty
     @NotNull boolean opikAIEnabled;
