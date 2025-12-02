@@ -347,6 +347,10 @@ from .optimization_page_public import OptimizationPagePublic
 from .optimization_public import OptimizationPublic
 from .optimization_public_status import OptimizationPublicStatus
 from .optimization_status import OptimizationStatus
+from .optimization_studio_config import OptimizationStudioConfig
+from .optimization_studio_config_public import OptimizationStudioConfigPublic
+from .optimization_studio_config_write import OptimizationStudioConfigWrite
+from .optimization_studio_log import OptimizationStudioLog
 from .optimization_write import OptimizationWrite
 from .optimization_write_status import OptimizationWriteStatus
 from .page_columns import PageColumns
@@ -425,6 +429,24 @@ from .span_write_type import SpanWriteType
 from .spans_count_response import SpansCountResponse
 from .start_multipart_upload_response import StartMultipartUploadResponse
 from .stream_options import StreamOptions
+from .studio_evaluation import StudioEvaluation
+from .studio_evaluation_public import StudioEvaluationPublic
+from .studio_evaluation_write import StudioEvaluationWrite
+from .studio_llm_model import StudioLlmModel
+from .studio_llm_model_public import StudioLlmModelPublic
+from .studio_llm_model_write import StudioLlmModelWrite
+from .studio_message import StudioMessage
+from .studio_message_public import StudioMessagePublic
+from .studio_message_write import StudioMessageWrite
+from .studio_metric import StudioMetric
+from .studio_metric_public import StudioMetricPublic
+from .studio_metric_write import StudioMetricWrite
+from .studio_optimizer import StudioOptimizer
+from .studio_optimizer_public import StudioOptimizerPublic
+from .studio_optimizer_write import StudioOptimizerWrite
+from .studio_prompt import StudioPrompt
+from .studio_prompt_public import StudioPromptPublic
+from .studio_prompt_write import StudioPromptWrite
 from .tool import Tool
 from .tool_call import ToolCall
 from .trace import Trace
@@ -803,6 +825,10 @@ __all__ = [
     "OptimizationPublic",
     "OptimizationPublicStatus",
     "OptimizationStatus",
+    "OptimizationStudioConfig",
+    "OptimizationStudioConfigPublic",
+    "OptimizationStudioConfigWrite",
+    "OptimizationStudioLog",
     "OptimizationWrite",
     "OptimizationWriteStatus",
     "PageColumns",
@@ -879,6 +905,24 @@ __all__ = [
     "SpansCountResponse",
     "StartMultipartUploadResponse",
     "StreamOptions",
+    "StudioEvaluation",
+    "StudioEvaluationPublic",
+    "StudioEvaluationWrite",
+    "StudioLlmModel",
+    "StudioLlmModelPublic",
+    "StudioLlmModelWrite",
+    "StudioMessage",
+    "StudioMessagePublic",
+    "StudioMessageWrite",
+    "StudioMetric",
+    "StudioMetricPublic",
+    "StudioMetricWrite",
+    "StudioOptimizer",
+    "StudioOptimizerPublic",
+    "StudioOptimizerWrite",
+    "StudioPrompt",
+    "StudioPromptPublic",
+    "StudioPromptWrite",
     "Tool",
     "ToolCall",
     "Trace",

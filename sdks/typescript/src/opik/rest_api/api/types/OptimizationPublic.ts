@@ -11,6 +11,7 @@ export interface OptimizationPublic {
     objectiveName: string;
     status: OpikApi.OptimizationPublicStatus;
     metadata?: OpikApi.JsonListStringPublic;
+    studioConfig?: OpikApi.OptimizationStudioConfigPublic;
     datasetId?: string;
     numTrials?: number;
     feedbackScores?: OpikApi.FeedbackScoreAveragePublic[];

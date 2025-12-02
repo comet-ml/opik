@@ -20,6 +20,7 @@ class ServiceTogglesConfig(UniversalBaseModel):
     welcome_wizard_enabled: typing_extensions.Annotated[bool, FieldMetadata(alias="welcomeWizardEnabled")]
     csv_upload_enabled: typing_extensions.Annotated[bool, FieldMetadata(alias="csvUploadEnabled")]
     export_enabled: typing_extensions.Annotated[bool, FieldMetadata(alias="exportEnabled")]
+    dashboards_enabled: typing_extensions.Annotated[bool, FieldMetadata(alias="dashboardsEnabled")]
 
     if IS_PYDANTIC_V2:
         model_config: typing.ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(extra="allow", frozen=True)  # type: ignore # Pydantic v2

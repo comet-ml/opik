@@ -2823,6 +2823,23 @@ paths:
           description: default response
           content:
             '*/*': {}
+  /v1/private/optimizations/studio/{id}/cancel:
+    get:
+      tags:
+      - Optimizations
+      summary: Cancel Studio optimizations
+      description: Cancel Studio optimizations by id
+      operationId: cancelStudioOptimizations
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "501":
+          description: Not Implemented
   /v1/private/optimizations:
     get:
       tags:
@@ -2859,6 +2876,10 @@ paths:
         in: query
         schema:
           type: boolean
+      - name: filters
+        in: query
+        schema:
+          type: string
       responses:
         "200":
           description: Optimizations resource
@@ -2929,6 +2950,58 @@ paths:
       responses:
         "204":
           description: No content
+  /v1/private/optimizations/studio:
+    get:
+      tags:
+      - Optimizations
+      summary: Find Studio optimizations
+      description: Find Studio optimizations
+      operationId: findStudioOptimizations
+      parameters:
+      - name: page
+        in: query
+        schema:
+          minimum: 1
+          type: integer
+          format: int32
+          default: 1
+      - name: size
+        in: query
+        schema:
+          minimum: 1
+          type: integer
+          format: int32
+          default: 10
+      - name: dataset_id
+        in: query
+        schema:
+          type: string
+          format: uuid
+      - name: name
+        in: query
+        schema:
+          type: string
+      - name: dataset_deleted
+        in: query
+        schema:
+          type: boolean
+      - name: filters
+        in: query
+        schema:
+          type: string
+      responses:
+        "200":
+          description: Studio optimizations resource
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OptimizationPage_Public"
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage_Public"
   /v1/private/optimizations/{id}:
     get:
       tags:
@@ -2977,6 +3050,60 @@ paths:
       responses:
         "204":
           description: No content
+  /v1/private/optimizations/studio/{id}:
+    get:
+      tags:
+      - Optimizations
+      summary: Get Studio optimization by id
+      description: Get Studio optimization with config included
+      operationId: getStudioOptimizationById
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "200":
+          description: Studio optimization resource
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Optimization_Public"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage_Public"
+  /v1/private/optimizations/studio/{id}/logs:
+    get:
+      tags:
+      - Optimizations
+      summary: Get Studio optimization logs
+      description: Get presigned S3 URL for downloading optimization logs
+      operationId: getStudioOptimizationLogs
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "200":
+          description: Logs response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OptimizationStudioLog"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
   /v1/private/projects:
     get:
       tags:
@@ -6388,10 +6515,6 @@ components:
         last_updated_by:
           type: string
           readOnly: true
-        action:
-          type: string
-          enum:
-          - evaluator
         type:
           type: string
           enum:
@@ -6400,6 +6523,10 @@ components:
           - trace_thread_llm_as_judge
           - trace_thread_user_defined_metric_python
           - span_llm_as_judge
+        action:
+          type: string
+          enum:
+          - evaluator
       discriminator:
         propertyName: type
         mapping:
@@ -6847,10 +6974,6 @@ components:
           format: float
         enabled:
           type: boolean
-        action:
-          type: string
-          enum:
-          - evaluator
         type:
           type: string
           enum:
@@ -6859,6 +6982,10 @@ components:
           - trace_thread_llm_as_judge
           - trace_thread_user_defined_metric_python
           - span_llm_as_judge
+        action:
+          type: string
+          enum:
+          - evaluator
       discriminator:
         propertyName: type
         mapping:
@@ -7165,10 +7292,6 @@ components:
         last_updated_by:
           type: string
           readOnly: true
-        action:
-          type: string
-          enum:
-          - evaluator
         type:
           type: string
           enum:
@@ -7177,6 +7300,10 @@ components:
           - trace_thread_llm_as_judge
           - trace_thread_user_defined_metric_python
           - span_llm_as_judge
+        action:
+          type: string
+          enum:
+          - evaluator
       discriminator:
         propertyName: type
         mapping:
@@ -7557,10 +7684,6 @@ components:
         last_updated_by:
           type: string
           readOnly: true
-        action:
-          type: string
-          enum:
-          - evaluator
         type:
           type: string
           enum:
@@ -7569,6 +7692,10 @@ components:
           - trace_thread_llm_as_judge
           - trace_thread_user_defined_metric_python
           - span_llm_as_judge
+        action:
+          type: string
+          enum:
+          - evaluator
       discriminator:
         propertyName: type
         mapping:
@@ -7640,10 +7767,6 @@ components:
         project_id:
           type: string
           format: uuid
-        action:
-          type: string
-          enum:
-          - evaluator
         type:
           type: string
           enum:
@@ -7652,6 +7775,10 @@ components:
           - trace_thread_llm_as_judge
           - trace_thread_user_defined_metric_python
           - span_llm_as_judge
+        action:
+          type: string
+          enum:
+          - evaluator
       discriminator:
         propertyName: type
         mapping:
@@ -11565,8 +11692,12 @@ components:
           - running
           - completed
           - cancelled
+          - initialized
+          - error
         metadata:
           $ref: "#/components/schemas/JsonListString"
+        studio_config:
+          $ref: "#/components/schemas/OptimizationStudioConfig"
         dataset_id:
           type: string
           format: uuid
@@ -11593,6 +11724,108 @@ components:
         last_updated_by:
           type: string
           readOnly: true
+    OptimizationStudioConfig:
+      required:
+      - dataset_name
+      - evaluation
+      - llm_model
+      - optimizer
+      - prompt
+      type: object
+      properties:
+        dataset_name:
+          minLength: 1
+          type: string
+        prompt:
+          $ref: "#/components/schemas/StudioPrompt"
+        llm_model:
+          $ref: "#/components/schemas/StudioLlmModel"
+        evaluation:
+          $ref: "#/components/schemas/StudioEvaluation"
+        optimizer:
+          $ref: "#/components/schemas/StudioOptimizer"
+    StudioEvaluation:
+      required:
+      - metrics
+      type: object
+      properties:
+        metrics:
+          minItems: 1
+          type: array
+          items:
+            $ref: "#/components/schemas/StudioMetric"
+    StudioLlmModel:
+      required:
+      - model
+      type: object
+      properties:
+        model:
+          minLength: 1
+          type: string
+        parameters:
+          $ref: "#/components/schemas/JsonNode"
+    StudioMessage:
+      required:
+      - content
+      - role
+      type: object
+      properties:
+        role:
+          minLength: 1
+          type: string
+        content:
+          minLength: 1
+          type: string
+    StudioMetric:
+      required:
+      - type
+      type: object
+      properties:
+        type:
+          minLength: 1
+          type: string
+        parameters:
+          $ref: "#/components/schemas/JsonNode"
+    StudioOptimizer:
+      required:
+      - type
+      type: object
+      properties:
+        type:
+          minLength: 1
+          type: string
+        parameters:
+          $ref: "#/components/schemas/JsonNode"
+    StudioPrompt:
+      required:
+      - messages
+      type: object
+      properties:
+        messages:
+          minItems: 1
+          type: array
+          items:
+            $ref: "#/components/schemas/StudioMessage"
+    OptimizationStudioConfig_Write:
+      required:
+      - dataset_name
+      - evaluation
+      - llm_model
+      - optimizer
+      - prompt
+      type: object
+      properties:
+        dataset_name:
+          minLength: 1
+          type: string
+        prompt:
+          $ref: "#/components/schemas/StudioPrompt_Write"
+        llm_model:
+          $ref: "#/components/schemas/StudioLlmModel_Write"
+        evaluation:
+          $ref: "#/components/schemas/StudioEvaluation_Write"
+        optimizer:
+          $ref: "#/components/schemas/StudioOptimizer_Write"
     Optimization_Write:
       required:
       - dataset_name
@@ -11617,11 +11850,77 @@ components:
           - running
           - completed
           - cancelled
+          - initialized
+          - error
         metadata:
           $ref: "#/components/schemas/JsonListString_Write"
+        studio_config:
+          $ref: "#/components/schemas/OptimizationStudioConfig_Write"
         last_updated_at:
           type: string
           format: date-time
+    StudioEvaluation_Write:
+      required:
+      - metrics
+      type: object
+      properties:
+        metrics:
+          minItems: 1
+          type: array
+          items:
+            $ref: "#/components/schemas/StudioMetric_Write"
+    StudioLlmModel_Write:
+      required:
+      - model
+      type: object
+      properties:
+        model:
+          minLength: 1
+          type: string
+        parameters:
+          $ref: "#/components/schemas/JsonNode_Write"
+    StudioMessage_Write:
+      required:
+      - content
+      - role
+      type: object
+      properties:
+        role:
+          minLength: 1
+          type: string
+        content:
+          minLength: 1
+          type: string
+    StudioMetric_Write:
+      required:
+      - type
+      type: object
+      properties:
+        type:
+          minLength: 1
+          type: string
+        parameters:
+          $ref: "#/components/schemas/JsonNode_Write"
+    StudioOptimizer_Write:
+      required:
+      - type
+      type: object
+      properties:
+        type:
+          minLength: 1
+          type: string
+        parameters:
+          $ref: "#/components/schemas/JsonNode_Write"
+    StudioPrompt_Write:
+      required:
+      - messages
+      type: object
+      properties:
+        messages:
+          minItems: 1
+          type: array
+          items:
+            $ref: "#/components/schemas/StudioMessage_Write"
     OptimizationPage_Public:
       type: object
       properties:
@@ -11642,6 +11941,26 @@ components:
           type: array
           items:
             type: string
+    OptimizationStudioConfig_Public:
+      required:
+      - dataset_name
+      - evaluation
+      - llm_model
+      - optimizer
+      - prompt
+      type: object
+      properties:
+        dataset_name:
+          minLength: 1
+          type: string
+        prompt:
+          $ref: "#/components/schemas/StudioPrompt_Public"
+        llm_model:
+          $ref: "#/components/schemas/StudioLlmModel_Public"
+        evaluation:
+          $ref: "#/components/schemas/StudioEvaluation_Public"
+        optimizer:
+          $ref: "#/components/schemas/StudioOptimizer_Public"
     Optimization_Public:
       required:
       - dataset_name
@@ -11666,8 +11985,12 @@ components:
           - running
           - completed
           - cancelled
+          - initialized
+          - error
         metadata:
           $ref: "#/components/schemas/JsonListString_Public"
+        studio_config:
+          $ref: "#/components/schemas/OptimizationStudioConfig_Public"
         dataset_id:
           type: string
           format: uuid
@@ -11694,6 +12017,79 @@ components:
         last_updated_by:
           type: string
           readOnly: true
+    StudioEvaluation_Public:
+      required:
+      - metrics
+      type: object
+      properties:
+        metrics:
+          minItems: 1
+          type: array
+          items:
+            $ref: "#/components/schemas/StudioMetric_Public"
+    StudioLlmModel_Public:
+      required:
+      - model
+      type: object
+      properties:
+        model:
+          minLength: 1
+          type: string
+        parameters:
+          $ref: "#/components/schemas/JsonNode_Public"
+    StudioMessage_Public:
+      required:
+      - content
+      - role
+      type: object
+      properties:
+        role:
+          minLength: 1
+          type: string
+        content:
+          minLength: 1
+          type: string
+    StudioMetric_Public:
+      required:
+      - type
+      type: object
+      properties:
+        type:
+          minLength: 1
+          type: string
+        parameters:
+          $ref: "#/components/schemas/JsonNode_Public"
+    StudioOptimizer_Public:
+      required:
+      - type
+      type: object
+      properties:
+        type:
+          minLength: 1
+          type: string
+        parameters:
+          $ref: "#/components/schemas/JsonNode_Public"
+    StudioPrompt_Public:
+      required:
+      - messages
+      type: object
+      properties:
+        messages:
+          minItems: 1
+          type: array
+          items:
+            $ref: "#/components/schemas/StudioMessage_Public"
+    OptimizationStudioLog:
+      type: object
+      properties:
+        url:
+          type: string
+        last_modified:
+          type: string
+          format: date-time
+        expires_at:
+          type: string
+          format: date-time
     OptimizationUpdate:
       type: object
       properties:
@@ -11705,6 +12101,8 @@ components:
           - running
           - completed
           - cancelled
+          - initialized
+          - error
     ErrorCountWithDeviation:
       type: object
       properties:
@@ -12517,6 +12915,7 @@ components:
       required:
       - alertsEnabled
       - csvUploadEnabled
+      - dashboardsEnabled
       - exportEnabled
       - guardrailsEnabled
       - opikAIEnabled
@@ -12543,6 +12942,8 @@ components:
         csvUploadEnabled:
           type: boolean
         exportEnabled:
+          type: boolean
+        dashboardsEnabled:
           type: boolean
     SpanBatchUpdate:
       required:
