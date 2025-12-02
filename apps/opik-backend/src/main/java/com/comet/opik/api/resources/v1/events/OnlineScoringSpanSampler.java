@@ -30,6 +30,7 @@ import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
 import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -94,9 +95,12 @@ public class OnlineScoringSpanSampler {
             log.info("Fetching evaluators for '{}' spans, project '{}' on workspace '{}'",
                     spans.size(), projectId, spansBatch.workspaceId());
 
-            // Fetch only span-level evaluators by filtering at database level
-            List<? extends AutomationRuleEvaluator<?, ?>> evaluators = ruleEvaluatorService.findAll(
-                    projectId, spansBatch.workspaceId(), AutomationRuleEvaluatorType.SPAN_LLM_AS_JUDGE);
+            // Fetch all span-level evaluators by filtering at database level
+            List<AutomationRuleEvaluator<?, ?>> evaluators = new ArrayList<>();
+            evaluators.addAll(ruleEvaluatorService.findAll(
+                    projectId, spansBatch.workspaceId(), AutomationRuleEvaluatorType.SPAN_LLM_AS_JUDGE));
+            evaluators.addAll(ruleEvaluatorService.findAll(
+                    projectId, spansBatch.workspaceId(), AutomationRuleEvaluatorType.SPAN_USER_DEFINED_METRIC_PYTHON));
 
             if (evaluators.isEmpty()) {
                 log.debug("No span-level evaluators found for project '{}' on workspace '{}'",
@@ -129,7 +133,7 @@ public class OnlineScoringSpanSampler {
                     case AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython rule ->
                         logUnsupportedEvaluatorType(rule);
                     case AutomationRuleEvaluatorSpanUserDefinedMetricPython rule -> {
-                        if (!serviceTogglesConfig.isPythonEvaluatorEnabled()) {
+                        if (!serviceTogglesConfig.isSpanUserDefinedMetricPythonEnabled()) {
                             log.warn("Span Python evaluator is disabled. Skipping...");
                             return;
                         }

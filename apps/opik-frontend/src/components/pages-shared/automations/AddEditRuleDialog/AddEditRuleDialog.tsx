@@ -69,6 +69,7 @@ import { ColumnData } from "@/types/shared";
 import {
   DEFAULT_PYTHON_CODE_THREAD_DATA,
   DEFAULT_PYTHON_CODE_TRACE_DATA,
+  DEFAULT_PYTHON_CODE_SPAN_DATA,
   LLM_PROMPT_CUSTOM_THREAD_TEMPLATE,
   LLM_PROMPT_CUSTOM_TRACE_TEMPLATE,
   LLM_PROMPT_CUSTOM_SPAN_TEMPLATE,
@@ -134,8 +135,7 @@ const DEFAULT_PYTHON_CODE_DATA: Record<
 > = {
   [EVALUATORS_RULE_SCOPE.trace]: DEFAULT_PYTHON_CODE_TRACE_DATA,
   [EVALUATORS_RULE_SCOPE.thread]: DEFAULT_PYTHON_CODE_THREAD_DATA,
-  // Python code is not supported for span scope, but we need this for type safety
-  [EVALUATORS_RULE_SCOPE.span]: DEFAULT_PYTHON_CODE_TRACE_DATA,
+  [EVALUATORS_RULE_SCOPE.span]: DEFAULT_PYTHON_CODE_SPAN_DATA,
 };
 
 type AddEditRuleDialogProps = {
@@ -151,7 +151,8 @@ type AddEditRuleDialogProps = {
 const isPythonCodeRule = (rule: EvaluatorsRule) => {
   return (
     rule.type === EVALUATORS_RULE_TYPE.python_code ||
-    rule.type === EVALUATORS_RULE_TYPE.thread_python_code
+    rule.type === EVALUATORS_RULE_TYPE.thread_python_code ||
+    rule.type === EVALUATORS_RULE_TYPE.span_python_code
   );
 };
 
@@ -177,6 +178,9 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
   );
   const isSpanLlmAsJudgeEnabled = useIsFeatureEnabled(
     FeatureToggleKeys.SPAN_LLM_AS_JUDGE_ENABLED,
+  );
+  const isSpanPythonCodeEnabled = useIsFeatureEnabled(
+    FeatureToggleKeys.SPAN_USER_DEFINED_METRIC_PYTHON_ENABLED,
   );
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const navigate = useNavigate();
@@ -524,7 +528,8 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
                                 >
                                   Thread
                                 </SelectItem>
-                                {isSpanLlmAsJudgeEnabled && (
+                                {(isSpanLlmAsJudgeEnabled ||
+                                  isSpanPythonCodeEnabled) && (
                                   <SelectItem
                                     value={EVALUATORS_RULE_SCOPE.span}
                                   >
@@ -612,7 +617,8 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
                               >
                                 LLM-as-judge
                               </ToggleGroupItem>
-                              {isCodeMetricEnabled && !isSpanScope ? (
+                              {(isCodeMetricEnabled && !isSpanScope) ||
+                              (isSpanScope && isSpanPythonCodeEnabled) ? (
                                 <ToggleGroupItem
                                   value={UI_EVALUATORS_RULE_TYPE.python_code}
                                   aria-label="Code metric"
@@ -623,7 +629,7 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
                                 <TooltipWrapper
                                   content={
                                     isSpanScope
-                                      ? "Python code metrics are not supported for span-level rules"
+                                      ? "Python code metrics are not enabled for span scope"
                                       : "This feature is not available for this environment"
                                   }
                                 >

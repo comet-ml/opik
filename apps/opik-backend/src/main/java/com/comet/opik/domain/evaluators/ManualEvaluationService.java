@@ -339,7 +339,7 @@ class ManualEvaluationServiceImpl implements ManualEvaluationService {
 
                     // Enqueue Span Python evaluations (if enabled)
                     spanPythonRules.forEach(rule -> {
-                        if (!serviceTogglesConfig.isPythonEvaluatorEnabled()) {
+                        if (!serviceTogglesConfig.isSpanUserDefinedMetricPythonEnabled()) {
                             log.warn("Span Python evaluator is disabled, skipping rule '{}'", rule.getId());
                             return;
                         }
