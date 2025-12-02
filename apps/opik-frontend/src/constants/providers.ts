@@ -4,6 +4,7 @@ import OpenRouterIcon from "@/icons/integrations/open_router.svg?react";
 import GeminiIcon from "@/icons/integrations/gemini.svg?react";
 import VertexAIIcon from "@/icons/integrations/vertex_ai.svg?react";
 import CustomIcon from "@/icons/integrations/custom.svg?react";
+import OpikIcon from "@/icons/integrations/opik.svg?react";
 
 import { PROVIDER_MODEL_TYPE, PROVIDER_TYPE } from "@/types/providers";
 
@@ -24,6 +25,14 @@ type PROVIDERS_TYPE = {
 };
 
 export const PROVIDERS: PROVIDERS_TYPE = {
+  [PROVIDER_TYPE.OPIK_BUILTIN]: {
+    label: "Opik Built-in",
+    value: PROVIDER_TYPE.OPIK_BUILTIN,
+    icon: OpikIcon,
+    apiKeyName: "Opik Built-in",
+    defaultModel: PROVIDER_MODEL_TYPE.OPIK_BUILTIN_MODEL,
+    description: "Built-in model provided by Opik - no API key required",
+  },
   [PROVIDER_TYPE.OPEN_AI]: {
     label: "OpenAI",
     value: PROVIDER_TYPE.OPEN_AI,

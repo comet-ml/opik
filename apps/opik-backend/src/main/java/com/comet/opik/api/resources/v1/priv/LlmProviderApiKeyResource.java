@@ -2,10 +2,12 @@ package com.comet.opik.api.resources.v1.priv;
 
 import com.codahale.metrics.annotation.Timed;
 import com.comet.opik.api.BatchDelete;
+import com.comet.opik.api.LlmProvider;
 import com.comet.opik.api.ProviderApiKey;
 import com.comet.opik.api.ProviderApiKeyUpdate;
 import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.domain.LlmProviderApiKeyService;
+import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.fasterxml.jackson.annotation.JsonView;
 import io.swagger.v3.oas.annotations.Operation;
@@ -34,8 +36,11 @@ import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
+import java.util.ArrayList;
+import java.util.Map;
 import java.util.UUID;
 
+import static com.comet.opik.infrastructure.BuiltinLlmProviderConfig.BUILTIN_PROVIDER_ID;
 import static com.comet.opik.infrastructure.EncryptionUtils.decrypt;
 import static com.comet.opik.infrastructure.EncryptionUtils.maskApiKey;
 
@@ -50,6 +55,7 @@ public class LlmProviderApiKeyResource {
 
     private final @NonNull LlmProviderApiKeyService llmProviderApiKeyService;
     private final @NonNull Provider<RequestContext> requestContext;
+    private final @NonNull OpikConfiguration configuration;
 
     @GET
     @Operation(operationId = "findLlmProviderKeys", summary = "Find LLM Provider's ApiKeys", description = "Find LLM Provider's ApiKeys", responses = {
@@ -62,18 +68,36 @@ public class LlmProviderApiKeyResource {
 
         log.info("Find LLM Provider's ApiKeys for workspaceId '{}'", workspaceId);
         ProviderApiKey.ProviderApiKeyPage providerApiKeyPage = llmProviderApiKeyService.find(workspaceId);
+
+        // Inject virtual built-in provider if enabled
+        var content = new ArrayList<>(providerApiKeyPage.content());
+        var defaultConfig = configuration.getBuiltinLlmProvider();
+        if (defaultConfig.isEnabled()) {
+            var virtualProvider = ProviderApiKey.builder()
+                    .id(BUILTIN_PROVIDER_ID)
+                    .provider(LlmProvider.OPIK_BUILTIN)
+                    .configuration(Map.of(
+                            "models", defaultConfig.getModel()))
+                    .readOnly(true)
+                    .build();
+            content.add(virtualProvider); // Add at the end so user-configured providers are selected first
+        }
+
         log.info("Found LLM Provider's ApiKeys for workspaceId '{}'", workspaceId);
+
+        var maskedContent = content.stream()
+                .map(providerApiKey -> providerApiKey.toBuilder()
+                        .apiKey(providerApiKey.apiKey() != null
+                                ? maskApiKey(decrypt(providerApiKey.apiKey()))
+                                : "null")
+                        .build())
+                .toList();
 
         return Response.ok().entity(
                 providerApiKeyPage.toBuilder()
-                        .content(
-                                providerApiKeyPage.content().stream()
-                                        .map(providerApiKey -> providerApiKey.toBuilder()
-                                                .apiKey(providerApiKey.apiKey() != null
-                                                        ? maskApiKey(decrypt(providerApiKey.apiKey()))
-                                                        : "null")
-                                                .build())
-                                        .toList())
+                        .content(maskedContent)
+                        .size(maskedContent.size())
+                        .total(maskedContent.size())
                         .build())
                 .build();
     }
@@ -148,10 +172,21 @@ public class LlmProviderApiKeyResource {
     public Response deleteApiKeys(
             @NotNull @RequestBody(content = @Content(schema = @Schema(implementation = BatchDelete.class))) @Valid BatchDelete batchDelete) {
         String workspaceId = requestContext.get().getWorkspaceId();
+
+        // Filter out the built-in provider UUID to prevent deletion
+        var defaultProviderUuid = BUILTIN_PROVIDER_ID;
+        var idsToDelete = batchDelete.ids().stream()
+                .filter(id -> !id.equals(defaultProviderUuid))
+                .collect(java.util.stream.Collectors.toSet());
+
+        if (idsToDelete.isEmpty()) {
+            return Response.noContent().build();
+        }
+
         log.info("Deleting api keys for LLM provider by ids, count '{}', on workspace_id '{}'",
-                batchDelete.ids().size(), workspaceId);
-        llmProviderApiKeyService.delete(batchDelete.ids(), workspaceId);
-        log.info("Deleted api keys for LLM provider by ids, count '{}', on workspace_id '{}'", batchDelete.ids().size(),
+                idsToDelete.size(), workspaceId);
+        llmProviderApiKeyService.delete(idsToDelete, workspaceId);
+        log.info("Deleted api keys for LLM provider by ids, count '{}', on workspace_id '{}'", idsToDelete.size(),
                 workspaceId);
         return Response.noContent().build();
     }

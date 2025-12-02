@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useMemo } from "react";
 import { Label } from "@/components/ui/label";
 import { PROVIDER_TYPE } from "@/types/providers";
 import { PROVIDERS_OPTIONS } from "@/constants/providers";
@@ -13,11 +13,20 @@ const ProviderGrid: React.FC<ProviderGridProps> = ({
   selectedProvider,
   onSelectProvider,
 }) => {
+  // Filter out OPIK_BUILTIN - it's a system provider that users don't configure
+  const configurableProviders = useMemo(
+    () =>
+      PROVIDERS_OPTIONS.filter(
+        (provider) => provider.value !== PROVIDER_TYPE.OPIK_BUILTIN,
+      ),
+    [],
+  );
+
   return (
     <div className="flex flex-col gap-2">
       <Label>Provider</Label>
       <div className="grid grid-cols-3 gap-3">
-        {PROVIDERS_OPTIONS.map((provider) => {
+        {configurableProviders.map((provider) => {
           const Icon = provider.icon;
           const isSelected = selectedProvider === provider.value;
 
