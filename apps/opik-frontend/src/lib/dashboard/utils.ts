@@ -1,3 +1,4 @@
+import uniqid from "uniqid";
 import {
   DashboardSection,
   DashboardSections,
@@ -16,15 +17,11 @@ const DEFAULT_SECTION_NAME = "New section";
 
 export const WIDGET_TYPES = WIDGET_TYPE;
 
-export const generateId = (): string => {
-  return Math.random().toString(36).substring(2, 9);
-};
-
 export const generateEmptySection = (
   title = DEFAULT_SECTION_NAME,
 ): DashboardSection => {
   return {
-    id: generateId(),
+    id: uniqid(),
     title,
     widgets: [],
     layout: [],

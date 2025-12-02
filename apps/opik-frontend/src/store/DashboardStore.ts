@@ -2,6 +2,7 @@ import { create } from "zustand";
 import { devtools } from "zustand/middleware";
 import { arrayMove } from "@dnd-kit/sortable";
 import { UniqueIdentifier } from "@dnd-kit/core";
+import uniqid from "uniqid";
 
 import {
   BaseDashboardConfig,
@@ -18,7 +19,6 @@ import {
 import {
   generateEmptyDashboard,
   generateEmptySection,
-  generateId,
   getSectionById,
 } from "@/lib/dashboard/utils";
 import {
@@ -242,7 +242,7 @@ export const useDashboardStore = create<DashboardStore<BaseDashboardConfig>>()(
           if (!section) return undefined;
 
           const newWidget: DashboardWidget = {
-            id: generateId(),
+            id: uniqid(),
             type: widgetConfig.type,
             title: widgetConfig.title,
             subtitle: widgetConfig.subtitle,
@@ -285,7 +285,7 @@ export const useDashboardStore = create<DashboardStore<BaseDashboardConfig>>()(
           const layoutItem = section.layout.find((item) => item.i === widgetId);
 
           const newWidget: DashboardWidget = {
-            id: generateId(),
+            id: uniqid(),
             type: widget.type,
             title: widget.title,
             subtitle: widget.subtitle,
