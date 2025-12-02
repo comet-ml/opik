@@ -9,5 +9,4 @@ ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.optimizations ON CLUSTER '{cluster}'
 MODIFY COLUMN status Enum8('running' = 0, 'completed' = 1, 'cancelled' = 2, 'initialized' = 3, 'error' = 4);
 
 --rollback ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.optimizations ON CLUSTER '{cluster}' DROP COLUMN IF EXISTS studio_config;
---rollback ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.optimizations ON CLUSTER '{cluster}' MODIFY COLUMN status Enum8('running' = 0, 'completed' = 1, 'cancelled' = 2);
-
+--rollback empty
