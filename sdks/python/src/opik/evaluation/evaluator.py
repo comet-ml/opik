@@ -653,6 +653,7 @@ def evaluate_optimization_trial(
     dataset: dataset.Dataset,
     task: LLMTask,
     scoring_metrics: Optional[List[base_metric.BaseMetric]] = None,
+    scoring_functions: Optional[List[scorer_function.ScorerFunction]] = None,
     experiment_name: Optional[str] = None,
     project_name: Optional[str] = None,
     experiment_config: Optional[Dict[str, Any]] = None,
@@ -677,6 +678,13 @@ def evaluate_optimization_trial(
 
         task: A callable object that takes dict with dataset item content
             as input and returns dict which will later be used for scoring.
+
+        scoring_functions: List of scorer functions to be executed during evaluation.
+            Each scorer function includes a scoring method that accepts predefined
+            arguments supplied by the evaluation engine:
+                • dataset_item — a dictionary containing the dataset item content,
+                • task_outputs — a dictionary containing the LLM task output.
+                • task_span - the data collected during the LLM task execution [optional].
 
         experiment_name: The name of the experiment associated with evaluation run.
             If None, a generated name will be used.
@@ -733,6 +741,13 @@ def evaluate_optimization_trial(
     checked_prompts = experiment_helpers.handle_prompt_args(
         prompt=prompt,
         prompts=prompts,
+    )
+
+    # wrap scoring functions if any
+    scoring_metrics = _wrap_scoring_functions(
+        scoring_functions=scoring_functions,
+        scoring_metrics=scoring_metrics,
+        project_name=project_name,
     )
 
     client = opik_client.get_client_cached()

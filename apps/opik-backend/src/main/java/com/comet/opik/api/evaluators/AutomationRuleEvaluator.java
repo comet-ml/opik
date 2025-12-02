@@ -1,7 +1,7 @@
 package com.comet.opik.api.evaluators;
 
 import com.comet.opik.api.Page;
-import com.comet.opik.api.filter.TraceFilter;
+import com.comet.opik.api.filter.Filter;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonSubTypes;
@@ -31,19 +31,22 @@ import java.util.UUID;
         @JsonSubTypes.Type(value = AutomationRuleEvaluatorUserDefinedMetricPython.class, name = AutomationRuleEvaluatorType.Constants.USER_DEFINED_METRIC_PYTHON),
         @JsonSubTypes.Type(value = AutomationRuleEvaluatorTraceThreadLlmAsJudge.class, name = AutomationRuleEvaluatorType.Constants.TRACE_THREAD_LLM_AS_JUDGE),
         @JsonSubTypes.Type(value = AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython.class, name = AutomationRuleEvaluatorType.Constants.TRACE_THREAD_USER_DEFINED_METRIC_PYTHON),
+        @JsonSubTypes.Type(value = AutomationRuleEvaluatorSpanLlmAsJudge.class, name = AutomationRuleEvaluatorType.Constants.SPAN_LLM_AS_JUDGE),
 })
 @Schema(name = "AutomationRuleEvaluator", discriminatorProperty = "type", discriminatorMapping = {
         @DiscriminatorMapping(value = AutomationRuleEvaluatorType.Constants.LLM_AS_JUDGE, schema = AutomationRuleEvaluatorLlmAsJudge.class),
         @DiscriminatorMapping(value = AutomationRuleEvaluatorType.Constants.USER_DEFINED_METRIC_PYTHON, schema = AutomationRuleEvaluatorUserDefinedMetricPython.class),
         @DiscriminatorMapping(value = AutomationRuleEvaluatorType.Constants.TRACE_THREAD_LLM_AS_JUDGE, schema = AutomationRuleEvaluatorTraceThreadLlmAsJudge.class),
         @DiscriminatorMapping(value = AutomationRuleEvaluatorType.Constants.TRACE_THREAD_USER_DEFINED_METRIC_PYTHON, schema = AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython.class),
+        @DiscriminatorMapping(value = AutomationRuleEvaluatorType.Constants.SPAN_LLM_AS_JUDGE, schema = AutomationRuleEvaluatorSpanLlmAsJudge.class),
 })
 @AllArgsConstructor
 @JsonIgnoreProperties(ignoreUnknown = true)
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
-public abstract sealed class AutomationRuleEvaluator<T> implements AutomationRule
+public abstract sealed class AutomationRuleEvaluator<T, E extends Filter> implements AutomationRule
         permits AutomationRuleEvaluatorLlmAsJudge, AutomationRuleEvaluatorUserDefinedMetricPython,
-        AutomationRuleEvaluatorTraceThreadLlmAsJudge, AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython {
+        AutomationRuleEvaluatorTraceThreadLlmAsJudge, AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython,
+        AutomationRuleEvaluatorSpanLlmAsJudge {
 
     @JsonView({View.Public.class})
     @Schema(accessMode = Schema.AccessMode.READ_ONLY)
@@ -65,10 +68,6 @@ public abstract sealed class AutomationRuleEvaluator<T> implements AutomationRul
     @JsonView({View.Public.class, View.Write.class})
     @Builder.Default
     private final boolean enabled = true;
-
-    @JsonView({View.Public.class, View.Write.class})
-    @Builder.Default
-    private final List<TraceFilter> filters = List.of();
 
     @JsonIgnore
     @NotNull private final T code;
@@ -97,7 +96,14 @@ public abstract sealed class AutomationRuleEvaluator<T> implements AutomationRul
         return AutomationRuleAction.EVALUATOR;
     }
 
-    public abstract <C extends AutomationRuleEvaluator<T>, B extends AutomationRuleEvaluatorBuilder<T, C, B>> AutomationRuleEvaluatorBuilder<T, C, B> toBuilder();
+    @JsonIgnore
+    @Builder.Default
+    protected final List<E> filters = List.of();
+
+    @NotNull @JsonView({View.Public.class, View.Write.class})
+    public abstract List<E> getFilters();
+
+    public abstract <C extends AutomationRuleEvaluator<T, E>, B extends AutomationRuleEvaluator.AutomationRuleEvaluatorBuilder<T, E, C, B>> AutomationRuleEvaluator.AutomationRuleEvaluatorBuilder<T, E, C, B> toBuilder();
 
     @UtilityClass
     public static class View {
@@ -115,13 +121,14 @@ public abstract sealed class AutomationRuleEvaluator<T> implements AutomationRul
                     View.Public.class}) int page,
             @JsonView({View.Public.class}) int size,
             @JsonView({View.Public.class}) long total,
-            @JsonView({View.Public.class}) List<AutomationRuleEvaluator<?>> content,
+            @JsonView({View.Public.class}) List<AutomationRuleEvaluator<?, ?>> content,
             @JsonView({View.Public.class}) List<String> sortableBy)
             implements
-                Page<AutomationRuleEvaluator<?>>{
+                Page<AutomationRuleEvaluator<?, ?>>{
 
         public static AutomationRuleEvaluatorPage empty(int page, List<String> sortableBy) {
             return new AutomationRuleEvaluatorPage(page, 0, 0, List.of(), sortableBy);
         }
     }
+
 }
