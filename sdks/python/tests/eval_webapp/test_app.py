@@ -1,20 +1,19 @@
 """Tests for the eval app FastAPI application."""
 
 import pytest
-from unittest import mock
 
-pytest.importorskip("fastapi")
+fastapi = pytest.importorskip("fastapi")
 
-from fastapi.testclient import TestClient
+from fastapi import testclient  # noqa: E402
 
-from opik.eval_app import create_app
+from opik import eval_app  # noqa: E402
 
 
 @pytest.fixture
 def client():
     """Create a test client for the eval app."""
-    app = create_app()
-    return TestClient(app)
+    app = eval_app.create_app()
+    return testclient.TestClient(app)
 
 
 class TestHealthcheckEndpoint:

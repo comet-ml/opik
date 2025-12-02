@@ -58,9 +58,7 @@ class TraceFieldMapping(pydantic.BaseModel):
 class EvaluationRequest(pydantic.BaseModel):
     """Request schema for running evaluation on a trace."""
 
-    trace_id: str = pydantic.Field(
-        description="ID of the trace to evaluate"
-    )
+    trace_id: str = pydantic.Field(description="ID of the trace to evaluate")
     metrics: List[MetricConfig] = pydantic.Field(
         min_length=1,
         description="List of metric configurations",
@@ -79,4 +77,6 @@ class EvaluationAcceptedResponse(pydantic.BaseModel):
 
     trace_id: str
     metrics_count: int
-    message: str = "Evaluation request accepted. Feedback scores will be logged to the trace."
+    message: str = (
+        "Evaluation request accepted. Feedback scores will be logged to the trace."
+    )

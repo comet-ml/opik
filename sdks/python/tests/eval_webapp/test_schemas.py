@@ -1,7 +1,5 @@
 """Tests for the eval app Pydantic schemas."""
 
-import pytest
-
 from opik.eval_app import schemas
 
 
@@ -63,9 +61,7 @@ class TestEvaluationRequest:
         request = schemas.EvaluationRequest(
             trace_id="trace-456",
             metrics=[schemas.MetricConfig(name="Equals")],
-            field_mapping=schemas.TraceFieldMapping(
-                mapping={"output": "output"}
-            ),
+            field_mapping=schemas.TraceFieldMapping(mapping={"output": "output"}),
             project_name="test_project",
         )
 

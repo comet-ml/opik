@@ -57,7 +57,9 @@ class TestEvalServiceInstantiateMetrics:
         registry.register(Equals, "heuristic")
         eval_service = EvalService(registry=registry)
 
-        configs = [schemas.MetricConfig(name="Equals", init_args={"case_sensitive": True})]
+        configs = [
+            schemas.MetricConfig(name="Equals", init_args={"case_sensitive": True})
+        ]
         result = eval_service._instantiate_metrics(configs)
 
         assert result[0]._case_sensitive is True
@@ -74,7 +76,9 @@ class TestEvalServiceInstantiateMetrics:
 
         assert exc_info.value.metric_name == "UnknownMetric"
 
-    def test_instantiate_metrics__invalid_init_args__raises_metric_instantiation_error(self):
+    def test_instantiate_metrics__invalid_init_args__raises_metric_instantiation_error(
+        self,
+    ):
         """Test that invalid init_args raises MetricInstantiationError."""
         from opik.evaluation.metrics import Equals
 
@@ -136,9 +140,7 @@ class TestEvalServiceExtractMetricInputs:
 
         mock_trace = mock.MagicMock()
 
-        field_mapping = schemas.TraceFieldMapping(
-            mapping={"value": "invalid_field"}
-        )
+        field_mapping = schemas.TraceFieldMapping(mapping={"value": "invalid_field"})
 
         with pytest.raises(exceptions.InvalidFieldMappingError) as exc_info:
             eval_service._extract_metric_inputs(mock_trace, field_mapping)

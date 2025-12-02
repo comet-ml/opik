@@ -125,7 +125,6 @@ class EvalService:
         parts = field_path.split(".")
         root_field = parts[0]
 
-        # Map root field to trace attribute
         trace_field_map = {
             "input": trace.input,
             "output": trace.output,
@@ -143,7 +142,6 @@ class EvalService:
 
         value = trace_field_map[root_field]
 
-        # Navigate nested fields if path has multiple parts
         for part in parts[1:]:
             if value is None:
                 return None
@@ -178,17 +176,33 @@ class EvalService:
             for metric in scoring_metrics:
                 try:
                     result = metric.score(**metric_inputs)
-                    feedback_scores.append(
-                        FeedbackScoreDict(
-                            id=trace_id,
-                            name=result.name,
-                            value=result.value,
-                            reason=getattr(result, "reason", None),
+
+                    # Handle both single result and list of results
+                    if isinstance(result, list):
+                        for score_result in result:
+                            feedback_scores.append(
+                                FeedbackScoreDict(
+                                    id=trace_id,
+                                    name=score_result.name,
+                                    value=score_result.value,
+                                    reason=getattr(score_result, "reason", None),
+                                )
+                            )
+                            LOGGER.debug(
+                                "Metric %s scored: %s",
+                                score_result.name,
+                                score_result.value,
+                            )
+                    else:
+                        feedback_scores.append(
+                            FeedbackScoreDict(
+                                id=trace_id,
+                                name=result.name,
+                                value=result.value,
+                                reason=getattr(result, "reason", None),
+                            )
                         )
-                    )
-                    LOGGER.debug(
-                        "Metric %s scored: %s", result.name, result.value
-                    )
+                        LOGGER.debug("Metric %s scored: %s", result.name, result.value)
                 except Exception as e:
                     LOGGER.warning(
                         "Metric %s failed to score: %s",

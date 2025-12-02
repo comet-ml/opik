@@ -1,13 +1,10 @@
 """Tests for the metrics registry module."""
 
-import pytest
-
 from opik.eval_app.metrics import (
     MetricDescriptor,
     MetricInfo,
     MetricsRegistry,
     ParamInfo,
-    create_default_registry,
     get_default_registry,
 )
 from opik.eval_app.metrics.param_extractor import (

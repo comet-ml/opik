@@ -43,18 +43,28 @@ def eval_app(host: str, port: int) -> None:
     click.echo(click.style("  Opik Eval App", fg="cyan", bold=True))
     click.echo(click.style("=" * 70, fg="cyan"))
     click.echo()
-    click.echo(f"  Server running at: {click.style(f'http://{host}:{port}', fg='green', bold=True)}")
+    click.echo(
+        f"  Server running at: {click.style(f'http://{host}:{port}', fg='green', bold=True)}"
+    )
     click.echo()
     click.echo("  Available endpoints:")
-    click.echo(f"    • GET  {click.style('/api/v1/evaluation/metrics', fg='yellow')} - List available metrics")
-    click.echo(f"    • POST {click.style('/api/v1/evaluation/traces', fg='yellow')}  - Evaluate trace & log scores")
-    click.echo(f"    • GET  {click.style('/healthcheck', fg='yellow')}               - Health check")
+    click.echo(
+        f"    • GET  {click.style('/api/v1/evaluation/metrics', fg='yellow')} - List available metrics"
+    )
+    click.echo(
+        f"    • POST {click.style('/api/v1/evaluation/traces', fg='yellow')}  - Evaluate trace & log scores"
+    )
+    click.echo(
+        f"    • GET  {click.style('/healthcheck', fg='yellow')}               - Health check"
+    )
     click.echo()
     click.echo("  Example request:")
-    click.echo('    curl -X POST http://localhost:8000/api/v1/evaluation/traces \\')
+    click.echo("    curl -X POST http://localhost:8000/api/v1/evaluation/traces \\")
     click.echo('      -H "Content-Type: application/json" \\')
     click.echo('      -d \'{"trace_id": "...", "metrics": [{"name": "Equals"}],')
-    click.echo('           "field_mapping": {"mapping": {"output": "output", "reference": "input"}}}\'')
+    click.echo(
+        '           "field_mapping": {"mapping": {"output": "output", "reference": "input"}}}\''
+    )
     click.echo()
     click.echo(click.style("=" * 70, fg="cyan"))
     click.echo()
@@ -62,4 +72,3 @@ def eval_app(host: str, port: int) -> None:
     import uvicorn
 
     uvicorn.run(app, host=host, port=port, log_level="info")
-

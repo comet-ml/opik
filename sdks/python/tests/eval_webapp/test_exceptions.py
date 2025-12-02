@@ -1,7 +1,5 @@
 """Tests for the eval app exceptions."""
 
-import pytest
-
 from opik.exceptions import OpikException
 from opik.eval_app import exceptions
 
