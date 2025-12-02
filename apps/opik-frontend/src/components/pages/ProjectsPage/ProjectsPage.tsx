@@ -39,7 +39,6 @@ import {
   COLUMN_TYPE,
   ColumnData,
   HeaderIconType,
-  SCORE_TYPE_FEEDBACK,
 } from "@/types/shared";
 import { convertColumnDataToColumn, mapColumnDataFields } from "@/lib/table";
 import useLocalStorageState from "use-local-storage-state";
@@ -198,7 +197,7 @@ const ProjectsPage: React.FunctionComponent = () => {
         cell: FeedbackScoreListCell as never,
         customMeta: {
           getHoverCardName: (row: ProjectWithStatistic) => row.name,
-          scoreType: SCORE_TYPE_FEEDBACK,
+          areAggregatedScores: true,
         },
         explainer: EXPLAINERS_MAP[EXPLAINER_ID.what_are_feedback_scores],
       },

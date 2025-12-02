@@ -18,7 +18,6 @@ import {
   COLUMN_NAME_ID,
   COLUMN_SELECT_ID,
   COLUMN_TYPE,
-  SCORE_TYPE_FEEDBACK,
 } from "@/types/shared";
 import { RESOURCE_TYPE } from "@/components/shared/ResourceLink/ResourceLink";
 import { ProjectWithStatistic } from "@/types/projects";
@@ -64,7 +63,7 @@ export const SHARED_COLUMNS = [
     cell: FeedbackScoreListCell as never,
     customMeta: {
       getHoverCardName: (row: ProjectWithStatistic) => row.name,
-      scoreType: SCORE_TYPE_FEEDBACK,
+      areAggregatedScores: true,
     },
   },
   {

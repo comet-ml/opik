@@ -40,9 +40,6 @@ import {
   COLUMN_ID_ID,
   COLUMN_FEEDBACK_SCORES_ID,
   COLUMN_COMMENTS_ID,
-  SCORE_TYPE_FEEDBACK,
-  COLUMN_EXPERIMENT_SCORES_ID,
-  SCORE_TYPE_EXPERIMENT,
 } from "@/types/shared";
 import { formatDate } from "@/lib/date";
 import { RESOURCE_TYPE } from "@/components/shared/ResourceLink/ResourceLink";
@@ -66,7 +63,6 @@ import { useExpandingConfig } from "@/components/pages-shared/experiments/useExp
 import PageBodyStickyContainer from "@/components/layout/PageBodyStickyContainer/PageBodyStickyContainer";
 import PageBodyStickyTableWrapper from "@/components/layout/PageBodyStickyTableWrapper/PageBodyStickyTableWrapper";
 import DataTablePagination from "@/components/shared/DataTablePagination/DataTablePagination";
-import ExperimentScoreListCell from "@/components/shared/DataTableCells/ExperimentScoreListCell";
 
 const STORAGE_KEY_PREFIX = "prompt-experiments";
 const PAGINATION_SIZE_KEY = "prompt-experiments-pagination-size";
@@ -180,20 +176,6 @@ export const DEFAULT_COLUMNS: ColumnData<GroupedExperiment>[] = [
     },
   },
   {
-    id: COLUMN_EXPERIMENT_SCORES_ID,
-    label: "Experiment Scores",
-    type: COLUMN_TYPE.numberDictionary,
-    accessorFn: transformExperimentScores,
-    cell: ExperimentScoreListCell as never,
-    aggregatedCell: ExperimentScoreListCell.Aggregation as never,
-    customMeta: {
-      getHoverCardName: (row: GroupedExperiment) => row.name,
-      scoreType: SCORE_TYPE_EXPERIMENT,
-      aggregationKey: "experiment_scores",
-    },
-    explainer: EXPLAINERS_MAP[EXPLAINER_ID.what_are_experiment_scores],
-  },
-  {
     id: COLUMN_FEEDBACK_SCORES_ID,
     label: "Feedback Scores",
     type: COLUMN_TYPE.numberDictionary,
@@ -202,7 +184,7 @@ export const DEFAULT_COLUMNS: ColumnData<GroupedExperiment>[] = [
     aggregatedCell: FeedbackScoreListCell.Aggregation as never,
     customMeta: {
       getHoverCardName: (row: GroupedExperiment) => row.name,
-      scoreType: SCORE_TYPE_FEEDBACK,
+      areAggregatedScores: true,
       aggregationKey: "feedback_scores",
     },
     explainer: EXPLAINERS_MAP[EXPLAINER_ID.what_are_feedback_scores],

@@ -172,16 +172,6 @@ export const useExperimentsTableConfig = <
     ];
   }, [dynamicScoresColumns]);
 
-  const experimentScoresColumnsData = useMemo(() => {
-    return scoresColumnsData.filter(
-      (c) => c.scoreType === SCORE_TYPE_EXPERIMENT,
-    );
-  }, [scoresColumnsData]);
-
-  const feedbackScoresColumnsData = useMemo(() => {
-    return scoresColumnsData.filter((c) => c.scoreType === SCORE_TYPE_FEEDBACK);
-  }, [scoresColumnsData]);
-
   const selectedRows = useMemo(() => {
     return experiments.filter(
       (row) => rowSelection[row.id] && !checkIsGroupRowType(row.id),
@@ -276,12 +266,7 @@ export const useExperimentsTableConfig = <
         selectedColumns,
         sortableColumns: sortableBy,
       }),
-      ...convertColumnDataToColumn<T, T>(experimentScoresColumnsData, {
-        columnsOrder: scoresColumnsOrder,
-        selectedColumns,
-        sortableColumns: sortableBy,
-      }),
-      ...convertColumnDataToColumn<T, T>(feedbackScoresColumnsData, {
+      ...convertColumnDataToColumn<T, T>(scoresColumnsData, {
         columnsOrder: scoresColumnsOrder,
         selectedColumns,
         sortableColumns: sortableBy,
@@ -304,9 +289,8 @@ export const useExperimentsTableConfig = <
     defaultColumns,
     columnsOrder,
     selectedColumns,
-    experimentScoresColumnsData,
+    scoresColumnsData,
     scoresColumnsOrder,
-    feedbackScoresColumnsData,
     actionsCell,
   ]);
 
@@ -345,24 +329,13 @@ export const useExperimentsTableConfig = <
   const columnSections = useMemo(() => {
     return [
       {
-        title: "Experiment scores",
-        columns: experimentScoresColumnsData,
-        order: scoresColumnsOrder,
-        onOrderChange: setScoresColumnsOrder,
-      },
-      {
         title: "Feedback scores",
-        columns: feedbackScoresColumnsData,
+        columns: scoresColumnsData,
         order: scoresColumnsOrder,
         onOrderChange: setScoresColumnsOrder,
       },
     ];
-  }, [
-    experimentScoresColumnsData,
-    feedbackScoresColumnsData,
-    scoresColumnsOrder,
-    setScoresColumnsOrder,
-  ]);
+  }, [scoresColumnsData, scoresColumnsOrder, setScoresColumnsOrder]);
 
   return {
     // State

@@ -14,13 +14,10 @@ import AddExperimentDialog from "@/components/pages-shared/experiments/AddExperi
 import { Button } from "@/components/ui/button";
 import useAppStore from "@/store/AppStore";
 import {
-  COLUMN_EXPERIMENT_SCORES_ID,
   COLUMN_FEEDBACK_SCORES_ID,
   COLUMN_NAME_ID,
   COLUMN_SELECT_ID,
   COLUMN_TYPE,
-  SCORE_TYPE_EXPERIMENT,
-  SCORE_TYPE_FEEDBACK,
 } from "@/types/shared";
 import { RESOURCE_TYPE } from "@/components/shared/ResourceLink/ResourceLink";
 import { Experiment } from "@/types/datasets";
@@ -28,7 +25,6 @@ import { convertColumnDataToColumn } from "@/lib/table";
 import { formatDate } from "@/lib/date";
 import FeedbackScoreListCell from "@/components/shared/DataTableCells/FeedbackScoreListCell";
 import { transformExperimentScores } from "@/lib/experimentScoreUtils";
-import ExperimentScoreListCell from "@/components/shared/DataTableCells/ExperimentScoreListCell";
 
 const COLUMNS_WIDTH_KEY = "home-experiments-columns-width";
 
@@ -66,17 +62,6 @@ export const COLUMNS = convertColumnDataToColumn<Experiment, Experiment>(
       type: COLUMN_TYPE.number,
     },
     {
-      id: COLUMN_EXPERIMENT_SCORES_ID,
-      label: "Experiment scores",
-      type: COLUMN_TYPE.numberDictionary,
-      accessorFn: transformExperimentScores,
-      cell: ExperimentScoreListCell as never,
-      customMeta: {
-        getHoverCardName: (row: Experiment) => row.name,
-        scoreType: SCORE_TYPE_EXPERIMENT,
-      },
-    },
-    {
       id: COLUMN_FEEDBACK_SCORES_ID,
       label: "Feedback scores",
       type: COLUMN_TYPE.numberDictionary,
@@ -84,7 +69,7 @@ export const COLUMNS = convertColumnDataToColumn<Experiment, Experiment>(
       cell: FeedbackScoreListCell as never,
       customMeta: {
         getHoverCardName: (row: Experiment) => row.name,
-        scoreType: SCORE_TYPE_FEEDBACK,
+        areAggregatedScores: true,
       },
     },
     {

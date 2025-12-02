@@ -30,7 +30,6 @@ import { transformExperimentScores } from "@/lib/experimentScoreUtils";
 import {
   COLUMN_COMMENTS_ID,
   COLUMN_DATASET_ID,
-  COLUMN_EXPERIMENT_SCORES_ID,
   COLUMN_FEEDBACK_SCORES_ID,
   COLUMN_ID_ID,
   COLUMN_METADATA_ID,
@@ -78,7 +77,6 @@ import { ChartData } from "@/components/pages-shared/experiments/FeedbackScoresC
 import GroupsButton from "@/components/shared/GroupsButton/GroupsButton";
 import useQueryParamAndLocalStorageState from "@/hooks/useQueryParamAndLocalStorageState";
 import TextCell from "@/components/shared/DataTableCells/TextCell";
-import ExperimentScoreListCell from "@/components/shared/DataTableCells/ExperimentScoreListCell";
 
 const STORAGE_KEY_PREFIX = "experiments";
 const PAGINATION_SIZE_KEY = "experiments-pagination-size";
@@ -192,19 +190,6 @@ export const DEFAULT_COLUMNS: ColumnData<GroupedExperiment>[] = [
     },
   },
   {
-    id: COLUMN_EXPERIMENT_SCORES_ID,
-    label: "Experiment Scores",
-    type: COLUMN_TYPE.numberDictionary,
-    accessorFn: transformExperimentScores,
-    cell: ExperimentScoreListCell as never,
-    aggregatedCell: ExperimentScoreListCell.Aggregation as never,
-    customMeta: {
-      getHoverCardName: (row: GroupedExperiment) => row.name,
-      aggregationKey: "experiment_scores",
-    },
-    explainer: EXPLAINERS_MAP[EXPLAINER_ID.what_are_experiment_scores],
-  },
-  {
     id: COLUMN_FEEDBACK_SCORES_ID,
     label: "Feedback Scores",
     type: COLUMN_TYPE.numberDictionary,
@@ -213,6 +198,7 @@ export const DEFAULT_COLUMNS: ColumnData<GroupedExperiment>[] = [
     aggregatedCell: FeedbackScoreListCell.Aggregation as never,
     customMeta: {
       getHoverCardName: (row: GroupedExperiment) => row.name,
+      areAggregatedScores: true,
       aggregationKey: "feedback_scores",
     },
     explainer: EXPLAINERS_MAP[EXPLAINER_ID.what_are_feedback_scores],

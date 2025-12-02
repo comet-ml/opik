@@ -66,7 +66,6 @@ import {
   COLUMN_TYPE,
   ColumnData,
   ROW_HEIGHT,
-  SCORE_TYPE_FEEDBACK,
 } from "@/types/shared";
 import {
   AnnotationQueue,
@@ -124,7 +123,7 @@ const DEFAULT_COLUMNS: ColumnData<AnnotationQueue>[] = [
     cell: FeedbackScoreListCell as never,
     customMeta: {
       getHoverCardName: (row: AnnotationQueue) => row.name,
-      scoreType: SCORE_TYPE_FEEDBACK,
+      areAggregatedScores: true,
     },
   },
   {
