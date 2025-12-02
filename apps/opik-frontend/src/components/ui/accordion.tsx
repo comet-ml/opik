@@ -53,4 +53,28 @@ const AccordionContent = React.forwardRef<
 
 AccordionContent.displayName = AccordionPrimitive.Content.displayName;
 
-export { Accordion, AccordionItem, AccordionTrigger, AccordionContent };
+const CustomAccordionTrigger = React.forwardRef<
+  HTMLDivElement,
+  React.HTMLAttributes<HTMLDivElement>
+>(({ className, children, ...props }, ref) => (
+  <AccordionPrimitive.Header className="flex">
+    <AccordionPrimitive.Trigger asChild>
+      <div
+        ref={ref}
+        className={cn("flex flex-1 cursor-pointer", className)}
+        {...props}
+      >
+        {children}
+      </div>
+    </AccordionPrimitive.Trigger>
+  </AccordionPrimitive.Header>
+));
+CustomAccordionTrigger.displayName = "CustomAccordionTrigger";
+
+export {
+  Accordion,
+  AccordionItem,
+  AccordionTrigger,
+  AccordionContent,
+  CustomAccordionTrigger,
+};
