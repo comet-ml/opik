@@ -12,4 +12,5 @@ export interface ServiceTogglesConfig {
     welcomeWizardEnabled: boolean;
     csvUploadEnabled: boolean;
     exportEnabled: boolean;
+    dashboardsEnabled: boolean;
 }

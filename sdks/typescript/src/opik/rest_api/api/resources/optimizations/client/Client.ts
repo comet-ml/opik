@@ -6,8 +6,8 @@ import * as environments from "../../../../environments";
 import * as core from "../../../../core";
 import * as OpikApi from "../../../index";
 import urlJoin from "url-join";
-import * as serializers from "../../../../serialization/index";
 import * as errors from "../../../../errors/index";
+import * as serializers from "../../../../serialization/index";
 
 export declare namespace Optimizations {
     export interface Options {
@@ -43,6 +43,90 @@ export class Optimizations {
     constructor(protected readonly _options: Optimizations.Options = {}) {}
 
     /**
+     * Cancel Studio optimizations by id
+     *
+     * @param {string} id
+     * @param {Optimizations.RequestOptions} requestOptions - Request-specific configuration.
+     *
+     * @throws {@link OpikApi.NotImplementedError}
+     *
+     * @example
+     *     await client.optimizations.cancelStudioOptimizations("id")
+     */
+    public cancelStudioOptimizations(
+        id: string,
+        requestOptions?: Optimizations.RequestOptions,
+    ): core.HttpResponsePromise<void> {
+        return core.HttpResponsePromise.fromPromise(this.__cancelStudioOptimizations(id, requestOptions));
+    }
+
+    private async __cancelStudioOptimizations(
+        id: string,
+        requestOptions?: Optimizations.RequestOptions,
+    ): Promise<core.WithRawResponse<void>> {
+        const _response = await core.fetcher({
+            url: urlJoin(
+                (await core.Supplier.get(this._options.baseUrl)) ??
+                    (await core.Supplier.get(this._options.environment)) ??
+                    environments.OpikApiEnvironment.Default,
+                `v1/private/optimizations/studio/${encodeURIComponent(id)}/cancel`,
+            ),
+            method: "GET",
+            headers: {
+                "Comet-Workspace":
+                    (await core.Supplier.get(this._options.workspaceName)) != null
+                        ? await core.Supplier.get(this._options.workspaceName)
+                        : undefined,
+                "X-Fern-Language": "JavaScript",
+                "X-Fern-Runtime": core.RUNTIME.type,
+                "X-Fern-Runtime-Version": core.RUNTIME.version,
+                ...(await this._getCustomAuthorizationHeaders()),
+                ...requestOptions?.headers,
+            },
+            contentType: "application/json",
+            requestType: "json",
+            timeoutMs: requestOptions?.timeoutInSeconds != null ? requestOptions.timeoutInSeconds * 1000 : 60000,
+            maxRetries: requestOptions?.maxRetries,
+            withCredentials: true,
+            abortSignal: requestOptions?.abortSignal,
+        });
+        if (_response.ok) {
+            return { data: undefined, rawResponse: _response.rawResponse };
+        }
+
+        if (_response.error.reason === "status-code") {
+            switch (_response.error.statusCode) {
+                case 501:
+                    throw new OpikApi.NotImplementedError(_response.error.body, _response.rawResponse);
+                default:
+                    throw new errors.OpikApiError({
+                        statusCode: _response.error.statusCode,
+                        body: _response.error.body,
+                        rawResponse: _response.rawResponse,
+                    });
+            }
+        }
+
+        switch (_response.error.reason) {
+            case "non-json":
+                throw new errors.OpikApiError({
+                    statusCode: _response.error.statusCode,
+                    body: _response.error.rawBody,
+                    rawResponse: _response.rawResponse,
+                });
+            case "timeout":
+                throw new errors.OpikApiTimeoutError(
+                    "Timeout exceeded when calling GET /v1/private/optimizations/studio/{id}/cancel.",
+                );
+            case "unknown":
+                throw new errors.OpikApiError({
+                    message: _response.error.errorMessage,
+                    rawResponse: _response.rawResponse,
+                });
+        }
+    }
+
+    /**
      * Find optimizations
      *
      * @param {OpikApi.FindOptimizationsRequest} request
@@ -64,7 +148,7 @@ export class Optimizations {
         request: OpikApi.FindOptimizationsRequest = {},
         requestOptions?: Optimizations.RequestOptions,
     ): Promise<core.WithRawResponse<OpikApi.OptimizationPagePublic>> {
-        const { page, size, datasetId, name, datasetDeleted } = request;
+        const { page, size, datasetId, name, datasetDeleted, filters } = request;
         const _queryParams: Record<string, string | string[] | object | object[] | null> = {};
         if (page != null) {
             _queryParams["page"] = page.toString();
@@ -84,6 +168,10 @@ export class Optimizations {
 
         if (datasetDeleted != null) {
             _queryParams["dataset_deleted"] = datasetDeleted.toString();
+        }
+
+        if (filters != null) {
+            _queryParams["filters"] = filters;
         }
 
         const _response = await core.fetcher({
@@ -396,6 +484,125 @@ export class Optimizations {
     }
 
     /**
+     * Find Studio optimizations
+     *
+     * @param {OpikApi.FindStudioOptimizationsRequest} request
+     * @param {Optimizations.RequestOptions} requestOptions - Request-specific configuration.
+     *
+     * @throws {@link OpikApi.BadRequestError}
+     *
+     * @example
+     *     await client.optimizations.findStudioOptimizations()
+     */
+    public findStudioOptimizations(
+        request: OpikApi.FindStudioOptimizationsRequest = {},
+        requestOptions?: Optimizations.RequestOptions,
+    ): core.HttpResponsePromise<OpikApi.OptimizationPagePublic> {
+        return core.HttpResponsePromise.fromPromise(this.__findStudioOptimizations(request, requestOptions));
+    }
+
+    private async __findStudioOptimizations(
+        request: OpikApi.FindStudioOptimizationsRequest = {},
+        requestOptions?: Optimizations.RequestOptions,
+    ): Promise<core.WithRawResponse<OpikApi.OptimizationPagePublic>> {
+        const { page, size, datasetId, name, datasetDeleted, filters } = request;
+        const _queryParams: Record<string, string | string[] | object | object[] | null> = {};
+        if (page != null) {
+            _queryParams["page"] = page.toString();
+        }
+
+        if (size != null) {
+            _queryParams["size"] = size.toString();
+        }
+
+        if (datasetId != null) {
+            _queryParams["dataset_id"] = datasetId;
+        }
+
+        if (name != null) {
+            _queryParams["name"] = name;
+        }
+
+        if (datasetDeleted != null) {
+            _queryParams["dataset_deleted"] = datasetDeleted.toString();
+        }
+
+        if (filters != null) {
+            _queryParams["filters"] = filters;
+        }
+
+        const _response = await core.fetcher({
+            url: urlJoin(
+                (await core.Supplier.get(this._options.baseUrl)) ??
+                    (await core.Supplier.get(this._options.environment)) ??
+                    environments.OpikApiEnvironment.Default,
+                "v1/private/optimizations/studio",
+            ),
+            method: "GET",
+            headers: {
+                "Comet-Workspace":
+                    (await core.Supplier.get(this._options.workspaceName)) != null
+                        ? await core.Supplier.get(this._options.workspaceName)
+                        : undefined,
+                "X-Fern-Language": "JavaScript",
+                "X-Fern-Runtime": core.RUNTIME.type,
+                "X-Fern-Runtime-Version": core.RUNTIME.version,
+                ...(await this._getCustomAuthorizationHeaders()),
+                ...requestOptions?.headers,
+            },
+            contentType: "application/json",
+            queryParameters: _queryParams,
+            requestType: "json",
+            timeoutMs: requestOptions?.timeoutInSeconds != null ? requestOptions.timeoutInSeconds * 1000 : 60000,
+            maxRetries: requestOptions?.maxRetries,
+            withCredentials: true,
+            abortSignal: requestOptions?.abortSignal,
+        });
+        if (_response.ok) {
+            return {
+                data: serializers.OptimizationPagePublic.parseOrThrow(_response.body, {
+                    unrecognizedObjectKeys: "passthrough",
+                    allowUnrecognizedUnionMembers: true,
+                    allowUnrecognizedEnumValues: true,
+                    breadcrumbsPrefix: ["response"],
+                }),
+                rawResponse: _response.rawResponse,
+            };
+        }
+
+        if (_response.error.reason === "status-code") {
+            switch (_response.error.statusCode) {
+                case 400:
+                    throw new OpikApi.BadRequestError(_response.error.body, _response.rawResponse);
+                default:
+                    throw new errors.OpikApiError({
+                        statusCode: _response.error.statusCode,
+                        body: _response.error.body,
+                        rawResponse: _response.rawResponse,
+                    });
+            }
+        }
+
+        switch (_response.error.reason) {
+            case "non-json":
+                throw new errors.OpikApiError({
+                    statusCode: _response.error.statusCode,
+                    body: _response.error.rawBody,
+                    rawResponse: _response.rawResponse,
+                });
+            case "timeout":
+                throw new errors.OpikApiTimeoutError(
+                    "Timeout exceeded when calling GET /v1/private/optimizations/studio.",
+                );
+            case "unknown":
+                throw new errors.OpikApiError({
+                    message: _response.error.errorMessage,
+                    rawResponse: _response.rawResponse,
+                });
+        }
+    }
+
+    /**
      * Get optimization by id
      *
      * @param {string} id
@@ -559,6 +766,190 @@ export class Optimizations {
             case "timeout":
                 throw new errors.OpikApiTimeoutError(
                     "Timeout exceeded when calling PUT /v1/private/optimizations/{id}.",
+                );
+            case "unknown":
+                throw new errors.OpikApiError({
+                    message: _response.error.errorMessage,
+                    rawResponse: _response.rawResponse,
+                });
+        }
+    }
+
+    /**
+     * Get Studio optimization with config included
+     *
+     * @param {string} id
+     * @param {Optimizations.RequestOptions} requestOptions - Request-specific configuration.
+     *
+     * @throws {@link OpikApi.NotFoundError}
+     *
+     * @example
+     *     await client.optimizations.getStudioOptimizationById("id")
+     */
+    public getStudioOptimizationById(
+        id: string,
+        requestOptions?: Optimizations.RequestOptions,
+    ): core.HttpResponsePromise<OpikApi.OptimizationPublic> {
+        return core.HttpResponsePromise.fromPromise(this.__getStudioOptimizationById(id, requestOptions));
+    }
+
+    private async __getStudioOptimizationById(
+        id: string,
+        requestOptions?: Optimizations.RequestOptions,
+    ): Promise<core.WithRawResponse<OpikApi.OptimizationPublic>> {
+        const _response = await core.fetcher({
+            url: urlJoin(
+                (await core.Supplier.get(this._options.baseUrl)) ??
+                    (await core.Supplier.get(this._options.environment)) ??
+                    environments.OpikApiEnvironment.Default,
+                `v1/private/optimizations/studio/${encodeURIComponent(id)}`,
+            ),
+            method: "GET",
+            headers: {
+                "Comet-Workspace":
+                    (await core.Supplier.get(this._options.workspaceName)) != null
+                        ? await core.Supplier.get(this._options.workspaceName)
+                        : undefined,
+                "X-Fern-Language": "JavaScript",
+                "X-Fern-Runtime": core.RUNTIME.type,
+                "X-Fern-Runtime-Version": core.RUNTIME.version,
+                ...(await this._getCustomAuthorizationHeaders()),
+                ...requestOptions?.headers,
+            },
+            contentType: "application/json",
+            requestType: "json",
+            timeoutMs: requestOptions?.timeoutInSeconds != null ? requestOptions.timeoutInSeconds * 1000 : 60000,
+            maxRetries: requestOptions?.maxRetries,
+            withCredentials: true,
+            abortSignal: requestOptions?.abortSignal,
+        });
+        if (_response.ok) {
+            return {
+                data: serializers.OptimizationPublic.parseOrThrow(_response.body, {
+                    unrecognizedObjectKeys: "passthrough",
+                    allowUnrecognizedUnionMembers: true,
+                    allowUnrecognizedEnumValues: true,
+                    breadcrumbsPrefix: ["response"],
+                }),
+                rawResponse: _response.rawResponse,
+            };
+        }
+
+        if (_response.error.reason === "status-code") {
+            switch (_response.error.statusCode) {
+                case 404:
+                    throw new OpikApi.NotFoundError(_response.error.body, _response.rawResponse);
+                default:
+                    throw new errors.OpikApiError({
+                        statusCode: _response.error.statusCode,
+                        body: _response.error.body,
+                        rawResponse: _response.rawResponse,
+                    });
+            }
+        }
+
+        switch (_response.error.reason) {
+            case "non-json":
+                throw new errors.OpikApiError({
+                    statusCode: _response.error.statusCode,
+                    body: _response.error.rawBody,
+                    rawResponse: _response.rawResponse,
+                });
+            case "timeout":
+                throw new errors.OpikApiTimeoutError(
+                    "Timeout exceeded when calling GET /v1/private/optimizations/studio/{id}.",
+                );
+            case "unknown":
+                throw new errors.OpikApiError({
+                    message: _response.error.errorMessage,
+                    rawResponse: _response.rawResponse,
+                });
+        }
+    }
+
+    /**
+     * Get presigned S3 URL for downloading optimization logs
+     *
+     * @param {string} id
+     * @param {Optimizations.RequestOptions} requestOptions - Request-specific configuration.
+     *
+     * @throws {@link OpikApi.NotFoundError}
+     *
+     * @example
+     *     await client.optimizations.getStudioOptimizationLogs("id")
+     */
+    public getStudioOptimizationLogs(
+        id: string,
+        requestOptions?: Optimizations.RequestOptions,
+    ): core.HttpResponsePromise<OpikApi.OptimizationStudioLog> {
+        return core.HttpResponsePromise.fromPromise(this.__getStudioOptimizationLogs(id, requestOptions));
+    }
+
+    private async __getStudioOptimizationLogs(
+        id: string,
+        requestOptions?: Optimizations.RequestOptions,
+    ): Promise<core.WithRawResponse<OpikApi.OptimizationStudioLog>> {
+        const _response = await core.fetcher({
+            url: urlJoin(
+                (await core.Supplier.get(this._options.baseUrl)) ??
+                    (await core.Supplier.get(this._options.environment)) ??
+                    environments.OpikApiEnvironment.Default,
+                `v1/private/optimizations/studio/${encodeURIComponent(id)}/logs`,
+            ),
+            method: "GET",
+            headers: {
+                "Comet-Workspace":
+                    (await core.Supplier.get(this._options.workspaceName)) != null
+                        ? await core.Supplier.get(this._options.workspaceName)
+                        : undefined,
+                "X-Fern-Language": "JavaScript",
+                "X-Fern-Runtime": core.RUNTIME.type,
+                "X-Fern-Runtime-Version": core.RUNTIME.version,
+                ...(await this._getCustomAuthorizationHeaders()),
+                ...requestOptions?.headers,
+            },
+            contentType: "application/json",
+            requestType: "json",
+            timeoutMs: requestOptions?.timeoutInSeconds != null ? requestOptions.timeoutInSeconds * 1000 : 60000,
+            maxRetries: requestOptions?.maxRetries,
+            withCredentials: true,
+            abortSignal: requestOptions?.abortSignal,
+        });
+        if (_response.ok) {
+            return {
+                data: serializers.OptimizationStudioLog.parseOrThrow(_response.body, {
+                    unrecognizedObjectKeys: "passthrough",
+                    allowUnrecognizedUnionMembers: true,
+                    allowUnrecognizedEnumValues: true,
+                    breadcrumbsPrefix: ["response"],
+                }),
+                rawResponse: _response.rawResponse,
+            };
+        }
+
+        if (_response.error.reason === "status-code") {
+            switch (_response.error.statusCode) {
+                case 404:
+                    throw new OpikApi.NotFoundError(_response.error.body, _response.rawResponse);
+                default:
+                    throw new errors.OpikApiError({
+                        statusCode: _response.error.statusCode,
+                        body: _response.error.body,
+                        rawResponse: _response.rawResponse,
+                    });
+            }
+        }
+
+        switch (_response.error.reason) {
+            case "non-json":
+                throw new errors.OpikApiError({
+                    statusCode: _response.error.statusCode,
+                    body: _response.error.rawBody,
+                    rawResponse: _response.rawResponse,
+                });
+            case "timeout":
+                throw new errors.OpikApiTimeoutError(
+                    "Timeout exceeded when calling GET /v1/private/optimizations/studio/{id}/logs.",
                 );
             case "unknown":
                 throw new errors.OpikApiError({
