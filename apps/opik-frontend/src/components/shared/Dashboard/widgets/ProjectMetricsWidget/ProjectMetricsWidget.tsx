@@ -6,7 +6,7 @@ import {
   INTERVAL_TYPE,
   METRIC_NAME_TYPE,
 } from "@/api/projects/useProjectMetric";
-import { useDashboardStore, selectPreviewWidget } from "@/store/DashboardStore";
+import { useDashboardStore } from "@/store/DashboardStore";
 import {
   ProjectDashboardConfig,
   DashboardWidgetComponentProps,
@@ -38,14 +38,16 @@ const ProjectMetricsWidget: React.FunctionComponent<
     }),
   );
 
-  const storeWidget = useDashboardStore((state) => {
-    if (preview || !sectionId || !widgetId) return null;
-    const section = state.sections.find((s) => s.id === sectionId);
-    return section?.widgets.find((w) => w.id === widgetId);
-  });
-
-  const previewWidget = useDashboardStore(selectPreviewWidget);
-  const widget = preview ? previewWidget : storeWidget;
+  const widget = useDashboardStore(
+    useShallow((state) => {
+      if (preview) {
+        return state.previewWidget;
+      }
+      if (!sectionId || !widgetId) return null;
+      const section = state.sections.find((s) => s.id === sectionId);
+      return section?.widgets.find((w) => w.id === widgetId);
+    }),
+  );
 
   const onAddEditWidgetCallback = useDashboardStore(
     (state) => state.onAddEditWidgetCallback,
