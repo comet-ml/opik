@@ -25,9 +25,12 @@ const CostMetricsCell = <TData,>(context: CellContext<TData, unknown>) => {
     storageKey = COST_PERCENTILE_STORAGE_KEY,
   } = (custom ?? {}) as CustomMeta;
 
-  const [selectedPercentile] = useLocalStorageState<PercentileValue>(storageKey, {
-    defaultValue: "p50",
-  });
+  const [selectedPercentile] = useLocalStorageState<PercentileValue>(
+    storageKey,
+    {
+      defaultValue: "p50",
+    },
+  );
 
   const value = get(context.row.original, metricsKey) as
     | AggregatedDuration
@@ -56,9 +59,12 @@ const CostMetricsAggregationCell = <TData,>(
   const { aggregationKey, storageKey = COST_PERCENTILE_STORAGE_KEY } =
     (custom ?? {}) as AggregationCustomMeta;
 
-  const [selectedPercentile] = useLocalStorageState<PercentileValue>(storageKey, {
-    defaultValue: "p50",
-  });
+  const [selectedPercentile] = useLocalStorageState<PercentileValue>(
+    storageKey,
+    {
+      defaultValue: "p50",
+    },
+  );
 
   const rowId = context.row.id;
   const { aggregationMap } = context.table.options.meta ?? {};

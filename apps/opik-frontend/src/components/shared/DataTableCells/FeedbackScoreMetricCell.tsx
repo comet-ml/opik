@@ -4,7 +4,7 @@ import isNumber from "lodash/isNumber";
 import isFunction from "lodash/isFunction";
 import useLocalStorageState from "use-local-storage-state";
 
-import { cn, formatNumericData } from "@/lib/utils";
+import { formatNumericData } from "@/lib/utils";
 import CellWrapper from "@/components/shared/DataTableCells/CellWrapper";
 import { FeedbackScoreMetric } from "@/types/datasets";
 import { FEEDBACK_SCORE_PERCENTILE_STORAGE_KEY_PREFIX } from "@/components/shared/DataTableHeaders/FeedbackScoreMetricsHeader";
@@ -97,7 +97,9 @@ const FeedbackScoreMetricAggregationCell = <TData,>(
   }
 
   // Fall back to accessorFn for average scores
-  const rawValue = isFunction(accessorFn) ? accessorFn(data as ExperimentsAggregations) : undefined;
+  const rawValue = isFunction(accessorFn)
+    ? accessorFn(data as ExperimentsAggregations)
+    : undefined;
   let value = "-";
 
   if (isNumber(rawValue)) {
@@ -117,4 +119,3 @@ const FeedbackScoreMetricAggregationCell = <TData,>(
 FeedbackScoreMetricCell.Aggregation = FeedbackScoreMetricAggregationCell;
 
 export default FeedbackScoreMetricCell;
-

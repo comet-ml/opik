@@ -165,7 +165,7 @@ export const DEFAULT_COLUMNS: ColumnData<GroupedExperiment>[] = [
     },
   },
   {
-    id: "cost_metrics",
+    id: "total_estimated_cost_metrics",
     label: "Cost per trace",
     type: COLUMN_TYPE.cost,
     accessorFn: (row) => row.total_estimated_cost_metrics,

@@ -11,7 +11,8 @@ import { formatDuration } from "@/lib/date";
 
 export type PercentileValue = "p50" | "p90" | "p99";
 
-export const DURATION_PERCENTILE_STORAGE_KEY = "experiments-duration-percentile";
+export const DURATION_PERCENTILE_STORAGE_KEY =
+  "experiments-duration-percentile";
 
 type CustomMeta = {
   metricsKey?: string;
@@ -20,12 +21,17 @@ type CustomMeta = {
 
 const DurationMetricsCell = <TData,>(context: CellContext<TData, unknown>) => {
   const { custom } = context.column.columnDef.meta ?? {};
-  const { metricsKey = "duration", storageKey = DURATION_PERCENTILE_STORAGE_KEY } =
-    (custom ?? {}) as CustomMeta;
+  const {
+    metricsKey = "duration",
+    storageKey = DURATION_PERCENTILE_STORAGE_KEY,
+  } = (custom ?? {}) as CustomMeta;
 
-  const [selectedPercentile] = useLocalStorageState<PercentileValue>(storageKey, {
-    defaultValue: "p50",
-  });
+  const [selectedPercentile] = useLocalStorageState<PercentileValue>(
+    storageKey,
+    {
+      defaultValue: "p50",
+    },
+  );
 
   const value = get(context.row.original, metricsKey) as
     | AggregatedDuration
@@ -54,9 +60,12 @@ const DurationMetricsAggregationCell = <TData,>(
   const { aggregationKey, storageKey = DURATION_PERCENTILE_STORAGE_KEY } =
     (custom ?? {}) as AggregationCustomMeta;
 
-  const [selectedPercentile] = useLocalStorageState<PercentileValue>(storageKey, {
-    defaultValue: "p50",
-  });
+  const [selectedPercentile] = useLocalStorageState<PercentileValue>(
+    storageKey,
+    {
+      defaultValue: "p50",
+    },
+  );
 
   const rowId = context.row.id;
   const { aggregationMap } = context.table.options.meta ?? {};
