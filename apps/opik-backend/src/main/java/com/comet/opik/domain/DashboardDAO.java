@@ -72,12 +72,13 @@ public interface DashboardDAO {
     @SqlQuery("SELECT * FROM dashboards " +
             "WHERE workspace_id = :workspaceId " +
             "<if(search)> AND name like concat('%', :search, '%') <endif> " +
-            "ORDER BY id DESC " +
+            "ORDER BY <if(sort_fields)> <sort_fields>, <endif> id DESC " +
             "LIMIT :limit OFFSET :offset")
     @UseStringTemplateEngine
     @AllowUnusedBindings
     List<Dashboard> find(@Bind("workspaceId") String workspaceId,
             @Define("search") @Bind("search") String search,
+            @Define("sort_fields") String sortingFields,
             @Bind("limit") int limit,
             @Bind("offset") int offset);
 

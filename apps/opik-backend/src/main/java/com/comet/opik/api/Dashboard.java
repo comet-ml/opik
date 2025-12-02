@@ -54,10 +54,11 @@ public record Dashboard(
                     Dashboard.View.Public.class}) List<Dashboard> content,
             @JsonView({Dashboard.View.Public.class}) int page,
             @JsonView({Dashboard.View.Public.class}) int size,
-            @JsonView({Dashboard.View.Public.class}) long total) implements Page<Dashboard>{
+            @JsonView({Dashboard.View.Public.class}) long total,
+            @JsonView({Dashboard.View.Public.class}) List<String> sortableBy) implements Page<Dashboard>{
 
-        public static DashboardPage empty(int page) {
-            return new DashboardPage(List.of(), page, 0, 0);
+        public static DashboardPage empty(int page, List<String> sortableBy) {
+            return new DashboardPage(List.of(), page, 0, 0, sortableBy);
         }
     }
 }

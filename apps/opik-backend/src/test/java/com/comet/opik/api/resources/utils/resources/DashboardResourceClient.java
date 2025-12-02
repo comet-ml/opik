@@ -13,6 +13,8 @@ import lombok.RequiredArgsConstructor;
 import org.apache.http.HttpStatus;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.util.Set;
 import java.util.UUID;
 
@@ -78,7 +80,12 @@ public class DashboardResourceClient {
 
     public DashboardPage find(String apiKey, String workspaceName, int page, int size, String name,
             int expectedStatus) {
-        try (var response = callFind(apiKey, workspaceName, page, size, name)) {
+        return find(apiKey, workspaceName, page, size, name, null, expectedStatus);
+    }
+
+    public DashboardPage find(String apiKey, String workspaceName, int page, int size, String name,
+            String sorting, int expectedStatus) {
+        try (var response = callFind(apiKey, workspaceName, page, size, name, sorting)) {
             assertThat(response.getStatus()).isEqualTo(expectedStatus);
             if (expectedStatus == HttpStatus.SC_OK) {
                 return response.readEntity(DashboardPage.class);
@@ -88,12 +95,20 @@ public class DashboardResourceClient {
     }
 
     public Response callFind(String apiKey, String workspaceName, int page, int size, String name) {
+        return callFind(apiKey, workspaceName, page, size, name, null);
+    }
+
+    public Response callFind(String apiKey, String workspaceName, int page, int size, String name, String sorting) {
         var target = client.target(RESOURCE_PATH.formatted(baseURI))
                 .queryParam("page", page)
                 .queryParam("size", size);
 
         if (name != null) {
             target = target.queryParam("name", name);
+        }
+
+        if (sorting != null) {
+            target = target.queryParam("sorting", URLEncoder.encode(sorting, StandardCharsets.UTF_8));
         }
 
         return target.request()
