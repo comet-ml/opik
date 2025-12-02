@@ -182,58 +182,33 @@ public abstract class FilterEvaluationServiceBase<E> {
                 break;
             }
 
-            int start = i;
-
-            // Check if we have an array index like "[0]"
+            // Handle array index in brackets: "[0]"
             if (path.charAt(i) == '[') {
-                // Find closing bracket
                 int bracketEnd = path.indexOf(']', i);
                 if (bracketEnd == -1) {
                     log.warn("Unclosed bracket in path '{}'", path);
                     return null;
                 }
                 String indexStr = path.substring(i + 1, bracketEnd);
-                try {
-                    int index = Integer.parseInt(indexStr);
-                    if (current.isArray() && index >= 0 && index < current.size()) {
-                        current = current.get(index);
-                    } else {
-                        return null;
-                    }
-                } catch (NumberFormatException e) {
-                    log.warn("Invalid array index '{}' in path '{}'", indexStr, path);
-                    return null;
-                }
+                current = getArrayElement(current, indexStr);
                 i = bracketEnd + 1;
             } else {
                 // Find next dot or bracket
-                int dotIndex = path.indexOf('.', i);
-                int bracketIndex = path.indexOf('[', i);
-                int end;
+                int nextDot = path.indexOf('.', i);
+                int nextBracket = path.indexOf('[', i);
+                int end = (nextDot == -1 && nextBracket == -1)
+                        ? pathLength
+                        : (nextDot == -1)
+                                ? nextBracket
+                                : (nextBracket == -1) ? nextDot : Math.min(nextDot, nextBracket);
 
-                if (dotIndex == -1 && bracketIndex == -1) {
-                    // Last part of path
-                    end = pathLength;
-                } else if (dotIndex == -1) {
-                    end = bracketIndex;
-                } else if (bracketIndex == -1) {
-                    end = dotIndex;
-                } else {
-                    end = Math.min(dotIndex, bracketIndex);
-                }
+                String part = path.substring(i, end);
 
-                String part = path.substring(start, end);
-
-                // Try as numeric index first (for arrays), then as field name
+                // Try as numeric index first, then as field name
                 try {
                     int index = Integer.parseInt(part);
-                    if (current.isArray() && index >= 0 && index < current.size()) {
-                        current = current.get(index);
-                    } else {
-                        return null;
-                    }
+                    current = getArrayElement(current, part);
                 } catch (NumberFormatException e) {
-                    // Not a number, treat as field name
                     current = current.get(part);
                 }
 
@@ -242,6 +217,24 @@ public abstract class FilterEvaluationServiceBase<E> {
         }
 
         return current;
+    }
+
+    /**
+     * Safely gets an array element by index string.
+     */
+    private JsonNode getArrayElement(JsonNode node, String indexStr) {
+        if (node == null || !node.isArray()) {
+            return null;
+        }
+        try {
+            int index = Integer.parseInt(indexStr);
+            if (index >= 0 && index < node.size()) {
+                return node.get(index);
+            }
+        } catch (NumberFormatException e) {
+            log.warn("Invalid array index '{}'", indexStr);
+        }
+        return null;
     }
 
     /**

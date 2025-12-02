@@ -5,17 +5,20 @@
 import * as serializers from "../index";
 import * as OpikApi from "../../api/index";
 import * as core from "../../core";
+import { TraceFilterPublic } from "./TraceFilterPublic";
 import { UserDefinedMetricPythonCodePublic } from "./UserDefinedMetricPythonCodePublic";
 
 export const AutomationRuleEvaluatorUserDefinedMetricPythonPublic: core.serialization.ObjectSchema<
     serializers.AutomationRuleEvaluatorUserDefinedMetricPythonPublic.Raw,
     OpikApi.AutomationRuleEvaluatorUserDefinedMetricPythonPublic
 > = core.serialization.object({
+    filters: core.serialization.list(TraceFilterPublic).optional(),
     code: UserDefinedMetricPythonCodePublic.optional(),
 });
 
 export declare namespace AutomationRuleEvaluatorUserDefinedMetricPythonPublic {
     export interface Raw {
+        filters?: TraceFilterPublic.Raw[] | null;
         code?: UserDefinedMetricPythonCodePublic.Raw | null;
     }
 }

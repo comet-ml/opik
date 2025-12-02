@@ -4,10 +4,12 @@ import typing
 
 import pydantic
 from ..core.pydantic_utilities import IS_PYDANTIC_V2, UniversalBaseModel
+from .trace_filter_write import TraceFilterWrite
 from .user_defined_metric_python_code_write import UserDefinedMetricPythonCodeWrite
 
 
 class AutomationRuleEvaluatorUserDefinedMetricPythonWrite(UniversalBaseModel):
+    filters: typing.Optional[typing.List[TraceFilterWrite]] = None
     code: typing.Optional[UserDefinedMetricPythonCodeWrite] = None
 
     if IS_PYDANTIC_V2:

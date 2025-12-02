@@ -5,9 +5,11 @@ import typing
 import pydantic
 from ..core.pydantic_utilities import IS_PYDANTIC_V2, UniversalBaseModel
 from .llm_as_judge_code_public import LlmAsJudgeCodePublic
+from .trace_filter_public import TraceFilterPublic
 
 
 class AutomationRuleEvaluatorLlmAsJudgePublic(UniversalBaseModel):
+    filters: typing.Optional[typing.List[TraceFilterPublic]] = None
     code: typing.Optional[LlmAsJudgeCodePublic] = None
 
     if IS_PYDANTIC_V2:
