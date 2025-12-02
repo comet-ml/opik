@@ -8,6 +8,7 @@ import com.comet.opik.api.filter.SpanFilter;
 import com.comet.opik.domain.SpanType;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JsonUtils;
+import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -784,6 +785,179 @@ class SpanFilterEvaluationServiceTest {
                     .key("context")
                     .operator(Operator.IS_EMPTY)
                     .value("")
+                    .build();
+
+            // When
+            var result = spanFilterEvaluationService.matchesFilter(filter, span);
+
+            // Then
+            assertThat(result).isTrue();
+        }
+
+        @Test
+        void matchesFilterWithCustomInputField() {
+            // Given
+            ObjectNode input = JsonUtils.createObjectNode();
+            input.put("message", "Hello world");
+            input.put("context", "test context");
+
+            var span = podamFactory.manufacturePojo(Span.class).toBuilder()
+                    .input(input)
+                    .build();
+            var filter = SpanFilter.builder()
+                    .field(SpanField.CUSTOM)
+                    .key("input.message")
+                    .operator(Operator.CONTAINS)
+                    .value("world")
+                    .build();
+
+            // When
+            var result = spanFilterEvaluationService.matchesFilter(filter, span);
+
+            // Then
+            assertThat(result).isTrue();
+        }
+
+        @Test
+        void matchesFilterWithCustomOutputField() {
+            // Given
+            ObjectNode output = JsonUtils.createObjectNode();
+            output.put("answer", "AI is artificial intelligence");
+            output.put("confidence", "0.95");
+
+            var span = podamFactory.manufacturePojo(Span.class).toBuilder()
+                    .output(output)
+                    .build();
+            var filter = SpanFilter.builder()
+                    .field(SpanField.CUSTOM)
+                    .key("output.answer")
+                    .operator(Operator.CONTAINS)
+                    .value("artificial")
+                    .build();
+
+            // When
+            var result = spanFilterEvaluationService.matchesFilter(filter, span);
+
+            // Then
+            assertThat(result).isTrue();
+        }
+
+        @Test
+        void matchesFilterWithCustomInputFieldEqual() {
+            // Given
+            ObjectNode input = JsonUtils.createObjectNode();
+            input.put("model", "gpt-4");
+
+            var span = podamFactory.manufacturePojo(Span.class).toBuilder()
+                    .input(input)
+                    .build();
+            var filter = SpanFilter.builder()
+                    .field(SpanField.CUSTOM)
+                    .key("input.model")
+                    .operator(Operator.EQUAL)
+                    .value("gpt-4")
+                    .build();
+
+            // When
+            var result = spanFilterEvaluationService.matchesFilter(filter, span);
+
+            // Then
+            assertThat(result).isTrue();
+        }
+
+        @Test
+        void matchesFilterWithCustomFieldInvalidKey() {
+            // Given
+            ObjectNode input = JsonUtils.createObjectNode();
+            input.put("message", "Hello");
+
+            var span = podamFactory.manufacturePojo(Span.class).toBuilder()
+                    .input(input)
+                    .build();
+            var filter = SpanFilter.builder()
+                    .field(SpanField.CUSTOM)
+                    .key("invalid") // Missing dot separator
+                    .operator(Operator.CONTAINS)
+                    .value("Hello")
+                    .build();
+
+            // When
+            var result = spanFilterEvaluationService.matchesFilter(filter, span);
+
+            // Then
+            assertThat(result).isFalse(); // Should not match due to invalid key format
+        }
+
+        @Test
+        void matchesFilterWithCustomFieldUnsupportedBaseField() {
+            // Given
+            ObjectNode input = JsonUtils.createObjectNode();
+            input.put("message", "Hello");
+
+            var span = podamFactory.manufacturePojo(Span.class).toBuilder()
+                    .input(input)
+                    .build();
+            var filter = SpanFilter.builder()
+                    .field(SpanField.CUSTOM)
+                    .key("metadata.message") // Unsupported base field (should be input/output)
+                    .operator(Operator.CONTAINS)
+                    .value("Hello")
+                    .build();
+
+            // When
+            var result = spanFilterEvaluationService.matchesFilter(filter, span);
+
+            // Then
+            assertThat(result).isFalse(); // Should not match due to unsupported base field
+        }
+
+        @Test
+        void matchesFilterWithCustomFieldArrayIndex() {
+            // Given
+            ObjectNode input = JsonUtils.createObjectNode();
+            ArrayNode messages = JsonUtils.createArrayNode();
+            ObjectNode message = JsonUtils.createObjectNode();
+            message.put("role", "user");
+            message.put("content", "Where is brazil?");
+            messages.add(message);
+            input.set("messages", messages);
+
+            var span = podamFactory.manufacturePojo(Span.class).toBuilder()
+                    .input(input)
+                    .build();
+            var filter = SpanFilter.builder()
+                    .field(SpanField.CUSTOM)
+                    .key("input.messages[0].content")
+                    .operator(Operator.CONTAINS)
+                    .value("brazil")
+                    .build();
+
+            // When
+            var result = spanFilterEvaluationService.matchesFilter(filter, span);
+
+            // Then
+            assertThat(result).isTrue();
+        }
+
+        @Test
+        void matchesFilterWithCustomFieldArrayIndexNumericPath() {
+            // Given
+            ObjectNode input = JsonUtils.createObjectNode();
+            ArrayNode messages = JsonUtils.createArrayNode();
+            ObjectNode message = JsonUtils.createObjectNode();
+            message.put("role", "user");
+            message.put("content", "Where is brazil?");
+            messages.add(message);
+            input.set("messages", messages);
+
+            var span = podamFactory.manufacturePojo(Span.class).toBuilder()
+                    .input(input)
+                    .build();
+            var filter = SpanFilter.builder()
+                    .field(SpanField.CUSTOM)
+                    .key("input.messages.0.content")
+                    .operator(Operator.CONTAINS)
+                    .value("brazil")
                     .build();
 
             // When
