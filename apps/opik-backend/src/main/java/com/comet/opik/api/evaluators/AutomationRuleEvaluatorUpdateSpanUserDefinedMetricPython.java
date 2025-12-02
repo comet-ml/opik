@@ -45,10 +45,15 @@ public final class AutomationRuleEvaluatorUpdateSpanUserDefinedMetricPython
         return super.getCode();
     }
 
+    /**
+     * Two purposes:
+     * - Makes the polymorphic T code available for serialization.
+     * - Provides the specific type T for Open API and Fern.
+     */
     @JsonProperty
     @Override
     public List<SpanFilter> getFilters() {
-        return super.filters;
+        return super.getFilters();
     }
 
     @Override
