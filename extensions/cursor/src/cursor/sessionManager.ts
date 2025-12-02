@@ -5,7 +5,7 @@ import * as fs from 'fs';
 import { SessionInfo } from "../interface";
 import { findFolder } from '../utils';
 import { captureException } from '../sentry';
-import { executeQuery, executeQueryPaginated, createTempDatabaseCopy, cleanupTempDatabase } from './sqlite';
+import { executeQuery, executeQueryPaginated } from './sqlite';
 
 import { TraceData } from "../interface";
 
@@ -169,13 +169,12 @@ function processConversationBubbles(
  * Read cursor chat data from SQLite database (asynchronous version)
  */
 async function readCursorChatDataAsync(stateDbPath: string, lastSyncedAt: number, currentSyncTime: number): Promise<any> {
-    // Create a temporary copy of the database to avoid "database is locked" errors
-    // This mimics the sql.js behavior where the database was loaded into memory
-    let tempDbPath: string | null = null;
+    // Use the database directly with -readonly flag (no expensive copy operation)
+    // The sqlite3 binary with -readonly flag is safe and handles locks gracefully
     
     try {
-        // Create temp copy of the database
-        tempDbPath = createTempDatabaseCopy(stateDbPath);
+        // Use the original database path directly
+        const dbPath = stateDbPath;
         const fiveMinutesAgo = Date.now() - (5 * 60 * 1000);
         const lastSyncedAtWithBuffer = lastSyncedAt - (5 * 60 * 1000);
 
@@ -190,7 +189,7 @@ async function readCursorChatDataAsync(stateDbPath: string, lastSyncedAt: number
                      OR (json_extract(value, '$.status') != 'completed' 
                          AND json_extract(value, '$.lastUpdatedAt') < ${fiveMinutesAgo}))`;
         
-        const composerRows = await executeQuery(tempDbPath, composerQuery);
+        const composerRows = await executeQuery(dbPath, composerQuery);
         
         if (!composerRows || composerRows.length === 0) {
             console.log(`⚠️ No composer data found (queried ${lastSyncedAt} < lastUpdatedAt <= ${currentSyncTime})`);
@@ -235,7 +234,7 @@ async function readCursorChatDataAsync(stateDbPath: string, lastSyncedAt: number
             WHERE ${composerIds.map((id: string) => `key LIKE 'bubbleId:${id}:%'`).join(' OR ')}
         `;
         
-        const allBubbleRows = await executeQueryPaginated(tempDbPath, bubbleQuery, 100);
+        const allBubbleRows = await executeQueryPaginated(dbPath, bubbleQuery, 100);
         console.log(`✅ Retrieved ${allBubbleRows.length} bubbles (only for active composers)`);
         
         // Group bubbles by composer ID
@@ -334,11 +333,6 @@ async function readCursorChatDataAsync(stateDbPath: string, lastSyncedAt: number
         captureException(error);
         console.error(`Error reading database ${stateDbPath}:`, error);
         throw error;
-    } finally {
-        // Always cleanup the temporary database copy
-        if (tempDbPath) {
-            cleanupTempDatabase(tempDbPath);
-        }
     }
 }
 

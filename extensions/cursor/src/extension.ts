@@ -88,7 +88,7 @@ export function activate(context: vscode.ExtensionContext) {
         captureException(error);
         console.error('Error in main processing loop:', error);
       }
-    }, 5000);
+    }, 15000);
 
     context.subscriptions.push({
       dispose: () => clearInterval(interval)
