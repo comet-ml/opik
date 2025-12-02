@@ -7,6 +7,8 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import isNil from "lodash/isNil";
+import isNumber from "lodash/isNumber";
+import { formatNumericData } from "@/lib/utils";
 
 import { ProjectMetricValue, TransformedData } from "@/types/projects";
 import { getDefaultHashedColorsChartConfig } from "@/lib/charts";
@@ -22,8 +24,14 @@ import { Filter } from "@/types/filters";
 import MetricLineChart from "./MetricLineChart";
 import MetricBarChart from "./MetricBarChart";
 
-const renderTooltipValue = ({ value }: ChartTooltipRenderValueArguments) =>
-  value;
+const MAX_DECIMAL_PLACES = 4;
+
+const renderTooltipValue = ({ value }: ChartTooltipRenderValueArguments) => {
+  if (isNumber(value)) {
+    return formatNumericData(value, MAX_DECIMAL_PLACES);
+  }
+  return value;
+};
 
 interface MetricContainerChartProps {
   name: string;
@@ -40,6 +48,7 @@ interface MetricContainerChartProps {
   chartId: string;
   traceFilters?: Filter[];
   threadFilters?: Filter[];
+  chartOnly?: boolean;
 }
 
 const predefinedColorMap = {
@@ -74,6 +83,7 @@ const MetricContainerChart = ({
   chartType = "line",
   traceFilters,
   threadFilters,
+  chartOnly = false,
 }: MetricContainerChartProps) => {
   const { data: traces, isPending } = useProjectMetric(
     {
@@ -134,6 +144,27 @@ const MetricContainerChart = ({
 
   const CHART = METRIC_CHART_TYPE[chartType];
 
+  const chartContent = noData ? (
+    <NoData
+      className="h-[var(--chart-height)] min-h-32 text-light-slate"
+      message="No data to show"
+    />
+  ) : (
+    <CHART
+      config={config}
+      interval={interval}
+      renderValue={renderValue}
+      customYTickFormatter={customYTickFormatter}
+      chartId={chartId}
+      isPending={isPending}
+      data={data}
+      lines={lines}
+      values={values}
+    />
+  );
+
+  if (chartOnly) return chartContent;
+
   return (
     <Card>
       <CardHeader className="space-y-0.5 p-5">
@@ -142,26 +173,7 @@ const MetricContainerChart = ({
           {description}
         </CardDescription>
       </CardHeader>
-      <CardContent className="p-5">
-        {noData ? (
-          <NoData
-            className="h-[var(--chart-height)] min-h-32 text-light-slate"
-            message="No data to show"
-          />
-        ) : (
-          <CHART
-            config={config}
-            interval={interval}
-            renderValue={renderValue}
-            customYTickFormatter={customYTickFormatter}
-            chartId={chartId}
-            isPending={isPending}
-            data={data}
-            lines={lines}
-            values={values}
-          />
-        )}
-      </CardContent>
+      <CardContent className="p-5">{chartContent}</CardContent>
     </Card>
   );
 };

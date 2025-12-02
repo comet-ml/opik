@@ -4,9 +4,15 @@ import {
   getRangePreset,
   DateRangePreset,
   PRESET_DATE_RANGES,
+  DateRangeSerializedValue,
 } from "@/components/shared/DateRangeSelect";
 import dayjs from "dayjs";
-import { DATE_RANGE_PRESET_ALLTIME, DEFAULT_DATE_PRESET } from "./constants";
+import {
+  DATE_RANGE_PRESET_ALLTIME,
+  DEFAULT_DATE_PRESET,
+  MIN_METRICS_DATE,
+  MAX_METRICS_DATE,
+} from "./constants";
 
 export const serializeDateForURL = (date: Date): string => {
   return dayjs(date).format("YYYY-MM-DD");
@@ -111,5 +117,44 @@ export const calculateIntervalStartAndEnd = (
   return {
     intervalStart: startTime.format(),
     intervalEnd: endTime?.format(),
+  };
+};
+
+export const calculateIntervalConfig = (
+  dateRange: DateRangeSerializedValue,
+): {
+  interval: INTERVAL_TYPE;
+  intervalStart: string | undefined;
+  intervalEnd: string | undefined;
+} => {
+  const safeRange =
+    typeof dateRange === "string" ? dateRange : DEFAULT_DATE_PRESET;
+
+  const parsedDateRange = parseDateRangeFromState(
+    safeRange,
+    MIN_METRICS_DATE,
+    MAX_METRICS_DATE,
+    DEFAULT_DATE_PRESET,
+  );
+
+  const isAllTime =
+    getRangePreset(parsedDateRange) === DATE_RANGE_PRESET_ALLTIME;
+  const interval = calculateIntervalType(parsedDateRange);
+
+  if (isAllTime) {
+    return {
+      interval,
+      intervalStart: undefined,
+      intervalEnd: undefined,
+    };
+  }
+
+  const { intervalStart, intervalEnd } =
+    calculateIntervalStartAndEnd(parsedDateRange);
+
+  return {
+    interval,
+    intervalStart,
+    intervalEnd,
   };
 };

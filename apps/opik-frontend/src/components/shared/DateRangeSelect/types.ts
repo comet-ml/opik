@@ -10,3 +10,5 @@ export type DateRangeValue = {
   from: Date;
   to: Date;
 };
+
+export type DateRangeSerializedValue = DateRangePreset | string;

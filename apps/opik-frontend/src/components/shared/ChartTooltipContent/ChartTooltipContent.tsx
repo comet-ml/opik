@@ -63,7 +63,7 @@ const ChartTooltipContent = React.forwardRef<
         </TooltipTrigger>
         <TooltipPortal>
           <TooltipContent className="min-w-32 max-w-72 px-1 py-1.5 will-change-transform">
-            <div ref={ref} className="grid items-start gap-1.5 bg-background">
+            <div ref={ref} className="grid items-start gap-1.5">
               {isFunction(renderHeader) && (
                 <div className="mb-1 max-w-full overflow-hidden border-b px-2 pt-0.5">
                   {renderHeader({ payload })}

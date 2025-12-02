@@ -35,7 +35,7 @@ public interface DashboardDAO {
             UPDATE dashboards SET
                 name = COALESCE(:dashboard.name, name),
                 slug = COALESCE(:slug, slug),
-                description = :dashboard.description,
+                description = COALESCE(:dashboard.description, description),
                 config = COALESCE(:dashboard.config, config),
                 last_updated_by = :lastUpdatedBy
             WHERE id = :id AND workspace_id = :workspaceId
