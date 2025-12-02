@@ -28,7 +28,6 @@ import useRulesList from "@/api/automations/useRulesList";
 import useOptimizationsList from "@/api/optimizations/useOptimizationsList";
 import useAlertsList from "@/api/alerts/useAlertsList";
 import { OnChangeFn } from "@/types/shared";
-import { FeatureToggleKeys } from "@/types/feature-toggles";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
