@@ -52,21 +52,21 @@ public final class AutomationRuleEvaluatorTraceThreadLlmAsJudge
             Instant createdAt,
             String createdBy,
             Instant lastUpdatedAt, String lastUpdatedBy) {
-        super(id, projectId, projectName, name, samplingRate, enabled, code, createdAt, createdBy,
+        super(id, projectId, projectName, name, samplingRate, enabled, filters, code, createdAt, createdBy,
                 lastUpdatedAt,
-                lastUpdatedBy, filters);
+                lastUpdatedBy);
+    }
+
+    @JsonView({View.Public.class, View.Write.class})
+    @Override
+    public List<TraceThreadFilter> getFilters() {
+        return super.getFilters();
     }
 
     @JsonView({View.Public.class, View.Write.class})
     @Override
     public TraceThreadLlmAsJudgeCode getCode() {
         return super.getCode();
-    }
-
-    @JsonView({View.Public.class, View.Write.class})
-    @Override
-    public List<TraceThreadFilter> getFilters() {
-        return super.filters;
     }
 
     @Override

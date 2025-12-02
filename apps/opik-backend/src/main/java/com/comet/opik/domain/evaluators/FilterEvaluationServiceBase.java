@@ -119,6 +119,7 @@ public abstract class FilterEvaluationServiceBase<E> {
 
     /**
      * Extracts a nested value from a JSON object using a key.
+     * Supports JSON paths with array indices, e.g., "messages[0].content" or "messages.0.content".
      * Note: JSON operations are blocking. For reactive contexts, consider wrapping calls in Mono.fromCallable()
      * and using subscribeOn(Schedulers.boundedElastic()) to offload blocking operations.
      */
@@ -136,8 +137,9 @@ public abstract class FilterEvaluationServiceBase<E> {
                 node = JsonUtils.getMapper().valueToTree(jsonValue);
             }
 
-            JsonNode valueNode = node.get(key);
-            if (valueNode == null) {
+            // Parse JSON path (supports array indices like "messages[0].content")
+            JsonNode valueNode = navigateJsonPath(node, key);
+            if (valueNode == null || valueNode.isNull()) {
                 return null;
             }
 
@@ -152,6 +154,87 @@ public abstract class FilterEvaluationServiceBase<E> {
             log.warn("Failed to extract nested value with key '{}': {}", key, e.getMessage());
             return null;
         }
+    }
+
+    /**
+     * Navigates a JSON path through a JsonNode, supporting array indices.
+     * Examples:
+     * - "message" -> node.get("message")
+     * - "messages[0]" -> node.get("messages").get(0)
+     * - "messages[0].content" -> node.get("messages").get(0).get("content")
+     * - "messages.0.content" -> node.get("messages").get(0).get("content")
+     */
+    private JsonNode navigateJsonPath(JsonNode node, String path) {
+        if (node == null || path == null || path.isEmpty()) {
+            return node;
+        }
+
+        JsonNode current = node;
+        int i = 0;
+        int pathLength = path.length();
+
+        while (i < pathLength && current != null && !current.isNull()) {
+            // Skip leading dots
+            while (i < pathLength && path.charAt(i) == '.') {
+                i++;
+            }
+            if (i >= pathLength) {
+                break;
+            }
+
+            // Handle array index in brackets: "[0]"
+            if (path.charAt(i) == '[') {
+                int bracketEnd = path.indexOf(']', i);
+                if (bracketEnd == -1) {
+                    log.warn("Unclosed bracket in path '{}'", path);
+                    return null;
+                }
+                String indexStr = path.substring(i + 1, bracketEnd);
+                current = getArrayElement(current, indexStr);
+                i = bracketEnd + 1;
+            } else {
+                // Find next dot or bracket
+                int nextDot = path.indexOf('.', i);
+                int nextBracket = path.indexOf('[', i);
+                int end = (nextDot == -1 && nextBracket == -1)
+                        ? pathLength
+                        : (nextDot == -1)
+                                ? nextBracket
+                                : (nextBracket == -1) ? nextDot : Math.min(nextDot, nextBracket);
+
+                String part = path.substring(i, end);
+
+                // Try as numeric index first, then as field name
+                try {
+                    int index = Integer.parseInt(part);
+                    current = getArrayElement(current, part);
+                } catch (NumberFormatException e) {
+                    current = current.get(part);
+                }
+
+                i = end;
+            }
+        }
+
+        return current;
+    }
+
+    /**
+     * Safely gets an array element by index string.
+     */
+    private JsonNode getArrayElement(JsonNode node, String indexStr) {
+        if (node == null || !node.isArray()) {
+            return null;
+        }
+        try {
+            int index = Integer.parseInt(indexStr);
+            if (index >= 0 && index < node.size()) {
+                return node.get(index);
+            }
+        } catch (NumberFormatException e) {
+            log.warn("Invalid array index '{}'", indexStr);
+        }
+        return null;
     }
 
     /**

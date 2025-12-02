@@ -578,7 +578,7 @@ class AnnotationQueueDAOImpl implements AnnotationQueueDAO {
                 .scope(AnnotationQueue.AnnotationScope.fromString(row.get("scope", String.class)))
                 .itemsCount(row.get("items_count", Long.class))
                 .reviewers(mapReviewers(row))
-                .feedbackScores(getFeedbackScores(row))
+                .feedbackScores(getFeedbackScores(row, "feedback_scores"))
                 .createdAt(row.get("created_at", Instant.class))
                 .createdBy(row.get("created_by", String.class))
                 .lastUpdatedAt(row.get("last_updated_at", Instant.class))

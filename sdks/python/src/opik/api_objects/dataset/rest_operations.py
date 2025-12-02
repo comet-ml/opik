@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from typing import List
 from opik.rest_api import OpikApi
 import opik.exceptions as exceptions

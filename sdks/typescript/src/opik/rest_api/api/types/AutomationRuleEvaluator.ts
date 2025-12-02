@@ -44,7 +44,6 @@ export namespace AutomationRuleEvaluator {
         createdBy?: string;
         lastUpdatedAt?: Date;
         lastUpdatedBy?: string;
-        filters: Record<string, unknown>[];
         action: "evaluator";
     }
 }

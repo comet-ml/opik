@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isStringMarkdown } from "./utils";
+import { isStringMarkdown, removeUndefinedKeys, isLooseEqual } from "./utils";
 
 describe("isStringMarkdown", () => {
   // Test non-string inputs
@@ -219,5 +219,166 @@ For more info, see [this link](https://example.com).`;
   it("should evaluate strings starting with { or [ but not JSON", () => {
     expect(isStringMarkdown("[Link](https://example.com)")).toBe(true);
     expect(isStringMarkdown("{ code block }")).toBe(false);
+  });
+});
+
+describe("removeUndefinedKeys", () => {
+  it("should remove undefined values from flat objects", () => {
+    const input = { a: 1, b: undefined, c: "hello" };
+    const expected = { a: 1, c: "hello" };
+    expect(removeUndefinedKeys(input)).toEqual(expected);
+  });
+
+  it("should handle nested objects", () => {
+    const input = {
+      a: 1,
+      b: { c: 2, d: undefined, e: { f: 3, g: undefined } },
+    };
+    const expected = { a: 1, b: { c: 2, e: { f: 3 } } };
+    expect(removeUndefinedKeys(input)).toEqual(expected);
+  });
+
+  it("should handle arrays", () => {
+    const input = [1, 2, { a: undefined, b: 3 }];
+    const expected = [1, 2, { b: 3 }];
+    expect(removeUndefinedKeys(input)).toEqual(expected);
+  });
+
+  it("should handle mixed nested structures", () => {
+    const input = {
+      a: [1, { b: undefined, c: 2 }],
+      d: { e: [{ f: undefined, g: 3 }] },
+    };
+    const expected = { a: [1, { c: 2 }], d: { e: [{ g: 3 }] } };
+    expect(removeUndefinedKeys(input)).toEqual(expected);
+  });
+
+  it("should return null for null input", () => {
+    expect(removeUndefinedKeys(null)).toBe(null);
+  });
+
+  it("should return undefined for undefined input", () => {
+    expect(removeUndefinedKeys(undefined)).toBe(undefined);
+  });
+
+  it("should handle empty objects", () => {
+    expect(removeUndefinedKeys({})).toEqual({});
+  });
+
+  it("should handle empty arrays", () => {
+    expect(removeUndefinedKeys([])).toEqual([]);
+  });
+
+  it("should preserve primitive values", () => {
+    expect(removeUndefinedKeys(42)).toBe(42);
+    expect(removeUndefinedKeys("hello")).toBe("hello");
+    expect(removeUndefinedKeys(true)).toBe(true);
+    expect(removeUndefinedKeys(false)).toBe(false);
+  });
+
+  it("should handle objects with all undefined values", () => {
+    const input = { a: undefined, b: undefined };
+    expect(removeUndefinedKeys(input)).toEqual({});
+  });
+
+  it("should not remove null values", () => {
+    const input = { a: null, b: undefined, c: 1 };
+    const expected = { a: null, c: 1 };
+    expect(removeUndefinedKeys(input)).toEqual(expected);
+  });
+
+  it("should not remove zero or empty string", () => {
+    const input = { a: 0, b: "", c: undefined };
+    const expected = { a: 0, b: "" };
+    expect(removeUndefinedKeys(input)).toEqual(expected);
+  });
+});
+
+describe("isLooseEqual", () => {
+  it("should return true for objects with same values but different undefined keys", () => {
+    const a = { x: 1, y: undefined };
+    const b = { x: 1 };
+    expect(isLooseEqual(a, b)).toBe(true);
+  });
+
+  it("should return true for deeply nested objects with undefined keys", () => {
+    const a = { a: { b: 2, c: undefined } };
+    const b = { a: { b: 2 } };
+    expect(isLooseEqual(a, b)).toBe(true);
+  });
+
+  it("should return true for arrays with objects containing undefined keys", () => {
+    const a = [1, 2, { x: undefined, y: 3 }];
+    const b = [1, 2, { y: 3 }];
+    expect(isLooseEqual(a, b)).toBe(true);
+  });
+
+  it("should return false for objects with different values", () => {
+    const a = { x: 1 };
+    const b = { x: 2 };
+    expect(isLooseEqual(a, b)).toBe(false);
+  });
+
+  it("should return true for identical objects", () => {
+    const a = { x: 1, y: 2 };
+    const b = { x: 1, y: 2 };
+    expect(isLooseEqual(a, b)).toBe(true);
+  });
+
+  it("should return true for empty objects", () => {
+    expect(isLooseEqual({}, {})).toBe(true);
+  });
+
+  it("should return true for objects with all undefined vs empty object", () => {
+    const a = { x: undefined, y: undefined };
+    const b = {};
+    expect(isLooseEqual(a, b)).toBe(true);
+  });
+
+  it("should handle key order differences", () => {
+    const a = { x: 1, y: 2 };
+    const b = { y: 2, x: 1 };
+    expect(isLooseEqual(a, b)).toBe(true);
+  });
+
+  it("should return true for null values", () => {
+    expect(isLooseEqual(null, null)).toBe(true);
+  });
+
+  it("should return true for undefined values", () => {
+    expect(isLooseEqual(undefined, undefined)).toBe(true);
+  });
+
+  it("should return true for primitive values", () => {
+    expect(isLooseEqual(42, 42)).toBe(true);
+    expect(isLooseEqual("hello", "hello")).toBe(true);
+    expect(isLooseEqual(true, true)).toBe(true);
+  });
+
+  it("should return false for different primitive values", () => {
+    expect(isLooseEqual(42, 43)).toBe(false);
+    expect(isLooseEqual("hello", "world")).toBe(false);
+    expect(isLooseEqual(true, false)).toBe(false);
+  });
+
+  it("should handle complex nested structures", () => {
+    const a = {
+      projectId: "",
+      interval: "DAILY",
+      intervalStart: "2025-11-21T00:00:00Z",
+      intervalEnd: undefined,
+    };
+    const b = {
+      interval: "DAILY",
+      projectId: "",
+      intervalStart: "2025-11-21T00:00:00Z",
+    };
+    expect(isLooseEqual(a, b)).toBe(true);
+  });
+
+  it("should return false when one object has extra defined keys", () => {
+    const a = { x: 1 };
+    const b = { x: 1, y: 2 };
+    expect(isLooseEqual(a, b)).toBe(false);
   });
 });
