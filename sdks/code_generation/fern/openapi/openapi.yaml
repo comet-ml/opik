@@ -9676,12 +9676,27 @@ components:
           - running
           - completed
           - cancelled
+        experiment_scores:
+          type: array
+          items:
+            $ref: "#/components/schemas/ExperimentScore"
         prompt_version:
           $ref: "#/components/schemas/PromptVersionLink"
         prompt_versions:
           type: array
           items:
             $ref: "#/components/schemas/PromptVersionLink"
+    ExperimentScore:
+      required:
+      - name
+      - value
+      type: object
+      properties:
+        name:
+          minLength: 1
+          type: string
+        value:
+          type: number
     PercentageValues:
       type: object
       properties:
@@ -9709,6 +9724,17 @@ components:
         prompt_name:
           type: string
           readOnly: true
+    ExperimentScore_Write:
+      required:
+      - name
+      - value
+      type: object
+      properties:
+        name:
+          minLength: 1
+          type: string
+        value:
+          type: number
     Experiment_Write:
       required:
       - dataset_name
@@ -9739,6 +9765,10 @@ components:
           - running
           - completed
           - cancelled
+        experiment_scores:
+          type: array
+          items:
+            $ref: "#/components/schemas/ExperimentScore_Write"
         prompt_version:
           $ref: "#/components/schemas/PromptVersionLink_Write"
         prompt_versions:
@@ -10382,6 +10412,17 @@ components:
           type: array
           items:
             type: string
+    ExperimentScore_Public:
+      required:
+      - name
+      - value
+      type: object
+      properties:
+        name:
+          minLength: 1
+          type: string
+        value:
+          type: number
     Experiment_Public:
       required:
       - dataset_name
@@ -10459,6 +10500,10 @@ components:
           - running
           - completed
           - cancelled
+        experiment_scores:
+          type: array
+          items:
+            $ref: "#/components/schemas/ExperimentScore_Public"
         prompt_version:
           $ref: "#/components/schemas/PromptVersionLink_Public"
         prompt_versions:
@@ -10535,6 +10580,10 @@ components:
         duration:
           $ref: "#/components/schemas/PercentageValues"
         feedback_scores:
+          type: array
+          items:
+            $ref: "#/components/schemas/FeedbackScoreAverage"
+        experiment_scores:
           type: array
           items:
             $ref: "#/components/schemas/FeedbackScoreAverage"
@@ -10630,6 +10679,10 @@ components:
           - running
           - completed
           - cancelled
+        experiment_scores:
+          type: array
+          items:
+            $ref: "#/components/schemas/ExperimentScore"
     BooleanFeedbackDefinition:
       required:
       - details
@@ -11905,6 +11958,8 @@ components:
       type: object
       properties:
         name:
+          type: string
+        type:
           type: string
     DataPointNumber_Public:
       required:
