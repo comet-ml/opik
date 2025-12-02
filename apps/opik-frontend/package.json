@@ -75,6 +75,7 @@
     "diff": "^7.0.0",
     "file-saver": "^2.0.5",
     "flattie": "^1.1.1",
+    "http-status-codes": "^2.3.0",
     "js-yaml": "^4.1.0",
     "json-2-csv": "^5.5.6",
     "jsonpath-plus": "^10.3.0",

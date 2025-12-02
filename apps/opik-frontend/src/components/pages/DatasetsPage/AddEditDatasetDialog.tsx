@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { SquareArrowOutUpRight } from "lucide-react";
+import { StatusCodes } from "http-status-codes";
 
 import useAppStore from "@/store/AppStore";
 import useDatasetCreateMutation from "@/api/datasets/useDatasetCreateMutation";
@@ -235,7 +236,7 @@ const AddEditDatasetDialog: React.FunctionComponent<
                 .response?.data?.errors?.[0] ||
               (error as { message?: string }).message;
 
-            if (statusCode === 409) {
+            if (statusCode === StatusCodes.CONFLICT) {
               // Keep dialog open and show error
               setNameError(
                 errorMessage || "A dataset with this name already exists",
@@ -417,9 +418,6 @@ const AddEditDatasetDialog: React.FunctionComponent<
                 }
               }}
             />
-            {nameError && (
-              <p className="comet-body-s text-destructive">{nameError}</p>
-            )}
           </div>
           <div className="flex flex-col gap-2 pb-4">
             <Label htmlFor="datasetDescription">Description</Label>
