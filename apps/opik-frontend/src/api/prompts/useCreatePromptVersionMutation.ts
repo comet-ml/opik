@@ -4,13 +4,14 @@ import get from "lodash/get";
 
 import api, { PROMPTS_REST_ENDPOINT } from "@/api/api";
 import { useToast } from "@/components/ui/use-toast";
-import { PromptVersion } from "@/types/prompts";
+import { PromptVersion, PROMPT_TEMPLATE_STRUCTURE } from "@/types/prompts";
 
 type UseCreatePromptVersionMutationParams = {
   name: string;
   template: string;
   metadata?: object;
   changeDescription?: string;
+  templateStructure?: PROMPT_TEMPLATE_STRUCTURE;
   onSuccess: (promptVersion: PromptVersion) => void;
 };
 
@@ -24,6 +25,7 @@ const useCreatePromptVersionMutation = () => {
       template,
       metadata,
       changeDescription,
+      templateStructure,
     }: UseCreatePromptVersionMutationParams) => {
       const { data } = await api.post(`${PROMPTS_REST_ENDPOINT}versions`, {
         name,
@@ -32,6 +34,7 @@ const useCreatePromptVersionMutation = () => {
           ...(metadata && { metadata }),
           ...(changeDescription && { change_description: changeDescription }),
         },
+        ...(templateStructure && { template_structure: templateStructure }),
       });
 
       return data;

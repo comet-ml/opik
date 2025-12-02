@@ -6393,6 +6393,10 @@ components:
           type: array
           items:
             type: object
+        action:
+          type: string
+          enum:
+          - evaluator
         type:
           type: string
           enum:
@@ -6401,10 +6405,6 @@ components:
           - trace_thread_llm_as_judge
           - trace_thread_user_defined_metric_python
           - span_llm_as_judge
-        action:
-          type: string
-          enum:
-          - evaluator
       discriminator:
         propertyName: type
         mapping:
@@ -6867,6 +6867,10 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/Filter_Write"
+        action:
+          type: string
+          enum:
+          - evaluator
         type:
           type: string
           enum:
@@ -6875,10 +6879,6 @@ components:
           - trace_thread_llm_as_judge
           - trace_thread_user_defined_metric_python
           - span_llm_as_judge
-        action:
-          type: string
-          enum:
-          - evaluator
       discriminator:
         propertyName: type
         mapping:
@@ -7215,6 +7215,10 @@ components:
           type: array
           items:
             type: object
+        action:
+          type: string
+          enum:
+          - evaluator
         type:
           type: string
           enum:
@@ -7223,10 +7227,6 @@ components:
           - trace_thread_llm_as_judge
           - trace_thread_user_defined_metric_python
           - span_llm_as_judge
-        action:
-          type: string
-          enum:
-          - evaluator
       discriminator:
         propertyName: type
         mapping:
@@ -7616,6 +7616,10 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/Filter_Public"
+        action:
+          type: string
+          enum:
+          - evaluator
         type:
           type: string
           enum:
@@ -7624,10 +7628,6 @@ components:
           - trace_thread_llm_as_judge
           - trace_thread_user_defined_metric_python
           - span_llm_as_judge
-        action:
-          type: string
-          enum:
-          - evaluator
       discriminator:
         propertyName: type
         mapping:
@@ -7723,6 +7723,10 @@ components:
         project_id:
           type: string
           format: uuid
+        action:
+          type: string
+          enum:
+          - evaluator
         type:
           type: string
           enum:
@@ -7731,10 +7735,6 @@ components:
           - trace_thread_llm_as_judge
           - trace_thread_user_defined_metric_python
           - span_llm_as_judge
-        action:
-          type: string
-          enum:
-          - evaluator
       discriminator:
         propertyName: type
         mapping:
@@ -12190,6 +12190,14 @@ components:
           enum:
           - mustache
           - jinja2
+        template_structure:
+          type: string
+          description: "Template structure type: 'text' or 'chat'. Immutable after\
+            \ creation."
+          enum:
+          - text
+          - chat
+          default: text
         tags:
           uniqueItems: true
           type: array
@@ -12252,6 +12260,12 @@ components:
           items:
             type: string
             readOnly: true
+        template_structure:
+          type: string
+          readOnly: true
+          enum:
+          - text
+          - chat
         created_at:
           type: string
           format: date-time
@@ -12288,6 +12302,14 @@ components:
           enum:
           - mustache
           - jinja2
+        template_structure:
+          type: string
+          description: "Template structure type: 'text' or 'chat'. Immutable after\
+            \ creation."
+          enum:
+          - text
+          - chat
+          default: text
         tags:
           uniqueItems: true
           type: array
@@ -12332,6 +12354,12 @@ components:
           items:
             type: string
             readOnly: true
+        template_structure:
+          type: string
+          readOnly: true
+          enum:
+          - text
+          - chat
         created_at:
           type: string
           format: date-time
@@ -12360,6 +12388,17 @@ components:
           type: string
         version:
           $ref: "#/components/schemas/PromptVersion_Detail"
+        template_structure:
+          type: string
+          description: "Template structure for the prompt: 'text' or 'chat'. Note:\
+            \ This field is only used when creating a new prompt. If a prompt with\
+            \ the given name already exists, this field is ignored and the existing\
+            \ prompt's template structure is used. Template structure is immutable\
+            \ after prompt creation."
+          enum:
+          - text
+          - chat
+          default: text
     Prompt_Detail:
       required:
       - name
@@ -12376,6 +12415,14 @@ components:
           minLength: 0
           pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
+        template_structure:
+          type: string
+          description: "Template structure type: 'text' or 'chat'. Immutable after\
+            \ creation."
+          enum:
+          - text
+          - chat
+          default: text
         tags:
           uniqueItems: true
           type: array
@@ -12447,6 +12494,12 @@ components:
           - jinja2
         change_description:
           type: string
+        template_structure:
+          type: string
+          readOnly: true
+          enum:
+          - text
+          - chat
         created_at:
           type: string
           format: date-time
@@ -12490,6 +12543,14 @@ components:
           minLength: 0
           pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
+        template_structure:
+          type: string
+          description: "Template structure type: 'text' or 'chat'. Immutable after\
+            \ creation."
+          enum:
+          - text
+          - chat
+          default: text
         tags:
           uniqueItems: true
           type: array
