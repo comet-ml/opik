@@ -4,13 +4,14 @@
 
 import * as OpikApi from "../index";
 
-export type AutomationRuleEvaluatorObjectPublic =
-    | OpikApi.AutomationRuleEvaluatorObjectPublic.LlmAsJudge
-    | OpikApi.AutomationRuleEvaluatorObjectPublic.UserDefinedMetricPython
-    | OpikApi.AutomationRuleEvaluatorObjectPublic.TraceThreadLlmAsJudge
-    | OpikApi.AutomationRuleEvaluatorObjectPublic.TraceThreadUserDefinedMetricPython;
+export type AutomationRuleEvaluatorObjectObjectPublic =
+    | OpikApi.AutomationRuleEvaluatorObjectObjectPublic.LlmAsJudge
+    | OpikApi.AutomationRuleEvaluatorObjectObjectPublic.UserDefinedMetricPython
+    | OpikApi.AutomationRuleEvaluatorObjectObjectPublic.TraceThreadLlmAsJudge
+    | OpikApi.AutomationRuleEvaluatorObjectObjectPublic.TraceThreadUserDefinedMetricPython
+    | OpikApi.AutomationRuleEvaluatorObjectObjectPublic.SpanLlmAsJudge;
 
-export namespace AutomationRuleEvaluatorObjectPublic {
+export namespace AutomationRuleEvaluatorObjectObjectPublic {
     export interface LlmAsJudge extends OpikApi.AutomationRuleEvaluatorLlmAsJudgePublic, _Base {
         type: "llm_as_judge";
     }
@@ -29,6 +30,10 @@ export namespace AutomationRuleEvaluatorObjectPublic {
         type: "trace_thread_user_defined_metric_python";
     }
 
+    export interface SpanLlmAsJudge extends OpikApi.AutomationRuleEvaluatorSpanLlmAsJudgePublic, _Base {
+        type: "span_llm_as_judge";
+    }
+
     export interface _Base {
         id?: string;
         projectId: string;
@@ -36,11 +41,11 @@ export namespace AutomationRuleEvaluatorObjectPublic {
         name: string;
         samplingRate?: number;
         enabled?: boolean;
-        filters?: OpikApi.TraceFilterPublic[];
         createdAt?: Date;
         createdBy?: string;
         lastUpdatedAt?: Date;
         lastUpdatedBy?: string;
+        filters: Record<string, unknown>[];
         action: "evaluator";
     }
 }

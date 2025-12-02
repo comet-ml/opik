@@ -5,17 +5,20 @@
 import * as serializers from "../index";
 import * as OpikApi from "../../api/index";
 import * as core from "../../core";
+import { TraceThreadFilterPublic } from "./TraceThreadFilterPublic";
 import { TraceThreadLlmAsJudgeCodePublic } from "./TraceThreadLlmAsJudgeCodePublic";
 
 export const AutomationRuleEvaluatorTraceThreadLlmAsJudgePublic: core.serialization.ObjectSchema<
     serializers.AutomationRuleEvaluatorTraceThreadLlmAsJudgePublic.Raw,
     OpikApi.AutomationRuleEvaluatorTraceThreadLlmAsJudgePublic
 > = core.serialization.object({
+    filters: core.serialization.list(TraceThreadFilterPublic).optional(),
     code: TraceThreadLlmAsJudgeCodePublic.optional(),
 });
 
 export declare namespace AutomationRuleEvaluatorTraceThreadLlmAsJudgePublic {
     export interface Raw {
+        filters?: TraceThreadFilterPublic.Raw[] | null;
         code?: TraceThreadLlmAsJudgeCodePublic.Raw | null;
     }
 }

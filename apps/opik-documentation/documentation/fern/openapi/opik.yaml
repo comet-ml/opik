@@ -1772,6 +1772,11 @@ paths:
           type: integer
           format: int32
           default: 10
+      - name: version
+        in: query
+        schema:
+          type: string
+          description: Version hash or tag to fetch specific dataset version
       - name: filters
         in: query
         schema:
@@ -1838,6 +1843,33 @@ paths:
                   anyOf:
                   - $ref: "#/components/schemas/DatasetItem"
                   - $ref: "#/components/schemas/ErrorMessage"
+  /v1/private/datasets/{id}/versions/diff:
+    get:
+      tags:
+      - Datasets
+      summary: Compare latest version with draft
+      description: "Compare the latest committed dataset version with the current\
+        \ draft state. This endpoint provides insights into changes made since the\
+        \ last version was committed. The comparison calculates additions, modifications,\
+        \ deletions, and unchanged items between the latest version snapshot and current\
+        \ draft."
+      operationId: compareDatasetVersions
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "200":
+          description: Diff computed successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DatasetVersionDiff"
+        "404":
+          description: Version not found
   /v1/private/datasets/{id}/versions/hash/{versionHash}/tags:
     post:
       tags:
@@ -6319,6 +6351,7 @@ components:
     AutomationRuleEvaluator:
       required:
       - action
+      - filters
       - name
       - project_id
       - type
@@ -6342,10 +6375,6 @@ components:
           format: float
         enabled:
           type: boolean
-        filters:
-          type: array
-          items:
-            $ref: "#/components/schemas/TraceFilter"
         created_at:
           type: string
           format: date-time
@@ -6360,6 +6389,10 @@ components:
         last_updated_by:
           type: string
           readOnly: true
+        filters:
+          type: array
+          items:
+            type: object
         type:
           type: string
           enum:
@@ -6367,6 +6400,7 @@ components:
           - user_defined_metric_python
           - trace_thread_llm_as_judge
           - trace_thread_user_defined_metric_python
+          - span_llm_as_judge
         action:
           type: string
           enum:
@@ -6378,10 +6412,12 @@ components:
           user_defined_metric_python: "#/components/schemas/AutomationRuleEvaluatorUserDefinedMetricPython"
           trace_thread_llm_as_judge: "#/components/schemas/AutomationRuleEvaluatorTraceThreadLlmAsJudge"
           trace_thread_user_defined_metric_python: "#/components/schemas/AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython"
+          span_llm_as_judge: "#/components/schemas/AutomationRuleEvaluatorSpanLlmAsJudge"
     AutomationRuleEvaluatorLlmAsJudge:
       required:
       - action
       - code
+      - filters
       - name
       - project_id
       - type
@@ -6390,12 +6426,36 @@ components:
       - $ref: "#/components/schemas/AutomationRuleEvaluator"
       - type: object
         properties:
+          filters:
+            type: array
+            items:
+              $ref: "#/components/schemas/TraceFilter"
           code:
             $ref: "#/components/schemas/LlmAsJudgeCode"
+    AutomationRuleEvaluatorSpanLlmAsJudge:
+      required:
+      - action
+      - code
+      - filters
+      - name
+      - project_id
+      - type
+      type: object
+      allOf:
+      - $ref: "#/components/schemas/AutomationRuleEvaluator"
+      - type: object
+        properties:
+          filters:
+            type: array
+            items:
+              $ref: "#/components/schemas/SpanFilter"
+          code:
+            $ref: "#/components/schemas/SpanLlmAsJudgeCode"
     AutomationRuleEvaluatorTraceThreadLlmAsJudge:
       required:
       - action
       - code
+      - filters
       - name
       - project_id
       - type
@@ -6404,12 +6464,17 @@ components:
       - $ref: "#/components/schemas/AutomationRuleEvaluator"
       - type: object
         properties:
+          filters:
+            type: array
+            items:
+              $ref: "#/components/schemas/TraceThreadFilter"
           code:
             $ref: "#/components/schemas/TraceThreadLlmAsJudgeCode"
     AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython:
       required:
       - action
       - code
+      - filters
       - name
       - project_id
       - type
@@ -6418,12 +6483,17 @@ components:
       - $ref: "#/components/schemas/AutomationRuleEvaluator"
       - type: object
         properties:
+          filters:
+            type: array
+            items:
+              $ref: "#/components/schemas/TraceThreadFilter"
           code:
             $ref: "#/components/schemas/TraceThreadUserDefinedMetricPythonCode"
     AutomationRuleEvaluatorUserDefinedMetricPython:
       required:
       - action
       - code
+      - filters
       - name
       - project_id
       - type
@@ -6432,6 +6502,10 @@ components:
       - $ref: "#/components/schemas/AutomationRuleEvaluator"
       - type: object
         properties:
+          filters:
+            type: array
+            items:
+              $ref: "#/components/schemas/TraceFilter"
           code:
             $ref: "#/components/schemas/UserDefinedMetricPythonCode"
     ImageUrl:
@@ -6536,7 +6610,77 @@ components:
           - DOUBLE
         description:
           type: string
+    SpanFilter:
+      type: object
+      properties:
+        field:
+          type: string
+        operator:
+          type: string
+          enum:
+          - contains
+          - not_contains
+          - starts_with
+          - ends_with
+          - =
+          - '!='
+          - '>'
+          - '>='
+          - <
+          - <=
+          - is_empty
+          - is_not_empty
+        key:
+          type: string
+        value:
+          type: string
+    SpanLlmAsJudgeCode:
+      required:
+      - messages
+      - model
+      - schema
+      - variables
+      type: object
+      properties:
+        model:
+          $ref: "#/components/schemas/LlmAsJudgeModelParameters"
+        messages:
+          type: array
+          items:
+            $ref: "#/components/schemas/LlmAsJudgeMessage"
+        variables:
+          type: object
+          additionalProperties:
+            type: string
+        schema:
+          type: array
+          items:
+            $ref: "#/components/schemas/LlmAsJudgeOutputSchema"
     TraceFilter:
+      type: object
+      properties:
+        field:
+          type: string
+        operator:
+          type: string
+          enum:
+          - contains
+          - not_contains
+          - starts_with
+          - ends_with
+          - =
+          - '!='
+          - '>'
+          - '>='
+          - <
+          - <=
+          - is_empty
+          - is_not_empty
+        key:
+          type: string
+        value:
+          type: string
+    TraceThreadFilter:
       type: object
       properties:
         field:
@@ -6608,6 +6752,7 @@ components:
       required:
       - action
       - code
+      - filters
       - name
       - project_id
       - type
@@ -6616,12 +6761,36 @@ components:
       - $ref: "#/components/schemas/AutomationRuleEvaluator_Write"
       - type: object
         properties:
+          filters:
+            type: array
+            items:
+              $ref: "#/components/schemas/TraceFilter_Write"
           code:
             $ref: "#/components/schemas/LlmAsJudgeCode_Write"
+    AutomationRuleEvaluatorSpanLlmAsJudge_Write:
+      required:
+      - action
+      - code
+      - filters
+      - name
+      - project_id
+      - type
+      type: object
+      allOf:
+      - $ref: "#/components/schemas/AutomationRuleEvaluator_Write"
+      - type: object
+        properties:
+          filters:
+            type: array
+            items:
+              $ref: "#/components/schemas/SpanFilter_Write"
+          code:
+            $ref: "#/components/schemas/SpanLlmAsJudgeCode_Write"
     AutomationRuleEvaluatorTraceThreadLlmAsJudge_Write:
       required:
       - action
       - code
+      - filters
       - name
       - project_id
       - type
@@ -6630,12 +6799,17 @@ components:
       - $ref: "#/components/schemas/AutomationRuleEvaluator_Write"
       - type: object
         properties:
+          filters:
+            type: array
+            items:
+              $ref: "#/components/schemas/TraceThreadFilter_Write"
           code:
             $ref: "#/components/schemas/TraceThreadLlmAsJudgeCode_Write"
     AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython_Write:
       required:
       - action
       - code
+      - filters
       - name
       - project_id
       - type
@@ -6644,12 +6818,17 @@ components:
       - $ref: "#/components/schemas/AutomationRuleEvaluator_Write"
       - type: object
         properties:
+          filters:
+            type: array
+            items:
+              $ref: "#/components/schemas/TraceThreadFilter_Write"
           code:
             $ref: "#/components/schemas/TraceThreadUserDefinedMetricPythonCode_Write"
     AutomationRuleEvaluatorUserDefinedMetricPython_Write:
       required:
       - action
       - code
+      - filters
       - name
       - project_id
       - type
@@ -6658,11 +6837,16 @@ components:
       - $ref: "#/components/schemas/AutomationRuleEvaluator_Write"
       - type: object
         properties:
+          filters:
+            type: array
+            items:
+              $ref: "#/components/schemas/TraceFilter_Write"
           code:
             $ref: "#/components/schemas/UserDefinedMetricPythonCode_Write"
     AutomationRuleEvaluator_Write:
       required:
       - action
+      - filters
       - name
       - project_id
       - type
@@ -6682,7 +6866,7 @@ components:
         filters:
           type: array
           items:
-            $ref: "#/components/schemas/TraceFilter_Write"
+            $ref: "#/components/schemas/Filter_Write"
         type:
           type: string
           enum:
@@ -6690,6 +6874,7 @@ components:
           - user_defined_metric_python
           - trace_thread_llm_as_judge
           - trace_thread_user_defined_metric_python
+          - span_llm_as_judge
         action:
           type: string
           enum:
@@ -6701,6 +6886,31 @@ components:
           user_defined_metric_python: "#/components/schemas/AutomationRuleEvaluatorUserDefinedMetricPython_Write"
           trace_thread_llm_as_judge: "#/components/schemas/AutomationRuleEvaluatorTraceThreadLlmAsJudge_Write"
           trace_thread_user_defined_metric_python: "#/components/schemas/AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython_Write"
+          span_llm_as_judge: "#/components/schemas/AutomationRuleEvaluatorSpanLlmAsJudge_Write"
+    Filter_Write:
+      type: object
+      properties:
+        value:
+          type: string
+        field:
+          type: string
+        key:
+          type: string
+        operator:
+          type: string
+          enum:
+          - contains
+          - not_contains
+          - starts_with
+          - ends_with
+          - =
+          - '!='
+          - '>'
+          - '>='
+          - <
+          - <=
+          - is_empty
+          - is_not_empty
     ImageUrl_Write:
       required:
       - url
@@ -6803,7 +7013,77 @@ components:
           - DOUBLE
         description:
           type: string
+    SpanFilter_Write:
+      type: object
+      properties:
+        field:
+          type: string
+        operator:
+          type: string
+          enum:
+          - contains
+          - not_contains
+          - starts_with
+          - ends_with
+          - =
+          - '!='
+          - '>'
+          - '>='
+          - <
+          - <=
+          - is_empty
+          - is_not_empty
+        key:
+          type: string
+        value:
+          type: string
+    SpanLlmAsJudgeCode_Write:
+      required:
+      - messages
+      - model
+      - schema
+      - variables
+      type: object
+      properties:
+        model:
+          $ref: "#/components/schemas/LlmAsJudgeModelParameters_Write"
+        messages:
+          type: array
+          items:
+            $ref: "#/components/schemas/LlmAsJudgeMessage_Write"
+        variables:
+          type: object
+          additionalProperties:
+            type: string
+        schema:
+          type: array
+          items:
+            $ref: "#/components/schemas/LlmAsJudgeOutputSchema_Write"
     TraceFilter_Write:
+      type: object
+      properties:
+        field:
+          type: string
+        operator:
+          type: string
+          enum:
+          - contains
+          - not_contains
+          - starts_with
+          - ends_with
+          - =
+          - '!='
+          - '>'
+          - '>='
+          - <
+          - <=
+          - is_empty
+          - is_not_empty
+        key:
+          type: string
+        value:
+          type: string
+    TraceThreadFilter_Write:
       type: object
       properties:
         field:
@@ -6875,6 +7155,7 @@ components:
       required:
       - action
       - code
+      - filters
       - name
       - project_id
       - type
@@ -6883,11 +7164,16 @@ components:
       - $ref: "#/components/schemas/AutomationRuleEvaluator_Public"
       - type: object
         properties:
+          filters:
+            type: array
+            items:
+              $ref: "#/components/schemas/TraceFilter_Public"
           code:
             $ref: "#/components/schemas/LlmAsJudgeCode_Public"
-    AutomationRuleEvaluatorObject_Public:
+    AutomationRuleEvaluatorObjectObject_Public:
       required:
       - action
+      - filters
       - name
       - project_id
       - type
@@ -6911,10 +7197,6 @@ components:
           format: float
         enabled:
           type: boolean
-        filters:
-          type: array
-          items:
-            $ref: "#/components/schemas/TraceFilter_Public"
         created_at:
           type: string
           format: date-time
@@ -6929,6 +7211,10 @@ components:
         last_updated_by:
           type: string
           readOnly: true
+        filters:
+          type: array
+          items:
+            type: object
         type:
           type: string
           enum:
@@ -6936,6 +7222,7 @@ components:
           - user_defined_metric_python
           - trace_thread_llm_as_judge
           - trace_thread_user_defined_metric_python
+          - span_llm_as_judge
         action:
           type: string
           enum:
@@ -6947,6 +7234,7 @@ components:
           user_defined_metric_python: "#/components/schemas/AutomationRuleEvaluatorUserDefinedMetricPython_Public"
           trace_thread_llm_as_judge: "#/components/schemas/AutomationRuleEvaluatorTraceThreadLlmAsJudge_Public"
           trace_thread_user_defined_metric_python: "#/components/schemas/AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython_Public"
+          span_llm_as_judge: "#/components/schemas/AutomationRuleEvaluatorSpanLlmAsJudge_Public"
     AutomationRuleEvaluatorPage_Public:
       type: object
       properties:
@@ -6962,15 +7250,16 @@ components:
         content:
           type: array
           items:
-            $ref: "#/components/schemas/AutomationRuleEvaluatorObject_Public"
+            $ref: "#/components/schemas/AutomationRuleEvaluatorObjectObject_Public"
         sortable_by:
           type: array
           items:
             type: string
-    AutomationRuleEvaluatorTraceThreadLlmAsJudge_Public:
+    AutomationRuleEvaluatorSpanLlmAsJudge_Public:
       required:
       - action
       - code
+      - filters
       - name
       - project_id
       - type
@@ -6979,12 +7268,36 @@ components:
       - $ref: "#/components/schemas/AutomationRuleEvaluator_Public"
       - type: object
         properties:
+          filters:
+            type: array
+            items:
+              $ref: "#/components/schemas/SpanFilter_Public"
+          code:
+            $ref: "#/components/schemas/SpanLlmAsJudgeCode_Public"
+    AutomationRuleEvaluatorTraceThreadLlmAsJudge_Public:
+      required:
+      - action
+      - code
+      - filters
+      - name
+      - project_id
+      - type
+      type: object
+      allOf:
+      - $ref: "#/components/schemas/AutomationRuleEvaluator_Public"
+      - type: object
+        properties:
+          filters:
+            type: array
+            items:
+              $ref: "#/components/schemas/TraceThreadFilter_Public"
           code:
             $ref: "#/components/schemas/TraceThreadLlmAsJudgeCode_Public"
     AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython_Public:
       required:
       - action
       - code
+      - filters
       - name
       - project_id
       - type
@@ -6993,12 +7306,17 @@ components:
       - $ref: "#/components/schemas/AutomationRuleEvaluator_Public"
       - type: object
         properties:
+          filters:
+            type: array
+            items:
+              $ref: "#/components/schemas/TraceThreadFilter_Public"
           code:
             $ref: "#/components/schemas/TraceThreadUserDefinedMetricPythonCode_Public"
     AutomationRuleEvaluatorUserDefinedMetricPython_Public:
       required:
       - action
       - code
+      - filters
       - name
       - project_id
       - type
@@ -7007,6 +7325,10 @@ components:
       - $ref: "#/components/schemas/AutomationRuleEvaluator_Public"
       - type: object
         properties:
+          filters:
+            type: array
+            items:
+              $ref: "#/components/schemas/TraceFilter_Public"
           code:
             $ref: "#/components/schemas/UserDefinedMetricPythonCode_Public"
     ImageUrl_Public:
@@ -7111,7 +7433,77 @@ components:
           - DOUBLE
         description:
           type: string
+    SpanFilter_Public:
+      type: object
+      properties:
+        field:
+          type: string
+        operator:
+          type: string
+          enum:
+          - contains
+          - not_contains
+          - starts_with
+          - ends_with
+          - =
+          - '!='
+          - '>'
+          - '>='
+          - <
+          - <=
+          - is_empty
+          - is_not_empty
+        key:
+          type: string
+        value:
+          type: string
+    SpanLlmAsJudgeCode_Public:
+      required:
+      - messages
+      - model
+      - schema
+      - variables
+      type: object
+      properties:
+        model:
+          $ref: "#/components/schemas/LlmAsJudgeModelParameters_Public"
+        messages:
+          type: array
+          items:
+            $ref: "#/components/schemas/LlmAsJudgeMessage_Public"
+        variables:
+          type: object
+          additionalProperties:
+            type: string
+        schema:
+          type: array
+          items:
+            $ref: "#/components/schemas/LlmAsJudgeOutputSchema_Public"
     TraceFilter_Public:
+      type: object
+      properties:
+        field:
+          type: string
+        operator:
+          type: string
+          enum:
+          - contains
+          - not_contains
+          - starts_with
+          - ends_with
+          - =
+          - '!='
+          - '>'
+          - '>='
+          - <
+          - <=
+          - is_empty
+          - is_not_empty
+        key:
+          type: string
+        value:
+          type: string
+    TraceThreadFilter_Public:
       type: object
       properties:
         field:
@@ -7182,6 +7574,7 @@ components:
     AutomationRuleEvaluator_Public:
       required:
       - action
+      - filters
       - name
       - project_id
       - type
@@ -7205,10 +7598,6 @@ components:
           format: float
         enabled:
           type: boolean
-        filters:
-          type: array
-          items:
-            $ref: "#/components/schemas/TraceFilter_Public"
         created_at:
           type: string
           format: date-time
@@ -7223,6 +7612,10 @@ components:
         last_updated_by:
           type: string
           readOnly: true
+        filters:
+          type: array
+          items:
+            $ref: "#/components/schemas/Filter_Public"
         type:
           type: string
           enum:
@@ -7230,6 +7623,7 @@ components:
           - user_defined_metric_python
           - trace_thread_llm_as_judge
           - trace_thread_user_defined_metric_python
+          - span_llm_as_judge
         action:
           type: string
           enum:
@@ -7241,6 +7635,31 @@ components:
           user_defined_metric_python: "#/components/schemas/AutomationRuleEvaluatorUserDefinedMetricPython_Public"
           trace_thread_llm_as_judge: "#/components/schemas/AutomationRuleEvaluatorTraceThreadLlmAsJudge_Public"
           trace_thread_user_defined_metric_python: "#/components/schemas/AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython_Public"
+          span_llm_as_judge: "#/components/schemas/AutomationRuleEvaluatorSpanLlmAsJudge_Public"
+    Filter_Public:
+      type: object
+      properties:
+        value:
+          type: string
+        field:
+          type: string
+        key:
+          type: string
+        operator:
+          type: string
+          enum:
+          - contains
+          - not_contains
+          - starts_with
+          - ends_with
+          - =
+          - '!='
+          - '>'
+          - '>='
+          - <
+          - <=
+          - is_empty
+          - is_not_empty
     LogItem:
       type: object
       properties:
@@ -7301,10 +7720,6 @@ components:
           format: float
         enabled:
           type: boolean
-        filters:
-          type: array
-          items:
-            $ref: "#/components/schemas/TraceFilter"
         project_id:
           type: string
           format: uuid
@@ -7315,6 +7730,7 @@ components:
           - user_defined_metric_python
           - trace_thread_llm_as_judge
           - trace_thread_user_defined_metric_python
+          - span_llm_as_judge
         action:
           type: string
           enum:
@@ -7326,6 +7742,7 @@ components:
           user_defined_metric_python: "#/components/schemas/AutomationRuleEvaluatorUpdateUserDefinedMetricPython"
           trace_thread_llm_as_judge: "#/components/schemas/AutomationRuleEvaluatorUpdateTraceThreadLlmAsJudge"
           trace_thread_user_defined_metric_python: "#/components/schemas/AutomationRuleEvaluatorUpdateTraceThreadUserDefinedMetricPython"
+          span_llm_as_judge: "#/components/schemas/AutomationRuleEvaluatorUpdateSpanLlmAsJudge"
     AutomationRuleEvaluatorUpdateLlmAsJudge:
       required:
       - action
@@ -7337,8 +7754,29 @@ components:
       - $ref: "#/components/schemas/AutomationRuleEvaluatorUpdate"
       - type: object
         properties:
+          filters:
+            type: array
+            items:
+              $ref: "#/components/schemas/TraceFilter"
           code:
             $ref: "#/components/schemas/LlmAsJudgeCode"
+    AutomationRuleEvaluatorUpdateSpanLlmAsJudge:
+      required:
+      - action
+      - code
+      - name
+      - project_id
+      type: object
+      allOf:
+      - $ref: "#/components/schemas/AutomationRuleEvaluatorUpdate"
+      - type: object
+        properties:
+          filters:
+            type: array
+            items:
+              $ref: "#/components/schemas/SpanFilter"
+          code:
+            $ref: "#/components/schemas/SpanLlmAsJudgeCode"
     AutomationRuleEvaluatorUpdateTraceThreadLlmAsJudge:
       required:
       - action
@@ -7350,6 +7788,10 @@ components:
       - $ref: "#/components/schemas/AutomationRuleEvaluatorUpdate"
       - type: object
         properties:
+          filters:
+            type: array
+            items:
+              $ref: "#/components/schemas/TraceThreadFilter"
           code:
             $ref: "#/components/schemas/TraceThreadLlmAsJudgeCode"
     AutomationRuleEvaluatorUpdateTraceThreadUserDefinedMetricPython:
@@ -7363,6 +7805,10 @@ components:
       - $ref: "#/components/schemas/AutomationRuleEvaluatorUpdate"
       - type: object
         properties:
+          filters:
+            type: array
+            items:
+              $ref: "#/components/schemas/TraceThreadFilter"
           code:
             $ref: "#/components/schemas/TraceThreadUserDefinedMetricPythonCode"
     AutomationRuleEvaluatorUpdateUserDefinedMetricPython:
@@ -7376,6 +7822,10 @@ components:
       - $ref: "#/components/schemas/AutomationRuleEvaluatorUpdate"
       - type: object
         properties:
+          filters:
+            type: array
+            items:
+              $ref: "#/components/schemas/TraceFilter"
           code:
             $ref: "#/components/schemas/UserDefinedMetricPythonCode"
     AssistantMessage:
@@ -7923,6 +8373,10 @@ components:
         id:
           type: string
           format: uuid
+        draft_item_id:
+          type: string
+          format: uuid
+          readOnly: true
         trace_id:
           type: string
           format: uuid
@@ -8436,6 +8890,10 @@ components:
         id:
           type: string
           format: uuid
+        draft_item_id:
+          type: string
+          format: uuid
+          readOnly: true
         trace_id:
           type: string
           format: uuid
@@ -8797,6 +9255,10 @@ components:
         id:
           type: string
           format: uuid
+        draft_item_id:
+          type: string
+          format: uuid
+          readOnly: true
         trace_id:
           type: string
           format: uuid
@@ -9006,6 +9468,30 @@ components:
           type: array
           items:
             type: string
+    DatasetVersionDiff:
+      type: object
+      properties:
+        from_version:
+          type: string
+        to_version:
+          type: string
+        statistics:
+          $ref: "#/components/schemas/DatasetVersionDiffStats"
+    DatasetVersionDiffStats:
+      type: object
+      properties:
+        itemsAdded:
+          type: integer
+          format: int32
+        itemsModified:
+          type: integer
+          format: int32
+        itemsDeleted:
+          type: integer
+          format: int32
+        itemsUnchanged:
+          type: integer
+          format: int32
     DatasetVersionTag:
       required:
       - tag
@@ -11502,30 +11988,6 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/TraceThreadFilter_Public"
-    TraceThreadFilter_Public:
-      type: object
-      properties:
-        field:
-          type: string
-        operator:
-          type: string
-          enum:
-          - contains
-          - not_contains
-          - starts_with
-          - ends_with
-          - =
-          - '!='
-          - '>'
-          - '>='
-          - <
-          - <=
-          - is_empty
-          - is_not_empty
-        key:
-          type: string
-        value:
-          type: string
     ProjectStatsSummary:
       type: object
       properties:
@@ -12087,6 +12549,7 @@ components:
       - guardrailsEnabled
       - opikAIEnabled
       - pythonEvaluatorEnabled
+      - spanLlmAsJudgeEnabled
       - traceThreadPythonEvaluatorEnabled
       - welcomeWizardEnabled
       type: object
@@ -12094,6 +12557,8 @@ components:
         pythonEvaluatorEnabled:
           type: boolean
         traceThreadPythonEvaluatorEnabled:
+          type: boolean
+        spanLlmAsJudgeEnabled:
           type: boolean
         guardrailsEnabled:
           type: boolean
@@ -12547,30 +13012,6 @@ components:
         id:
           type: string
           format: uuid
-    SpanFilter_Public:
-      type: object
-      properties:
-        field:
-          type: string
-        operator:
-          type: string
-          enum:
-          - contains
-          - not_contains
-          - starts_with
-          - ends_with
-          - =
-          - '!='
-          - '>'
-          - '>='
-          - <
-          - <=
-          - is_empty
-          - is_not_empty
-        key:
-          type: string
-        value:
-          type: string
     SpanSearchStreamRequest_Public:
       type: object
       properties:
@@ -13143,30 +13584,6 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/FeedbackScoreBatchItemThread"
-    TraceThreadFilter:
-      type: object
-      properties:
-        field:
-          type: string
-        operator:
-          type: string
-          enum:
-          - contains
-          - not_contains
-          - starts_with
-          - ends_with
-          - =
-          - '!='
-          - '>'
-          - '>='
-          - <
-          - <=
-          - is_empty
-          - is_not_empty
-        key:
-          type: string
-        value:
-          type: string
     TraceThreadSearchStreamRequest:
       type: object
       properties:
