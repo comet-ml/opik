@@ -244,7 +244,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                                 .flatMap(DatasetItemResultMapper::mapItem)
                                 .collectList()
                                 .map(items -> new DatasetItemPage(items, page, items.size(), total, columns, null,
-                                        null));
+                                        false));
                     });
                 });
     }
@@ -279,11 +279,9 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
             return makeFluxContextAware(bindWorkspaceIdToFlux(statement))
                     .doFinally(signalType -> endSegment(segment))
                     .flatMap(result -> result.map((row, metadata) -> {
-                        Long idHash = row.get("id_hash", Long.class);
-                        Long dataHash = row.get("data_hash", Long.class);
-                        return new ItemsHash(
-                                idHash != null ? idHash : 0L,
-                                dataHash != null ? dataHash : 0L);
+                        long idHash = row.get("id_hash", Long.class);
+                        long dataHash = row.get("data_hash", Long.class);
+                        return new ItemsHash(idHash, dataHash);
                     }))
                     .singleOrEmpty()
                     .defaultIfEmpty(new ItemsHash(0L, 0L));

@@ -389,7 +389,7 @@ class DatasetItemServiceImpl implements DatasetItemService {
             log.info("Resolved version '{}' to version ID '{}' for dataset '{}'",
                     datasetItemSearchCriteria.versionHashOrTag(), versionId, datasetItemSearchCriteria.datasetId());
 
-            // For versioned items, hasDraft is always null (concept doesn't apply to immutable versions)
+            // For versioned items, hasDraft is always false (concept doesn't apply to immutable versions)
             return versionDao.getItems(datasetItemSearchCriteria, page, size, versionId)
                     .defaultIfEmpty(DatasetItemPage.empty(page, sortingFactory.getSortableFields()));
         } else {
@@ -432,8 +432,8 @@ class DatasetItemServiceImpl implements DatasetItemService {
                                     ItemsHash draft = tuple.getT1();
                                     ItemsHash version = tuple.getT2();
                                     // Has draft if either ID hash or data hash differs
-                                    boolean hasDraft = !draft.idHash().equals(version.idHash())
-                                            || !draft.dataHash().equals(version.dataHash());
+                                    boolean hasDraft = draft.idHash() != version.idHash()
+                                            || draft.dataHash() != version.dataHash();
                                     log.debug(
                                             "Dataset '{}' hasDraft='{}' (draftIdHash='{}', versionIdHash='{}', draftDataHash='{}', versionDataHash='{}')",
                                             datasetId, hasDraft, draft.idHash(), version.idHash(), draft.dataHash(),

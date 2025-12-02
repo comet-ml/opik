@@ -50,7 +50,7 @@ public record DatasetItem(
             @JsonView({DatasetItem.View.Public.class}) long total,
             @JsonView({DatasetItem.View.Public.class}) Set<Column> columns,
             @JsonView({DatasetItem.View.Public.class}) List<String> sortableBy,
-            @JsonView({DatasetItem.View.Public.class}) Boolean hasDraft) implements Page<DatasetItem>{
+            @JsonView({DatasetItem.View.Public.class}) boolean hasDraft) implements Page<DatasetItem>{
 
         public static DatasetItemPage empty(int page, List<String> sortableBy) {
             return new DatasetItemPage(List.of(), page, 0, 0, Set.of(), sortableBy, false);

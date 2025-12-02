@@ -1451,7 +1451,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                             .onErrorResume(e -> handleSqlError(e, List.of()))
                             .flatMap(
                                     items -> Mono.just(new DatasetItemPage(items, page, items.size(), total, columns,
-                                            sortingFactory.getSortableFields(), null)));
+                                            sortingFactory.getSortableFields(), false)));
                 }));
     }
 
@@ -1725,11 +1725,9 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
             return makeFluxContextAware(bindWorkspaceIdToFlux(statement))
                     .doFinally(signalType -> endSegment(segment))
                     .flatMap(result -> result.map((row, metadata) -> {
-                        Long idHash = row.get("id_hash", Long.class);
-                        Long dataHash = row.get("data_hash", Long.class);
-                        return new ItemsHash(
-                                idHash != null ? idHash : 0L,
-                                dataHash != null ? dataHash : 0L);
+                        long idHash = row.get("id_hash", Long.class);
+                        long dataHash = row.get("data_hash", Long.class);
+                        return new ItemsHash(idHash, dataHash);
                     }))
                     .singleOrEmpty()
                     .defaultIfEmpty(new ItemsHash(0L, 0L));
