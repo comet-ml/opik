@@ -1727,10 +1727,10 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                     .flatMap(result -> result.map((row, metadata) -> {
                         long idHash = row.get("id_hash", Long.class);
                         long dataHash = row.get("data_hash", Long.class);
-                        return new ItemsHash(idHash, dataHash);
+                        return ItemsHash.builder().idHash(idHash).dataHash(dataHash).build();
                     }))
                     .singleOrEmpty()
-                    .defaultIfEmpty(new ItemsHash(0L, 0L));
+                    .defaultIfEmpty(ItemsHash.builder().idHash(0L).dataHash(0L).build());
         });
     }
 
