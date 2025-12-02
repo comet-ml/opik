@@ -135,6 +135,31 @@ public interface DatasetVersionService {
      */
     UUID resolveVersionId(String workspaceId, UUID datasetId, String hashOrTag);
 
+    /**
+     * Resolves a version identifier (hash or tag) to a version ID with explicit workspace ID.
+     * <p>
+     * This method tries to find a version by hash first, then by tag if not found by hash.
+     * This variant is useful when calling from reactive contexts where RequestContext is not available.
+     *
+     * @param datasetId the unique identifier of the dataset
+     * @param hashOrTag either a version hash or a tag name
+     * @param workspaceId the workspace ID
+     * @return the UUID of the matching version
+     * @throws NotFoundException if no version is found with the given hash or tag
+     */
+    UUID resolveVersionId(UUID datasetId, String hashOrTag, String workspaceId);
+
+    /**
+     * Gets the latest version of a dataset with explicit workspace ID.
+     * <p>
+     * This variant is useful when calling from reactive contexts where RequestContext is not available.
+     *
+     * @param datasetId the unique identifier of the dataset
+     * @param workspaceId the workspace ID
+     * @return an Optional containing the latest version if it exists, empty otherwise
+     */
+    Optional<DatasetVersion> getLatestVersion(UUID datasetId, String workspaceId);
+
     DatasetVersionDiff compareVersions(UUID datasetId, String fromHashOrTag, String toHashOrTag);
 
     /**
@@ -275,7 +300,7 @@ class DatasetVersionServiceImpl implements DatasetVersionService {
 
     private Optional<DatasetVersion> getVersionByTag(@NonNull UUID datasetId, @NonNull String tag,
             @NonNull String workspaceId) {
-        log.info("Getting version by tag for dataset: '{}', tag: '{}'", datasetId, tag);
+        log.info("Getting version by tag for dataset: '{}', tag: '{}', workspace: '{}'", datasetId, tag, workspaceId);
 
         return template.inTransaction(READ_ONLY, handle -> {
             var dao = handle.attach(DatasetVersionDAO.class);
@@ -283,7 +308,8 @@ class DatasetVersionServiceImpl implements DatasetVersionService {
         });
     }
 
-    private Optional<DatasetVersion> getLatestVersion(@NonNull UUID datasetId, @NonNull String workspaceId) {
+    @Override
+    public Optional<DatasetVersion> getLatestVersion(@NonNull UUID datasetId, @NonNull String workspaceId) {
         return getVersionByTag(datasetId, LATEST_TAG, workspaceId);
     }
 
@@ -402,7 +428,8 @@ class DatasetVersionServiceImpl implements DatasetVersionService {
 
     @Override
     public UUID resolveVersionId(@NonNull String workspaceId, @NonNull UUID datasetId, @NonNull String hashOrTag) {
-        log.info("Resolving version ID, hashOrTag='{}', dataset='{}'", hashOrTag, datasetId);
+        log.info("Resolving version ID, hashOrTag='{}', dataset='{}', workspace='{}'", hashOrTag, datasetId,
+                workspaceId);
 
         return template.inTransaction(READ_ONLY, handle -> {
             var dao = handle.attach(DatasetVersionDAO.class);
@@ -421,6 +448,11 @@ class DatasetVersionServiceImpl implements DatasetVersionService {
 
             throw new NotFoundException(ERROR_VERSION_NOT_FOUND.formatted(hashOrTag, datasetId));
         });
+    }
+
+    @Override
+    public UUID resolveVersionId(@NonNull UUID datasetId, @NonNull String hashOrTag, @NonNull String workspaceId) {
+        return resolveVersionId(workspaceId, datasetId, hashOrTag);
     }
 
     @Override

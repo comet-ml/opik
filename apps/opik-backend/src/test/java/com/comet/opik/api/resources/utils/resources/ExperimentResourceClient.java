@@ -74,7 +74,9 @@ public class ExperimentResourceClient {
                 .totalEstimatedCostAvg(null)
                 .type(ExperimentType.REGULAR)
                 .optimizationId(null)
-                .usage(null);
+                .usage(null)
+                .datasetVersionHash(null)
+                .datasetVersionTag(null);
     }
 
     public List<Experiment> generateExperimentList() {

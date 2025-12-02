@@ -193,7 +193,7 @@ class ExperimentsResourceTest {
 
     private static final String[] EXPERIMENT_IGNORED_FIELDS = new String[]{
             "id", "datasetId", "name", "feedbackScores", "traceCount", "createdAt", "lastUpdatedAt", "createdBy",
-            "lastUpdatedBy", "comments"};
+            "lastUpdatedBy", "comments", "datasetVersionHash", "datasetVersionTag", "datasetVersionId"};
 
     private static final String WORKSPACE_ID = UUID.randomUUID().toString();
     private static final String USER = "user-" + RandomStringUtils.secure().nextAlphanumeric(36);
@@ -5745,6 +5745,135 @@ class ExperimentsResourceTest {
                     .metadata(thirdUpdateMetadata)
                     .build();
             getAndAssert(experimentId, finalExpectedExperiment, TEST_WORKSPACE, API_KEY);
+        }
+    }
+
+    @Test
+    @DisplayName("Create experiment with dataset version hash - should link to specific version")
+    void createExperimentWithDatasetVersionHash() {
+        // Create dataset
+        var dataset = podamFactory.manufacturePojo(Dataset.class);
+        UUID datasetId = datasetResourceClient.createDataset(dataset, API_KEY, TEST_WORKSPACE);
+
+        // Create dataset items
+        var items = List.of(
+                podamFactory.manufacturePojo(DatasetItem.class).toBuilder().id(null).build(),
+                podamFactory.manufacturePojo(DatasetItem.class).toBuilder().id(null).build());
+        var batch = DatasetItemBatch.builder()
+                .datasetId(datasetId)
+                .items(items)
+                .build();
+        datasetResourceClient.createDatasetItems(batch, TEST_WORKSPACE, API_KEY);
+
+        // Commit dataset version
+        var versionCreate = com.comet.opik.api.DatasetVersionCreate.builder()
+                .changeDescription("Test version")
+                .build();
+
+        var version = datasetResourceClient.commitVersion(datasetId, versionCreate, API_KEY, TEST_WORKSPACE);
+        UUID versionId = version.id();
+        String versionHash = version.versionHash();
+
+        // Create experiment with version hash
+        var experiment = experimentResourceClient.createPartialExperiment()
+                .datasetName(dataset.name())
+                .datasetVersionHash(versionHash)
+                .build();
+
+        var experimentId = createAndAssert(experiment, API_KEY, TEST_WORKSPACE);
+
+        // Verify experiment is linked to the correct version
+        var createdExperiment = getExperiment(experimentId, TEST_WORKSPACE, API_KEY);
+        assertThat(createdExperiment.datasetVersionId()).isEqualTo(versionId);
+    }
+
+    @Test
+    @DisplayName("Create experiment with dataset version tag - should link to specific version")
+    void createExperimentWithDatasetVersionTag() {
+        // Create dataset
+        var dataset = podamFactory.manufacturePojo(Dataset.class);
+        UUID datasetId = datasetResourceClient.createDataset(dataset, API_KEY, TEST_WORKSPACE);
+
+        // Create dataset items
+        var items = List.of(
+                podamFactory.manufacturePojo(DatasetItem.class).toBuilder().id(null).build(),
+                podamFactory.manufacturePojo(DatasetItem.class).toBuilder().id(null).build());
+        var batch = DatasetItemBatch.builder()
+                .datasetId(datasetId)
+                .items(items)
+                .build();
+        datasetResourceClient.createDatasetItems(batch, TEST_WORKSPACE, API_KEY);
+
+        // Commit dataset version with tag
+        String tag = "v1.0.0";
+        var versionCreate = com.comet.opik.api.DatasetVersionCreate.builder()
+                .tag(tag)
+                .changeDescription("Test version with tag")
+                .build();
+
+        var version = datasetResourceClient.commitVersion(datasetId, versionCreate, API_KEY, TEST_WORKSPACE);
+        UUID versionId = version.id();
+
+        // Create experiment with version tag
+        var experiment = experimentResourceClient.createPartialExperiment()
+                .datasetName(dataset.name())
+                .datasetVersionTag(tag)
+                .build();
+
+        var experimentId = createAndAssert(experiment, API_KEY, TEST_WORKSPACE);
+
+        // Verify experiment is linked to the correct version
+        var createdExperiment = getExperiment(experimentId, TEST_WORKSPACE, API_KEY);
+        assertThat(createdExperiment.datasetVersionId()).isEqualTo(versionId);
+    }
+
+    @Test
+    @DisplayName("Create experiment with invalid version hash - should return 404")
+    void createExperimentWithInvalidVersionHash() {
+        // Create dataset
+        var dataset = podamFactory.manufacturePojo(Dataset.class);
+        datasetResourceClient.createDataset(dataset, API_KEY, TEST_WORKSPACE);
+
+        // Create experiment with non-existent version hash
+        var experiment = experimentResourceClient.createPartialExperiment()
+                .datasetName(dataset.name())
+                .datasetVersionHash("invalid-hash-12345678")
+                .build();
+
+        // Should fail with 404
+        try (var response = client.target(URL_TEMPLATE.formatted(baseURI))
+                .request()
+                .accept(jakarta.ws.rs.core.MediaType.APPLICATION_JSON_TYPE)
+                .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                .header(WORKSPACE_HEADER, TEST_WORKSPACE)
+                .post(Entity.json(experiment))) {
+
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NOT_FOUND);
+        }
+    }
+
+    @Test
+    @DisplayName("Create experiment with invalid version tag - should return 404")
+    void createExperimentWithInvalidVersionTag() {
+        // Create dataset
+        var dataset = podamFactory.manufacturePojo(Dataset.class);
+        datasetResourceClient.createDataset(dataset, API_KEY, TEST_WORKSPACE);
+
+        // Create experiment with non-existent version tag
+        var experiment = experimentResourceClient.createPartialExperiment()
+                .datasetName(dataset.name())
+                .datasetVersionTag("non-existent-tag")
+                .build();
+
+        // Should fail with 404
+        try (var response = client.target(URL_TEMPLATE.formatted(baseURI))
+                .request()
+                .accept(jakarta.ws.rs.core.MediaType.APPLICATION_JSON_TYPE)
+                .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                .header(WORKSPACE_HEADER, TEST_WORKSPACE)
+                .post(Entity.json(experiment))) {
+
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NOT_FOUND);
         }
     }
 }
