@@ -225,7 +225,9 @@ export const formatNumberInK = (value: number, precision = 1): string => {
 
   return range
     ? `${(value / range.divider).toFixed(precision)}${range.suffix}`
-    : value.toFixed(precision).toString();
+    : isNumber(value)
+      ? value.toFixed(precision)
+      : String(value);
 };
 
 export const calculatePercentageChange = (
