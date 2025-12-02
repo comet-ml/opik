@@ -108,8 +108,9 @@ class AutomationRuleEvaluatorsClient:
         --------
         from Opik import OpikApi
         from Opik import AutomationRuleEvaluatorWrite_LlmAsJudge
+        from Opik import TraceFilterWrite
         client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
-        client.automation_rule_evaluators.create_automation_rule_evaluator(request=AutomationRuleEvaluatorWrite_LlmAsJudge(), )
+        client.automation_rule_evaluators.create_automation_rule_evaluator(request=AutomationRuleEvaluatorWrite_LlmAsJudge(filters=[TraceFilterWrite()], ), )
         """
         _response = self._raw_client.create_automation_rule_evaluator(request=request, request_options=request_options)
         return _response.data
@@ -342,10 +343,11 @@ class AsyncAutomationRuleEvaluatorsClient:
         --------
         from Opik import AsyncOpikApi
         from Opik import AutomationRuleEvaluatorWrite_LlmAsJudge
+        from Opik import TraceFilterWrite
         import asyncio
         client = AsyncOpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
         async def main() -> None:
-            await client.automation_rule_evaluators.create_automation_rule_evaluator(request=AutomationRuleEvaluatorWrite_LlmAsJudge(), )
+            await client.automation_rule_evaluators.create_automation_rule_evaluator(request=AutomationRuleEvaluatorWrite_LlmAsJudge(filters=[TraceFilterWrite()], ), )
         asyncio.run(main())
         """
         _response = await self._raw_client.create_automation_rule_evaluator(
