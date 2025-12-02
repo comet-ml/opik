@@ -562,6 +562,9 @@ serviceToggles:
   # Default: false
   # Description: Whether or not Dashboards feature is enabled
   dashboardsEnabled: ${TOGGLE_DASHBOARDS_ENABLED:-"false"}
+  # Default: false
+  # Description: Whether or not Optimization Studio is enabled
+  optimizationStudioEnabled: ${TOGGLE_OPTIMIZATION_STUDIO_ENABLED:-"false"}
 
 # Trace Thread configuration
 traceThreadConfig:
