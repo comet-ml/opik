@@ -16,9 +16,7 @@ const useDashboardCreateMutation = () => {
 
   return useMutation({
     mutationFn: async ({ dashboard }: UseDashboardCreateMutationParams) => {
-      const { headers } = await api.post(DASHBOARDS_REST_ENDPOINT, {
-        ...dashboard,
-      });
+      const { headers } = await api.post(DASHBOARDS_REST_ENDPOINT, dashboard);
 
       const id = extractIdFromLocation(headers?.location);
 
