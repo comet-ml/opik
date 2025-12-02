@@ -85,7 +85,6 @@ const AddEditDatasetDialog: React.FunctionComponent<
   const [description, setDescription] = useState<string>(
     dataset ? dataset.description || "" : "",
   );
-  const [nameError, setNameError] = useState<string>("");
 
   // Reset state when dialog closes or when dataset prop changes
   useEffect(() => {
@@ -96,7 +95,6 @@ const AddEditDatasetDialog: React.FunctionComponent<
       setCsvError(undefined);
       setCsvData(undefined);
       setConfirmOpen(false);
-      setNameError("");
       if (!dataset) {
         setName("");
         setDescription("");
@@ -105,7 +103,6 @@ const AddEditDatasetDialog: React.FunctionComponent<
       // Reset state when dialog opens (in case of stale state)
       setIsOverlayShown(false);
       setConfirmOpen(false);
-      setNameError("");
       if (dataset) {
         setName(dataset.name);
         setDescription(dataset.description || "");
@@ -209,9 +206,6 @@ const AddEditDatasetDialog: React.FunctionComponent<
   );
 
   const submitHandler = useCallback(() => {
-    // Clear any previous error
-    setNameError("");
-
     if (isEdit) {
       updateMutate(
         {
@@ -237,10 +231,13 @@ const AddEditDatasetDialog: React.FunctionComponent<
               (error as { message?: string }).message;
 
             if (statusCode === StatusCodes.CONFLICT) {
-              // Keep dialog open and show error
-              setNameError(
-                errorMessage || "A dataset with this name already exists",
-              );
+              // Keep dialog open - user can see error in toast and retry
+              toast({
+                title: "Dataset name already exists",
+                description:
+                  errorMessage || "A dataset with this name already exists",
+                variant: "destructive",
+              });
             } else {
               // For other errors, show toast and close dialog
               toast({
@@ -275,10 +272,13 @@ const AddEditDatasetDialog: React.FunctionComponent<
               (error as { message?: string }).message;
 
             if (statusCode === 409) {
-              // Keep dialog open and show error
-              setNameError(
-                errorMessage || "A dataset with this name already exists",
-              );
+              // Keep dialog open - user can see error in toast and retry
+              toast({
+                title: "Dataset name already exists",
+                description:
+                  errorMessage || "A dataset with this name already exists",
+                variant: "destructive",
+              });
             } else {
               // For other errors, show toast and close dialog
               toast({
@@ -410,13 +410,7 @@ const AddEditDatasetDialog: React.FunctionComponent<
               id="datasetName"
               placeholder="Dataset name"
               value={name}
-              onChange={(event) => {
-                setName(event.target.value);
-                // Clear error when user starts typing
-                if (nameError) {
-                  setNameError("");
-                }
-              }}
+              onChange={(event) => setName(event.target.value)}
             />
           </div>
           <div className="flex flex-col gap-2 pb-4">
