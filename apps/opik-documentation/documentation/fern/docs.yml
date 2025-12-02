@@ -619,6 +619,9 @@ navigation:
           - page: Langflow
             path: docs/tracing/integrations/langflow.mdx
             slug: langflow
+          - page: n8n
+            path: docs/tracing/integrations/n8n.mdx
+            slug: n8n
           - page: OpenWebUI
             path: docs/tracing/integrations/openwebui.mdx
             slug: openwebui
@@ -1116,6 +1119,9 @@ redirects:
     permanent: true
   - source: "/docs/opik/tracing/integrations/xai-grok"
     destination: "/docs/opik/integrations/xai-grok"
+    permanent: true
+  - source: "/docs/opik/tracing/integrations/n8n"
+    destination: "/docs/opik/integrations/n8n"
     permanent: true
   # OpenTelemetry redirects
   - source: "/docs/opik/opentelemetry"
