@@ -194,6 +194,14 @@ spec:
           envFrom:
             {{- toYaml . | nindent 10 }}
           {{- end }}
+          {{- if $value.secretRefs }}
+          {{- range $value.secretRefs }}
+          {{- if .name }}
+            - secretRef:
+                name: {{ .name }}
+          {{- end }}
+          {{- end }}
+          {{- end }}
           volumeMounts:
           {{- if and $value.usesJavaTrustStore (or $.Values.caCerts.additionalCACerts $.Values.caCerts.existingAdditionalCACertsRef $.Values.caCerts.overwriteJavaCATrustStore.enabled) }}
             - name: {{ ternary $.Values.caCerts.overwriteJavaCATrustStore.volume.name "ca-trust-store" $.Values.caCerts.overwriteJavaCATrustStore.enabled }}

@@ -55,6 +55,19 @@ def create_app(test_config=None, should_init_executor=True):
         # load the test config if passed in
         app.config.from_mapping(test_config)
 
+    # Log SDK versions at startup for debugging
+    try:
+        import opik
+        app.logger.info(f"opik SDK version: {opik.__version__}")
+    except Exception as e:
+        app.logger.warning(f"Could not determine opik SDK version: {e}")
+    
+    try:
+        import opik_optimizer
+        app.logger.info(f"opik_optimizer SDK version: {opik_optimizer.__version__}")
+    except Exception as e:
+        app.logger.warning(f"Could not determine opik_optimizer SDK version: {e}")
+
     # Setup OpenTelemetry before registering blueprints
     if os.environ.get("OPIK_OTEL_SDK_ENABLED", "").lower() == "true":
         setup_telemetry(app)
