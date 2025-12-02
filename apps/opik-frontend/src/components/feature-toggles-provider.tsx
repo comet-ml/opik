@@ -43,12 +43,7 @@ export function FeatureTogglesProvider({ children }: FeatureTogglesProps) {
 
   useEffect(() => {
     if (data) {
-      // TODO lala Remove this override once dashboards feature is ready for production
-      const featuresWithOverrides = {
-        ...data,
-        [FeatureToggleKeys.DASHBOARDS_ENABLED]: true,
-      };
-      setFeatures(featuresWithOverrides);
+      setFeatures(data);
     }
   }, [data]);
 
