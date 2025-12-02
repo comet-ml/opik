@@ -107,12 +107,13 @@ public interface DatasetVersionService {
      * <p>
      * This method tries to find a version by hash first, then by tag if not found by hash.
      *
+     * @param workspaceId the workspace ID for the request
      * @param datasetId the unique identifier of the dataset
      * @param hashOrTag either a version hash or a tag name
      * @return the UUID of the matching version
      * @throws NotFoundException if no version is found with the given hash or tag
      */
-    UUID resolveVersionId(UUID datasetId, String hashOrTag);
+    UUID resolveVersionId(String workspaceId, UUID datasetId, String hashOrTag);
 
     DatasetVersionDiff compareVersions(UUID datasetId, String fromHashOrTag, String toHashOrTag);
 
@@ -326,12 +327,7 @@ class DatasetVersionServiceImpl implements DatasetVersionService {
     }
 
     @Override
-    public UUID resolveVersionId(@NonNull UUID datasetId, @NonNull String hashOrTag) {
-        String workspaceId = requestContext.get().getWorkspaceId();
-        return resolveVersionId(datasetId, hashOrTag, workspaceId);
-    }
-
-    private UUID resolveVersionId(@NonNull UUID datasetId, @NonNull String hashOrTag, @NonNull String workspaceId) {
+    public UUID resolveVersionId(@NonNull String workspaceId, @NonNull UUID datasetId, @NonNull String hashOrTag) {
         log.info("Resolving version ID, hashOrTag='{}', dataset='{}'", hashOrTag, datasetId);
 
         return template.inTransaction(READ_ONLY, handle -> {
@@ -359,10 +355,12 @@ class DatasetVersionServiceImpl implements DatasetVersionService {
 
         log.info("Comparing versions: from='{}', to='{}', dataset='{}'", fromHashOrTag, toHashOrTag, datasetId);
 
+        String workspaceId = requestContext.get().getWorkspaceId();
+
         // Resolve 'from' and to 'to' version IDs
-        UUID fromVersionId = resolveVersionId(datasetId, fromHashOrTag);
+        UUID fromVersionId = resolveVersionId(workspaceId, datasetId, fromHashOrTag);
         UUID toVersionId = Optional.ofNullable(toHashOrTag)
-                .map(hashOrTag -> resolveVersionId(datasetId, hashOrTag))
+                .map(hashOrTag -> resolveVersionId(workspaceId, datasetId, hashOrTag))
                 .orElse(null);
         var stats = calculateDiffStatistics(datasetId, fromVersionId, toVersionId);
 
@@ -476,7 +474,7 @@ class DatasetVersionServiceImpl implements DatasetVersionService {
 
         return Mono.fromCallable(() -> {
             // Resolve version reference to version ID and get version details
-            UUID versionId = resolveVersionId(datasetId, versionRef, workspaceId);
+            UUID versionId = resolveVersionId(workspaceId, datasetId, versionRef);
             DatasetVersion versionToRestore = template.inTransaction(READ_ONLY, handle -> {
                 var dao = handle.attach(DatasetVersionDAO.class);
                 return dao.findById(versionId, workspaceId).orElseThrow(

@@ -383,15 +383,20 @@ class DatasetItemServiceImpl implements DatasetItemService {
             log.info("Finding versioned dataset items by '{}', page '{}', size '{}'", datasetItemSearchCriteria, page,
                     size);
 
-            // Resolve version hash/tag to version ID
-            UUID versionId = versionService.resolveVersionId(datasetItemSearchCriteria.datasetId(),
-                    datasetItemSearchCriteria.versionHashOrTag());
-            log.info("Resolved version '{}' to version ID '{}' for dataset '{}'",
-                    datasetItemSearchCriteria.versionHashOrTag(), versionId, datasetItemSearchCriteria.datasetId());
+            return Mono.deferContextual(ctx -> {
+                String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
 
-            // For versioned items, hasDraft is always false (concept doesn't apply to immutable versions)
-            return versionDao.getItems(datasetItemSearchCriteria, page, size, versionId)
-                    .defaultIfEmpty(DatasetItemPage.empty(page, sortingFactory.getSortableFields()));
+                // Resolve version hash/tag to version ID
+                UUID versionId = versionService.resolveVersionId(workspaceId,
+                        datasetItemSearchCriteria.datasetId(),
+                        datasetItemSearchCriteria.versionHashOrTag());
+                log.info("Resolved version '{}' to version ID '{}' for dataset '{}'",
+                        datasetItemSearchCriteria.versionHashOrTag(), versionId, datasetItemSearchCriteria.datasetId());
+
+                // For versioned items, hasDraft is always false (concept doesn't apply to immutable versions)
+                return versionDao.getItems(datasetItemSearchCriteria, page, size, versionId)
+                        .defaultIfEmpty(DatasetItemPage.empty(page, sortingFactory.getSortableFields()));
+            });
         } else {
             // Fetch draft (current) items from dataset_items table
             log.info("Finding draft dataset items by '{}', page '{}', size '{}'",
