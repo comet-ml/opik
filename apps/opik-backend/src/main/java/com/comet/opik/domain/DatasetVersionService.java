@@ -533,15 +533,7 @@ class DatasetVersionServiceImpl implements DatasetVersionService {
                         () -> new NotFoundException(ERROR_VERSION_NOT_FOUND.formatted(versionRef, datasetId)));
             });
 
-            // Check if this is the latest version
-            Optional<DatasetVersion> latestVersion = getLatestVersion(datasetId, workspaceId);
-            boolean isLatestVersion = latestVersion.isPresent()
-                    && latestVersion.get().id().equals(versionId);
-
-            log.info("Restoring version '{}' for dataset '{}', isLatest='{}'",
-                    versionRef, datasetId, isLatestVersion);
-
-            return new RestoreContext(versionId, versionToRestore, isLatestVersion, workspaceId, userName);
+            return new RestoreContext(versionId, versionToRestore, workspaceId, userName);
         })
                 .subscribeOn(Schedulers.boundedElastic())
                 .flatMap(context -> {
@@ -554,9 +546,22 @@ class DatasetVersionServiceImpl implements DatasetVersionService {
                             .doOnSuccess(restoredCount -> log.info(
                                     "Restored '{}' items from version '{}' to draft for dataset '{}'",
                                     restoredCount, versionRef, datasetId))
-                            // Step 3: If not latest version, commit a new version with the restored items
-                            .flatMap(restoredCount -> {
-                                if (!context.isLatestVersion) {
+                            // Step 3: Check if this is the latest version AFTER restore operations
+                            // (delayed to reduce race condition window)
+                            .flatMap(restoredCount -> Mono.fromCallable(() -> {
+                                Optional<DatasetVersion> latestVersion = getLatestVersion(datasetId,
+                                        context.workspaceId);
+                                boolean isLatestVersion = latestVersion.isPresent()
+                                        && latestVersion.get().id().equals(context.versionId);
+
+                                log.info("Restored version '{}' for dataset '{}', isLatest='{}'",
+                                        versionRef, datasetId, isLatestVersion);
+
+                                return isLatestVersion;
+                            }).subscribeOn(Schedulers.boundedElastic()))
+                            // Step 4: If not latest version, commit a new version with the restored items
+                            .flatMap(isLatestVersion -> {
+                                if (!isLatestVersion) {
                                     log.info("Creating new version snapshot after restore for dataset '{}'",
                                             datasetId);
                                     // Call internal commitVersion with captured workspace ID and user name
@@ -577,7 +582,7 @@ class DatasetVersionServiceImpl implements DatasetVersionService {
                 });
     }
 
-    private record RestoreContext(UUID versionId, DatasetVersion versionToRestore, boolean isLatestVersion,
-            String workspaceId, String userName) {
+    private record RestoreContext(UUID versionId, DatasetVersion versionToRestore, String workspaceId,
+            String userName) {
     }
 }
