@@ -20,7 +20,6 @@ import com.comet.opik.api.ExperimentUpdate;
 import com.comet.opik.api.FeedbackScore;
 import com.comet.opik.api.FeedbackScoreAverage;
 import com.comet.opik.api.FeedbackScoreItem;
-import com.comet.opik.api.FeedbackScoreMetric;
 import com.comet.opik.api.FeedbackScoreNames;
 import com.comet.opik.api.PercentageValues;
 import com.comet.opik.api.Project;
@@ -2323,6 +2322,168 @@ class ExperimentsResourceTest {
                     null)) {
                 assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
             }
+        }
+
+        @ParameterizedTest
+        @MethodSource("durationAndCostMetricsSortingFields")
+        @DisplayName("when sorting by duration and cost metrics percentiles, then return page sorted correctly")
+        void whenSortingByDurationAndCostMetricsPercentiles__thenReturnPage(
+                String sortField, Direction direction) {
+
+            var workspaceName = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var dataset = podamFactory.manufacturePojo(Dataset.class);
+            datasetResourceClient.createDataset(dataset, apiKey, workspaceName);
+
+            // Create multiple experiments with different cost values for predictable sorting
+            List<BigDecimal> costValues = List.of(
+                    BigDecimal.valueOf(1.0),
+                    BigDecimal.valueOf(3.0),
+                    BigDecimal.valueOf(5.0),
+                    BigDecimal.valueOf(2.0),
+                    BigDecimal.valueOf(4.0));
+
+            List<Long> durationMillis = List.of(100L, 300L, 500L, 200L, 400L);
+
+            List<Experiment> experiments = new ArrayList<>();
+
+            for (int i = 0; i < 5; i++) {
+                var experiment = experimentResourceClient.createPartialExperiment()
+                        .datasetName(dataset.name())
+                        .usage(null)
+                        .build();
+
+                experimentResourceClient.create(experiment, apiKey, workspaceName);
+
+                // Create trace with specific duration
+                var startTime = Instant.now();
+                var endTime = startTime.plusMillis(durationMillis.get(i));
+                var trace = podamFactory.manufacturePojo(Trace.class).toBuilder()
+                        .startTime(startTime)
+                        .endTime(endTime)
+                        .build();
+
+                traceResourceClient.createTrace(trace, apiKey, workspaceName);
+
+                // Create span with specific cost
+                var span = podamFactory.manufacturePojo(Span.class).toBuilder()
+                        .traceId(trace.id())
+                        .projectName(trace.projectName())
+                        .type(SpanType.llm)
+                        .totalEstimatedCost(costValues.get(i))
+                        .build();
+
+                spanResourceClient.createSpan(span, apiKey, workspaceName);
+
+                // Create experiment item linking trace to experiment
+                var experimentItem = podamFactory.manufacturePojo(ExperimentItem.class).toBuilder()
+                        .experimentId(experiment.id())
+                        .usage(null)
+                        .traceId(trace.id())
+                        .feedbackScores(null)
+                        .build();
+
+                experimentResourceClient.createExperimentItem(Set.of(experimentItem), apiKey, workspaceName);
+
+                experiments.add(experiment);
+            }
+
+            // Create the sorting field
+            var sortingField = SortingField.builder()
+                    .field(sortField)
+                    .direction(direction)
+                    .build();
+
+            // Get sorted results from API
+            try (var actualResponse = findExperiment(
+                    workspaceName, apiKey, 1, 10, dataset.id(), null, false, null,
+                    List.of(sortingField), null, null, null)) {
+
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
+                var actualPage = actualResponse.readEntity(ExperimentPage.class);
+                assertThat(actualPage.content()).hasSize(5);
+
+                // Verify sorting order
+                List<Experiment> actualExperiments = actualPage.content();
+
+                // Extract values based on sort field for verification
+                if (sortField.startsWith("duration.")) {
+                    String percentile = sortField.split("\\.")[1];
+                    List<BigDecimal> actualValues = actualExperiments.stream()
+                            .map(e -> {
+                                if (e.duration() == null) return null;
+                                return switch (percentile) {
+                                    case "p50" -> e.duration().p50();
+                                    case "p90" -> e.duration().p90();
+                                    case "p99" -> e.duration().p99();
+                                    default -> null;
+                                };
+                            })
+                            .toList();
+
+                    assertValuesAreSorted(actualValues, direction);
+                } else if (sortField.startsWith("total_estimated_cost_metrics.")) {
+                    String percentile = sortField.split("\\.")[1];
+                    List<BigDecimal> actualValues = actualExperiments.stream()
+                            .map(e -> {
+                                if (e.totalEstimatedCostMetrics() == null) return null;
+                                return switch (percentile) {
+                                    case "p50" -> e.totalEstimatedCostMetrics().p50();
+                                    case "p90" -> e.totalEstimatedCostMetrics().p90();
+                                    case "p99" -> e.totalEstimatedCostMetrics().p99();
+                                    default -> null;
+                                };
+                            })
+                            .toList();
+
+                    assertValuesAreSorted(actualValues, direction);
+                }
+            }
+        }
+
+        private void assertValuesAreSorted(List<BigDecimal> values, Direction direction) {
+            for (int i = 0; i < values.size() - 1; i++) {
+                BigDecimal current = values.get(i);
+                BigDecimal next = values.get(i + 1);
+
+                if (current == null || next == null) {
+                    continue;
+                }
+
+                if (direction == Direction.ASC) {
+                    assertThat(current.compareTo(next))
+                            .as("Value at index '%d' ('%s') should be <= value at index '%d' ('%s')", i, current, i + 1,
+                                    next)
+                            .isLessThanOrEqualTo(0);
+                } else {
+                    assertThat(current.compareTo(next))
+                            .as("Value at index '%d' ('%s') should be >= value at index '%d' ('%s')", i, current, i + 1,
+                                    next)
+                            .isGreaterThanOrEqualTo(0);
+                }
+            }
+        }
+
+        Stream<Arguments> durationAndCostMetricsSortingFields() {
+            return Stream.of(
+                    // Duration metrics sorting
+                    arguments("duration.p50", Direction.ASC),
+                    arguments("duration.p50", Direction.DESC),
+                    arguments("duration.p90", Direction.ASC),
+                    arguments("duration.p90", Direction.DESC),
+                    arguments("duration.p99", Direction.ASC),
+                    arguments("duration.p99", Direction.DESC),
+                    // Cost metrics sorting
+                    arguments("total_estimated_cost_metrics.p50", Direction.ASC),
+                    arguments("total_estimated_cost_metrics.p50", Direction.DESC),
+                    arguments("total_estimated_cost_metrics.p90", Direction.ASC),
+                    arguments("total_estimated_cost_metrics.p90", Direction.DESC),
+                    arguments("total_estimated_cost_metrics.p99", Direction.ASC),
+                    arguments("total_estimated_cost_metrics.p99", Direction.DESC));
         }
 
         @Test
