@@ -1,4 +1,4 @@
-from typing import Any, Protocol
+from typing import Any, Protocol, cast
 from opik.evaluation.metrics import score_result
 from opik.message_processing.emulation import models as emulation_models
 from . import helpers
@@ -18,6 +18,9 @@ class MetricWithTaskSpanFunction(Protocol):
         llm_output: str,
         task_span: emulation_models.SpanModel | None,
     ) -> score_result.ScoreResult: ...
+
+
+MetricType = MetricFunction | MetricWithTaskSpanFunction
 
 
 class MultiMetricObjective:
@@ -55,13 +58,15 @@ class MultiMetricObjective:
 
             for metric, weight in zip(self.metrics, self.weights):
                 if helpers.has_task_span_parameter(metric) and task_span is not None:
-                    score_result_ = metric(
+                    metric_with_span = cast(MetricWithTaskSpanFunction, metric)
+                    score_result_ = metric_with_span(
                         dataset_item=dataset_item,
                         llm_output=llm_output,
                         task_span=task_span,
                     )
                 else:
-                    score_result_ = metric(
+                    metric_without_span = cast(MetricFunction, metric)
+                    score_result_ = metric_without_span(
                         dataset_item=dataset_item, llm_output=llm_output
                     )
                 raw_score_results.append(score_result_)
