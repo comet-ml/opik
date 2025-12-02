@@ -6,6 +6,7 @@ import com.comet.opik.api.evaluators.LlmAsJudgeModelParameters;
 import com.comet.opik.domain.LlmProviderApiKeyService;
 import com.comet.opik.domain.llm.LlmProviderFactory;
 import com.comet.opik.domain.llm.LlmProviderService;
+import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.llm.antropic.AnthropicModelName;
 import com.comet.opik.infrastructure.llm.customllm.CustomLlmModelNameChecker;
 import com.comet.opik.infrastructure.llm.gemini.GeminiModelName;
@@ -28,13 +29,16 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.function.Function;
 
+import static com.comet.opik.infrastructure.BuiltinLlmProviderConfig.BUILTIN_PROVIDER_ID;
 import static com.comet.opik.infrastructure.EncryptionUtils.decrypt;
+import static com.comet.opik.infrastructure.EncryptionUtils.encrypt;
 
 @Slf4j
 @RequiredArgsConstructor(onConstructor_ = @Inject)
 class LlmProviderFactoryImpl implements LlmProviderFactory {
 
     private final @NonNull LlmProviderApiKeyService llmProviderApiKeyService;
+    private final @NonNull OpikConfiguration configuration;
     private final Map<LlmProvider, LlmServiceProvider> services = new EnumMap<>(LlmProvider.class);
 
     public void register(LlmProvider llmProvider, LlmServiceProvider service) {
@@ -86,6 +90,12 @@ class LlmProviderFactoryImpl implements LlmProviderFactory {
      * The agreed requirement is to resolve the LLM provider and its API key based on the model.
      */
     public LlmProvider getLlmProvider(@NonNull String model) {
+        // Check if this is the built-in model
+        var defaultConfig = configuration.getBuiltinLlmProvider();
+        if (defaultConfig.isEnabled() && model.equals(defaultConfig.getModel())) {
+            return LlmProvider.OPIK_BUILTIN;
+        }
+
         if (isModelBelongToProvider(model, OpenaiModelName.class, OpenaiModelName::toString)) {
             return LlmProvider.OPEN_AI;
         }
@@ -119,6 +129,21 @@ class LlmProviderFactoryImpl implements LlmProviderFactory {
      * making it impossible to reliably extract the provider name from the model string alone.
      */
     private ProviderApiKey getProviderApiKey(String workspaceId, LlmProvider llmProvider, String model) {
+        // Handle the built-in provider - return virtual config
+        if (llmProvider == LlmProvider.OPIK_BUILTIN) {
+            var defaultConfig = configuration.getBuiltinLlmProvider();
+            return ProviderApiKey.builder()
+                    .id(BUILTIN_PROVIDER_ID)
+                    .provider(LlmProvider.OPIK_BUILTIN)
+                    .apiKey(encrypt(defaultConfig.getApiKey()))
+                    .baseUrl(defaultConfig.getBaseUrl())
+                    .configuration(Map.of(
+                            "models", defaultConfig.getModel(),
+                            "actual_model", defaultConfig.getActualModel(),
+                            "span_provider", defaultConfig.getSpanProvider()))
+                    .build();
+        }
+
         return llmProviderApiKeyService.find(workspaceId).content().stream()
                 .filter(providerApiKey -> {
                     // Match provider type
@@ -175,5 +200,20 @@ class LlmProviderFactoryImpl implements LlmProviderFactory {
         return EnumUtils.getEnumList(enumClass).stream()
                 .map(valueGetter)
                 .anyMatch(model::equals);
+    }
+
+    @Override
+    public ResolvedModelInfo getResolvedModelInfo(@NonNull String model) {
+        var llmProvider = getLlmProvider(model);
+
+        if (llmProvider == LlmProvider.OPIK_BUILTIN) {
+            var defaultConfig = configuration.getBuiltinLlmProvider();
+            return new ResolvedModelInfo(
+                    defaultConfig.getActualModel(),
+                    defaultConfig.getSpanProvider());
+        }
+
+        // For other providers, return the original model and provider type
+        return new ResolvedModelInfo(model, llmProvider.getValue());
     }
 }

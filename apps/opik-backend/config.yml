@@ -705,3 +705,24 @@ webhook:
     # Default: 1s
     # Description: Maximum time to wait for acquiring metrics alert job lock
     metricsAlertJobLockWaitTimeout: ${WEBHOOK_METRICS_ALERT_JOB_LOCK_WAIT_TIMEOUT:-1s}
+
+# Built-in LLM Provider configuration
+# Note: The model name "opik-builtin-model" is hardcoded and cannot be changed.
+# This ensures backward compatibility with automation rules that store the model name.
+builtinLlmProvider:
+  # Default: false
+  # Description: Whether or not to enable the built-in LLM provider
+  enabled: ${BUILTIN_LLM_PROVIDER_ENABLED:-false}
+  # Default: gpt-4o-mini
+  # Description: Actual model name sent to the AI server (the underlying LLM)
+  actualModel: ${BUILTIN_LLM_PROVIDER_ACTUAL_MODEL:-gpt-4o-mini}
+  # Default: openai
+  # Description: Provider name stored in spans for cost tracking
+  spanProvider: ${BUILTIN_LLM_PROVIDER_SPAN_PROVIDER:-openai}
+  # Default: empty
+  # Description: API key for the OpenAI endpoint
+  apiKey: ${BUILTIN_LLM_PROVIDER_API_KEY:-}
+  # Default: empty
+  # Description: Base URL for OpenAI-compatible endpoint (empty for built-in OpenAI)
+  baseUrl: ${BUILTIN_LLM_PROVIDER_BASE_URL:-}
+

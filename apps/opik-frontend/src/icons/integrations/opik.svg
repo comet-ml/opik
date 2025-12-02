@@ -1,0 +1,9 @@
+<svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Outer ring -->
+  <circle cx="8" cy="8" r="7" stroke="currentColor" stroke-width="1.5" fill="none"/>
+  <!-- Inner filled circle -->
+  <circle cx="8" cy="8" r="4" fill="currentColor"/>
+  <!-- Eye highlight -->
+  <circle cx="6.5" cy="6.5" r="1.5" fill="white"/>
+</svg>
+
