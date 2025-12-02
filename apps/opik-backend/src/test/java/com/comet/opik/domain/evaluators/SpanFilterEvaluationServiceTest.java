@@ -8,6 +8,7 @@ import com.comet.opik.api.filter.SpanFilter;
 import com.comet.opik.domain.SpanType;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JsonUtils;
+import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -908,6 +909,62 @@ class SpanFilterEvaluationServiceTest {
 
             // Then
             assertThat(result).isFalse(); // Should not match due to unsupported base field
+        }
+
+        @Test
+        void matchesFilterWithCustomFieldArrayIndex() {
+            // Given
+            ObjectNode input = JsonUtils.createObjectNode();
+            ArrayNode messages = JsonUtils.createArrayNode();
+            ObjectNode message = JsonUtils.createObjectNode();
+            message.put("role", "user");
+            message.put("content", "Where is brazil?");
+            messages.add(message);
+            input.set("messages", messages);
+
+            var span = podamFactory.manufacturePojo(Span.class).toBuilder()
+                    .input(input)
+                    .build();
+            var filter = SpanFilter.builder()
+                    .field(SpanField.CUSTOM)
+                    .key("input.messages[0].content")
+                    .operator(Operator.CONTAINS)
+                    .value("brazil")
+                    .build();
+
+            // When
+            var result = spanFilterEvaluationService.matchesFilter(filter, span);
+
+            // Then
+            assertThat(result).isTrue();
+        }
+
+        @Test
+        void matchesFilterWithCustomFieldArrayIndexNumericPath() {
+            // Given
+            ObjectNode input = JsonUtils.createObjectNode();
+            ArrayNode messages = JsonUtils.createArrayNode();
+            ObjectNode message = JsonUtils.createObjectNode();
+            message.put("role", "user");
+            message.put("content", "Where is brazil?");
+            messages.add(message);
+            input.set("messages", messages);
+
+            var span = podamFactory.manufacturePojo(Span.class).toBuilder()
+                    .input(input)
+                    .build();
+            var filter = SpanFilter.builder()
+                    .field(SpanField.CUSTOM)
+                    .key("input.messages.0.content")
+                    .operator(Operator.CONTAINS)
+                    .value("brazil")
+                    .build();
+
+            // When
+            var result = spanFilterEvaluationService.matchesFilter(filter, span);
+
+            // Then
+            assertThat(result).isTrue();
         }
     }
 

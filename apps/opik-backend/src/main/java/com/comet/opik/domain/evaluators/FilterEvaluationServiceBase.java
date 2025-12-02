@@ -119,6 +119,7 @@ public abstract class FilterEvaluationServiceBase<E> {
 
     /**
      * Extracts a nested value from a JSON object using a key.
+     * Supports JSON paths with array indices, e.g., "messages[0].content" or "messages.0.content".
      * Note: JSON operations are blocking. For reactive contexts, consider wrapping calls in Mono.fromCallable()
      * and using subscribeOn(Schedulers.boundedElastic()) to offload blocking operations.
      */
@@ -136,8 +137,9 @@ public abstract class FilterEvaluationServiceBase<E> {
                 node = JsonUtils.getMapper().valueToTree(jsonValue);
             }
 
-            JsonNode valueNode = node.get(key);
-            if (valueNode == null) {
+            // Parse JSON path (supports array indices like "messages[0].content")
+            JsonNode valueNode = navigateJsonPath(node, key);
+            if (valueNode == null || valueNode.isNull()) {
                 return null;
             }
 
@@ -152,6 +154,94 @@ public abstract class FilterEvaluationServiceBase<E> {
             log.warn("Failed to extract nested value with key '{}': {}", key, e.getMessage());
             return null;
         }
+    }
+
+    /**
+     * Navigates a JSON path through a JsonNode, supporting array indices.
+     * Examples:
+     * - "message" -> node.get("message")
+     * - "messages[0]" -> node.get("messages").get(0)
+     * - "messages[0].content" -> node.get("messages").get(0).get("content")
+     * - "messages.0.content" -> node.get("messages").get(0).get("content")
+     */
+    private JsonNode navigateJsonPath(JsonNode node, String path) {
+        if (node == null || path == null || path.isEmpty()) {
+            return node;
+        }
+
+        JsonNode current = node;
+        int i = 0;
+        int pathLength = path.length();
+
+        while (i < pathLength && current != null && !current.isNull()) {
+            // Skip leading dots
+            while (i < pathLength && path.charAt(i) == '.') {
+                i++;
+            }
+            if (i >= pathLength) {
+                break;
+            }
+
+            int start = i;
+
+            // Check if we have an array index like "[0]"
+            if (path.charAt(i) == '[') {
+                // Find closing bracket
+                int bracketEnd = path.indexOf(']', i);
+                if (bracketEnd == -1) {
+                    log.warn("Unclosed bracket in path '{}'", path);
+                    return null;
+                }
+                String indexStr = path.substring(i + 1, bracketEnd);
+                try {
+                    int index = Integer.parseInt(indexStr);
+                    if (current.isArray() && index >= 0 && index < current.size()) {
+                        current = current.get(index);
+                    } else {
+                        return null;
+                    }
+                } catch (NumberFormatException e) {
+                    log.warn("Invalid array index '{}' in path '{}'", indexStr, path);
+                    return null;
+                }
+                i = bracketEnd + 1;
+            } else {
+                // Find next dot or bracket
+                int dotIndex = path.indexOf('.', i);
+                int bracketIndex = path.indexOf('[', i);
+                int end;
+
+                if (dotIndex == -1 && bracketIndex == -1) {
+                    // Last part of path
+                    end = pathLength;
+                } else if (dotIndex == -1) {
+                    end = bracketIndex;
+                } else if (bracketIndex == -1) {
+                    end = dotIndex;
+                } else {
+                    end = Math.min(dotIndex, bracketIndex);
+                }
+
+                String part = path.substring(start, end);
+
+                // Try as numeric index first (for arrays), then as field name
+                try {
+                    int index = Integer.parseInt(part);
+                    if (current.isArray() && index >= 0 && index < current.size()) {
+                        current = current.get(index);
+                    } else {
+                        return null;
+                    }
+                } catch (NumberFormatException e) {
+                    // Not a number, treat as field name
+                    current = current.get(part);
+                }
+
+                i = end;
+            }
+        }
+
+        return current;
     }
 
     /**
