@@ -39,7 +39,7 @@ public class OpikBuiltinServiceProvider implements LlmServiceProvider {
 
         if (builtinConfig.isEnabled()) {
             factory.register(LlmProvider.OPIK_BUILTIN, this);
-            log.info("Registered OPIK_DEFAULT provider with actual model '{}'", builtinConfig.getActualModel());
+            log.info("Registered OPIK_BUILTIN provider with actual model '{}'", builtinConfig.getActualModel());
         }
     }
 

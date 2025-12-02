@@ -91,8 +91,8 @@ class LlmProviderFactoryImpl implements LlmProviderFactory {
      */
     public LlmProvider getLlmProvider(@NonNull String model) {
         // Check if this is the built-in model
-        var defaultConfig = configuration.getBuiltinLlmProvider();
-        if (defaultConfig.isEnabled() && model.equals(defaultConfig.getModel())) {
+        var builtinConfig = configuration.getBuiltinLlmProvider();
+        if (builtinConfig.isEnabled() && model.equals(builtinConfig.getModel())) {
             return LlmProvider.OPIK_BUILTIN;
         }
 
@@ -131,16 +131,16 @@ class LlmProviderFactoryImpl implements LlmProviderFactory {
     private ProviderApiKey getProviderApiKey(String workspaceId, LlmProvider llmProvider, String model) {
         // Handle the built-in provider - return virtual config
         if (llmProvider == LlmProvider.OPIK_BUILTIN) {
-            var defaultConfig = configuration.getBuiltinLlmProvider();
+            var builtinConfig = configuration.getBuiltinLlmProvider();
             return ProviderApiKey.builder()
                     .id(BUILTIN_PROVIDER_ID)
                     .provider(LlmProvider.OPIK_BUILTIN)
-                    .apiKey(encrypt(defaultConfig.getApiKey()))
-                    .baseUrl(defaultConfig.getBaseUrl())
+                    .apiKey(encrypt(builtinConfig.getApiKey()))
+                    .baseUrl(builtinConfig.getBaseUrl())
                     .configuration(Map.of(
-                            "models", defaultConfig.getModel(),
-                            "actual_model", defaultConfig.getActualModel(),
-                            "span_provider", defaultConfig.getSpanProvider()))
+                            "models", builtinConfig.getModel(),
+                            "actual_model", builtinConfig.getActualModel(),
+                            "span_provider", builtinConfig.getSpanProvider()))
                     .build();
         }
 
@@ -207,10 +207,10 @@ class LlmProviderFactoryImpl implements LlmProviderFactory {
         var llmProvider = getLlmProvider(model);
 
         if (llmProvider == LlmProvider.OPIK_BUILTIN) {
-            var defaultConfig = configuration.getBuiltinLlmProvider();
+            var builtinConfig = configuration.getBuiltinLlmProvider();
             return new ResolvedModelInfo(
-                    defaultConfig.getActualModel(),
-                    defaultConfig.getSpanProvider());
+                    builtinConfig.getActualModel(),
+                    builtinConfig.getSpanProvider());
         }
 
         // For other providers, return the original model and provider type

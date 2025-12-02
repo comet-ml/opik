@@ -71,13 +71,13 @@ public class LlmProviderApiKeyResource {
 
         // Inject virtual built-in provider if enabled
         var content = new ArrayList<>(providerApiKeyPage.content());
-        var defaultConfig = configuration.getBuiltinLlmProvider();
-        if (defaultConfig.isEnabled()) {
+        var builtinConfig = configuration.getBuiltinLlmProvider();
+        if (builtinConfig.isEnabled()) {
             var virtualProvider = ProviderApiKey.builder()
                     .id(BUILTIN_PROVIDER_ID)
                     .provider(LlmProvider.OPIK_BUILTIN)
                     .configuration(Map.of(
-                            "models", defaultConfig.getModel()))
+                            "models", builtinConfig.getModel()))
                     .readOnly(true)
                     .build();
             content.add(virtualProvider); // Add at the end so user-configured providers are selected first
@@ -174,9 +174,9 @@ public class LlmProviderApiKeyResource {
         String workspaceId = requestContext.get().getWorkspaceId();
 
         // Filter out the built-in provider UUID to prevent deletion
-        var defaultProviderUuid = BUILTIN_PROVIDER_ID;
+        var builtinProviderUuid = BUILTIN_PROVIDER_ID;
         var idsToDelete = batchDelete.ids().stream()
-                .filter(id -> !id.equals(defaultProviderUuid))
+                .filter(id -> !id.equals(builtinProviderUuid))
                 .collect(java.util.stream.Collectors.toSet());
 
         if (idsToDelete.isEmpty()) {
