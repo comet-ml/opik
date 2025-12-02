@@ -102,6 +102,7 @@ class OnlineScoringSpanSamplerTest {
         void shouldSkipSamplingWhenToggleDisabled() {
             // Given
             when(serviceTogglesConfig.isSpanLlmAsJudgeEnabled()).thenReturn(false);
+            when(serviceTogglesConfig.isSpanUserDefinedMetricPythonEnabled()).thenReturn(false);
             Span span = createTestSpan();
             SpansCreated event = new SpansCreated(List.of(span), workspaceId, userName);
 
@@ -109,9 +110,43 @@ class OnlineScoringSpanSamplerTest {
             sampler.onSpansCreated(event);
 
             // Then
-            // When toggle is disabled, findAll is never called since we return early
-            verify(ruleEvaluatorService, never()).findAll(any(), any(), any());
+            // When both toggles are disabled, findAll is never called since we return early
+            verify(ruleEvaluatorService, never()).findAll(any(), any(),
+                    eq(AutomationRuleEvaluatorType.SPAN_LLM_AS_JUDGE));
+            verify(ruleEvaluatorService, never()).findAll(any(), any(),
+                    eq(AutomationRuleEvaluatorType.SPAN_USER_DEFINED_METRIC_PYTHON));
             verify(onlineScorePublisher, never()).enqueueMessage(any(), any());
+        }
+
+        @Test
+        @DisplayName("Should skip Python evaluators when Python toggle is disabled")
+        void shouldSkipPythonEvaluatorsWhenToggleDisabled() {
+            // Given
+            when(serviceTogglesConfig.isSpanLlmAsJudgeEnabled()).thenReturn(true);
+            when(serviceTogglesConfig.isSpanUserDefinedMetricPythonEnabled()).thenReturn(false);
+            Span span = createTestSpan();
+            SpansCreated event = new SpansCreated(List.of(span), workspaceId, userName);
+
+            AutomationRuleEvaluatorSpanLlmAsJudge evaluator = createTestEvaluator(true, 1.0f, List.of());
+            List<AutomationRuleEvaluatorSpanLlmAsJudge> evaluators = List.of(evaluator);
+
+            when(ruleEvaluatorService.<SpanLlmAsJudgeCode, SpanFilter, AutomationRuleEvaluatorSpanLlmAsJudge>findAll(
+                    projectId, workspaceId, AutomationRuleEvaluatorType.SPAN_LLM_AS_JUDGE))
+                    .thenReturn(evaluators);
+            lenient().when(filterEvaluationService.matchesAllFilters(any(), any()))
+                    .thenReturn(true);
+
+            // When
+            sampler.onSpansCreated(event);
+
+            // Then
+            // Should fetch LLM evaluators but NOT Python evaluators
+            verify(ruleEvaluatorService, times(1)).findAll(
+                    projectId, workspaceId, AutomationRuleEvaluatorType.SPAN_LLM_AS_JUDGE);
+            verify(ruleEvaluatorService, never()).findAll(
+                    any(), any(), eq(AutomationRuleEvaluatorType.SPAN_USER_DEFINED_METRIC_PYTHON));
+            verify(onlineScorePublisher, times(1)).enqueueMessage(any(),
+                    eq(AutomationRuleEvaluatorType.SPAN_LLM_AS_JUDGE));
         }
 
         @Test
@@ -119,6 +154,7 @@ class OnlineScoringSpanSamplerTest {
         void shouldProcessSamplingWhenToggleEnabled() {
             // Given
             when(serviceTogglesConfig.isSpanLlmAsJudgeEnabled()).thenReturn(true);
+            when(serviceTogglesConfig.isSpanUserDefinedMetricPythonEnabled()).thenReturn(false);
             Span span = createTestSpan();
             SpansCreated event = new SpansCreated(List.of(span), workspaceId, userName);
 
@@ -337,6 +373,7 @@ class OnlineScoringSpanSamplerTest {
         void shouldProcessSpansFromMultipleProjectsSeparately() {
             // Given
             when(serviceTogglesConfig.isSpanLlmAsJudgeEnabled()).thenReturn(true);
+            when(serviceTogglesConfig.isSpanUserDefinedMetricPythonEnabled()).thenReturn(false);
             UUID projectId2 = UUID.randomUUID();
 
             Span span1 = createTestSpan(projectId);
@@ -353,13 +390,8 @@ class OnlineScoringSpanSamplerTest {
                     projectId, workspaceId, AutomationRuleEvaluatorType.SPAN_LLM_AS_JUDGE)).thenReturn(evaluators1);
             when(ruleEvaluatorService.<SpanLlmAsJudgeCode, SpanFilter, AutomationRuleEvaluatorSpanLlmAsJudge>findAll(
                     projectId2, workspaceId, AutomationRuleEvaluatorType.SPAN_LLM_AS_JUDGE)).thenReturn(evaluators2);
-            // Mock SPAN_USER_DEFINED_METRIC_PYTHON calls (return empty lists)
-            lenient().when(ruleEvaluatorService.findAll(
-                    projectId, workspaceId, AutomationRuleEvaluatorType.SPAN_USER_DEFINED_METRIC_PYTHON))
-                    .thenReturn(List.of());
-            lenient().when(ruleEvaluatorService.findAll(
-                    projectId2, workspaceId, AutomationRuleEvaluatorType.SPAN_USER_DEFINED_METRIC_PYTHON))
-                    .thenReturn(List.of());
+            // Python toggle is disabled, so these calls should never happen
+            // No need to mock them since they won't be called
             // Empty filters list means all spans match (matchesAllFilters returns true for empty list)
             // Need to stub since the mock needs to return true for empty filter lists
             lenient().when(filterEvaluationService.matchesAllFilters(any(), any()))
