@@ -32,6 +32,7 @@ import SearchInput from "@/components/shared/SearchInput/SearchInput";
 import { formatDate } from "@/lib/date";
 import ColumnsButton from "@/components/shared/ColumnsButton/ColumnsButton";
 import {
+  COLUMN_FEEDBACK_SCORES_ID,
   COLUMN_GUARDRAILS_ID,
   COLUMN_NAME_ID,
   COLUMN_SELECT_ID,
@@ -185,7 +186,7 @@ const ProjectsPage: React.FunctionComponent = () => {
             : "-",
       },
       {
-        id: "feedback_scores",
+        id: COLUMN_FEEDBACK_SCORES_ID,
         label: "Feedback scores (avg.)",
         type: COLUMN_TYPE.numberDictionary,
         accessorFn: (row) =>
@@ -196,7 +197,7 @@ const ProjectsPage: React.FunctionComponent = () => {
         cell: FeedbackScoreListCell as never,
         customMeta: {
           getHoverCardName: (row: ProjectWithStatistic) => row.name,
-          isAverageScores: true,
+          areAggregatedScores: true,
         },
         explainer: EXPLAINERS_MAP[EXPLAINER_ID.what_are_feedback_scores],
       },
