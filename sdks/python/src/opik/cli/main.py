@@ -6,6 +6,7 @@ from typing import Optional
 import click
 
 from .configure import configure
+from .eval_app import eval_app
 from .export import export
 from .healthcheck import healthcheck
 from .import_command import import_data
@@ -40,8 +41,9 @@ def cli(ctx: click.Context, api_key: Optional[str]) -> None:
 
 # Register all commands
 cli.add_command(configure)
-cli.add_command(proxy)
-cli.add_command(healthcheck)
+cli.add_command(eval_app)
 cli.add_command(export)
+cli.add_command(healthcheck)
 cli.add_command(import_data)
+cli.add_command(proxy)
 cli.add_command(usage_report)

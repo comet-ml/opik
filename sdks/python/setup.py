@@ -66,6 +66,10 @@ setup(
             "fastapi>=0.100.0",
             "uvicorn>=0.23.0",
         ],
+        "eval-app": [
+            "fastapi>=0.100.0",
+            "uvicorn>=0.23.0",
+        ],
     },
     entry_points={
         "pytest11": [
