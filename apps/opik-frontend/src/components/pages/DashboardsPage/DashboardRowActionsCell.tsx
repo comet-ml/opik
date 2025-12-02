@@ -14,7 +14,6 @@ import { Dashboard } from "@/types/dashboard";
 import useDashboardDeleteMutation from "@/api/dashboards/useDashboardDeleteMutation";
 import DashboardCreateDialog from "@/components/pages/DashboardsPage/DashboardCreateDialog";
 import DashboardCloneDialog from "@/components/pages/DashboardsPage/DashboardCloneDialog";
-import { getRowId } from "./utils";
 
 export const DashboardRowActionsCell: React.FunctionComponent<
   CellContext<Dashboard, unknown>
@@ -31,7 +30,7 @@ export const DashboardRowActionsCell: React.FunctionComponent<
 
   const deleteDashboard = useCallback(() => {
     deleteDashboardMutate({
-      dashboardId: getRowId(dashboard),
+      dashboardId: dashboard.id,
     });
   }, [dashboard, deleteDashboardMutate]);
 

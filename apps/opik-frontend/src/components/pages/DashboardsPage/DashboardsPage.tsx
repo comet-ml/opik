@@ -39,9 +39,9 @@ import { ColumnPinningState } from "@tanstack/react-table";
 import {
   generateActionsColumDef,
   generateSelectColumDef,
+  getRowId,
 } from "@/components/shared/DataTable/utils";
 import { RESOURCE_TYPE } from "@/components/shared/ResourceLink/ResourceLink";
-import { getRowId } from "./utils";
 
 const SELECTED_COLUMNS_KEY = "dashboards-selected-columns";
 const COLUMNS_WIDTH_KEY = "dashboards-columns-width";
