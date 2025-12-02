@@ -128,6 +128,7 @@ public abstract class FilterEvaluationServiceBase<E> {
     /**
      * Extracts a nested value from a JSON object using JSONPath.
      * Supports standard JSONPath syntax, e.g., "$.messages[0].content" or "messages[0].content".
+     * Also supports numeric dot notation (e.g., "messages.0.content") which is converted to bracket notation.
      * See: https://github.com/json-path/JsonPath for full JSONPath syntax.
      * Note: JSON operations are blocking. For reactive contexts, consider wrapping calls in Mono.fromCallable()
      * and using subscribeOn(Schedulers.boundedElastic()) to offload blocking operations.
@@ -137,8 +138,11 @@ public abstract class FilterEvaluationServiceBase<E> {
             return null;
         }
 
+        // Normalize numeric dot notation to bracket notation (e.g., "messages.0.content" -> "messages[0].content")
+        String normalizedKey = normalizeJsonPath(key);
+
         // Normalize the path to ensure it starts with $. for JSONPath
-        String jsonPath = key.startsWith("$") ? key : "$." + key;
+        String jsonPath = normalizedKey.startsWith("$") ? normalizedKey : "$." + normalizedKey;
 
         try {
             String jsonString;
@@ -158,6 +162,28 @@ public abstract class FilterEvaluationServiceBase<E> {
             log.warn("Failed to extract nested value with JSONPath '{}': {}", jsonPath, e.getMessage());
             return null;
         }
+    }
+
+    /**
+     * Normalizes JSONPath by converting numeric dot notation to bracket notation.
+     * For example: "messages.0.content" -> "messages[0].content"
+     * This ensures compatibility with JSONPath library which prefers bracket notation for array indices.
+     */
+    private String normalizeJsonPath(String path) {
+        if (path == null || path.isEmpty()) {
+            return path;
+        }
+
+        // Remove leading $ if present, we'll add it back later
+        boolean hasLeadingDollar = path.startsWith("$");
+        String pathWithoutDollar = hasLeadingDollar ? path.substring(1) : path;
+
+        // Pattern: match a dot followed by one or more digits (array index in dot notation)
+        // Replace ".0" with "[0]", ".123" with "[123]", etc.
+        // Use word boundary to avoid matching digits that are part of property names
+        String normalized = pathWithoutDollar.replaceAll("\\.(\\d+)(?=\\.|$)", "[$1]");
+
+        return hasLeadingDollar ? "$" + normalized : normalized;
     }
 
     /**
