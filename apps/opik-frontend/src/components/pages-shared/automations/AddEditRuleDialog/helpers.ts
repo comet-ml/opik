@@ -6,7 +6,7 @@ import {
   UI_EVALUATORS_RULE_TYPE,
 } from "@/types/automations";
 import { Filter } from "@/types/filters";
-import { ColumnData, COLUMN_CUSTOM_ID, COLUMN_TYPE } from "@/types/shared";
+import { ColumnData } from "@/types/shared";
 
 export const getUIRuleType = (ruleType: EVALUATORS_RULE_TYPE) =>
   ({
@@ -64,38 +64,12 @@ export const normalizeFilters = (
 ): Filter[] => {
   if (!filters || filters.length === 0) return [];
 
-  return filters.map((filter) => {
-    let field = filter.field || "";
-    let key = filter.key || "";
-    let type = filter.type || getFilterTypeByField(filter.field, columns);
-
-    // Map input_json/output_json to COLUMN_CUSTOM_ID for span filters
-    // Backend stores input_json/output_json when filtering on nested JSON paths
-    if (field === "input_json" || field === "output_json") {
-      const baseField = field === "input_json" ? "input" : "output";
-      // If there's a key, map to COLUMN_CUSTOM_ID
-      if (key) {
-        field = COLUMN_CUSTOM_ID;
-        // The key should be the full path (e.g., "context" or "input.context")
-        // If key doesn't start with input/output prefix, add it
-        if (!key.startsWith("input.") && !key.startsWith("output.")) {
-          key = `${baseField}.${key}`;
-        }
-        type = COLUMN_TYPE.dictionary;
-      } else {
-        // No key means filtering on the whole input/output as string
-        field = baseField;
-        type = COLUMN_TYPE.string;
-      }
-    }
-
-    return {
-      id: filter.id || uniqid(),
-      field,
-      type,
-      operator: filter.operator || "",
-      key,
-      value: filter.value || "",
-    } as Filter;
-  });
+  return filters.map((filter) => ({
+    id: filter.id || uniqid(),
+    field: filter.field || "",
+    type: filter.type || getFilterTypeByField(filter.field, columns),
+    operator: filter.operator || "",
+    key: filter.key || "",
+    value: filter.value || "",
+  })) as Filter[];
 };

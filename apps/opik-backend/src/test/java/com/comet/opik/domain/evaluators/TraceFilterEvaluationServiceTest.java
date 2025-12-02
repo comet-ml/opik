@@ -487,6 +487,123 @@ class TraceFilterEvaluationServiceTest {
             // Then
             assertThat(result).isTrue();
         }
+
+        @Test
+        void matchesFilterWithCustomInputField() {
+            // Given
+            ObjectNode input = JsonUtils.createObjectNode();
+            input.put("message", "Hello world");
+            input.put("context", "test context");
+
+            var trace = podamFactory.manufacturePojo(Trace.class).toBuilder()
+                    .input(input)
+                    .build();
+            var filter = TraceFilter.builder()
+                    .field(TraceField.CUSTOM)
+                    .key("input.message")
+                    .operator(Operator.CONTAINS)
+                    .value("world")
+                    .build();
+
+            // When
+            var result = traceFilterEvaluationService.matchesFilter(filter, trace);
+
+            // Then
+            assertThat(result).isTrue();
+        }
+
+        @Test
+        void matchesFilterWithCustomOutputField() {
+            // Given
+            ObjectNode output = JsonUtils.createObjectNode();
+            output.put("answer", "AI is artificial intelligence");
+            output.put("confidence", "0.95");
+
+            var trace = podamFactory.manufacturePojo(Trace.class).toBuilder()
+                    .output(output)
+                    .build();
+            var filter = TraceFilter.builder()
+                    .field(TraceField.CUSTOM)
+                    .key("output.answer")
+                    .operator(Operator.CONTAINS)
+                    .value("artificial")
+                    .build();
+
+            // When
+            var result = traceFilterEvaluationService.matchesFilter(filter, trace);
+
+            // Then
+            assertThat(result).isTrue();
+        }
+
+        @Test
+        void matchesFilterWithCustomInputFieldEqual() {
+            // Given
+            ObjectNode input = JsonUtils.createObjectNode();
+            input.put("model", "gpt-4");
+
+            var trace = podamFactory.manufacturePojo(Trace.class).toBuilder()
+                    .input(input)
+                    .build();
+            var filter = TraceFilter.builder()
+                    .field(TraceField.CUSTOM)
+                    .key("input.model")
+                    .operator(Operator.EQUAL)
+                    .value("gpt-4")
+                    .build();
+
+            // When
+            var result = traceFilterEvaluationService.matchesFilter(filter, trace);
+
+            // Then
+            assertThat(result).isTrue();
+        }
+
+        @Test
+        void matchesFilterWithCustomFieldInvalidKey() {
+            // Given
+            ObjectNode input = JsonUtils.createObjectNode();
+            input.put("message", "Hello");
+
+            var trace = podamFactory.manufacturePojo(Trace.class).toBuilder()
+                    .input(input)
+                    .build();
+            var filter = TraceFilter.builder()
+                    .field(TraceField.CUSTOM)
+                    .key("invalid") // Missing dot separator
+                    .operator(Operator.CONTAINS)
+                    .value("Hello")
+                    .build();
+
+            // When
+            var result = traceFilterEvaluationService.matchesFilter(filter, trace);
+
+            // Then
+            assertThat(result).isFalse(); // Should not match due to invalid key format
+        }
+
+        @Test
+        void matchesFilterWithCustomFieldUnsupportedBaseField() {
+            // Given
+            ObjectNode input = JsonUtils.createObjectNode();
+            input.put("message", "Hello");
+
+            var trace = podamFactory.manufacturePojo(Trace.class).toBuilder()
+                    .input(input)
+                    .build();
+            var filter = TraceFilter.builder()
+                    .field(TraceField.CUSTOM)
+                    .key("metadata.message") // Unsupported base field (should be input/output)
+                    .operator(Operator.CONTAINS)
+                    .value("Hello")
+                    .build();
+
+            // When
+            var result = traceFilterEvaluationService.matchesFilter(filter, trace);
+
+            // Then
+            assertThat(result).isFalse(); // Should not match due to unsupported base field
+        }
     }
 
     @Nested

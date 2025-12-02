@@ -79,8 +79,39 @@ public class SpanFilterEvaluationService extends FilterEvaluationServiceBase<Spa
             case DURATION ->
                 span.duration() != null ? span.duration() : calculateDuration(span.startTime(), span.endTime());
             case ERROR_INFO -> key != null ? extractErrorInfoField(span.errorInfo(), key) : span.errorInfo();
+            case CUSTOM -> extractCustomFieldValue(key, span);
             default -> {
                 log.warn("Unsupported span field for filter evaluation: {}", spanField);
+                yield null;
+            }
+        };
+    }
+
+    /**
+     * Extracts value from a custom field filter.
+     * Custom filters have a key in format "input.path" or "output.path" where path is the JSON path.
+     * For example: key="input.message" extracts span.input().message
+     */
+    private Object extractCustomFieldValue(String key, Span span) {
+        if (key == null || key.isEmpty()) {
+            return null;
+        }
+
+        // Parse key format: "input.path" or "output.path"
+        int dotIndex = key.indexOf('.');
+        if (dotIndex <= 0) {
+            log.warn("Invalid custom filter key format: '{}'. Expected format: 'input.path' or 'output.path'", key);
+            return null;
+        }
+
+        String baseField = key.substring(0, dotIndex);
+        String nestedKey = key.substring(dotIndex + 1);
+
+        return switch (baseField) {
+            case "input" -> extractNestedValue(span.input(), nestedKey);
+            case "output" -> extractNestedValue(span.output(), nestedKey);
+            default -> {
+                log.warn("Unsupported base field in custom filter key: '{}'. Supported: 'input', 'output'", baseField);
                 yield null;
             }
         };
