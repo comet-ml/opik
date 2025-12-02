@@ -28,7 +28,7 @@ import DashboardSection from "./DashboardSection/DashboardSection";
 
 const MemoizedSortableContext = memo(SortableContext);
 
-const Dashboard: React.FC = () => {
+const Dashboard: React.FunctionComponent = () => {
   const [active, setActive] = useState<Active | null>(null);
   const dragTopCoordinate = React.useRef<number>(0);
 
@@ -67,10 +67,9 @@ const Dashboard: React.FC = () => {
     }),
   );
 
-  const activeSectionIndex = useMemo(() => {
-    if (!active) return -1;
-    return sectionIds.findIndex((id) => id === active.id);
-  }, [active, sectionIds]);
+  const activeSectionIndex = !active
+    ? -1
+    : sectionIds.findIndex((id) => id === active.id);
 
   const handleDragStart = useCallback((event: DragStartEvent) => {
     dragTopCoordinate.current = 0;

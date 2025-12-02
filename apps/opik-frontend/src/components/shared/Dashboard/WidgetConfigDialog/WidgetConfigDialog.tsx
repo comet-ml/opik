@@ -143,7 +143,9 @@ const WidgetConfigDialog: React.FunctionComponent<WidgetConfigDialogProps> = ({
         </DialogHeader>
 
         {currentStep === DialogStep.ADD && (
-          <WidgetConfigDialogAddStep onSelectWidget={handleSelectWidget} />
+          <div className="max-h-[50vh] overflow-y-auto">
+            <WidgetConfigDialogAddStep onSelectWidget={handleSelectWidget} />
+          </div>
         )}
 
         {currentStep === DialogStep.EDIT && widgetData && (
@@ -155,7 +157,7 @@ const WidgetConfigDialog: React.FunctionComponent<WidgetConfigDialogProps> = ({
           />
         )}
 
-        <div className="flex justify-between gap-2 pt-4">
+        <div className="flex justify-between gap-2 border-t pt-4">
           <div>
             {currentStep === DialogStep.EDIT && !isEditMode && (
               <Button variant="outline" onClick={handleBack}>

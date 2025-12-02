@@ -12,7 +12,9 @@ type DashboardWidgetEmptyStateProps = {
   actionLabel?: string;
 };
 
-const DashboardWidgetEmptyState: React.FC<DashboardWidgetEmptyStateProps> = ({
+const DashboardWidgetEmptyState: React.FunctionComponent<
+  DashboardWidgetEmptyStateProps
+> = ({
   title = "No data",
   message = "There is no data to display for this widget",
   icon,

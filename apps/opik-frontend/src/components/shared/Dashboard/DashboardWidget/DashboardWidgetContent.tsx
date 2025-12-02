@@ -9,11 +9,9 @@ type DashboardWidgetContentProps = {
   className?: string;
 };
 
-const DashboardWidgetContent: React.FC<DashboardWidgetContentProps> = ({
-  children,
-  showSeparator = true,
-  className,
-}) => {
+const DashboardWidgetContent: React.FunctionComponent<
+  DashboardWidgetContentProps
+> = ({ children, showSeparator = true, className }) => {
   return (
     <>
       {showSeparator && <Separator className="w-full" />}

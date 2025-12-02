@@ -77,11 +77,12 @@ const ProjectWidgetFiltersSection = <T extends FieldValues>({
     () => ({
       rowsMap: {
         [COLUMN_METADATA_ID]: {
-          keyComponent: TracesOrSpansPathsAutocomplete as React.FC<unknown> & {
-            placeholder: string;
-            value: string;
-            onValueChange: (value: string) => void;
-          },
+          keyComponent:
+            TracesOrSpansPathsAutocomplete as React.FunctionComponent<unknown> & {
+              placeholder: string;
+              value: string;
+              onValueChange: (value: string) => void;
+            },
           keyComponentProps: {
             rootKeys: ["metadata"],
             projectId,
@@ -91,11 +92,12 @@ const ProjectWidgetFiltersSection = <T extends FieldValues>({
           },
         },
         [COLUMN_CUSTOM_ID]: {
-          keyComponent: TracesOrSpansPathsAutocomplete as React.FC<unknown> & {
-            placeholder: string;
-            value: string;
-            onValueChange: (value: string) => void;
-          },
+          keyComponent:
+            TracesOrSpansPathsAutocomplete as React.FunctionComponent<unknown> & {
+              placeholder: string;
+              value: string;
+              onValueChange: (value: string) => void;
+            },
           keyComponentProps: {
             rootKeys: ["input", "output"],
             projectId,
@@ -115,7 +117,7 @@ const ProjectWidgetFiltersSection = <T extends FieldValues>({
         },
         [COLUMN_FEEDBACK_SCORES_ID]: {
           keyComponent:
-            TracesOrSpansFeedbackScoresSelect as React.FC<unknown> & {
+            TracesOrSpansFeedbackScoresSelect as React.FunctionComponent<unknown> & {
               placeholder: string;
               value: string;
               onValueChange: (value: string) => void;

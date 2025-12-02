@@ -1,7 +1,7 @@
 import React, { memo, useMemo, useCallback } from "react";
 import { useShallow } from "zustand/react/shallow";
 
-import DashboardWidget from "@/components/shared/Dashboard/DashboardWidget";
+import DashboardWidget from "@/components/shared/Dashboard/DashboardWidget/DashboardWidget";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import { useDashboardStore, selectPreviewWidget } from "@/store/DashboardStore";
 import {

@@ -20,7 +20,7 @@ const WidgetConfigPreview: React.FunctionComponent<
 
   if (!WidgetComponent || !previewWidget) {
     return (
-      <div className="flex h-full items-center justify-center rounded-md border border-border bg-white p-4">
+      <div className="flex h-full min-h-0 items-center justify-center rounded-md border bg-white p-4">
         <p className="text-center text-2xl font-black text-slate-300">
           &lt;preview&gt;
         </p>
@@ -29,7 +29,7 @@ const WidgetConfigPreview: React.FunctionComponent<
   }
 
   return (
-    <div className="h-full overflow-hidden rounded-md bg-white">
+    <div className="h-full min-h-0 overflow-hidden rounded-md bg-white">
       <WidgetComponent preview />
     </div>
   );

@@ -21,7 +21,7 @@ import MetricDateRangeSelect from "@/components/pages-shared/traces/MetricDateRa
 import { DateRangeSerializedValue } from "@/components/shared/DateRangeSelect";
 import DashboardSectionsContainer from "@/components/shared/Dashboard/Dashboard";
 import AddSectionButton from "@/components/shared/Dashboard/DashboardSection/AddSectionButton";
-import { WidgetConfigDialog } from "@/components/shared/Dashboard/WidgetConfigDialog";
+import WidgetConfigDialog from "@/components/shared/Dashboard/WidgetConfigDialog/WidgetConfigDialog";
 import Loader from "@/components/shared/Loader/Loader";
 import useNavigationBlocker from "@/hooks/useNavigationBlocker";
 import { Separator } from "@/components/ui/separator";

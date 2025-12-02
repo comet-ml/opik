@@ -61,7 +61,6 @@ const DashboardWidgetGrid: React.FunctionComponent<
 
   return (
     <ResponsiveGridLayout
-      // eslint-disable-next-line tailwindcss/no-custom-classname
       className="layout"
       layout={layout}
       cols={GRID_COLUMNS}
@@ -69,7 +68,7 @@ const DashboardWidgetGrid: React.FunctionComponent<
       margin={GRID_MARGIN}
       containerPadding={CONTAINER_PADDING}
       onLayoutChange={handleLayoutChange}
-      draggableHandle=".drag-handle"
+      draggableHandle=".comet-drag-handle"
       useCSSTransforms
       preventCollision={false}
       compactType="vertical"

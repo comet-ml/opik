@@ -41,7 +41,9 @@ type DashboardWidgetActionsMenuProps = {
   onOpenChange?: (open: boolean) => void;
 };
 
-const DashboardWidgetActionsMenu: React.FC<DashboardWidgetActionsMenuProps> = ({
+const DashboardWidgetActionsMenu: React.FunctionComponent<
+  DashboardWidgetActionsMenuProps
+> = ({
   sectionId,
   widgetId,
   widgetTitle,

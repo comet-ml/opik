@@ -4,7 +4,7 @@ type DashboardWidgetPreviewContentProps = {
   children: React.ReactNode;
 };
 
-const DashboardWidgetPreviewContent: React.FC<
+const DashboardWidgetPreviewContent: React.FunctionComponent<
   DashboardWidgetPreviewContentProps
 > = ({ children }) => {
   return <div className="h-full">{children}</div>;

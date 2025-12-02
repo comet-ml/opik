@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { FiltersArraySchema } from "../shared/ProjectWidgetFiltersSection/schema";
+import { FiltersArraySchema } from "@/components/shared/Dashboard/widgets/shared/ProjectWidgetFiltersSection/schema";
 import { TRACE_DATA_TYPE } from "@/constants/traces";
 
 export const ProjectStatsCardWidgetSchema = z.object({

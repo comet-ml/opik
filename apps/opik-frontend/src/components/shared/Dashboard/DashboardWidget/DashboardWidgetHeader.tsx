@@ -10,14 +10,9 @@ type DashboardWidgetHeaderProps = {
   preview?: boolean;
 };
 
-const DashboardWidgetHeader: React.FC<DashboardWidgetHeaderProps> = ({
-  title,
-  subtitle,
-  actions,
-  dragHandle,
-  className,
-  preview = false,
-}) => {
+const DashboardWidgetHeader: React.FunctionComponent<
+  DashboardWidgetHeaderProps
+> = ({ title, subtitle, actions, dragHandle, className, preview = false }) => {
   const [menuOpen, setMenuOpen] = useState(false);
 
   const actionsWithHandler =

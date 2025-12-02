@@ -66,10 +66,10 @@ const WidgetConfigDialogAddStep: React.FunctionComponent<
         return (
           <div key={category} className="flex flex-col gap-2">
             <div className="flex flex-col gap-0.5 px-0.5">
-              <h3 className="text-sm font-medium text-[#373D4D]">
+              <h3 className="text-sm font-medium text-foreground">
                 {categoryConfig.label}
               </h3>
-              <p className="text-sm text-slate-400">
+              <p className="text-sm text-muted-foreground">
                 {categoryConfig.description}
               </p>
             </div>
@@ -82,7 +82,7 @@ const WidgetConfigDialogAddStep: React.FunctionComponent<
                     !widget.disabled && onSelectWidget(widget.type)
                   }
                   disabled={widget.disabled}
-                  className={`flex flex-col gap-1 rounded-md border border-slate-200 bg-white p-4 text-left transition-colors hover:bg-slate-50 ${
+                  className={`flex flex-col gap-1 rounded-md border bg-background p-4 text-left transition-colors hover:bg-accent ${
                     widget.disabled ? "cursor-not-allowed opacity-50" : ""
                   }`}
                 >
@@ -92,11 +92,11 @@ const WidgetConfigDialogAddStep: React.FunctionComponent<
                     >
                       {widget.icon}
                     </div>
-                    <h4 className="text-sm font-medium leading-5 text-[#373D4D]">
+                    <h4 className="text-sm font-medium leading-5 text-foreground">
                       {widget.title}
                     </h4>
                   </div>
-                  <p className="text-xs leading-4 text-slate-500">
+                  <p className="text-xs leading-4 text-muted-foreground">
                     {widget.description}
                   </p>
                 </button>

@@ -6,13 +6,7 @@ import React, {
 } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import get from "lodash/get";
 
-import {
-  AddWidgetConfig,
-  ProjectMetricsWidget,
-  WidgetEditorHandle,
-} from "@/types/dashboard";
 import {
   Form,
   FormControl,
@@ -23,13 +17,23 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Description } from "@/components/ui/description";
-import { cn } from "@/lib/utils";
+
 import SelectBox from "@/components/shared/SelectBox/SelectBox";
-import { METRIC_NAME_TYPE } from "@/api/projects/useProjectMetric";
-import { useDashboardStore } from "@/store/DashboardStore";
-import { ProjectDashboardConfig } from "@/types/dashboard";
 import ProjectsSelectBox from "@/components/pages-shared/automations/ProjectsSelectBox";
-import ProjectWidgetFiltersSection from "@/components/shared/Dashboard/widgets/shared/ProjectWidgetFiltersSection";
+import ProjectWidgetFiltersSection from "@/components/shared/Dashboard/widgets/shared/ProjectWidgetFiltersSection/ProjectWidgetFiltersSection";
+
+import { cn } from "@/lib/utils";
+import { useDashboardStore } from "@/store/DashboardStore";
+
+import get from "lodash/get";
+
+import { METRIC_NAME_TYPE } from "@/api/projects/useProjectMetric";
+import {
+  AddWidgetConfig,
+  ProjectMetricsWidget,
+  WidgetEditorHandle,
+  ProjectDashboardConfig,
+} from "@/types/dashboard";
 import {
   ProjectMetricsWidgetSchema,
   ProjectMetricsWidgetFormData,

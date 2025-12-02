@@ -6,10 +6,9 @@ type DashboardWidgetActionsProps = {
   className?: string;
 };
 
-const DashboardWidgetActions: React.FC<DashboardWidgetActionsProps> = ({
-  children,
-  className,
-}) => {
+const DashboardWidgetActions: React.FunctionComponent<
+  DashboardWidgetActionsProps
+> = ({ children, className }) => {
   return (
     <div
       className={cn(

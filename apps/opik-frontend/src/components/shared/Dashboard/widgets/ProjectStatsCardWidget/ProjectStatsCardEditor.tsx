@@ -28,7 +28,7 @@ import SelectBox from "@/components/shared/SelectBox/SelectBox";
 import { useDashboardStore } from "@/store/DashboardStore";
 import { ProjectDashboardConfig } from "@/types/dashboard";
 import ProjectsSelectBox from "@/components/pages-shared/automations/ProjectsSelectBox";
-import ProjectWidgetFiltersSection from "@/components/shared/Dashboard/widgets/shared/ProjectWidgetFiltersSection";
+import ProjectWidgetFiltersSection from "@/components/shared/Dashboard/widgets/shared/ProjectWidgetFiltersSection/ProjectWidgetFiltersSection";
 import {
   ProjectStatsCardWidgetSchema,
   ProjectStatsCardWidgetFormData,

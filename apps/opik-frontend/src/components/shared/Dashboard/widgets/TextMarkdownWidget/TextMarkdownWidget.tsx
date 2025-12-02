@@ -1,6 +1,6 @@
 import React, { memo } from "react";
 
-import DashboardWidget from "@/components/shared/Dashboard/DashboardWidget";
+import DashboardWidget from "@/components/shared/Dashboard/DashboardWidget/DashboardWidget";
 import { useDashboardStore, selectPreviewWidget } from "@/store/DashboardStore";
 import MarkdownPreview from "@/components/shared/MarkdownPreview/MarkdownPreview";
 import { DashboardWidgetComponentProps } from "@/types/dashboard";

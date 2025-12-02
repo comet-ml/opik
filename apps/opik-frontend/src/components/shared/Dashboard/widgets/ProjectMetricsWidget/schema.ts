@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { FiltersArraySchema } from "@/components/shared/Dashboard/widgets/shared/ProjectWidgetFiltersSection";
+import { FiltersArraySchema } from "@/components/shared/Dashboard/widgets/shared/ProjectWidgetFiltersSection/schema";
 
 export const ProjectMetricsWidgetSchema = z.object({
   title: z

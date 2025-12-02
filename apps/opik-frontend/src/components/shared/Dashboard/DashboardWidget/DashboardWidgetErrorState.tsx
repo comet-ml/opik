@@ -11,7 +11,9 @@ type DashboardWidgetErrorStateProps = {
   className?: string;
 };
 
-const DashboardWidgetErrorState: React.FC<DashboardWidgetErrorStateProps> = ({
+const DashboardWidgetErrorState: React.FunctionComponent<
+  DashboardWidgetErrorStateProps
+> = ({
   title = "Failed to load data",
   message = "An error occurred while loading the widget data",
   error,

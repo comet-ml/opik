@@ -18,8 +18,8 @@ const WidgetConfigDialogEditStep: React.FunctionComponent<
   WidgetConfigDialogEditStepProps
 > = ({ widgetData, onChange, editorComponent, editorRef }) => {
   return (
-    <div className="grid h-[600px] grid-cols-[3fr_2fr] gap-4">
-      <div className="overflow-hidden">
+    <div className="grid h-[50vh] max-h-[600px] min-h-[300px] grid-cols-[3fr_2fr] gap-4">
+      <div className="overflow-y-auto">
         <WidgetConfigForm
           widgetData={widgetData}
           onChange={onChange}
@@ -28,7 +28,7 @@ const WidgetConfigDialogEditStep: React.FunctionComponent<
         />
       </div>
 
-      <div className="overflow-hidden">
+      <div className="flex h-full flex-col overflow-hidden">
         <WidgetConfigPreview widgetData={widgetData} />
       </div>
     </div>

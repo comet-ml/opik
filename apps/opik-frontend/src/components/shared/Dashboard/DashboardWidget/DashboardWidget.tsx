@@ -1,4 +1,7 @@
-import DashboardWidgetRoot from "./DashboardWidgetRoot";
+import React from "react";
+import { Card } from "@/components/ui/card";
+import { cn } from "@/lib/utils";
+
 import DashboardWidgetHeader from "./DashboardWidgetHeader";
 import DashboardWidgetActions from "./DashboardWidgetActions";
 import DashboardWidgetActionsMenu from "./DashboardWidgetActionsMenu";
@@ -7,6 +10,28 @@ import DashboardWidgetPreviewContent from "./DashboardWidgetPreviewContent";
 import DashboardWidgetEmptyState from "./DashboardWidgetEmptyState";
 import DashboardWidgetErrorState from "./DashboardWidgetErrorState";
 import DashboardWidgetDragHandle from "./DashboardWidgetDragHandle";
+
+type DashboardWidgetRootProps = {
+  children: React.ReactNode;
+  className?: string;
+};
+
+const DashboardWidgetRoot: React.FunctionComponent<
+  DashboardWidgetRootProps
+> = ({ children, className }) => {
+  return (
+    <div className="group h-full">
+      <Card
+        className={cn(
+          "flex h-full flex-col gap-2 rounded-md px-2 pb-2 pt-1",
+          className,
+        )}
+      >
+        {children}
+      </Card>
+    </div>
+  );
+};
 
 type DashboardWidgetComponents = typeof DashboardWidgetRoot & {
   Header: typeof DashboardWidgetHeader;
