@@ -9,10 +9,12 @@ import * as core from "../../core";
 export const ScoreName: core.serialization.ObjectSchema<serializers.ScoreName.Raw, OpikApi.ScoreName> =
     core.serialization.object({
         name: core.serialization.string().optional(),
+        type: core.serialization.string().optional(),
     });
 
 export declare namespace ScoreName {
     export interface Raw {
         name?: string | null;
+        type?: string | null;
     }
 }

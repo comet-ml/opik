@@ -8,6 +8,9 @@ import {
   AggregatedFeedbackScore,
   COLUMN_TYPE,
   ColumnData,
+  SCORE_TYPE_EXPERIMENT,
+  SCORE_TYPE_FEEDBACK,
+  ScoreType,
 } from "@/types/shared";
 import DataTable from "@/components/shared/DataTable/DataTable";
 import DataTableNoData from "@/components/shared/DataTableNoData/DataTableNoData";
@@ -25,6 +28,7 @@ interface GetFeedbackScoreMapArguments {
   experiments: {
     id: string;
     feedback_scores?: AggregatedFeedbackScore[];
+    experiment_scores?: AggregatedFeedbackScore[];
   }[];
 }
 
@@ -35,18 +39,45 @@ export type FeedbackScoreData = {
 type FiledValue = string | number | undefined | null;
 
 type FeedbackScoreMap = Record<string, Record<string, number>>;
+type ScoreTypeMap = Record<string, ScoreType>;
+
+export const buildScoreTypeMap = (
+  experiments: {
+    feedback_scores?: AggregatedFeedbackScore[];
+    experiment_scores?: AggregatedFeedbackScore[];
+  }[],
+): ScoreTypeMap => {
+  const scoreTypeMap: ScoreTypeMap = {};
+
+  experiments.forEach((experiment) => {
+    (experiment.feedback_scores ?? []).forEach((score) => {
+      if (!scoreTypeMap[score.name]) {
+        scoreTypeMap[score.name] = SCORE_TYPE_FEEDBACK;
+      }
+    });
+    (experiment.experiment_scores ?? []).forEach((score) => {
+      if (!scoreTypeMap[score.name]) {
+        scoreTypeMap[score.name] = SCORE_TYPE_EXPERIMENT;
+      }
+    });
+  });
+
+  return scoreTypeMap;
+};
 
 export const getFeedbackScoreMap = ({
   experiments,
 }: GetFeedbackScoreMapArguments): FeedbackScoreMap => {
   return experiments.reduce<FeedbackScoreMap>((acc, e) => {
-    acc[e.id] = (e.feedback_scores || [])?.reduce<Record<string, number>>(
-      (a, f) => {
-        a[f.name] = f.value;
-        return a;
-      },
-      {},
-    );
+    const scores = [
+      ...(e.experiment_scores ?? []),
+      ...(e.feedback_scores ?? []),
+    ];
+
+    acc[e.id] = scores.reduce<Record<string, number>>((a, f) => {
+      a[f.name] = f.value;
+      return a;
+    }, {});
 
     return acc;
   }, {});
@@ -55,11 +86,13 @@ export const getFeedbackScoreMap = ({
 interface GetFeedbackScoresForExperimentsAsRowsArguments {
   feedbackScoresMap: FeedbackScoreMap;
   experimentsIds: string[];
+  scoreTypeMap: ScoreTypeMap;
 }
 
 export const getFeedbackScoresForExperimentsAsRows = ({
   feedbackScoresMap,
   experimentsIds,
+  scoreTypeMap,
 }: GetFeedbackScoresForExperimentsAsRowsArguments) => {
   const keys = uniq(
     Object.values(feedbackScoresMap).reduce<string[]>(
@@ -77,8 +110,11 @@ export const getFeedbackScoresForExperimentsAsRows = ({
       {},
     );
 
+    const isFeedbackScore = scoreTypeMap[key] === SCORE_TYPE_FEEDBACK;
+    const name = isFeedbackScore ? `${key} (avg)` : key;
+
     return {
-      name: key,
+      name,
       ...data,
     } as FeedbackScoreData;
   });
@@ -142,6 +178,10 @@ const ExperimentFeedbackScoresTab: React.FunctionComponent<
     return retVal;
   }, [experimentsIds, experiments]);
 
+  const scoreTypeMap = useMemo(() => {
+    return buildScoreTypeMap(experiments);
+  }, [experiments]);
+
   const feedbackScoresMap = useMemo(() => {
     return getFeedbackScoreMap({
       experiments,
@@ -152,8 +192,9 @@ const ExperimentFeedbackScoresTab: React.FunctionComponent<
     return getFeedbackScoresForExperimentsAsRows({
       feedbackScoresMap,
       experimentsIds,
+      scoreTypeMap,
     });
-  }, [feedbackScoresMap, experimentsIds]);
+  }, [feedbackScoresMap, experimentsIds, scoreTypeMap]);
 
   const noDataText = isCompare
     ? "These experiments have no feedback scores"

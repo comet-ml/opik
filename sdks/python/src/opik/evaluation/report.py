@@ -1,10 +1,11 @@
 from collections import defaultdict
-from typing import Dict, List, Tuple
+from typing import Dict, List, Optional, Tuple
 
 from rich import align, console, panel, table, text
 
 
 from . import test_result, evaluation_result
+from .metrics import score_result
 
 
 def _format_time(seconds: float) -> str:
@@ -41,7 +42,10 @@ def _compute_average_scores(
 
 
 def display_experiment_results(
-    dataset_name: str, total_time: float, test_results: List[test_result.TestResult]
+    dataset_name: str,
+    total_time: float,
+    test_results: List[test_result.TestResult],
+    experiment_scores: Optional[List[score_result.ScoreResult]] = None,
 ) -> None:
     average_scores, failed_scores = _compute_average_scores(test_results)
     nb_items = len(test_results)
@@ -61,6 +65,14 @@ def display_experiment_results(
         if failed_scores[name] > 0:
             score_strings += text.Text(f" - {failed_scores[name]} failed", style="red")
         score_strings += text.Text("\n")
+
+    # Add experiment scores if available
+    if experiment_scores:
+        for score in experiment_scores:
+            score_strings += text.Text(
+                f"{score.name}: {score.value:.4f}", style="green bold"
+            )
+            score_strings += text.Text("\n")
 
     aligned_test_results = align.Align.left(score_strings)
 

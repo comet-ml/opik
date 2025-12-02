@@ -94,6 +94,7 @@ public class ExperimentResponseBuilder {
                                         .totalEstimatedCostAvg(BigDecimal.ZERO)
                                         .duration(null)
                                         .feedbackScores(List.of())
+                                        .experimentScores(List.of())
                                         .build())
                                 .groups(new HashMap<>())
                                 .build();
@@ -140,6 +141,10 @@ public class ExperimentResponseBuilder {
         Map<String, BigDecimal> feedbackScoreSums = new HashMap<>();
         Map<String, Long> feedbackScoreCounts = new HashMap<>();
 
+        // For experiment scores - group by name and calculate weighted averages
+        Map<String, BigDecimal> experimentScoreSums = new HashMap<>();
+        Map<String, Long> experimentScoreCounts = new HashMap<>();
+
         for (GroupContentWithAggregations child : childGroups.values()) {
             AggregationData childAgg = child.aggregations();
             long expCount = childAgg.experimentCount();
@@ -169,18 +174,11 @@ public class ExperimentResponseBuilder {
                 }
             }
 
-            // For feedback scores (weighted average per name)
-            if (childAgg.feedbackScores() != null) {
-                for (FeedbackScoreAverage score : childAgg.feedbackScores()) {
-                    String name = score.name();
-                    BigDecimal value = score.value();
+            // Accumulate feedback scores
+            accumulateScores(childAgg.feedbackScores(), expCount, feedbackScoreSums, feedbackScoreCounts);
 
-                    if (value != null && name != null) {
-                        feedbackScoreSums.merge(name, value.multiply(BigDecimal.valueOf(expCount)), BigDecimal::add);
-                        feedbackScoreCounts.merge(name, expCount, Long::sum);
-                    }
-                }
-            }
+            // Accumulate experiment scores
+            accumulateScores(childAgg.experimentScores(), expCount, experimentScoreSums, experimentScoreCounts);
         }
 
         // Calculate averages
@@ -196,6 +194,8 @@ public class ExperimentResponseBuilder {
                 : null;
 
         List<FeedbackScoreAverage> avgFeedbackScores = buildAvgFeedbackScores(feedbackScoreSums, feedbackScoreCounts);
+        List<FeedbackScoreAverage> avgExperimentScores = buildAvgFeedbackScores(experimentScoreSums,
+                experimentScoreCounts);
 
         // Build updated aggregation data
         return AggregationData.builder()
@@ -205,7 +205,37 @@ public class ExperimentResponseBuilder {
                 .totalEstimatedCostAvg(avgCost)
                 .duration(avgDuration)
                 .feedbackScores(avgFeedbackScores)
+                .experimentScores(avgExperimentScores)
                 .build();
+    }
+
+    /**
+     * Accumulate scores for weighted average calculation.
+     *
+     * @param scores List of scores to accumulate
+     * @param experimentCount Number of experiments contributing to these scores
+     * @param scoreSums Map to accumulate weighted sums
+     * @param scoreCounts Map to track total experiment counts per score name
+     */
+    private void accumulateScores(
+            List<FeedbackScoreAverage> scores,
+            long experimentCount,
+            Map<String, BigDecimal> scoreSums,
+            Map<String, Long> scoreCounts) {
+
+        if (scores == null) {
+            return;
+        }
+
+        for (FeedbackScoreAverage score : scores) {
+            String name = score.name();
+            BigDecimal value = score.value();
+
+            if (value != null && name != null) {
+                scoreSums.merge(name, value.multiply(BigDecimal.valueOf(experimentCount)), BigDecimal::add);
+                scoreCounts.merge(name, experimentCount, Long::sum);
+            }
+        }
     }
 
     private List<FeedbackScoreAverage> buildAvgFeedbackScores(Map<String, BigDecimal> feedbackScoreSums,
@@ -231,6 +261,7 @@ public class ExperimentResponseBuilder {
                 .totalEstimatedCostAvg(item.totalEstimatedCostAvg())
                 .duration(item.duration())
                 .feedbackScores(item.feedbackScores())
+                .experimentScores(item.experimentScores())
                 .build();
     }
 

@@ -139,7 +139,7 @@ const DEFAULT_COLUMNS: ColumnData<AnnotationQueue>[] = [
     cell: FeedbackScoreListCell as never,
     customMeta: {
       getHoverCardName: (row: AnnotationQueue) => row.name,
-      isAverageScores: true,
+      areAggregatedScores: true,
     },
   },
   {

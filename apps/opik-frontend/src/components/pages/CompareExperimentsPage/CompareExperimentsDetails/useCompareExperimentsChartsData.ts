@@ -2,6 +2,7 @@ import { useMemo } from "react";
 import { Experiment } from "@/types/datasets";
 import uniq from "lodash/uniq";
 import { BarDataPoint, RadarDataPoint } from "@/types/chart";
+import { AggregatedFeedbackScore } from "@/types/shared";
 
 export type ExperimentLabelsMap = Record<string, string>;
 type UseCompareExperimentsChartsDataArgs = {
@@ -29,15 +30,22 @@ const useCompareExperimentsChartsData = ({
 
   const scoreMap = useMemo(() => {
     if (!isCompare) return {};
+
+    const createScoresMap = (
+      scores: AggregatedFeedbackScore[] | undefined,
+      addAvgSuffix: boolean,
+    ): Record<string, number> =>
+      (scores || []).reduce<Record<string, number>>((acc, score) => {
+        const key = addAvgSuffix ? `${score.name} (avg)` : score.name;
+        acc[key] = score.value;
+        return acc;
+      }, {});
+
     return experimentsList.reduce<Record<string, Record<string, number>>>(
       (acc, e) => {
-        acc[e.id] = (e.feedback_scores || [])?.reduce<Record<string, number>>(
-          (a, f) => {
-            a[f.name] = f.value;
-            return a;
-          },
-          {},
-        );
+        const feedbackScoresMap = createScoresMap(e.feedback_scores, true);
+        const experimentScoresMap = createScoresMap(e.experiment_scores, false);
+        acc[e.id] = { ...feedbackScoresMap, ...experimentScoresMap };
         return acc;
       },
       {},

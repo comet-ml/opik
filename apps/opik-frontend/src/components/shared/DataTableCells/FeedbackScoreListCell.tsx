@@ -12,13 +12,27 @@ import FeedbackScoreHoverCard from "../FeedbackScoreTag/FeedbackScoreHoverCard";
 import { useObserveResizeNode } from "@/hooks/useObserveResizeNode";
 import ChildrenWidthMeasurer from "../ChildrenWidthMeasurer/ChildrenWidthMeasurer";
 import CellTooltipWrapper from "@/components/shared/DataTableCells/CellTooltipWrapper";
+import {
+  ScoreType,
+  SCORE_TYPE_EXPERIMENT,
+  SCORE_TYPE_FEEDBACK,
+} from "@/types/shared";
 
 const TAG_GAP = 6;
 const COUNTER_WIDTH = 30;
 
 type CustomMeta<TData> = {
   getHoverCardName: (row: TData) => string;
-  isAverageScores?: boolean;
+  areAggregatedScores?: boolean;
+};
+
+type RowWithScores = {
+  feedback_scores?: TraceFeedbackScore[];
+  experiment_scores?: TraceFeedbackScore[];
+};
+
+type ScoreWithType = TraceFeedbackScore & {
+  scoreType: ScoreType;
 };
 
 const calculateVisibleCount = (
@@ -67,15 +81,28 @@ const calculateVisibleCount = (
 const FeedbackScoreListCell = <TData,>(
   context: CellContext<TData, unknown>,
 ) => {
-  const feedbackScoreList = context.getValue() as TraceFeedbackScore[];
-  const { getHoverCardName, isAverageScores } = (context.column.columnDef.meta
-    ?.custom ?? {}) as CustomMeta<TData>;
+  // Combine all scores together, marking each with its type and adding (avg) suffix
+  const rowData = context.row.original as RowWithScores;
+  const scoreList: ScoreWithType[] = [
+    ...(rowData.feedback_scores ?? []).map((score) => ({
+      ...score,
+      name: `${score.name} (avg)`,
+      scoreType: SCORE_TYPE_FEEDBACK,
+    })),
+    ...(rowData.experiment_scores ?? []).map((score) => ({
+      ...score,
+      scoreType: SCORE_TYPE_EXPERIMENT,
+    })),
+  ];
+
+  const { getHoverCardName, areAggregatedScores } = (context.column.columnDef
+    .meta?.custom ?? {}) as CustomMeta<TData>;
 
   const hoverCardName = getHoverCardName(context.row.original);
-  const isEmpty = !feedbackScoreList?.length;
+  const isEmpty = !scoreList.length;
   const [visibleCount, setVisibleCount] = useState(0);
   const widthList = useRef<number[]>([]);
-  const remainingCount = feedbackScoreList.length - visibleCount;
+  const remainingCount = scoreList.length - visibleCount;
 
   const { ref: cellRef } = useObserveResizeNode<HTMLDivElement>((node) => {
     const visibleCount = calculateVisibleCount(
@@ -86,9 +113,7 @@ const FeedbackScoreListCell = <TData,>(
     setVisibleCount(visibleCount);
   });
 
-  const sortedList = feedbackScoreList.sort((c1, c2) =>
-    c1.name.localeCompare(c2.name),
-  );
+  const sortedList = scoreList.sort((c1, c2) => c1.name.localeCompare(c2.name));
 
   const onMeasure = useCallback((measureList: number[]) => {
     widthList.current = measureList;
@@ -106,7 +131,7 @@ const FeedbackScoreListCell = <TData,>(
         <div ref={cellRef} className="w-full min-w-0 flex-1 overflow-hidden">
           <FeedbackScoreHoverCard
             title={hoverCardName}
-            isAverageScores={isAverageScores}
+            areAggregatedScores={areAggregatedScores}
             scores={sortedList}
             hidden={!remainingCount}
           >
@@ -163,19 +188,42 @@ const FeedbackScoreListAggregationCell = <TData,>(
   const { aggregationMap } = context.table.options.meta ?? {};
 
   const data = aggregationMap?.[rowId] ?? {};
-  const rawValue = get(data, aggregationKey ?? "", undefined);
-  let value = "";
 
-  if (isArray(rawValue)) {
-    value = (rawValue as TraceFeedbackScore[])
-      .map(
-        (item: TraceFeedbackScore) =>
-          `${item.name}: ${
-            isNumber(item.value) ? dataFormatter(item.value) : "-"
-          }`,
-      )
-      .join(", ");
-  }
+  // Combine all scores together, marking each with its type and adding (avg) suffix
+  const feedbackScores = get(data, aggregationKey ?? "feedback_scores", []);
+  const experimentScores = get(data, "experiment_scores", []);
+
+  const feedbackScoresWithType: ScoreWithType[] = (
+    isArray(feedbackScores) ? feedbackScores : []
+  ).map((score: TraceFeedbackScore) => ({
+    ...score,
+    name: `${score.name} (avg)`,
+    scoreType: SCORE_TYPE_FEEDBACK,
+  }));
+
+  const experimentScoresWithType: ScoreWithType[] = (
+    isArray(experimentScores) ? experimentScores : []
+  ).map((score: TraceFeedbackScore) => ({
+    ...score,
+    scoreType: SCORE_TYPE_EXPERIMENT,
+  }));
+
+  const scoresRaw: ScoreWithType[] = [
+    ...feedbackScoresWithType,
+    ...experimentScoresWithType,
+  ];
+
+  const formatScores = (scores: ScoreWithType[]) => {
+    return scores.map(
+      (item) =>
+        `${item.name}: ${
+          isNumber(item.value) ? dataFormatter(item.value) : "-"
+        }`,
+    );
+  };
+
+  const scoresFormatted = formatScores(scoresRaw);
+  const value = scoresFormatted.join(", ");
 
   return (
     <CellWrapper

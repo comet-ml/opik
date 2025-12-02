@@ -13,7 +13,12 @@ import Loader from "@/components/shared/Loader/Loader";
 import AddEditProjectDialog from "@/components/pages/ProjectsPage/AddEditProjectDialog";
 import { Button } from "@/components/ui/button";
 import useAppStore from "@/store/AppStore";
-import { COLUMN_NAME_ID, COLUMN_SELECT_ID, COLUMN_TYPE } from "@/types/shared";
+import {
+  COLUMN_FEEDBACK_SCORES_ID,
+  COLUMN_NAME_ID,
+  COLUMN_SELECT_ID,
+  COLUMN_TYPE,
+} from "@/types/shared";
 import { RESOURCE_TYPE } from "@/components/shared/ResourceLink/ResourceLink";
 import { ProjectWithStatistic } from "@/types/projects";
 import { formatDate } from "@/lib/date";
@@ -47,7 +52,7 @@ export const SHARED_COLUMNS = [
     sortable: true,
   },
   {
-    id: "feedback_scores",
+    id: COLUMN_FEEDBACK_SCORES_ID,
     label: "Feedback scores",
     type: COLUMN_TYPE.numberDictionary,
     accessorFn: (row: ProjectWithStatistic) =>
@@ -58,7 +63,7 @@ export const SHARED_COLUMNS = [
     cell: FeedbackScoreListCell as never,
     customMeta: {
       getHoverCardName: (row: ProjectWithStatistic) => row.name,
-      isAverageScores: true,
+      areAggregatedScores: true,
     },
   },
   {
