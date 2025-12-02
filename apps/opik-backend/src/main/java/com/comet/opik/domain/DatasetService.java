@@ -117,6 +117,10 @@ class DatasetServiceImpl implements DatasetService {
     private final @NonNull OptimizationDAO optimizationDAO;
     private final @NonNull EventBus eventBus;
 
+    private static String formatDatasetAlreadyExistsMessage(String datasetName) {
+        return "Dataset with name '%s' already exists".formatted(datasetName);
+    }
+
     @Override
     public Dataset save(@NonNull Dataset dataset) {
 
@@ -143,7 +147,7 @@ class DatasetServiceImpl implements DatasetService {
                 return dao.findById(newDataset.id(), workspaceId).orElseThrow();
             } catch (UnableToExecuteStatementException e) {
                 if (e.getCause() instanceof SQLIntegrityConstraintViolationException) {
-                    String message = "Dataset with name '%s' already exists".formatted(dataset.name());
+                    String message = formatDatasetAlreadyExistsMessage(dataset.name());
                     log.info(message);
                     throw new EntityAlreadyExistsException(new ErrorMessage(List.of(message)));
                 } else {
@@ -224,7 +228,7 @@ class DatasetServiceImpl implements DatasetService {
                 }
             } catch (UnableToExecuteStatementException e) {
                 if (e.getCause() instanceof SQLIntegrityConstraintViolationException) {
-                    String message = "Dataset with name '%s' already exists".formatted(dataset.name());
+                    String message = formatDatasetAlreadyExistsMessage(dataset.name());
                     log.info(message);
                     throw new EntityAlreadyExistsException(new ErrorMessage(List.of(message)));
                 } else {
