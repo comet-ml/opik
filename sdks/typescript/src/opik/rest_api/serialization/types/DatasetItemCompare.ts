@@ -14,6 +14,7 @@ export const DatasetItemCompare: core.serialization.ObjectSchema<
     OpikApi.DatasetItemCompare
 > = core.serialization.object({
     id: core.serialization.string().optional(),
+    draftItemId: core.serialization.property("draft_item_id", core.serialization.string().optional()),
     traceId: core.serialization.property("trace_id", core.serialization.string().optional()),
     spanId: core.serialization.property("span_id", core.serialization.string().optional()),
     source: DatasetItemCompareSource,
@@ -33,6 +34,7 @@ export const DatasetItemCompare: core.serialization.ObjectSchema<
 export declare namespace DatasetItemCompare {
     export interface Raw {
         id?: string | null;
+        draft_item_id?: string | null;
         trace_id?: string | null;
         span_id?: string | null;
         source: DatasetItemCompareSource.Raw;
