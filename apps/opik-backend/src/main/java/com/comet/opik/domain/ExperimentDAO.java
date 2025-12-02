@@ -15,6 +15,7 @@ import com.comet.opik.api.ExperimentStreamRequest;
 import com.comet.opik.api.ExperimentType;
 import com.comet.opik.api.ExperimentUpdate;
 import com.comet.opik.api.FeedbackScoreAverage;
+import com.comet.opik.api.FeedbackScoreMetric;
 import com.comet.opik.api.PercentageValues;
 import com.comet.opik.api.sorting.ExperimentSortingFactory;
 import com.comet.opik.domain.filter.FilterQueryBuilder;
@@ -186,6 +187,21 @@ class ExperimentDAO {
                           quantiles(0.5, 0.9, 0.99)(duration)
                         )
                     ) AS duration_values,
+                    <if(aggregate_metrics)>
+                    mapFromArrays(
+                        ['p50', 'p90', 'p99'],
+                        arrayMap(
+                          v -> toDecimal64(
+                                 greatest(
+                                   least(if(isFinite(v), v, 0),  999999999.999999999),
+                                   -999999999.999999999
+                                 ),
+                                 9
+                               ),
+                          quantiles(0.5, 0.9, 0.99)(toFloat64(total_estimated_cost))
+                        )
+                    ) AS total_estimated_cost_metrics,
+                    <endif>
                     count(DISTINCT trace_id) as trace_count,
                     avgMap(usage) as usage,
                     sum(total_estimated_cost) as total_estimated_cost_sum,
@@ -287,57 +303,112 @@ class ExperimentDAO {
                     IF(length(values) = 1, arrayElement(values, 1), toDecimal64(arrayAvg(values), 9)) AS value
                 FROM feedback_scores_combined_grouped
             ),
-            feedback_scores_agg AS (
+        feedback_scores_agg AS (
+            SELECT
+                experiment_id,
+                mapFromArrays(
+                    groupArray(fs_avg.name),
+                    groupArray(fs_avg.avg_value)
+                ) AS feedback_scores
+            FROM (
                 SELECT
-                    experiment_id,
-                    mapFromArrays(
-                        groupArray(fs_avg.name),
-                        groupArray(fs_avg.avg_value)
-                    ) AS feedback_scores
+                    et.experiment_id,
+                    fs.name,
+                    avg(fs.value) AS avg_value
                 FROM (
                     SELECT
-                        et.experiment_id,
-                        fs.name,
-                        avg(fs.value) AS avg_value
-                    FROM (
-                        SELECT
-                            DISTINCT
-                                experiment_id,
-                                trace_id
-                        FROM experiment_items_final
-                    ) as et
-                    LEFT JOIN (
-                        SELECT
-                            name,
-                            entity_id AS trace_id,
-                            value
-                        FROM feedback_scores_final
-                    ) fs ON fs.trace_id = et.trace_id
-                    GROUP BY et.experiment_id, fs.name
-                    HAVING length(fs.name) > 0
-                ) as fs_avg
-                GROUP BY experiment_id
-            ),
-            experiment_scores_agg AS (
+                        DISTINCT
+                            experiment_id,
+                            trace_id
+                    FROM experiment_items_final
+                ) as et
+                LEFT JOIN (
+                    SELECT
+                        name,
+                        entity_id AS trace_id,
+                        value
+                    FROM feedback_scores_final
+                ) fs ON fs.trace_id = et.trace_id
+                GROUP BY et.experiment_id, fs.name
+                HAVING length(fs.name) > 0
+            ) as fs_avg
+            GROUP BY experiment_id
+        ),
+        experiment_scores_agg AS (
+            SELECT
+                experiment_id,
+                mapFromArrays(
+                    groupArray(name),
+                    groupArray(value)
+                ) AS experiment_scores
+            FROM (
                 SELECT
-                    experiment_id,
-                    mapFromArrays(
-                        groupArray(name),
-                        groupArray(value)
-                    ) AS experiment_scores
+                    e.id AS experiment_id,
+                    JSON_VALUE(score, '$.name') AS name,
+                    CAST(JSON_VALUE(score, '$.value') AS Float64) AS value
+                FROM experiments_final AS e
+                ARRAY JOIN JSONExtractArrayRaw(e.experiment_scores) AS score
+                WHERE length(e.experiment_scores) > 2
+                  AND length(JSON_VALUE(score, '$.name')) > 0
+            ) AS es
+            GROUP BY experiment_id
+        ),
+        <if(aggregate_metrics)>
+        feedback_scores_metrics_agg AS (
+            SELECT
+                experiment_id,
+                groupArray(tuple(
+                    fs_metrics.name,
+                    fs_metrics.p50,
+                    fs_metrics.p90,
+                    fs_metrics.p99
+                )) AS feedback_score_metrics
+            FROM (
+                SELECT
+                    et.experiment_id,
+                    fs.name,
+                    toDecimal64(
+                        greatest(
+                            least(if(isFinite(quantileExact(0.5)(toFloat64(fs.value))), quantileExact(0.5)(toFloat64(fs.value)), 0), 999999999.999999999),
+                            -999999999.999999999
+                        ),
+                        9
+                    ) AS p50,
+                    toDecimal64(
+                        greatest(
+                            least(if(isFinite(quantileExact(0.9)(toFloat64(fs.value))), quantileExact(0.9)(toFloat64(fs.value)), 0), 999999999.999999999),
+                            -999999999.999999999
+                        ),
+                        9
+                    ) AS p90,
+                    toDecimal64(
+                        greatest(
+                            least(if(isFinite(quantileExact(0.99)(toFloat64(fs.value))), quantileExact(0.99)(toFloat64(fs.value)), 0), 999999999.999999999),
+                            -999999999.999999999
+                        ),
+                        9
+                    ) AS p99
                 FROM (
                     SELECT
-                        e.id AS experiment_id,
-                        JSON_VALUE(score, '$.name') AS name,
-                        CAST(JSON_VALUE(score, '$.value') AS Float64) AS value
-                    FROM experiments_final AS e
-                    ARRAY JOIN JSONExtractArrayRaw(e.experiment_scores) AS score
-                    WHERE length(e.experiment_scores) > 2
-                      AND length(JSON_VALUE(score, '$.name')) > 0
-                ) AS es
-                GROUP BY experiment_id
-            ),
-            comments_agg AS (
+                        DISTINCT
+                            experiment_id,
+                            trace_id
+                    FROM experiment_items_final
+                ) as et
+                LEFT JOIN (
+                    SELECT
+                        name,
+                        entity_id AS trace_id,
+                        value
+                    FROM feedback_scores_final
+                ) fs ON fs.trace_id = et.trace_id
+                GROUP BY et.experiment_id, fs.name
+                HAVING length(fs.name) > 0
+            ) as fs_metrics
+            GROUP BY experiment_id
+        ),
+        <endif>
+        comments_agg AS (
                 SELECT
                     ei.experiment_id,
                     groupUniqArrayArray(tc.comments_array) as comments_array_agg
@@ -390,11 +461,21 @@ class ExperimentDAO {
                 ed.usage as usage,
                 ed.total_estimated_cost_sum as total_estimated_cost,
                 ed.total_estimated_cost_avg as total_estimated_cost_avg,
+                <if(aggregate_metrics)>
+                ed.total_estimated_cost_metrics as total_estimated_cost_metrics,
+                fsm.feedback_score_metrics as feedback_score_metrics,
+                <else>
+                null as total_estimated_cost_metrics,
+                null as feedback_score_metrics,
+                <endif>
                 ca.comments_array_agg as comments_array_agg
             FROM experiments_final AS e
             LEFT JOIN experiment_durations AS ed ON e.id = ed.experiment_id
             LEFT JOIN feedback_scores_agg AS fs ON e.id = fs.experiment_id
             LEFT JOIN experiment_scores_agg AS es ON e.id = es.experiment_id
+            <if(aggregate_metrics)>
+            LEFT JOIN feedback_scores_metrics_agg AS fsm ON e.id = fsm.experiment_id
+            <endif>
             LEFT JOIN comments_agg AS ca ON e.id = ca.experiment_id
             ORDER BY <if(sort_fields)><sort_fields>,<endif> e.id DESC
             <if(limit)> LIMIT :limit <endif> <if(offset)> OFFSET :offset <endif>
@@ -649,6 +730,8 @@ class ExperimentDAO {
                 null AS duration,
                 null AS total_estimated_cost,
                 null AS total_estimated_cost_avg,
+                null AS total_estimated_cost_metrics,
+                null AS feedback_score_metrics,
                 null AS usage,
                 null AS comments_array_agg
             FROM experiments
@@ -900,6 +983,8 @@ class ExperimentDAO {
                     .duration(getDuration(row))
                     .totalEstimatedCost(getCostValue(row, "total_estimated_cost"))
                     .totalEstimatedCostAvg(getCostValue(row, "total_estimated_cost_avg"))
+                    .totalEstimatedCostMetrics(getTotalEstimatedCostMetrics(row))
+                    .feedbackScoreMetrics(getFeedbackScoreMetrics(row))
                     .usage(row.get("usage", Map.class))
                     .promptVersion(promptVersions.stream().findFirst().orElse(null))
                     .promptVersions(promptVersions.isEmpty() ? null : promptVersions)
@@ -928,6 +1013,37 @@ class ExperimentDAO {
                         convertToBigDecimal(durations.get("p90")),
                         convertToBigDecimal(durations.get("p99"))))
                 .orElse(null);
+    }
+
+    private static PercentageValues getTotalEstimatedCostMetrics(Row row) {
+        return Optional.ofNullable(row.get("total_estimated_cost_metrics", Map.class))
+                .map(map -> (Map<String, ? extends Number>) map)
+                .map(metrics -> new PercentageValues(
+                        convertToBigDecimal(metrics.get("p50")),
+                        convertToBigDecimal(metrics.get("p90")),
+                        convertToBigDecimal(metrics.get("p99"))))
+                .orElse(null);
+    }
+
+    private static List<FeedbackScoreMetric> getFeedbackScoreMetrics(Row row) {
+        List<List<Object>> metrics = row.get("feedback_score_metrics", List.class);
+
+        if (metrics == null || metrics.isEmpty()) {
+            return null;
+        }
+
+        List<FeedbackScoreMetric> feedbackScoreMetrics = metrics.stream()
+                .filter(tuple -> tuple != null && tuple.size() >= 4)
+                .map(tuple -> {
+                    String name = (String) tuple.get(0);
+                    BigDecimal p50 = convertToBigDecimal((Number) tuple.get(1));
+                    BigDecimal p90 = convertToBigDecimal((Number) tuple.get(2));
+                    BigDecimal p99 = convertToBigDecimal((Number) tuple.get(3));
+                    return new FeedbackScoreMetric(name, new PercentageValues(p50, p90, p99));
+                })
+                .toList();
+
+        return feedbackScoreMetrics.isEmpty() ? null : feedbackScoreMetrics;
     }
 
     private static BigDecimal convertToBigDecimal(Number value) {
@@ -1034,6 +1150,7 @@ class ExperimentDAO {
         template.add("sort_fields", sorting);
         template.add("limit", size);
         template.add("offset", offset);
+        template.add("aggregate_metrics", true);
 
         var statement = connection.createStatement(template.render())
                 .bind("limit", size)
