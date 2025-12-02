@@ -12,11 +12,9 @@ import useSpansList from "@/api/traces/useSpansList";
 import { Span, Trace } from "@/types/traces";
 import { Filters } from "@/types/filters";
 import { Sorting } from "@/types/sorting";
+import { TRACE_DATA_TYPE } from "@/constants/traces";
 
-export enum TRACE_DATA_TYPE {
-  traces = "traces",
-  spans = "spans",
-}
+export { TRACE_DATA_TYPE };
 
 type UseTracesOrSpansListParams = {
   projectId: string;

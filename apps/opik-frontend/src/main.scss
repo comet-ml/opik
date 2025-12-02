@@ -757,3 +757,29 @@ div.cm-theme div.cm-search.cm-panel {
     }
   }
 }
+
+/* Dashboard section sorting styles */
+.dashboard-section-sorting {
+  /* Hide accordion content during drag/sort operation */
+  /* This provides better UX by collapsing all sections while dragging */
+  /* The expanded state is preserved and restored after drag ends */
+  [data-state="open"] [data-radix-accordion-content] {
+    display: none;
+  }
+}
+
+/* Dashboard widget grid layout styles */
+.react-grid-item.react-grid-placeholder {
+  background-color: rgb(59, 130, 246) !important;
+  opacity: 0.2;
+}
+
+/* Dashboard widget resize handle styles */
+.react-grid-item > .react-resizable-handle::after {
+  border-color: hsl(var(--light-slate)) !important;
+  transition: border-color 0.2s ease-in-out;
+}
+
+.react-grid-item:hover > .react-resizable-handle::after {
+  border-color: hsl(var(--muted-slate)) !important;
+}
