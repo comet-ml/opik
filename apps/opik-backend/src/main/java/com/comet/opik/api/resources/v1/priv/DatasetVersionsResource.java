@@ -179,10 +179,15 @@ public class DatasetVersionsResource {
 
         checkFeatureEnabled();
         String workspaceId = requestContext.get().getWorkspaceId();
+        String userName = requestContext.get().getUserName();
 
         log.info("Restoring dataset '{}' to version '{}' on workspace '{}'", datasetId, request.versionRef(),
                 workspaceId);
-        DatasetVersion version = versionService.restoreVersion(datasetId, request.versionRef());
+        DatasetVersion version = versionService.restoreVersion(datasetId, request.versionRef())
+                .contextWrite(ctx -> ctx
+                        .put(RequestContext.WORKSPACE_ID, workspaceId)
+                        .put(RequestContext.USER_NAME, userName))
+                .block();
         log.info("Restored dataset '{}' to version '{}' on workspace '{}'", datasetId, request.versionRef(),
                 workspaceId);
 
