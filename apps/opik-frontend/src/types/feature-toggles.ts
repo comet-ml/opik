@@ -10,4 +10,5 @@ export enum FeatureToggleKeys {
   EXPORT_ENABLED = "export_enabled",
   SPAN_LLM_AS_JUDGE_ENABLED = "span_llm_as_judge_enabled",
   SPAN_USER_DEFINED_METRIC_PYTHON_ENABLED = "span_user_defined_metric_python_enabled",
+  DASHBOARDS_ENABLED = "dashboards_enabled",
 }

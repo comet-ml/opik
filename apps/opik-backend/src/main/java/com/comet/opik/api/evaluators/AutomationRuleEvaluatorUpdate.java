@@ -56,18 +56,16 @@ public abstract sealed class AutomationRuleEvaluatorUpdate<T, E extends Filter> 
 
     @JsonIgnore
     @Builder.Default
-    protected final List<E> filters = List.of();
+    private final List<E> filters = List.of();
 
     @JsonIgnore
     @NotNull private final T code;
 
     @NotNull private final UUID projectId;
 
-    public abstract <C extends AutomationRuleEvaluatorUpdate<T, E>, B extends AutomationRuleEvaluatorUpdate.AutomationRuleEvaluatorUpdateBuilder<T, E, C, B>> AutomationRuleEvaluatorUpdate.AutomationRuleEvaluatorUpdateBuilder<T, E, C, B> toBuilder();
-
     public abstract AutomationRuleEvaluatorType getType();
 
-    public abstract List<E> getFilters();
+    public abstract <C extends AutomationRuleEvaluatorUpdate<T, E>, B extends AutomationRuleEvaluatorUpdate.AutomationRuleEvaluatorUpdateBuilder<T, E, C, B>> AutomationRuleEvaluatorUpdate.AutomationRuleEvaluatorUpdateBuilder<T, E, C, B> toBuilder();
 
     @Override
     @NotNull public AutomationRule.AutomationRuleAction getAction() {

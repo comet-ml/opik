@@ -1772,6 +1772,11 @@ paths:
           type: integer
           format: int32
           default: 10
+      - name: version
+        in: query
+        schema:
+          type: string
+          description: Version hash or tag to fetch specific dataset version
       - name: filters
         in: query
         schema:
@@ -1838,6 +1843,33 @@ paths:
                   anyOf:
                   - $ref: "#/components/schemas/DatasetItem"
                   - $ref: "#/components/schemas/ErrorMessage"
+  /v1/private/datasets/{id}/versions/diff:
+    get:
+      tags:
+      - Datasets
+      summary: Compare latest version with draft
+      description: "Compare the latest committed dataset version with the current\
+        \ draft state. This endpoint provides insights into changes made since the\
+        \ last version was committed. The comparison calculates additions, modifications,\
+        \ deletions, and unchanged items between the latest version snapshot and current\
+        \ draft."
+      operationId: compareDatasetVersions
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "200":
+          description: Diff computed successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DatasetVersionDiff"
+        "404":
+          description: Version not found
   /v1/private/datasets/{id}/versions/hash/{versionHash}/tags:
     post:
       tags:
@@ -2791,6 +2823,23 @@ paths:
           description: default response
           content:
             '*/*': {}
+  /v1/private/optimizations/studio/{id}/cancel:
+    get:
+      tags:
+      - Optimizations
+      summary: Cancel Studio optimizations
+      description: Cancel Studio optimizations by id
+      operationId: cancelStudioOptimizations
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "501":
+          description: Not Implemented
   /v1/private/optimizations:
     get:
       tags:
@@ -2827,6 +2876,10 @@ paths:
         in: query
         schema:
           type: boolean
+      - name: filters
+        in: query
+        schema:
+          type: string
       responses:
         "200":
           description: Optimizations resource
@@ -2897,6 +2950,58 @@ paths:
       responses:
         "204":
           description: No content
+  /v1/private/optimizations/studio:
+    get:
+      tags:
+      - Optimizations
+      summary: Find Studio optimizations
+      description: Find Studio optimizations
+      operationId: findStudioOptimizations
+      parameters:
+      - name: page
+        in: query
+        schema:
+          minimum: 1
+          type: integer
+          format: int32
+          default: 1
+      - name: size
+        in: query
+        schema:
+          minimum: 1
+          type: integer
+          format: int32
+          default: 10
+      - name: dataset_id
+        in: query
+        schema:
+          type: string
+          format: uuid
+      - name: name
+        in: query
+        schema:
+          type: string
+      - name: dataset_deleted
+        in: query
+        schema:
+          type: boolean
+      - name: filters
+        in: query
+        schema:
+          type: string
+      responses:
+        "200":
+          description: Studio optimizations resource
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OptimizationPage_Public"
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage_Public"
   /v1/private/optimizations/{id}:
     get:
       tags:
@@ -2945,6 +3050,60 @@ paths:
       responses:
         "204":
           description: No content
+  /v1/private/optimizations/studio/{id}:
+    get:
+      tags:
+      - Optimizations
+      summary: Get Studio optimization by id
+      description: Get Studio optimization with config included
+      operationId: getStudioOptimizationById
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "200":
+          description: Studio optimization resource
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Optimization_Public"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage_Public"
+  /v1/private/optimizations/studio/{id}/logs:
+    get:
+      tags:
+      - Optimizations
+      summary: Get Studio optimization logs
+      description: Get presigned S3 URL for downloading optimization logs
+      operationId: getStudioOptimizationLogs
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "200":
+          description: Logs response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OptimizationStudioLog"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
   /v1/private/projects:
     get:
       tags:
@@ -6342,10 +6501,6 @@ components:
           format: float
         enabled:
           type: boolean
-        filters:
-          type: array
-          items:
-            $ref: "#/components/schemas/TraceFilter"
         created_at:
           type: string
           format: date-time
@@ -6367,6 +6522,7 @@ components:
           - user_defined_metric_python
           - trace_thread_llm_as_judge
           - trace_thread_user_defined_metric_python
+          - span_llm_as_judge
         action:
           type: string
           enum:
@@ -6378,6 +6534,7 @@ components:
           user_defined_metric_python: "#/components/schemas/AutomationRuleEvaluatorUserDefinedMetricPython"
           trace_thread_llm_as_judge: "#/components/schemas/AutomationRuleEvaluatorTraceThreadLlmAsJudge"
           trace_thread_user_defined_metric_python: "#/components/schemas/AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython"
+          span_llm_as_judge: "#/components/schemas/AutomationRuleEvaluatorSpanLlmAsJudge"
     AutomationRuleEvaluatorLlmAsJudge:
       required:
       - action
@@ -6390,8 +6547,30 @@ components:
       - $ref: "#/components/schemas/AutomationRuleEvaluator"
       - type: object
         properties:
+          filters:
+            type: array
+            items:
+              $ref: "#/components/schemas/TraceFilter"
           code:
             $ref: "#/components/schemas/LlmAsJudgeCode"
+    AutomationRuleEvaluatorSpanLlmAsJudge:
+      required:
+      - action
+      - code
+      - name
+      - project_id
+      - type
+      type: object
+      allOf:
+      - $ref: "#/components/schemas/AutomationRuleEvaluator"
+      - type: object
+        properties:
+          filters:
+            type: array
+            items:
+              $ref: "#/components/schemas/SpanFilter"
+          code:
+            $ref: "#/components/schemas/SpanLlmAsJudgeCode"
     AutomationRuleEvaluatorTraceThreadLlmAsJudge:
       required:
       - action
@@ -6404,6 +6583,10 @@ components:
       - $ref: "#/components/schemas/AutomationRuleEvaluator"
       - type: object
         properties:
+          filters:
+            type: array
+            items:
+              $ref: "#/components/schemas/TraceThreadFilter"
           code:
             $ref: "#/components/schemas/TraceThreadLlmAsJudgeCode"
     AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython:
@@ -6418,6 +6601,10 @@ components:
       - $ref: "#/components/schemas/AutomationRuleEvaluator"
       - type: object
         properties:
+          filters:
+            type: array
+            items:
+              $ref: "#/components/schemas/TraceThreadFilter"
           code:
             $ref: "#/components/schemas/TraceThreadUserDefinedMetricPythonCode"
     AutomationRuleEvaluatorUserDefinedMetricPython:
@@ -6432,6 +6619,10 @@ components:
       - $ref: "#/components/schemas/AutomationRuleEvaluator"
       - type: object
         properties:
+          filters:
+            type: array
+            items:
+              $ref: "#/components/schemas/TraceFilter"
           code:
             $ref: "#/components/schemas/UserDefinedMetricPythonCode"
     ImageUrl:
@@ -6536,7 +6727,77 @@ components:
           - DOUBLE
         description:
           type: string
+    SpanFilter:
+      type: object
+      properties:
+        field:
+          type: string
+        operator:
+          type: string
+          enum:
+          - contains
+          - not_contains
+          - starts_with
+          - ends_with
+          - =
+          - '!='
+          - '>'
+          - '>='
+          - <
+          - <=
+          - is_empty
+          - is_not_empty
+        key:
+          type: string
+        value:
+          type: string
+    SpanLlmAsJudgeCode:
+      required:
+      - messages
+      - model
+      - schema
+      - variables
+      type: object
+      properties:
+        model:
+          $ref: "#/components/schemas/LlmAsJudgeModelParameters"
+        messages:
+          type: array
+          items:
+            $ref: "#/components/schemas/LlmAsJudgeMessage"
+        variables:
+          type: object
+          additionalProperties:
+            type: string
+        schema:
+          type: array
+          items:
+            $ref: "#/components/schemas/LlmAsJudgeOutputSchema"
     TraceFilter:
+      type: object
+      properties:
+        field:
+          type: string
+        operator:
+          type: string
+          enum:
+          - contains
+          - not_contains
+          - starts_with
+          - ends_with
+          - =
+          - '!='
+          - '>'
+          - '>='
+          - <
+          - <=
+          - is_empty
+          - is_not_empty
+        key:
+          type: string
+        value:
+          type: string
+    TraceThreadFilter:
       type: object
       properties:
         field:
@@ -6616,8 +6877,30 @@ components:
       - $ref: "#/components/schemas/AutomationRuleEvaluator_Write"
       - type: object
         properties:
+          filters:
+            type: array
+            items:
+              $ref: "#/components/schemas/TraceFilter_Write"
           code:
             $ref: "#/components/schemas/LlmAsJudgeCode_Write"
+    AutomationRuleEvaluatorSpanLlmAsJudge_Write:
+      required:
+      - action
+      - code
+      - name
+      - project_id
+      - type
+      type: object
+      allOf:
+      - $ref: "#/components/schemas/AutomationRuleEvaluator_Write"
+      - type: object
+        properties:
+          filters:
+            type: array
+            items:
+              $ref: "#/components/schemas/SpanFilter_Write"
+          code:
+            $ref: "#/components/schemas/SpanLlmAsJudgeCode_Write"
     AutomationRuleEvaluatorTraceThreadLlmAsJudge_Write:
       required:
       - action
@@ -6630,6 +6913,10 @@ components:
       - $ref: "#/components/schemas/AutomationRuleEvaluator_Write"
       - type: object
         properties:
+          filters:
+            type: array
+            items:
+              $ref: "#/components/schemas/TraceThreadFilter_Write"
           code:
             $ref: "#/components/schemas/TraceThreadLlmAsJudgeCode_Write"
     AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython_Write:
@@ -6644,6 +6931,10 @@ components:
       - $ref: "#/components/schemas/AutomationRuleEvaluator_Write"
       - type: object
         properties:
+          filters:
+            type: array
+            items:
+              $ref: "#/components/schemas/TraceThreadFilter_Write"
           code:
             $ref: "#/components/schemas/TraceThreadUserDefinedMetricPythonCode_Write"
     AutomationRuleEvaluatorUserDefinedMetricPython_Write:
@@ -6658,6 +6949,10 @@ components:
       - $ref: "#/components/schemas/AutomationRuleEvaluator_Write"
       - type: object
         properties:
+          filters:
+            type: array
+            items:
+              $ref: "#/components/schemas/TraceFilter_Write"
           code:
             $ref: "#/components/schemas/UserDefinedMetricPythonCode_Write"
     AutomationRuleEvaluator_Write:
@@ -6679,10 +6974,6 @@ components:
           format: float
         enabled:
           type: boolean
-        filters:
-          type: array
-          items:
-            $ref: "#/components/schemas/TraceFilter_Write"
         type:
           type: string
           enum:
@@ -6690,6 +6981,7 @@ components:
           - user_defined_metric_python
           - trace_thread_llm_as_judge
           - trace_thread_user_defined_metric_python
+          - span_llm_as_judge
         action:
           type: string
           enum:
@@ -6701,6 +6993,7 @@ components:
           user_defined_metric_python: "#/components/schemas/AutomationRuleEvaluatorUserDefinedMetricPython_Write"
           trace_thread_llm_as_judge: "#/components/schemas/AutomationRuleEvaluatorTraceThreadLlmAsJudge_Write"
           trace_thread_user_defined_metric_python: "#/components/schemas/AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython_Write"
+          span_llm_as_judge: "#/components/schemas/AutomationRuleEvaluatorSpanLlmAsJudge_Write"
     ImageUrl_Write:
       required:
       - url
@@ -6803,7 +7096,77 @@ components:
           - DOUBLE
         description:
           type: string
+    SpanFilter_Write:
+      type: object
+      properties:
+        field:
+          type: string
+        operator:
+          type: string
+          enum:
+          - contains
+          - not_contains
+          - starts_with
+          - ends_with
+          - =
+          - '!='
+          - '>'
+          - '>='
+          - <
+          - <=
+          - is_empty
+          - is_not_empty
+        key:
+          type: string
+        value:
+          type: string
+    SpanLlmAsJudgeCode_Write:
+      required:
+      - messages
+      - model
+      - schema
+      - variables
+      type: object
+      properties:
+        model:
+          $ref: "#/components/schemas/LlmAsJudgeModelParameters_Write"
+        messages:
+          type: array
+          items:
+            $ref: "#/components/schemas/LlmAsJudgeMessage_Write"
+        variables:
+          type: object
+          additionalProperties:
+            type: string
+        schema:
+          type: array
+          items:
+            $ref: "#/components/schemas/LlmAsJudgeOutputSchema_Write"
     TraceFilter_Write:
+      type: object
+      properties:
+        field:
+          type: string
+        operator:
+          type: string
+          enum:
+          - contains
+          - not_contains
+          - starts_with
+          - ends_with
+          - =
+          - '!='
+          - '>'
+          - '>='
+          - <
+          - <=
+          - is_empty
+          - is_not_empty
+        key:
+          type: string
+        value:
+          type: string
+    TraceThreadFilter_Write:
       type: object
       properties:
         field:
@@ -6883,9 +7246,13 @@ components:
       - $ref: "#/components/schemas/AutomationRuleEvaluator_Public"
       - type: object
         properties:
+          filters:
+            type: array
+            items:
+              $ref: "#/components/schemas/TraceFilter_Public"
           code:
             $ref: "#/components/schemas/LlmAsJudgeCode_Public"
-    AutomationRuleEvaluatorObject_Public:
+    AutomationRuleEvaluatorObjectObject_Public:
       required:
       - action
       - name
@@ -6911,10 +7278,6 @@ components:
           format: float
         enabled:
           type: boolean
-        filters:
-          type: array
-          items:
-            $ref: "#/components/schemas/TraceFilter_Public"
         created_at:
           type: string
           format: date-time
@@ -6936,6 +7299,7 @@ components:
           - user_defined_metric_python
           - trace_thread_llm_as_judge
           - trace_thread_user_defined_metric_python
+          - span_llm_as_judge
         action:
           type: string
           enum:
@@ -6947,6 +7311,7 @@ components:
           user_defined_metric_python: "#/components/schemas/AutomationRuleEvaluatorUserDefinedMetricPython_Public"
           trace_thread_llm_as_judge: "#/components/schemas/AutomationRuleEvaluatorTraceThreadLlmAsJudge_Public"
           trace_thread_user_defined_metric_python: "#/components/schemas/AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython_Public"
+          span_llm_as_judge: "#/components/schemas/AutomationRuleEvaluatorSpanLlmAsJudge_Public"
     AutomationRuleEvaluatorPage_Public:
       type: object
       properties:
@@ -6962,11 +7327,29 @@ components:
         content:
           type: array
           items:
-            $ref: "#/components/schemas/AutomationRuleEvaluatorObject_Public"
+            $ref: "#/components/schemas/AutomationRuleEvaluatorObjectObject_Public"
         sortable_by:
           type: array
           items:
             type: string
+    AutomationRuleEvaluatorSpanLlmAsJudge_Public:
+      required:
+      - action
+      - code
+      - name
+      - project_id
+      - type
+      type: object
+      allOf:
+      - $ref: "#/components/schemas/AutomationRuleEvaluator_Public"
+      - type: object
+        properties:
+          filters:
+            type: array
+            items:
+              $ref: "#/components/schemas/SpanFilter_Public"
+          code:
+            $ref: "#/components/schemas/SpanLlmAsJudgeCode_Public"
     AutomationRuleEvaluatorTraceThreadLlmAsJudge_Public:
       required:
       - action
@@ -6979,6 +7362,10 @@ components:
       - $ref: "#/components/schemas/AutomationRuleEvaluator_Public"
       - type: object
         properties:
+          filters:
+            type: array
+            items:
+              $ref: "#/components/schemas/TraceThreadFilter_Public"
           code:
             $ref: "#/components/schemas/TraceThreadLlmAsJudgeCode_Public"
     AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython_Public:
@@ -6993,6 +7380,10 @@ components:
       - $ref: "#/components/schemas/AutomationRuleEvaluator_Public"
       - type: object
         properties:
+          filters:
+            type: array
+            items:
+              $ref: "#/components/schemas/TraceThreadFilter_Public"
           code:
             $ref: "#/components/schemas/TraceThreadUserDefinedMetricPythonCode_Public"
     AutomationRuleEvaluatorUserDefinedMetricPython_Public:
@@ -7007,6 +7398,10 @@ components:
       - $ref: "#/components/schemas/AutomationRuleEvaluator_Public"
       - type: object
         properties:
+          filters:
+            type: array
+            items:
+              $ref: "#/components/schemas/TraceFilter_Public"
           code:
             $ref: "#/components/schemas/UserDefinedMetricPythonCode_Public"
     ImageUrl_Public:
@@ -7111,7 +7506,77 @@ components:
           - DOUBLE
         description:
           type: string
+    SpanFilter_Public:
+      type: object
+      properties:
+        field:
+          type: string
+        operator:
+          type: string
+          enum:
+          - contains
+          - not_contains
+          - starts_with
+          - ends_with
+          - =
+          - '!='
+          - '>'
+          - '>='
+          - <
+          - <=
+          - is_empty
+          - is_not_empty
+        key:
+          type: string
+        value:
+          type: string
+    SpanLlmAsJudgeCode_Public:
+      required:
+      - messages
+      - model
+      - schema
+      - variables
+      type: object
+      properties:
+        model:
+          $ref: "#/components/schemas/LlmAsJudgeModelParameters_Public"
+        messages:
+          type: array
+          items:
+            $ref: "#/components/schemas/LlmAsJudgeMessage_Public"
+        variables:
+          type: object
+          additionalProperties:
+            type: string
+        schema:
+          type: array
+          items:
+            $ref: "#/components/schemas/LlmAsJudgeOutputSchema_Public"
     TraceFilter_Public:
+      type: object
+      properties:
+        field:
+          type: string
+        operator:
+          type: string
+          enum:
+          - contains
+          - not_contains
+          - starts_with
+          - ends_with
+          - =
+          - '!='
+          - '>'
+          - '>='
+          - <
+          - <=
+          - is_empty
+          - is_not_empty
+        key:
+          type: string
+        value:
+          type: string
+    TraceThreadFilter_Public:
       type: object
       properties:
         field:
@@ -7205,10 +7670,6 @@ components:
           format: float
         enabled:
           type: boolean
-        filters:
-          type: array
-          items:
-            $ref: "#/components/schemas/TraceFilter_Public"
         created_at:
           type: string
           format: date-time
@@ -7230,6 +7691,7 @@ components:
           - user_defined_metric_python
           - trace_thread_llm_as_judge
           - trace_thread_user_defined_metric_python
+          - span_llm_as_judge
         action:
           type: string
           enum:
@@ -7241,6 +7703,7 @@ components:
           user_defined_metric_python: "#/components/schemas/AutomationRuleEvaluatorUserDefinedMetricPython_Public"
           trace_thread_llm_as_judge: "#/components/schemas/AutomationRuleEvaluatorTraceThreadLlmAsJudge_Public"
           trace_thread_user_defined_metric_python: "#/components/schemas/AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython_Public"
+          span_llm_as_judge: "#/components/schemas/AutomationRuleEvaluatorSpanLlmAsJudge_Public"
     LogItem:
       type: object
       properties:
@@ -7301,10 +7764,6 @@ components:
           format: float
         enabled:
           type: boolean
-        filters:
-          type: array
-          items:
-            $ref: "#/components/schemas/TraceFilter"
         project_id:
           type: string
           format: uuid
@@ -7315,6 +7774,7 @@ components:
           - user_defined_metric_python
           - trace_thread_llm_as_judge
           - trace_thread_user_defined_metric_python
+          - span_llm_as_judge
         action:
           type: string
           enum:
@@ -7326,6 +7786,7 @@ components:
           user_defined_metric_python: "#/components/schemas/AutomationRuleEvaluatorUpdateUserDefinedMetricPython"
           trace_thread_llm_as_judge: "#/components/schemas/AutomationRuleEvaluatorUpdateTraceThreadLlmAsJudge"
           trace_thread_user_defined_metric_python: "#/components/schemas/AutomationRuleEvaluatorUpdateTraceThreadUserDefinedMetricPython"
+          span_llm_as_judge: "#/components/schemas/AutomationRuleEvaluatorUpdateSpanLlmAsJudge"
     AutomationRuleEvaluatorUpdateLlmAsJudge:
       required:
       - action
@@ -7337,8 +7798,29 @@ components:
       - $ref: "#/components/schemas/AutomationRuleEvaluatorUpdate"
       - type: object
         properties:
+          filters:
+            type: array
+            items:
+              $ref: "#/components/schemas/TraceFilter"
           code:
             $ref: "#/components/schemas/LlmAsJudgeCode"
+    AutomationRuleEvaluatorUpdateSpanLlmAsJudge:
+      required:
+      - action
+      - code
+      - name
+      - project_id
+      type: object
+      allOf:
+      - $ref: "#/components/schemas/AutomationRuleEvaluatorUpdate"
+      - type: object
+        properties:
+          filters:
+            type: array
+            items:
+              $ref: "#/components/schemas/SpanFilter"
+          code:
+            $ref: "#/components/schemas/SpanLlmAsJudgeCode"
     AutomationRuleEvaluatorUpdateTraceThreadLlmAsJudge:
       required:
       - action
@@ -7350,6 +7832,10 @@ components:
       - $ref: "#/components/schemas/AutomationRuleEvaluatorUpdate"
       - type: object
         properties:
+          filters:
+            type: array
+            items:
+              $ref: "#/components/schemas/TraceThreadFilter"
           code:
             $ref: "#/components/schemas/TraceThreadLlmAsJudgeCode"
     AutomationRuleEvaluatorUpdateTraceThreadUserDefinedMetricPython:
@@ -7363,6 +7849,10 @@ components:
       - $ref: "#/components/schemas/AutomationRuleEvaluatorUpdate"
       - type: object
         properties:
+          filters:
+            type: array
+            items:
+              $ref: "#/components/schemas/TraceThreadFilter"
           code:
             $ref: "#/components/schemas/TraceThreadUserDefinedMetricPythonCode"
     AutomationRuleEvaluatorUpdateUserDefinedMetricPython:
@@ -7376,6 +7866,10 @@ components:
       - $ref: "#/components/schemas/AutomationRuleEvaluatorUpdate"
       - type: object
         properties:
+          filters:
+            type: array
+            items:
+              $ref: "#/components/schemas/TraceFilter"
           code:
             $ref: "#/components/schemas/UserDefinedMetricPythonCode"
     AssistantMessage:
@@ -7923,6 +8417,10 @@ components:
         id:
           type: string
           format: uuid
+        draft_item_id:
+          type: string
+          format: uuid
+          readOnly: true
         trace_id:
           type: string
           format: uuid
@@ -8436,6 +8934,10 @@ components:
         id:
           type: string
           format: uuid
+        draft_item_id:
+          type: string
+          format: uuid
+          readOnly: true
         trace_id:
           type: string
           format: uuid
@@ -8797,6 +9299,10 @@ components:
         id:
           type: string
           format: uuid
+        draft_item_id:
+          type: string
+          format: uuid
+          readOnly: true
         trace_id:
           type: string
           format: uuid
@@ -9006,6 +9512,30 @@ components:
           type: array
           items:
             type: string
+    DatasetVersionDiff:
+      type: object
+      properties:
+        from_version:
+          type: string
+        to_version:
+          type: string
+        statistics:
+          $ref: "#/components/schemas/DatasetVersionDiffStats"
+    DatasetVersionDiffStats:
+      type: object
+      properties:
+        itemsAdded:
+          type: integer
+          format: int32
+        itemsModified:
+          type: integer
+          format: int32
+        itemsDeleted:
+          type: integer
+          format: int32
+        itemsUnchanged:
+          type: integer
+          format: int32
     DatasetVersionTag:
       required:
       - tag
@@ -9190,12 +9720,27 @@ components:
           - running
           - completed
           - cancelled
+        experiment_scores:
+          type: array
+          items:
+            $ref: "#/components/schemas/ExperimentScore"
         prompt_version:
           $ref: "#/components/schemas/PromptVersionLink"
         prompt_versions:
           type: array
           items:
             $ref: "#/components/schemas/PromptVersionLink"
+    ExperimentScore:
+      required:
+      - name
+      - value
+      type: object
+      properties:
+        name:
+          minLength: 1
+          type: string
+        value:
+          type: number
     PercentageValues:
       type: object
       properties:
@@ -9223,6 +9768,17 @@ components:
         prompt_name:
           type: string
           readOnly: true
+    ExperimentScore_Write:
+      required:
+      - name
+      - value
+      type: object
+      properties:
+        name:
+          minLength: 1
+          type: string
+        value:
+          type: number
     Experiment_Write:
       required:
       - dataset_name
@@ -9253,6 +9809,10 @@ components:
           - running
           - completed
           - cancelled
+        experiment_scores:
+          type: array
+          items:
+            $ref: "#/components/schemas/ExperimentScore_Write"
         prompt_version:
           $ref: "#/components/schemas/PromptVersionLink_Write"
         prompt_versions:
@@ -9896,6 +10456,17 @@ components:
           type: array
           items:
             type: string
+    ExperimentScore_Public:
+      required:
+      - name
+      - value
+      type: object
+      properties:
+        name:
+          minLength: 1
+          type: string
+        value:
+          type: number
     Experiment_Public:
       required:
       - dataset_name
@@ -9973,6 +10544,10 @@ components:
           - running
           - completed
           - cancelled
+        experiment_scores:
+          type: array
+          items:
+            $ref: "#/components/schemas/ExperimentScore_Public"
         prompt_version:
           $ref: "#/components/schemas/PromptVersionLink_Public"
         prompt_versions:
@@ -10049,6 +10624,10 @@ components:
         duration:
           $ref: "#/components/schemas/PercentageValues"
         feedback_scores:
+          type: array
+          items:
+            $ref: "#/components/schemas/FeedbackScoreAverage"
+        experiment_scores:
           type: array
           items:
             $ref: "#/components/schemas/FeedbackScoreAverage"
@@ -10144,6 +10723,10 @@ components:
           - running
           - completed
           - cancelled
+        experiment_scores:
+          type: array
+          items:
+            $ref: "#/components/schemas/ExperimentScore"
     BooleanFeedbackDefinition:
       required:
       - details
@@ -11109,8 +11692,12 @@ components:
           - running
           - completed
           - cancelled
+          - initialized
+          - error
         metadata:
           $ref: "#/components/schemas/JsonListString"
+        studio_config:
+          $ref: "#/components/schemas/OptimizationStudioConfig"
         dataset_id:
           type: string
           format: uuid
@@ -11137,6 +11724,108 @@ components:
         last_updated_by:
           type: string
           readOnly: true
+    OptimizationStudioConfig:
+      required:
+      - dataset_name
+      - evaluation
+      - llm_model
+      - optimizer
+      - prompt
+      type: object
+      properties:
+        dataset_name:
+          minLength: 1
+          type: string
+        prompt:
+          $ref: "#/components/schemas/StudioPrompt"
+        llm_model:
+          $ref: "#/components/schemas/StudioLlmModel"
+        evaluation:
+          $ref: "#/components/schemas/StudioEvaluation"
+        optimizer:
+          $ref: "#/components/schemas/StudioOptimizer"
+    StudioEvaluation:
+      required:
+      - metrics
+      type: object
+      properties:
+        metrics:
+          minItems: 1
+          type: array
+          items:
+            $ref: "#/components/schemas/StudioMetric"
+    StudioLlmModel:
+      required:
+      - model
+      type: object
+      properties:
+        model:
+          minLength: 1
+          type: string
+        parameters:
+          $ref: "#/components/schemas/JsonNode"
+    StudioMessage:
+      required:
+      - content
+      - role
+      type: object
+      properties:
+        role:
+          minLength: 1
+          type: string
+        content:
+          minLength: 1
+          type: string
+    StudioMetric:
+      required:
+      - type
+      type: object
+      properties:
+        type:
+          minLength: 1
+          type: string
+        parameters:
+          $ref: "#/components/schemas/JsonNode"
+    StudioOptimizer:
+      required:
+      - type
+      type: object
+      properties:
+        type:
+          minLength: 1
+          type: string
+        parameters:
+          $ref: "#/components/schemas/JsonNode"
+    StudioPrompt:
+      required:
+      - messages
+      type: object
+      properties:
+        messages:
+          minItems: 1
+          type: array
+          items:
+            $ref: "#/components/schemas/StudioMessage"
+    OptimizationStudioConfig_Write:
+      required:
+      - dataset_name
+      - evaluation
+      - llm_model
+      - optimizer
+      - prompt
+      type: object
+      properties:
+        dataset_name:
+          minLength: 1
+          type: string
+        prompt:
+          $ref: "#/components/schemas/StudioPrompt_Write"
+        llm_model:
+          $ref: "#/components/schemas/StudioLlmModel_Write"
+        evaluation:
+          $ref: "#/components/schemas/StudioEvaluation_Write"
+        optimizer:
+          $ref: "#/components/schemas/StudioOptimizer_Write"
     Optimization_Write:
       required:
       - dataset_name
@@ -11161,11 +11850,77 @@ components:
           - running
           - completed
           - cancelled
+          - initialized
+          - error
         metadata:
           $ref: "#/components/schemas/JsonListString_Write"
+        studio_config:
+          $ref: "#/components/schemas/OptimizationStudioConfig_Write"
         last_updated_at:
           type: string
           format: date-time
+    StudioEvaluation_Write:
+      required:
+      - metrics
+      type: object
+      properties:
+        metrics:
+          minItems: 1
+          type: array
+          items:
+            $ref: "#/components/schemas/StudioMetric_Write"
+    StudioLlmModel_Write:
+      required:
+      - model
+      type: object
+      properties:
+        model:
+          minLength: 1
+          type: string
+        parameters:
+          $ref: "#/components/schemas/JsonNode_Write"
+    StudioMessage_Write:
+      required:
+      - content
+      - role
+      type: object
+      properties:
+        role:
+          minLength: 1
+          type: string
+        content:
+          minLength: 1
+          type: string
+    StudioMetric_Write:
+      required:
+      - type
+      type: object
+      properties:
+        type:
+          minLength: 1
+          type: string
+        parameters:
+          $ref: "#/components/schemas/JsonNode_Write"
+    StudioOptimizer_Write:
+      required:
+      - type
+      type: object
+      properties:
+        type:
+          minLength: 1
+          type: string
+        parameters:
+          $ref: "#/components/schemas/JsonNode_Write"
+    StudioPrompt_Write:
+      required:
+      - messages
+      type: object
+      properties:
+        messages:
+          minItems: 1
+          type: array
+          items:
+            $ref: "#/components/schemas/StudioMessage_Write"
     OptimizationPage_Public:
       type: object
       properties:
@@ -11186,6 +11941,26 @@ components:
           type: array
           items:
             type: string
+    OptimizationStudioConfig_Public:
+      required:
+      - dataset_name
+      - evaluation
+      - llm_model
+      - optimizer
+      - prompt
+      type: object
+      properties:
+        dataset_name:
+          minLength: 1
+          type: string
+        prompt:
+          $ref: "#/components/schemas/StudioPrompt_Public"
+        llm_model:
+          $ref: "#/components/schemas/StudioLlmModel_Public"
+        evaluation:
+          $ref: "#/components/schemas/StudioEvaluation_Public"
+        optimizer:
+          $ref: "#/components/schemas/StudioOptimizer_Public"
     Optimization_Public:
       required:
       - dataset_name
@@ -11210,8 +11985,12 @@ components:
           - running
           - completed
           - cancelled
+          - initialized
+          - error
         metadata:
           $ref: "#/components/schemas/JsonListString_Public"
+        studio_config:
+          $ref: "#/components/schemas/OptimizationStudioConfig_Public"
         dataset_id:
           type: string
           format: uuid
@@ -11238,6 +12017,79 @@ components:
         last_updated_by:
           type: string
           readOnly: true
+    StudioEvaluation_Public:
+      required:
+      - metrics
+      type: object
+      properties:
+        metrics:
+          minItems: 1
+          type: array
+          items:
+            $ref: "#/components/schemas/StudioMetric_Public"
+    StudioLlmModel_Public:
+      required:
+      - model
+      type: object
+      properties:
+        model:
+          minLength: 1
+          type: string
+        parameters:
+          $ref: "#/components/schemas/JsonNode_Public"
+    StudioMessage_Public:
+      required:
+      - content
+      - role
+      type: object
+      properties:
+        role:
+          minLength: 1
+          type: string
+        content:
+          minLength: 1
+          type: string
+    StudioMetric_Public:
+      required:
+      - type
+      type: object
+      properties:
+        type:
+          minLength: 1
+          type: string
+        parameters:
+          $ref: "#/components/schemas/JsonNode_Public"
+    StudioOptimizer_Public:
+      required:
+      - type
+      type: object
+      properties:
+        type:
+          minLength: 1
+          type: string
+        parameters:
+          $ref: "#/components/schemas/JsonNode_Public"
+    StudioPrompt_Public:
+      required:
+      - messages
+      type: object
+      properties:
+        messages:
+          minItems: 1
+          type: array
+          items:
+            $ref: "#/components/schemas/StudioMessage_Public"
+    OptimizationStudioLog:
+      type: object
+      properties:
+        url:
+          type: string
+        last_modified:
+          type: string
+          format: date-time
+        expires_at:
+          type: string
+          format: date-time
     OptimizationUpdate:
       type: object
       properties:
@@ -11249,6 +12101,8 @@ components:
           - running
           - completed
           - cancelled
+          - initialized
+          - error
     ErrorCountWithDeviation:
       type: object
       properties:
@@ -11420,6 +12274,8 @@ components:
       properties:
         name:
           type: string
+        type:
+          type: string
     DataPointNumber_Public:
       required:
       - time
@@ -11502,30 +12358,6 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/TraceThreadFilter_Public"
-    TraceThreadFilter_Public:
-      type: object
-      properties:
-        field:
-          type: string
-        operator:
-          type: string
-          enum:
-          - contains
-          - not_contains
-          - starts_with
-          - ends_with
-          - =
-          - '!='
-          - '>'
-          - '>='
-          - <
-          - <=
-          - is_empty
-          - is_not_empty
-        key:
-          type: string
-        value:
-          type: string
     ProjectStatsSummary:
       type: object
       properties:
@@ -12083,10 +12915,12 @@ components:
       required:
       - alertsEnabled
       - csvUploadEnabled
+      - dashboardsEnabled
       - exportEnabled
       - guardrailsEnabled
       - opikAIEnabled
       - pythonEvaluatorEnabled
+      - spanLlmAsJudgeEnabled
       - traceThreadPythonEvaluatorEnabled
       - welcomeWizardEnabled
       type: object
@@ -12094,6 +12928,8 @@ components:
         pythonEvaluatorEnabled:
           type: boolean
         traceThreadPythonEvaluatorEnabled:
+          type: boolean
+        spanLlmAsJudgeEnabled:
           type: boolean
         guardrailsEnabled:
           type: boolean
@@ -12106,6 +12942,8 @@ components:
         csvUploadEnabled:
           type: boolean
         exportEnabled:
+          type: boolean
+        dashboardsEnabled:
           type: boolean
     SpanBatchUpdate:
       required:
@@ -12547,30 +13385,6 @@ components:
         id:
           type: string
           format: uuid
-    SpanFilter_Public:
-      type: object
-      properties:
-        field:
-          type: string
-        operator:
-          type: string
-          enum:
-          - contains
-          - not_contains
-          - starts_with
-          - ends_with
-          - =
-          - '!='
-          - '>'
-          - '>='
-          - <
-          - <=
-          - is_empty
-          - is_not_empty
-        key:
-          type: string
-        value:
-          type: string
     SpanSearchStreamRequest_Public:
       type: object
       properties:
@@ -13143,30 +13957,6 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/FeedbackScoreBatchItemThread"
-    TraceThreadFilter:
-      type: object
-      properties:
-        field:
-          type: string
-        operator:
-          type: string
-          enum:
-          - contains
-          - not_contains
-          - starts_with
-          - ends_with
-          - =
-          - '!='
-          - '>'
-          - '>='
-          - <
-          - <=
-          - is_empty
-          - is_not_empty
-        key:
-          type: string
-        value:
-          type: string
     TraceThreadSearchStreamRequest:
       type: object
       properties:
