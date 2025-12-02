@@ -35,6 +35,7 @@ interface BaseLoadableSelectBoxProps {
   buttonClassName?: string;
   actionPanel?: ReactElement;
   minWidth?: number;
+  align?: "start" | "end" | "center";
   emptyState?: ReactElement;
   showTooltip?: boolean;
 }
@@ -73,6 +74,7 @@ export const LoadableSelectBox = ({
   renderTitle: parentRenderTitle,
   actionPanel,
   minWidth = 0,
+  align = "end",
   multiselect = false,
   showTooltip = false,
   emptyState,
@@ -255,11 +257,11 @@ export const LoadableSelectBox = ({
         <PopoverTrigger asChild>{buttonElement}</PopoverTrigger>
       )}
       <PopoverContent
-        align="end"
+        align={align}
         style={
-          width
+          width || minWidth
             ? {
-                width: `${Math.max(width, minWidth)}px`,
+                width: `${Math.max(width || 0, minWidth)}px`,
               }
             : {}
         }

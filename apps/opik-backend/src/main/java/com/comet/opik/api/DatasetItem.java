@@ -24,6 +24,7 @@ import java.util.UUID;
 public record DatasetItem(
         @JsonView( {
                 DatasetItem.View.Public.class, DatasetItem.View.Write.class}) UUID id,
+        @JsonView({DatasetItem.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) UUID draftItemId,
         @JsonView({DatasetItem.View.Public.class, DatasetItem.View.Write.class}) UUID traceId,
         @JsonView({DatasetItem.View.Public.class, DatasetItem.View.Write.class}) UUID spanId,
         @JsonView({DatasetItem.View.Public.class, DatasetItem.View.Write.class}) @NotNull DatasetItemSource source,

@@ -21,6 +21,9 @@ import com.comet.opik.utils.NumberUtils;
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonValue;
 import io.dropwizard.jobs.Job;
+import io.opentelemetry.api.GlobalOpenTelemetry;
+import io.opentelemetry.api.metrics.LongCounter;
+import io.opentelemetry.api.metrics.Meter;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import lombok.Getter;
@@ -69,7 +72,6 @@ import static com.comet.opik.api.AlertTriggerConfig.WINDOW_CONFIG_KEY;
 @Slf4j
 @Singleton
 @DisallowConcurrentExecution
-@RequiredArgsConstructor(onConstructor_ = @Inject)
 public class MetricsAlertJob extends Job implements InterruptableJob {
 
     public static final EnumSet<AlertEventType> SUPPORTED_EVENT_TYPES = EnumSet.of(
@@ -81,13 +83,52 @@ public class MetricsAlertJob extends Job implements InterruptableJob {
     private static final BigDecimal MILLISECONDS_PER_SECOND = BigDecimal.valueOf(1000);
     private volatile boolean interrupted = false;
 
-    private final @NonNull @Config WebhookConfig webhookConfig;
+    private final @NonNull WebhookConfig webhookConfig;
     private final @NonNull LockService lockService;
     private final @NonNull AlertService alertService;
     private final @NonNull ProjectMetricsDAO projectMetricsDAO;
     private final @NonNull ProjectService projectService;
     private final @NonNull IdGenerator idGenerator;
     private final @NonNull AlertWebhookSender alertWebhookSender;
+
+    // OpenTelemetry metrics for monitoring alerts
+    private final LongCounter alertsFired;
+    private final LongCounter alertsSkipped;
+    private final LongCounter alertsErrors;
+
+    @Inject
+    public MetricsAlertJob(@NonNull @Config WebhookConfig webhookConfig,
+            @NonNull LockService lockService,
+            @NonNull AlertService alertService,
+            @NonNull ProjectMetricsDAO projectMetricsDAO,
+            @NonNull ProjectService projectService,
+            @NonNull IdGenerator idGenerator,
+            @NonNull AlertWebhookSender alertWebhookSender) {
+        this.webhookConfig = webhookConfig;
+        this.lockService = lockService;
+        this.alertService = alertService;
+        this.projectMetricsDAO = projectMetricsDAO;
+        this.projectService = projectService;
+        this.idGenerator = idGenerator;
+        this.alertWebhookSender = alertWebhookSender;
+
+        Meter meter = GlobalOpenTelemetry.get().getMeter("opik.alerts");
+
+        this.alertsFired = meter
+                .counterBuilder("opik.alerts.fired")
+                .setDescription("Number of alerts sent to configured webhooks")
+                .build();
+
+        this.alertsSkipped = meter
+                .counterBuilder("opik.alerts.skipped")
+                .setDescription("Number of alerts evaluated but not triggered")
+                .build();
+
+        this.alertsErrors = meter
+                .counterBuilder("opik.alerts.errors")
+                .setDescription("Number of errors during alerts processing")
+                .build();
+    }
 
     @Override
     public void doJob(JobExecutionContext context) {
@@ -157,6 +198,7 @@ public class MetricsAlertJob extends Job implements InterruptableJob {
                             .then();
                 })
                 .onErrorResume(error -> {
+                    alertsErrors.add(1);
                     log.error("Failed to process alert '{}' (id: '{}'): {}",
                             alert.name(), alert.id(), error.getMessage(), error);
                     return Mono.empty();
@@ -240,6 +282,7 @@ public class MetricsAlertJob extends Job implements InterruptableJob {
                         error.getMessage(), alert.workspaceId(), alert.name(), trigger.eventType(), config.name(),
                         error))
                 .switchIfEmpty(Mono.defer(() -> {
+                    alertsSkipped.add(1);
                     log.info("No metric data found for alert '{}' (id: '{}'), trigger: '{}', name: '{}' in time window",
                             alert.name(), alert.id(), trigger.eventType(), config.name());
                     return Mono.empty();
@@ -251,6 +294,7 @@ public class MetricsAlertJob extends Job implements InterruptableJob {
                                 alert.name(), alert.id(), trigger.eventType(), metricValue, thresholdForComparison,
                                 config.name());
 
+                        alertsFired.add(1);
                         var metricValueFinal = trigger.eventType() == AlertEventType.TRACE_LATENCY
                                 ? metricValue.divide(MILLISECONDS_PER_SECOND, 9, RoundingMode.HALF_UP) // Convert back to seconds for payload
                                 : metricValue;
@@ -293,6 +337,7 @@ public class MetricsAlertJob extends Job implements InterruptableJob {
                                         List.of("system"))); // System user for automated alerts
                     }
 
+                    alertsSkipped.add(1);
                     log.debug("Alert '{}' (id: '{}') not triggered: {} = '{}', threshold = '{}', name: '{}'",
                             alert.name(), alert.id(), trigger.eventType(), metricValue, thresholdForComparison,
                             config.name());

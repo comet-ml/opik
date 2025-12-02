@@ -4,10 +4,12 @@ import typing
 
 import pydantic
 from ..core.pydantic_utilities import IS_PYDANTIC_V2, UniversalBaseModel
+from .trace_thread_filter import TraceThreadFilter
 from .trace_thread_llm_as_judge_code import TraceThreadLlmAsJudgeCode
 
 
 class AutomationRuleEvaluatorUpdateTraceThreadLlmAsJudge(UniversalBaseModel):
+    filters: typing.Optional[typing.List[TraceThreadFilter]] = None
     code: typing.Optional[TraceThreadLlmAsJudgeCode] = None
 
     if IS_PYDANTIC_V2:

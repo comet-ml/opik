@@ -873,6 +873,156 @@ class TraceDAOImpl implements TraceDAO {
                     LIMIT 1 BY entity_id, id
                 )
                 GROUP BY workspace_id, project_id, entity_type, entity_id
+            ), span_feedback_scores_combined_raw AS (
+                SELECT workspace_id,
+                       project_id,
+                       entity_id,
+                       name,
+                       category_name,
+                       value,
+                       reason,
+                       source,
+                       created_by,
+                       last_updated_by,
+                       created_at,
+                       last_updated_at,
+                       feedback_scores.last_updated_by AS author
+                FROM feedback_scores FINAL
+                WHERE entity_type = 'span'
+                  AND workspace_id = :workspace_id
+                  AND project_id = :project_id
+                UNION ALL
+                SELECT workspace_id,
+                       project_id,
+                       entity_id,
+                       name,
+                       category_name,
+                       value,
+                       reason,
+                       source,
+                       created_by,
+                       last_updated_by,
+                       created_at,
+                       last_updated_at,
+                       author
+                FROM authored_feedback_scores FINAL
+                WHERE entity_type = 'span'
+                  AND workspace_id = :workspace_id
+                  AND project_id = :project_id
+            ), span_feedback_scores_with_ranking AS (
+                SELECT workspace_id,
+                       project_id,
+                       entity_id,
+                       name,
+                       category_name,
+                       value,
+                       reason,
+                       source,
+                       created_by,
+                       last_updated_by,
+                       created_at,
+                       last_updated_at,
+                       author,
+                       ROW_NUMBER() OVER (
+                           PARTITION BY workspace_id, project_id, entity_id, name, author
+                           ORDER BY last_updated_at DESC
+                       ) as rn
+                FROM span_feedback_scores_combined_raw
+            ), span_feedback_scores_combined AS (
+                SELECT workspace_id,
+                       project_id,
+                       entity_id,
+                       name,
+                       category_name,
+                       value,
+                       reason,
+                       source,
+                       created_by,
+                       last_updated_by,
+                       created_at,
+                       last_updated_at,
+                       author
+                FROM span_feedback_scores_with_ranking
+                WHERE rn = 1
+            ), span_feedback_scores_with_trace_id AS (
+                SELECT workspace_id,
+                       project_id,
+                       s.trace_id,
+                       name,
+                       category_name,
+                       value,
+                       reason,
+                       source,
+                       created_by,
+                       last_updated_by,
+                       created_at,
+                       last_updated_at,
+                       author
+                FROM span_feedback_scores_combined sfs
+                INNER JOIN (
+                    SELECT id, trace_id
+                    FROM spans FINAL
+                    WHERE workspace_id = :workspace_id
+                      AND project_id = :project_id
+                    ORDER BY (workspace_id, project_id, trace_id, parent_span_id, id) DESC, last_updated_at DESC
+                    LIMIT 1 BY id
+                ) AS s ON sfs.entity_id = s.id
+            ), span_feedback_scores_combined_grouped AS (
+                SELECT
+                    workspace_id,
+                    project_id,
+                    trace_id,
+                    name,
+                    groupArray(value) AS values,
+                    groupArray(reason) AS reasons,
+                    groupArray(category_name) AS categories,
+                    groupArray(author) AS authors,
+                    groupArray(source) AS sources,
+                    groupArray(created_by) AS created_bies,
+                    groupArray(last_updated_by) AS updated_bies,
+                    groupArray(created_at) AS created_ats,
+                    groupArray(last_updated_at) AS last_updated_ats
+                FROM span_feedback_scores_with_trace_id
+                GROUP BY workspace_id, project_id, trace_id, name
+            ), span_feedback_scores_final AS (
+                SELECT
+                    workspace_id,
+                    project_id,
+                    trace_id,
+                    name,
+                    arrayStringConcat(categories, ', ') AS category_name,
+                    IF(length(values) = 1, arrayElement(values, 1), toDecimal64(arrayAvg(values), 9)) AS value,
+                    IF(length(reasons) = 1, arrayElement(reasons, 1), arrayStringConcat(arrayMap(x -> if(x = '', '\\<no reason>', x), reasons), ', ')) AS reason,
+                    arrayElement(sources, 1) AS source,
+                    mapFromArrays(
+                            authors,
+                            arrayMap(
+                                    i -> tuple(values[i], reasons[i], categories[i], sources[i], last_updated_ats[i]),
+                                    arrayEnumerate(values)
+                            )
+                    ) AS value_by_author,
+                    arrayStringConcat(created_bies, ', ') AS created_by,
+                    arrayStringConcat(updated_bies, ', ') AS last_updated_by,
+                    arrayMin(created_ats) AS created_at,
+                    arrayMax(last_updated_ats) AS last_updated_at
+                FROM span_feedback_scores_combined_grouped
+            ), span_feedback_scores_agg AS (
+                SELECT
+                    trace_id,
+                    groupArray(tuple(
+                        name,
+                        category_name,
+                        value,
+                        reason,
+                        source,
+                        value_by_author,
+                        created_at,
+                        last_updated_at,
+                        created_by,
+                        last_updated_by
+                    )) AS span_feedback_scores_list
+                FROM span_feedback_scores_final
+                GROUP BY workspace_id, project_id, trace_id
             ), spans_agg AS (
                 SELECT
                     trace_id,
@@ -933,6 +1083,18 @@ class TraceDAOImpl implements TraceDAO {
                  HAVING <feedback_scores_empty_filters>
              )
             <endif>
+            <if(span_feedback_scores_empty_filters)>
+             , sfsc AS (SELECT trace_id, COUNT(trace_id) AS span_feedback_scores_count
+                 FROM (
+                    SELECT *
+                    FROM span_feedback_scores_final
+                    ORDER BY (workspace_id, project_id, trace_id, name) DESC, last_updated_at DESC
+                    LIMIT 1 BY trace_id, name
+                 )
+                 GROUP BY trace_id
+                 HAVING <span_feedback_scores_empty_filters>
+             )
+            <endif>
             , traces_final AS (
                 SELECT
                     t.* <if(exclude_fields)>EXCEPT (<exclude_fields>) <endif>,
@@ -951,6 +1113,12 @@ class TraceDAOImpl implements TraceDAO {
                 <endif>
                 <if(sort_has_span_statistics)>
                 LEFT JOIN spans_agg s ON t.id = s.trace_id
+                <endif>
+                <if(feedback_scores_empty_filters)>
+                LEFT JOIN fsc ON fsc.entity_id = t.id
+                <endif>
+                <if(span_feedback_scores_empty_filters)>
+                LEFT JOIN sfsc ON sfsc.trace_id = t.id
                 <endif>
                 <if(annotation_queue_filters)>
                 LEFT JOIN trace_annotation_queue_ids as taqi ON taqi.trace_id = t.id
@@ -976,6 +1144,15 @@ class TraceDAOImpl implements TraceDAO {
                   HAVING <feedback_scores_filters>
                  )
                  <endif>
+                 <if(span_feedback_scores_filters)>
+                 AND id IN (
+                    SELECT
+                        trace_id
+                    FROM span_feedback_scores_final
+                    GROUP BY trace_id
+                    HAVING <span_feedback_scores_filters>
+                 )
+                 <endif>
                  <if(trace_aggregation_filters)>
                  AND id IN (
                     SELECT
@@ -989,6 +1166,13 @@ class TraceDAOImpl implements TraceDAO {
                     id IN (SELECT entity_id FROM fsc WHERE fsc.feedback_scores_count = 0)
                         OR
                     id NOT IN (SELECT entity_id FROM fsc)
+                 )
+                 <endif>
+                 <if(span_feedback_scores_empty_filters)>
+                 AND (
+                    id IN (SELECT trace_id FROM sfsc WHERE sfsc.span_feedback_scores_count = 0)
+                        OR
+                    id NOT IN (SELECT trace_id FROM sfsc)
                  )
                  <endif>
                  ORDER BY <if(sort_fields)> <sort_fields>, id DESC, last_updated_at DESC <else>(workspace_id, project_id, id) DESC, last_updated_at DESC <endif>
@@ -1005,6 +1189,7 @@ class TraceDAOImpl implements TraceDAO {
                   <if(!exclude_feedback_scores)>
                   , fsagg.feedback_scores_list as feedback_scores_list
                   , fsagg.feedback_scores as feedback_scores
+                  , sfsagg.span_feedback_scores_list as span_feedback_scores_list
                   <endif>
                   <if(!exclude_usage)>, s.usage as usage<endif>
                   <if(!exclude_total_estimated_cost)>, s.total_estimated_cost as total_estimated_cost<endif>
@@ -1016,6 +1201,7 @@ class TraceDAOImpl implements TraceDAO {
                   , s.providers AS providers
              FROM traces_final t
              LEFT JOIN feedback_scores_agg fsagg ON fsagg.entity_id = t.id
+             LEFT JOIN span_feedback_scores_agg sfsagg ON sfsagg.trace_id = t.id
              LEFT JOIN spans_agg s ON t.id = s.trace_id
              LEFT JOIN comments_agg c ON t.id = c.entity_id
              LEFT JOIN guardrails_agg gagg ON gagg.entity_id = t.id
@@ -1135,6 +1321,156 @@ class TraceDAOImpl implements TraceDAO {
                       AND project_id = :project_id
                  ) AS annotation_queue_ids_with_trace_id
                  GROUP BY trace_id
+            ), span_feedback_scores_combined_raw AS (
+                SELECT workspace_id,
+                       project_id,
+                       entity_id,
+                       name,
+                       category_name,
+                       value,
+                       reason,
+                       source,
+                       created_by,
+                       last_updated_by,
+                       created_at,
+                       last_updated_at,
+                       feedback_scores.last_updated_by AS author
+                FROM feedback_scores FINAL
+                WHERE entity_type = 'span'
+                  AND workspace_id = :workspace_id
+                  AND project_id = :project_id
+                UNION ALL
+                SELECT workspace_id,
+                       project_id,
+                       entity_id,
+                       name,
+                       category_name,
+                       value,
+                       reason,
+                       source,
+                       created_by,
+                       last_updated_by,
+                       created_at,
+                       last_updated_at,
+                       author
+                FROM authored_feedback_scores FINAL
+                WHERE entity_type = 'span'
+                  AND workspace_id = :workspace_id
+                  AND project_id = :project_id
+            ), span_feedback_scores_with_ranking AS (
+                SELECT workspace_id,
+                       project_id,
+                       entity_id,
+                       name,
+                       category_name,
+                       value,
+                       reason,
+                       source,
+                       created_by,
+                       last_updated_by,
+                       created_at,
+                       last_updated_at,
+                       author,
+                       ROW_NUMBER() OVER (
+                           PARTITION BY workspace_id, project_id, entity_id, name, author
+                           ORDER BY last_updated_at DESC
+                       ) as rn
+                FROM span_feedback_scores_combined_raw
+            ), span_feedback_scores_combined AS (
+                SELECT workspace_id,
+                       project_id,
+                       entity_id,
+                       name,
+                       category_name,
+                       value,
+                       reason,
+                       source,
+                       created_by,
+                       last_updated_by,
+                       created_at,
+                       last_updated_at,
+                       author
+                FROM span_feedback_scores_with_ranking
+                WHERE rn = 1
+            ), span_feedback_scores_with_trace_id AS (
+                SELECT workspace_id,
+                       project_id,
+                       s.trace_id,
+                       name,
+                       category_name,
+                       value,
+                       reason,
+                       source,
+                       created_by,
+                       last_updated_by,
+                       created_at,
+                       last_updated_at,
+                       author
+                FROM span_feedback_scores_combined sfs
+                INNER JOIN (
+                    SELECT id, trace_id
+                    FROM spans FINAL
+                    WHERE workspace_id = :workspace_id
+                      AND project_id = :project_id
+                    ORDER BY (workspace_id, project_id, trace_id, parent_span_id, id) DESC, last_updated_at DESC
+                    LIMIT 1 BY id
+                ) AS s ON sfs.entity_id = s.id
+            ), span_feedback_scores_combined_grouped AS (
+                SELECT
+                    workspace_id,
+                    project_id,
+                    trace_id,
+                    name,
+                    groupArray(value) AS values,
+                    groupArray(reason) AS reasons,
+                    groupArray(category_name) AS categories,
+                    groupArray(author) AS authors,
+                    groupArray(source) AS sources,
+                    groupArray(created_by) AS created_bies,
+                    groupArray(last_updated_by) AS updated_bies,
+                    groupArray(created_at) AS created_ats,
+                    groupArray(last_updated_at) AS last_updated_ats
+                FROM span_feedback_scores_with_trace_id
+                GROUP BY workspace_id, project_id, trace_id, name
+            ), span_feedback_scores_final AS (
+                SELECT
+                    workspace_id,
+                    project_id,
+                    trace_id,
+                    name,
+                    arrayStringConcat(categories, ', ') AS category_name,
+                    IF(length(values) = 1, arrayElement(values, 1), toDecimal64(arrayAvg(values), 9)) AS value,
+                    IF(length(reasons) = 1, arrayElement(reasons, 1), arrayStringConcat(arrayMap(x -> if(x = '', '\\<no reason>', x), reasons), ', ')) AS reason,
+                    arrayElement(sources, 1) AS source,
+                    mapFromArrays(
+                            authors,
+                            arrayMap(
+                                    i -> tuple(values[i], reasons[i], categories[i], sources[i], last_updated_ats[i]),
+                                    arrayEnumerate(values)
+                            )
+                    ) AS value_by_author,
+                    arrayStringConcat(created_bies, ', ') AS created_by,
+                    arrayStringConcat(updated_bies, ', ') AS last_updated_by,
+                    arrayMin(created_ats) AS created_at,
+                    arrayMax(last_updated_ats) AS last_updated_at
+                FROM span_feedback_scores_combined_grouped
+            ), span_feedback_scores_agg AS (
+                SELECT
+                    trace_id,
+                    groupArray(tuple(
+                        name,
+                        category_name,
+                        value,
+                        reason,
+                        source,
+                        value_by_author,
+                        created_at,
+                        last_updated_at,
+                        created_by,
+                        last_updated_by
+                    )) AS span_feedback_scores_list
+                FROM span_feedback_scores_final
+                GROUP BY workspace_id, project_id, trace_id
             )
             <if(feedback_scores_empty_filters)>
              , fsc AS (SELECT entity_id, COUNT(entity_id) AS feedback_scores_count
@@ -1146,6 +1482,18 @@ class TraceDAOImpl implements TraceDAO {
                  )
                  GROUP BY entity_id
                  HAVING <feedback_scores_empty_filters>
+            )
+            <endif>
+            <if(span_feedback_scores_empty_filters)>
+             , sfsc AS (SELECT trace_id, COUNT(trace_id) AS span_feedback_scores_count
+                 FROM (
+                    SELECT *
+                    FROM span_feedback_scores_final
+                    ORDER BY (workspace_id, project_id, trace_id, name) DESC, last_updated_at DESC
+                    LIMIT 1 BY trace_id, name
+                 )
+                 GROUP BY trace_id
+                 HAVING <span_feedback_scores_empty_filters>
             )
             <endif>
             SELECT
@@ -1170,6 +1518,9 @@ class TraceDAOImpl implements TraceDAO {
                     <if(feedback_scores_empty_filters)>
                     LEFT JOIN fsc ON fsc.entity_id = traces.id
                     <endif>
+                    <if(span_feedback_scores_empty_filters)>
+                    LEFT JOIN sfsc ON sfsc.trace_id = traces.id
+                    <endif>
                     <if(annotation_queue_filters)>
                     LEFT JOIN trace_annotation_queue_ids as taqi ON taqi.trace_id = traces.id
                     <endif>
@@ -1193,8 +1544,24 @@ class TraceDAOImpl implements TraceDAO {
                         HAVING <feedback_scores_filters>
                     )
                     <endif>
+                    <if(span_feedback_scores_filters)>
+                    AND id IN (
+                        SELECT
+                            trace_id
+                        FROM span_feedback_scores_final
+                        GROUP BY trace_id
+                        HAVING <span_feedback_scores_filters>
+                    )
+                    <endif>
                     <if(feedback_scores_empty_filters)>
                     AND fsc.feedback_scores_count = 0
+                    <endif>
+                    <if(span_feedback_scores_empty_filters)>
+                    AND (
+                        id IN (SELECT trace_id FROM sfsc WHERE sfsc.span_feedback_scores_count = 0)
+                            OR
+                        id NOT IN (SELECT trace_id FROM sfsc)
+                    )
                     <endif>
                     ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
                     LIMIT 1 BY id
@@ -1533,7 +1900,189 @@ class TraceDAOImpl implements TraceDAO {
                       AND project_id IN :project_ids
                  ) AS annotation_queue_ids_with_trace_id
                  GROUP BY trace_id
+            ), span_feedback_scores_combined_raw AS (
+                SELECT workspace_id,
+                       project_id,
+                       entity_id,
+                       name,
+                       category_name,
+                       value,
+                       reason,
+                       source,
+                       created_by,
+                       last_updated_by,
+                       created_at,
+                       last_updated_at,
+                       feedback_scores.last_updated_by AS author
+                FROM feedback_scores FINAL
+                WHERE entity_type = 'span'
+                  AND workspace_id = :workspace_id
+                  AND project_id IN :project_ids
+                UNION ALL
+                SELECT workspace_id,
+                       project_id,
+                       entity_id,
+                       name,
+                       category_name,
+                       value,
+                       reason,
+                       source,
+                       created_by,
+                       last_updated_by,
+                       created_at,
+                       last_updated_at,
+                       author
+                FROM authored_feedback_scores FINAL
+                WHERE entity_type = 'span'
+                  AND workspace_id = :workspace_id
+                  AND project_id IN :project_ids
+            ), span_feedback_scores_with_ranking AS (
+                SELECT workspace_id,
+                       project_id,
+                       entity_id,
+                       name,
+                       category_name,
+                       value,
+                       reason,
+                       source,
+                       created_by,
+                       last_updated_by,
+                       created_at,
+                       last_updated_at,
+                       author,
+                       ROW_NUMBER() OVER (
+                           PARTITION BY workspace_id, project_id, entity_id, name, author
+                           ORDER BY last_updated_at DESC
+                       ) as rn
+                FROM span_feedback_scores_combined_raw
+            ), span_feedback_scores_combined AS (
+                SELECT workspace_id,
+                       project_id,
+                       entity_id,
+                       name,
+                       category_name,
+                       value,
+                       reason,
+                       source,
+                       created_by,
+                       last_updated_by,
+                       created_at,
+                       last_updated_at,
+                       author
+                FROM span_feedback_scores_with_ranking
+                WHERE rn = 1
+            ), span_feedback_scores_with_trace_id AS (
+                SELECT workspace_id,
+                       project_id,
+                       s.trace_id,
+                       name,
+                       category_name,
+                       value,
+                       reason,
+                       source,
+                       created_by,
+                       last_updated_by,
+                       created_at,
+                       last_updated_at,
+                       author
+                FROM span_feedback_scores_combined sfs
+                INNER JOIN (
+                    SELECT id, trace_id
+                    FROM spans FINAL
+                    WHERE workspace_id = :workspace_id
+                      AND project_id IN :project_ids
+                      AND trace_id IN (
+                          SELECT id
+                          FROM traces final
+                          <if(guardrails_filters)>
+                          LEFT JOIN guardrails_agg gagg ON gagg.entity_id = traces.id
+                          <endif>
+                          <if(annotation_queue_filters)>
+                          LEFT JOIN trace_annotation_queue_ids as taqi ON taqi.trace_id = traces.id
+                          <endif>
+                          WHERE workspace_id = :workspace_id
+                          AND project_id IN :project_ids
+                          <if(uuid_from_time)>AND id >= :uuid_from_time<endif>
+                          <if(uuid_to_time)>AND id \\<= :uuid_to_time<endif>
+                          <if(filters)> AND <filters> <endif>
+                          <if(annotation_queue_filters)> AND <annotation_queue_filters> <endif>
+                      )
+                    ORDER BY (workspace_id, project_id, trace_id, parent_span_id, id) DESC, last_updated_at DESC
+                    LIMIT 1 BY id
+                ) AS s ON sfs.entity_id = s.id
+            ), span_feedback_scores_combined_grouped AS (
+                SELECT
+                    workspace_id,
+                    project_id,
+                    trace_id,
+                    name,
+                    groupArray(value) AS values,
+                    groupArray(reason) AS reasons,
+                    groupArray(category_name) AS categories,
+                    groupArray(author) AS authors,
+                    groupArray(source) AS sources,
+                    groupArray(created_by) AS created_bies,
+                    groupArray(last_updated_by) AS updated_bies,
+                    groupArray(created_at) AS created_ats,
+                    groupArray(last_updated_at) AS last_updated_ats
+                FROM span_feedback_scores_with_trace_id
+                GROUP BY workspace_id, project_id, trace_id, name
+            ), span_feedback_scores_final AS (
+                SELECT
+                    workspace_id,
+                    project_id,
+                    trace_id,
+                    name,
+                    arrayStringConcat(categories, ', ') AS category_name,
+                    IF(length(values) = 1, arrayElement(values, 1), toDecimal64(arrayAvg(values), 9)) AS value,
+                    IF(length(reasons) = 1, arrayElement(reasons, 1), arrayStringConcat(arrayMap(x -> if(x = '', '\\<no reason>', x), reasons), ', ')) AS reason,
+                    arrayElement(sources, 1) AS source,
+                    mapFromArrays(
+                            authors,
+                            arrayMap(
+                                    i -> tuple(values[i], reasons[i], categories[i], sources[i], last_updated_ats[i]),
+                                    arrayEnumerate(values)
+                            )
+                    ) AS value_by_author,
+                    arrayStringConcat(created_bies, ', ') AS created_by,
+                    arrayStringConcat(updated_bies, ', ') AS last_updated_by,
+                    arrayMin(created_ats) AS created_at,
+                    arrayMax(last_updated_ats) AS last_updated_at
+                FROM span_feedback_scores_combined_grouped
+            ), span_feedback_scores_agg AS (
+                SELECT
+                    trace_id,
+                    mapFromArrays(
+                            groupArray(name),
+                            groupArray(value)
+                    ) AS span_feedback_scores,
+                    groupArray(tuple(
+                        name,
+                        category_name,
+                        value,
+                        reason,
+                        source,
+                        value_by_author,
+                        created_at,
+                        last_updated_at,
+                        created_by,
+                        last_updated_by
+                    )) AS span_feedback_scores_list
+                FROM span_feedback_scores_final
+                GROUP BY workspace_id, project_id, trace_id
             )
+            <if(span_feedback_scores_empty_filters)>
+             , sfsc AS (SELECT trace_id, COUNT(trace_id) AS span_feedback_scores_count
+                 FROM (
+                    SELECT *
+                    FROM span_feedback_scores_final
+                    ORDER BY (workspace_id, project_id, trace_id, name) DESC, last_updated_at DESC
+                    LIMIT 1 BY trace_id, name
+                 )
+                 GROUP BY trace_id
+                 HAVING <span_feedback_scores_empty_filters>
+            )
+            <endif>
             <if(project_stats)>
             ,    error_count_current AS (
                     SELECT
@@ -1589,6 +2138,9 @@ class TraceDAOImpl implements TraceDAO {
                 <if(feedback_scores_empty_filters)>
                 LEFT JOIN fsc ON fsc.entity_id = traces.id
                 <endif>
+                <if(span_feedback_scores_empty_filters)>
+                LEFT JOIN sfsc ON sfsc.trace_id = traces.id
+                <endif>
                 <if(annotation_queue_filters)>
                 LEFT JOIN trace_annotation_queue_ids as taqi ON taqi.trace_id = traces.id
                 <endif>
@@ -1612,6 +2164,15 @@ class TraceDAOImpl implements TraceDAO {
                     HAVING <feedback_scores_filters>
                 )
                 <endif>
+                <if(span_feedback_scores_filters)>
+                AND id IN (
+                    SELECT
+                        trace_id
+                    FROM span_feedback_scores_final
+                    GROUP BY trace_id
+                    HAVING <span_feedback_scores_filters>
+                )
+                <endif>
                 <if(trace_aggregation_filters)>
                 AND id IN (
                     SELECT
@@ -1622,6 +2183,13 @@ class TraceDAOImpl implements TraceDAO {
                 <endif>
                 <if(feedback_scores_empty_filters)>
                 AND fsc.feedback_scores_count = 0
+                <endif>
+                <if(span_feedback_scores_empty_filters)>
+                AND (
+                    id IN (SELECT trace_id FROM sfsc WHERE sfsc.span_feedback_scores_count = 0)
+                        OR
+                    id NOT IN (SELECT trace_id FROM sfsc)
+                )
                 <endif>
             )
             SELECT
@@ -1644,6 +2212,7 @@ class TraceDAOImpl implements TraceDAO {
                 avg(tags_length) AS tags,
                 avgMap(s.usage) as usage,
                 avgMap(f.feedback_scores) AS feedback_scores,
+                avgMap(sfs.span_feedback_scores) AS span_feedback_scores,
                 avg(s.llm_span_count) AS llm_span_count_avg,
                 avg(s.span_count) AS span_count_avg,
                 avgIf(s.total_estimated_cost, s.total_estimated_cost > 0) AS total_estimated_cost_,
@@ -1660,6 +2229,7 @@ class TraceDAOImpl implements TraceDAO {
             FROM trace_final t
             LEFT JOIN spans_agg AS s ON t.id = s.trace_id
             LEFT JOIN feedback_scores_agg as f ON t.id = f.entity_id
+            LEFT JOIN span_feedback_scores_agg as sfs ON t.id = sfs.trace_id
             LEFT JOIN guardrails_agg as g ON t.id = g.entity_id
             <if(project_stats)>
             LEFT JOIN error_count_current ec ON t.project_id = ec.project_id
@@ -2805,6 +3375,24 @@ class TraceDAOImpl implements TraceDAO {
                 .singleOrEmpty();
     }
 
+    /**
+     * Retrieves a value from a database row for a given field.
+     * <p>
+     * This method handles cases where columns may not exist in the result set.
+     * Some queries (e.g., trace list queries with field exclusions) may not
+     * include all possible columns to optimize performance. When a column is
+     * absent, this method returns null instead of throwing an exception.
+     * </p>
+     *
+     * @param exclude Set of fields to exclude from retrieval (returns null if field is in this set)
+     * @param field The trace field to retrieve
+     * @param row The database row to read from
+     * @param fieldName The database column name
+     * @param clazz The expected class type of the value
+     * @param <T> The type of the value to retrieve
+     * @return The field value, or null if the field is excluded, the column doesn't exist,
+     *         or the column value is null
+     */
     private <T> T getValue(Set<Trace.TraceField> exclude, Trace.TraceField field, Row row, String fieldName,
             Class<T> clazz) {
         if (exclude.contains(field)) {
@@ -3109,6 +3697,9 @@ class TraceDAOImpl implements TraceDAO {
                                     traceAggregationFilters));
                     filterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.FEEDBACK_SCORES)
                             .ifPresent(scoresFilters -> template.add("feedback_scores_filters", scoresFilters));
+                    filterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.SPAN_FEEDBACK_SCORES)
+                            .ifPresent(spanScoresFilters -> template.add("span_feedback_scores_filters",
+                                    spanScoresFilters));
                     filterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.ANNOTATION_AGGREGATION)
                             .ifPresent(traceAnnotationFilters -> template.add("annotation_queue_filters",
                                     traceAnnotationFilters));
@@ -3117,6 +3708,11 @@ class TraceDAOImpl implements TraceDAO {
                     filterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.FEEDBACK_SCORES_IS_EMPTY)
                             .ifPresent(feedbackScoreIsEmptyFilters -> template.add("feedback_scores_empty_filters",
                                     feedbackScoreIsEmptyFilters));
+                    filterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.SPAN_FEEDBACK_SCORES_IS_EMPTY)
+                            .ifPresent(feedbackScoreIsEmptyFilters -> template.add("span_feedback_scores_empty_filters",
+                                    feedbackScoreIsEmptyFilters));
+                    filterQueryBuilder.hasGuardrailsFilter(filters)
+                            .ifPresent(hasGuardrailsFilter -> template.add("guardrails_filters", true));
                 });
         Optional.ofNullable(traceSearchCriteria.lastReceivedId())
                 .ifPresent(lastReceivedTraceId -> template.add("last_received_id", lastReceivedTraceId));
@@ -3135,13 +3731,14 @@ class TraceDAOImpl implements TraceDAO {
                     filterQueryBuilder.bind(statement, filters, FilterStrategy.TRACE);
                     filterQueryBuilder.bind(statement, filters, FilterStrategy.TRACE_AGGREGATION);
                     filterQueryBuilder.bind(statement, filters, FilterStrategy.FEEDBACK_SCORES);
+                    filterQueryBuilder.bind(statement, filters, FilterStrategy.SPAN_FEEDBACK_SCORES);
                     filterQueryBuilder.bind(statement, filters, FilterStrategy.ANNOTATION_AGGREGATION);
                     filterQueryBuilder.bind(statement, filters, FilterStrategy.TRACE_THREAD);
                     filterQueryBuilder.bind(statement, filters, FilterStrategy.FEEDBACK_SCORES_IS_EMPTY);
+                    filterQueryBuilder.bind(statement, filters, FilterStrategy.SPAN_FEEDBACK_SCORES_IS_EMPTY);
                 });
         Optional.ofNullable(traceSearchCriteria.lastReceivedId())
                 .ifPresent(lastReceivedTraceId -> statement.bind("last_received_id", lastReceivedTraceId));
-
         // Bind UUID BETWEEN bounds for time-based filtering
         Optional.ofNullable(traceSearchCriteria.uuidFromTime())
                 .ifPresent(uuid_from_time -> statement.bind("uuid_from_time", uuid_from_time));

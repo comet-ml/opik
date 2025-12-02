@@ -6,6 +6,7 @@ import * as OpikApi from "../index";
 
 export interface DatasetItemPublic {
     id?: string;
+    draftItemId?: string;
     traceId?: string;
     spanId?: string;
     source: OpikApi.DatasetItemPublicSource;

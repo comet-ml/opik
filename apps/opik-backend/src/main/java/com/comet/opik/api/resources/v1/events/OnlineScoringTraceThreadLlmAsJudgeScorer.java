@@ -144,7 +144,7 @@ public class OnlineScoringTraceThreadLlmAsJudgeScorer extends OnlineScoringBaseS
     private void processScoring(TraceThreadToScoreLlmAsJudge message, List<Trace> traces,
             UUID threadModelId, String threadId) {
 
-        final AutomationRuleEvaluator<?> rule;
+        final AutomationRuleEvaluator<?, ?> rule;
 
         try {
             rule = automationRuleEvaluatorService.findById(message.ruleId(), message.projectId(),

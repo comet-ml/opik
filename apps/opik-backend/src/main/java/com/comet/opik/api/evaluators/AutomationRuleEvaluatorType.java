@@ -15,7 +15,8 @@ public enum AutomationRuleEvaluatorType {
     LLM_AS_JUDGE(Constants.LLM_AS_JUDGE),
     USER_DEFINED_METRIC_PYTHON(Constants.USER_DEFINED_METRIC_PYTHON),
     TRACE_THREAD_LLM_AS_JUDGE(Constants.TRACE_THREAD_LLM_AS_JUDGE),
-    TRACE_THREAD_USER_DEFINED_METRIC_PYTHON(Constants.TRACE_THREAD_USER_DEFINED_METRIC_PYTHON);
+    TRACE_THREAD_USER_DEFINED_METRIC_PYTHON(Constants.TRACE_THREAD_USER_DEFINED_METRIC_PYTHON),
+    SPAN_LLM_AS_JUDGE(Constants.SPAN_LLM_AS_JUDGE);
 
     @JsonValue
     private final String type;
@@ -32,5 +33,6 @@ public enum AutomationRuleEvaluatorType {
         public static final String USER_DEFINED_METRIC_PYTHON = "user_defined_metric_python";
         public static final String TRACE_THREAD_LLM_AS_JUDGE = "trace_thread_llm_as_judge";
         public static final String TRACE_THREAD_USER_DEFINED_METRIC_PYTHON = "trace_thread_user_defined_metric_python";
+        public static final String SPAN_LLM_AS_JUDGE = "span_llm_as_judge";
     }
 }
