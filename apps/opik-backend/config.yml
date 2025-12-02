@@ -559,6 +559,9 @@ serviceToggles:
   # Default: true
   # Description: Whether or not export/download functionality is enabled
   exportEnabled: ${TOGGLE_EXPORT_ENABLED:-"true"}
+  # Default: false
+  # Description: Whether or not Dashboards feature is enabled
+  dashboardsEnabled: ${TOGGLE_DASHBOARDS_ENABLED:-"false"}
 
 # Trace Thread configuration
 traceThreadConfig:

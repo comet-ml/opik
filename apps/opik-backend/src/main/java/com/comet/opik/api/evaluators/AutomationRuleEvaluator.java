@@ -70,6 +70,10 @@ public abstract sealed class AutomationRuleEvaluator<T, E extends Filter> implem
     private final boolean enabled = true;
 
     @JsonIgnore
+    @Builder.Default
+    private final List<E> filters = List.of();
+
+    @JsonIgnore
     @NotNull private final T code;
 
     @JsonView({View.Public.class})
@@ -95,13 +99,6 @@ public abstract sealed class AutomationRuleEvaluator<T, E extends Filter> implem
     @NotNull public AutomationRuleAction getAction() {
         return AutomationRuleAction.EVALUATOR;
     }
-
-    @JsonIgnore
-    @Builder.Default
-    protected final List<E> filters = List.of();
-
-    @NotNull @JsonView({View.Public.class, View.Write.class})
-    public abstract List<E> getFilters();
 
     public abstract <C extends AutomationRuleEvaluator<T, E>, B extends AutomationRuleEvaluator.AutomationRuleEvaluatorBuilder<T, E, C, B>> AutomationRuleEvaluator.AutomationRuleEvaluatorBuilder<T, E, C, B> toBuilder();
 

@@ -32,6 +32,7 @@ import {
   INTERVAL_DESCRIPTIONS,
   renderDurationTooltipValue,
   durationYTickFormatter,
+  tokenYTickFormatter,
 } from "./utils";
 
 const TRACE_FILTER_COLUMNS: ColumnData<BaseTraceData>[] = [
@@ -278,6 +279,7 @@ const TraceMetricsSection: React.FC<TraceMetricsSectionProps> = ({
             intervalStart={intervalStart}
             intervalEnd={intervalEnd}
             projectId={projectId}
+            customYTickFormatter={tokenYTickFormatter}
             chartType="line"
             traceFilters={processedTracesFilters}
           />
