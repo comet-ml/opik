@@ -1,12 +1,12 @@
 import React, { useEffect, useMemo } from "react";
 import { useQueryParam, StringParam } from "use-query-params";
 import { keepPreviousData } from "@tanstack/react-query";
-import useOptimizationById from "@/api/optimizations/useOptimizationById";
 import useExperimentsList from "@/api/datasets/useExperimentsList";
 import useBreadcrumbsStore from "@/store/BreadcrumbsStore";
 import useAppStore from "@/store/AppStore";
 import Loader from "@/components/shared/Loader/Loader";
 import { EXPERIMENT_TYPE } from "@/types/datasets";
+import { OPTIMIZATION_STATUS } from "@/types/optimizations";
 import {
   OptimizationStudioProvider,
   useOptimizationStudioContext,
@@ -17,6 +17,7 @@ import ObserveOptimizationSection from "@/components/pages/OptimizationStudioPag
 import { DEMO_TEMPLATES } from "@/constants/optimizations";
 import useOptimizationStudioById from "@/api/optimizations/useOptimizationStudioById";
 const REFETCH_INTERVAL = 30000;
+const ACTIVE_REFETCH_INTERVAL = 3000;
 const MAX_EXPERIMENTS_LOADED = 1000;
 
 const OptimizationStudioRunPageContent = () => {
@@ -39,10 +40,24 @@ const OptimizationStudioRunPageContent = () => {
       {
         enabled: Boolean(optimizationId),
         placeholderData: keepPreviousData,
-        refetchInterval: optimizationId ? REFETCH_INTERVAL : false,
+        refetchInterval: (query) => {
+          if (!optimizationId) return false;
+          const status = query.state.data?.status;
+          if (
+            status === OPTIMIZATION_STATUS.RUNNING ||
+            status === OPTIMIZATION_STATUS.INITIALIZED
+          ) {
+            return ACTIVE_REFETCH_INTERVAL;
+          }
+          return REFETCH_INTERVAL;
+        },
       },
     );
 
+
+  const isActiveOptimization =
+    activeOptimization?.status === OPTIMIZATION_STATUS.RUNNING ||
+    activeOptimization?.status === OPTIMIZATION_STATUS.INITIALIZED;
 
   const { data: experimentsData, isPending: isExperimentsPending } =
     useExperimentsList(
@@ -56,7 +71,11 @@ const OptimizationStudioRunPageContent = () => {
       {
         enabled: Boolean(optimizationId),
         placeholderData: keepPreviousData,
-        refetchInterval: optimizationId ? REFETCH_INTERVAL : false,
+        refetchInterval: optimizationId
+          ? isActiveOptimization
+            ? ACTIVE_REFETCH_INTERVAL
+            : REFETCH_INTERVAL
+          : false,
       },
     );
 

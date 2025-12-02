@@ -94,7 +94,7 @@ export const OptimizationStudioProvider: React.FC<
       // ALEX
       const optimizationPayload = {
         dataset_name: formData.datasetName,
-        objective_name: "Accuracy",
+        objective_name: studioConfig.evaluation.metrics[0].type,
         status: OPTIMIZATION_STATUS.RUNNING,
         studio_config: {
           ...studioConfig,
