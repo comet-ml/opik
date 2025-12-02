@@ -17,6 +17,7 @@ const _Base = core.serialization.object({
     name: core.serialization.string(),
     samplingRate: core.serialization.property("sampling_rate", core.serialization.number().optional()),
     enabled: core.serialization.boolean().optional(),
+    filters: core.serialization.list(FilterWrite),
     action: core.serialization.stringLiteral("evaluator"),
 });
 export const AutomationRuleEvaluatorWrite: core.serialization.Schema<
@@ -70,6 +71,7 @@ export declare namespace AutomationRuleEvaluatorWrite {
         name: string;
         sampling_rate?: number | null;
         enabled?: boolean | null;
+        filters: FilterWrite.Raw[];
         action: "evaluator";
     }
 }

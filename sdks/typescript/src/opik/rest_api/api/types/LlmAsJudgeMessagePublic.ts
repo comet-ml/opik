@@ -8,6 +8,6 @@ export interface LlmAsJudgeMessagePublic {
     role: OpikApi.LlmAsJudgeMessagePublicRole;
     content?: string;
     contentArray?: OpikApi.LlmAsJudgeMessageContentPublic[];
-    structuredContent?: boolean;
     stringContent?: boolean;
+    structuredContent?: boolean;
 }

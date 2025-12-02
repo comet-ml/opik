@@ -45,6 +45,7 @@ export namespace AutomationRuleEvaluatorPublic {
         createdBy?: string;
         lastUpdatedAt?: Date;
         lastUpdatedBy?: string;
+        filters: OpikApi.FilterPublic[];
         action: "evaluator";
     }
 }

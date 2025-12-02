@@ -6389,14 +6389,14 @@ components:
         last_updated_by:
           type: string
           readOnly: true
-        action:
-          type: string
-          enum:
-          - evaluator
         filters:
           type: array
           items:
             type: object
+        action:
+          type: string
+          enum:
+          - evaluator
         type:
           type: string
           enum:
@@ -6405,10 +6405,6 @@ components:
           - trace_thread_llm_as_judge
           - trace_thread_user_defined_metric_python
           - span_llm_as_judge
-        action:
-          type: string
-          enum:
-          - evaluator
       discriminator:
         propertyName: type
         mapping:
@@ -6564,9 +6560,9 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/LlmAsJudgeMessageContent"
-        structured_content:
-          type: boolean
         string_content:
+          type: boolean
+        structured_content:
           type: boolean
     LlmAsJudgeMessageContent:
       required:
@@ -6870,12 +6866,11 @@ components:
         filters:
           type: array
           items:
-            $ref: "#/components/schemas/TraceFilter_Write"
+            $ref: "#/components/schemas/Filter_Write"
         action:
           type: string
           enum:
           - evaluator
-            $ref: "#/components/schemas/Filter_Write"
         type:
           type: string
           enum:
@@ -6884,10 +6879,6 @@ components:
           - trace_thread_llm_as_judge
           - trace_thread_user_defined_metric_python
           - span_llm_as_judge
-        action:
-          type: string
-          enum:
-          - evaluator
       discriminator:
         propertyName: type
         mapping:
@@ -6985,9 +6976,9 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/LlmAsJudgeMessageContent_Write"
-        structured_content:
-          type: boolean
         string_content:
+          type: boolean
+        structured_content:
           type: boolean
     LlmAsJudgeModelParameters_Write:
       required:
@@ -7220,14 +7211,14 @@ components:
         last_updated_by:
           type: string
           readOnly: true
-        action:
-          type: string
-          enum:
-          - evaluator
         filters:
           type: array
           items:
             type: object
+        action:
+          type: string
+          enum:
+          - evaluator
         type:
           type: string
           enum:
@@ -7236,10 +7227,6 @@ components:
           - trace_thread_llm_as_judge
           - trace_thread_user_defined_metric_python
           - span_llm_as_judge
-        action:
-          type: string
-          enum:
-          - evaluator
       discriminator:
         propertyName: type
         mapping:
@@ -7409,9 +7396,9 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/LlmAsJudgeMessageContent_Public"
-        structured_content:
-          type: boolean
         string_content:
+          type: boolean
+        structured_content:
           type: boolean
     LlmAsJudgeModelParameters_Public:
       required:
@@ -7625,14 +7612,14 @@ components:
         last_updated_by:
           type: string
           readOnly: true
-        action:
-          type: string
-          enum:
-          - evaluator
         filters:
           type: array
           items:
             $ref: "#/components/schemas/Filter_Public"
+        action:
+          type: string
+          enum:
+          - evaluator
         type:
           type: string
           enum:
@@ -7641,10 +7628,6 @@ components:
           - trace_thread_llm_as_judge
           - trace_thread_user_defined_metric_python
           - span_llm_as_judge
-        action:
-          type: string
-          enum:
-          - evaluator
       discriminator:
         propertyName: type
         mapping:
@@ -7752,10 +7735,6 @@ components:
           - trace_thread_llm_as_judge
           - trace_thread_user_defined_metric_python
           - span_llm_as_judge
-        action:
-          type: string
-          enum:
-          - evaluator
       discriminator:
         propertyName: type
         mapping:

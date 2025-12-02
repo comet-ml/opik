@@ -18,8 +18,8 @@ export const LlmAsJudgeMessageWrite: core.serialization.ObjectSchema<
         "content_array",
         core.serialization.list(LlmAsJudgeMessageContentWrite).optional(),
     ),
-    structuredContent: core.serialization.property("structured_content", core.serialization.boolean().optional()),
     stringContent: core.serialization.property("string_content", core.serialization.boolean().optional()),
+    structuredContent: core.serialization.property("structured_content", core.serialization.boolean().optional()),
 });
 
 export declare namespace LlmAsJudgeMessageWrite {
@@ -27,7 +27,7 @@ export declare namespace LlmAsJudgeMessageWrite {
         role: LlmAsJudgeMessageWriteRole.Raw;
         content?: string | null;
         content_array?: LlmAsJudgeMessageContentWrite.Raw[] | null;
-        structured_content?: boolean | null;
         string_content?: boolean | null;
+        structured_content?: boolean | null;
     }
 }
