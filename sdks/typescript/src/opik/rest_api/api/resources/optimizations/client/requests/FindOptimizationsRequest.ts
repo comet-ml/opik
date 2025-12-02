@@ -12,4 +12,5 @@ export interface FindOptimizationsRequest {
     datasetId?: string;
     name?: string;
     datasetDeleted?: boolean;
+    filters?: string;
 }

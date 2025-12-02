@@ -6,6 +6,7 @@ import typing
 import pydantic
 from ..core.pydantic_utilities import IS_PYDANTIC_V2, UniversalBaseModel
 from .json_list_string_write import JsonListStringWrite
+from .optimization_studio_config_write import OptimizationStudioConfigWrite
 from .optimization_write_status import OptimizationWriteStatus
 
 
@@ -16,6 +17,7 @@ class OptimizationWrite(UniversalBaseModel):
     objective_name: str
     status: OptimizationWriteStatus
     metadata: typing.Optional[JsonListStringWrite] = None
+    studio_config: typing.Optional[OptimizationStudioConfigWrite] = None
     last_updated_at: typing.Optional[dt.datetime] = None
 
     if IS_PYDANTIC_V2:

@@ -13,9 +13,12 @@ from ..core.request_options import RequestOptions
 from ..core.serialization import convert_and_respect_annotation_metadata
 from ..errors.bad_request_error import BadRequestError
 from ..errors.not_found_error import NotFoundError
+from ..errors.not_implemented_error import NotImplementedError
 from ..types.json_list_string_write import JsonListStringWrite
 from ..types.optimization_page_public import OptimizationPagePublic
 from ..types.optimization_public import OptimizationPublic
+from ..types.optimization_studio_config_write import OptimizationStudioConfigWrite
+from ..types.optimization_studio_log import OptimizationStudioLog
 from ..types.optimization_write_status import OptimizationWriteStatus
 from .types.optimization_update_status import OptimizationUpdateStatus
 
@@ -27,6 +30,47 @@ class RawOptimizationsClient:
     def __init__(self, *, client_wrapper: SyncClientWrapper):
         self._client_wrapper = client_wrapper
 
+    def cancel_studio_optimizations(
+        self, id: str, *, request_options: typing.Optional[RequestOptions] = None
+    ) -> HttpResponse[None]:
+        """
+        Cancel Studio optimizations by id
+
+        Parameters
+        ----------
+        id : str
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        HttpResponse[None]
+        """
+        _response = self._client_wrapper.httpx_client.request(
+            f"v1/private/optimizations/studio/{jsonable_encoder(id)}/cancel",
+            method="GET",
+            request_options=request_options,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                return HttpResponse(response=_response, data=None)
+            if _response.status_code == 501:
+                raise NotImplementedError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
+        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+
     def find_optimizations(
         self,
         *,
@@ -35,6 +79,7 @@ class RawOptimizationsClient:
         dataset_id: typing.Optional[str] = None,
         name: typing.Optional[str] = None,
         dataset_deleted: typing.Optional[bool] = None,
+        filters: typing.Optional[str] = None,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> HttpResponse[OptimizationPagePublic]:
         """
@@ -51,6 +96,8 @@ class RawOptimizationsClient:
         name : typing.Optional[str]
 
         dataset_deleted : typing.Optional[bool]
+
+        filters : typing.Optional[str]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -69,6 +116,7 @@ class RawOptimizationsClient:
                 "dataset_id": dataset_id,
                 "name": name,
                 "dataset_deleted": dataset_deleted,
+                "filters": filters,
             },
             request_options=request_options,
         )
@@ -107,6 +155,7 @@ class RawOptimizationsClient:
         id: typing.Optional[str] = OMIT,
         name: typing.Optional[str] = OMIT,
         metadata: typing.Optional[JsonListStringWrite] = OMIT,
+        studio_config: typing.Optional[OptimizationStudioConfigWrite] = OMIT,
         last_updated_at: typing.Optional[dt.datetime] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> HttpResponse[None]:
@@ -126,6 +175,8 @@ class RawOptimizationsClient:
         name : typing.Optional[str]
 
         metadata : typing.Optional[JsonListStringWrite]
+
+        studio_config : typing.Optional[OptimizationStudioConfigWrite]
 
         last_updated_at : typing.Optional[dt.datetime]
 
@@ -147,6 +198,9 @@ class RawOptimizationsClient:
                 "status": status,
                 "metadata": convert_and_respect_annotation_metadata(
                     object_=metadata, annotation=JsonListStringWrite, direction="write"
+                ),
+                "studio_config": convert_and_respect_annotation_metadata(
+                    object_=studio_config, annotation=OptimizationStudioConfigWrite, direction="write"
                 ),
                 "last_updated_at": last_updated_at,
             },
@@ -173,6 +227,7 @@ class RawOptimizationsClient:
         id: typing.Optional[str] = OMIT,
         name: typing.Optional[str] = OMIT,
         metadata: typing.Optional[JsonListStringWrite] = OMIT,
+        studio_config: typing.Optional[OptimizationStudioConfigWrite] = OMIT,
         last_updated_at: typing.Optional[dt.datetime] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> HttpResponse[None]:
@@ -192,6 +247,8 @@ class RawOptimizationsClient:
         name : typing.Optional[str]
 
         metadata : typing.Optional[JsonListStringWrite]
+
+        studio_config : typing.Optional[OptimizationStudioConfigWrite]
 
         last_updated_at : typing.Optional[dt.datetime]
 
@@ -213,6 +270,9 @@ class RawOptimizationsClient:
                 "status": status,
                 "metadata": convert_and_respect_annotation_metadata(
                     object_=metadata, annotation=JsonListStringWrite, direction="write"
+                ),
+                "studio_config": convert_and_respect_annotation_metadata(
+                    object_=studio_config, annotation=OptimizationStudioConfigWrite, direction="write"
                 ),
                 "last_updated_at": last_updated_at,
             },
@@ -262,6 +322,81 @@ class RawOptimizationsClient:
         try:
             if 200 <= _response.status_code < 300:
                 return HttpResponse(response=_response, data=None)
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
+        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+
+    def find_studio_optimizations(
+        self,
+        *,
+        page: typing.Optional[int] = None,
+        size: typing.Optional[int] = None,
+        dataset_id: typing.Optional[str] = None,
+        name: typing.Optional[str] = None,
+        dataset_deleted: typing.Optional[bool] = None,
+        filters: typing.Optional[str] = None,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> HttpResponse[OptimizationPagePublic]:
+        """
+        Find Studio optimizations
+
+        Parameters
+        ----------
+        page : typing.Optional[int]
+
+        size : typing.Optional[int]
+
+        dataset_id : typing.Optional[str]
+
+        name : typing.Optional[str]
+
+        dataset_deleted : typing.Optional[bool]
+
+        filters : typing.Optional[str]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        HttpResponse[OptimizationPagePublic]
+            Studio optimizations resource
+        """
+        _response = self._client_wrapper.httpx_client.request(
+            "v1/private/optimizations/studio",
+            method="GET",
+            params={
+                "page": page,
+                "size": size,
+                "dataset_id": dataset_id,
+                "name": name,
+                "dataset_deleted": dataset_deleted,
+                "filters": filters,
+            },
+            request_options=request_options,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                _data = typing.cast(
+                    OptimizationPagePublic,
+                    parse_obj_as(
+                        type_=OptimizationPagePublic,  # type: ignore
+                        object_=_response.json(),
+                    ),
+                )
+                return HttpResponse(response=_response, data=_data)
+            if _response.status_code == 400:
+                raise BadRequestError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
             _response_json = _response.json()
         except JSONDecodeError:
             raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
@@ -363,10 +498,149 @@ class RawOptimizationsClient:
             raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
         raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
 
+    def get_studio_optimization_by_id(
+        self, id: str, *, request_options: typing.Optional[RequestOptions] = None
+    ) -> HttpResponse[OptimizationPublic]:
+        """
+        Get Studio optimization with config included
+
+        Parameters
+        ----------
+        id : str
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        HttpResponse[OptimizationPublic]
+            Studio optimization resource
+        """
+        _response = self._client_wrapper.httpx_client.request(
+            f"v1/private/optimizations/studio/{jsonable_encoder(id)}",
+            method="GET",
+            request_options=request_options,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                _data = typing.cast(
+                    OptimizationPublic,
+                    parse_obj_as(
+                        type_=OptimizationPublic,  # type: ignore
+                        object_=_response.json(),
+                    ),
+                )
+                return HttpResponse(response=_response, data=_data)
+            if _response.status_code == 404:
+                raise NotFoundError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
+        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+
+    def get_studio_optimization_logs(
+        self, id: str, *, request_options: typing.Optional[RequestOptions] = None
+    ) -> HttpResponse[OptimizationStudioLog]:
+        """
+        Get presigned S3 URL for downloading optimization logs
+
+        Parameters
+        ----------
+        id : str
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        HttpResponse[OptimizationStudioLog]
+            Logs response
+        """
+        _response = self._client_wrapper.httpx_client.request(
+            f"v1/private/optimizations/studio/{jsonable_encoder(id)}/logs",
+            method="GET",
+            request_options=request_options,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                _data = typing.cast(
+                    OptimizationStudioLog,
+                    parse_obj_as(
+                        type_=OptimizationStudioLog,  # type: ignore
+                        object_=_response.json(),
+                    ),
+                )
+                return HttpResponse(response=_response, data=_data)
+            if _response.status_code == 404:
+                raise NotFoundError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
+        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+
 
 class AsyncRawOptimizationsClient:
     def __init__(self, *, client_wrapper: AsyncClientWrapper):
         self._client_wrapper = client_wrapper
+
+    async def cancel_studio_optimizations(
+        self, id: str, *, request_options: typing.Optional[RequestOptions] = None
+    ) -> AsyncHttpResponse[None]:
+        """
+        Cancel Studio optimizations by id
+
+        Parameters
+        ----------
+        id : str
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        AsyncHttpResponse[None]
+        """
+        _response = await self._client_wrapper.httpx_client.request(
+            f"v1/private/optimizations/studio/{jsonable_encoder(id)}/cancel",
+            method="GET",
+            request_options=request_options,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                return AsyncHttpResponse(response=_response, data=None)
+            if _response.status_code == 501:
+                raise NotImplementedError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
+        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
 
     async def find_optimizations(
         self,
@@ -376,6 +650,7 @@ class AsyncRawOptimizationsClient:
         dataset_id: typing.Optional[str] = None,
         name: typing.Optional[str] = None,
         dataset_deleted: typing.Optional[bool] = None,
+        filters: typing.Optional[str] = None,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> AsyncHttpResponse[OptimizationPagePublic]:
         """
@@ -392,6 +667,8 @@ class AsyncRawOptimizationsClient:
         name : typing.Optional[str]
 
         dataset_deleted : typing.Optional[bool]
+
+        filters : typing.Optional[str]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -410,6 +687,7 @@ class AsyncRawOptimizationsClient:
                 "dataset_id": dataset_id,
                 "name": name,
                 "dataset_deleted": dataset_deleted,
+                "filters": filters,
             },
             request_options=request_options,
         )
@@ -448,6 +726,7 @@ class AsyncRawOptimizationsClient:
         id: typing.Optional[str] = OMIT,
         name: typing.Optional[str] = OMIT,
         metadata: typing.Optional[JsonListStringWrite] = OMIT,
+        studio_config: typing.Optional[OptimizationStudioConfigWrite] = OMIT,
         last_updated_at: typing.Optional[dt.datetime] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> AsyncHttpResponse[None]:
@@ -467,6 +746,8 @@ class AsyncRawOptimizationsClient:
         name : typing.Optional[str]
 
         metadata : typing.Optional[JsonListStringWrite]
+
+        studio_config : typing.Optional[OptimizationStudioConfigWrite]
 
         last_updated_at : typing.Optional[dt.datetime]
 
@@ -488,6 +769,9 @@ class AsyncRawOptimizationsClient:
                 "status": status,
                 "metadata": convert_and_respect_annotation_metadata(
                     object_=metadata, annotation=JsonListStringWrite, direction="write"
+                ),
+                "studio_config": convert_and_respect_annotation_metadata(
+                    object_=studio_config, annotation=OptimizationStudioConfigWrite, direction="write"
                 ),
                 "last_updated_at": last_updated_at,
             },
@@ -514,6 +798,7 @@ class AsyncRawOptimizationsClient:
         id: typing.Optional[str] = OMIT,
         name: typing.Optional[str] = OMIT,
         metadata: typing.Optional[JsonListStringWrite] = OMIT,
+        studio_config: typing.Optional[OptimizationStudioConfigWrite] = OMIT,
         last_updated_at: typing.Optional[dt.datetime] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> AsyncHttpResponse[None]:
@@ -533,6 +818,8 @@ class AsyncRawOptimizationsClient:
         name : typing.Optional[str]
 
         metadata : typing.Optional[JsonListStringWrite]
+
+        studio_config : typing.Optional[OptimizationStudioConfigWrite]
 
         last_updated_at : typing.Optional[dt.datetime]
 
@@ -554,6 +841,9 @@ class AsyncRawOptimizationsClient:
                 "status": status,
                 "metadata": convert_and_respect_annotation_metadata(
                     object_=metadata, annotation=JsonListStringWrite, direction="write"
+                ),
+                "studio_config": convert_and_respect_annotation_metadata(
+                    object_=studio_config, annotation=OptimizationStudioConfigWrite, direction="write"
                 ),
                 "last_updated_at": last_updated_at,
             },
@@ -603,6 +893,81 @@ class AsyncRawOptimizationsClient:
         try:
             if 200 <= _response.status_code < 300:
                 return AsyncHttpResponse(response=_response, data=None)
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
+        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+
+    async def find_studio_optimizations(
+        self,
+        *,
+        page: typing.Optional[int] = None,
+        size: typing.Optional[int] = None,
+        dataset_id: typing.Optional[str] = None,
+        name: typing.Optional[str] = None,
+        dataset_deleted: typing.Optional[bool] = None,
+        filters: typing.Optional[str] = None,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> AsyncHttpResponse[OptimizationPagePublic]:
+        """
+        Find Studio optimizations
+
+        Parameters
+        ----------
+        page : typing.Optional[int]
+
+        size : typing.Optional[int]
+
+        dataset_id : typing.Optional[str]
+
+        name : typing.Optional[str]
+
+        dataset_deleted : typing.Optional[bool]
+
+        filters : typing.Optional[str]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        AsyncHttpResponse[OptimizationPagePublic]
+            Studio optimizations resource
+        """
+        _response = await self._client_wrapper.httpx_client.request(
+            "v1/private/optimizations/studio",
+            method="GET",
+            params={
+                "page": page,
+                "size": size,
+                "dataset_id": dataset_id,
+                "name": name,
+                "dataset_deleted": dataset_deleted,
+                "filters": filters,
+            },
+            request_options=request_options,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                _data = typing.cast(
+                    OptimizationPagePublic,
+                    parse_obj_as(
+                        type_=OptimizationPagePublic,  # type: ignore
+                        object_=_response.json(),
+                    ),
+                )
+                return AsyncHttpResponse(response=_response, data=_data)
+            if _response.status_code == 400:
+                raise BadRequestError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
             _response_json = _response.json()
         except JSONDecodeError:
             raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
@@ -699,6 +1064,104 @@ class AsyncRawOptimizationsClient:
         try:
             if 200 <= _response.status_code < 300:
                 return AsyncHttpResponse(response=_response, data=None)
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
+        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+
+    async def get_studio_optimization_by_id(
+        self, id: str, *, request_options: typing.Optional[RequestOptions] = None
+    ) -> AsyncHttpResponse[OptimizationPublic]:
+        """
+        Get Studio optimization with config included
+
+        Parameters
+        ----------
+        id : str
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        AsyncHttpResponse[OptimizationPublic]
+            Studio optimization resource
+        """
+        _response = await self._client_wrapper.httpx_client.request(
+            f"v1/private/optimizations/studio/{jsonable_encoder(id)}",
+            method="GET",
+            request_options=request_options,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                _data = typing.cast(
+                    OptimizationPublic,
+                    parse_obj_as(
+                        type_=OptimizationPublic,  # type: ignore
+                        object_=_response.json(),
+                    ),
+                )
+                return AsyncHttpResponse(response=_response, data=_data)
+            if _response.status_code == 404:
+                raise NotFoundError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
+        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+
+    async def get_studio_optimization_logs(
+        self, id: str, *, request_options: typing.Optional[RequestOptions] = None
+    ) -> AsyncHttpResponse[OptimizationStudioLog]:
+        """
+        Get presigned S3 URL for downloading optimization logs
+
+        Parameters
+        ----------
+        id : str
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        AsyncHttpResponse[OptimizationStudioLog]
+            Logs response
+        """
+        _response = await self._client_wrapper.httpx_client.request(
+            f"v1/private/optimizations/studio/{jsonable_encoder(id)}/logs",
+            method="GET",
+            request_options=request_options,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                _data = typing.cast(
+                    OptimizationStudioLog,
+                    parse_obj_as(
+                        type_=OptimizationStudioLog,  # type: ignore
+                        object_=_response.json(),
+                    ),
+                )
+                return AsyncHttpResponse(response=_response, data=_data)
+            if _response.status_code == 404:
+                raise NotFoundError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
             _response_json = _response.json()
         except JSONDecodeError:
             raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
