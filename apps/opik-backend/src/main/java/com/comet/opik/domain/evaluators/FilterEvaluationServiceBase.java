@@ -6,7 +6,10 @@ import com.comet.opik.api.filter.Filter;
 import com.comet.opik.api.filter.Operator;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.JsonNode;
+import com.jayway.jsonpath.Configuration;
+import com.jayway.jsonpath.JsonPath;
+import com.jayway.jsonpath.Option;
+import com.jayway.jsonpath.PathNotFoundException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.ObjectUtils;
@@ -19,7 +22,7 @@ import java.util.Objects;
 import java.util.Set;
 
 /**
- * Base class for filter evaluation services.
+ * Base class for filter evaluation services using JSONPath for nested field extraction.
  * Contains common logic for evaluating filters against entities (Trace, Span, etc.).
  * Subclasses must implement extractFieldValue to provide entity-specific field extraction.
  *
@@ -28,6 +31,11 @@ import java.util.Set;
 @Slf4j
 @RequiredArgsConstructor
 public abstract class FilterEvaluationServiceBase<E> {
+
+    // JSONPath configuration with options to suppress exceptions for missing paths
+    private static final Configuration JSON_PATH_CONFIG = Configuration.builder()
+            .options(Option.DEFAULT_PATH_LEAF_TO_NULL, Option.SUPPRESS_EXCEPTIONS)
+            .build();
 
     private final Class<E> entityClass;
 
@@ -118,8 +126,9 @@ public abstract class FilterEvaluationServiceBase<E> {
     }
 
     /**
-     * Extracts a nested value from a JSON object using a key.
-     * Supports JSON paths with array indices, e.g., "messages[0].content" or "messages.0.content".
+     * Extracts a nested value from a JSON object using JSONPath.
+     * Supports standard JSONPath syntax, e.g., "$.messages[0].content" or "messages[0].content".
+     * See: https://github.com/json-path/JsonPath for full JSONPath syntax.
      * Note: JSON operations are blocking. For reactive contexts, consider wrapping calls in Mono.fromCallable()
      * and using subscribeOn(Schedulers.boundedElastic()) to offload blocking operations.
      */
@@ -128,120 +137,27 @@ public abstract class FilterEvaluationServiceBase<E> {
             return null;
         }
 
+        // Normalize the path to ensure it starts with $. for JSONPath
+        String jsonPath = key.startsWith("$") ? key : "$." + key;
+
         try {
-            JsonNode node;
+            String jsonString;
             if (jsonValue instanceof String str) {
-                // Use JsonUtils.getMapper() which provides a thread-safe shared ObjectMapper instance
-                node = JsonUtils.getMapper().readTree(str);
+                jsonString = str;
             } else {
-                node = JsonUtils.getMapper().valueToTree(jsonValue);
+                // Convert object to JSON string for JSONPath parsing
+                jsonString = JsonUtils.getMapper().writeValueAsString(jsonValue);
             }
 
-            // Parse JSON path (supports array indices like "messages[0].content")
-            JsonNode valueNode = navigateJsonPath(node, key);
-            if (valueNode == null || valueNode.isNull()) {
-                return null;
-            }
-
-            if (valueNode.isTextual()) {
-                return valueNode.textValue();
-            } else if (valueNode.isNumber()) {
-                return valueNode.numberValue();
-            } else {
-                return JsonUtils.getMapper().treeToValue(valueNode, Object.class);
-            }
+            // Use JSONPath to extract the value
+            return JsonPath.using(JSON_PATH_CONFIG).parse(jsonString).read(jsonPath);
+        } catch (PathNotFoundException e) {
+            log.debug("Path '{}' not found in JSON value", jsonPath);
+            return null;
         } catch (Exception e) {
-            log.warn("Failed to extract nested value with key '{}': {}", key, e.getMessage());
+            log.warn("Failed to extract nested value with JSONPath '{}': {}", jsonPath, e.getMessage());
             return null;
         }
-    }
-
-    /**
-     * Navigates a JSON path through a JsonNode, supporting array indices.
-     * Examples:
-     * - "message" -> node.get("message")
-     * - "messages[0]" -> node.get("messages").get(0)
-     * - "messages[0].content" -> node.get("messages").get(0).get("content")
-     * - "messages.0.content" -> node.get("messages").get(0).get("content")
-     */
-    private JsonNode navigateJsonPath(JsonNode node, String path) {
-        if (node == null || path == null || path.isEmpty()) {
-            return node;
-        }
-
-        JsonNode current = node;
-        int i = 0;
-        int pathLength = path.length();
-
-        while (i < pathLength && current != null && !current.isNull()) {
-            // Skip leading dots
-            while (i < pathLength && path.charAt(i) == '.') {
-                i++;
-            }
-            if (i >= pathLength) {
-                break;
-            }
-
-            int start = i;
-
-            // Check if we have an array index like "[0]"
-            if (path.charAt(i) == '[') {
-                // Find closing bracket
-                int bracketEnd = path.indexOf(']', i);
-                if (bracketEnd == -1) {
-                    log.warn("Unclosed bracket in path '{}'", path);
-                    return null;
-                }
-                String indexStr = path.substring(i + 1, bracketEnd);
-                try {
-                    int index = Integer.parseInt(indexStr);
-                    if (current.isArray() && index >= 0 && index < current.size()) {
-                        current = current.get(index);
-                    } else {
-                        return null;
-                    }
-                } catch (NumberFormatException e) {
-                    log.warn("Invalid array index '{}' in path '{}'", indexStr, path);
-                    return null;
-                }
-                i = bracketEnd + 1;
-            } else {
-                // Find next dot or bracket
-                int dotIndex = path.indexOf('.', i);
-                int bracketIndex = path.indexOf('[', i);
-                int end;
-
-                if (dotIndex == -1 && bracketIndex == -1) {
-                    // Last part of path
-                    end = pathLength;
-                } else if (dotIndex == -1) {
-                    end = bracketIndex;
-                } else if (bracketIndex == -1) {
-                    end = dotIndex;
-                } else {
-                    end = Math.min(dotIndex, bracketIndex);
-                }
-
-                String part = path.substring(start, end);
-
-                // Try as numeric index first (for arrays), then as field name
-                try {
-                    int index = Integer.parseInt(part);
-                    if (current.isArray() && index >= 0 && index < current.size()) {
-                        current = current.get(index);
-                    } else {
-                        return null;
-                    }
-                } catch (NumberFormatException e) {
-                    // Not a number, treat as field name
-                    current = current.get(part);
-                }
-
-                i = end;
-            }
-        }
-
-        return current;
     }
 
     /**
