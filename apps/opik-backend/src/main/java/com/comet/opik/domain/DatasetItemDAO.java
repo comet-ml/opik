@@ -60,7 +60,7 @@ public interface DatasetItemDAO {
 
     Flux<DatasetItem> getItems(UUID datasetId, int limit, UUID lastRetrievedId);
 
-    Mono<Long> deleteAllDraftItems(UUID datasetId);
+    Mono<Long> deleteAllNonVersionedDatasetItems(UUID datasetId);
 
     Mono<List<WorkspaceAndResourceId>> getDatasetItemWorkspace(Set<UUID> datasetItemIds);
 
@@ -169,7 +169,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
             ;
             """;
 
-    private static final String DELETE_ALL_DRAFT_ITEMS = """
+    private static final String DELETE_ALL_NON_VERSIONED_DATASET_ITEMS = """
             DELETE FROM dataset_items
             WHERE dataset_id = :datasetId
             AND workspace_id = :workspace_id
@@ -1693,12 +1693,12 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
 
     @Override
     @WithSpan
-    public Mono<Long> deleteAllDraftItems(@NonNull UUID datasetId) {
+    public Mono<Long> deleteAllNonVersionedDatasetItems(@NonNull UUID datasetId) {
         log.info("Deleting all draft items for dataset: '{}'", datasetId);
 
         return asyncTemplate.nonTransaction(connection -> {
 
-            Statement statement = connection.createStatement(DELETE_ALL_DRAFT_ITEMS);
+            Statement statement = connection.createStatement(DELETE_ALL_NON_VERSIONED_DATASET_ITEMS);
 
             Segment segment = startSegment(DATASET_ITEMS, CLICKHOUSE, "delete_all_draft_items");
 

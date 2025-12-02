@@ -486,7 +486,7 @@ class DatasetVersionServiceImpl implements DatasetVersionService {
                 .subscribeOn(Schedulers.boundedElastic())
                 .flatMap(context -> {
                     // Step 1: Delete all draft items
-                    return datasetItemDAO.deleteAllDraftItems(datasetId)
+                    return datasetItemDAO.deleteAllNonVersionedDatasetItems(datasetId)
                             .doOnSuccess(deletedCount -> log.info("Deleted '{}' draft items for dataset '{}'",
                                     deletedCount, datasetId))
                             // Step 2: Copy items from version to draft using bulk INSERT INTO ... SELECT
