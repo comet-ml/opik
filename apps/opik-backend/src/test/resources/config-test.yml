@@ -7,7 +7,6 @@ logging:
   #  Default: com.comet: DEBUG
   #  Description: Individual logger configuration
   loggers:
-    com.clickhouse.client: DEBUG
     com.comet: DEBUG
 
 # Description: state database configuration
