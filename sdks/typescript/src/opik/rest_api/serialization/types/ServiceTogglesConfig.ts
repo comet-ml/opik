@@ -12,6 +12,7 @@ export const ServiceTogglesConfig: core.serialization.ObjectSchema<
 > = core.serialization.object({
     pythonEvaluatorEnabled: core.serialization.boolean(),
     traceThreadPythonEvaluatorEnabled: core.serialization.boolean(),
+    spanLlmAsJudgeEnabled: core.serialization.boolean(),
     guardrailsEnabled: core.serialization.boolean(),
     opikAiEnabled: core.serialization.property("opikAIEnabled", core.serialization.boolean()),
     alertsEnabled: core.serialization.boolean(),
@@ -24,6 +25,7 @@ export declare namespace ServiceTogglesConfig {
     export interface Raw {
         pythonEvaluatorEnabled: boolean;
         traceThreadPythonEvaluatorEnabled: boolean;
+        spanLlmAsJudgeEnabled: boolean;
         guardrailsEnabled: boolean;
         opikAIEnabled: boolean;
         alertsEnabled: boolean;

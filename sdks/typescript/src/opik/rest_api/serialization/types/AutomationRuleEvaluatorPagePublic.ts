@@ -5,7 +5,7 @@
 import * as serializers from "../index";
 import * as OpikApi from "../../api/index";
 import * as core from "../../core";
-import { AutomationRuleEvaluatorObjectPublic } from "./AutomationRuleEvaluatorObjectPublic";
+import { AutomationRuleEvaluatorObjectObjectPublic } from "./AutomationRuleEvaluatorObjectObjectPublic";
 
 export const AutomationRuleEvaluatorPagePublic: core.serialization.ObjectSchema<
     serializers.AutomationRuleEvaluatorPagePublic.Raw,
@@ -14,7 +14,7 @@ export const AutomationRuleEvaluatorPagePublic: core.serialization.ObjectSchema<
     page: core.serialization.number().optional(),
     size: core.serialization.number().optional(),
     total: core.serialization.number().optional(),
-    content: core.serialization.list(AutomationRuleEvaluatorObjectPublic).optional(),
+    content: core.serialization.list(AutomationRuleEvaluatorObjectObjectPublic).optional(),
     sortableBy: core.serialization.property(
         "sortable_by",
         core.serialization.list(core.serialization.string()).optional(),
@@ -26,7 +26,7 @@ export declare namespace AutomationRuleEvaluatorPagePublic {
         page?: number | null;
         size?: number | null;
         total?: number | null;
-        content?: AutomationRuleEvaluatorObjectPublic.Raw[] | null;
+        content?: AutomationRuleEvaluatorObjectObjectPublic.Raw[] | null;
         sortable_by?: string[] | null;
     }
 }

@@ -5,17 +5,20 @@
 import * as serializers from "../index";
 import * as OpikApi from "../../api/index";
 import * as core from "../../core";
+import { TraceThreadFilter } from "./TraceThreadFilter";
 import { TraceThreadUserDefinedMetricPythonCode } from "./TraceThreadUserDefinedMetricPythonCode";
 
 export const AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython: core.serialization.ObjectSchema<
     serializers.AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython.Raw,
     OpikApi.AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython
 > = core.serialization.object({
+    filters: core.serialization.list(TraceThreadFilter).optional(),
     code: TraceThreadUserDefinedMetricPythonCode.optional(),
 });
 
 export declare namespace AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython {
     export interface Raw {
+        filters?: TraceThreadFilter.Raw[] | null;
         code?: TraceThreadUserDefinedMetricPythonCode.Raw | null;
     }
 }

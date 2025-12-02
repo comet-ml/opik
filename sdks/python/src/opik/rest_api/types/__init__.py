@@ -41,6 +41,7 @@ from .auth_details_holder import AuthDetailsHolder
 from .automation_rule_evaluator import (
     AutomationRuleEvaluator,
     AutomationRuleEvaluator_LlmAsJudge,
+    AutomationRuleEvaluator_SpanLlmAsJudge,
     AutomationRuleEvaluator_TraceThreadLlmAsJudge,
     AutomationRuleEvaluator_TraceThreadUserDefinedMetricPython,
     AutomationRuleEvaluator_UserDefinedMetricPython,
@@ -48,21 +49,26 @@ from .automation_rule_evaluator import (
 from .automation_rule_evaluator_llm_as_judge import AutomationRuleEvaluatorLlmAsJudge
 from .automation_rule_evaluator_llm_as_judge_public import AutomationRuleEvaluatorLlmAsJudgePublic
 from .automation_rule_evaluator_llm_as_judge_write import AutomationRuleEvaluatorLlmAsJudgeWrite
-from .automation_rule_evaluator_object_public import (
-    AutomationRuleEvaluatorObjectPublic,
-    AutomationRuleEvaluatorObjectPublic_LlmAsJudge,
-    AutomationRuleEvaluatorObjectPublic_TraceThreadLlmAsJudge,
-    AutomationRuleEvaluatorObjectPublic_TraceThreadUserDefinedMetricPython,
-    AutomationRuleEvaluatorObjectPublic_UserDefinedMetricPython,
+from .automation_rule_evaluator_object_object_public import (
+    AutomationRuleEvaluatorObjectObjectPublic,
+    AutomationRuleEvaluatorObjectObjectPublic_LlmAsJudge,
+    AutomationRuleEvaluatorObjectObjectPublic_SpanLlmAsJudge,
+    AutomationRuleEvaluatorObjectObjectPublic_TraceThreadLlmAsJudge,
+    AutomationRuleEvaluatorObjectObjectPublic_TraceThreadUserDefinedMetricPython,
+    AutomationRuleEvaluatorObjectObjectPublic_UserDefinedMetricPython,
 )
 from .automation_rule_evaluator_page_public import AutomationRuleEvaluatorPagePublic
 from .automation_rule_evaluator_public import (
     AutomationRuleEvaluatorPublic,
     AutomationRuleEvaluatorPublic_LlmAsJudge,
+    AutomationRuleEvaluatorPublic_SpanLlmAsJudge,
     AutomationRuleEvaluatorPublic_TraceThreadLlmAsJudge,
     AutomationRuleEvaluatorPublic_TraceThreadUserDefinedMetricPython,
     AutomationRuleEvaluatorPublic_UserDefinedMetricPython,
 )
+from .automation_rule_evaluator_span_llm_as_judge import AutomationRuleEvaluatorSpanLlmAsJudge
+from .automation_rule_evaluator_span_llm_as_judge_public import AutomationRuleEvaluatorSpanLlmAsJudgePublic
+from .automation_rule_evaluator_span_llm_as_judge_write import AutomationRuleEvaluatorSpanLlmAsJudgeWrite
 from .automation_rule_evaluator_trace_thread_llm_as_judge import AutomationRuleEvaluatorTraceThreadLlmAsJudge
 from .automation_rule_evaluator_trace_thread_llm_as_judge_public import (
     AutomationRuleEvaluatorTraceThreadLlmAsJudgePublic,
@@ -80,11 +86,13 @@ from .automation_rule_evaluator_trace_thread_user_defined_metric_python_write im
 from .automation_rule_evaluator_update import (
     AutomationRuleEvaluatorUpdate,
     AutomationRuleEvaluatorUpdate_LlmAsJudge,
+    AutomationRuleEvaluatorUpdate_SpanLlmAsJudge,
     AutomationRuleEvaluatorUpdate_TraceThreadLlmAsJudge,
     AutomationRuleEvaluatorUpdate_TraceThreadUserDefinedMetricPython,
     AutomationRuleEvaluatorUpdate_UserDefinedMetricPython,
 )
 from .automation_rule_evaluator_update_llm_as_judge import AutomationRuleEvaluatorUpdateLlmAsJudge
+from .automation_rule_evaluator_update_span_llm_as_judge import AutomationRuleEvaluatorUpdateSpanLlmAsJudge
 from .automation_rule_evaluator_update_trace_thread_llm_as_judge import (
     AutomationRuleEvaluatorUpdateTraceThreadLlmAsJudge,
 )
@@ -104,6 +112,7 @@ from .automation_rule_evaluator_user_defined_metric_python_write import (
 from .automation_rule_evaluator_write import (
     AutomationRuleEvaluatorWrite,
     AutomationRuleEvaluatorWrite_LlmAsJudge,
+    AutomationRuleEvaluatorWrite_SpanLlmAsJudge,
     AutomationRuleEvaluatorWrite_TraceThreadLlmAsJudge,
     AutomationRuleEvaluatorWrite_TraceThreadUserDefinedMetricPython,
     AutomationRuleEvaluatorWrite_UserDefinedMetricPython,
@@ -180,6 +189,8 @@ from .dataset_public import DatasetPublic
 from .dataset_public_status import DatasetPublicStatus
 from .dataset_public_visibility import DatasetPublicVisibility
 from .dataset_status import DatasetStatus
+from .dataset_version_diff import DatasetVersionDiff
+from .dataset_version_diff_stats import DatasetVersionDiffStats
 from .dataset_version_page_public import DatasetVersionPagePublic
 from .dataset_version_public import DatasetVersionPublic
 from .dataset_visibility import DatasetVisibility
@@ -262,6 +273,10 @@ from .feedback_update import (
     FeedbackUpdate_Categorical,
     FeedbackUpdate_Numerical,
 )
+from .filter_public import FilterPublic
+from .filter_public_operator import FilterPublicOperator
+from .filter_write import FilterWrite
+from .filter_write_operator import FilterWriteOperator
 from .function import Function
 from .function_call import FunctionCall
 from .group_content import GroupContent
@@ -391,8 +406,15 @@ from .span_batch import SpanBatch
 from .span_enrichment_options import SpanEnrichmentOptions
 from .span_experiment_item_bulk_write_view import SpanExperimentItemBulkWriteView
 from .span_experiment_item_bulk_write_view_type import SpanExperimentItemBulkWriteViewType
+from .span_filter import SpanFilter
+from .span_filter_operator import SpanFilterOperator
 from .span_filter_public import SpanFilterPublic
 from .span_filter_public_operator import SpanFilterPublicOperator
+from .span_filter_write import SpanFilterWrite
+from .span_filter_write_operator import SpanFilterWriteOperator
+from .span_llm_as_judge_code import SpanLlmAsJudgeCode
+from .span_llm_as_judge_code_public import SpanLlmAsJudgeCodePublic
+from .span_llm_as_judge_code_write import SpanLlmAsJudgeCodeWrite
 from .span_page_public import SpanPagePublic
 from .span_public import SpanPublic
 from .span_public_type import SpanPublicType
@@ -425,6 +447,8 @@ from .trace_thread_filter import TraceThreadFilter
 from .trace_thread_filter_operator import TraceThreadFilterOperator
 from .trace_thread_filter_public import TraceThreadFilterPublic
 from .trace_thread_filter_public_operator import TraceThreadFilterPublicOperator
+from .trace_thread_filter_write import TraceThreadFilterWrite
+from .trace_thread_filter_write_operator import TraceThreadFilterWriteOperator
 from .trace_thread_identifier import TraceThreadIdentifier
 from .trace_thread_llm_as_judge_code import TraceThreadLlmAsJudgeCode
 from .trace_thread_llm_as_judge_code_public import TraceThreadLlmAsJudgeCodePublic
@@ -510,17 +534,22 @@ __all__ = [
     "AutomationRuleEvaluatorLlmAsJudge",
     "AutomationRuleEvaluatorLlmAsJudgePublic",
     "AutomationRuleEvaluatorLlmAsJudgeWrite",
-    "AutomationRuleEvaluatorObjectPublic",
-    "AutomationRuleEvaluatorObjectPublic_LlmAsJudge",
-    "AutomationRuleEvaluatorObjectPublic_TraceThreadLlmAsJudge",
-    "AutomationRuleEvaluatorObjectPublic_TraceThreadUserDefinedMetricPython",
-    "AutomationRuleEvaluatorObjectPublic_UserDefinedMetricPython",
+    "AutomationRuleEvaluatorObjectObjectPublic",
+    "AutomationRuleEvaluatorObjectObjectPublic_LlmAsJudge",
+    "AutomationRuleEvaluatorObjectObjectPublic_SpanLlmAsJudge",
+    "AutomationRuleEvaluatorObjectObjectPublic_TraceThreadLlmAsJudge",
+    "AutomationRuleEvaluatorObjectObjectPublic_TraceThreadUserDefinedMetricPython",
+    "AutomationRuleEvaluatorObjectObjectPublic_UserDefinedMetricPython",
     "AutomationRuleEvaluatorPagePublic",
     "AutomationRuleEvaluatorPublic",
     "AutomationRuleEvaluatorPublic_LlmAsJudge",
+    "AutomationRuleEvaluatorPublic_SpanLlmAsJudge",
     "AutomationRuleEvaluatorPublic_TraceThreadLlmAsJudge",
     "AutomationRuleEvaluatorPublic_TraceThreadUserDefinedMetricPython",
     "AutomationRuleEvaluatorPublic_UserDefinedMetricPython",
+    "AutomationRuleEvaluatorSpanLlmAsJudge",
+    "AutomationRuleEvaluatorSpanLlmAsJudgePublic",
+    "AutomationRuleEvaluatorSpanLlmAsJudgeWrite",
     "AutomationRuleEvaluatorTraceThreadLlmAsJudge",
     "AutomationRuleEvaluatorTraceThreadLlmAsJudgePublic",
     "AutomationRuleEvaluatorTraceThreadLlmAsJudgeWrite",
@@ -529,10 +558,12 @@ __all__ = [
     "AutomationRuleEvaluatorTraceThreadUserDefinedMetricPythonWrite",
     "AutomationRuleEvaluatorUpdate",
     "AutomationRuleEvaluatorUpdateLlmAsJudge",
+    "AutomationRuleEvaluatorUpdateSpanLlmAsJudge",
     "AutomationRuleEvaluatorUpdateTraceThreadLlmAsJudge",
     "AutomationRuleEvaluatorUpdateTraceThreadUserDefinedMetricPython",
     "AutomationRuleEvaluatorUpdateUserDefinedMetricPython",
     "AutomationRuleEvaluatorUpdate_LlmAsJudge",
+    "AutomationRuleEvaluatorUpdate_SpanLlmAsJudge",
     "AutomationRuleEvaluatorUpdate_TraceThreadLlmAsJudge",
     "AutomationRuleEvaluatorUpdate_TraceThreadUserDefinedMetricPython",
     "AutomationRuleEvaluatorUpdate_UserDefinedMetricPython",
@@ -541,10 +572,12 @@ __all__ = [
     "AutomationRuleEvaluatorUserDefinedMetricPythonWrite",
     "AutomationRuleEvaluatorWrite",
     "AutomationRuleEvaluatorWrite_LlmAsJudge",
+    "AutomationRuleEvaluatorWrite_SpanLlmAsJudge",
     "AutomationRuleEvaluatorWrite_TraceThreadLlmAsJudge",
     "AutomationRuleEvaluatorWrite_TraceThreadUserDefinedMetricPython",
     "AutomationRuleEvaluatorWrite_UserDefinedMetricPython",
     "AutomationRuleEvaluator_LlmAsJudge",
+    "AutomationRuleEvaluator_SpanLlmAsJudge",
     "AutomationRuleEvaluator_TraceThreadLlmAsJudge",
     "AutomationRuleEvaluator_TraceThreadUserDefinedMetricPython",
     "AutomationRuleEvaluator_UserDefinedMetricPython",
@@ -620,6 +653,8 @@ __all__ = [
     "DatasetPublicStatus",
     "DatasetPublicVisibility",
     "DatasetStatus",
+    "DatasetVersionDiff",
+    "DatasetVersionDiffStats",
     "DatasetVersionPagePublic",
     "DatasetVersionPublic",
     "DatasetVisibility",
@@ -695,6 +730,10 @@ __all__ = [
     "Feedback_Boolean",
     "Feedback_Categorical",
     "Feedback_Numerical",
+    "FilterPublic",
+    "FilterPublicOperator",
+    "FilterWrite",
+    "FilterWriteOperator",
     "Function",
     "FunctionCall",
     "GroupContent",
@@ -822,8 +861,15 @@ __all__ = [
     "SpanEnrichmentOptions",
     "SpanExperimentItemBulkWriteView",
     "SpanExperimentItemBulkWriteViewType",
+    "SpanFilter",
+    "SpanFilterOperator",
     "SpanFilterPublic",
     "SpanFilterPublicOperator",
+    "SpanFilterWrite",
+    "SpanFilterWriteOperator",
+    "SpanLlmAsJudgeCode",
+    "SpanLlmAsJudgeCodePublic",
+    "SpanLlmAsJudgeCodeWrite",
     "SpanPagePublic",
     "SpanPublic",
     "SpanPublicType",
@@ -856,6 +902,8 @@ __all__ = [
     "TraceThreadFilterOperator",
     "TraceThreadFilterPublic",
     "TraceThreadFilterPublicOperator",
+    "TraceThreadFilterWrite",
+    "TraceThreadFilterWriteOperator",
     "TraceThreadIdentifier",
     "TraceThreadLlmAsJudgeCode",
     "TraceThreadLlmAsJudgeCodePublic",

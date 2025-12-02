@@ -12,6 +12,7 @@ from .json_node import JsonNode
 
 class DatasetItemPublic(UniversalBaseModel):
     id: typing.Optional[str] = None
+    draft_item_id: typing.Optional[str] = None
     trace_id: typing.Optional[str] = None
     span_id: typing.Optional[str] = None
     source: DatasetItemPublicSource

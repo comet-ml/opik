@@ -5,5 +5,6 @@
 import * as OpikApi from "../index";
 
 export interface AutomationRuleEvaluatorTraceThreadLlmAsJudgeWrite {
+    filters?: OpikApi.TraceThreadFilterWrite[];
     code?: OpikApi.TraceThreadLlmAsJudgeCodeWrite;
 }

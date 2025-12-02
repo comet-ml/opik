@@ -4,14 +4,14 @@ import typing
 
 import pydantic
 from ..core.pydantic_utilities import IS_PYDANTIC_V2, UniversalBaseModel
-from .automation_rule_evaluator_object_public import AutomationRuleEvaluatorObjectPublic
+from .automation_rule_evaluator_object_object_public import AutomationRuleEvaluatorObjectObjectPublic
 
 
 class AutomationRuleEvaluatorPagePublic(UniversalBaseModel):
     page: typing.Optional[int] = None
     size: typing.Optional[int] = None
     total: typing.Optional[int] = None
-    content: typing.Optional[typing.List[AutomationRuleEvaluatorObjectPublic]] = None
+    content: typing.Optional[typing.List[AutomationRuleEvaluatorObjectObjectPublic]] = None
     sortable_by: typing.Optional[typing.List[str]] = None
 
     if IS_PYDANTIC_V2:

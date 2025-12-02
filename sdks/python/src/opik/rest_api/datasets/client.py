@@ -14,6 +14,7 @@ from ..types.dataset_item_write import DatasetItemWrite
 from ..types.dataset_item_write_source import DatasetItemWriteSource
 from ..types.dataset_page_public import DatasetPagePublic
 from ..types.dataset_public import DatasetPublic
+from ..types.dataset_version_diff import DatasetVersionDiff
 from ..types.dataset_version_page_public import DatasetVersionPagePublic
 from ..types.json_node import JsonNode
 from ..types.page_columns import PageColumns
@@ -790,6 +791,7 @@ class DatasetsClient:
         *,
         page: typing.Optional[int] = None,
         size: typing.Optional[int] = None,
+        version: typing.Optional[str] = None,
         filters: typing.Optional[str] = None,
         truncate: typing.Optional[bool] = None,
         request_options: typing.Optional[RequestOptions] = None,
@@ -804,6 +806,8 @@ class DatasetsClient:
         page : typing.Optional[int]
 
         size : typing.Optional[int]
+
+        version : typing.Optional[str]
 
         filters : typing.Optional[str]
 
@@ -824,7 +828,13 @@ class DatasetsClient:
         client.datasets.get_dataset_items(id='id', )
         """
         _response = self._raw_client.get_dataset_items(
-            id, page=page, size=size, filters=filters, truncate=truncate, request_options=request_options
+            id,
+            page=page,
+            size=size,
+            version=version,
+            filters=filters,
+            truncate=truncate,
+            request_options=request_options,
         )
         return _response.data
 
@@ -897,6 +907,33 @@ class DatasetsClient:
             request_options=request_options,
         ) as r:
             yield from r.data
+
+    def compare_dataset_versions(
+        self, id: str, *, request_options: typing.Optional[RequestOptions] = None
+    ) -> DatasetVersionDiff:
+        """
+        Compare the latest committed dataset version with the current draft state. This endpoint provides insights into changes made since the last version was committed. The comparison calculates additions, modifications, deletions, and unchanged items between the latest version snapshot and current draft.
+
+        Parameters
+        ----------
+        id : str
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        DatasetVersionDiff
+            Diff computed successfully
+
+        Examples
+        --------
+        from Opik import OpikApi
+        client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        client.datasets.compare_dataset_versions(id='id', )
+        """
+        _response = self._raw_client.compare_dataset_versions(id, request_options=request_options)
+        return _response.data
 
     def create_version_tag(
         self, version_hash: str, id: str, *, tag: str, request_options: typing.Optional[RequestOptions] = None
@@ -1861,6 +1898,7 @@ class AsyncDatasetsClient:
         *,
         page: typing.Optional[int] = None,
         size: typing.Optional[int] = None,
+        version: typing.Optional[str] = None,
         filters: typing.Optional[str] = None,
         truncate: typing.Optional[bool] = None,
         request_options: typing.Optional[RequestOptions] = None,
@@ -1875,6 +1913,8 @@ class AsyncDatasetsClient:
         page : typing.Optional[int]
 
         size : typing.Optional[int]
+
+        version : typing.Optional[str]
 
         filters : typing.Optional[str]
 
@@ -1898,7 +1938,13 @@ class AsyncDatasetsClient:
         asyncio.run(main())
         """
         _response = await self._raw_client.get_dataset_items(
-            id, page=page, size=size, filters=filters, truncate=truncate, request_options=request_options
+            id,
+            page=page,
+            size=size,
+            version=version,
+            filters=filters,
+            truncate=truncate,
+            request_options=request_options,
         )
         return _response.data
 
@@ -1975,6 +2021,36 @@ class AsyncDatasetsClient:
         ) as r:
             async for data in r.data:
                 yield data
+
+    async def compare_dataset_versions(
+        self, id: str, *, request_options: typing.Optional[RequestOptions] = None
+    ) -> DatasetVersionDiff:
+        """
+        Compare the latest committed dataset version with the current draft state. This endpoint provides insights into changes made since the last version was committed. The comparison calculates additions, modifications, deletions, and unchanged items between the latest version snapshot and current draft.
+
+        Parameters
+        ----------
+        id : str
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        DatasetVersionDiff
+            Diff computed successfully
+
+        Examples
+        --------
+        from Opik import AsyncOpikApi
+        import asyncio
+        client = AsyncOpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        async def main() -> None:
+            await client.datasets.compare_dataset_versions(id='id', )
+        asyncio.run(main())
+        """
+        _response = await self._raw_client.compare_dataset_versions(id, request_options=request_options)
+        return _response.data
 
     async def create_version_tag(
         self, version_hash: str, id: str, *, tag: str, request_options: typing.Optional[RequestOptions] = None

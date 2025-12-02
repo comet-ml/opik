@@ -5,5 +5,6 @@
 import * as OpikApi from "../index";
 
 export interface AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython {
+    filters?: OpikApi.TraceThreadFilter[];
     code?: OpikApi.TraceThreadUserDefinedMetricPythonCode;
 }

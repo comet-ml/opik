@@ -8,7 +8,10 @@ import typing
 import pydantic
 from ..core.pydantic_utilities import IS_PYDANTIC_V2, UniversalBaseModel
 from .llm_as_judge_code import LlmAsJudgeCode
+from .span_filter import SpanFilter
+from .span_llm_as_judge_code import SpanLlmAsJudgeCode
 from .trace_filter import TraceFilter
+from .trace_thread_filter import TraceThreadFilter
 from .trace_thread_llm_as_judge_code import TraceThreadLlmAsJudgeCode
 from .trace_thread_user_defined_metric_python_code import TraceThreadUserDefinedMetricPythonCode
 from .user_defined_metric_python_code import UserDefinedMetricPythonCode
@@ -21,11 +24,11 @@ class Base(UniversalBaseModel):
     name: str
     sampling_rate: typing.Optional[float] = None
     enabled: typing.Optional[bool] = None
-    filters: typing.Optional[typing.List[TraceFilter]] = None
     created_at: typing.Optional[dt.datetime] = None
     created_by: typing.Optional[str] = None
     last_updated_at: typing.Optional[dt.datetime] = None
     last_updated_by: typing.Optional[str] = None
+    filters: typing.List[typing.Dict[str, typing.Optional[typing.Any]]]
     action: typing.Literal["evaluator"] = "evaluator"
 
     if IS_PYDANTIC_V2:
@@ -40,6 +43,7 @@ class Base(UniversalBaseModel):
 
 class AutomationRuleEvaluator_LlmAsJudge(Base):
     type: typing.Literal["llm_as_judge"] = "llm_as_judge"
+    filters: typing.Optional[typing.List[TraceFilter]] = None
     code: typing.Optional[LlmAsJudgeCode] = None
 
     if IS_PYDANTIC_V2:
@@ -54,6 +58,7 @@ class AutomationRuleEvaluator_LlmAsJudge(Base):
 
 class AutomationRuleEvaluator_UserDefinedMetricPython(Base):
     type: typing.Literal["user_defined_metric_python"] = "user_defined_metric_python"
+    filters: typing.Optional[typing.List[TraceFilter]] = None
     code: typing.Optional[UserDefinedMetricPythonCode] = None
 
     if IS_PYDANTIC_V2:
@@ -68,6 +73,7 @@ class AutomationRuleEvaluator_UserDefinedMetricPython(Base):
 
 class AutomationRuleEvaluator_TraceThreadLlmAsJudge(Base):
     type: typing.Literal["trace_thread_llm_as_judge"] = "trace_thread_llm_as_judge"
+    filters: typing.Optional[typing.List[TraceThreadFilter]] = None
     code: typing.Optional[TraceThreadLlmAsJudgeCode] = None
 
     if IS_PYDANTIC_V2:
@@ -82,7 +88,23 @@ class AutomationRuleEvaluator_TraceThreadLlmAsJudge(Base):
 
 class AutomationRuleEvaluator_TraceThreadUserDefinedMetricPython(Base):
     type: typing.Literal["trace_thread_user_defined_metric_python"] = "trace_thread_user_defined_metric_python"
+    filters: typing.Optional[typing.List[TraceThreadFilter]] = None
     code: typing.Optional[TraceThreadUserDefinedMetricPythonCode] = None
+
+    if IS_PYDANTIC_V2:
+        model_config: typing.ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(extra="allow", frozen=True)  # type: ignore # Pydantic v2
+    else:
+
+        class Config:
+            frozen = True
+            smart_union = True
+            extra = pydantic.Extra.allow
+
+
+class AutomationRuleEvaluator_SpanLlmAsJudge(Base):
+    type: typing.Literal["span_llm_as_judge"] = "span_llm_as_judge"
+    filters: typing.Optional[typing.List[SpanFilter]] = None
+    code: typing.Optional[SpanLlmAsJudgeCode] = None
 
     if IS_PYDANTIC_V2:
         model_config: typing.ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(extra="allow", frozen=True)  # type: ignore # Pydantic v2
@@ -99,4 +121,5 @@ AutomationRuleEvaluator = typing.Union[
     AutomationRuleEvaluator_UserDefinedMetricPython,
     AutomationRuleEvaluator_TraceThreadLlmAsJudge,
     AutomationRuleEvaluator_TraceThreadUserDefinedMetricPython,
+    AutomationRuleEvaluator_SpanLlmAsJudge,
 ]

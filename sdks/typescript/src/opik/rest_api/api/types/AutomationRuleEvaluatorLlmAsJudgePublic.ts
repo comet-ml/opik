@@ -5,5 +5,6 @@
 import * as OpikApi from "../index";
 
 export interface AutomationRuleEvaluatorLlmAsJudgePublic {
+    filters?: OpikApi.TraceFilterPublic[];
     code?: OpikApi.LlmAsJudgeCodePublic;
 }

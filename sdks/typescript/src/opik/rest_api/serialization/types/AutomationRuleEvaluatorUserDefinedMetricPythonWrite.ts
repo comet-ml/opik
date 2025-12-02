@@ -5,17 +5,20 @@
 import * as serializers from "../index";
 import * as OpikApi from "../../api/index";
 import * as core from "../../core";
+import { TraceFilterWrite } from "./TraceFilterWrite";
 import { UserDefinedMetricPythonCodeWrite } from "./UserDefinedMetricPythonCodeWrite";
 
 export const AutomationRuleEvaluatorUserDefinedMetricPythonWrite: core.serialization.ObjectSchema<
     serializers.AutomationRuleEvaluatorUserDefinedMetricPythonWrite.Raw,
     OpikApi.AutomationRuleEvaluatorUserDefinedMetricPythonWrite
 > = core.serialization.object({
+    filters: core.serialization.list(TraceFilterWrite).optional(),
     code: UserDefinedMetricPythonCodeWrite.optional(),
 });
 
 export declare namespace AutomationRuleEvaluatorUserDefinedMetricPythonWrite {
     export interface Raw {
+        filters?: TraceFilterWrite.Raw[] | null;
         code?: UserDefinedMetricPythonCodeWrite.Raw | null;
     }
 }
