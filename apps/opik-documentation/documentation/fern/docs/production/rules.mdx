@@ -122,6 +122,143 @@ The scores returned by the online evaluation rules will be stored as feedback sc
 
 You can also view the average feedback scores for all the traces in your project from the traces table.
 
+## Triggering evaluation rules programmatically
+
+In addition to automatic evaluation of new traces, you can programmatically trigger evaluation of existing traces using the REST API. This is useful when you want to:
+
+- Evaluate a specific subset of traces with a rule
+- Re-evaluate traces after updating a rule
+- Integrate evaluation into your own workflows or pipelines
+
+### Using the REST API
+
+To trigger evaluation for specific traces, use the manual evaluation endpoint:
+
+<Tabs>
+  <Tab title="Opik Cloud">
+```python
+import requests
+
+# Configuration
+BASE_URL = "https://www.comet.com/opik/api"
+API_KEY = "your-api-key"
+WORKSPACE_NAME = "your-workspace"
+
+# Headers for authentication
+headers = {
+    "Accept": "application/json",
+    "Content-Type": "application/json",
+    "Authorization": API_KEY,  # Note: No "Bearer " prefix
+    "Comet-Workspace": WORKSPACE_NAME
+}
+
+def trigger_evaluation(project_id: str, trace_ids: list[str], rule_ids: list[str]):
+    """
+    Trigger online evaluation for traces using automation rules.
+    
+    Args:
+        project_id: UUID of the project
+        trace_ids: List of trace UUIDs to evaluate
+        rule_ids: List of automation rule UUIDs to apply
+    """
+    url = f"{BASE_URL}/v1/private/manual-evaluation/traces"
+    
+    payload = {
+        "project_id": project_id,
+        "entity_ids": trace_ids,
+        "rule_ids": rule_ids,
+        "entity_type": "trace"  # Use "thread" for thread evaluation
+    }
+    
+    response = requests.post(url, headers=headers, json=payload)
+    
+    if response.status_code == 202:
+        result = response.json()
+        print(f"Evaluation queued successfully!")
+        print(f"Entities queued: {result['entities_queued']}")
+        print(f"Rules applied: {result['rules_applied']}")
+        return result
+    else:
+        print(f"Error: {response.status_code}")
+        print(f"Response: {response.text}")
+        return None
+
+# Example usage
+trigger_evaluation(
+    project_id="your-project-uuid",
+    trace_ids=["trace-uuid-1", "trace-uuid-2"],
+    rule_ids=["rule-uuid-1"]
+)
+```
+  </Tab>
+  <Tab title="Self-hosted">
+```python
+import requests
+
+# Configuration - adjust BASE_URL for your self-hosted instance
+BASE_URL = "http://localhost:5173/api"
+API_KEY = "your-api-key"
+
+# Headers for authentication
+headers = {
+    "Accept": "application/json",
+    "Content-Type": "application/json",
+    "Authorization": API_KEY
+}
+
+def trigger_evaluation(project_id: str, trace_ids: list[str], rule_ids: list[str]):
+    """
+    Trigger online evaluation for traces using automation rules.
+    
+    Args:
+        project_id: UUID of the project
+        trace_ids: List of trace UUIDs to evaluate
+        rule_ids: List of automation rule UUIDs to apply
+    """
+    url = f"{BASE_URL}/v1/private/manual-evaluation/traces"
+    
+    payload = {
+        "project_id": project_id,
+        "entity_ids": trace_ids,
+        "rule_ids": rule_ids,
+        "entity_type": "trace"  # Use "thread" for thread evaluation
+    }
+    
+    response = requests.post(url, headers=headers, json=payload)
+    
+    if response.status_code == 202:
+        result = response.json()
+        print(f"Evaluation queued successfully!")
+        print(f"Entities queued: {result['entities_queued']}")
+        print(f"Rules applied: {result['rules_applied']}")
+        return result
+    else:
+        print(f"Error: {response.status_code}")
+        print(f"Response: {response.text}")
+        return None
+
+# Example usage
+trigger_evaluation(
+    project_id="your-project-uuid",
+    trace_ids=["trace-uuid-1", "trace-uuid-2"],
+    rule_ids=["rule-uuid-1"]
+)
+```
+  </Tab>
+</Tabs>
+
+### Finding the required IDs
+
+To use this API, you'll need the following UUIDs:
+
+- **Project ID**: Found in the URL when viewing a project, or via the [Projects API](/reference/rest-api/projects/get-projects)
+- **Trace IDs**: Found in the trace details panel, or via the [Traces API](/reference/rest-api/traces/get-traces-by-project)
+- **Rule IDs**: Found in the rule details, or via the [Automation Rules API](/reference/rest-api/automation-rule-evaluators/find-automation-rule-evaluators)
+
+<Note>
+  The evaluation is queued asynchronously. The API returns immediately with a `202 Accepted` status, and the evaluation runs in the background. Feedback scores will appear on the traces once the evaluation completes.
+</Note>
+
 ## Online thread evaluation rules
 
 It is also possible to define LLM as a Judge and Custome Python metrics that run on threads. This is useful to score the entire conversations and not just the individual traces.
