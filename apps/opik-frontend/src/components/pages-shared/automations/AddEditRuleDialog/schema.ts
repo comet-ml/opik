@@ -364,20 +364,18 @@ export const PythonCodeDetailsTraceFormSchema = BasePythonCodeFormSchema.extend(
 
 export const PythonCodeDetailsThreadFormSchema = BasePythonCodeFormSchema;
 
-export const PythonCodeDetailsSpanFormSchema = BasePythonCodeFormSchema.extend(
-  {
-    arguments: z.record(
-      z.string(),
-      z
-        .string()
-        .min(1, { message: "Key is required" })
-        .regex(/^(input|output|metadata)/, {
-          message: `Key is invalid, it should begin with "input", "output", or "metadata" and follow this format: "input.[PATH]" For example: "input.message"`,
-        }),
-    ),
-    parsingArgumentsError: z.boolean().optional(),
-  },
-);
+export const PythonCodeDetailsSpanFormSchema = BasePythonCodeFormSchema.extend({
+  arguments: z.record(
+    z.string(),
+    z
+      .string()
+      .min(1, { message: "Key is required" })
+      .regex(/^(input|output|metadata)/, {
+        message: `Key is invalid, it should begin with "input", "output", or "metadata" and follow this format: "input.[PATH]" For example: "input.message"`,
+      }),
+  ),
+  parsingArgumentsError: z.boolean().optional(),
+});
 
 export const BaseEvaluationRuleFormSchema = z.object({
   ruleName: RuleNameSchema,
