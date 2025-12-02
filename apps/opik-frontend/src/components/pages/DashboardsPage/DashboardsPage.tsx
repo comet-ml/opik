@@ -19,6 +19,7 @@ import { Dashboard } from "@/types/dashboard";
 import Loader from "@/components/shared/Loader/Loader";
 import DashboardCreateDialog from "@/components/pages/DashboardsPage/DashboardCreateDialog";
 import { DashboardRowActionsCell } from "@/components/pages/DashboardsPage/DashboardRowActionsCell";
+import DashboardsActionsPanel from "@/components/pages/DashboardsPage/DashboardsActionsPanel";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import useAppStore from "@/store/AppStore";
@@ -142,6 +143,10 @@ const DashboardsPage: React.FunctionComponent = () => {
     ? "There are no dashboards yet"
     : "No search results";
 
+  const selectedDashboards = useMemo(() => {
+    return dashboards.filter((dashboard) => rowSelection[dashboard.id]);
+  }, [dashboards, rowSelection]);
+
   const [selectedColumns, setSelectedColumns] = useLocalStorageState<string[]>(
     SELECTED_COLUMNS_KEY,
     {
@@ -235,6 +240,7 @@ const DashboardsPage: React.FunctionComponent = () => {
           dimension="sm"
         ></SearchInput>
         <div className="flex items-center gap-2">
+          <DashboardsActionsPanel dashboards={selectedDashboards} />
           <Separator orientation="vertical" className="mx-2 h-4" />
           <ColumnsButton
             columns={columnsDef}

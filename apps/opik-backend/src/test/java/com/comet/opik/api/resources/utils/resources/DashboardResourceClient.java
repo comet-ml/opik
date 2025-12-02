@@ -13,6 +13,7 @@ import lombok.RequiredArgsConstructor;
 import org.apache.http.HttpStatus;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 
+import java.util.Set;
 import java.util.UUID;
 
 import static com.comet.opik.infrastructure.auth.RequestContext.WORKSPACE_HEADER;
@@ -140,6 +141,28 @@ public class DashboardResourceClient {
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .header(WORKSPACE_HEADER, workspaceName)
                 .delete();
+    }
+
+    public void batchDelete(Set<UUID> ids, String apiKey, String workspaceName) {
+        batchDelete(ids, apiKey, workspaceName, HttpStatus.SC_NO_CONTENT);
+    }
+
+    public void batchDelete(Set<UUID> ids, String apiKey, String workspaceName, int expectedStatus) {
+        try (var response = callBatchDelete(ids, apiKey, workspaceName)) {
+            assertThat(response.getStatus()).isEqualTo(expectedStatus);
+        }
+    }
+
+    public Response callBatchDelete(Set<UUID> ids, String apiKey, String workspaceName) {
+        var batchDelete = com.comet.opik.api.BatchDelete.builder()
+                .ids(ids)
+                .build();
+        return client.target(RESOURCE_PATH.formatted(baseURI))
+                .path("delete-batch")
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .post(Entity.json(batchDelete));
     }
 
     public Dashboard.DashboardBuilder createPartialDashboard() {

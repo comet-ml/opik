@@ -1,6 +1,7 @@
 package com.comet.opik.api.resources.v1.priv;
 
 import com.codahale.metrics.annotation.Timed;
+import com.comet.opik.api.BatchDelete;
 import com.comet.opik.api.Dashboard;
 import com.comet.opik.api.Dashboard.DashboardPage;
 import com.comet.opik.api.DashboardUpdate;
@@ -153,6 +154,23 @@ public class DashboardsResource {
         service.delete(id);
 
         log.info("Deleted dashboard by id '{}' in workspace '{}'", id, workspaceId);
+        return Response.noContent().build();
+    }
+
+    @POST
+    @Path("/delete-batch")
+    @Operation(operationId = "deleteDashboardsBatch", summary = "Delete dashboards", description = "Delete dashboards batch", responses = {
+            @ApiResponse(responseCode = "204", description = "No content"),
+    })
+    public Response deleteDashboardsBatch(
+            @NotNull @RequestBody(content = @Content(schema = @Schema(implementation = BatchDelete.class))) @Valid BatchDelete batchDelete) {
+
+        String workspaceId = requestContext.get().getWorkspaceId();
+
+        log.info("Deleting dashboards by ids, count '{}' in workspace '{}'", batchDelete.ids().size(), workspaceId);
+        service.delete(batchDelete.ids());
+        log.info("Deleted dashboards by ids, count '{}' in workspace '{}'", batchDelete.ids().size(), workspaceId);
+
         return Response.noContent().build();
     }
 }

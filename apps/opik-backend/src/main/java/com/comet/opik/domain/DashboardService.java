@@ -21,6 +21,7 @@ import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
 import java.sql.SQLIntegrityConstraintViolationException;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONLY;
@@ -38,6 +39,8 @@ public interface DashboardService {
     Dashboard update(@NonNull UUID id, @NonNull DashboardUpdate dashboardUpdate);
 
     void delete(@NonNull UUID id);
+
+    void delete(@NonNull Set<UUID> ids);
 }
 
 @Slf4j
@@ -199,5 +202,24 @@ class DashboardServiceImpl implements DashboardService {
 
             return null;
         });
+    }
+
+    @Override
+    public void delete(@NonNull Set<UUID> ids) {
+        if (ids.isEmpty()) {
+            log.info("Dashboard ids list is empty, returning");
+            return;
+        }
+
+        String workspaceId = requestContext.get().getWorkspaceId();
+
+        log.info("Deleting dashboards by ids, count '{}' in workspace '{}'", ids.size(), workspaceId);
+
+        template.inTransaction(WRITE, handle -> {
+            handle.attach(DashboardDAO.class).delete(ids, workspaceId);
+            return null;
+        });
+
+        log.info("Deleted dashboards by ids, count '{}' in workspace '{}'", ids.size(), workspaceId);
     }
 }

@@ -38,6 +38,7 @@ import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
@@ -493,6 +494,104 @@ class DashboardsResourceTest {
 
             // Verify original dashboard still exists
             dashboardResourceClient.get(id, API_KEY, TEST_WORKSPACE_NAME, HttpStatus.SC_OK);
+        }
+    }
+
+    @Nested
+    @DisplayName("Batch delete dashboards")
+    class BatchDeleteDashboards {
+
+        @Test
+        @DisplayName("Batch delete multiple existing dashboards")
+        void batchDeleteMultipleExistingDashboards() {
+            var dashboard1 = dashboardResourceClient.createPartialDashboard().build();
+            var id1 = dashboardResourceClient.create(dashboard1, API_KEY, TEST_WORKSPACE_NAME);
+
+            var dashboard2 = dashboardResourceClient.createPartialDashboard().build();
+            var id2 = dashboardResourceClient.create(dashboard2, API_KEY, TEST_WORKSPACE_NAME);
+
+            var dashboard3 = dashboardResourceClient.createPartialDashboard().build();
+            var id3 = dashboardResourceClient.create(dashboard3, API_KEY, TEST_WORKSPACE_NAME);
+
+            // Verify dashboards exist
+            dashboardResourceClient.get(id1, API_KEY, TEST_WORKSPACE_NAME, HttpStatus.SC_OK);
+            dashboardResourceClient.get(id2, API_KEY, TEST_WORKSPACE_NAME, HttpStatus.SC_OK);
+            dashboardResourceClient.get(id3, API_KEY, TEST_WORKSPACE_NAME, HttpStatus.SC_OK);
+
+            // Batch delete dashboards
+            dashboardResourceClient.batchDelete(Set.of(id1, id2, id3), API_KEY, TEST_WORKSPACE_NAME);
+
+            // Verify dashboards are deleted
+            dashboardResourceClient.get(id1, API_KEY, TEST_WORKSPACE_NAME, HttpStatus.SC_NOT_FOUND);
+            dashboardResourceClient.get(id2, API_KEY, TEST_WORKSPACE_NAME, HttpStatus.SC_NOT_FOUND);
+            dashboardResourceClient.get(id3, API_KEY, TEST_WORKSPACE_NAME, HttpStatus.SC_NOT_FOUND);
+        }
+
+        @Test
+        @DisplayName("Batch delete single dashboard")
+        void batchDeleteSingleDashboard() {
+            var dashboard = dashboardResourceClient.createPartialDashboard().build();
+            var id = dashboardResourceClient.create(dashboard, API_KEY, TEST_WORKSPACE_NAME);
+
+            // Verify dashboard exists
+            dashboardResourceClient.get(id, API_KEY, TEST_WORKSPACE_NAME, HttpStatus.SC_OK);
+
+            // Batch delete single dashboard
+            dashboardResourceClient.batchDelete(Set.of(id), API_KEY, TEST_WORKSPACE_NAME);
+
+            // Verify dashboard is deleted
+            dashboardResourceClient.get(id, API_KEY, TEST_WORKSPACE_NAME, HttpStatus.SC_NOT_FOUND);
+        }
+
+        @Test
+        @DisplayName("Batch delete with non-existent IDs returns 204")
+        void batchDeleteWithNonExistentIdsReturns204() {
+            var nonExistentId1 = UUID.randomUUID();
+            var nonExistentId2 = UUID.randomUUID();
+
+            dashboardResourceClient.batchDelete(Set.of(nonExistentId1, nonExistentId2), API_KEY, TEST_WORKSPACE_NAME,
+                    HttpStatus.SC_NO_CONTENT);
+        }
+
+        @Test
+        @DisplayName("Batch delete with mixed existing and non-existent IDs")
+        void batchDeleteWithMixedIds() {
+            var dashboard = dashboardResourceClient.createPartialDashboard().build();
+            var existingId = dashboardResourceClient.create(dashboard, API_KEY, TEST_WORKSPACE_NAME);
+            var nonExistentId = UUID.randomUUID();
+
+            // Verify dashboard exists
+            dashboardResourceClient.get(existingId, API_KEY, TEST_WORKSPACE_NAME, HttpStatus.SC_OK);
+
+            // Batch delete with mixed IDs
+            dashboardResourceClient.batchDelete(Set.of(existingId, nonExistentId), API_KEY, TEST_WORKSPACE_NAME);
+
+            // Verify existing dashboard is deleted
+            dashboardResourceClient.get(existingId, API_KEY, TEST_WORKSPACE_NAME, HttpStatus.SC_NOT_FOUND);
+        }
+
+        @Test
+        @DisplayName("Batch delete from different workspace returns 204 but doesn't delete")
+        void batchDeleteFromDifferentWorkspaceReturns204() {
+            // Create dashboards in one workspace
+            var dashboard1 = dashboardResourceClient.createPartialDashboard().build();
+            var id1 = dashboardResourceClient.create(dashboard1, API_KEY, TEST_WORKSPACE_NAME);
+
+            var dashboard2 = dashboardResourceClient.createPartialDashboard().build();
+            var id2 = dashboardResourceClient.create(dashboard2, API_KEY, TEST_WORKSPACE_NAME);
+
+            // Try to delete from a different workspace
+            String differentApiKey = UUID.randomUUID().toString();
+            String differentWorkspaceName = "different-workspace-" + UUID.randomUUID();
+            String differentWorkspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(differentApiKey, differentWorkspaceName, differentWorkspaceId);
+
+            dashboardResourceClient.batchDelete(Set.of(id1, id2), differentApiKey, differentWorkspaceName,
+                    HttpStatus.SC_NO_CONTENT);
+
+            // Verify original dashboards still exist
+            dashboardResourceClient.get(id1, API_KEY, TEST_WORKSPACE_NAME, HttpStatus.SC_OK);
+            dashboardResourceClient.get(id2, API_KEY, TEST_WORKSPACE_NAME, HttpStatus.SC_OK);
         }
     }
 
