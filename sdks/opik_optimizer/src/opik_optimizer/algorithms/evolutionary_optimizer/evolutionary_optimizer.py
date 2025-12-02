@@ -379,7 +379,7 @@ class EvolutionaryOptimizer(BaseOptimizer):
 
     def optimize_prompt(
         self,
-        prompt: chat_prompt.ChatPrompt,
+        prompt: chat_prompt.ChatPrompt | dict[str, chat_prompt.ChatPrompt],
         dataset: opik.Dataset,
         metric: Callable,
         experiment_config: dict | None = None,
@@ -396,7 +396,7 @@ class EvolutionaryOptimizer(BaseOptimizer):
     ) -> OptimizationResult:
         """
         Args:
-            prompt: The prompt to optimize.
+            prompt: The prompt to optimize (single ChatPrompt or dict of ChatPrompts).
             dataset: Dataset used to evaluate each candidate prompt.
             metric: Objective function receiving `(dataset_item, llm_output)`.
             experiment_config: Optional experiment configuration metadata.
@@ -410,6 +410,19 @@ class EvolutionaryOptimizer(BaseOptimizer):
             max_trials: Maximum number of prompt evaluations allowed.
             mcp_config: MCP tool-calling configuration (default: None).
         """
+        # Convert single prompt to dict format for internal processing
+        optimizable_prompts: dict[str, chat_prompt.ChatPrompt]
+        is_single_prompt_optimization: bool
+        if isinstance(prompt, chat_prompt.ChatPrompt):
+            optimizable_prompts = {prompt.name: prompt}
+            is_single_prompt_optimization = True
+        else:
+            optimizable_prompts = prompt
+            is_single_prompt_optimization = False
+
+        # For evolutionary optimizer, work with the first prompt
+        # (evolutionary doesn't naturally support multi-prompt optimization)
+        working_prompt = list(optimizable_prompts.values())[0]
 
         # Logic on which dataset to use for scoring
         if validation_dataset is not None:
@@ -422,8 +435,10 @@ class EvolutionaryOptimizer(BaseOptimizer):
         )
 
         # Use base class validation and setup methods
-        self._validate_optimization_inputs(prompt, dataset, metric)
-        self.agent_class = self._setup_agent_class(prompt, agent_class)
+        self._validate_optimization_inputs(
+            optimizable_prompts, dataset, metric, support_content_parts=True
+        )
+        self.agent_class = self._setup_agent_class(working_prompt, agent_class)
         evaluation_kwargs: dict[str, Any] = {}
         if mcp_config is not None:
             evaluation_kwargs["mcp_config"] = mcp_config
@@ -454,7 +469,7 @@ class EvolutionaryOptimizer(BaseOptimizer):
         )
 
         reporting.display_configuration(
-            prompt.get_messages(),
+            working_prompt.get_messages(),
             {
                 "optimizer": f"{'DEAP MOO' if self.enable_moo else 'DEAP SO'} Evolutionary Optimization",
                 "population_size": self.population_size,
@@ -463,7 +478,7 @@ class EvolutionaryOptimizer(BaseOptimizer):
                 "crossover_rate": self.crossover_rate,
             },
             verbose=self.verbose,
-            tools=getattr(prompt, "tools", None),
+            tools=getattr(working_prompt, "tools", None),
         )
 
         # Step 1. Step variables and define fitness function
@@ -492,7 +507,7 @@ class EvolutionaryOptimizer(BaseOptimizer):
 
                 primary_fitness_score = evaluation_ops.evaluate_prompt(
                     self,
-                    prompt,
+                    working_prompt,
                     messages,  # type: ignore
                     dataset=evaluation_dataset,  # use right dataset for scoring
                     metric=metric,
@@ -521,7 +536,7 @@ class EvolutionaryOptimizer(BaseOptimizer):
 
                 fitness_score = evaluation_ops.evaluate_prompt(
                     self,
-                    prompt,
+                    working_prompt,
                     messages,
                     dataset=evaluation_dataset,  # use right dataset for scoring
                     metric=metric,
@@ -540,18 +555,18 @@ class EvolutionaryOptimizer(BaseOptimizer):
             verbose=self.verbose
         ) as report_baseline_performance:
             initial_eval_result = self._deap_evaluate_individual_fitness(
-                prompt.get_messages()
+                working_prompt.get_messages()
             )  # type: ignore
             initial_primary_score = initial_eval_result[0]
             initial_length = (
                 initial_eval_result[1]
                 if self.enable_moo
-                else float(len(json.dumps(prompt.get_messages())))
+                else float(len(json.dumps(working_prompt.get_messages())))
             )
 
             trials_used[0] = 0
             best_primary_score_overall = initial_primary_score
-            best_prompt_overall = prompt
+            best_prompt_overall = working_prompt
             report_baseline_performance.set_score(initial_primary_score)
 
         # Step 3. Define the output style guide
@@ -585,7 +600,7 @@ class EvolutionaryOptimizer(BaseOptimizer):
         # Step 4. Initialize population
         initial_prompts: list[chat_prompt.ChatPrompt] = (
             population_ops.initialize_population(
-                prompt=prompt,
+                prompt=working_prompt,
                 output_style_guidance=effective_output_style_guidance,
                 mcp_context=self._mcp_context,
                 model=self.model,
@@ -638,9 +653,9 @@ class EvolutionaryOptimizer(BaseOptimizer):
                 best_primary_score_overall = current_best_for_primary.fitness.values[0]
                 best_prompt_overall = chat_prompt.ChatPrompt(
                     messages=current_best_for_primary,
-                    tools=getattr(current_best_for_primary, "tools", prompt.tools),
+                    tools=getattr(current_best_for_primary, "tools", working_prompt.tools),
                     function_map=getattr(
-                        current_best_for_primary, "function_map", prompt.function_map
+                        current_best_for_primary, "function_map", working_prompt.function_map
                     ),
                     model=getattr(current_best_for_primary, "model", prompt.model),
                     model_parameters=getattr(
@@ -653,9 +668,9 @@ class EvolutionaryOptimizer(BaseOptimizer):
                 best_primary_score_overall = current_best_on_front.fitness.values[0]
                 best_prompt_overall = chat_prompt.ChatPrompt(
                     messages=current_best_on_front,
-                    tools=getattr(current_best_on_front, "tools", prompt.tools),
+                    tools=getattr(current_best_on_front, "tools", working_prompt.tools),
                     function_map=getattr(
-                        current_best_on_front, "function_map", prompt.function_map
+                        current_best_on_front, "function_map", working_prompt.function_map
                     ),
                     model=getattr(current_best_on_front, "model", prompt.model),
                     model_parameters=getattr(
@@ -735,7 +750,7 @@ class EvolutionaryOptimizer(BaseOptimizer):
                 deap_population, invalid_count = self._run_generation(
                     generation_idx,
                     deap_population,
-                    prompt,
+                    working_prompt,
                     hof,
                     report_evolutionary_algo,
                     best_primary_score_overall,
@@ -817,9 +832,9 @@ class EvolutionaryOptimizer(BaseOptimizer):
                 best_overall_solution = sorted_hof[0]
                 final_best_prompt = chat_prompt.ChatPrompt(
                     messages=best_overall_solution,
-                    tools=getattr(best_overall_solution, "tools", prompt.tools),
+                    tools=getattr(best_overall_solution, "tools", working_prompt.tools),
                     function_map=getattr(
-                        best_overall_solution, "function_map", prompt.function_map
+                        best_overall_solution, "function_map", working_prompt.function_map
                     ),
                     model=getattr(best_overall_solution, "model", prompt.model),
                     model_parameters=getattr(
@@ -883,7 +898,7 @@ class EvolutionaryOptimizer(BaseOptimizer):
             )
             final_details.update(
                 {
-                    "initial_prompt": prompt.get_messages(),
+                    "initial_prompt": working_prompt.get_messages(),
                     "initial_score": initial_primary_score,
                     "initial_score_for_display": initial_primary_score,
                     "final_prompt": final_best_prompt,
@@ -948,11 +963,23 @@ class EvolutionaryOptimizer(BaseOptimizer):
             final_details["final_tools"] = final_tools
         tool_prompts = self._extract_tool_prompts(final_tools)
 
+        # Convert result format based on input type
+        if is_single_prompt_optimization:
+            result_prompt: (
+                chat_prompt.ChatPrompt | dict[str, chat_prompt.ChatPrompt]
+            ) = final_best_prompt
+            result_initial_prompt: (
+                chat_prompt.ChatPrompt | dict[str, chat_prompt.ChatPrompt]
+            ) = working_prompt
+        else:
+            result_prompt = {working_prompt.name: final_best_prompt}
+            result_initial_prompt = optimizable_prompts
+
         return OptimizationResult(
             optimizer=self.__class__.__name__,
-            prompt=final_best_prompt.get_messages(),
+            prompt=result_prompt,
             score=final_primary_score,
-            initial_prompt=prompt.get_messages(),
+            initial_prompt=result_initial_prompt,
             initial_score=initial_primary_score,
             metric_name=metric.__name__,
             details=final_details,
