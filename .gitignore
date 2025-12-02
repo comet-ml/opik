@@ -79,6 +79,9 @@ pip-log.txt
 # VS Code
 .vscode
 
+# Claude Code
+.claude/
+
 # charts
 deployment/helm_chart/opik/charts
 deployment/helm_chart/opik/values-*.yaml
