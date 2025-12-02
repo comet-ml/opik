@@ -49,11 +49,7 @@ const WidgetConfigDialogAddStep: React.FunctionComponent<
     });
   }, [widgetResolver]);
 
-  const categories = [
-    WIDGET_CATEGORY.OBSERVABILITY,
-    WIDGET_CATEGORY.EVALUATION,
-    WIDGET_CATEGORY.GENERAL,
-  ] as const;
+  const categories = Object.values(WIDGET_CATEGORY);
 
   return (
     <div className="flex flex-col gap-4">
