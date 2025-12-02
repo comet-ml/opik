@@ -143,13 +143,13 @@ class ManualEvaluationServiceImpl implements ManualEvaluationService {
         log.info("Evaluating '{}' traces with '{}' rules", traceIds.size(), rules.size());
 
         // Separate rules by type - only trace-level rules are valid for trace evaluation
-        List<AutomationRuleEvaluatorLlmAsJudge> spanLevelLlmAsJudgeRules = new ArrayList<>();
+        List<AutomationRuleEvaluatorLlmAsJudge> traceLevelLlmAsJudgeRules = new ArrayList<>();
         List<AutomationRuleEvaluatorUserDefinedMetricPython> spanLevelPythonRules = new ArrayList<>();
         List<AutomationRuleEvaluator<?, ?>> traceThreadRules = new ArrayList<>();
 
         for (AutomationRuleEvaluator<?, ?> rule : rules) {
             switch (rule) {
-                case AutomationRuleEvaluatorLlmAsJudge llmAsJudge -> spanLevelLlmAsJudgeRules.add(llmAsJudge);
+                case AutomationRuleEvaluatorLlmAsJudge llmAsJudge -> traceLevelLlmAsJudgeRules.add(llmAsJudge);
                 case AutomationRuleEvaluatorUserDefinedMetricPython python -> spanLevelPythonRules.add(python);
                 case AutomationRuleEvaluatorTraceThreadLlmAsJudge traceThreadLlmAsJudge ->
                     traceThreadRules.add(traceThreadLlmAsJudge);
@@ -169,8 +169,8 @@ class ManualEvaluationServiceImpl implements ManualEvaluationService {
 
         // Handle span-level evaluators - need to fetch full traces
         Mono<Void> spanLevelMono = Mono.empty();
-        if (!spanLevelLlmAsJudgeRules.isEmpty() || !spanLevelPythonRules.isEmpty()) {
-            spanLevelMono = enqueueSpanLevelEvaluations(traceIds, spanLevelLlmAsJudgeRules,
+        if (!traceLevelLlmAsJudgeRules.isEmpty() || !spanLevelPythonRules.isEmpty()) {
+            spanLevelMono = enqueueSpanLevelEvaluations(traceIds, traceLevelLlmAsJudgeRules,
                     spanLevelPythonRules, projectId, workspaceId, userName);
         }
 
