@@ -353,6 +353,13 @@ class OnlineScoringSpanSamplerTest {
                     projectId, workspaceId, AutomationRuleEvaluatorType.SPAN_LLM_AS_JUDGE)).thenReturn(evaluators1);
             when(ruleEvaluatorService.<SpanLlmAsJudgeCode, SpanFilter, AutomationRuleEvaluatorSpanLlmAsJudge>findAll(
                     projectId2, workspaceId, AutomationRuleEvaluatorType.SPAN_LLM_AS_JUDGE)).thenReturn(evaluators2);
+            // Mock SPAN_USER_DEFINED_METRIC_PYTHON calls (return empty lists)
+            lenient().when(ruleEvaluatorService.findAll(
+                    projectId, workspaceId, AutomationRuleEvaluatorType.SPAN_USER_DEFINED_METRIC_PYTHON))
+                    .thenReturn(List.of());
+            lenient().when(ruleEvaluatorService.findAll(
+                    projectId2, workspaceId, AutomationRuleEvaluatorType.SPAN_USER_DEFINED_METRIC_PYTHON))
+                    .thenReturn(List.of());
             // Empty filters list means all spans match (matchesAllFilters returns true for empty list)
             // Need to stub since the mock needs to return true for empty filter lists
             lenient().when(filterEvaluationService.matchesAllFilters(any(), any()))
