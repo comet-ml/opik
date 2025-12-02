@@ -69,6 +69,7 @@ Infrastructure:
       - 'deployment/**/*'
       - 'scripts/**/*'
       - 'extensions/**/*'
+      - '**/.gitignore'
       - '**/*.sh'
       - '**/*.ps1'
 
