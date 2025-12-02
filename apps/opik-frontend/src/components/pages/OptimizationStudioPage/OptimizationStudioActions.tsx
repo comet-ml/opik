@@ -13,7 +13,10 @@ const OptimizationStudioActions: React.FC = () => {
   const form = useFormContext();
   const isFormValid = form.formState.isValid;
 
-  const isRunning = activeOptimization?.status === OPTIMIZATION_STATUS.RUNNING;
+  const isRunning =
+    activeOptimization?.status === OPTIMIZATION_STATUS.RUNNING ||
+    activeOptimization?.status === OPTIMIZATION_STATUS.INITIALIZED;
+    
   const showViewTrials = Boolean(activeOptimization?.id);
 
   const renderActionButton = () => {
