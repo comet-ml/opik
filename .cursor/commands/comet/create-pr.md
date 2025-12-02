@@ -155,7 +155,7 @@ This workflow will:
 
 - **Title**: Format as `[{TICKET-NUMBER}] [{COMPONENT}] {TASK-SUMMARY}` extracted from branch description and change analysis
   - Examples: `[OPIK-2180] [DOCS] Add cursor git workflow rule`, `[OPIK-1234] [BE] Add create trace endpoint`
-- **Description**: Fill using the Opik PR template format from `/.github/pull_request_template.md`:
+- **Description**: Fill using the Opik PR template format from `/.github/pull_request_template.md`. Unless specifically requested, **never** include customer names in the description of the PR as they should not be public:
   ```markdown
   ## Details
   {implementation_summary_from_git_analysis}
