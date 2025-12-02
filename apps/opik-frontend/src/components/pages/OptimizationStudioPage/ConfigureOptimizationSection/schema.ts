@@ -159,7 +159,7 @@ export const convertFormDataToStudioConfig = (
 ): OptimizationStudioConfig => {
   const messages = formData.messages.map((m) => ({
     role: m.role,
-    content: m.content,
+    content: typeof m.content === "string" ? m.content : JSON.stringify(m.content),
   }));
 
   return {
