@@ -4,7 +4,6 @@ import useLocalStorageState from "use-local-storage-state";
 import { ColumnPinningState } from "@tanstack/react-table";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { ArrowRight } from "lucide-react";
-import get from "lodash/get";
 
 import DataTable from "@/components/shared/DataTable/DataTable";
 import DataTableNoData from "@/components/shared/DataTableNoData/DataTableNoData";
@@ -14,13 +13,18 @@ import Loader from "@/components/shared/Loader/Loader";
 import AddExperimentDialog from "@/components/pages-shared/experiments/AddExperimentDialog/AddExperimentDialog";
 import { Button } from "@/components/ui/button";
 import useAppStore from "@/store/AppStore";
-import { COLUMN_NAME_ID, COLUMN_SELECT_ID, COLUMN_TYPE } from "@/types/shared";
+import {
+  COLUMN_FEEDBACK_SCORES_ID,
+  COLUMN_NAME_ID,
+  COLUMN_SELECT_ID,
+  COLUMN_TYPE,
+} from "@/types/shared";
 import { RESOURCE_TYPE } from "@/components/shared/ResourceLink/ResourceLink";
 import { Experiment } from "@/types/datasets";
 import { convertColumnDataToColumn } from "@/lib/table";
 import { formatDate } from "@/lib/date";
 import FeedbackScoreListCell from "@/components/shared/DataTableCells/FeedbackScoreListCell";
-import { formatNumericData } from "@/lib/utils";
+import { transformExperimentScores } from "@/lib/experimentScoreUtils";
 
 const COLUMNS_WIDTH_KEY = "home-experiments-columns-width";
 
@@ -58,18 +62,14 @@ export const COLUMNS = convertColumnDataToColumn<Experiment, Experiment>(
       type: COLUMN_TYPE.number,
     },
     {
-      id: "feedback_scores",
+      id: COLUMN_FEEDBACK_SCORES_ID,
       label: "Feedback scores",
       type: COLUMN_TYPE.numberDictionary,
-      accessorFn: (row) =>
-        get(row, "feedback_scores", []).map((score) => ({
-          ...score,
-          value: formatNumericData(score.value),
-        })),
+      accessorFn: transformExperimentScores,
       cell: FeedbackScoreListCell as never,
       customMeta: {
         getHoverCardName: (row: Experiment) => row.name,
-        isAverageScores: true,
+        areAggregatedScores: true,
       },
     },
     {

@@ -6,6 +6,7 @@ import typing
 import pydantic
 from ..core.pydantic_utilities import IS_PYDANTIC_V2, UniversalBaseModel
 from .comment import Comment
+from .experiment_score import ExperimentScore
 from .experiment_status import ExperimentStatus
 from .experiment_type import ExperimentType
 from .feedback_score_average import FeedbackScoreAverage
@@ -34,6 +35,7 @@ class Experiment(UniversalBaseModel):
     created_by: typing.Optional[str] = None
     last_updated_by: typing.Optional[str] = None
     status: typing.Optional[ExperimentStatus] = None
+    experiment_scores: typing.Optional[typing.List[ExperimentScore]] = None
     prompt_version: typing.Optional[PromptVersionLink] = None
     prompt_versions: typing.Optional[typing.List[PromptVersionLink]] = None
 
