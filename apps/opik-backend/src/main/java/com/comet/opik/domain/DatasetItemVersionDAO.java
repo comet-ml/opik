@@ -146,7 +146,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 WHERE dataset_id = :datasetId
                 AND dataset_version_id = :versionId
                 AND workspace_id = :workspace_id
-                ORDER BY id
+                ORDER BY (workspace_id, dataset_id, dataset_version_id, id) DESC, last_updated_at DESC
                 LIMIT 1 BY id
             )
             """;

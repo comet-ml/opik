@@ -888,7 +888,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
             FROM dataset_items
             WHERE dataset_id = :datasetId
             AND workspace_id = :workspace_id
-            ORDER BY (workspace_id, dataset_id, id) DESC, last_updated_at DESC
+            ORDER BY (workspace_id, dataset_id, source, trace_id, span_id, id) DESC, last_updated_at DESC
             LIMIT 1 BY id
             """;
 
@@ -898,24 +898,19 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                 groupBitXor(data_hash) as data_hash
             FROM (
                 SELECT data_hash, id
-                FROM dataset_items FINAL
+                FROM dataset_items
                 WHERE dataset_id = :datasetId
                 AND workspace_id = :workspace_id
-                ORDER BY id
+                ORDER BY (workspace_id, dataset_id, source, trace_id, span_id, id) DESC, last_updated_at DESC
                 LIMIT 1 BY id
             )
             """;
 
     private static final String COUNT_DRAFT_ITEMS = """
-            SELECT count() as count
-            FROM (
-                SELECT id
-                FROM dataset_items
-                WHERE dataset_id = :datasetId
-                AND workspace_id = :workspace_id
-                ORDER BY (workspace_id, dataset_id, id) DESC, last_updated_at DESC
-                LIMIT 1 BY id
-            )
+            SELECT count(DISTINCT id) as count
+            FROM dataset_items
+            WHERE dataset_id = :datasetId
+            AND workspace_id = :workspace_id
             """;
 
     private static final String RESTORE_FROM_VERSION = """
