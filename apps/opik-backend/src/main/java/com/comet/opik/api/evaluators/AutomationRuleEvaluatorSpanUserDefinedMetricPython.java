@@ -48,8 +48,8 @@ public final class AutomationRuleEvaluatorSpanUserDefinedMetricPython
             @NotNull SpanUserDefinedMetricPythonCode code,
             Instant createdAt,
             String createdBy, Instant lastUpdatedAt, String lastUpdatedBy) {
-        super(id, projectId, projectName, name, samplingRate, enabled, code, createdAt, createdBy,
-                lastUpdatedAt, lastUpdatedBy, filters);
+        super(id, projectId, projectName, name, samplingRate, enabled, filters, code, createdAt, createdBy,
+                lastUpdatedAt, lastUpdatedBy);
     }
 
     /**
@@ -66,7 +66,7 @@ public final class AutomationRuleEvaluatorSpanUserDefinedMetricPython
     @JsonView({View.Public.class, View.Write.class})
     @Override
     public List<SpanFilter> getFilters() {
-        return super.filters;
+        return super.getFilters();
     }
 
     @Override
