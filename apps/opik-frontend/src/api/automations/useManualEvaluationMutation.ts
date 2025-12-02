@@ -6,7 +6,7 @@ import { useToast } from "@/components/ui/use-toast";
 
 const MANUAL_EVALUATION_REST_ENDPOINT = "/v1/private/manual-evaluation/";
 
-type ManualEvaluationEntityType = "trace" | "thread";
+type ManualEvaluationEntityType = "trace" | "thread" | "span";
 
 type ManualEvaluationRequest = {
   project_id: string;
@@ -41,7 +41,9 @@ const useManualEvaluationMutation = () => {
       const endpoint =
         entityType === "trace"
           ? `${MANUAL_EVALUATION_REST_ENDPOINT}traces`
-          : `${MANUAL_EVALUATION_REST_ENDPOINT}threads`;
+          : entityType === "thread"
+            ? `${MANUAL_EVALUATION_REST_ENDPOINT}threads`
+            : `${MANUAL_EVALUATION_REST_ENDPOINT}spans`;
 
       const requestBody: ManualEvaluationRequest = {
         project_id: projectId,
@@ -58,9 +60,17 @@ const useManualEvaluationMutation = () => {
     },
     onSuccess: (data, variables) => {
       const entityLabel =
-        variables.entityType === "trace" ? "traces" : "threads";
+        variables.entityType === "trace"
+          ? "traces"
+          : variables.entityType === "thread"
+            ? "threads"
+            : "spans";
       const capitalizedEntityLabel =
-        variables.entityType === "trace" ? "Traces" : "Threads";
+        variables.entityType === "trace"
+          ? "Traces"
+          : variables.entityType === "thread"
+            ? "Threads"
+            : "Spans";
 
       toast({
         title: "Evaluation queued",

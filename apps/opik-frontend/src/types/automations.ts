@@ -7,11 +7,13 @@ export enum EVALUATORS_RULE_TYPE {
   python_code = "user_defined_metric_python",
   thread_llm_judge = "trace_thread_llm_as_judge",
   thread_python_code = "trace_thread_user_defined_metric_python",
+  span_llm_judge = "span_llm_as_judge",
 }
 
 export enum EVALUATORS_RULE_SCOPE {
   trace = "trace",
   thread = "thread",
+  span = "span",
 }
 
 export enum UI_EVALUATORS_RULE_TYPE {
@@ -34,7 +36,10 @@ export interface LLMJudgeObject {
 }
 
 export interface LLMJudgeDetails {
-  type: EVALUATORS_RULE_TYPE.llm_judge | EVALUATORS_RULE_TYPE.thread_llm_judge;
+  type:
+    | EVALUATORS_RULE_TYPE.llm_judge
+    | EVALUATORS_RULE_TYPE.thread_llm_judge
+    | EVALUATORS_RULE_TYPE.span_llm_judge;
   code: LLMJudgeObject;
 }
 

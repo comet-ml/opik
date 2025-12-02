@@ -5,6 +5,7 @@ import { generateTagVariant } from "@/lib/traces";
 import HeaderWrapper from "@/components/shared/DataTableHeaders/HeaderWrapper";
 import useSortableHeader from "@/components/shared/DataTableHeaders/useSortableHeader";
 import { FeedbackScoreCustomMeta } from "@/types/feedback-scores";
+import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 
 const FeedbackScoreHeader = <TData,>(
   context: HeaderContext<TData, unknown>,
@@ -34,7 +35,13 @@ const FeedbackScoreHeader = <TData,>(
         className="mr-0.5 size-2 shrink-0 rounded-[2px] bg-[--color-bg]"
         style={{ "--color-bg": color } as React.CSSProperties}
       ></div>
-      <span className="truncate">{header}</span>
+      {header ? (
+        <TooltipWrapper content={header} side="top">
+          <span className="truncate">{header}</span>
+        </TooltipWrapper>
+      ) : (
+        <span className="truncate"></span>
+      )}
       {renderSort()}
     </HeaderWrapper>
   );

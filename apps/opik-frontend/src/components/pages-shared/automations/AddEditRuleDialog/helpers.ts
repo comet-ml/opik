@@ -15,6 +15,7 @@ export const getUIRuleType = (ruleType: EVALUATORS_RULE_TYPE) =>
     [EVALUATORS_RULE_TYPE.thread_llm_judge]: UI_EVALUATORS_RULE_TYPE.llm_judge,
     [EVALUATORS_RULE_TYPE.thread_python_code]:
       UI_EVALUATORS_RULE_TYPE.python_code,
+    [EVALUATORS_RULE_TYPE.span_llm_judge]: UI_EVALUATORS_RULE_TYPE.llm_judge,
   })[ruleType];
 
 export const getUIRuleScope = (ruleType: EVALUATORS_RULE_TYPE) =>
@@ -23,6 +24,7 @@ export const getUIRuleScope = (ruleType: EVALUATORS_RULE_TYPE) =>
     [EVALUATORS_RULE_TYPE.python_code]: EVALUATORS_RULE_SCOPE.trace,
     [EVALUATORS_RULE_TYPE.thread_llm_judge]: EVALUATORS_RULE_SCOPE.thread,
     [EVALUATORS_RULE_TYPE.thread_python_code]: EVALUATORS_RULE_SCOPE.thread,
+    [EVALUATORS_RULE_TYPE.span_llm_judge]: EVALUATORS_RULE_SCOPE.span,
   })[ruleType];
 
 export const getBackendRuleType = (
@@ -40,6 +42,12 @@ export const getBackendRuleType = (
       [UI_EVALUATORS_RULE_TYPE.python_code]:
         EVALUATORS_RULE_TYPE.thread_python_code,
     },
+    [EVALUATORS_RULE_SCOPE.span]: {
+      [UI_EVALUATORS_RULE_TYPE.llm_judge]: EVALUATORS_RULE_TYPE.span_llm_judge,
+      // Python code is not supported for span scope
+      [UI_EVALUATORS_RULE_TYPE.python_code]:
+        EVALUATORS_RULE_TYPE.span_llm_judge,
+    },
   })[scope][uiType];
 
 const getFilterTypeByField = (
@@ -56,15 +64,12 @@ export const normalizeFilters = (
 ): Filter[] => {
   if (!filters || filters.length === 0) return [];
 
-  return filters.map(
-    (filter) =>
-      ({
-        id: filter.id || uniqid(),
-        field: filter.field || "",
-        type: filter.type || getFilterTypeByField(filter.field, columns),
-        operator: filter.operator || "",
-        key: filter.key || "",
-        value: filter.value || "",
-      }) as Filter,
-  );
+  return filters.map((filter) => ({
+    id: filter.id || uniqid(),
+    field: filter.field || "",
+    type: filter.type || getFilterTypeByField(filter.field, columns),
+    operator: filter.operator || "",
+    key: filter.key || "",
+    value: filter.value || "",
+  })) as Filter[];
 };
