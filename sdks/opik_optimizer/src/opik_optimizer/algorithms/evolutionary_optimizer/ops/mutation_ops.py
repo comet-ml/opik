@@ -6,6 +6,11 @@ import random
 
 from .. import prompts as evo_prompts
 from ....api_objects import chat_prompt
+from ....api_objects.types import (
+    Content,
+    extract_text_from_content,
+    rebuild_content_with_new_text,
+)
 from .... import utils, _llm_calls
 from .. import reporting, helpers, mcp
 
@@ -60,10 +65,11 @@ def _modify_phrase(phrase: str, model: str, model_parameters: dict[str, Any]) ->
 
 
 def _word_level_mutation(
-    msg_content: str, model: str, model_parameters: dict[str, Any]
-) -> str:
-    """Perform word-level mutation."""
-    words = msg_content.split()
+    msg_content: Content, model: str, model_parameters: dict[str, Any]
+) -> Content:
+    """Perform word-level mutation, handling both string and content parts."""
+    text = extract_text_from_content(msg_content)
+    words = text.split()
     if len(words) <= 1:
         return msg_content
 
@@ -83,22 +89,24 @@ def _word_level_mutation(
             phrase=words[idx], model=model, model_parameters=model_parameters
         )
 
-    return " ".join(words)
+    mutated_text = " ".join(words)
+    return rebuild_content_with_new_text(msg_content, mutated_text)
 
 
 def _word_level_mutation_prompt(
     prompt: chat_prompt.ChatPrompt, model: str, model_parameters: dict[str, Any]
 ) -> chat_prompt.ChatPrompt:
-    mutated_messages: list[dict[str, str]] = []
+    mutated_messages: list[dict[str, Any]] = []
     for message in prompt.get_messages():
+        mutated_content = _word_level_mutation(
+            msg_content=message["content"],
+            model=model,
+            model_parameters=model_parameters,
+        )
         mutated_messages.append(
             {
                 "role": message["role"],
-                "content": _word_level_mutation(
-                    msg_content=message["content"],
-                    model=model,
-                    model_parameters=model_parameters,
-                ),
+                "content": mutated_content,
             }
         )
     return chat_prompt.ChatPrompt(
@@ -114,42 +122,39 @@ def _structural_mutation(
     model_parameters: dict[str, Any],
 ) -> chat_prompt.ChatPrompt:
     """Perform structural mutation (reordering, combining, splitting)."""
-    mutated_messages: list[dict[str, str]] = []
+    mutated_messages: list[dict[str, Any]] = []
 
     for message in prompt.get_messages():
-        content = message["content"]
+        original_content = message["content"]
         role = message["role"]
+        text = extract_text_from_content(original_content)
 
-        sentences = [s.strip() for s in content.split(".") if s.strip()]
+        sentences = [s.strip() for s in text.split(".") if s.strip()]
         if len(sentences) <= 1:
+            mutated_content = _word_level_mutation(
+                msg_content=original_content,
+                model=model,
+                model_parameters=model_parameters,
+            )
             mutated_messages.append(
                 {
                     "role": role,
-                    "content": _word_level_mutation(
-                        msg_content=content,
-                        model=model,
-                        model_parameters=model_parameters,
-                    ),
+                    "content": mutated_content,
                 }
             )
             continue
 
         mutation_type = random.random()
+        new_text: str | None = None
         if mutation_type < 0.3:
             random.shuffle(sentences)
-            mutated_messages.append(
-                {"role": role, "content": ". ".join(sentences) + "."}
-            )
-            continue
+            new_text = ". ".join(sentences) + "."
         elif mutation_type < 0.6:
             if len(sentences) >= 2:
                 idx = random.randint(0, len(sentences) - 2)
                 combined = sentences[idx] + " and " + sentences[idx + 1]
                 sentences[idx : idx + 2] = [combined]
-                mutated_messages.append(
-                    {"role": role, "content": ". ".join(sentences) + "."}
-                )
-                continue
+                new_text = ". ".join(sentences) + "."
         else:
             idx = random.randint(0, len(sentences) - 1)
             words = sentences[idx].split()
@@ -159,12 +164,13 @@ def _structural_mutation(
                     " ".join(words[:split_point]),
                     " ".join(words[split_point:]),
                 ]
-                mutated_messages.append(
-                    {"role": role, "content": ". ".join(sentences) + "."}
-                )
-                continue
-            else:
-                mutated_messages.append({"role": role, "content": content})
+                new_text = ". ".join(sentences) + "."
+
+        if new_text is not None:
+            mutated_content = rebuild_content_with_new_text(original_content, new_text)
+        else:
+            mutated_content = original_content
+        mutated_messages.append({"role": role, "content": mutated_content})
 
     return chat_prompt.ChatPrompt(
         messages=mutated_messages,

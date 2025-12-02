@@ -9,6 +9,11 @@ from deap import creator as _creator
 from .. import prompts as evo_prompts
 from .. import reporting
 from .... import utils, _llm_calls
+from ....api_objects.types import (
+    Content,
+    extract_text_from_content,
+    rebuild_content_with_new_text,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -86,30 +91,42 @@ def _deap_crossover_word_level(
 def deap_crossover(ind1: Any, ind2: Any, verbose: int = 1) -> tuple[Any, Any]:
     """Crossover operation that preserves semantic meaning.
     Attempts chunk-level crossover first, then falls back to word-level.
+    Handles both string content and content parts (preserving images/video).
     """
     reporting.display_message(
         "      Recombining prompts by mixing and matching words and sentences.",
         verbose=verbose,
     )
-    messages_1_orig: list[dict[str, str]] = ind1
-    messages_2_orig: list[dict[str, str]] = ind2
+    messages_1_orig: list[dict[str, Any]] = ind1
+    messages_2_orig: list[dict[str, Any]] = ind2
 
     for i, message_1 in enumerate(messages_1_orig):
         role: str = message_1["role"]
-        message_1_str: str = message_1["content"]
+        content_1: Content = message_1["content"]
         if (len(messages_2_orig) >= i + 1) and (messages_2_orig[i]["role"] == role):
             message_2 = messages_2_orig[i]
-            message_2_str: str = message_2["content"]
+            content_2: Content = message_2["content"]
+
+            # Extract text from content (handles both string and content parts)
+            text_1 = extract_text_from_content(content_1)
+            text_2 = extract_text_from_content(content_2)
+
             try:
-                child1_str, child2_str = _deap_crossover_chunking_strategy(
-                    message_1_str, message_2_str
+                child1_text, child2_text = _deap_crossover_chunking_strategy(
+                    text_1, text_2
                 )
             except ValueError:
-                child1_str, child2_str = _deap_crossover_word_level(
-                    message_1_str, message_2_str
+                child1_text, child2_text = _deap_crossover_word_level(
+                    text_1, text_2
                 )
-            messages_1_orig[i]["content"] = child1_str
-            messages_2_orig[i]["content"] = child2_str
+
+            # Rebuild content preserving non-text parts (images/video)
+            messages_1_orig[i]["content"] = rebuild_content_with_new_text(
+                content_1, child1_text
+            )
+            messages_2_orig[i]["content"] = rebuild_content_with_new_text(
+                content_2, child2_text
+            )
         else:
             pass
 
@@ -137,13 +154,15 @@ def llm_deap_crossover(
     model_parameters: dict[str, Any],
     verbose: int = 1,
 ) -> tuple[Any, Any]:
-    """Perform crossover by asking an LLM to blend two parent prompts."""
+    """Perform crossover by asking an LLM to blend two parent prompts.
+    LLM handles content parts naturally since it receives the full messages.
+    """
     reporting.display_message(
         "      Recombining prompts using an LLM.", verbose=verbose
     )
 
-    parent1_messages: list[dict[str, str]] = ind1
-    parent2_messages: list[dict[str, str]] = ind2
+    parent1_messages: list[dict[str, Any]] = ind1
+    parent2_messages: list[dict[str, Any]] = ind2
     current_output_style_guidance = output_style_guidance
 
     user_prompt_for_llm_crossover = evo_prompts.llm_crossover_user_prompt(
@@ -176,7 +195,7 @@ def llm_deap_crossover(
         except Exception:
             # Continue with heuristic extraction below
             json_response = None
-        children: list[list[dict[str, str]]] = []
+        children: list[list[dict[str, Any]]] = []
         if isinstance(json_response, list):
             children = [c for c in json_response if isinstance(c, list)]
 
