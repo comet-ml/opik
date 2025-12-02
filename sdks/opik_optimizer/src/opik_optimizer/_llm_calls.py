@@ -1,12 +1,19 @@
 from typing import Any
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError as PydanticValidationError
+import json
+import logging
 import sys
 from types import FrameType
 
 import litellm
-from opik.evaluation.models.litellm import opik_monitor as opik_litellm_monitor
+from litellm.exceptions import BadRequestError
 
 from . import _throttle
+from . import utils as _utils
+
+from opik.integrations import litellm as litellm_integration
+
+logger = logging.getLogger(__name__)
 
 _limiter = _throttle.get_rate_limiter_for_current_opik_installation()
 
@@ -96,10 +103,7 @@ def _prepare_model_params(
     """
 
     # Merge optimizer's model_parameters with call-time overrides
-    merged_params = {**model_parameters, **call_time_params}
-
-    # Add Opik monitoring wrapper
-    final_params = opik_litellm_monitor.try_add_opik_monitoring_to_params(merged_params)
+    final_params = {**model_parameters, **call_time_params}
 
     # Add reasoning metadata if applicable
     if is_reasoning and "metadata" in final_params:
@@ -128,6 +132,15 @@ def _prepare_model_params(
     return final_params
 
 
+class StructuredOutputParsingError(Exception):
+    """Raised when a structured output Pydantic model cannot be parsed."""
+
+    def __init__(self, content: str, error: Exception) -> None:
+        super().__init__(f"{error} (content={content!r})")
+        self.content = content
+        self.error = error
+
+
 def _parse_response(
     response: Any,
     response_model: type[BaseModel] | None = None,
@@ -145,10 +158,57 @@ def _parse_response(
     """
     content = response.choices[0].message.content
 
+    finish_reason = getattr(response.choices[0], "finish_reason", None)
+    # When the model was truncated due to max_tokens we raise a BadRequest so downstream sees the OpenAI error.
+    # Empty string responses with a truncation finish reason mean the model hit max_tokens.
+    if (
+        isinstance(content, str)
+        and finish_reason in {"length", "token limit", "max_tokens"}
+        and not content.strip()
+    ):
+        raise BadRequestError(
+            message=(
+                "OpenAIException - Could not finish the message because max_tokens or model output limit "
+                "was reached. Please try again with higher max_tokens."
+            ),
+            llm_provider="litellm",
+            model=getattr(response, "model", None),
+            response=response,
+            litellm_debug_info={
+                "finish_reason": finish_reason,
+                "content_excerpt": content[:200],
+            },
+            body=None,
+        )
+
     # When using structured outputs with Pydantic models, LiteLLM automatically
     # parses the response. Parse the JSON string into the Pydantic model
     if response_model is not None:
-        return response_model.model_validate_json(content)
+        try:
+            return response_model.model_validate_json(content)
+        except PydanticValidationError as exc:
+            try:
+                cleaned = _utils.json_to_dict(content)
+                if cleaned is not None:
+                    return response_model.model_validate(cleaned)
+            except (
+                json.JSONDecodeError,
+                SyntaxError,
+                TypeError,
+                ValueError,
+            ) as parse_exc:
+                logger.debug(
+                    "Structured output fallback parsing failed for %s: %s",
+                    getattr(response_model, "__name__", "unknown"),
+                    parse_exc,
+                )
+            logger.error(
+                "Structured output parsing failed for %s: %s | response_snippet=%s",
+                getattr(response_model, "__name__", "unknown"),
+                exc,
+                (content or "")[:400],
+            )
+            raise StructuredOutputParsingError(content=content, error=exc) from exc
 
     return content
 
@@ -218,7 +278,8 @@ def call_model(
         optimization_id,
     )
 
-    response = litellm.completion(
+    litellm_decorator = litellm_integration.track_completion()
+    response = litellm_decorator(litellm.completion)(
         model=model,
         messages=messages,
         seed=seed,

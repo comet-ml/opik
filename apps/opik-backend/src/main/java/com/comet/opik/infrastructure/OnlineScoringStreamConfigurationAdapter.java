@@ -1,7 +1,7 @@
 package com.comet.opik.infrastructure;
 
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorType;
-import com.comet.opik.api.resources.v1.events.OnlineScoringCodecs;
+import com.comet.opik.infrastructure.redis.RedisStreamCodec;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import io.dropwizard.util.Duration;
 import lombok.NonNull;
@@ -21,21 +21,21 @@ public class OnlineScoringStreamConfigurationAdapter implements StreamConfigurat
 
     public static OnlineScoringStreamConfigurationAdapter create(
             @NonNull OnlineScoringConfig config,
-            @NonNull AutomationRuleEvaluatorType evaluatorType) {
+            @NonNull AutomationRuleEvaluatorType ruleEvaluatorType) {
 
         var streamConfig = config.getStreams().stream()
-                .filter(stream -> evaluatorType.name().equalsIgnoreCase(stream.getScorer()))
+                .filter(stream -> ruleEvaluatorType.name().equalsIgnoreCase(stream.getScorer()))
                 .findFirst()
                 .orElseThrow(() -> new IllegalArgumentException(
-                        "No stream configuration found for evaluator type: " + evaluatorType.name()));
+                        "No stream configuration found for evaluator type: " + ruleEvaluatorType.name()));
 
-        return new OnlineScoringStreamConfigurationAdapter(config, evaluatorType, streamConfig);
+        return new OnlineScoringStreamConfigurationAdapter(config, ruleEvaluatorType, streamConfig);
     }
 
     @Override
     @JsonIgnore
     public Codec getCodec() {
-        var scoringCodecs = OnlineScoringCodecs.fromString(streamConfig.getCodec());
+        var scoringCodecs = RedisStreamCodec.fromString(streamConfig.getCodec());
         return scoringCodecs.getCodec();
     }
 

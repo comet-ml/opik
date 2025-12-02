@@ -4,11 +4,8 @@ import logging
 import dspy
 from dspy.utils import callback as dspy_callback
 
-import opik.types as types
-import opik.opik_context as opik_context
-import opik.context_storage as context_storage
+from opik import context_storage, opik_context, tracing_runtime_config, types
 from opik.api_objects import helpers, span, trace, opik_client
-import opik.decorator.tracing_runtime_config as tracing_runtime_config
 from opik.decorator import error_info_collector
 
 from .graph import build_mermaid_graph_from_module

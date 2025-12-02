@@ -246,7 +246,7 @@ result = optimizer.optimize_prompt(
     n_samples=12,
     max_metric_calls=60,
     reflection_minibatch_size=5,
-    candidate_selection_strategy="best",
+    candidate_selection_strategy="pareto",
 )
 
 result.display()

@@ -48,7 +48,7 @@ Results shown below use `gpt-4o-mini` for evaluation. Scores will change if you 
    ```
 4. Inspect the JSON or load it into a notebook to compare against the published table.
 
-The script spins up datasets defined in `sdks/opik_optimizer/benchmarks/config.py`, runs each optimizer with consistent trial budgets, and logs runs to Opik so you can review traces.
+The script spins up datasets defined in `sdks/opik_optimizer/benchmarks/config.py`, runs each optimizer with consistent trial budgets, and logs runs to Opik so you can review traces. Note that production use should include separate validation datasets to prevent overfitting—see [Define datasets](/agent_optimization/optimization/define_datasets) for guidance.
 
 <Tip>
   Looking for production-style examples beyond synthetic benchmarks? Check out the [agent optimizations demos](https://github.com/comet-ml/agent-optimizations-demos) repo. It contains end-to-end scenarios (LangGraph, RAG, support bots) and shows how different optimizers behave in real workloads.

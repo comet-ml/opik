@@ -9,6 +9,9 @@ export type DropdownOption<TDataType> = {
   description?: string;
   tooltip?: string;
   disabled?: boolean;
+  action?: {
+    href?: string;
+  };
 };
 
 export const COLUMN_ID_ID = "id";
@@ -17,7 +20,16 @@ export const COLUMN_NAME_ID = "name";
 export const COLUMN_ACTIONS_ID = "actions";
 export const COLUMN_METADATA_ID = "metadata";
 export const COLUMN_FEEDBACK_SCORES_ID = "feedback_scores";
+export const COLUMN_EXPERIMENT_SCORES_ID = "experiment_scores";
+export const COLUMN_SPAN_FEEDBACK_SCORES_ID = "span_feedback_scores";
 export const COLUMN_USAGE_ID = "usage";
+
+// Score type constants
+export const SCORE_TYPE_FEEDBACK = "feedback_scores" as const;
+export const SCORE_TYPE_EXPERIMENT = "experiment_scores" as const;
+export type ScoreType =
+  | typeof SCORE_TYPE_FEEDBACK
+  | typeof SCORE_TYPE_EXPERIMENT;
 export const COLUMN_COMMENTS_ID = "comments";
 export const COLUMN_GUARDRAILS_ID = "guardrails";
 export const COLUMN_CREATED_AT_ID = "created_at";
@@ -61,7 +73,7 @@ export type Explainer = {
   docHash?: string;
 };
 
-export type HeaderIconType = COLUMN_TYPE | "guardrails";
+export type HeaderIconType = COLUMN_TYPE | "guardrails" | "tags";
 
 export type ColumnData<T> = {
   id: string;
@@ -70,6 +82,7 @@ export type ColumnData<T> = {
   accessorFn?: (row: T) => string | number | object | boolean | undefined;
   size?: number;
   type?: COLUMN_TYPE;
+  scoreType?: ScoreType;
   customMeta?: object;
   iconType?: HeaderIconType;
   header?: Header<T, unknown>;
@@ -89,6 +102,7 @@ export type DynamicColumn = {
   id: string;
   label: string;
   columnType: COLUMN_TYPE;
+  type?: ScoreType;
 };
 
 export enum ROW_HEIGHT {
@@ -105,6 +119,7 @@ export enum CELL_VERTICAL_ALIGNMENT {
 
 export interface FeedbackScoreName {
   name: string;
+  type?: ScoreType;
 }
 
 export enum STATISTIC_AGGREGATION_TYPE {

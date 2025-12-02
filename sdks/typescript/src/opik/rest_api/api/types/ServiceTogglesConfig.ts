@@ -5,8 +5,12 @@
 export interface ServiceTogglesConfig {
     pythonEvaluatorEnabled: boolean;
     traceThreadPythonEvaluatorEnabled: boolean;
+    spanLlmAsJudgeEnabled: boolean;
     guardrailsEnabled: boolean;
     opikAiEnabled: boolean;
     alertsEnabled: boolean;
     welcomeWizardEnabled: boolean;
+    csvUploadEnabled: boolean;
+    exportEnabled: boolean;
+    dashboardsEnabled: boolean;
 }

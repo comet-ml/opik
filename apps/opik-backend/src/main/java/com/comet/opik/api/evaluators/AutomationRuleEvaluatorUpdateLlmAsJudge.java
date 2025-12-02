@@ -22,7 +22,9 @@ import static com.comet.opik.api.evaluators.AutomationRuleEvaluatorLlmAsJudge.Ll
 @Data
 @JsonIgnoreProperties(ignoreUnknown = true)
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
-public final class AutomationRuleEvaluatorUpdateLlmAsJudge extends AutomationRuleEvaluatorUpdate<LlmAsJudgeCode> {
+public final class AutomationRuleEvaluatorUpdateLlmAsJudge
+        extends
+            AutomationRuleEvaluatorUpdate<LlmAsJudgeCode, TraceFilter> {
 
     @ConstructorProperties({"name", "samplingRate", "enabled", "filters", "code", "projectId"})
     public AutomationRuleEvaluatorUpdateLlmAsJudge(
@@ -30,6 +32,17 @@ public final class AutomationRuleEvaluatorUpdateLlmAsJudge extends AutomationRul
             @NotNull LlmAsJudgeCode code,
             @NotNull UUID projectId) {
         super(name, samplingRate, enabled, filters, code, projectId);
+    }
+
+    /**
+     * Two purposes:
+     * - Makes the polymorphic T code available for serialization.
+     * - Provides the specific type T for Open API and Fern.
+     */
+    @JsonProperty
+    @Override
+    public List<TraceFilter> getFilters() {
+        return super.getFilters();
     }
 
     /**

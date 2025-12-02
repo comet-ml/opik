@@ -11,6 +11,7 @@ import com.comet.opik.api.filter.Field;
 import com.comet.opik.api.filter.FieldType;
 import com.comet.opik.api.filter.Filter;
 import com.comet.opik.api.filter.Operator;
+import com.comet.opik.api.filter.OptimizationField;
 import com.comet.opik.api.filter.PromptField;
 import com.comet.opik.api.filter.SpanField;
 import com.comet.opik.api.filter.TraceField;
@@ -82,6 +83,7 @@ public class FilterQueryBuilder {
     private static final String INSTRUCTIONS_DB = "instructions";
     private static final String NUMBER_OF_MESSAGES_ANALYTICS_DB = "number_of_messages";
     private static final String FEEDBACK_SCORE_COUNT_DB = "fsc.feedback_scores_count";
+    private static final String SPAN_FEEDBACK_SCORE_COUNT_DB = "sfsc.span_feedback_scores_count";
     private static final String GUARDRAILS_RESULT_DB = "gagg.guardrails_result";
     private static final String VISIBILITY_MODE_DB = "visibility_mode";
     private static final String ERROR_INFO_DB = "error_info";
@@ -92,12 +94,24 @@ public class FilterQueryBuilder {
     private static final String SOURCE_DB = "source";
     private static final String TRACE_ID_DB = "trace_id";
     private static final String SPAN_ID_DB = "span_id";
-    public static final String ANNOTATION_QUEUE_IDS_ANALYTICS_DB = "annotation_queue_ids";
+    public static final String ANNOTATION_QUEUE_IDS_ANALYTICS_DB = "taqi.annotation_queue_ids";
+    public static final String THREAD_ANNOTATION_QUEUE_IDS_ANALYTICS_DB = "ttaqi.annotation_queue_ids";
     private static final String WEBHOOK_URL_DB = "webhook_url";
     private static final String ALERT_TYPE_DB = "alert_type";
     private static final String ENABLED_DB = "enabled";
     private static final String SAMPLING_RATE_DB = "sampling_rate";
     private static final String TYPE_DB = "type";
+
+    /**
+     * Set of all feedback score fields across different entity types (Trace, Span, TraceThread, etc.).
+     * Used to identify feedback score filters that require special handling in query building.
+     */
+    private static final Set<Field> FEEDBACK_SCORE_FIELDS = Set.of(
+            TraceField.FEEDBACK_SCORES,
+            TraceField.SPAN_FEEDBACK_SCORES,
+            SpanField.FEEDBACK_SCORES,
+            TraceThreadField.FEEDBACK_SCORES,
+            ExperimentsComparisonValidKnownField.FEEDBACK_SCORES);
 
     // Table alias prefixes for AutomationRuleEvaluator queries
     private static final String AUTOMATION_RULE_TABLE_ALIAS = "rule.%s";
@@ -216,6 +230,7 @@ public class FilterQueryBuilder {
                     .put(TraceField.USAGE_PROMPT_TOKENS, USAGE_PROMPT_TOKENS_ANALYTICS_DB)
                     .put(TraceField.USAGE_TOTAL_TOKENS, USAGE_TOTAL_TOKENS_ANALYTICS_DB)
                     .put(TraceField.FEEDBACK_SCORES, VALUE_ANALYTICS_DB)
+                    .put(TraceField.SPAN_FEEDBACK_SCORES, VALUE_ANALYTICS_DB)
                     .put(TraceField.DURATION, DURATION_ANALYTICS_DB)
                     .put(TraceField.THREAD_ID, THREAD_ID_ANALYTICS_DB)
                     .put(TraceField.GUARDRAILS, GUARDRAILS_RESULT_DB)
@@ -240,7 +255,7 @@ public class FilterQueryBuilder {
                     .put(TraceThreadField.FEEDBACK_SCORES, VALUE_ANALYTICS_DB)
                     .put(TraceThreadField.STATUS, STATUS_DB)
                     .put(TraceThreadField.TAGS, TAGS_DB)
-                    .put(TraceThreadField.ANNOTATION_QUEUE_IDS, ANNOTATION_QUEUE_IDS_ANALYTICS_DB)
+                    .put(TraceThreadField.ANNOTATION_QUEUE_IDS, THREAD_ANNOTATION_QUEUE_IDS_ANALYTICS_DB)
                     .build());
 
     private static final Map<SpanField, String> SPAN_FIELDS_MAP = new EnumMap<>(
@@ -272,6 +287,13 @@ public class FilterQueryBuilder {
                     .put(ExperimentField.METADATA, METADATA_ANALYTICS_DB)
                     .put(ExperimentField.DATASET_ID, DATASET_ID_ANALYTICS_DB)
                     .put(ExperimentField.PROMPT_IDS, PROMPT_IDS_ANALYTICS_DB)
+                    .build());
+
+    private static final Map<OptimizationField, String> OPTIMIZATION_FIELDS_MAP = new EnumMap<>(
+            ImmutableMap.<OptimizationField, String>builder()
+                    .put(OptimizationField.METADATA, METADATA_ANALYTICS_DB)
+                    .put(OptimizationField.DATASET_ID, DATASET_ID_ANALYTICS_DB)
+                    .put(OptimizationField.STATUS, STATUS_DB)
                     .build());
 
     private static final Map<PromptField, String> PROMPT_FIELDS_MAP = new EnumMap<>(
@@ -377,6 +399,8 @@ public class FilterQueryBuilder {
                     .put(ExperimentsComparisonValidKnownField.DURATION, DURATION_ANALYTICS_DB)
                     .put(ExperimentsComparisonValidKnownField.FEEDBACK_SCORES, VALUE_ANALYTICS_DB)
                     .put(ExperimentsComparisonValidKnownField.OUTPUT, OUTPUT_ANALYTICS_DB)
+                    .put(ExperimentsComparisonValidKnownField.TOTAL_ESTIMATED_COST, TOTAL_ESTIMATED_COST_ANALYTICS_DB)
+                    .put(ExperimentsComparisonValidKnownField.USAGE_TOTAL_TOKENS, USAGE_TOTAL_TOKENS_ANALYTICS_DB)
                     .build());
 
     private static final Map<FilterStrategy, Set<? extends Field>> FILTER_STRATEGY_MAP = createFilterStrategyMap();
@@ -438,6 +462,8 @@ public class FilterQueryBuilder {
                 SpanField.FEEDBACK_SCORES,
                 ExperimentsComparisonValidKnownField.FEEDBACK_SCORES,
                 TraceThreadField.FEEDBACK_SCORES));
+
+        map.put(FilterStrategy.SPAN_FEEDBACK_SCORES, Set.of(TraceField.SPAN_FEEDBACK_SCORES));
 
         map.put(FilterStrategy.EXPERIMENT_ITEM, Set.of(
                 ExperimentsComparisonValidKnownField.OUTPUT,
@@ -541,6 +567,11 @@ public class FilterQueryBuilder {
                 AutomationRuleEvaluatorField.CREATED_BY,
                 AutomationRuleEvaluatorField.LAST_UPDATED_BY));
 
+        map.put(FilterStrategy.OPTIMIZATION, Set.of(
+                OptimizationField.METADATA,
+                OptimizationField.DATASET_ID,
+                OptimizationField.STATUS));
+
         return map;
     }
 
@@ -596,22 +627,31 @@ public class FilterQueryBuilder {
         // we want to apply the is empty filter only in the case below
         if (filter.operator() == Operator.IS_EMPTY && filterStrategy == FilterStrategy.FEEDBACK_SCORES_IS_EMPTY) {
             return Optional.of(FILTER_STRATEGY_MAP.get(FilterStrategy.FEEDBACK_SCORES));
-        } else
-            if (filter.operator() == Operator.IS_NOT_EMPTY
-                    && filterStrategy == FilterStrategy.FEEDBACK_SCORES_IS_EMPTY) {
-                        return Optional.empty();
-                    } else
-                if (filter.operator() == Operator.IS_EMPTY && isFeedBackScore(filter)) {
-                    return Optional.empty();
-                }
+        }
+
+        if (filter.operator() == Operator.IS_EMPTY && filterStrategy == FilterStrategy.SPAN_FEEDBACK_SCORES_IS_EMPTY) {
+            return Optional.of(FILTER_STRATEGY_MAP.get(FilterStrategy.SPAN_FEEDBACK_SCORES));
+        }
+
+        if (isNotEmptyScoresFilter(filterStrategy, filter)) {
+            return Optional.empty();
+        }
+
+        if (filter.operator() == Operator.IS_EMPTY && isFeedbackScore(filter)) {
+            return Optional.empty();
+        }
 
         return Optional.ofNullable(FILTER_STRATEGY_MAP.get(filterStrategy));
     }
 
-    private static boolean isFeedBackScore(Filter filter) {
-        Set<Field> feedbackScoreFields = Set.of(TraceField.FEEDBACK_SCORES, SpanField.FEEDBACK_SCORES,
-                TraceThreadField.FEEDBACK_SCORES, ExperimentsComparisonValidKnownField.FEEDBACK_SCORES);
-        return feedbackScoreFields.contains(filter.field());
+    private static boolean isNotEmptyScoresFilter(FilterStrategy filterStrategy, Filter filter) {
+        return filter.operator() == Operator.IS_NOT_EMPTY
+                && Set.of(FilterStrategy.FEEDBACK_SCORES_IS_EMPTY, FilterStrategy.SPAN_FEEDBACK_SCORES_IS_EMPTY)
+                        .contains(filterStrategy);
+    }
+
+    private static boolean isFeedbackScore(Filter filter) {
+        return FEEDBACK_SCORE_FIELDS.contains(filter.field());
     }
 
     private String toAnalyticsDbFilter(Filter filter, int i, FilterStrategy filterStrategy) {
@@ -624,6 +664,10 @@ public class FilterQueryBuilder {
         // this is a special case where the DB field is determined by the filter strategy rather than the filter field
         if (filterStrategy == FilterStrategy.FEEDBACK_SCORES_IS_EMPTY) {
             return FEEDBACK_SCORE_COUNT_DB;
+        }
+
+        if (filterStrategy == FilterStrategy.SPAN_FEEDBACK_SCORES_IS_EMPTY) {
+            return SPAN_FEEDBACK_SCORE_COUNT_DB;
         }
 
         return switch (field) {
@@ -640,6 +684,7 @@ public class FilterQueryBuilder {
             case AlertField alertField -> ALERT_FIELDS_MAP.get(alertField);
             case AutomationRuleEvaluatorField automationRuleEvaluatorField ->
                 AUTOMATION_RULE_EVALUATOR_FIELDS_MAP.get(automationRuleEvaluatorField);
+            case OptimizationField optimizationField -> OPTIMIZATION_FIELDS_MAP.get(optimizationField);
             default -> {
 
                 if (field.isDynamic(filterStrategy)) {

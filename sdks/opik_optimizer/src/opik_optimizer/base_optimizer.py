@@ -158,7 +158,8 @@ class BaseOptimizer(ABC):
 
         if not callable(metric):
             raise ValueError(
-                "Metric must be a function that takes `dataset_item` and `llm_output` as arguments."
+                "Metric must be a callable that takes `dataset_item` and `llm_output` as arguments, "
+                "and optionally `task_span` for metrics that need access to span information."
             )
 
         if prompt._has_content_parts() and not support_content_parts:
@@ -169,20 +170,51 @@ class BaseOptimizer(ABC):
     def _setup_agent_class(
         self, prompt: "chat_prompt.ChatPrompt", agent_class: Any = None
     ) -> Any:
-        """
-        Setup agent class for optimization.
+        """Resolve the agent class used for prompt evaluations.
+
+        Ensures custom implementations inherit from :class:`OptimizableAgent` and that
+        the optimizer reference is always available to track metrics.
 
         Args:
-            prompt: The chat prompt
-            agent_class: Optional custom agent class
+            prompt: The chat prompt driving the agent instance.
+            agent_class: Optional custom agent class supplied by the caller.
 
         Returns:
-            The agent class to use
+            The agent class to instantiate for dataset evaluations.
         """
         if agent_class is None:
             return create_litellm_agent_class(prompt, optimizer_ref=self)
-        else:
-            return agent_class
+        if not issubclass(agent_class, OptimizableAgent):
+            raise TypeError(
+                f"agent_class must inherit from OptimizableAgent, got {agent_class.__name__}"
+            )
+        return agent_class
+
+    def _bind_optimizer_to_agent(self, agent: OptimizableAgent) -> OptimizableAgent:
+        """Attach this optimizer to the agent instance without mutating the class."""
+        try:
+            agent.optimizer = self  # type: ignore[attr-defined]
+        except Exception:  # pragma: no cover - custom agents may forbid new attrs
+            logger.debug(
+                "Unable to record optimizer on agent instance of %s",
+                agent.__class__.__name__,
+            )
+        return agent
+
+    def _instantiate_agent(
+        self,
+        *args: Any,
+        agent_class: type[OptimizableAgent] | None = None,
+        **kwargs: Any,
+    ) -> OptimizableAgent:
+        """
+        Instantiate the provided agent_class (or self.agent_class) and bind optimizer.
+        """
+        resolved_class = agent_class or getattr(self, "agent_class", None)
+        if resolved_class is None:
+            raise ValueError("agent_class must be provided before instantiation")
+        agent = resolved_class(*args, **kwargs)
+        return self._bind_optimizer_to_agent(agent)
 
     def _extract_tool_prompts(
         self, tools: list[dict[str, Any]] | None
@@ -326,17 +358,33 @@ class BaseOptimizer(ABC):
 
         return helpers.drop_none(metadata)
 
-    def _build_optimization_config(self) -> dict[str, Any]:
+    def _build_optimization_metadata(
+        self, agent_class: type[OptimizableAgent] | None = None
+    ) -> dict[str, Any]:
         """
         Build metadata dictionary for optimization creation to be used when
         creating Opik optimizations.
 
+        Args:
+            agent_class: Optional agent class. If None, will try to get from self.agent_class.
+
         Returns:
-            Dictionary with 'optimizer' and optionally 'name' keys.
+            Dictionary with 'optimizer' and optionally 'agent_class' keys.
         """
         metadata: dict[str, Any] = {"optimizer": self.__class__.__name__}
         if self.name:
             metadata["name"] = self.name
+
+        # Try to get agent_class name from parameter or instance
+        agent_class_name: str | None = None
+        if agent_class is not None:
+            agent_class_name = getattr(agent_class, "__name__", None)
+        elif hasattr(self, "agent_class") and self.agent_class is not None:
+            agent_class_name = getattr(self.agent_class, "__name__", None)
+
+        if agent_class_name:
+            metadata["agent_class"] = agent_class_name
+
         return metadata
 
     def _prepare_experiment_config(
@@ -345,16 +393,26 @@ class BaseOptimizer(ABC):
         prompt: "chat_prompt.ChatPrompt",
         dataset: Dataset,
         metric: Callable,
+        validation_dataset: Dataset | None = None,
         experiment_config: dict[str, Any] | None = None,
         configuration_updates: dict[str, Any] | None = None,
         additional_metadata: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
-        dataset_id = getattr(dataset, "id", None)
+        """
+        Prepare experiment configuration with dataset tracking.
+
+        Args:
+            dataset_training: Training dataset (used for feedback/context)
+            validation_dataset: Optional validation dataset (used for ranking)
+        """
         project_name = (
             getattr(self.agent_class, "project_name", None)
             if hasattr(self, "agent_class")
             else None
         )
+        # Ensure experiment traces follow the project name supplied to optimize_prompt.
+        if not project_name:
+            project_name = getattr(self, "project_name", None)
         if not project_name:
             project_name = getattr(prompt, "project_name", None)
         if not project_name:
@@ -369,8 +427,8 @@ class BaseOptimizer(ABC):
             ),
             "agent_config": self._build_agent_config(prompt),
             "metric": getattr(metric, "__name__", str(metric)),
-            "dataset": getattr(dataset, "name", None),
-            "dataset_id": dataset_id,
+            "dataset_training": dataset.name,
+            "dataset_training_id": dataset.id,
             "optimizer": self.__class__.__name__,
             "optimizer_metadata": self._build_optimizer_metadata(),
             "tool_signatures": self._summarize_tool_signatures(prompt),
@@ -393,6 +451,10 @@ class BaseOptimizer(ABC):
         if experiment_config:
             base_config = self._deep_merge_dicts(base_config, experiment_config)
 
+        if validation_dataset:
+            base_config["validation_dataset"] = validation_dataset.name
+            base_config["validation_dataset_id"] = validation_dataset.id
+
         return helpers.drop_none(base_config)
 
     @abstractmethod
@@ -407,6 +469,7 @@ class BaseOptimizer(ABC):
         agent_class: type[OptimizableAgent] | None = None,
         project_name: str = "Optimization",
         optimization_id: str | None = None,
+        validation_dataset: Dataset | None = None,
         *args: Any,
         **kwargs: Any,
     ) -> optimization_result.OptimizationResult:
@@ -414,7 +477,9 @@ class BaseOptimizer(ABC):
         Optimize a prompt.
 
         Args:
-           dataset: Opik dataset name, or Opik dataset
+           dataset: Opik dataset name, or Opik dataset (training set - used for feedback/context)
+               TODO/FIXME: This parameter will be deprecated in favor of dataset_training.
+               For now, it serves as the training dataset parameter.
            metric: A metric function, this function should have two arguments:
                dataset_item and llm_output
            prompt: the prompt to optimize
@@ -424,6 +489,11 @@ class BaseOptimizer(ABC):
            project_name: Opik project name for logging traces (default: "Optimization")
            optimization_id: Optional ID to use when creating the Opik optimization run;
                when provided it must be a valid UUIDv7 string.
+           validation_dataset: Optional validation dataset (validation set - used for ranking candidates).
+               When provided, the optimizer uses the training dataset for understanding failure modes
+               and generating improvements, then evaluates candidates on the validation dataset to select
+               the best one. This helps prevent overfitting to the training data. If not provided, uses
+               the same dataset for both training and validation, which may lead to overfitting.
            **kwargs: Additional arguments for optimization
         """
         pass
@@ -486,7 +556,7 @@ class BaseOptimizer(ABC):
         else:
             self.agent_class = agent_class
 
-        agent = self.agent_class(prompt)
+        agent = self._instantiate_agent(prompt)
 
         def llm_task(dataset_item: dict[str, Any]) -> dict[str, str]:
             messages = prompt.get_messages(dataset_item)

@@ -3,7 +3,11 @@ package com.comet.opik.domain;
 import com.comet.opik.api.DatasetLastOptimizationCreated;
 import com.comet.opik.api.Optimization;
 import com.comet.opik.api.OptimizationStatus;
+import com.comet.opik.api.OptimizationStudioConfig;
 import com.comet.opik.api.OptimizationUpdate;
+import com.comet.opik.domain.filter.FilterQueryBuilder;
+import com.comet.opik.domain.filter.FilterStrategy;
+import com.comet.opik.utils.JsonUtils;
 import com.comet.opik.utils.template.TemplateUtils;
 import com.google.common.base.Function;
 import com.google.common.base.Preconditions;
@@ -18,6 +22,7 @@ import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.reactivestreams.Publisher;
 import org.stringtemplate.v4.ST;
 import reactor.core.publisher.Flux;
@@ -80,6 +85,7 @@ class OptimizationDAOImpl implements OptimizationDAO {
                 objective_name,
                 status,
                 metadata,
+                studio_config,
                 created_by,
                 last_updated_by,
                 last_updated_at
@@ -92,6 +98,7 @@ class OptimizationDAOImpl implements OptimizationDAO {
                 :objective_name,
                 :status,
                 :metadata,
+                :studio_config,
                 :created_by,
                 :last_updated_by,
                 COALESCE(parseDateTime64BestEffortOrNull(:last_updated_at, 6), now64(6))
@@ -109,6 +116,8 @@ class OptimizationDAOImpl implements OptimizationDAO {
                 <if(name)>AND ilike(name, CONCAT('%%', :name ,'%%'))<endif>
                 <if(dataset_id)>AND dataset_id = :dataset_id <endif>
                 <if(dataset_deleted)>AND dataset_deleted = :dataset_deleted<endif>
+                <if(studio_only)>AND studio_config != ''<endif>
+                <if(filters)>AND <filters><endif>
                 ORDER BY id DESC, last_updated_at DESC
                 LIMIT 1 BY id
             ), experiments_final AS (
@@ -243,6 +252,8 @@ class OptimizationDAOImpl implements OptimizationDAO {
                 <if(name)>AND ilike(name, CONCAT('%%', :name ,'%%'))<endif>
                 <if(dataset_id)>AND dataset_id = :dataset_id <endif>
                 <if(dataset_deleted)>AND dataset_deleted = :dataset_deleted<endif>
+                <if(studio_only)>AND studio_config != ''<endif>
+                <if(filters)>AND <filters><endif>
                 ORDER BY id DESC, last_updated_at DESC
                 LIMIT 1 BY id
             )
@@ -269,7 +280,7 @@ class OptimizationDAOImpl implements OptimizationDAO {
 
     private static final String UPDATE_BY_ID = """
             INSERT INTO optimizations (
-            	id, dataset_id, name, workspace_id, objective_name, status, metadata, created_at, created_by, last_updated_by
+            	id, dataset_id, name, workspace_id, objective_name, status, metadata, created_at, created_by, last_updated_by, studio_config
             )
             SELECT
                 id,
@@ -281,7 +292,8 @@ class OptimizationDAOImpl implements OptimizationDAO {
                 metadata,
                 created_at,
                 created_by,
-                :user_name as last_updated_by
+                :user_name as last_updated_by,
+                studio_config
             FROM optimizations
             WHERE id = :id
             AND workspace_id = :workspace_id
@@ -292,7 +304,7 @@ class OptimizationDAOImpl implements OptimizationDAO {
 
     private static final String SET_DATASET_DELETED_TO_TRUE_BY_DATASET_ID = """
             INSERT INTO optimizations (
-            	id, dataset_id, name, workspace_id, objective_name, status, metadata, created_at, created_by, last_updated_at, last_updated_by, dataset_deleted
+            	id, dataset_id, name, workspace_id, objective_name, status, metadata, created_at, created_by, last_updated_at, last_updated_by, dataset_deleted, studio_config
             )
             SELECT
                 id,
@@ -306,7 +318,8 @@ class OptimizationDAOImpl implements OptimizationDAO {
                 created_by,
                 last_updated_at,
                 last_updated_by,
-                true as dataset_deleted
+                true as dataset_deleted,
+                studio_config
             FROM optimizations
             WHERE workspace_id = :workspace_id
             AND dataset_id IN :dataset_ids
@@ -355,6 +368,7 @@ class OptimizationDAOImpl implements OptimizationDAO {
             """;
 
     private final @NonNull ConnectionFactory connectionFactory;
+    private final @NonNull FilterQueryBuilder filterQueryBuilder;
 
     @Override
     public Mono<Void> upsert(@NonNull Optimization optimization) {
@@ -536,6 +550,14 @@ class OptimizationDAOImpl implements OptimizationDAO {
         Optional.ofNullable(searchCriteria.name())
                 .ifPresent(name -> template.add("name", name));
 
+        Optional.ofNullable(searchCriteria.studioOnly())
+                .filter(Boolean.TRUE::equals)
+                .ifPresent(studioOnly -> template.add("studio_only", "true"));
+
+        Optional.ofNullable(searchCriteria.filters())
+                .flatMap(filters -> filterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.OPTIMIZATION))
+                .ifPresent(optimizationFilters -> template.add("filters", optimizationFilters));
+
         Optional.ofNullable(searchCriteria.entityType())
                 .ifPresent(entityType -> template.add("entity_type", EntityType.TRACE.getType()));
     }
@@ -551,6 +573,9 @@ class OptimizationDAOImpl implements OptimizationDAO {
         Optional.ofNullable(searchCriteria.name())
                 .ifPresent(name -> statement.bind("name", name));
 
+        Optional.ofNullable(searchCriteria.filters())
+                .ifPresent(filters -> filterQueryBuilder.bind(statement, filters, FilterStrategy.OPTIMIZATION));
+
         if (isFindQuery) {
             Optional.ofNullable(searchCriteria.entityType())
                     .ifPresent(entityType -> statement.bind("entity_type", EntityType.TRACE.getType()));
@@ -558,6 +583,7 @@ class OptimizationDAOImpl implements OptimizationDAO {
     }
 
     private Publisher<? extends Result> upsert(Optimization optimization, Connection connection) {
+
         var statement = connection.createStatement(UPSERT)
                 .bind("id", optimization.id())
                 .bind("dataset_id", optimization.datasetId())
@@ -565,6 +591,18 @@ class OptimizationDAOImpl implements OptimizationDAO {
                 .bind("objective_name", optimization.objectiveName())
                 .bind("status", optimization.status().getValue())
                 .bind("metadata", getStringOrDefault(optimization.metadata()));
+
+        if (optimization.studioConfig() != null) {
+            try {
+                String studioConfigJson = JsonUtils.writeValueAsString(optimization.studioConfig());
+                statement.bind("studio_config", studioConfigJson);
+            } catch (Exception e) {
+                throw new IllegalStateException(
+                        "Failed to serialize studio_config for optimization: '%s'".formatted(optimization.id()), e);
+            }
+        } else {
+            statement.bindNull("studio_config", String.class);
+        }
 
         if (optimization.lastUpdatedAt() != null) {
             statement.bind("last_updated_at", optimization.lastUpdatedAt().toString());
@@ -590,6 +628,17 @@ class OptimizationDAOImpl implements OptimizationDAO {
 
     private Publisher<Optimization> mapToDto(Result result) {
         return result.map((row, rowMetadata) -> {
+            OptimizationStudioConfig studioConfig = null;
+            String studioConfigJson = row.get("studio_config", String.class);
+            if (StringUtils.isNotEmpty(studioConfigJson)) {
+                try {
+                    studioConfig = JsonUtils.readValue(studioConfigJson, OptimizationStudioConfig.class);
+                } catch (Exception e) {
+                    log.error("Failed to deserialize studio_config for optimization: '{}'",
+                            row.get("id", UUID.class), e);
+                }
+            }
+
             return Optimization.builder()
                     .id(row.get("id", UUID.class))
                     .name(row.get("name", String.class))
@@ -597,11 +646,12 @@ class OptimizationDAOImpl implements OptimizationDAO {
                     .objectiveName(row.get("objective_name", String.class))
                     .status(OptimizationStatus.fromString(row.get("status", String.class)))
                     .metadata(getJsonNodeOrDefault(row.get("metadata", String.class)))
+                    .studioConfig(studioConfig)
                     .createdAt(row.get("created_at", Instant.class))
                     .lastUpdatedAt(row.get("last_updated_at", Instant.class))
                     .createdBy(row.get("created_by", String.class))
                     .lastUpdatedBy(row.get("last_updated_by", String.class))
-                    .feedbackScores(getFeedbackScores(row))
+                    .feedbackScores(getFeedbackScores(row, "feedback_scores"))
                     .numTrials(row.get("num_trials", Long.class))
                     .build();
         });

@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import { findAndReturnNewTraces } from './sessionManager';
 import { logTracesToOpik } from '../opik';
-import { getSessionInfo, updateSessionInfo } from '../state';
+import { getSessionInfo, updateSessionInfo, getLastSyncedAt, updateLastSyncedAt } from '../state';
 import { captureException } from '../sentry';
 
 export class CursorService {
@@ -25,14 +25,12 @@ export class CursorService {
     this.isProcessing = true;
     let numberOfTracesLogged = 0;
     let sessionInfo = getSessionInfo(this.context);
-    const startTime = Date.now();
+    const lastSyncedAt = getLastSyncedAt(this.context);
+    // Capture current time before processing to avoid race conditions
+    const currentSyncTime = Date.now();
     
     try {
-      // Check if we should skip historical conversations (useful for first-time setup)
-      const config = vscode.workspace.getConfiguration();
-      const skipHistorical = config.get<boolean>('opik.skipHistoricalConversations') ?? true;
-      
-      const cursorResult = await findAndReturnNewTraces(this.context, vsInstallationPath, sessionInfo, skipHistorical);
+      const cursorResult = await findAndReturnNewTraces(this.context, vsInstallationPath, sessionInfo, lastSyncedAt, currentSyncTime);
       
       if (cursorResult && cursorResult.tracesData) {
         const { tracesData, updatedSessionInfo } = cursorResult;
@@ -93,13 +91,9 @@ export class CursorService {
 
         updateSessionInfo(this.context, sessionInfo);
         
-        // Log processing performance and stats
-        const processingTime = Date.now() - startTime;
-        
-        // Count total bubbles for stats
-        const totalBubbles = tracesData.reduce((sum, trace) => {
-          return sum + (trace.metadata?.totalBubbles || 0);
-        }, 0);
+        // Update lastSyncedAt after successful processing (even if no traces uploaded)
+        // This prevents re-querying the same conversations
+        updateLastSyncedAt(this.context, currentSyncTime);
       } else {
         const error = new Error("No cursor data returned from findAndReturnNewTraces");
         captureException(error);

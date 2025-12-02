@@ -1,7 +1,11 @@
 import React, { useEffect, useMemo, useState } from "react";
 import get from "lodash/get";
 import isEmpty from "lodash/isEmpty";
-import { ColumnDef, createColumnHelper } from "@tanstack/react-table";
+import {
+  ColumnDef,
+  ColumnPinningState,
+  createColumnHelper,
+} from "@tanstack/react-table";
 import useLocalStorageState from "use-local-storage-state";
 
 import DataTable from "@/components/shared/DataTable/DataTable";
@@ -18,7 +22,7 @@ import PlaygroundVariableCell from "@/components/pages/PlaygroundPage/Playground
 import DataTableNoData from "@/components/shared/DataTableNoData/DataTableNoData";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 import { useHydrateDatasetItemData } from "@/components/pages/PlaygroundPage/useHydrateDatasetItemData";
-import ListCell from "@/components/shared/DataTableCells/ListCell";
+import PlaygroundTagsCell from "@/components/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundOutputTable/PlaygroundTagsCell";
 
 type PlaygroundOutputTableData = {
   variables: { [key: string]: string };
@@ -32,6 +36,7 @@ interface PlaygroundOutputTableProps {
   datasetColumns: DatasetItemColumn[];
   promptIds: string[];
   isLoadingDatasetItems: boolean;
+  isFetchingData: boolean;
 }
 
 const COLUMNS_WIDTH_KEY = "playground-output-table-width-keys";
@@ -41,6 +46,7 @@ const PlaygroundOutputTable = ({
   promptIds,
   datasetColumns,
   isLoadingDatasetItems,
+  isFetchingData,
 }: PlaygroundOutputTableProps) => {
   const [columnsWidth, setColumnsWidth] = useLocalStorageState<
     Record<string, number>
@@ -52,10 +58,12 @@ const PlaygroundOutputTable = ({
   const [hydratedDatasetItems, setHydratedDatasetItems] = useState<
     DatasetItem[]
   >([]);
+  const [isHydrating, setIsHydrating] = useState(false);
 
   // Hydrate dataset items when they change
   useEffect(() => {
     const hydrateItems = async () => {
+      setIsHydrating(true);
       const hydratedItems = await Promise.all(
         datasetItems.map(async (item) => {
           const hydratedData = await hydrateDatasetItemData(item);
@@ -66,20 +74,25 @@ const PlaygroundOutputTable = ({
         }),
       );
       setHydratedDatasetItems(hydratedItems);
+      setIsHydrating(false);
     };
 
     if (datasetItems.length > 0) {
       hydrateItems();
     } else {
       setHydratedDatasetItems([]);
+      setIsHydrating(false);
     }
   }, [datasetItems, hydrateDatasetItemData]);
 
-  const noDataMessage = isLoadingDatasetItems
-    ? "Loading..."
-    : "No dataset items";
+  const noDataMessage =
+    isLoadingDatasetItems || isHydrating ? "Loading..." : "No dataset items";
 
   const rows = useMemo(() => {
+    if (isLoadingDatasetItems || isHydrating) {
+      return [];
+    }
+
     return hydratedDatasetItems.map((di) => {
       return {
         id: di.id,
@@ -90,7 +103,7 @@ const PlaygroundOutputTable = ({
         tags: di.tags || [],
       };
     });
-  }, [hydratedDatasetItems]);
+  }, [hydratedDatasetItems, isLoadingDatasetItems, isHydrating]);
 
   const columns = useMemo(() => {
     if (isEmpty(datasetColumns)) {
@@ -126,8 +139,9 @@ const PlaygroundOutputTable = ({
       id: "tags",
       label: "Tags",
       type: COLUMN_TYPE.list,
+      iconType: "tags",
       accessorFn: (row) => row.tags || [],
-      cell: ListCell as never,
+      cell: PlaygroundTagsCell as never,
     } as ColumnData<PlaygroundOutputTableData>);
 
     retVal.push(
@@ -156,19 +170,35 @@ const PlaygroundOutputTable = ({
       } as ColumnData<PlaygroundOutputTableData>;
     });
 
-    retVal.push(
-      columnHelper.group({
-        id: "playground-output",
-        meta: {
-          header: "Output",
-        },
-        header: SectionHeader,
-        columns: convertColumnDataToColumn<
-          PlaygroundOutputTableData,
-          PlaygroundOutputTableData
-        >(outputColumns, {}),
-      }),
-    );
+    // Split into pinned and non-pinned outputs
+    const nonPinnedOutputs = outputColumns.slice(0, -1);
+    const pinnedOutput = outputColumns[outputColumns.length - 1];
+
+    // Only add the output group if there are non-pinned outputs
+    if (nonPinnedOutputs.length > 0) {
+      retVal.push(
+        columnHelper.group({
+          id: "playground-output",
+          meta: {
+            header: "Output",
+          },
+          header: SectionHeader,
+          columns: convertColumnDataToColumn<
+            PlaygroundOutputTableData,
+            PlaygroundOutputTableData
+          >(nonPinnedOutputs, {}),
+        }),
+      );
+    }
+
+    // Add pinned output as standalone column (outside any group)
+    if (pinnedOutput) {
+      const pinnedColumns = convertColumnDataToColumn<
+        PlaygroundOutputTableData,
+        PlaygroundOutputTableData
+      >([pinnedOutput], {});
+      retVal.push(...pinnedColumns);
+    }
 
     return retVal;
   }, [datasetColumns, promptIds]);
@@ -182,9 +212,19 @@ const PlaygroundOutputTable = ({
     [columnsWidth, setColumnsWidth],
   );
 
+  const columnPinning = useMemo<ColumnPinningState>(
+    () => ({
+      right:
+        promptIds.length > 0
+          ? [`output-${promptIds[promptIds.length - 1]}`]
+          : [],
+    }),
+    [promptIds],
+  );
+
   return (
     <div
-      className="playground-table overflow-x-auto pt-10" // eslint-disable-line tailwindcss/no-custom-classname
+      className="playground-table overflow-x-auto pt-11" // eslint-disable-line tailwindcss/no-custom-classname
       style={{ "--cell-top-height": "28px" } as React.CSSProperties}
     >
       <DataTable
@@ -192,7 +232,9 @@ const PlaygroundOutputTable = ({
         data={rows}
         rowHeight={ROW_HEIGHT.large}
         resizeConfig={resizeConfig}
+        columnPinningState={columnPinning}
         noData={<DataTableNoData title={noDataMessage} />}
+        showLoadingOverlay={isFetchingData}
       />
     </div>
   );

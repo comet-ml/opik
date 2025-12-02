@@ -1,5 +1,6 @@
 import importlib.metadata
 import logging
+import os
 
 from opik.evaluation.models.litellm import warning_filters
 
@@ -17,12 +18,16 @@ from .algorithms import (
 )
 from .logging_config import setup_logging
 from .optimization_result import OptimizationResult
-from .multi_metric_objective import MultiMetricObjective
+from .metrics.multi_metric_objective import MultiMetricObjective
 from .algorithms.parameter_optimizer import (
     ParameterSearchSpace,
     ParameterSpec,
     ParameterType,
 )
+
+# FIXME: Remove once LiteLLM issue is resolved
+# https://github.com/BerriAI/litellm/issues/16813
+os.environ.setdefault("LITELLM_LOCAL_MODEL_COST_MAP", "True")
 
 __version__ = importlib.metadata.version("opik_optimizer")
 

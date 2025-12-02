@@ -43,7 +43,7 @@ import {
   getFeedbackScoresByUser,
   getLastCommentByUser,
 } from "@/lib/annotation-queues";
-import { hasValuesByAuthor } from "@/lib/feedback-scores";
+import { findValueByAuthor, hasValuesByAuthor } from "@/lib/feedback-scores";
 
 const isItemProcessed = (
   item: Trace | Thread,
@@ -57,7 +57,7 @@ const isItemProcessed = (
     if (!feedbackScoreNames.includes(score.name)) return false;
 
     return hasValuesByAuthor(score)
-      ? Boolean(score.value_by_author?.[userName])
+      ? Boolean(findValueByAuthor(score.value_by_author, userName))
       : score.last_updated_by === userName;
   });
 
@@ -746,13 +746,18 @@ export const SMEFlowProvider: React.FunctionComponent<SMEFlowProviderProps> = ({
   }, [currentItem, isThread, currentAnnotationState]);
 
   useEffect(() => {
-    if (
-      !isItemsLoading &&
-      queueItems.length > 0 &&
-      unprocessedItems.length === 0 &&
-      currentView !== WORKFLOW_STATUS.COMPLETED
-    ) {
-      setCurrentView(WORKFLOW_STATUS.COMPLETED);
+    if (!isItemsLoading && queueItems.length > 0) {
+      if (
+        unprocessedItems.length === 0 &&
+        currentView !== WORKFLOW_STATUS.COMPLETED
+      ) {
+        setCurrentView(WORKFLOW_STATUS.COMPLETED);
+      } else if (
+        unprocessedItems.length > 0 &&
+        currentView !== WORKFLOW_STATUS.ANNOTATING
+      ) {
+        setCurrentView(WORKFLOW_STATUS.INITIAL);
+      }
     }
   }, [
     isItemsLoading,

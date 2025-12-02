@@ -6,6 +6,7 @@ import LLMPromptMessagesVariable from "@/components/pages-shared/llm/LLMPromptMe
 import { Description } from "@/components/ui/description";
 import ExplainerIcon from "@/components/shared/ExplainerIcon/ExplainerIcon";
 import { EXPLAINERS_MAP, EXPLAINER_ID } from "@/constants/explainers";
+import { TRACE_DATA_TYPE } from "@/hooks/useTracesOrSpansList";
 
 const DEFAULT_DESCRIPTION =
   "Detected variables in your prompt (e.g., {{variable1}}) will appear below. For each one, select a field from a recent trace to map it — including image fields like input.image_url or output.image_base64. These mappings auto-fill the variables during rule execution.";
@@ -29,6 +30,7 @@ interface LLMPromptMessagesVariablesProps {
   errorText?: string;
   projectName?: string;
   datasetColumnNames?: string[];
+  type?: TRACE_DATA_TYPE;
 }
 
 const LLMPromptMessagesVariables = ({
@@ -41,6 +43,7 @@ const LLMPromptMessagesVariables = ({
   errorText = DEFAULT_ERROR_TEXT,
   projectName,
   datasetColumnNames,
+  type = TRACE_DATA_TYPE.traces,
 }: LLMPromptMessagesVariablesProps) => {
   const variablesList: DropdownOption<string>[] = useMemo(() => {
     if (!variables || typeof variables !== "object") {
@@ -84,6 +87,7 @@ const LLMPromptMessagesVariables = ({
             projectId={projectId}
             projectName={projectName}
             datasetColumnNames={datasetColumnNames}
+            type={type}
           />
         ))}
       </div>

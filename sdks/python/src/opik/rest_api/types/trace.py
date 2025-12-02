@@ -35,6 +35,11 @@ class Trace(UniversalBaseModel):
     created_by: typing.Optional[str] = None
     last_updated_by: typing.Optional[str] = None
     feedback_scores: typing.Optional[typing.List[FeedbackScore]] = None
+    span_feedback_scores: typing.Optional[typing.List[FeedbackScore]] = pydantic.Field(default=None)
+    """
+    Aggregated feedback scores from all spans in this trace, averaged by score name
+    """
+
     comments: typing.Optional[typing.List[Comment]] = None
     guardrails_validations: typing.Optional[typing.List[GuardrailsValidation]] = None
     total_estimated_cost: typing.Optional[float] = None
@@ -47,6 +52,7 @@ class Trace(UniversalBaseModel):
     thread_id: typing.Optional[str] = None
     visibility_mode: typing.Optional[TraceVisibilityMode] = None
     llm_span_count: typing.Optional[int] = None
+    has_tool_spans: typing.Optional[bool] = None
     providers: typing.Optional[typing.List[str]] = pydantic.Field(default=None)
     """
     List of unique provider names from all spans in this trace, sorted alphabetically

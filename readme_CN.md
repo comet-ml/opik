@@ -100,7 +100,7 @@ Opik（由 [Comet](https://www.comet.com?from=llm&utm_source=opik&utm_medium=git
 
 最简方式启动本地 Opik 实例，使用全新 `.opik.sh` 安装脚本：
 
-On Linux or Mac Enviroment:
+On Linux or Mac Environment:
 
 ```bash
 # 克隆 Opik 仓库
@@ -113,7 +113,7 @@ cd opik
 ./opik.sh
 ```
 
-On Windows Enviroment:
+On Windows Environment:
 
 ```powershell
 # 克隆 Opik 仓库
@@ -224,6 +224,7 @@ opik configure
 | **Microsoft Agent Framework (Python)** | 记录 Microsoft Agent Framework 调用的跟踪 | [文档](https://www.comet.com/docs/opik/integrations/microsoft-agent-framework?utm_source=opik&utm_medium=github&utm_content=agent_framework_link&utm_campaign=opik)              |
 | **Microsoft Agent Framework (.NET)** | 记录 Microsoft Agent Framework .NET 调用的跟踪 | [文档](https://www.comet.com/docs/opik/integrations/microsoft-agent-framework-dotnet?utm_source=opik&utm_medium=github&utm_content=agent_framework_dotnet_link&utm_campaign=opik) |
 | **Mistral AI**            | 记录 Mistral AI LLM 调用的跟踪                  | [文档](https://www.comet.com/docs/opik/integrations/mistral?utm_source=opik&utm_medium=github&utm_content=mistral_link&utm_campaign=opik)                             |
+| **n8n**                   | 记录 n8n 工作流执行的跟踪                       | [文档](https://www.comet.com/docs/opik/integrations/n8n?utm_source=opik&utm_medium=github&utm_content=n8n_link&utm_campaign=opik)                                     |
 | **LlamaIndex**            | 记录 LlamaIndex LLM 调用的跟踪                  | [文档](https://www.comet.com/docs/opik/integrations/llama_index?utm_source=opik&utm_medium=github&utm_content=llama_index_link&utm_campaign=opik)                     |
 | **Ollama**                | 记录 Ollama LLM 调用的跟踪                      | [文档](https://www.comet.com/docs/opik/integrations/ollama?utm_source=opik&utm_medium=github&utm_content=ollama_link&utm_campaign=opik)                               |
 | **OpenAI (Python)**       | 记录 OpenAI LLM 调用的跟踪                      | [文档](https://www.comet.com/docs/opik/integrations/openai?utm_source=opik&utm_medium=github&utm_content=openai_link&utm_campaign=opik)                               |

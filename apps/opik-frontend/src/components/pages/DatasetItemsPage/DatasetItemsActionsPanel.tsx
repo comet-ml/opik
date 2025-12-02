@@ -12,6 +12,10 @@ import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import DatasetExpansionDialog from "./DatasetExpansionDialog";
 import GeneratedSamplesDialog from "./GeneratedSamplesDialog";
 import AddTagDialog from "./AddTagDialog";
+import { DATASET_ITEM_DATA_PREFIX } from "@/constants/datasets";
+import { stripColumnPrefix } from "@/lib/utils";
+import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
+import { FeatureToggleKeys } from "@/types/feature-toggles";
 
 type DatasetItemsActionsPanelProps = {
   getDataForExport: () => Promise<DatasetItem[]>;
@@ -43,6 +47,7 @@ const DatasetItemsActionsPanel: React.FunctionComponent<
   const disabled = !selectedDatasetItems?.length;
 
   const { mutate } = useDatasetItemBatchDeleteMutation();
+  const isExportEnabled = useIsFeatureEnabled(FeatureToggleKeys.EXPORT_ENABLED);
 
   const deleteDatasetItemsHandler = useCallback(() => {
     mutate({
@@ -62,7 +67,11 @@ const DatasetItemsActionsPanel: React.FunctionComponent<
         // Check if this column is a dynamic dataset column
         if (dynamicColumns.includes(column)) {
           // Dynamic columns are stored in the item.data object
-          acc[column] = get(item.data, column, "");
+          const columnName = stripColumnPrefix(
+            column,
+            DATASET_ITEM_DATA_PREFIX,
+          );
+          acc[columnName] = get(item.data, columnName, "");
         } else {
           // Handle direct properties like id, created_at, etc.
           acc[column] = get(item, column, "");
@@ -148,9 +157,14 @@ const DatasetItemsActionsPanel: React.FunctionComponent<
       </TooltipWrapper>
 
       <ExportToButton
-        disabled={disabled || columnsToExport.length === 0}
+        disabled={disabled || columnsToExport.length === 0 || !isExportEnabled}
         getData={mapRowData}
         generateFileName={generateFileName}
+        tooltipContent={
+          !isExportEnabled
+            ? "Export functionality is disabled for this installation"
+            : undefined
+        }
       />
       <TooltipWrapper content="Delete">
         <Button

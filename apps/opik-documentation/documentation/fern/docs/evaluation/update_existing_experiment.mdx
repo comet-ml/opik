@@ -2,6 +2,108 @@
 subtitle: Guides you through the process of updating an existing experiment
 ---
 
+You can update existing experiments in several ways:
+
+1. **Update experiment name and configuration** - Change the experiment name or update its configuration metadata
+2. **Update experiment scores** - Add new scores or re-compute existing scores for experiment items
+
+## Update Experiment Name and Configuration
+
+You can update an experiment's name and configuration from both the Opik UI and the SDKs.
+
+### From the Opik UI
+
+To update an experiment from the UI:
+
+1. Navigate to the **Experiments** page
+2. Find the experiment you want to update
+3. Click the **...** menu button on the experiment row
+4. Select **Edit** from the dropdown menu
+
+<Frame>
+  <img src="/img/evaluation/edit_experiment.png" />
+</Frame>
+
+5. Update the experiment name and/or configuration (JSON format)
+6. Click **Update Experiment** to save your changes
+
+<Frame>
+  <img src="/img/evaluation/edit_experiment_dialog.png" />
+</Frame>
+
+The configuration is stored as JSON and is useful for tracking parameters like model names, temperatures, prompt templates, or any other metadata relevant to your experiment.
+
+### From the Python SDK
+
+Use the `update_experiment` method to update an experiment's name and configuration:
+
+```python
+import opik
+
+client = opik.Opik()
+
+# Update experiment name
+client.update_experiment(
+    id="experiment-id",
+    name="Updated Experiment Name"
+)
+
+# Update experiment configuration
+client.update_experiment(
+    id="experiment-id",
+    experiment_config={
+        "model": "gpt-4",
+        "temperature": 0.7,
+        "prompt_template": "Answer the following question: {question}"
+    }
+)
+
+# Update both name and configuration
+client.update_experiment(
+    id="experiment-id",
+    name="Updated Experiment Name",
+    experiment_config={
+        "model": "gpt-4",
+        "temperature": 0.7
+    }
+)
+```
+
+### From the TypeScript SDK
+
+Use the `updateExperiment` method to update an experiment's name and configuration:
+
+```typescript
+import { Opik } from "opik";
+
+const opik = new Opik();
+
+// Update experiment name
+await opik.updateExperiment("experiment-id", {
+  name: "Updated Experiment Name"
+});
+
+// Update experiment configuration
+await opik.updateExperiment("experiment-id", {
+  experimentConfig: {
+    model: "gpt-4",
+    temperature: 0.7,
+    promptTemplate: "Answer the following question: {question}"
+  }
+});
+
+// Update both name and configuration
+await opik.updateExperiment("experiment-id", {
+  name: "Updated Experiment Name",
+  experimentConfig: {
+    model: "gpt-4",
+    temperature: 0.7
+  }
+});
+```
+
+## Update Experiment Scores
+
 Sometimes you may want to update an existing experiment with new scores, or update existing scores for an experiment. You can do this using the [`evaluate_experiment` function](https://www.comet.com/docs/opik/python-sdk-reference/evaluation/evaluate_existing.html).
 
 This function will re-run the scoring metrics on the existing experiment items and update the scores:
@@ -20,6 +122,11 @@ evaluate_experiment(experiment_name="my-experiment", scoring_metrics=[hallucinat
   The `evaluate_experiment` function can be used to update existing scores for an experiment. If you use a scoring
   metric with the same name as an existing score, the scores will be updated with the new values.
 </Tip>
+
+<Note>
+  You can also compute experiment-level aggregate metrics when updating experiments using the `experiment_scoring_functions` parameter. 
+  Learn more about [experiment-level metrics](/evaluation/evaluate_your_llm#computing-experiment-level-metrics).
+</Note>
 
 ## Example
 

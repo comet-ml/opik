@@ -1,5 +1,6 @@
 # Runner for the suite of library integration tests
 #
+#          echo "result=${{ secrets.OPENAI_API_KEY != '' }}" >> $GITHUB_OUTPUT
 name: SDK Library Integration Tests Runner
 run-name: "SDK Library Integration Tests Runner ${{ github.ref_name }} by @${{ github.actor }}"
 permissions:
@@ -47,10 +48,33 @@ env:
   OPIK_SENTRY_ENABLE: False
 
 jobs:
+  has_needed_secrets:
+    name: Check Secrets
+    runs-on: ubuntu-latest
+    outputs:
+      has_secrets: ${{ steps.init.outputs.has_secrets }}
+    steps:
+      - name: Print has secrets into output
+        id: init
+        run: |
+          echo "has_secrets=${{ secrets.OPENAI_API_KEY != '' }}" >> $GITHUB_OUTPUT
+
+  missed_api_key_warning:
+    name: Missed OpenAI API Key Warning
+    needs: [has_needed_secrets]
+    runs-on: ubuntu-latest
+    if: ${{ needs.has_needed_secrets.outputs.has_secrets == 'false' }}
+    steps:
+      - name: Print disabled message
+        run: |
+          echo "::warning::SDK Library Integration Tests are disabled because OPENAI_API_KEY is not set"
+
   init_environment:
     name: Build
+    needs: [has_needed_secrets]
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    if: ${{ needs.has_needed_secrets.outputs.has_secrets == 'true' }}
     outputs:
       LIBS: ${{ steps.init.outputs.LIBS }}
 

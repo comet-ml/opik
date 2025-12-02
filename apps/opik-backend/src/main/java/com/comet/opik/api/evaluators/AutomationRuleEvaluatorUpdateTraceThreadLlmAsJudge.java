@@ -1,6 +1,6 @@
 package com.comet.opik.api.evaluators;
 
-import com.comet.opik.api.filter.TraceFilter;
+import com.comet.opik.api.filter.TraceThreadFilter;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
@@ -24,14 +24,25 @@ import static com.comet.opik.api.evaluators.AutomationRuleEvaluatorTraceThreadLl
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
 public final class AutomationRuleEvaluatorUpdateTraceThreadLlmAsJudge
         extends
-            AutomationRuleEvaluatorUpdate<TraceThreadLlmAsJudgeCode> {
+            AutomationRuleEvaluatorUpdate<TraceThreadLlmAsJudgeCode, TraceThreadFilter> {
 
     @ConstructorProperties({"name", "samplingRate", "enabled", "filters", "code", "projectId"})
     public AutomationRuleEvaluatorUpdateTraceThreadLlmAsJudge(
-            @NotBlank String name, float samplingRate, boolean enabled, List<TraceFilter> filters,
+            @NotBlank String name, float samplingRate, boolean enabled, List<TraceThreadFilter> filters,
             @NotNull TraceThreadLlmAsJudgeCode code,
             @NotNull UUID projectId) {
         super(name, samplingRate, enabled, filters, code, projectId);
+    }
+
+    /**
+     * Two purposes:
+     * - Makes the polymorphic T code available for serialization.
+     * - Provides the specific type T for Open API and Fern.
+     */
+    @Override
+    @JsonProperty
+    public List<TraceThreadFilter> getFilters() {
+        return super.getFilters();
     }
 
     /**

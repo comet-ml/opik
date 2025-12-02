@@ -26,7 +26,7 @@ The Opik Optimizer SDK wraps a mix of in-house algorithms (MetaPrompt, Hierarchi
 ## How to choose
 
 1. **Identify the constraint** (e.g., wording vs. tool usage vs. parameters).
-2. **Check dataset readiness** – reflective optimizers need detailed metric reasons.
+2. **Check dataset readiness** – reflective optimizers need detailed metric reasons. Consider splitting your data into training and validation sets to prevent overfitting.
 3. **Estimate budget** – evolutionary/GEPA runs consume more tokens than MetaPrompt.
 4. **Plan follow-up** – you can chain optimizers (MetaPrompt → Parameter) when needed.
 

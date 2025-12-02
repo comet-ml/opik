@@ -29,10 +29,12 @@ import {
   COLUMN_ID_ID,
   COLUMN_SELECT_ID,
   COLUMN_TYPE,
+  COLUMN_USAGE_ID,
   ColumnData,
   DynamicColumn,
   OnChangeFn,
   ROW_HEIGHT,
+  SCORE_TYPE_EXPERIMENT,
 } from "@/types/shared";
 import {
   EXPERIMENT_ITEM_OUTPUT_PREFIX,
@@ -89,6 +91,7 @@ import PageBodyStickyContainer from "@/components/layout/PageBodyStickyContainer
 import PageBodyStickyTableWrapper from "@/components/layout/PageBodyStickyTableWrapper/PageBodyStickyTableWrapper";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 import DurationCell from "@/components/shared/DataTableCells/DurationCell";
+import CostCell from "@/components/shared/DataTableCells/CostCell";
 import {
   USER_FEEDBACK_COLUMN_ID,
   USER_FEEDBACK_NAME,
@@ -382,11 +385,13 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
 
   const dynamicScoresColumns = useMemo(() => {
     return (feedbackScoresData?.scores ?? [])
+      .filter((c) => c.type !== SCORE_TYPE_EXPERIMENT)
       .sort((c1, c2) => c1.name.localeCompare(c2.name))
       .map<DynamicColumn>((c) => ({
         id: `${COLUMN_FEEDBACK_SCORES_ID}.${c.name}`,
         label: c.name,
         columnType: COLUMN_TYPE.number,
+        type: c.type,
       }));
   }, [feedbackScoresData?.scores]);
 
@@ -397,6 +402,8 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
       ...dynamicScoresColumns.map((c) => c.id),
       COLUMN_COMMENTS_ID,
       COLUMN_DURATION_ID,
+      `${COLUMN_USAGE_ID}.total_tokens`,
+      "total_estimated_cost",
     ],
     [dynamicDatasetColumns, dynamicOutputColumns, dynamicScoresColumns],
   );
@@ -453,6 +460,27 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
         statisticDataFormater: formatDuration,
         customMeta: {
           experimentsIds,
+        },
+      },
+      {
+        id: `${COLUMN_USAGE_ID}.total_tokens`,
+        label: "Total tokens",
+        type: COLUMN_TYPE.number,
+        cell: CostCell.Compare as never,
+        customMeta: {
+          experimentsIds,
+          accessor: `${COLUMN_USAGE_ID}.total_tokens`,
+          formatter: (value: number) => value.toLocaleString(),
+        },
+      },
+      {
+        id: "total_estimated_cost",
+        label: "Estimated cost",
+        type: COLUMN_TYPE.cost,
+        cell: CostCell.Compare as never,
+        customMeta: {
+          experimentsIds,
+          accessor: "total_estimated_cost",
         },
       },
       {

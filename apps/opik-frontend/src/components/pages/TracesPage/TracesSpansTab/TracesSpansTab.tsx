@@ -17,7 +17,7 @@ import isObject from "lodash/isObject";
 import isNumber from "lodash/isNumber";
 import get from "lodash/get";
 import {
-  useMetricDateRangeWithQuery,
+  useMetricDateRangeWithQueryAndStorage,
   MetricDateRangeSelect,
 } from "@/components/pages-shared/traces/MetricDateRangeSelect";
 
@@ -28,6 +28,7 @@ import useTracesOrSpansScoresColumns from "@/hooks/useTracesOrSpansScoresColumns
 import {
   COLUMN_COMMENTS_ID,
   COLUMN_FEEDBACK_SCORES_ID,
+  COLUMN_SPAN_FEEDBACK_SCORES_ID,
   COLUMN_GUARDRAIL_STATISTIC_ID,
   COLUMN_GUARDRAILS_ID,
   COLUMN_ID_ID,
@@ -109,6 +110,22 @@ const getRowId = (d: Trace | Span) => d.id;
 
 const REFETCH_INTERVAL = 30000;
 
+const SPAN_FEEDBACK_SCORE_SUFFIX = " (span)";
+
+/**
+ * Formats a score name with the span suffix for display in column labels
+ */
+const formatSpanScoreLabel = (scoreName: string): string => {
+  return `${scoreName}${SPAN_FEEDBACK_SCORE_SUFFIX}`;
+};
+
+/**
+ * Extracts the score name from a label by removing the span suffix
+ */
+const parseSpanScoreName = (label: string): string => {
+  return label.replace(SPAN_FEEDBACK_SCORE_SUFFIX, "");
+};
+
 const SHARED_COLUMNS: ColumnData<BaseTraceData>[] = [
   {
     id: "name",
@@ -168,6 +185,7 @@ const SHARED_COLUMNS: ColumnData<BaseTraceData>[] = [
     id: "tags",
     label: "Tags",
     type: COLUMN_TYPE.list,
+    iconType: "tags",
     cell: ListCell as never,
   },
   {
@@ -250,7 +268,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
     intervalEnd,
     minDate,
     maxDate,
-  } = useMetricDateRangeWithQuery({});
+  } = useMetricDateRangeWithQueryAndStorage();
   const [search = "", setSearch] = useQueryParam("search", StringParam, {
     updateType: "replaceIn",
   });
@@ -401,6 +419,18 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
             placeholder: "Select score",
           },
         },
+        ...(type === TRACE_DATA_TYPE.traces
+          ? {
+              [COLUMN_SPAN_FEEDBACK_SCORES_ID]: {
+                keyComponent: TracesOrSpansFeedbackScoresSelect,
+                keyComponentProps: {
+                  projectId,
+                  type: TRACE_DATA_TYPE.spans,
+                  placeholder: "Select span score",
+                },
+              },
+            }
+          : {}),
         [COLUMN_GUARDRAILS_ID]: {
           keyComponentProps: {
             options: [
@@ -491,6 +521,20 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
       },
     );
 
+  const {
+    data: spanFeedbackScoresData,
+    isPending: isSpanFeedbackScoresPending,
+  } = useTracesOrSpansScoresColumns(
+    {
+      projectId,
+      type: TRACE_DATA_TYPE.spans,
+    },
+    {
+      enabled: type === TRACE_DATA_TYPE.traces,
+      refetchInterval: REFETCH_INTERVAL,
+    },
+  );
+
   const noData = !search && filters.length === 0;
   const noDataText = noData
     ? `There are no ${type === TRACE_DATA_TYPE.traces ? "traces" : "spans"} yet`
@@ -538,7 +582,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
   });
 
   const dynamicScoresColumns = useMemo(() => {
-    return (feedbackScoresData?.scores ?? [])
+    return (feedbackScoresData?.scores?.slice() ?? [])
       .sort((c1, c2) => c1.name.localeCompare(c2.name))
       .map<DynamicColumn>((c) => ({
         id: `${COLUMN_FEEDBACK_SCORES_ID}.${c.name}`,
@@ -547,9 +591,23 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
       }));
   }, [feedbackScoresData?.scores]);
 
+  const dynamicSpanScoresColumns = useMemo(() => {
+    if (type !== TRACE_DATA_TYPE.traces) return [];
+    return (spanFeedbackScoresData?.scores?.slice() ?? [])
+      .sort((c1, c2) => c1.name.localeCompare(c2.name))
+      .map<DynamicColumn>((c) => ({
+        id: `${COLUMN_SPAN_FEEDBACK_SCORES_ID}.${c.name}`,
+        label: formatSpanScoreLabel(c.name),
+        columnType: COLUMN_TYPE.number,
+      }));
+  }, [spanFeedbackScoresData?.scores, type]);
+
   const dynamicColumnsIds = useMemo(
-    () => dynamicScoresColumns.map((c) => c.id),
-    [dynamicScoresColumns],
+    () => [
+      ...dynamicScoresColumns.map((c) => c.id),
+      ...dynamicSpanScoresColumns.map((c) => c.id),
+    ],
+    [dynamicScoresColumns, dynamicSpanScoresColumns],
   );
 
   useDynamicColumnsCache({
@@ -571,7 +629,10 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
       (col) => col.id !== USER_FEEDBACK_COLUMN_ID,
     );
 
-    return [userFeedbackColumn, ...otherDynamicColumns].map(
+    const feedbackScoresColumns = [
+      userFeedbackColumn,
+      ...otherDynamicColumns,
+    ].map(
       ({ label, id, columnType }) =>
         ({
           id,
@@ -584,7 +645,32 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
           statisticKey: `${COLUMN_FEEDBACK_SCORES_ID}.${label}`,
         }) as ColumnData<BaseTraceData>,
     );
-  }, [dynamicScoresColumns]);
+
+    // Add span feedback scores columns only for traces
+    if (type === TRACE_DATA_TYPE.traces) {
+      const spanFeedbackScoresColumns = dynamicSpanScoresColumns.map(
+        ({ label, id, columnType }) => {
+          // Extract the score name without the "(span)" suffix for matching
+          const scoreName = parseSpanScoreName(label);
+          return {
+            id,
+            label,
+            type: columnType,
+            header: FeedbackScoreHeader as never,
+            cell: FeedbackScoreCell as never,
+            accessorFn: (row) =>
+              (row as Trace).span_feedback_scores?.find(
+                (f) => f.name === scoreName,
+              ),
+            statisticKey: `${COLUMN_SPAN_FEEDBACK_SCORES_ID}.${scoreName}`,
+          } as ColumnData<BaseTraceData>;
+        },
+      );
+      return [...feedbackScoresColumns, ...spanFeedbackScoresColumns];
+    }
+
+    return feedbackScoresColumns;
+  }, [dynamicScoresColumns, dynamicSpanScoresColumns, type]);
 
   const selectedRows: Array<Trace | Span> = useMemo(() => {
     return rows.filter((row) => rowSelection[row.id]);
@@ -764,6 +850,15 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
         label: "Feedback scores",
         type: COLUMN_TYPE.numberDictionary,
       },
+      ...(type === TRACE_DATA_TYPE.traces
+        ? [
+            {
+              id: COLUMN_SPAN_FEEDBACK_SCORES_ID,
+              label: "Span feedback scores",
+              type: COLUMN_TYPE.numberDictionary,
+            },
+          ]
+        : []),
       {
         id: COLUMN_CUSTOM_ID,
         label: "Custom filter",
@@ -876,7 +971,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
     ];
   }, [scoresColumnsData, scoresColumnsOrder, setScoresColumnsOrder]);
 
-  if (isPending || isFeedbackScoresPending) {
+  if (isPending || isFeedbackScoresPending || isSpanFeedbackScoresPending) {
     return <Loader />;
   }
 

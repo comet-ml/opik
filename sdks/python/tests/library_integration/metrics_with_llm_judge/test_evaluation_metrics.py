@@ -241,7 +241,7 @@ def test__syc_eval__invalid_score_from_judge():
 
 
 def test__trajectory_accuracy():
-    trajectory_accuracy_metric = metrics.TrajectoryAccuracy()
+    trajectory_accuracy_metric = metrics.TrajectoryAccuracy(track=False)
 
     result = trajectory_accuracy_metric.score(
         goal="Find the weather in Paris",
@@ -265,7 +265,7 @@ def test__trajectory_accuracy():
 
 @pytest.mark.asyncio
 async def test__trajectory_accuracy__async():
-    trajectory_accuracy_metric = metrics.TrajectoryAccuracy()
+    trajectory_accuracy_metric = metrics.TrajectoryAccuracy(track=False)
 
     result = await trajectory_accuracy_metric.ascore(
         goal="Calculate the sum of 15 and 27",
@@ -405,7 +405,7 @@ def test__structured_output_compliance__with_json_schema(model):
 async def test__structured_output_compliance__async():
     """Test structured output compliance with async model."""
 
-    structured_output_metric = metrics.StructuredOutputCompliance()
+    structured_output_metric = metrics.StructuredOutputCompliance(track=False)
 
     result = await structured_output_metric.ascore(
         output='{"name": "John", "age": 30, "city": "New York"}'

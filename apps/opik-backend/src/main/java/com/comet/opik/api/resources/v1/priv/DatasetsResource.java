@@ -30,6 +30,7 @@ import com.comet.opik.domain.DatasetExpansionService;
 import com.comet.opik.domain.DatasetItemSearchCriteria;
 import com.comet.opik.domain.DatasetItemService;
 import com.comet.opik.domain.DatasetService;
+import com.comet.opik.domain.DatasetVersionService;
 import com.comet.opik.domain.EntityType;
 import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.domain.Streamer;
@@ -86,6 +87,7 @@ import java.util.function.Predicate;
 
 import static com.comet.opik.api.Dataset.DatasetPage;
 import static com.comet.opik.utils.AsyncUtils.setRequestContext;
+import static org.apache.commons.collections4.CollectionUtils.emptyIfNull;
 
 @Path("/v1/private/datasets")
 @Produces(MediaType.APPLICATION_JSON)
@@ -99,6 +101,7 @@ public class DatasetsResource {
     private final @NonNull DatasetService service;
     private final @NonNull DatasetItemService itemService;
     private final @NonNull DatasetExpansionService expansionService;
+    private final @NonNull DatasetVersionService versionService;
     private final @NonNull Provider<RequestContext> requestContext;
     private final @NonNull FiltersFactory filtersFactory;
     private final @NonNull IdGenerator idGenerator;
@@ -136,7 +139,7 @@ public class DatasetsResource {
             @QueryParam("with_experiments_only") boolean withExperimentsOnly,
             @QueryParam("with_optimizations_only") boolean withOptimizationsOnly,
             @QueryParam("prompt_id") UUID promptId,
-            @QueryParam("name") String name,
+            @QueryParam("name") @Schema(description = "Filter datasets by name (partial match, case insensitive)") String name,
             @QueryParam("sorting") String sorting,
             @QueryParam("filters") String filters) {
 
@@ -318,13 +321,15 @@ public class DatasetsResource {
 
         String workspaceId = requestContext.get().getWorkspaceId();
 
-        log.info("Batch updating '{}' dataset items on workspaceId '{}'", batchUpdate.ids().size(), workspaceId);
+        log.info("Batch updating dataset items. workspaceId='{}', idsSize='{}', filters='{}'", workspaceId,
+                emptyIfNull(batchUpdate.ids()).size(), emptyIfNull(batchUpdate.filters()).size());
 
         itemService.batchUpdate(batchUpdate)
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
 
-        log.info("Batch updated '{}' dataset items on workspaceId '{}'", batchUpdate.ids().size(), workspaceId);
+        log.info("Batch updated dataset items. workspaceId='{}', idsSize='{}', filters='{}'", workspaceId,
+                emptyIfNull(batchUpdate.ids()).size(), emptyIfNull(batchUpdate.filters()).size());
 
         return Response.noContent().build();
     }
@@ -362,10 +367,16 @@ public class DatasetsResource {
             @PathParam("id") UUID id,
             @QueryParam("page") @Min(1) @DefaultValue("1") int page,
             @QueryParam("size") @Min(1) @DefaultValue("10") int size,
+            @QueryParam("version") @Schema(description = "Version hash or tag to fetch specific dataset version") String version,
             @QueryParam("filters") String filters,
             @QueryParam("truncate") @Schema(description = "Truncate image included in either input, output or metadata") boolean truncate) {
 
         var queryFilters = filtersFactory.newFilters(filters, DatasetItemFilter.LIST_TYPE_REFERENCE);
+        String workspaceId = requestContext.get().getWorkspaceId();
+
+        log.info(
+                "Finding dataset items by id '{}', version '{}', page '{}', size '{}', filters '{}' on workspace_id '{}'",
+                id, version, page, size, filters, workspaceId);
 
         var datasetItemSearchCriteria = DatasetItemSearchCriteria.builder()
                 .datasetId(id)
@@ -373,15 +384,13 @@ public class DatasetsResource {
                 .filters(queryFilters)
                 .entityType(EntityType.TRACE)
                 .truncate(truncate)
+                .versionHashOrTag(version)
                 .build();
 
-        String workspaceId = requestContext.get().getWorkspaceId();
-        log.info("Finding dataset items by id '{}', page '{}', size '{}', filters '{}' on workspace_id '{}'", id, page,
-                size, filters, workspaceId);
-
-        DatasetItem.DatasetItemPage datasetItemPage = itemService.getItems(page, size, datasetItemSearchCriteria)
+        var datasetItemPage = itemService.getItems(page, size, datasetItemSearchCriteria)
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
+
         log.info("Found dataset items by id '{}', count '{}', page '{}', size '{}' on workspace_id '{}'", id,
                 datasetItemPage.content().size(), page, size, workspaceId);
 
@@ -594,6 +603,7 @@ public class DatasetsResource {
                 .search(search)
                 .entityType(EntityType.TRACE)
                 .truncate(truncate)
+                .versionHashOrTag(null) // Get draft items
                 .build();
 
         String workspaceId = requestContext.get().getWorkspaceId();
@@ -681,5 +691,17 @@ public class DatasetsResource {
                 datasetId, experimentIds, workspaceId);
 
         return Response.ok(columns).build();
+    }
+
+    /**
+     * Sub-resource locator for dataset version operations.
+     * Delegates all requests under /{id}/versions to DatasetVersionsResource.
+     *
+     * @param datasetId the dataset ID from the path parameter
+     * @return a new instance of DatasetVersionsResource configured for this dataset
+     */
+    @Path("/{id}/versions")
+    public DatasetVersionsResource versions(@PathParam("id") UUID datasetId) {
+        return new DatasetVersionsResource(datasetId, versionService, requestContext);
     }
 }

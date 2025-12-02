@@ -27,10 +27,10 @@ const FieldInput: React.FC<{ field: DatasetField; isEditing: boolean }> = ({
   isEditing,
 }) => {
   const form = useFormContext<Record<string, unknown>>();
-  const fieldValue = form.watch(field.id);
+  const fieldValue = form.watch(field.key);
 
   if (field.type === FIELD_TYPE.COMPLEX) {
-    return <JsonFieldEditor fieldName={field.id} isEditing={isEditing} />;
+    return <JsonFieldEditor fieldName={field.key} isEditing={isEditing} />;
   }
 
   const displayValue =
@@ -41,7 +41,7 @@ const FieldInput: React.FC<{ field: DatasetField; isEditing: boolean }> = ({
       <TextareaAutosize
         value={displayValue}
         onChange={(e) =>
-          form.setValue(field.id, e.target.value, { shouldDirty: true })
+          form.setValue(field.key, e.target.value, { shouldDirty: true })
         }
         readOnly={!isEditing}
         placeholder={isEditing ? "Enter text for this field…" : undefined}
@@ -76,9 +76,9 @@ const DatasetItemEditorForm: React.FC<DatasetItemEditorFormProps> = ({
     fields.forEach((field) => {
       // For COMPLEX fields, stringify the value for CodeMirror
       if (field.type === FIELD_TYPE.COMPLEX) {
-        values[field.id] = JSON.stringify(field.value, null, 2);
+        values[field.key] = JSON.stringify(field.value, null, 2);
       } else {
-        values[field.id] = field.value;
+        values[field.key] = field.value;
       }
     });
     return values;
@@ -127,12 +127,12 @@ const DatasetItemEditorForm: React.FC<DatasetItemEditorFormProps> = ({
         <Accordion
           type="multiple"
           className="w-full"
-          defaultValue={fields.map((f) => f.id)}
+          defaultValue={fields.map((f) => f.key)}
         >
           {fields.map((field) => (
-            <AccordionItem key={field.id} value={field.id}>
+            <AccordionItem key={field.key} value={field.key}>
               <AccordionTrigger className="comet-body-s-accented pl-0 text-foreground">
-                {field.label}
+                {field.key}
               </AccordionTrigger>
               <AccordionContent>
                 <FieldInput field={field} isEditing={isEditing} />

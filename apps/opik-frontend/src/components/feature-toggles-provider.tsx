@@ -21,6 +21,9 @@ const DEFAULT_STATE: FeatureToggles = {
   [FeatureToggleKeys.TOGGLE_ALERTS_ENABLED]: false,
   [FeatureToggleKeys.WELCOME_WIZARD_ENABLED]: false,
   [FeatureToggleKeys.CSV_UPLOAD_ENABLED]: false,
+  [FeatureToggleKeys.EXPORT_ENABLED]: true,
+  [FeatureToggleKeys.SPAN_LLM_AS_JUDGE_ENABLED]: false,
+  [FeatureToggleKeys.DASHBOARDS_ENABLED]: false,
 };
 
 const initialState: FeatureTogglesState = {
@@ -40,7 +43,9 @@ export function FeatureTogglesProvider({ children }: FeatureTogglesProps) {
   });
 
   useEffect(() => {
-    if (data) setFeatures(data);
+    if (data) {
+      setFeatures(data);
+    }
   }, [data]);
 
   const value = useMemo(() => {

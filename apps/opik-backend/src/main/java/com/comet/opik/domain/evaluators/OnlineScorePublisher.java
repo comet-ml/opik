@@ -6,9 +6,9 @@ import com.comet.opik.api.evaluators.AutomationRuleEvaluatorTraceThreadUserDefin
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorType;
 import com.comet.opik.api.events.TraceThreadToScoreLlmAsJudge;
 import com.comet.opik.api.events.TraceThreadToScoreUserDefinedMetricPython;
-import com.comet.opik.api.resources.v1.events.OnlineScoringCodecs;
 import com.comet.opik.infrastructure.OnlineScoringConfig;
 import com.comet.opik.infrastructure.ServiceTogglesConfig;
+import com.comet.opik.infrastructure.redis.RedisStreamCodec;
 import com.google.inject.ImplementedBy;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
@@ -88,7 +88,7 @@ class OnlineScorePublisherImpl implements OnlineScorePublisher {
 
     public void enqueueMessage(List<?> messages, AutomationRuleEvaluatorType type) {
         var config = streamConfigurations.get(type);
-        var codec = OnlineScoringCodecs.fromString(config.getCodec()).getCodec();
+        var codec = RedisStreamCodec.fromString(config.getCodec()).getCodec();
         var llmAsJudgeStream = redisClient.getStream(config.getStreamName(), codec);
         Flux.fromIterable(messages)
                 .flatMap(message -> llmAsJudgeStream
@@ -104,7 +104,7 @@ class OnlineScorePublisherImpl implements OnlineScorePublisher {
     public void enqueueThreadMessage(@NonNull List<String> threadIds, @NonNull UUID ruleId, @NonNull UUID projectId,
             @NonNull String workspaceId, @NonNull String userName) {
 
-        AutomationRuleEvaluator<?> rule;
+        AutomationRuleEvaluator<?, ?> rule;
 
         try {
             rule = automationRuleEvaluatorService.findById(ruleId, projectId, workspaceId);

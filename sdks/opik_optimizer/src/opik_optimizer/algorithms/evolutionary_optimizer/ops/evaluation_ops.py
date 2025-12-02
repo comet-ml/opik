@@ -10,7 +10,7 @@ from opik import opik_context
 import copy
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
-    from .. import evolutionary_optimizer
+    from .. import evolutionary_optimizer  # noqa: F401
 
 
 def evaluate_prompt(
@@ -62,7 +62,7 @@ def evaluate_prompt(
         additional_metadata=additional_metadata,
     )
     try:
-        agent = optimizer.agent_class(new_prompt)
+        agent = optimizer._instantiate_agent(new_prompt)
     except Exception:
         return 0.0
 

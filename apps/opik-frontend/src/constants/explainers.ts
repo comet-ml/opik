@@ -78,6 +78,8 @@ export enum EXPLAINER_ID {
   prompt_generation_learn_more = "prompt_generation_learn_more",
   prompt_improvement_learn_more = "prompt_improvement_learn_more",
   prompt_improvement_optimizer = "prompt_improvement_optimizer",
+  whats_an_alert = "whats_an_alert",
+  what_are_dashboards = "what_are_dashboards",
 }
 
 export const EXPLAINERS_MAP: Record<EXPLAINER_ID, Explainer> = {
@@ -314,7 +316,7 @@ export const EXPLAINERS_MAP: Record<EXPLAINER_ID, Explainer> = {
   [EXPLAINER_ID.what_does_the_dataset_do_here]: {
     id: EXPLAINER_ID.what_does_the_dataset_do_here,
     description:
-      "Run a prompt on a dataset in the Playground to preview its performance across multiple inputs. Select one or more metrics to automatically evaluate each dataset item.",
+      "Run a prompt on your dataset to preview its performance. You can select metrics, filter the data, or adjust the page size. The experiment runs only on the items currently shown.",
   },
   [EXPLAINER_ID.how_do_i_use_the_dataset_in_the_playground]: {
     id: EXPLAINER_ID.how_do_i_use_the_dataset_in_the_playground,
@@ -548,5 +550,17 @@ export const EXPLAINERS_MAP: Record<EXPLAINER_ID, Explainer> = {
     description:
       "Looking for advanced optimization algorithms? Check out the Opik optimizer!",
     docLink: "/agent_optimization/opik_optimizer/overview",
+  },
+  [EXPLAINER_ID.whats_an_alert]: {
+    id: EXPLAINER_ID.whats_an_alert,
+    description:
+      "Monitor important events in your project and get notified when something needs your attention.",
+    docLink: "/production/alerts",
+  },
+  [EXPLAINER_ID.what_are_dashboards]: {
+    id: EXPLAINER_ID.what_are_dashboards,
+    description:
+      "Set up a new dashboard to organize, isolate, and monitor different scenarios.",
+    docLink: "/production/dashboards",
   },
 };

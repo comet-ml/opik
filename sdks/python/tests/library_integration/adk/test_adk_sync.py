@@ -708,7 +708,7 @@ def test_adk__tool_calls_tracked_function__tracked_function_span_attached_to_the
 def test_adk__litellm_used_for_openai_model__usage_logged_in_openai_format(
     fake_backend,
 ):
-    model_name = "openai/gpt-5-mini"
+    model_name = "openai/gpt-4o-mini"
 
     opik_tracer = OpikTracer(
         tags=["adk-test"], metadata={"adk-metadata-key": "adk-metadata-value"}
@@ -838,7 +838,7 @@ def test_adk__litellm_used_for_openai_model__usage_logged_in_openai_format(
 def test_adk__litellm_used_for_openai_model__streaming_mode_is_SSE__usage_logged_in_openai_format(
     fake_backend,
 ):
-    model_name = "openai/gpt-5-mini"
+    model_name = "openai/gpt-4o-mini"
 
     opik_tracer = OpikTracer(
         tags=["adk-test"], metadata={"adk-metadata-key": "adk-metadata-value"}
@@ -1880,3 +1880,53 @@ def test_adk__transfer_to_agent__tracked_and_span_created(
     assert_equal(expected=EXPECTED_TRACE_TREE, actual=trace_tree)
     assert_dict_has_keys(trace_tree.spans[0].usage, EXPECTED_USAGE_KEYS_GOOGLE)
     assert_dict_has_keys(trace_tree.spans[2].spans[0].usage, EXPECTED_USAGE_KEYS_GOOGLE)
+
+
+@pytest.fixture
+def disable_tracing():
+    opik.set_tracing_active(False)
+    yield
+    opik.set_tracing_active(True)
+
+
+def test_adk__tracing_disabled__no_spans_created(fake_backend, disable_tracing):
+    opik_tracer = OpikTracer(
+        project_name="adk-test",
+        tags=["adk-test"],
+        metadata={"adk-metadata-key": "adk-metadata-value"},
+    )
+
+    root_agent = adk_agents.Agent(
+        name="weather_agent",
+        model=MODEL_NAME,
+        description=(
+            "Agent to answer questions about the weather in a city (only 'New York' supported)."
+        ),
+        instruction=(
+            "I can answer your questions about the weather in a city (only 'New York' supported)."
+        ),
+        tools=[agent_tools.get_weather],
+        before_agent_callback=opik_tracer.before_agent_callback,
+        after_agent_callback=opik_tracer.after_agent_callback,
+        before_model_callback=opik_tracer.before_model_callback,
+        after_model_callback=opik_tracer.after_model_callback,
+        before_tool_callback=opik_tracer.before_tool_callback,
+        after_tool_callback=opik_tracer.after_tool_callback,
+    )
+
+    runner = _build_runner(root_agent)
+
+    events_generator = runner.run(
+        user_id=USER_ID,
+        session_id=SESSION_ID,
+        new_message=genai_types.Content(
+            role="user",
+            parts=[genai_types.Part(text="What is the weather in New York?")],
+        ),
+    )
+    _ = _extract_final_response_text(events_generator)
+
+    opik.flush_tracker()
+
+    assert len(fake_backend.trace_trees) == 0
+    assert len(fake_backend.span_trees) == 0

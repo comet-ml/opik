@@ -24,12 +24,43 @@ serviceAccount:
   name: ""
   annotations: {}
 
-demoDataJob: 
+demoDataJob:
   enabled: true
 
 nodeSelector: {}
 tolerations: []
 affinity: {}
+
+caCerts:
+  # -- (list) Additional Certificate Authority Certificates to trust.
+  # Each list entry has two keys: `name` and `content`. `name` should be a
+  # unique identifier. content Should be PEM formated Public Certificate
+  # contents.
+  additionalCACerts:
+
+  # -- Certificates are Public Keys + Metadata, but some organizations may
+  # still prefer storing these in Secrets.
+  additionalCACertsInSecret: false
+
+  # -- If there is an existing ConfigMap containing the additional CA
+  # Certificates you can provide its name here instead of creatinga a new one.
+  # If `additionalCACertsInSecret` is `true` we will look for this name in
+  # Secrets.
+  existingAdditionalCACertsRef:
+
+  overwriteJavaCATrustStore:
+    # -- If enabled we will not inject additional CA Certificates to the Java
+    # TrustStore, but instead will mount a given volume containing a Java Trust
+    # Store to replace the default one in the containers.
+    enabled: false
+    # -- A Kubernetes Volume definition which will contain a valid Java Trust
+    # Store. See
+    # https://kubernetes.io/docs/reference/kubernetes-api/config-and-storage-resources/volume/
+    # for valid parameters.
+    volume: {}
+    # -- The sub-path of the valid Java Trust Store to mount from the volume.
+    subPath: cacerts
+
 
 component:
   backend:
@@ -59,6 +90,7 @@ component:
         repository: curlimages/curl
         tag: 8.12.1
     waitForMysql:
+      enabled: false
       mysql:
         host: opik-mysql
         port: 3306
@@ -124,6 +156,8 @@ component:
         enabled: false
         hosts: []
         secretName: ""
+    # @ignored
+    usesJavaTrustStore: true
 
   python-backend:
     enabled: true
@@ -155,6 +189,28 @@ component:
       OTEL_PROPAGATORS: "tracecontext,baggage"
       OTEL_EXPERIMENTAL_EXPORTER_OTLP_RETRY_ENABLED: true
       OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE: cumulative
+    
+    # Optional: Reference external Kubernetes secrets for sensitive configuration
+    # Use this to inject LLM API keys (OPENAI_API_KEY, ANTHROPIC_API_KEY, etc.)
+    # from external secret managers (AWS Secrets Manager, GCP Secret Manager, Azure Key Vault)
+    # 
+    # Customers can create secrets using:
+    # - ExternalSecret Operator (recommended for production)
+    # - Kubernetes Secrets CSI Driver
+    # - Manual kubectl create secret
+    # 
+    # Each secretRef will be added as an envFrom entry, making all key-value pairs
+    # from the secret available as environment variables in the python-backend pod.
+    # 
+    # Example configuration:
+    # secretRefs:
+    #   - name: "opik-llm-api-keys"       # Contains OPENAI_API_KEY, ANTHROPIC_API_KEY, etc.
+    #   - name: "opik-aws-credentials"    # Contains AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY
+    # 
+    # For detailed setup instructions, see:
+    # apps/opik-python-backend/docs/LLM_API_KEYS_CONFIGURATION.md
+    secretRefs: []
+    
     envFrom:
       - configMapRef:
           name: opik-python-backend
@@ -508,7 +564,7 @@ clickhouse:
     name: ""
   zookeeper:
       host: opik-zookeeper
-  backup: 
+  backup:
     enabled: false
     successfulJobsHistoryLimit: 1
     serviceAccount:

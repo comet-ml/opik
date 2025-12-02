@@ -15,6 +15,7 @@ import { Input } from "@/components/ui/input";
 import { Description } from "@/components/ui/description";
 import { Button } from "@/components/ui/button";
 import { Plus, Trash2 } from "lucide-react";
+import { v4 as uuidv4 } from "uuid";
 
 type CustomProviderDetailsProps = {
   form: UseFormReturn<AIProviderFormType>;
@@ -167,10 +168,7 @@ const CustomProviderDetails: React.FC<CustomProviderDetailsProps> = ({
           const headers = field.value || [];
 
           const addHeader = () => {
-            field.onChange([
-              ...headers,
-              { key: "", value: "", id: crypto.randomUUID() },
-            ]);
+            field.onChange([...headers, { key: "", value: "", id: uuidv4() }]);
           };
 
           const removeHeader = (id: string) => {

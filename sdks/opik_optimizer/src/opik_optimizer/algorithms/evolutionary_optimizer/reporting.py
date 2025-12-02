@@ -37,7 +37,7 @@ def infer_output_style(verbose: int = 1) -> Any:
     class Reporter:
         def start_style_inference(self) -> None:
             if verbose >= 1:
-                console.print("> Infering the output style using the prompt:")
+                console.print("> Inferring the output style using the prompt:")
                 console.print("│")
 
         def error(self, error_message: str) -> None:

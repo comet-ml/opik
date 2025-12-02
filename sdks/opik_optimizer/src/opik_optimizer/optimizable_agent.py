@@ -1,13 +1,11 @@
 from typing import Any, TYPE_CHECKING
 import json
 import os
+import copy
 
-
-from opik.opik_context import get_current_span_data
 
 import litellm
-from litellm.integrations.opik.opik import OpikLogger
-
+from opik.integrations import litellm as litellm_integration
 from . import _throttle
 
 _limiter = _throttle.get_rate_limiter_for_current_opik_installation()
@@ -43,6 +41,7 @@ class OptimizableAgent:
     input_dataset_field: str | None = None
     prompts: dict[str, "chat_prompt.ChatPrompt"]
     prompt: "chat_prompt.ChatPrompt"
+    optimizer: Any | None = None
 
     def __init__(
         self, prompt: "chat_prompt.ChatPrompt", project_name: str | None = None
@@ -63,13 +62,22 @@ class OptimizableAgent:
         # Litellm bug requires this (maybe problematic if multi-threaded)
         if "OPIK_PROJECT_NAME" not in os.environ:
             os.environ["OPIK_PROJECT_NAME"] = str(self.project_name)
-        self.opik_logger = OpikLogger()
-        litellm.callbacks = [self.opik_logger]
+        # self.opik_logger = OpikLogger()
+        # litellm.callbacks = [self.opik_logger]
+        self.litellm_decorator = litellm_integration.track_completion(
+            project_name=self.project_name
+        )
 
     def init_agent(self, prompt: "chat_prompt.ChatPrompt") -> None:
-        """Initialize the agent with the provided configuration."""
+        """Bind the runtime prompt and snapshot its model configuration."""
         # Register the tools, if any, for default LiteLLM Agent use:
         self.prompt = prompt
+        if getattr(prompt, "model", None) is not None:
+            self.model = prompt.model
+        if getattr(prompt, "model_kwargs", None) is not None:
+            self.model_kwargs = copy.deepcopy(prompt.model_kwargs or {})
+        else:
+            self.model_kwargs = {}
 
     @_throttle.rate_limited(_limiter)
     def _llm_complete(
@@ -78,17 +86,11 @@ class OptimizableAgent:
         tools: list[dict[str, str]] | None,
         seed: int | None = None,
     ) -> Any:
-        response = litellm.completion(
+        response = self.litellm_decorator(litellm.completion)(
             model=self.model,
             messages=messages,
             seed=seed,
             tools=tools,
-            metadata={
-                "opik": {
-                    "current_span_data": get_current_span_data(),
-                    "project_name": self.project_name,
-                },
-            },
             **self.model_kwargs,
         )
         return response
@@ -129,6 +131,11 @@ class OptimizableAgent:
             while count < 20:
                 count += 1
                 response = self._llm_complete(all_messages, self.prompt.tools, seed)
+                optimizer_ref = self.optimizer
+                if optimizer_ref is not None and hasattr(
+                    optimizer_ref, "_increment_llm_counter"
+                ):
+                    optimizer_ref._increment_llm_counter()
                 msg = response.choices[0].message
                 all_messages.append(msg.to_dict())
                 if msg.tool_calls:
@@ -153,16 +160,22 @@ class OptimizableAgent:
                             }
                         )
                         # Increment tool call counter if we have access to the optimizer
-                        if hasattr(self, "optimizer") and hasattr(
-                            self.optimizer, "_increment_tool_counter"
+                        optimizer_ref = self.optimizer
+                        if optimizer_ref is not None and hasattr(
+                            optimizer_ref, "_increment_tool_counter"
                         ):
-                            self.optimizer._increment_tool_counter()
+                            optimizer_ref._increment_tool_counter()
                 else:
                     final_response = msg["content"]
                     break
             result = final_response
         else:
             response = self._llm_complete(all_messages, None, seed)
+            optimizer_ref = self.optimizer
+            if optimizer_ref is not None and hasattr(
+                optimizer_ref, "_increment_llm_counter"
+            ):
+                optimizer_ref._increment_llm_counter()
             result = response.choices[0].message.content
         return result
 

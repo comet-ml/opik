@@ -4528,6 +4528,125 @@ class TracesResourceTest {
         }
     }
 
+    @Nested
+    @DisplayName("Span Feedback Scores Aggregation:")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class SpanFeedbackScoresAggregation {
+
+        @Test
+        @DisplayName("when trace has spans with feedback scores, then return aggregated span scores")
+        void getTrace__whenTraceHasSpansWithFeedbackScores__thenReturnAggregatedSpanScores() {
+            // Create trace
+            var expectedTrace = createTrace();
+            var traceId = create(expectedTrace, API_KEY, TEST_WORKSPACE);
+            var projectId = getProjectId(expectedTrace.projectName(), TEST_WORKSPACE, API_KEY);
+
+            // Create spans with feedback scores
+            var span1 = factory.manufacturePojo(Span.class).toBuilder()
+                    .traceId(traceId)
+                    .projectName(expectedTrace.projectName())
+                    .feedbackScores(null)
+                    .build();
+            spanResourceClient.createSpan(span1, API_KEY, TEST_WORKSPACE);
+
+            var span2 = factory.manufacturePojo(Span.class).toBuilder()
+                    .traceId(traceId)
+                    .projectName(expectedTrace.projectName())
+                    .feedbackScores(null)
+                    .build();
+            spanResourceClient.createSpan(span2, API_KEY, TEST_WORKSPACE);
+
+            // Add feedback scores to spans
+            // Span1: accuracy=0.8, relevance=0.9
+            // Span2: accuracy=0.9, relevance=0.7
+            // Expected aggregated: accuracy=(0.8+0.9)/2=0.85, relevance=(0.9+0.7)/2=0.8
+            var span1AccuracyScore = FeedbackScoreBatchItem.builder()
+                    .id(span1.id())
+                    .projectName(expectedTrace.projectName())
+                    .name("accuracy")
+                    .value(BigDecimal.valueOf(0.8))
+                    .source(ScoreSource.SDK)
+                    .build();
+            var span1RelevanceScore = FeedbackScoreBatchItem.builder()
+                    .id(span1.id())
+                    .projectName(expectedTrace.projectName())
+                    .name("relevance")
+                    .value(BigDecimal.valueOf(0.9))
+                    .source(ScoreSource.SDK)
+                    .build();
+            var span2AccuracyScore = FeedbackScoreBatchItem.builder()
+                    .id(span2.id())
+                    .projectName(expectedTrace.projectName())
+                    .name("accuracy")
+                    .value(BigDecimal.valueOf(0.9))
+                    .source(ScoreSource.SDK)
+                    .build();
+            var span2RelevanceScore = FeedbackScoreBatchItem.builder()
+                    .id(span2.id())
+                    .projectName(expectedTrace.projectName())
+                    .name("relevance")
+                    .value(BigDecimal.valueOf(0.7))
+                    .source(ScoreSource.SDK)
+                    .build();
+
+            spanResourceClient.feedbackScores(
+                    List.of(span1AccuracyScore, span1RelevanceScore, span2AccuracyScore, span2RelevanceScore),
+                    API_KEY, TEST_WORKSPACE);
+
+            // Get trace and verify aggregated span scores
+            var actualTrace = traceResourceClient.getById(traceId, TEST_WORKSPACE, API_KEY);
+
+            assertThat(actualTrace.spanFeedbackScores()).isNotNull();
+            assertThat(actualTrace.spanFeedbackScores()).hasSize(2);
+
+            // Verify accuracy score (average of 0.8 and 0.9 = 0.85)
+            var accuracyScore = actualTrace.spanFeedbackScores().stream()
+                    .filter(score -> "accuracy".equals(score.name()))
+                    .findFirst()
+                    .orElseThrow();
+            assertThat(accuracyScore.value()).isEqualByComparingTo(BigDecimal.valueOf(0.85));
+
+            // Verify relevance score (average of 0.9 and 0.7 = 0.8)
+            var relevanceScore = actualTrace.spanFeedbackScores().stream()
+                    .filter(score -> "relevance".equals(score.name()))
+                    .findFirst()
+                    .orElseThrow();
+            assertThat(relevanceScore.value()).isEqualByComparingTo(BigDecimal.valueOf(0.8));
+        }
+
+        @Test
+        @DisplayName("when trace has spans without feedback scores, then return null span scores")
+        void getTrace__whenTraceHasSpansWithoutFeedbackScores__thenReturnNullSpanScores() {
+            // Create trace
+            var expectedTrace = createTrace();
+            var traceId = create(expectedTrace, API_KEY, TEST_WORKSPACE);
+
+            // Create spans without feedback scores
+            var span1 = factory.manufacturePojo(Span.class).toBuilder()
+                    .traceId(traceId)
+                    .projectName(expectedTrace.projectName())
+                    .feedbackScores(null)
+                    .build();
+            spanResourceClient.createSpan(span1, API_KEY, TEST_WORKSPACE);
+
+            // Get trace and verify span scores are null
+            var actualTrace = traceResourceClient.getById(traceId, TEST_WORKSPACE, API_KEY);
+            assertThat(actualTrace.spanFeedbackScores()).isNull();
+        }
+
+        @Test
+        @DisplayName("when trace has no spans, then return null span scores")
+        void getTrace__whenTraceHasNoSpans__thenReturnNullSpanScores() {
+            // Create trace without spans
+            var expectedTrace = createTrace();
+            var traceId = create(expectedTrace, API_KEY, TEST_WORKSPACE);
+
+            // Get trace and verify span scores are null
+            var actualTrace = traceResourceClient.getById(traceId, TEST_WORKSPACE, API_KEY);
+            assertThat(actualTrace.spanFeedbackScores()).isNull();
+        }
+    }
+
     private FeedbackScoreBatchItemBuilder<?, ?> initFeedbackScoreItem() {
         return factory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder();
     }
@@ -4547,9 +4666,10 @@ class TracesResourceTest {
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
     class GetFeedbackScoreNames {
 
-        @Test
+        @ParameterizedTest
+        @ValueSource(booleans = {true, false})
         @DisplayName("when get feedback score names, then return feedback score names")
-        void getFeedbackScoreNames__whenGetFeedbackScoreNames__thenReturnFeedbackScoreNames() {
+        void getFeedbackScoreNames__whenGetFeedbackScoreNames__thenReturnFeedbackScoreNames(boolean useProjectId) {
 
             // given
             var apiKey = UUID.randomUUID().toString();
@@ -4579,7 +4699,11 @@ class TracesResourceTest {
 
             traceResourceClient.createMultiValueScores(otherNames, unexpectedProject, apiKey, workspaceName);
 
-            fetchAndAssertResponse(names, projectId, apiKey, workspaceName);
+            List<String> allNames = new ArrayList<>(names);
+            allNames.addAll(otherNames);
+
+            fetchAndAssertResponse(useProjectId ? names : allNames, useProjectId ? projectId : null, apiKey,
+                    workspaceName);
         }
     }
 
@@ -4588,9 +4712,11 @@ class TracesResourceTest {
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
     class GetTraceThreadsFeedbackScoreNames {
 
-        @Test
+        @ParameterizedTest
+        @ValueSource(booleans = {true, false})
         @DisplayName("when get trace threads feedback score names, then return feedback score names")
-        void getTraceThreadsFeedbackScoreNames__whenGetTraceThreadsFeedbackScoreNames__thenReturnFeedbackScoreNames() {
+        void getTraceThreadsFeedbackScoreNames__whenGetTraceThreadsFeedbackScoreNames__thenReturnFeedbackScoreNames(
+                boolean useProjectId) {
 
             // given
             var apiKey = UUID.randomUUID().toString();
@@ -4623,11 +4749,15 @@ class TracesResourceTest {
             createMultiValueTraceThreadScores(otherNames, unexpectedProject, apiKey, workspaceName);
 
             // when
-            FeedbackScoreNames actualNames = traceResourceClient.getTraceThreadsFeedbackScoreNames(projectId, apiKey,
+            FeedbackScoreNames actualNames = traceResourceClient.getTraceThreadsFeedbackScoreNames(
+                    useProjectId ? projectId : null, apiKey,
                     workspaceName);
 
+            List<String> allNames = new ArrayList<>(names);
+            allNames.addAll(otherNames);
+
             // then
-            assertFeedbackScoreNames(actualNames, names);
+            assertFeedbackScoreNames(actualNames, useProjectId ? names : allNames);
         }
     }
 
@@ -6077,6 +6207,73 @@ class TracesResourceTest {
                 var thread3 = traceResourceClient.getTraceThread(threadId3, projectId, API_KEY, TEST_WORKSPACE);
                 assertThat(thread3.tags()).containsExactlyInAnyOrder("new-tag-1", "new-tag-2");
             }
+        }
+
+        @Test
+        @DisplayName("when batch updating threads multiple times, then latest values are preserved")
+        void batchUpdate__whenMultiplePartialUpdates__thenLatestValuesPreserved() {
+            var projectName = "project-" + RandomStringUtils.secure().nextAlphanumeric(32);
+            projectResourceClient.createProject(projectName, API_KEY, TEST_WORKSPACE);
+            var projectId = projectResourceClient.getByName(projectName, API_KEY, TEST_WORKSPACE).id();
+
+            // Create a thread by creating a trace
+            var threadId = UUID.randomUUID().toString();
+            create(createTrace().toBuilder()
+                    .projectName(projectName)
+                    .threadId(threadId)
+                    .build(),
+                    API_KEY, TEST_WORKSPACE);
+
+            // Wait for thread to be created
+            Awaitility.await()
+                    .atMost(5, TimeUnit.SECONDS)
+                    .untilAsserted(() -> {
+                        var threads = traceResourceClient.getTraceThreads(
+                                projectId, null, API_KEY, TEST_WORKSPACE, null, null, null);
+                        assertThat(threads.content()).hasSize(1);
+                    });
+
+            var threads = traceResourceClient.getTraceThreads(
+                    projectId, null, API_KEY, TEST_WORKSPACE, null, null, null);
+            var threadModelId = threads.content().getFirst().threadModelId();
+
+            // First batch update: Set original tags
+            var originalTags = Set.of("tag-" + RandomStringUtils.secure().nextAlphanumeric(8));
+            var firstBatchUpdate = TraceThreadBatchUpdate.builder()
+                    .ids(Set.of(threadModelId))
+                    .update(TraceThreadUpdate.builder()
+                            .tags(originalTags)
+                            .build())
+                    .mergeTags(false)
+                    .build();
+            traceResourceClient.batchUpdateThreads(firstBatchUpdate, API_KEY, TEST_WORKSPACE);
+
+            // Second batch update: Update with new tags
+            var secondTags = Set.of("updated-" + RandomStringUtils.secure().nextAlphanumeric(8));
+            var secondBatchUpdate = TraceThreadBatchUpdate.builder()
+                    .ids(Set.of(threadModelId))
+                    .update(TraceThreadUpdate.builder()
+                            .tags(secondTags)
+                            .build())
+                    .mergeTags(false)
+                    .build();
+            traceResourceClient.batchUpdateThreads(secondBatchUpdate, API_KEY, TEST_WORKSPACE);
+
+            // Third batch update: Update with final tags
+            var thirdTags = Set.of("final-" + RandomStringUtils.secure().nextAlphanumeric(8));
+            var thirdBatchUpdate = TraceThreadBatchUpdate.builder()
+                    .ids(Set.of(threadModelId))
+                    .update(TraceThreadUpdate.builder()
+                            .tags(thirdTags)
+                            .build())
+                    .mergeTags(false)
+                    .build();
+            traceResourceClient.batchUpdateThreads(thirdBatchUpdate, API_KEY, TEST_WORKSPACE);
+
+            // Verify that thread has the latest tags (not from first or second update)
+            var finalThread = traceResourceClient.getTraceThread(
+                    threadId, projectId, API_KEY, TEST_WORKSPACE);
+            assertThat(finalThread.tags()).containsExactlyInAnyOrderElementsOf(thirdTags);
         }
 
         @Test

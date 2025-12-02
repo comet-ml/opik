@@ -10,8 +10,10 @@ import ExplainerIcon from "@/components/shared/ExplainerIcon/ExplainerIcon";
 import FiltersButton from "@/components/shared/FiltersButton/FiltersButton";
 import AddEditRuleDialog from "@/components/pages-shared/automations/AddEditRuleDialog/AddEditRuleDialog";
 import AddEditDatasetDialog from "@/components/pages/DatasetsPage/AddEditDatasetDialog";
+import DataTablePagination from "@/components/shared/DataTablePagination/DataTablePagination";
 import MetricSelector from "./MetricSelector";
 import DatasetEmptyState from "./DatasetEmptyState";
+import PlaygroundProgressIndicator from "@/components/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundProgressIndicator";
 
 import useDatasetsList from "@/api/datasets/useDatasetsList";
 import useProjectByName from "@/api/projects/useProjectByName";
@@ -49,6 +51,11 @@ interface PlaygroundOutputActionsProps {
   loadingDatasetItems: boolean;
   filters: Filters;
   onFiltersChange: (filters: Filters) => void;
+  page: number;
+  onChangePage: (page: number) => void;
+  size: number;
+  onChangeSize: (size: number) => void;
+  total: number;
 }
 
 const DEFAULT_LOADED_DATASETS = 1000;
@@ -65,6 +72,11 @@ const PlaygroundOutputActions = ({
   loadingDatasetItems,
   filters,
   onFiltersChange,
+  page,
+  onChangePage,
+  size,
+  onChangeSize,
+  total,
 }: PlaygroundOutputActionsProps) => {
   const [isLoadedMore, setIsLoadedMore] = useState(false);
   const [isRuleDialogOpen, setIsRuleDialogOpen] = useState(false);
@@ -89,6 +101,7 @@ const PlaygroundOutputActions = ({
         id: "tags",
         label: "Tags",
         type: COLUMN_TYPE.list,
+        iconType: "tags" as const,
       },
     ];
   }, []);
@@ -149,8 +162,11 @@ const PlaygroundOutputActions = ({
     return datasets.map((ds) => ({
       label: ds.name,
       value: ds.id,
+      action: {
+        href: `/${workspaceName}/datasets/${ds.id}`,
+      },
     }));
-  }, [datasets]);
+  }, [datasets, workspaceName]);
 
   const datasetName = datasets?.find((ds) => ds.id === datasetId)?.name || null;
 
@@ -363,8 +379,13 @@ const PlaygroundOutputActions = ({
       ? "action-tooltip-open-tooltip"
       : "action-tooltip";
 
-    const runLabel =
-      promptCount > 1 || (datasetId && datasetItems.length > 1)
+    const hasActiveFilters = filters.length > 0;
+    const isPaginationActive = page > 1 || size < total;
+    const isSubsetSelected = hasActiveFilters || isPaginationActive;
+
+    const runLabel = isSubsetSelected
+      ? "Run selection"
+      : promptCount > 1 || (datasetId && datasetItems.length > 1)
         ? "Run all"
         : "Run";
 
@@ -428,6 +449,11 @@ const PlaygroundOutputActions = ({
 
   return (
     <>
+      {isRunning && datasetId && (
+        <div className="mb-4 mt-2">
+          <PlaygroundProgressIndicator />
+        </div>
+      )}
       <div className="sticky right-0 ml-auto flex h-0 gap-2">
         {createdExperiments.length > 0 && (
           <TooltipWrapper
@@ -471,7 +497,7 @@ const PlaygroundOutputActions = ({
             }
             isLoading={isLoadingDatasets}
             optionsCount={DEFAULT_LOADED_DATASETS}
-            buttonClassName={cn("w-[310px]", {
+            buttonClassName={cn("w-[220px]", {
               "rounded-r-none": !!datasetId,
             })}
             renderTitle={(option) => {
@@ -500,6 +526,7 @@ const PlaygroundOutputActions = ({
                 </div>
               </div>
             }
+            showTooltip
           />
 
           {datasetId && (
@@ -530,8 +557,25 @@ const PlaygroundOutputActions = ({
             onSelectionChange={setSelectedRuleIds}
             datasetId={datasetId}
             onCreateRuleClick={handleCreateRuleClick}
+            workspaceName={workspaceName}
           />
         </div>
+        {datasetId && (
+          <div className="mt-2.5 flex h-8 items-center justify-center">
+            <Separator orientation="vertical" className="mr-2 h-4" />
+            <DataTablePagination
+              page={page}
+              pageChange={onChangePage}
+              size={size}
+              sizeChange={onChangeSize}
+              total={total}
+              variant="minimal"
+              itemsPerPage={[10, 50, 100, 200, 500, 1000]}
+              disabled={isRunning}
+            />
+            <Separator orientation="vertical" className="mx-2 h-4" />
+          </div>
+        )}
         <div className="-ml-0.5 mt-2.5 flex h-8 items-center gap-2">
           <ExplainerIcon
             {...EXPLAINERS_MAP[EXPLAINER_ID.what_does_the_dataset_do_here]}

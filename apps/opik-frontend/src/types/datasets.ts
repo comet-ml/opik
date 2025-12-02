@@ -3,6 +3,7 @@ import {
   AggregatedDuration,
   AggregatedFeedbackScore,
   DYNAMIC_COLUMN_TYPE,
+  UsageData,
 } from "@/types/shared";
 import { CommentItems } from "./comment";
 
@@ -74,6 +75,7 @@ export interface Experiment {
   metadata?: object;
   name: string;
   feedback_scores?: AggregatedFeedbackScore[];
+  experiment_scores?: AggregatedFeedbackScore[];
   duration?: AggregatedDuration;
   // @deprecated
   prompt_version?: ExperimentPromptVersion;
@@ -96,6 +98,8 @@ export interface ExperimentItem {
   output: object;
   feedback_scores?: TraceFeedbackScore[];
   duration?: number;
+  usage?: UsageData;
+  total_estimated_cost?: number;
   comments?: CommentItems;
   created_at: string;
   last_updated_at: string;
@@ -112,6 +116,7 @@ export interface ExperimentsAggregations {
   total_estimated_cost_avg?: number;
   duration?: AggregatedDuration;
   feedback_scores?: AggregatedFeedbackScore[];
+  experiment_scores?: AggregatedFeedbackScore[];
 }
 
 export interface ExperimentsGroupNode {

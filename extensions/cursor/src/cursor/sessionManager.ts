@@ -1,11 +1,11 @@
 import * as path from 'path';
 import * as vscode from 'vscode';
 import * as fs from 'fs';
-import initSqlJs, { Database, QueryExecResult, SqlValue } from 'sql.js';
 
 import { SessionInfo } from "../interface";
 import { findFolder } from '../utils';
 import { captureException } from '../sentry';
+import { executeQuery, executeQueryPaginated, createTempDatabaseCopy, cleanupTempDatabase } from './sqlite';
 
 import { TraceData } from "../interface";
 
@@ -14,12 +14,6 @@ import { TraceData } from "../interface";
  * Each composer session maintains its own progress tracking to avoid duplicate uploads.
  * 
  * Strategy:
- * If skipHistorical=true:
- *   - Old never-synced conversations: Skip entirely (ignore historical data)
- *   - Recent never-synced conversations (< 1 hour): Upload entire conversation
- *   - Already synced, no new messages: Skip 
- *   - Already synced, has new messages: Upload new messages only
- * If skipHistorical=false:
  *   - Never synced conversations: Upload entire conversation
  *   - Already synced, no new messages: Skip (avoid duplicates)
  *   - Already synced, has new messages: Upload new messages only
@@ -27,10 +21,9 @@ import { TraceData } from "../interface";
  * @param conversations Array of conversation objects from cursor database
  * @param opikProjectName Project name for Opik
  * @param sessionInfo Existing session info with per-composer tracking
- * @param skipHistorical Whether to skip conversations without new messages
  * @returns Object containing traces and updated session info
  */
-async function convertConversationsToTraces(conversations: any[], opikProjectName: string, sessionInfo: Record<string, SessionInfo>, skipHistorical: boolean = false) {
+async function convertConversationsToTraces(conversations: any[], opikProjectName: string, sessionInfo: Record<string, SessionInfo>) {
     const tracesData: TraceData[] = [];
     const updatedSessionInfo: Record<string, { lastMessageId?: string; lastMessageTime?: number }> = {};
 
@@ -39,6 +32,7 @@ async function convertConversationsToTraces(conversations: any[], opikProjectNam
 
     for (const conversation of conversations) {
         if (!conversation.bubbles || !Array.isArray(conversation.bubbles) || conversation.bubbles.length === 0) {
+            console.log(`⏭️  Skipping composer ${conversation.composerId} - no bubbles`);
             continue;
         }
 
@@ -51,25 +45,10 @@ async function convertConversationsToTraces(conversations: any[], opikProjectNam
         const neverSynced = !lastUploadId;
         const hasNewMessagesSinceSync = lastUploadId && latestMessage && latestMessage.id !== lastUploadId;
         
-        // Determine if this is a recent/active conversation (within last hour)
-        const ONE_HOUR_MS = 60 * 60 * 1000;
-        const latestMessageTime = latestMessage?.createdAt || latestMessage?.timestamp || conversation.createdAt || 0;
-        const isRecentActivity = (Date.now() - latestMessageTime) < ONE_HOUR_MS;
-        
-        // Apply skipHistorical logic:
-        if (skipHistorical) {
-            // If skipHistorical=true: process conversations with new messages OR recent activity
-            if (neverSynced && !isRecentActivity) {
-                continue; // Skip - old historical conversation and skipHistorical=true
-            }
-            if (!neverSynced && !hasNewMessagesSinceSync) {
-                continue; // Skip - no new messages since last sync
-            }
-        } else {
-            // If skipHistorical=false: process all conversations with new messages or never synced
-            if (!neverSynced && !hasNewMessagesSinceSync) {
-                continue; // Skip - no new messages and already synced
-            }
+        // Skip if already synced and no new messages
+        if (!neverSynced && !hasNewMessagesSinceSync) {
+            console.log(`⏭️  Skipping composer ${composerId} - no new messages (latest: ${latestMessage?.id}, last uploaded: ${lastUploadId})`);
+            continue; // Skip - no new messages and already synced
         }
 
         // Determine processing strategy:
@@ -78,10 +57,7 @@ async function convertConversationsToTraces(conversations: any[], opikProjectNam
         const uploadEntireConversation = lastUploadId === undefined;
         
         if (uploadEntireConversation) {
-            const reason = neverSynced ? 
-                (isRecentActivity ? "recent activity" : "never synced") : 
-                "has new messages";
-            console.log(`📤 Processing entire conversation for composer ${composerId} (${reason})`);
+            console.log(`📤 Processing entire conversation for composer ${composerId} (never synced)`);
         } else {
             console.log(`📤 Processing new messages for composer ${composerId} after message ${lastUploadId}`);
         }
@@ -102,13 +78,6 @@ async function convertConversationsToTraces(conversations: any[], opikProjectNam
                 lastMessageId: conversationTraces.lastMessageId,
                 lastMessageTime: conversationTraces.lastMessageTime
             };
-        }
-    }
-
-    if (skipHistorical) {
-        const skippedSessions = Object.keys(updatedSessionInfo).length - tracesData.length;
-        if (skippedSessions > 0) {
-            console.log(`⏭️ Skipped ${skippedSessions} historical conversations (skipHistorical=true)`);
         }
     }
     
@@ -199,48 +168,87 @@ function processConversationBubbles(
 /**
  * Read cursor chat data from SQLite database (asynchronous version)
  */
-async function readCursorChatDataAsync(stateDbPath: string): Promise<any> {
+async function readCursorChatDataAsync(stateDbPath: string, lastSyncedAt: number, currentSyncTime: number): Promise<any> {
+    // Create a temporary copy of the database to avoid "database is locked" errors
+    // This mimics the sql.js behavior where the database was loaded into memory
+    let tempDbPath: string | null = null;
+    
     try {
-        // Initialize SQL.js
-        const SQL = await initSqlJs();
-        
-        // Read the database file
-        const fileBuffer = fs.readFileSync(stateDbPath);
-        const db = new SQL.Database(new Uint8Array(fileBuffer));
-        
-        // Calculate 5 minutes ago timestamp (in milliseconds)
+        // Create temp copy of the database
+        tempDbPath = createTempDatabaseCopy(stateDbPath);
         const fiveMinutesAgo = Date.now() - (5 * 60 * 1000);
+        const lastSyncedAtWithBuffer = lastSyncedAt - (5 * 60 * 1000);
 
-        // Find all composer chats
+        // Find all composer chats updated between last sync and current sync time
+        // This prevents race conditions by using a consistent time window
+        // Using > (not >=) to avoid duplicates, and <= (not <) to avoid gaps
         const composerQuery = `SELECT key, value FROM cursorDiskKV 
                 WHERE key LIKE 'composerData%' 
+                AND json_extract(value, '$.lastUpdatedAt') > ${lastSyncedAtWithBuffer}
+                AND json_extract(value, '$.lastUpdatedAt') <= ${currentSyncTime}
                 AND (json_extract(value, '$.status') = 'completed' 
                      OR (json_extract(value, '$.status') != 'completed' 
                          AND json_extract(value, '$.lastUpdatedAt') < ${fiveMinutesAgo}))`;
         
-        const composerRows = db.exec(composerQuery)[0]?.values || [];
+        const composerRows = await executeQuery(tempDbPath, composerQuery);
         
         if (!composerRows || composerRows.length === 0) {
-            console.log(`⚠️ No composer data found in ${path.basename(path.dirname(stateDbPath))}`);
-            db.close();
+            console.log(`⚠️ No composer data found (queried ${lastSyncedAt} < lastUpdatedAt <= ${currentSyncTime})`);
             return [];
         }
         
-        // Get all bubbles in one query
-        const bubbleQuery = "SELECT key, value FROM cursorDiskKV WHERE key LIKE 'bubbleId:%'";
-        const allBubbleRows = db.exec(bubbleQuery)[0]?.values || [];
+        console.log(`📊 Found ${composerRows.length} composer(s) updated since last sync (${lastSyncedAt} < lastUpdatedAt <= ${currentSyncTime})`);
+        
+        // Log the composer IDs and their update times for debugging
+        composerRows.forEach((row: any) => {
+            try {
+                const composerData = JSON.parse(row.value);
+                const composerId = row.key.split(':')[1];
+                console.log(`  → Composer ${composerId}: updated at ${composerData.lastUpdatedAt}, status: ${composerData.status}`);
+            } catch (e) {
+                // Ignore parse errors
+            }
+        });
+        
+        // Extract composer IDs from the keys (format: composerData:<composerId>)
+        const composerIds = composerRows
+            .map((row: any) => {
+                if (typeof row.key === 'string') {
+                    return row.key.split(':')[1];
+                }
+                return null;
+            })
+            .filter((id: string | null) => id !== null);
+        
+        if (composerIds.length === 0) {
+            console.log(`⚠️ No valid composer IDs found`);
+            return [];
+        }
+        
+        console.log(`🔍 Fetching bubbles for ${composerIds.length} active composer(s)`);
+        
+        // Build optimized query to only fetch bubbles for relevant composers
+        // Bubble key format: bubbleId:<composerId>:<bubbleId>
+        // This dramatically reduces data transfer by filtering at the database level
+        const bubbleQuery = `
+            SELECT key, value FROM cursorDiskKV 
+            WHERE ${composerIds.map((id: string) => `key LIKE 'bubbleId:${id}:%'`).join(' OR ')}
+        `;
+        
+        const allBubbleRows = await executeQueryPaginated(tempDbPath, bubbleQuery, 100);
+        console.log(`✅ Retrieved ${allBubbleRows.length} bubbles (only for active composers)`);
         
         // Group bubbles by composer ID
         const bubblesByComposer: Record<string, any[]> = {};
         
-        allBubbleRows.forEach((bubbleRow: SqlValue[]) => {
-            if (!bubbleRow[1]) return; // value is at index 1
+        allBubbleRows.forEach((bubbleRow: any) => {
+            if (!bubbleRow.value) return;
             
             try {
-                const key = bubbleRow[0];
+                const key = bubbleRow.key;
                 if (typeof key !== 'string') return;
-                const composerId = key.split(':')[1]; // key is at index 0
-                const value = bubbleRow[1];
+                const composerId = key.split(':')[1];
+                const value = bubbleRow.value;
                 if (typeof value !== 'string') return;
                 const chatData = JSON.parse(value);
                 
@@ -269,11 +277,11 @@ async function readCursorChatDataAsync(stateDbPath: string): Promise<any> {
         // Process each composer and build conversations
         const conversations: any[] = [];
         
-        composerRows.forEach((composerRow: SqlValue[], index: number) => {
+        composerRows.forEach((composerRow: any, index: number) => {
             try {
-                const value = composerRow[1];
+                const value = composerRow.value;
                 if (typeof value !== 'string') return;
-                const composerData = JSON.parse(value); // value is at index 1
+                const composerData = JSON.parse(value);
                 
                 // Handle null composerData
                 if (!composerData) {
@@ -281,9 +289,9 @@ async function readCursorChatDataAsync(stateDbPath: string): Promise<any> {
                     return;
                 }
                 
-                const key = composerRow[0];
+                const key = composerRow.key;
                 if (typeof key !== 'string') return;
-                const threadId = key.split(':')[1]; // key is at index 0
+                const threadId = key.split(':')[1];
                 
                 // Get bubbles for this composer
                 const bubbles = bubblesByComposer[threadId] || [];
@@ -321,12 +329,16 @@ async function readCursorChatDataAsync(stateDbPath: string): Promise<any> {
             }
         });
         
-        db.close();
         return conversations;
     } catch (error) {
         captureException(error);
         console.error(`Error reading database ${stateDbPath}:`, error);
         throw error;
+    } finally {
+        // Always cleanup the temporary database copy
+        if (tempDbPath) {
+            cleanupTempDatabase(tempDbPath);
+        }
     }
 }
 
@@ -334,7 +346,13 @@ async function readCursorChatDataAsync(stateDbPath: string): Promise<any> {
  * Find all state.vscdb files in the given globalStorage directories
  */
 
-export async function findAndReturnNewTraces(context: vscode.ExtensionContext, VSInstallationPath: string, sessionInfo: Record<string, SessionInfo>, skipHistorical: boolean = false) {
+export async function findAndReturnNewTraces(
+    context: vscode.ExtensionContext, 
+    VSInstallationPath: string, 
+    sessionInfo: Record<string, SessionInfo>,
+    lastSyncedAt: number,
+    currentSyncTime: number
+) {
     const opikProjectName: string = vscode.workspace.getConfiguration().get('opik.projectName') || 'default';
     
     const globalStoragePaths = findFolder(VSInstallationPath, 'globalStorage');
@@ -363,11 +381,11 @@ export async function findAndReturnNewTraces(context: vscode.ExtensionContext, V
         return null;
     } else {
         try {
-            const conversations = await readCursorChatDataAsync(stateDbPath);
+            const conversations = await readCursorChatDataAsync(stateDbPath, lastSyncedAt, currentSyncTime);
             
             if (conversations && Array.isArray(conversations) && conversations.length > 0) {
                 // Convert conversations to Opik traces with per-session tracking
-                const result = await convertConversationsToTraces(conversations, opikProjectName, sessionInfo, skipHistorical);
+                const result = await convertConversationsToTraces(conversations, opikProjectName, sessionInfo);
                 
                 return {
                     tracesData: result.tracesData,

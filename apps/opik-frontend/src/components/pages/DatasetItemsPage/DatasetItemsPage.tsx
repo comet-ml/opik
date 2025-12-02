@@ -53,7 +53,6 @@ import {
   generateActionsColumDef,
   generateSelectColumDef,
 } from "@/components/shared/DataTable/utils";
-import { useTruncationEnabled } from "@/components/server-sync-provider";
 import UseDatasetDropdown from "@/components/pages/DatasetItemsPage/UseDatasetDropdown";
 import { RESOURCE_TYPE } from "@/components/shared/ResourceLink/ResourceLink";
 import { DATASET_ITEM_DATA_PREFIX } from "@/constants/datasets";
@@ -76,7 +75,7 @@ const ROW_HEIGHT_KEY = "dataset-items-row-height";
 
 const DatasetItemsPage = () => {
   const datasetId = useDatasetIdFromURL();
-  const truncationEnabled = useTruncationEnabled();
+  const truncationEnabled = false;
 
   const [activeRowId = "", setActiveRowId] = useQueryParam("row", StringParam, {
     updateType: "replaceIn",
@@ -128,18 +127,24 @@ const DatasetItemsPage = () => {
     datasetId,
   });
 
-  const { data, isPending } = useDatasetItemsList(
-    {
-      datasetId,
-      filters,
-      page: page as number,
-      size: size as number,
-      search: search!,
-      truncate: truncationEnabled,
-    },
-    {
-      placeholderData: keepPreviousData,
-    },
+  const { data, isPending, isPlaceholderData, isFetching } =
+    useDatasetItemsList(
+      {
+        datasetId,
+        filters,
+        page: page as number,
+        size: size as number,
+        search: search!,
+        truncate: truncationEnabled,
+      },
+      {
+        placeholderData: keepPreviousData,
+      },
+    );
+  const datasetColumns = useMemo(
+    () =>
+      (data?.columns ?? []).sort((c1, c2) => c1.name.localeCompare(c2.name)),
+    [data?.columns],
   );
 
   const { refetch: refetchExportData } = useDatasetItemsList(
@@ -211,14 +216,12 @@ const DatasetItemsPage = () => {
   }, [refetchExportData, rowSelection]);
 
   const dynamicDatasetColumns = useMemo(() => {
-    return (data?.columns ?? [])
-      .sort((c1, c2) => c1.name.localeCompare(c2.name))
-      .map<DynamicColumn>((c) => ({
-        id: `${DATASET_ITEM_DATA_PREFIX}.${c.name}`,
-        label: c.name,
-        columnType: mapDynamicColumnTypesToColumnType(c.types),
-      }));
-  }, [data]);
+    return datasetColumns.map<DynamicColumn>((c) => ({
+      id: `${DATASET_ITEM_DATA_PREFIX}.${c.name}`,
+      label: c.name,
+      columnType: mapDynamicColumnTypesToColumnType(c.types),
+    }));
+  }, [datasetColumns]);
 
   const dynamicColumnsIds = useMemo(
     () => dynamicDatasetColumns.map((c) => c.id),
@@ -247,6 +250,7 @@ const DatasetItemsPage = () => {
       id: "tags",
       label: "Tags",
       type: COLUMN_TYPE.list,
+      iconType: "tags",
       accessorFn: (row) => row.tags || [],
       cell: ListCell as never,
     });
@@ -280,6 +284,7 @@ const DatasetItemsPage = () => {
         id: "tags",
         label: "Tags",
         type: COLUMN_TYPE.list,
+        iconType: "tags" as const,
       },
     ];
   }, []);
@@ -433,6 +438,7 @@ const DatasetItemsPage = () => {
         onRowClick={handleRowClick}
         activeRowId={activeRowId ?? ""}
         resizeConfig={resizeConfig}
+        showLoadingOverlay={isPlaceholderData && isFetching}
         selectionConfig={{
           rowSelection,
           setRowSelection,
@@ -471,7 +477,7 @@ const DatasetItemsPage = () => {
       <DatasetItemEditor
         datasetItemId={activeRowId as string}
         datasetId={datasetId}
-        columns={columnsData}
+        columns={datasetColumns}
         onClose={handleClose}
         isOpen={Boolean(activeRowId)}
         rows={rows}
@@ -489,7 +495,7 @@ const DatasetItemsPage = () => {
         datasetId={datasetId}
         open={openAddSidebar}
         setOpen={setOpenAddSidebar}
-        columns={columnsData}
+        columns={datasetColumns}
       />
     </div>
   );

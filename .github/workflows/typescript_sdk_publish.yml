@@ -1,7 +1,17 @@
-name: TypeScript SDK Publish
-run-name: "TypeScript SDK Publish from ${{github.ref_name}} by @${{ github.actor }}"
+name: TypeScript SDK Build & Publish
+run-name: "TypeScript SDK Build & Publish ${{ github.event.inputs.version || inputs.version || 'auto' }} from ${{github.ref_name}} by @${{ github.actor }}"
 
 on:
+  push:
+    branches:
+      - main
+    paths:
+      - "sdks/typescript/**"
+      - ".github/workflows/typescript_sdk_publish.yml"
+  pull_request:
+    paths:
+      - "sdks/typescript/**"
+      - ".github/workflows/typescript_sdk_publish.yml"
   workflow_dispatch:
     inputs:
       version:
@@ -26,11 +36,10 @@ on:
         default: false
 
 jobs:
-  publish:
+  build-and-publish:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     env:
-      VERSION: ${{ github.event.inputs.version || inputs.version }}
       IS_RELEASE: ${{ github.event.inputs.is_release || inputs.is_release }}
     defaults:
       run:
@@ -52,9 +61,24 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Generate version
+        id: version
+        run: |
+          if [ -n "${{ github.event.inputs.version || inputs.version }}" ]; then
+            # Use provided version from workflow_dispatch or workflow_call
+            VERSION="${{ github.event.inputs.version || inputs.version }}"
+          else
+            # For push/PR: use package.json version with short SHA (not published)
+            PACKAGE_VERSION=$(node -p "require('./package.json').version")
+            SHORT_SHA=$(git rev-parse --short HEAD)
+            VERSION="${PACKAGE_VERSION}-${SHORT_SHA}"
+          fi
+          echo "VERSION=${VERSION}" >> $GITHUB_OUTPUT
+          echo "Generated version: ${VERSION}"
+
       - name: Update version
         if: ${{ env.IS_RELEASE }}
-        run: npm version ${{ env.VERSION }} --no-git-tag-version
+        run: npm version ${{ steps.version.outputs.VERSION }} --no-git-tag-version
 
       - name: Build package
         run: npm run build
@@ -65,7 +89,7 @@ jobs:
           git config --local user.email "github-actions@comet.com"
           git config --local user.name "github-actions"
           git add package.json package-lock.json
-          git commit -m "Update TypeScript SDK version to ${{ env.VERSION }}"
+          git commit -m "Update TypeScript SDK version to ${{ steps.version.outputs.VERSION }}"
 
       - name: Publish to NPM
         if: ${{ env.IS_RELEASE }}
@@ -80,3 +104,16 @@ jobs:
           github_token: ${{ secrets.GH_PAT_TO_ACCESS_GITHUB_API }}
           branch: ${{ github.ref }}
           force_with_lease: true
+
+      - name: Summary
+        run: |
+          echo "## TypeScript SDK Build" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Version:** ${{ steps.version.outputs.VERSION }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Event:** ${{ github.event_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Is Release:** ${{ env.IS_RELEASE }}" >> $GITHUB_STEP_SUMMARY
+          if [ "${{ env.IS_RELEASE }}" = "true" ]; then
+            echo "**Published:** ✅ Published to NPM" >> $GITHUB_STEP_SUMMARY
+          else
+            echo " ⏭️ Build only " >> $GITHUB_STEP_SUMMARY
+          fi

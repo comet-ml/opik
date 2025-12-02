@@ -45,11 +45,17 @@ const TracesOrSpansPathsAutocomplete: React.FC<
   value,
   onValueChange,
   type = TRACE_DATA_TYPE.traces,
-  placeholder = "Select a key from recent trace",
+  placeholder,
   excludeRoot = false,
   projectName: projectNameProp,
   datasetColumnNames,
 }) => {
+  // Default placeholder based on type
+  const defaultPlaceholder =
+    type === TRACE_DATA_TYPE.spans
+      ? "Select a key from recent span"
+      : "Select a key from recent trace";
+  const finalPlaceholder = placeholder ?? defaultPlaceholder;
   const isProjectId = Boolean(projectId);
   const queryClient = useQueryClient();
 
@@ -172,7 +178,7 @@ const TracesOrSpansPathsAutocomplete: React.FC<
       items={items}
       hasError={hasError}
       isLoading={isProjectId ? isPending || isPendingNonTruncated : false}
-      placeholder={placeholder}
+      placeholder={finalPlaceholder}
     />
   );
 };

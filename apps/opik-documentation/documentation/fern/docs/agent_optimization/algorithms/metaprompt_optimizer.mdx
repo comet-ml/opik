@@ -26,7 +26,7 @@ critique and improve your initial prompt. Here's a conceptual breakdown:
 
 <Tip>
   The optimizer is open-source, you can check out the code in the
-  [Opik repository](https://github.com/comet-ml/opik/tree/main/sdks/opik_optimizer/src/opik_optimizer/meta_prompt_optimizer).
+  [Opik repository](https://github.com/comet-ml/opik/tree/main/sdks/opik_optimizer/src/opik_optimizer/algorithms/meta_prompt_optimizer).
 </Tip>
 
 
@@ -51,7 +51,7 @@ optimizer = MetaPromptOptimizer(
 )
 
 # Prepare dataset
-dataset = datasets.hotpot_300()
+dataset = datasets.hotpot(count=300)
 
 # Define metric and task configuration (see docs for more options)
 def levenshtein_ratio(dataset_item, llm_output):
@@ -104,7 +104,7 @@ The `optimize_prompt` method has the following parameters:
 <ParamField path="project_name" type="str" optional={true} default="Optimization">Opik project name for logging traces and experiments. Default: "Optimization"</ParamField>
 <ParamField path="max_trials" type="int" optional={true} default="10">Maximum total number of prompts to evaluate across all rounds. Optimizer stops when this limit is reached.</ParamField>
 <ParamField path="mcp_config" type="opik_optimizer.mcp_utils.mcp_workflow.MCPExecutionConfig | None" optional={true}>Optional MCP (Model Context Protocol) execution configuration for prompts that use external tools. Enables tool-calling workflows. Default: None</ParamField>
-<ParamField path="candidate_generator" type="collections.abc.Callable[..., list[opik_optimizer.optimization_config.chat_prompt.ChatPrompt]] | None" optional={true}>Optional custom function to generate candidate prompts. Overrides default meta-reasoning generator. Should return list[ChatPrompt].</ParamField>
+<ParamField path="candidate_generator" type="collections.abc.Callable[..., list[opik_optimizer.api_objects.chat_prompt.ChatPrompt]] | None" optional={true}>Optional custom function to generate candidate prompts. Overrides default meta-reasoning generator. Should return list[ChatPrompt].</ParamField>
 <ParamField path="candidate_generator_kwargs" type="dict[str, typing.Any] | None" optional={true}>Optional kwargs to pass to candidate_generator.</ParamField>
 <ParamField path="args" type="Any" />
 <ParamField path="kwargs" type="Any" />

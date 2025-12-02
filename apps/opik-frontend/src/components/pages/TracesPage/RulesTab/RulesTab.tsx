@@ -121,9 +121,14 @@ type RulesTabProps = {
 
 export const RulesTab: React.FC<RulesTabProps> = ({ projectId }) => {
   const resetDialogKeyRef = useRef(0);
-  const [openDialog, setOpenDialog] = useState<boolean>(false);
+  const [openDialogForCreate, setOpenDialogForCreate] =
+    useState<boolean>(false);
 
   const [search = "", setSearch] = useQueryParam("search", StringParam, {
+    updateType: "replaceIn",
+  });
+
+  const [editRuleId, setEditRuleId] = useQueryParam("editRule", StringParam, {
     updateType: "replaceIn",
   });
 
@@ -160,6 +165,9 @@ export const RulesTab: React.FC<RulesTabProps> = ({ projectId }) => {
 
   const rows: EvaluatorsRule[] = useMemo(() => data?.content ?? [], [data]);
 
+  const editingRule = rows.find((r) => r.id === editRuleId);
+  const isDialogOpen = Boolean(editingRule) || openDialogForCreate;
+
   const [selectedColumns, setSelectedColumns] = useLocalStorageState<string[]>(
     SELECTED_COLUMNS_KEY,
     {
@@ -183,6 +191,14 @@ export const RulesTab: React.FC<RulesTabProps> = ({ projectId }) => {
   const selectedRows: EvaluatorsRule[] = useMemo(() => {
     return rows.filter((row) => rowSelection[row.id]);
   }, [rowSelection, rows]);
+
+  const handleOpenEditDialog = useCallback(
+    (ruleId: string) => {
+      setEditRuleId(ruleId);
+      resetDialogKeyRef.current = resetDialogKeyRef.current + 1;
+    },
+    [setEditRuleId],
+  );
 
   const columns = useMemo(() => {
     return [
@@ -208,11 +224,16 @@ export const RulesTab: React.FC<RulesTabProps> = ({ projectId }) => {
         enableHiding: false,
         enableSorting: false,
       } as ColumnDef<EvaluatorsRule>,
-      generateActionsColumDef({
-        cell: RuleRowActionsCell,
+      generateActionsColumDef<EvaluatorsRule>({
+        cell: (props) => (
+          <RuleRowActionsCell
+            {...props}
+            openEditDialog={handleOpenEditDialog}
+          />
+        ),
       }),
     ];
-  }, [columnsOrder, selectedColumns]);
+  }, [columnsOrder, selectedColumns, handleOpenEditDialog]);
 
   const resizeConfig = useMemo(
     () => ({
@@ -224,9 +245,19 @@ export const RulesTab: React.FC<RulesTabProps> = ({ projectId }) => {
   );
 
   const handleNewRuleClick = useCallback(() => {
-    setOpenDialog(true);
+    setOpenDialogForCreate(true);
     resetDialogKeyRef.current = resetDialogKeyRef.current + 1;
   }, []);
+
+  const handleCloseDialog = useCallback(
+    (open: boolean) => {
+      setOpenDialogForCreate(open);
+      if (!open) {
+        setEditRuleId(undefined);
+      }
+    },
+    [setEditRuleId],
+  );
 
   if (isPending) {
     return <Loader />;
@@ -243,9 +274,10 @@ export const RulesTab: React.FC<RulesTabProps> = ({ projectId }) => {
         />
         <AddEditRuleDialog
           key={resetDialogKeyRef.current}
-          open={openDialog}
+          open={isDialogOpen}
           projectId={projectId}
-          setOpen={setOpenDialog}
+          setOpen={handleCloseDialog}
+          rule={editingRule}
         />
       </>
     );
@@ -317,9 +349,10 @@ export const RulesTab: React.FC<RulesTabProps> = ({ projectId }) => {
       </PageBodyStickyContainer>
       <AddEditRuleDialog
         key={resetDialogKeyRef.current}
-        open={openDialog}
+        open={isDialogOpen}
         projectId={projectId}
-        setOpen={setOpenDialog}
+        setOpen={handleCloseDialog}
+        rule={editingRule}
       />
     </>
   );

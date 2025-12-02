@@ -1,80 +1,33 @@
-import copy
-import json
 import logging
-import textwrap
-from typing import Any, cast
+from typing import Any
 from collections.abc import Callable
 
 import opik
-from opik import Dataset, opik_context
-from opik.environment import get_tqdm_for_current_environment
-
-from opik_optimizer import task_evaluator
-
-from ... import _throttle, helpers
+from opik import Dataset
 from ...base_optimizer import BaseOptimizer, OptimizationRound
 from ...api_objects import chat_prompt
 from ...optimization_result import OptimizationResult
 from ...optimizable_agent import OptimizableAgent
+from ... import _throttle
 from . import reporting
-import re
-from ... import _llm_calls
-from ...mcp_utils.mcp import PROMPT_TOOL_FOOTER, PROMPT_TOOL_HEADER
+from .ops.halloffame_ops import PromptHallOfFame
+from .ops.candidate_ops import _sync_tool_description_in_system
+from ..._llm_calls import StructuredOutputParsingError
+from litellm.exceptions import BadRequestError
 from ...mcp_utils.mcp_workflow import (
     MCPExecutionConfig,
     MCPSecondPassCoordinator,
     extract_tool_arguments,
 )
-from ...utils.prompt_segments import apply_segment_updates, extract_prompt_segments
+from ...utils.prompt_segments import extract_prompt_segments
 
-tqdm = get_tqdm_for_current_environment()
+# Import ops modules
+from .ops import evaluation_ops, candidate_ops, context_ops, result_ops
 
 # Set up logging
 logger = logging.getLogger(__name__)  # Gets logger configured by setup_logging
 
 _rate_limiter = _throttle.get_rate_limiter_for_current_opik_installation()
-
-
-def _sync_tool_description_in_system(prompt: chat_prompt.ChatPrompt) -> None:
-    if not prompt.system or not getattr(prompt, "tools", None):
-        return
-
-    description = (
-        prompt.tools[0].get("function", {}).get("description") if prompt.tools else None
-    )
-    if not description:
-        return
-
-    tool_name = (
-        prompt.tools[0].get("function", {}).get("name") if prompt.tools else None
-    )
-
-    system_text = cast(str, prompt.system)
-    if PROMPT_TOOL_HEADER not in system_text or PROMPT_TOOL_FOOTER not in system_text:
-        return
-
-    start = system_text.index(PROMPT_TOOL_HEADER) + len(PROMPT_TOOL_HEADER)
-    end = system_text.index(PROMPT_TOOL_FOOTER)
-    description_text = description.strip()
-    system_text = (
-        system_text[:start] + "\n" + description_text + "\n" + system_text[end:]
-    )
-    prompt.system = system_text
-
-    if tool_name:
-        pattern = rf"(-\s*{re.escape(tool_name)}:\s)(.*)"
-
-        def _tool_section_replacer(match: re.Match[str]) -> str:
-            return f"{match.group(1)}{description_text}"
-
-        system_text = re.sub(
-            pattern,
-            _tool_section_replacer,
-            system_text,
-            count=1,
-            flags=re.MULTILINE,
-        )
-        prompt.system = system_text
 
 
 class MetaPromptOptimizer(BaseOptimizer):
@@ -86,7 +39,6 @@ class MetaPromptOptimizer(BaseOptimizer):
     - Ensuring prompts follow best practices
     - Refining prompts for clarity and effectiveness
     - Optimizing prompts for specific evaluation metrics
-    - Improving prompts based on performance feedback
 
     The optimizer works by:
     1. Evaluating the current prompt on a dataset
@@ -102,47 +54,34 @@ class MetaPromptOptimizer(BaseOptimizer):
             See: https://docs.litellm.ai/docs/completion/input
         prompts_per_round: Number of candidate prompts to generate per optimization round
         enable_context: Whether to include task-specific context when reasoning about improvements
+        num_task_examples: Number of dataset examples to show in task context (default: 10)
+        task_context_columns: Specific dataset columns to include in context (None = all input columns)
         n_threads: Number of parallel threads for prompt evaluation
         verbose: Controls internal logging/progress bars (0=off, 1=on)
         seed: Random seed for reproducibility
+        use_hall_of_fame: Enable Hall of Fame pattern extraction and re-injection
+        prettymode_prompt_history: Display prompt history in pretty format (True) or JSON (False)
     """
 
     # --- Constants for Default Configuration ---
-    DEFAULT_ROUNDS = 3
-    DEFAULT_PROMPTS_PER_ROUND = 4
-
-    # --- Reasoning System Prompt ---
-    _REASONING_SYSTEM_PROMPT = """You are an expert prompt engineer. Your task is to improve prompts for any type of task.
-
-        Focus on making the prompt more effective by:
-        1. Being clear and specific about what is expected
-        2. Providing necessary context and constraints
-        3. Guiding the model to produce the desired output format
-        4. Removing ambiguity and unnecessary elements
-        5. Maintaining conciseness while being complete
-
-        Instructions:
-        1. If there is a system prompt, prioritize adding instructions there if and only if it makes sense.
-        2. DO NOT add any variables or parameters to the prompt you are editing.
-        3. You can reuse variables that already exist in the prompt.
-
-        Return a JSON array of prompts with the following structure. Make sure to return a valid
-        JSON object with correct use of double quotes and single quotes. JSON keys should be
-        double-quoted:
-        {
-            "prompts": [
-                {
-                    "prompt": [{"role": "<role>", "content": "<content>"}],
-                    "improvement_focus": "what aspect this prompt improves",
-                    "reasoning": "why this improvement should help"
-                },
-                {
-                    "prompt": [{"role": "<role>", "content": "<content>"}],
-                    "improvement_focus": "what aspect this prompt improves",
-                    "reasoning": "why this improvement should help"
-                }
-            ]
-        }"""
+    DEFAULT_PROMPTS_PER_ROUND = 4  # Same as DEFAULT_NUM_GENERATIONS
+    DEFAULT_SYNTHESIS_PROMPTS_PER_ROUND = 2
+    DEFAULT_SYNTHESIS_START_ROUND = 3
+    DEFAULT_SYNTHESIS_ROUND_INTERVAL = 3
+    DEFAULT_NUM_THREADS = 12
+    DEFAULT_SEED = 42
+    DEFAULT_NUM_TASK_EXAMPLES = 5
+    DEFAULT_HALL_OF_FAME_SIZE = 10
+    DEFAULT_PATTERN_EXTRACTION_INTERVAL = 5
+    DEFAULT_PATTERN_INJECTION_RATE = 0.6
+    DEFAULT_DATASET_CONTEXT_MAX_TOKENS = 10000
+    DEFAULT_DATASET_CONTEXT_RATIO = 0.25
+    DEFAULT_PRETTYMODE_PROMPT_HISTORY = True
+    DEFAULT_EXTRACT_METRIC_UNDERSTANDING = True
+    # TODO: Refactor and make global - this should be a configuration parameter
+    # Other optimizers only optimize system prompts, not user prompts
+    # Setting this to True allows more flexibility
+    DEFAULT_ALLOW_USER_PROMPT_OPTIMIZATION = False
 
     def __init__(
         self,
@@ -150,10 +89,14 @@ class MetaPromptOptimizer(BaseOptimizer):
         model_parameters: dict[str, Any] | None = None,
         prompts_per_round: int = DEFAULT_PROMPTS_PER_ROUND,
         enable_context: bool = True,
-        n_threads: int = 12,
+        num_task_examples: int = DEFAULT_NUM_TASK_EXAMPLES,
+        task_context_columns: list[str] | None = None,
+        n_threads: int = DEFAULT_NUM_THREADS,
         verbose: int = 1,
-        seed: int = 42,
+        seed: int = DEFAULT_SEED,
         name: str | None = None,
+        use_hall_of_fame: bool = True,
+        prettymode_prompt_history: bool = DEFAULT_PRETTYMODE_PROMPT_HISTORY,
     ) -> None:
         super().__init__(
             model=model,
@@ -163,17 +106,93 @@ class MetaPromptOptimizer(BaseOptimizer):
             name=name,
         )
         self.prompts_per_round = prompts_per_round
+        self.synthesis_prompts_per_round = self.DEFAULT_SYNTHESIS_PROMPTS_PER_ROUND
+        self.synthesis_start_round = self.DEFAULT_SYNTHESIS_START_ROUND
+        self.synthesis_round_interval = self.DEFAULT_SYNTHESIS_ROUND_INTERVAL
         self.n_threads = n_threads
         self.dataset: Dataset | None = None
         self.enable_context = enable_context
+        self.num_task_examples = num_task_examples
+        self.task_context_columns = task_context_columns
+
+        # Calculate token budget for task context data stuffing (dataset examples only)
+        # This is ONLY used for adaptive fitting logic in get_task_context()
+        self.max_context_tokens = self._calculate_max_context_tokens()
+
+        # Hall of Fame for pattern mining
+        self.use_hall_of_fame = use_hall_of_fame
+        self.prettymode_prompt_history = prettymode_prompt_history
+        self.extract_metric_understanding = self.DEFAULT_EXTRACT_METRIC_UNDERSTANDING
+        self.allow_user_prompt_optimization = (
+            self.DEFAULT_ALLOW_USER_PROMPT_OPTIMIZATION
+        )
+        self.hall_of_fame_size = self.DEFAULT_HALL_OF_FAME_SIZE
+        self.pattern_extraction_interval = self.DEFAULT_PATTERN_EXTRACTION_INTERVAL
+        self.pattern_injection_rate = self.DEFAULT_PATTERN_INJECTION_RATE
+        self.hall_of_fame: PromptHallOfFame | None = None
+        if self.use_hall_of_fame:
+            self.hall_of_fame = PromptHallOfFame(
+                max_size=self.hall_of_fame_size,
+                pattern_extraction_interval=self.pattern_extraction_interval,
+            )
+            logger.debug(
+                f"Hall of Fame enabled: size={self.hall_of_fame_size}, "
+                f"extraction_interval={self.pattern_extraction_interval}"
+            )
+
         logger.debug(f"Initialized MetaPromptOptimizer with model={model}")
         logger.debug(f"Prompts/round: {prompts_per_round}")
 
+    def _calculate_max_context_tokens(self) -> int:
+        """
+        Calculate token budget for task context data stuffing (dataset examples ONLY).
+
+        This limit is ONLY used in get_task_context() for adaptive fitting of dataset examples.
+        It determines how many examples and how much truncation to use when building task context.
+
+        Uses ~25% of model's max tokens, capped at DEFAULT_MAX_DATASET_CONTEXT_MAX_TOKENS.
+        Falls back to absolute max for custom models where litellm can't determine limits.
+        """
+        try:
+            from litellm import get_max_tokens
+
+            model_max_tokens = get_max_tokens(self.model)
+            # Use ~25% of model's context for dataset examples
+            calculated_max = int(model_max_tokens * self.DEFAULT_DATASET_CONTEXT_RATIO)
+            logger.debug(
+                f"Model {self.model} max tokens: {model_max_tokens}, "
+                f"calculated dataset context budget: {calculated_max}"
+            )
+        except Exception as e:
+            logger.debug(
+                f"Could not get max tokens for model {self.model}: {e}. "
+                f"Using default max: {self.DEFAULT_DATASET_CONTEXT_MAX_TOKENS}"
+            )
+            calculated_max = self.DEFAULT_DATASET_CONTEXT_MAX_TOKENS
+
+        # Apply absolute safety limit (for custom models or huge context windows)
+        max_tokens = min(calculated_max, self.DEFAULT_DATASET_CONTEXT_MAX_TOKENS)
+        logger.debug(f"Final dataset context token budget: {max_tokens}")
+        return max_tokens
+
     def get_optimizer_metadata(self) -> dict[str, Any]:
-        return {
+        metadata: dict[str, Any] = {
             "prompts_per_round": self.prompts_per_round,
             "enable_context": self.enable_context,
+            "num_task_examples": self.num_task_examples,
+            "task_context_columns": self.task_context_columns,
+            "max_context_tokens": self.max_context_tokens,
+            "n_threads": self.n_threads,
+            "use_hall_of_fame": self.use_hall_of_fame,
+            "hall_of_fame_size": self.hall_of_fame.max_size
+            if self.hall_of_fame
+            else self.DEFAULT_HALL_OF_FAME_SIZE,
+            "pattern_extraction_interval": self.hall_of_fame.pattern_extraction_interval
+            if self.hall_of_fame
+            else self.DEFAULT_PATTERN_EXTRACTION_INTERVAL,
+            "pattern_injection_rate": self.pattern_injection_rate,
         }
+        return metadata
 
     def _evaluate_prompt(
         self,
@@ -188,167 +207,20 @@ class MetaPromptOptimizer(BaseOptimizer):
         mcp_config: MCPExecutionConfig | None = None,
         **kwargs: Any,
     ) -> float:
-        """
-        Args:
-            dataset: Opik Dataset to evaluate the prompt on
-            metric: Metric functions
-            use_full_dataset: Whether to use the full dataset or a subset
-            experiment_config: Optional configuration for the experiment, useful to log additional metadata
-            n_samples: Optional number of items to test in the dataset
-            optimization_id: Optional ID of the optimization
-            verbose: Controls internal logging/progress bars (0=off, 1=on).
-        Returns:
-            float: The evaluation score
-        """
-        # Calculate subset size for trials
-        if not use_full_dataset:
-            total_items = len(dataset.get_items())
-            if n_samples is not None:
-                if n_samples > total_items:
-                    logger.warning(
-                        f"Requested n_samples ({n_samples}) is larger than dataset size ({total_items}). Using full dataset."
-                    )
-                    subset_size = None
-                else:
-                    subset_size = n_samples
-                    logger.debug(f"Using specified n_samples: {subset_size} items")
-            else:
-                # Calculate 20% of total, but no more than 20 items and no more than total items
-                subset_size = min(total_items, min(20, max(10, int(total_items * 0.2))))
-                logger.debug(
-                    f"Using automatic subset size calculation: {subset_size} items (20% of {total_items} total items)"
-                )
-        else:
-            subset_size = None  # Use all items for final checks
-            logger.debug("Using full dataset for evaluation")
-
-        configuration_updates = helpers.drop_none(
-            {
-                "n_samples": subset_size,
-                "use_full_dataset": use_full_dataset,
-            }
-        )
-        meta_metadata = helpers.drop_none(
-            {
-                "optimization_id": optimization_id,
-                "stage": "trial_evaluation" if not use_full_dataset else "final_eval",
-            }
-        )
-        experiment_config = self._prepare_experiment_config(
+        """Evaluate a prompt on a dataset using a metric (delegates to ops)."""
+        return evaluation_ops.evaluate_prompt(
+            optimizer=self,
             prompt=prompt,
             dataset=dataset,
             metric=metric,
-            experiment_config=experiment_config,
-            configuration_updates=configuration_updates,
-            additional_metadata={"meta_prompt": meta_metadata}
-            if meta_metadata
-            else None,
-        )
-
-        def llm_task(dataset_item: dict[str, Any]) -> dict[str, str]:
-            new_prompt = prompt.copy()
-            messages = new_prompt.get_messages(dataset_item)
-            new_prompt.set_messages(messages)
-            agent = self.agent_class(new_prompt)
-
-            if mcp_config is not None:
-                coordinator = mcp_config.coordinator
-                coordinator.reset()
-                try:
-                    logger.debug(
-                        "Calling MCP-enabled LLM with tool access; prompt length=%s",
-                        sum(len(msg["content"]) for msg in messages),
-                    )
-                    raw_model_output = agent.llm_invoke(
-                        messages=messages,
-                        seed=self.seed,
-                        allow_tool_use=True,
-                    )
-                except Exception as exc:
-                    logger.error("Error during MCP first pass: %s", exc)
-                    raise
-
-                second_pass_messages = coordinator.build_second_pass_messages(
-                    base_messages=messages,
-                    dataset_item=dataset_item,
-                )
-
-                if second_pass_messages is None and mcp_config.fallback_invoker:
-                    fallback_args = mcp_config.fallback_arguments(dataset_item)
-                    if fallback_args:
-                        logger.debug(
-                            "MCP fallback triggered for tool %s with args=%s",
-                            mcp_config.tool_name,
-                            fallback_args,
-                        )
-                        summary_override = mcp_config.fallback_invoker(fallback_args)
-                        second_pass_messages = coordinator.build_second_pass_messages(
-                            base_messages=messages,
-                            dataset_item=dataset_item,
-                            summary_override=summary_override,
-                        )
-
-                if second_pass_messages is not None:
-                    logger.debug(
-                        "Executing MCP second pass with %d messages",
-                        len(second_pass_messages),
-                    )
-                    final_response = agent.llm_invoke(
-                        messages=second_pass_messages,
-                        seed=self.seed,
-                        allow_tool_use=mcp_config.allow_tool_use_on_second_pass,
-                    )
-                else:
-                    final_response = raw_model_output
-
-                cleaned_model_output = final_response.strip()
-            else:
-                try:
-                    logger.debug(
-                        f"Calling LLM with prompt length: {sum(len(msg['content']) for msg in messages)}"
-                    )
-                    raw_model_output = agent.invoke(messages)
-                    logger.debug(f"LLM raw response length: {len(raw_model_output)}")
-                    logger.debug(f"LLM raw output: {raw_model_output}")
-                except Exception as e:
-                    logger.error(f"Error calling model with prompt: {e}")
-                    logger.error(f"Failed prompt: {messages}")
-                    logger.error(
-                        f"Prompt length: {sum(len(msg['content']) for msg in messages)}"
-                    )
-                    raise
-
-                cleaned_model_output = raw_model_output.strip()
-
-            # Add tags to trace for optimization tracking
-            if self.current_optimization_id:
-                opik_context.update_current_trace(
-                    tags=[self.current_optimization_id, "Evaluation"]
-                )
-
-            result = {
-                "llm_output": cleaned_model_output,
-            }
-            return result
-
-        # Use dataset's get_items with limit for sampling
-        logger.debug(
-            f"Starting evaluation with {subset_size if subset_size else 'all'} samples for metric: {getattr(metric, '__name__', str(metric))}"
-        )
-        score = task_evaluator.evaluate(
-            dataset=dataset,
-            metric=metric,
-            evaluated_task=llm_task,
+            n_samples=n_samples,
             dataset_item_ids=dataset_item_ids,
-            num_threads=self.n_threads,
-            project_name=self.project_name,
-            n_samples=subset_size,  # Use subset_size for trials, None for full dataset
             experiment_config=experiment_config,
+            use_full_dataset=use_full_dataset,
             optimization_id=optimization_id,
-            verbose=self.verbose,
+            mcp_config=mcp_config,
+            **kwargs,
         )
-        logger.debug(f"Evaluation score: {score:.4f}")
-        return score
 
     def optimize_prompt(
         self,
@@ -361,6 +233,7 @@ class MetaPromptOptimizer(BaseOptimizer):
         agent_class: type[OptimizableAgent] | None = None,
         project_name: str = "Optimization",
         optimization_id: str | None = None,
+        validation_dataset: Dataset | None = None,
         max_trials: int = 10,
         mcp_config: MCPExecutionConfig | None = None,
         candidate_generator: Callable[..., list[chat_prompt.ChatPrompt]] | None = None,
@@ -382,6 +255,9 @@ class MetaPromptOptimizer(BaseOptimizer):
                 prompt during evaluation.
             metric: Evaluation function that takes (dataset_item, llm_output) and returns a
                 score (float). Higher scores indicate better performance.
+            validation_dataset: Optional validation dataset for evaluating candidates. When provided,
+                the optimizer uses the training dataset for understanding failure modes and generating
+                improvements, then evaluates candidates on the validation dataset to prevent overfitting.
             experiment_config: Optional metadata dictionary to log with Opik experiments.
                 Useful for tracking experiment parameters and context.
             n_samples: Number of dataset items to use per evaluation. If None, uses full dataset.
@@ -440,6 +316,12 @@ class MetaPromptOptimizer(BaseOptimizer):
         # Set project name from parameter
         self.project_name = project_name
 
+        # Update experiment_config with validation_dataset if provided
+        if validation_dataset is not None:
+            experiment_config = experiment_config or {}
+            experiment_config["validation_dataset"] = validation_dataset.name
+            experiment_config["validation_dataset_id"] = validation_dataset.id
+
         total_items = len(dataset.get_items())
         if n_samples is not None and n_samples > total_items:
             logger.warning(
@@ -452,8 +334,8 @@ class MetaPromptOptimizer(BaseOptimizer):
             optimization = self.opik_client.create_optimization(
                 dataset_name=dataset.name,
                 objective_name=getattr(metric, "__name__", str(metric)),
+                metadata=self._build_optimization_metadata(),
                 name=self.name,
-                metadata=self._build_optimization_config(),
                 optimization_id=optimization_id,
             )
             self.current_optimization_id = optimization.id
@@ -479,6 +361,9 @@ class MetaPromptOptimizer(BaseOptimizer):
                 "prompts_per_round": self.prompts_per_round,
                 "n_samples": n_samples,
                 "auto_continue": auto_continue,
+                "validation_dataset": validation_dataset.name
+                if validation_dataset is not None
+                else None,
             },
             verbose=self.verbose,
             tools=getattr(prompt, "tools", None),
@@ -491,6 +376,7 @@ class MetaPromptOptimizer(BaseOptimizer):
                 prompt=prompt,
                 dataset=dataset,
                 metric=metric,
+                validation_dataset=validation_dataset,
                 experiment_config=experiment_config,
                 max_trials=max_trials,
                 n_samples=n_samples,
@@ -510,6 +396,7 @@ class MetaPromptOptimizer(BaseOptimizer):
                 logger.debug("Optimization marked as cancelled")
             raise e
 
+    # FIXME: To be removed once MCP is fully supported
     def optimize_mcp(
         self,
         prompt: chat_prompt.ChatPrompt,
@@ -555,6 +442,7 @@ class MetaPromptOptimizer(BaseOptimizer):
             optimization_id=None,
             prompt=prompt,
             dataset=dataset,
+            validation_dataset=None,
             metric=metric,
             experiment_config=experiment_config,
             max_trials=10,
@@ -575,6 +463,7 @@ class MetaPromptOptimizer(BaseOptimizer):
         optimization_id: str | None,
         prompt: chat_prompt.ChatPrompt,
         dataset: Dataset,
+        validation_dataset: Dataset | None,
         metric: Callable,
         experiment_config: dict | None,
         max_trials: int,
@@ -591,12 +480,22 @@ class MetaPromptOptimizer(BaseOptimizer):
         self._reset_counters()  # Reset counters for run
         initial_prompt = prompt
 
+        # Logic on which dataset to use for scoring
+        evaluation_dataset = (
+            validation_dataset if validation_dataset is not None else dataset
+        )
+
         current_prompt = prompt
         with reporting.display_evaluation(verbose=self.verbose) as baseline_reporter:
+            if validation_dataset is not None:
+                experiment_config = experiment_config or {}
+                experiment_config["validation_dataset"] = validation_dataset.name
+                experiment_config["validation_dataset_id"] = validation_dataset.id
+
             initial_score = self._evaluate_prompt(
                 prompt,
                 optimization_id=optimization_id,
-                dataset=dataset,
+                dataset=evaluation_dataset,
                 metric=metric,
                 n_samples=n_samples,
                 experiment_config=experiment_config,
@@ -626,14 +525,63 @@ class MetaPromptOptimizer(BaseOptimizer):
                 round_reporter.round_start(round_num)
                 previous_best_score = best_score
 
+                # Check if we should extract patterns from hall of fame
+                if self.hall_of_fame and self.hall_of_fame.should_extract_patterns(
+                    trials_used
+                ):
+                    logger.info(
+                        f"Extracting patterns from hall of fame at trial {trials_used}"
+                    )
+                    new_patterns = self.hall_of_fame.extract_patterns(
+                        model=self.model,
+                        model_parameters=self.model_parameters,
+                        metric_name=metric.__name__,
+                    )
+                    if new_patterns:
+                        logger.info(f"Extracted {len(new_patterns)} new patterns")
+                        for i, pattern in enumerate(new_patterns[:3], 1):
+                            logger.debug(f"  Pattern {i}: {pattern[:100]}...")
+
                 # Calculate how many prompts to generate this round
                 prompts_this_round = min(
                     self.prompts_per_round, max_trials - trials_used
                 )
 
-                # Step 1. Create a set of candidate prompts
-                generator = candidate_generator or self._generate_candidate_prompts
-                generator_kwargs = dict(candidate_generator_kwargs or {})
+                # Create a set of candidate prompts
+                is_synthesis_round = (
+                    round_num >= self.synthesis_start_round
+                    and (round_num - self.synthesis_start_round)
+                    % self.synthesis_round_interval
+                    == 0
+                )
+
+                if is_synthesis_round and not candidate_generator:
+                    # Synthesis round: combine top performers into comprehensive prompts
+                    logger.info("Combining top performers into comprehensive prompts")
+
+                    generator = self._generate_synthesis_prompts
+                    # Synthesis doesn't use patterns
+                    generator_kwargs = {}
+
+                    # Synthesis creates a fixed, small number of prompts
+                    prompts_this_round = min(
+                        self.synthesis_prompts_per_round, max_trials - trials_used
+                    )
+                else:
+                    # Regular Round
+                    generator = candidate_generator or self._generate_candidate_prompts
+                    generator_kwargs = dict(candidate_generator_kwargs or {})
+
+                    # Add patterns to generator kwargs for injection
+                    if self.hall_of_fame:
+                        patterns_to_inject = (
+                            self.hall_of_fame.get_patterns_for_injection(n=3)
+                        )
+                        if patterns_to_inject:
+                            generator_kwargs["winning_patterns"] = patterns_to_inject
+                            logger.debug(
+                                f"Injecting {len(patterns_to_inject)} patterns into generation"
+                            )
 
                 try:
                     candidate_prompts = generator(
@@ -649,9 +597,41 @@ class MetaPromptOptimizer(BaseOptimizer):
                     # Limit to prompts_this_round
                     candidate_prompts = candidate_prompts[:prompts_this_round]
                 except Exception as e:
-                    round_reporter.failed_to_generate(prompts_this_round, e)
-                    round_num += 1
-                    continue
+                    if isinstance(e, (BadRequestError, StructuredOutputParsingError)):
+                        raise
+                    round_reporter.failed_to_generate(prompts_this_round, str(e))
+
+                    # If synthesis fails, fall back to regular generation
+                    if is_synthesis_round:
+                        logger.warning(
+                            "Synthesis failed, falling back to regular candidate generation"
+                        )
+                        try:
+                            generator = self._generate_candidate_prompts
+                            generator_kwargs = {}
+                            prompts_this_round = self.prompts_per_round
+                            candidate_prompts = generator(
+                                project_name=self.project_name,
+                                current_prompt=best_prompt,
+                                best_score=best_score,
+                                round_num=round_num,
+                                previous_rounds=rounds,
+                                metric=metric,
+                                optimization_id=optimization_id,
+                                **generator_kwargs,
+                            )
+                            candidate_prompts = candidate_prompts[:prompts_this_round]
+                        except Exception as fallback_e:
+                            # If fallback also fails, break to prevent infinite loop
+                            round_reporter.failed_to_generate(
+                                prompts_this_round, str(fallback_e)
+                            )
+                            trials_used += prompts_this_round
+                            break
+                    else:
+                        # Regular generation failed - break to prevent infinite loop
+                        trials_used += prompts_this_round
+                        break
 
                 # Step 2. Score each candidate prompt
                 prompt_scores: list[tuple[chat_prompt.ChatPrompt, float]] = []
@@ -667,7 +647,7 @@ class MetaPromptOptimizer(BaseOptimizer):
                             prompt_score = self._evaluate_prompt(
                                 prompt=candidate_prompt,
                                 optimization_id=optimization_id,
-                                dataset=dataset,
+                                dataset=evaluation_dataset,
                                 metric=metric,
                                 n_samples=n_samples,
                                 use_full_dataset=False,
@@ -697,6 +677,27 @@ class MetaPromptOptimizer(BaseOptimizer):
                     best_cand_score_avg, best_score
                 )
                 round_reporter.round_end(round_num, best_cand_score_avg, best_score)
+
+                # Add best candidate to hall of fame if qualified
+                if self.hall_of_fame and best_cand_score_avg > 0:
+                    from .ops.halloffame_ops import HallOfFameEntry
+
+                    entry = HallOfFameEntry(
+                        prompt_messages=best_candidate_this_round.get_messages(),
+                        score=best_cand_score_avg,
+                        trial_number=trials_used,
+                        improvement_over_baseline=(
+                            (best_cand_score_avg - initial_score) / initial_score
+                            if initial_score > 0
+                            else 0
+                        ),
+                        metric_name=metric.__name__,
+                    )
+                    if self.hall_of_fame.add(entry):
+                        logger.debug(
+                            f"Added to hall of fame: score={best_cand_score_avg:.3f}, "
+                            f"trial={trials_used}"
+                        )
 
                 round_data = self._create_round_data(
                     round_num=round_num,
@@ -755,12 +756,8 @@ class MetaPromptOptimizer(BaseOptimizer):
     def _calculate_improvement(
         self, current_score: float, previous_score: float
     ) -> float:
-        """Calculate the improvement percentage between scores."""
-        return (
-            (current_score - previous_score) / previous_score
-            if previous_score > 0
-            else 0
-        )
+        """Calculate the improvement percentage between scores (delegates to ops)."""
+        return result_ops.calculate_improvement(current_score, previous_score)
 
     def _create_round_data(
         self,
@@ -772,33 +769,15 @@ class MetaPromptOptimizer(BaseOptimizer):
         previous_best_score: float,
         improvement_this_round: float,
     ) -> OptimizationRound:
-        """Create an OptimizationRound object with the current round's data."""
-        generated_prompts_log: list[dict[str, Any]] = []
-        for prompt, score in evaluated_candidates:
-            improvement_vs_prev = self._calculate_improvement(
-                score, previous_best_score
-            )
-            tool_entries: list[Any] = []
-            if getattr(prompt, "tools", None):
-                tool_entries = copy.deepcopy(list(prompt.tools or []))
-
-            generated_prompts_log.append(
-                {
-                    "prompt": prompt.get_messages(),
-                    "tools": tool_entries,
-                    "score": score,
-                    "improvement": improvement_vs_prev,
-                }
-            )
-
-        return OptimizationRound(
-            round_number=round_num + 1,
-            current_prompt=current_best_prompt,
-            current_score=current_best_score,
-            generated_prompts=generated_prompts_log,
-            best_prompt=best_prompt_overall,
-            best_score=current_best_score,
-            improvement=improvement_this_round,
+        """Create an OptimizationRound object with the current round's data (delegates to ops)."""
+        return result_ops.create_round_data(
+            round_num=round_num,
+            current_best_prompt=current_best_prompt,
+            current_best_score=current_best_score,
+            best_prompt_overall=best_prompt_overall,
+            evaluated_candidates=evaluated_candidates,
+            previous_best_score=previous_best_score,
+            improvement_this_round=improvement_this_round,
         )
 
     def _create_result(
@@ -813,62 +792,36 @@ class MetaPromptOptimizer(BaseOptimizer):
         optimization_id: str | None,
         best_tools: list[dict[str, Any]] | None,
     ) -> OptimizationResult:
-        """Create the final OptimizationResult object."""
-        details = {
-            "final_prompt": best_prompt,
-            "final_score": best_score,
-            "rounds": rounds,
-            "total_rounds": len(rounds),
-            "metric_name": getattr(metric, "__name__", str(metric)),
-            "model": self.model,
-            "temperature": self.model_parameters.get("temperature"),
-        }
-
-        if best_tools:
-            details["final_tools"] = best_tools
-
-        tool_prompts = self._extract_tool_prompts(best_tools)
-
-        return OptimizationResult(
-            optimizer=self.__class__.__name__,
-            prompt=best_prompt,
-            score=best_score,
+        """Create the final OptimizationResult object (delegates to ops)."""
+        return result_ops.create_result(
+            optimizer_class_name=self.__class__.__name__,
+            metric=metric,
             initial_prompt=initial_prompt,
+            best_prompt=best_prompt,
+            best_score=best_score,
             initial_score=initial_score,
-            metric_name=getattr(metric, "__name__", str(metric)),
-            details=details,
-            llm_calls=self.llm_call_counter,
-            tool_calls=self.tool_call_counter,
+            rounds=rounds,
             dataset_id=dataset_id,
             optimization_id=optimization_id,
-            tool_prompts=tool_prompts,
+            best_tools=best_tools,
+            llm_call_counter=self.llm_call_counter,
+            tool_call_counter=self.tool_call_counter,
+            model=self.model,
+            model_parameters=self.model_parameters,
+            extract_tool_prompts_fn=self._extract_tool_prompts,
         )
 
-    def _get_task_context(self, metric: Callable) -> str:
-        """Get task-specific context from the dataset and metric configuration."""
-        if self.dataset is None:
-            return ""
-
-        try:
-            # Try get_items() first as it's the preferred method
-            items = self.dataset.get_items()
-            sample = items[0]  # Get first sample
-        except Exception as e:
-            logger.warning(f"Could not get sample from dataset: {e}")
-
-        # Describe Single Metric
-        if sample is not None:
-            metric_name = metric.__name__
-            description = metric.__doc__ or "No description available."
-
-            metrics_str = f"- {metric_name}: {description}"
-
-            context = "\nTask Context:\n"
-            context += f"Dataset fields (includes both input and optionally the expected output): {', '.join([x for x in sample.keys() if x != 'id'])}\n"
-            context += f"Evaluation Metric:\n{metrics_str}\n"
-            context += f"\nExample:\n{json.dumps(sample)}\n"
-
-        return context
+    def _get_task_context(self, metric: Callable) -> tuple[str, int]:
+        """Get task-specific context from the dataset and metric (delegates to ops)."""
+        return context_ops.get_task_context(
+            dataset=self.dataset,
+            metric=metric,
+            num_examples=self.num_task_examples,
+            columns=self.task_context_columns,
+            max_tokens=self.max_context_tokens,
+            model=self.model,
+            extract_metric_understanding=self.extract_metric_understanding,
+        )
 
     def _generate_candidate_prompts(
         self,
@@ -879,169 +832,22 @@ class MetaPromptOptimizer(BaseOptimizer):
         metric: Callable,
         optimization_id: str | None = None,
         project_name: str | None = None,
+        winning_patterns: list[str] | None = None,
     ) -> list[chat_prompt.ChatPrompt]:
-        """Generate candidate prompts using meta-prompting."""
-        with reporting.display_candidate_generation_report(
-            self.prompts_per_round, verbose=self.verbose
-        ) as candidate_generation_report:
-            logger.debug(f"\nGenerating candidate prompts for round {round_num + 1}")
-            logger.debug(f"Generating from prompt: {current_prompt.get_messages()}")
-            logger.debug(f"Current best score: {best_score:.4f}")
-
-            history_context = self._build_history_context(previous_rounds)
-            task_context_str = ""
-            analysis_instruction = ""
-            metric_focus_instruction = ""
-            improvement_point_1 = ""
-
-            if self.enable_context:
-                task_context_str = self._get_task_context(metric=metric)
-                analysis_instruction = "Analyze the example provided (if any), the metric description (if any), and the history of scores."
-                metric_focus_instruction = (
-                    f"Focus on improving the score for the metric: {metric.__name__}."
-                )
-                improvement_point_1 = "1. Be more specific and clear about expectations based on the metric and task."
-                logger.debug(
-                    "Task context and metric-specific instructions enabled for reasoning prompt."
-                )
-            else:
-                analysis_instruction = "Analyze the history of scores and the current prompt's performance."
-                metric_focus_instruction = "Focus on generating diverse and effective prompt variations based on the history."
-                improvement_point_1 = "1. Be more specific and clear about expectations based on the task."
-                logger.debug(
-                    "Task context and metric-specific instructions disabled for reasoning prompt."
-                )
-
-            user_prompt = f"""Current prompt: {current_prompt.get_messages()}
-            Current score: {best_score}
-            {history_context}
-            {task_context_str}
-
-            {analysis_instruction}
-            Generate {self.prompts_per_round} improved versions of this prompt.
-            {metric_focus_instruction}
-            Each version should aim to:
-            {improvement_point_1}
-            2. Provide necessary context and constraints (if applicable, without relying on disabled external context).
-            3. Guide the model to produce the desired output format suitable for the task.
-            4. Remove ambiguity and unnecessary elements.
-            5. Maintain conciseness while being complete.
-
-            Return a valid JSON array as specified."""
-
-            try:
-                # Prepare metadata for optimization algorithm call
-                metadata_for_call: dict[str, Any] = {}
-                if project_name:
-                    metadata_for_call["project_name"] = project_name
-                    metadata_for_call["opik"] = {"project_name": project_name}
-                if optimization_id and "opik" in metadata_for_call:
-                    metadata_for_call["opik"]["optimization_id"] = optimization_id
-                metadata_for_call["optimizer_name"] = self.__class__.__name__
-                metadata_for_call["opik_call_type"] = "optimization_algorithm"
-
-                content = _llm_calls.call_model(
-                    messages=[
-                        {"role": "system", "content": self._REASONING_SYSTEM_PROMPT},
-                        {"role": "user", "content": user_prompt},
-                    ],
-                    model=self.model,
-                    model_parameters=self.model_parameters,
-                    metadata=metadata_for_call,
-                    optimization_id=optimization_id,
-                )
-                logger.debug(f"Raw response from reasoning model: {content}")
-
-                # --- Robust JSON Parsing and Validation ---
-                json_result = None
-                try:
-                    # Try direct JSON parsing
-                    json_result = json.loads(content)
-                except json.JSONDecodeError:
-                    import re
-
-                    json_match = re.search(r"\{.*\}", content, re.DOTALL)
-                    if json_match:
-                        try:
-                            json_result = json.loads(json_match.group())
-                        except json.JSONDecodeError as e:
-                            raise ValueError(
-                                f"Could not parse JSON extracted via regex: {e} - received: {json_match.group()}"
-                            )
-                    else:
-                        raise ValueError(
-                            f"No JSON object found in response via regex. - received: {content}"
-                        )
-
-                # Validate the parsed JSON structure
-                if isinstance(json_result, list) and len(json_result) == 1:
-                    json_result = json_result[0]
-
-                if not isinstance(json_result, dict) or "prompts" not in json_result:
-                    logger.debug(f"Parsed JSON content: {json_result}")
-                    raise ValueError(
-                        f"Parsed JSON is not a dictionary or missing 'prompts' key. - received: {json_result}"
-                    )
-
-                if not isinstance(json_result["prompts"], list):
-                    logger.debug(f"Content of 'prompts': {json_result.get('prompts')}")
-                    raise ValueError(
-                        f"'prompts' key does not contain a list. - received: {json_result.get('prompts')}"
-                    )
-
-                # Extract and log valid prompts
-                valid_prompts: list[chat_prompt.ChatPrompt] = []
-                for item in json_result["prompts"]:
-                    if (
-                        isinstance(item, dict)
-                        and "prompt" in item
-                        and isinstance(item["prompt"], list)
-                    ):
-                        # NOTE: might be brittle
-                        if current_prompt.user:
-                            user_text = current_prompt.user
-                        else:
-                            if current_prompt.messages is not None:
-                                user_text = current_prompt.messages[-1]["content"]
-                            else:
-                                raise Exception(
-                                    "User content not found in chat-prompt!"
-                                )
-
-                        valid_prompts.append(
-                            chat_prompt.ChatPrompt(
-                                system=item["prompt"][0]["content"],
-                                user=user_text,
-                                tools=current_prompt.tools,
-                                function_map=current_prompt.function_map,
-                            )
-                        )
-
-                        # Log details
-                        focus = item.get("improvement_focus", "N/A")
-                        reasoning = item.get("reasoning", "N/A")
-                        logger.debug(f"Generated prompt: {item['prompt']}")
-                        logger.debug(f"  Improvement focus: {focus}")
-                        logger.debug(f"  Reasoning: {reasoning}")
-                    else:
-                        logger.warning(
-                            f"Skipping invalid prompt item structure in JSON response: {item}"
-                        )
-
-                if not valid_prompts:
-                    raise ValueError(
-                        "No valid prompts found in the parsed JSON response after validation."
-                    )
-
-                candidate_generation_report.set_generated_prompts()
-
-                return valid_prompts
-                # --- End Robust Parsing ---
-
-            except Exception as e:
-                raise ValueError(
-                    f"Unexpected error during candidate prompt generation: {e}"
-                )
+        """Generate candidate prompts using meta-prompting (delegates to ops)."""
+        return candidate_ops.generate_candidate_prompts(
+            optimizer=self,
+            current_prompt=current_prompt,
+            best_score=best_score,
+            round_num=round_num,
+            previous_rounds=previous_rounds,
+            metric=metric,
+            build_history_context_fn=self._build_history_context,
+            get_task_context_fn=self._get_task_context,
+            optimization_id=optimization_id,
+            project_name=project_name,
+            winning_patterns=winning_patterns,
+        )
 
     def _generate_mcp_candidate_prompts(
         self,
@@ -1056,172 +862,55 @@ class MetaPromptOptimizer(BaseOptimizer):
         project_name: str | None = None,
         panel_style: str = "bright_magenta",
     ) -> list[chat_prompt.ChatPrompt]:
-        segments = {
-            segment.segment_id: segment
-            for segment in extract_prompt_segments(current_prompt)
-        }
-        if tool_segment_id not in segments:
-            raise ValueError(f"Tool segment '{tool_segment_id}' not found in prompt")
+        """Generate MCP tool description candidate prompts (delegates to ops)."""
+        return candidate_ops.generate_mcp_candidate_prompts(
+            optimizer=self,
+            current_prompt=current_prompt,
+            best_score=best_score,
+            round_num=round_num,
+            previous_rounds=previous_rounds,
+            metric=metric,
+            tool_segment_id=tool_segment_id,
+            tool_name=tool_name,
+            build_history_context_fn=self._build_history_context,
+            optimization_id=optimization_id,
+            project_name=project_name,
+            panel_style=panel_style,
+        )
 
-        target_segment = segments[tool_segment_id]
-        current_description = target_segment.content
-        tool_metadata = target_segment.metadata.get("raw_tool", {})
-
-        history_context = self._build_history_context(previous_rounds)
-
-        instruction = textwrap.dedent(
-            f"""
-            Current tool name: {tool_name}
-            Current tool description:
-            ---
-            {current_description}
-            ---
-
-            Tool metadata (JSON):
-            {json.dumps(tool_metadata, indent=2)}
-
-            Current best score: {best_score:.4f}
-            {history_context}
-
-            Generate {self.prompts_per_round} improved descriptions for this tool.
-            Each description should clarify expected input arguments and set explicit expectations
-            for how the tool output must be used in the final response.
-            Avoid changing unrelated parts of the prompt. Focus only on the description text for `{tool_name}`.
-
-            Return a JSON object of the form:
-            {{
-              "prompts": [
-                {{
-                  "tool_description": "...",
-                  "improvement_focus": "...",
-                  "reasoning": "..."
-                }}
-              ]
-            }}
-            """
-        ).strip()
-
-        with reporting.display_candidate_generation_report(
-            self.prompts_per_round, verbose=self.verbose
-        ) as candidate_generation_report:
-            try:
-                # Prepare metadata for optimization algorithm call
-                metadata_for_call_tools: dict[str, Any] = {}
-                if project_name:
-                    metadata_for_call_tools["project_name"] = project_name
-                    metadata_for_call_tools["opik"] = {"project_name": project_name}
-                if optimization_id and "opik" in metadata_for_call_tools:
-                    metadata_for_call_tools["opik"]["optimization_id"] = optimization_id
-                metadata_for_call_tools["optimizer_name"] = self.__class__.__name__
-                metadata_for_call_tools["opik_call_type"] = "optimization_algorithm"
-
-                content = _llm_calls.call_model(
-                    messages=[
-                        {"role": "system", "content": self._REASONING_SYSTEM_PROMPT},
-                        {"role": "user", "content": instruction},
-                    ],
-                    model=self.model,
-                    model_parameters=self.model_parameters,
-                    metadata=metadata_for_call_tools,
-                    optimization_id=optimization_id,
-                )
-
-                try:
-                    json_result = json.loads(content)
-                except json.JSONDecodeError:
-                    import re
-
-                    json_match = re.search(r"\{.*\}", content, re.DOTALL)
-                    if not json_match:
-                        raise ValueError("No JSON object found in reasoning output")
-                    json_result = json.loads(json_match.group())
-
-                prompts_payload = json_result.get("prompts")
-                if not isinstance(prompts_payload, list):
-                    raise ValueError("Reasoning output missing 'prompts' list")
-
-                candidate_generation_report.set_generated_prompts()
-
-                candidates: list[chat_prompt.ChatPrompt] = []
-                for item in prompts_payload:
-                    if not isinstance(item, dict):
-                        continue
-                    description = item.get("tool_description")
-                    if not isinstance(description, str) or not description.strip():
-                        continue
-
-                    updated_prompt = apply_segment_updates(
-                        current_prompt,
-                        {tool_segment_id: description.strip()},
-                    )
-                    _sync_tool_description_in_system(updated_prompt)
-                    if (
-                        description.strip()
-                        and description.strip() != current_description.strip()
-                    ):
-                        reporting.display_tool_description(
-                            description.strip(),
-                            f"Round {round_num + 1} tool description",
-                            panel_style,
-                        )
-                    candidates.append(updated_prompt)
-
-                if not candidates:
-                    raise ValueError(
-                        "Reasoning output did not produce valid tool descriptions"
-                    )
-
-                return candidates
-            except Exception as exc:
-                raise ValueError(f"Error generating MCP prompt candidates: {exc}")
+    def _generate_synthesis_prompts(
+        self,
+        current_prompt: chat_prompt.ChatPrompt,
+        best_score: float,
+        round_num: int,
+        previous_rounds: list[OptimizationRound],
+        metric: Callable,
+        optimization_id: str | None = None,
+        project_name: str | None = None,
+    ) -> list[chat_prompt.ChatPrompt]:
+        """Generate synthesis prompts that combine top performers."""
+        return candidate_ops.generate_synthesis_prompts(
+            optimizer=self,
+            current_prompt=current_prompt,
+            best_score=best_score,
+            previous_rounds=previous_rounds,
+            metric=metric,
+            get_task_context_fn=self._get_task_context,
+            optimization_id=optimization_id,
+            project_name=project_name,
+        )
 
     def _build_history_context(self, previous_rounds: list[OptimizationRound]) -> str:
-        """Build context from previous optimization rounds."""
-        if not previous_rounds:
-            return ""
+        """Build context from Hall of Fame and previous optimization rounds."""
+        top_prompts_to_show = max(
+            self.prompts_per_round, self.synthesis_prompts_per_round
+        )
+        return context_ops.build_history_context(
+            previous_rounds,
+            hall_of_fame=self.hall_of_fame if hasattr(self, "hall_of_fame") else None,
+            pretty_mode=self.prettymode_prompt_history,
+            top_prompts_per_round=top_prompts_to_show,
+        )
 
-        context = "\nPrevious rounds (latest first):\n"
-        for round_data in reversed(previous_rounds[-3:]):
-            context += f"\nRound {round_data.round_number}:\n"
-            context += f"Best score this round: {round_data.best_score:.4f}\n"
-            context += "Generated prompts this round (best first):\n"
 
-            sorted_generated = sorted(
-                round_data.generated_prompts,
-                key=lambda p: p.get("score", -float("inf")),
-                reverse=True,
-            )
-
-            for p in sorted_generated[:3]:
-                prompt_text = p.get("prompt", "N/A")
-                score = p.get("score", float("nan"))
-                context += f"- Prompt: {prompt_text[:150]}...\n"
-                context += f"  Avg Score: {score:.4f}\n"
-        return context
-
-    def _get_evaluation_subset(
-        self, dataset: opik.Dataset, min_size: int = 20, max_size: int = 100
-    ) -> list[dict[str, Any]]:
-        """Get a random subset of the dataset for evaluation.
-
-        Returns:
-            List[Dict[str, Any]]: A list of dataset items to evaluate against
-        """
-        try:
-            # Get all items from the dataset
-            all_items = dataset.get_items()
-            if not all_items:
-                return all_items
-
-            # Calculate subset size
-            total_size = len(all_items)
-            subset_size = min(max(min_size, int(total_size * 0.2)), max_size)
-
-            # Get random subset of items
-            import random
-
-            return random.sample(all_items, subset_size)
-
-        except Exception as e:
-            logger.warning(f"Could not create evaluation subset: {e}")
-            return all_items
+__all__ = ["MetaPromptOptimizer", "_sync_tool_description_in_system"]
