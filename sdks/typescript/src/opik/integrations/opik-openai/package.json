@@ -50,7 +50,7 @@
     "lint": "eslint '**/*.{ts,tsx}'",
     "typecheck": "tsc --noEmit",
     "format": "prettier --write 'src/**/*.{ts,tsx,js,jsx,json,md}'",
-    "test": "vitest"
+    "test": "vitest run"
   },
   "files": [
     "dist/**/*",
