@@ -132,27 +132,6 @@ const ProjectStatsCardEditor = forwardRef<
     isValid: form.formState.isValid,
   }));
 
-  useEffect(() => {
-    form.reset({
-      title,
-      subtitle: subtitle || "",
-      source,
-      metric,
-      projectId: localProjectId,
-      traceFilters,
-      spanFilters,
-    });
-  }, [
-    title,
-    subtitle,
-    source,
-    metric,
-    localProjectId,
-    traceFilters,
-    spanFilters,
-    form,
-  ]);
-
   const handleTitleChange = (value: string) => {
     onChange({ title: value });
   };

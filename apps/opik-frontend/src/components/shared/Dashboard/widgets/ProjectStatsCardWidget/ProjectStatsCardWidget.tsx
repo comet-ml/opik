@@ -3,7 +3,7 @@ import { useShallow } from "zustand/react/shallow";
 
 import DashboardWidget from "@/components/shared/Dashboard/DashboardWidget/DashboardWidget";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
-import { useDashboardStore, selectPreviewWidget } from "@/store/DashboardStore";
+import { useDashboardStore } from "@/store/DashboardStore";
 import {
   ProjectDashboardConfig,
   DashboardWidgetComponentProps,
@@ -51,14 +51,16 @@ const ProjectStatsCardWidget: React.FunctionComponent<
     }),
   );
 
-  const storeWidget = useDashboardStore((state) => {
-    if (preview || !sectionId || !widgetId) return null;
-    const section = state.sections.find((s) => s.id === sectionId);
-    return section?.widgets.find((w) => w.id === widgetId);
-  });
-
-  const previewWidget = useDashboardStore(selectPreviewWidget);
-  const widget = preview ? previewWidget : storeWidget;
+  const widget = useDashboardStore(
+    useShallow((state) => {
+      if (preview) {
+        return state.previewWidget;
+      }
+      if (!sectionId || !widgetId) return null;
+      const section = state.sections.find((s) => s.id === sectionId);
+      return section?.widgets.find((w) => w.id === widgetId);
+    }),
+  );
 
   const onAddEditWidgetCallback = useDashboardStore(
     (state) => state.onAddEditWidgetCallback,

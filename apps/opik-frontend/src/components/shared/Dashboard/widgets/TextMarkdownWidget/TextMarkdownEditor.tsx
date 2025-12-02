@@ -1,4 +1,4 @@
-import React, { useEffect, forwardRef, useImperativeHandle } from "react";
+import React, { forwardRef, useImperativeHandle } from "react";
 import CodeMirror from "@uiw/react-codemirror";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -63,30 +63,21 @@ const TextMarkdownEditor = forwardRef<
     isValid: form.formState.isValid,
   }));
 
-  useEffect(() => {
-    form.reset({
-      title,
-      subtitle: subtitle || "",
-      content,
-    });
-  }, [title, subtitle, content, form]);
+  const handleTitleChange = (value: string) => {
+    onChange({ title: value });
+  };
 
-  const handleFieldChange = (
-    field: keyof TextMarkdownWidgetFormData,
-    value: string,
-  ) => {
-    if (field === "title") {
-      onChange({ title: value });
-    } else if (field === "subtitle") {
-      onChange({ subtitle: value });
-    } else if (field === "content") {
-      onChange({
-        config: {
-          ...config,
-          content: value,
-        },
-      });
-    }
+  const handleSubtitleChange = (value: string) => {
+    onChange({ subtitle: value });
+  };
+
+  const handleContentChange = (value: string) => {
+    onChange({
+      config: {
+        ...config,
+        content: value,
+      },
+    });
   };
 
   return (
@@ -109,7 +100,7 @@ const TextMarkdownEditor = forwardRef<
                     {...field}
                     onChange={(e) => {
                       field.onChange(e);
-                      handleFieldChange("title", e.target.value);
+                      handleTitleChange(e.target.value);
                     }}
                   />
                 </FormControl>
@@ -131,7 +122,7 @@ const TextMarkdownEditor = forwardRef<
                   {...field}
                   onChange={(e) => {
                     field.onChange(e);
-                    handleFieldChange("subtitle", e.target.value);
+                    handleSubtitleChange(e.target.value);
                   }}
                 />
               </FormControl>
@@ -158,7 +149,7 @@ const TextMarkdownEditor = forwardRef<
                       value={field.value}
                       onChange={(value) => {
                         field.onChange(value);
-                        handleFieldChange("content", value);
+                        handleContentChange(value);
                       }}
                       theme={codemirrorTheme}
                       basicSetup={{

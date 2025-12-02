@@ -174,27 +174,6 @@ const ProjectMetricsEditor = forwardRef<
     isValid: form.formState.isValid,
   }));
 
-  useEffect(() => {
-    form.reset({
-      title,
-      subtitle: subtitle || "",
-      metricType,
-      chartType,
-      projectId: localProjectId,
-      traceFilters,
-      threadFilters,
-    });
-  }, [
-    title,
-    subtitle,
-    metricType,
-    chartType,
-    localProjectId,
-    traceFilters,
-    threadFilters,
-    form,
-  ]);
-
   const handleTitleChange = (value: string) => {
     onChange({ title: value });
   };

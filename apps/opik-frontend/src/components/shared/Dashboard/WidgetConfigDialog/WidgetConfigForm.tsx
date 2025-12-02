@@ -30,7 +30,12 @@ const WidgetConfigForm: React.FunctionComponent<WidgetConfigFormProps> = ({
 
   return (
     <div className="size-full">
-      <EditorComponent ref={editorRef} {...widgetData} onChange={onChange} />
+      <EditorComponent
+        key={widgetData.type}
+        ref={editorRef}
+        {...widgetData}
+        onChange={onChange}
+      />
     </div>
   );
 };
