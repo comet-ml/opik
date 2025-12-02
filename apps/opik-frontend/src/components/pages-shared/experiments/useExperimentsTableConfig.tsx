@@ -29,8 +29,8 @@ import {
   calculateGroupLabel,
   checkIsGroupRowType,
 } from "@/lib/groups";
-import FeedbackScoreHeader from "@/components/shared/DataTableHeaders/FeedbackScoreHeader";
-import FeedbackScoreCell from "@/components/shared/DataTableCells/FeedbackScoreCell";
+import FeedbackScoreMetricsHeader from "@/components/shared/DataTableHeaders/FeedbackScoreMetricsHeader";
+import FeedbackScoreMetricCell from "@/components/shared/DataTableCells/FeedbackScoreMetricCell";
 import ResourceCell from "@/components/shared/DataTableCells/ResourceCell";
 import TextCell from "@/components/shared/DataTableCells/TextCell";
 import { RESOURCE_TYPE } from "@/components/shared/ResourceLink/ResourceLink";
@@ -143,9 +143,9 @@ export const useExperimentsTableConfig = <
             label: displayLabel,
             type: columnType,
             scoreType: actualType,
-            header: FeedbackScoreHeader as never,
-            cell: FeedbackScoreCell as never,
-            aggregatedCell: FeedbackScoreCell.Aggregation as never,
+            header: FeedbackScoreMetricsHeader as never,
+            cell: FeedbackScoreMetricCell as never,
+            aggregatedCell: FeedbackScoreMetricCell.Aggregation as never,
             accessorFn: (row: T) => {
               const rowWithScores = row as T & {
                 feedback_scores?: AggregatedFeedbackScore[];
@@ -155,6 +155,7 @@ export const useExperimentsTableConfig = <
               return getScoreByName(scores, label);
             },
             customMeta: {
+              feedbackKey: label,
               accessorFn: (aggregation: ExperimentsAggregations) => {
                 const aggWithScores = aggregation as ExperimentsAggregations & {
                   feedback_scores?: AggregatedFeedbackScore[];

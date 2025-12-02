@@ -21,11 +21,19 @@ import ResourceCell from "@/components/shared/DataTableCells/ResourceCell";
 import CommentsCell from "@/components/shared/DataTableCells/CommentsCell";
 import CostCell from "@/components/shared/DataTableCells/CostCell";
 import CodeCell from "@/components/shared/DataTableCells/CodeCell";
-import DurationCell from "@/components/shared/DataTableCells/DurationCell";
+import DurationMetricsCell, {
+  DURATION_PERCENTILE_STORAGE_KEY,
+} from "@/components/shared/DataTableCells/DurationMetricsCell";
+import CostMetricsCell, {
+  COST_PERCENTILE_STORAGE_KEY,
+} from "@/components/shared/DataTableCells/CostMetricsCell";
+import FeedbackScoreListCell from "@/components/shared/DataTableCells/FeedbackScoreListCell";
+import PercentileMetricsHeader from "@/components/shared/DataTableHeaders/PercentileMetricsHeader";
 import { RESOURCE_TYPE } from "@/components/shared/ResourceLink/ResourceLink";
 import Loader from "@/components/shared/Loader/Loader";
 import useAppStore from "@/store/AppStore";
-import { formatDate } from "@/lib/date";
+import { formatDate, formatDuration } from "@/lib/date";
+import { formatCost } from "@/lib/money";
 import { transformExperimentScores } from "@/lib/experimentScoreUtils";
 import {
   COLUMN_COMMENTS_ID,
@@ -65,7 +73,6 @@ import {
 } from "@/components/shared/DataTable/utils";
 import { calculateGroupLabel, isGroupFullyExpanded } from "@/lib/groups";
 import MultiResourceCell from "@/components/shared/DataTableCells/MultiResourceCell";
-import FeedbackScoreListCell from "@/components/shared/DataTableCells/FeedbackScoreListCell";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 import ExplainerDescription from "@/components/shared/ExplainerDescription/ExplainerDescription";
 import FiltersButton from "@/components/shared/FiltersButton/FiltersButton";
@@ -112,36 +119,18 @@ export const DEFAULT_COLUMNS: ColumnData<GroupedExperiment>[] = [
     type: COLUMN_TYPE.string,
   },
   {
-    id: "duration.p50",
-    label: "Duration (avg.)",
+    id: "duration",
+    label: "Duration",
     type: COLUMN_TYPE.duration,
-    accessorFn: (row) => row.duration?.p50,
-    cell: DurationCell as never,
-    aggregatedCell: DurationCell.Aggregation as never,
+    accessorFn: (row) => row.duration,
+    header: PercentileMetricsHeader as never,
+    cell: DurationMetricsCell as never,
+    aggregatedCell: DurationMetricsCell.Aggregation as never,
     customMeta: {
-      aggregationKey: "duration.p50",
-    },
-  },
-  {
-    id: "duration.p90",
-    label: "Duration (p90)",
-    type: COLUMN_TYPE.duration,
-    accessorFn: (row) => row.duration?.p90,
-    cell: DurationCell as never,
-    aggregatedCell: DurationCell.Aggregation as never,
-    customMeta: {
-      aggregationKey: "duration.p90",
-    },
-  },
-  {
-    id: "duration.p99",
-    label: "Duration (p99)",
-    type: COLUMN_TYPE.duration,
-    accessorFn: (row) => row.duration?.p99,
-    cell: DurationCell as never,
-    aggregatedCell: DurationCell.Aggregation as never,
-    customMeta: {
-      aggregationKey: "duration.p99",
+      metricsKey: "duration",
+      aggregationKey: "duration",
+      storageKey: DURATION_PERCENTILE_STORAGE_KEY,
+      dataFormatter: formatDuration,
     },
   },
   {
@@ -190,6 +179,21 @@ export const DEFAULT_COLUMNS: ColumnData<GroupedExperiment>[] = [
     },
   },
   {
+    id: "cost_metrics",
+    label: "Cost per trace",
+    type: COLUMN_TYPE.cost,
+    accessorFn: (row) => row.total_estimated_cost_metrics,
+    header: PercentileMetricsHeader as never,
+    cell: CostMetricsCell as never,
+    aggregatedCell: CostMetricsCell.Aggregation as never,
+    customMeta: {
+      metricsKey: "total_estimated_cost_metrics",
+      aggregationKey: "total_estimated_cost_metrics",
+      storageKey: COST_PERCENTILE_STORAGE_KEY,
+      dataFormatter: formatCost,
+    },
+  },
+  {
     id: COLUMN_FEEDBACK_SCORES_ID,
     label: "Feedback Scores",
     type: COLUMN_TYPE.numberDictionary,
@@ -224,7 +228,7 @@ export const DEFAULT_COLUMNS: ColumnData<GroupedExperiment>[] = [
 export const DEFAULT_SELECTED_COLUMNS: string[] = [
   COLUMN_DATASET_ID,
   "created_at",
-  "duration.p50",
+  "duration",
   COLUMN_FEEDBACK_SCORES_ID,
   COLUMN_COMMENTS_ID,
 ];
