@@ -56,6 +56,10 @@ const FeedbackScoreHoverCard: React.FC<FeedbackScoreHoverCardProps> = ({
           <div className="flex flex-col gap-1.5 pb-1 pt-1.5">
             {scores.map((tag) => {
               const hasReason = isValidReason(tag.reason);
+              const reasons = hasReason
+                ? tag.reason!.split(", ").filter((r) => r.trim())
+                : [];
+
               return (
                 <div key={tag.name} className="flex flex-col gap-1 px-2">
                   <div className="flex items-center justify-between">
@@ -68,10 +72,12 @@ const FeedbackScoreHoverCard: React.FC<FeedbackScoreHoverCardProps> = ({
                       {tag.value}
                     </div>
                   </div>
-                  {hasReason && (
-                    <div className="comet-body-xs break-words text-muted-slate">
-                      {tag.reason}
-                    </div>
+                  {reasons.length > 0 && (
+                    <ol className="comet-body-xs list-decimal break-words pl-4 text-muted-slate">
+                      {reasons.map((reason, idx) => (
+                        <li key={idx}>{reason}</li>
+                      ))}
+                    </ol>
                   )}
                 </div>
               );
