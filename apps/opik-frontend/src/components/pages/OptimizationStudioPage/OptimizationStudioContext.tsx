@@ -83,6 +83,8 @@ export const OptimizationStudioProvider: React.FC<
         activeOptimization || templateData || null,
       ),
     );
+
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeOptimization, templateData, form.reset]);
 
   const submitOptimization = useCallback(async () => {
