@@ -20,7 +20,7 @@ import { Input } from "@/components/ui/input";
 import { Description } from "@/components/ui/description";
 
 import SelectBox from "@/components/shared/SelectBox/SelectBox";
-import ExperimentWidgetFiltersSection from "@/components/shared/Dashboard/widgets/shared/ExperimentWidgetFiltersSection/ExperimentWidgetFiltersSection";
+import ExperimentWidgetDataSection from "@/components/shared/Dashboard/widgets/shared/ExperimentWidgetDataSection/ExperimentWidgetDataSection";
 
 import { cn } from "@/lib/utils";
 import { Filters } from "@/types/filters";
@@ -203,7 +203,7 @@ const ExperimentsFeedbackScoresWidgetEditor = forwardRef<
             </Description>
           </div>
 
-          <ExperimentWidgetFiltersSection
+          <ExperimentWidgetDataSection
             control={form.control}
             filtersFieldName="filters"
             groupsFieldName="groups"
