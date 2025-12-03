@@ -26,7 +26,7 @@ const FeedbackDefinitionsValueCell = (
       </p>
     );
   } else if (feedbackDefinition.type === FEEDBACK_DEFINITION_TYPE.boolean) {
-    items = `${feedbackDefinition.details.true_label} / ${feedbackDefinition.details.false_label}`;
+    items = `${feedbackDefinition.details.true_label}, ${feedbackDefinition.details.false_label}`;
   }
 
   return (

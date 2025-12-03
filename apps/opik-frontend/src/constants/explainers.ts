@@ -78,6 +78,8 @@ export enum EXPLAINER_ID {
   prompt_generation_learn_more = "prompt_generation_learn_more",
   prompt_improvement_learn_more = "prompt_improvement_learn_more",
   prompt_improvement_optimizer = "prompt_improvement_optimizer",
+  whats_an_alert = "whats_an_alert",
+  what_are_dashboards = "what_are_dashboards",
 }
 
 export const EXPLAINERS_MAP: Record<EXPLAINER_ID, Explainer> = {
@@ -548,5 +550,17 @@ export const EXPLAINERS_MAP: Record<EXPLAINER_ID, Explainer> = {
     description:
       "Looking for advanced optimization algorithms? Check out the Opik optimizer!",
     docLink: "/agent_optimization/opik_optimizer/overview",
+  },
+  [EXPLAINER_ID.whats_an_alert]: {
+    id: EXPLAINER_ID.whats_an_alert,
+    description:
+      "Monitor important events in your project and get notified when something needs your attention.",
+    docLink: "/production/alerts",
+  },
+  [EXPLAINER_ID.what_are_dashboards]: {
+    id: EXPLAINER_ID.what_are_dashboards,
+    description:
+      "Set up a new dashboard to organize, isolate, and monitor different scenarios.",
+    docLink: "/production/dashboards",
   },
 };

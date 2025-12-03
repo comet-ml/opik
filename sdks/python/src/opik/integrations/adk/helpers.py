@@ -1,3 +1,4 @@
+import logging
 import os
 from typing import (
     Any,
@@ -7,6 +8,8 @@ from typing import (
 from google.adk.models import LlmResponse
 import opik.types as opik_types
 import pydantic
+
+LOGGER = logging.getLogger(__name__)
 
 
 def convert_adk_base_model_to_dict(value: pydantic.BaseModel) -> Dict[str, Any]:
@@ -27,13 +30,19 @@ def get_adk_provider() -> opik_types.LLMProvider:
 
 
 def has_empty_text_part_content(llm_response: LlmResponse) -> bool:
-    if llm_response.content is None or len(llm_response.content.parts) == 0:
-        return True
-
-    # to filter out something like this: {"candidates":[{"content":{"parts":[{"text":""}],"role":"model"}}],...}}
-    if len(llm_response.content.parts) == 1:
-        part = llm_response.content.parts[0]
-        if part.text is not None and len(part.text) == 0:
+    try:
+        if llm_response.content is None:
             return True
 
-    return False
+        if not llm_response.content.parts:
+            return True
+
+        # to filter out something like this: {"candidates":[{"content":{"parts":[{"text":""}],"role":"model"}}],...}}
+        if len(llm_response.content.parts) == 1:
+            part = llm_response.content.parts[0]
+            if part.text is not None and len(part.text) == 0:
+                return True
+        return False
+    except Exception as e:
+        LOGGER.warning(f"Exception in has_empty_text_part_content {e}", exc_info=True)
+        return True

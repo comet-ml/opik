@@ -5,17 +5,20 @@
 import * as serializers from "../index";
 import * as OpikApi from "../../api/index";
 import * as core from "../../core";
+import { TraceFilterWrite } from "./TraceFilterWrite";
 import { LlmAsJudgeCodeWrite } from "./LlmAsJudgeCodeWrite";
 
 export const AutomationRuleEvaluatorLlmAsJudgeWrite: core.serialization.ObjectSchema<
     serializers.AutomationRuleEvaluatorLlmAsJudgeWrite.Raw,
     OpikApi.AutomationRuleEvaluatorLlmAsJudgeWrite
 > = core.serialization.object({
+    filters: core.serialization.list(TraceFilterWrite).optional(),
     code: LlmAsJudgeCodeWrite.optional(),
 });
 
 export declare namespace AutomationRuleEvaluatorLlmAsJudgeWrite {
     export interface Raw {
+        filters?: TraceFilterWrite.Raw[] | null;
         code?: LlmAsJudgeCodeWrite.Raw | null;
     }
 }

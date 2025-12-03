@@ -49,6 +49,7 @@ public class DatasetExpansionService {
                 .entityType(EntityType.TRACE)
                 .filters(null) // No filters needed
                 .truncate(false)
+                .versionHashOrTag(null) // Get draft items
                 .build();
 
         var existingItems = datasetItemService.getItems(1, 10, searchCriteria)

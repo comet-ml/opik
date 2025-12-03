@@ -7,6 +7,7 @@ import * as OpikApi from "../../api/index";
 import * as core from "../../core";
 import { OptimizationStatus } from "./OptimizationStatus";
 import { JsonListString } from "./JsonListString";
+import { OptimizationStudioConfig } from "./OptimizationStudioConfig";
 import { FeedbackScoreAverage } from "./FeedbackScoreAverage";
 
 export const Optimization: core.serialization.ObjectSchema<serializers.Optimization.Raw, OpikApi.Optimization> =
@@ -17,6 +18,7 @@ export const Optimization: core.serialization.ObjectSchema<serializers.Optimizat
         objectiveName: core.serialization.property("objective_name", core.serialization.string()),
         status: OptimizationStatus,
         metadata: JsonListString.optional(),
+        studioConfig: core.serialization.property("studio_config", OptimizationStudioConfig.optional()),
         datasetId: core.serialization.property("dataset_id", core.serialization.string().optional()),
         numTrials: core.serialization.property("num_trials", core.serialization.number().optional()),
         feedbackScores: core.serialization.property(
@@ -37,6 +39,7 @@ export declare namespace Optimization {
         objective_name: string;
         status: OptimizationStatus.Raw;
         metadata?: JsonListString.Raw | null;
+        studio_config?: OptimizationStudioConfig.Raw | null;
         dataset_id?: string | null;
         num_trials?: number | null;
         feedback_scores?: FeedbackScoreAverage.Raw[] | null;

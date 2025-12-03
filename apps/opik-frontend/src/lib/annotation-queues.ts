@@ -4,7 +4,7 @@ import isNumber from "lodash/isNumber";
 import omit from "lodash/omit";
 import { isObjectThread } from "@/lib/traces";
 import { CommentItem, CommentItems } from "@/types/comment";
-import { hasValuesByAuthor } from "@/lib/feedback-scores";
+import { findValueByAuthor, hasValuesByAuthor } from "@/lib/feedback-scores";
 
 export const generateSMEURL = (workspace: string, id: string): string => {
   const basePath = import.meta.env.VITE_BASE_URL || "/";
@@ -49,7 +49,10 @@ export const getFeedbackScoresByUser = (
     )
     .map((feedbackScore): TraceFeedbackScore | undefined => {
       if (hasValuesByAuthor(feedbackScore)) {
-        const userValue = feedbackScore.value_by_author?.[userName];
+        const userValue = findValueByAuthor(
+          feedbackScore.value_by_author,
+          userName,
+        );
         if (userValue) {
           const rawValue = userValue.value;
           return {

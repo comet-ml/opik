@@ -296,6 +296,16 @@ onlineScoring:
       claimIntervalRatio: # Empty - will use global default
       pendingMessageDuration: # Empty - will use global default
       maxRetries: # Empty - will use global default
+    - scorer: span_llm_as_judge
+      streamName: stream_scoring_span_llm_as_judge
+      codec: java
+      # Optional per stream configuration (falls back to global if not specified)
+      poolingInterval: # Empty - will use global default
+      longPollingDuration: # Empty - will use global default
+      consumerBatchSize: # Empty - will use global default
+      claimIntervalRatio: # Empty - will use global default
+      pendingMessageDuration: # Empty - will use global default
+      maxRetries: # Empty - will use global default
 
 # LLM providers client configuration
 llmProviderClient:
@@ -393,6 +403,9 @@ serviceToggles:
   # Default: false
   # Description: Whether or not to enable the trace thread Python evaluator
   traceThreadPythonEvaluatorEnabled: "false"
+  # Default: true
+  # Description: Whether or not to enable the span LLM as Judge evaluator
+  spanLlmAsJudgeEnabled: "false"
   # Default: false
   # Description: Whether or not OpikAI feature is enabled
   opikAIEnabled: "false"
@@ -405,6 +418,12 @@ serviceToggles:
   # Default: true
   # Description: Whether or not export/download functionality is enabled
   exportEnabled: "true"
+  # Default: false
+  # Description: Whether or not Dashboards feature is enabled
+  dashboardsEnabled: "false"
+  # Default: true for testing
+  # Description: Whether or not dataset versioning feature is enabled
+  datasetVersioningEnabled: "true"
 
 # Trace Thread configuration
 traceThreadConfig:

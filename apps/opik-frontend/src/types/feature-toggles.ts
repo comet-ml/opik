@@ -9,4 +9,6 @@ export enum FeatureToggleKeys {
   CSV_UPLOAD_ENABLED = "csv_upload_enabled",
   EXPORT_ENABLED = "export_enabled",
   DATASET_VERSIONING_ENABLED = "dataset_versioning_enabled",
+  SPAN_LLM_AS_JUDGE_ENABLED = "span_llm_as_judge_enabled",
+  DASHBOARDS_ENABLED = "dashboards_enabled",
 }

@@ -35,6 +35,7 @@ interface BaseLoadableSelectBoxProps {
   buttonClassName?: string;
   actionPanel?: ReactElement;
   minWidth?: number;
+  align?: "start" | "end" | "center";
   emptyState?: ReactElement;
   showTooltip?: boolean;
 }
@@ -73,6 +74,7 @@ export const LoadableSelectBox = ({
   renderTitle: parentRenderTitle,
   actionPanel,
   minWidth = 0,
+  align = "end",
   multiselect = false,
   showTooltip = false,
   emptyState,
@@ -131,7 +133,11 @@ export const LoadableSelectBox = ({
 
   const renderTitle = () => {
     if (!selectedOptions.length) {
-      return <div className="truncate text-light-slate">{placeholder}</div>;
+      return (
+        <div className="truncate font-normal text-light-slate">
+          {placeholder}
+        </div>
+      );
     }
 
     if (isFunction(parentRenderTitle)) {
@@ -229,7 +235,7 @@ export const LoadableSelectBox = ({
 
   const buttonElement = (
     <Button
-      className={cn("group justify-between", buttonClassName, {
+      className={cn("group justify-between px-3", buttonClassName, {
         "disabled:cursor-not-allowed disabled:border-input disabled:bg-muted-disabled disabled:text-muted-gray disabled:placeholder:text-muted-gray hover:disabled:shadow-none":
           disabled,
       })}
@@ -255,11 +261,11 @@ export const LoadableSelectBox = ({
         <PopoverTrigger asChild>{buttonElement}</PopoverTrigger>
       )}
       <PopoverContent
-        align="end"
+        align={align}
         style={
-          width
+          width || minWidth
             ? {
-                width: `${Math.max(width, minWidth)}px`,
+                width: `${Math.max(width || 0, minWidth)}px`,
               }
             : {}
         }
@@ -284,73 +290,88 @@ export const LoadableSelectBox = ({
           )}
           {hasFilteredOptions ? (
             <>
-              {filteredOptions.map((option) => (
-                <div
-                  key={option.value}
-                  className={cn(
-                    "group flex cursor-pointer items-center gap-2 rounded-md px-4 hover:bg-primary-foreground",
-                    option.description ? "min-h-12 py-2" : "h-10",
-                  )}
-                  onClick={() => {
-                    if (multiselect) {
-                      const newSelectedValues = isSelected(option.value)
-                        ? selectedValues.filter((v) => v !== option.value)
-                        : [...selectedValues, option.value];
-                      onChange &&
-                        (onChange as (value: string[]) => void)(
-                          newSelectedValues,
-                        );
-                    } else {
-                      onChange &&
-                        (onChange as (value: string) => void)(option.value);
-                      openChangeHandler(false);
-                    }
-                  }}
-                >
-                  {multiselect ? (
-                    <Checkbox
-                      checked={isSelected(option.value)}
-                      className="shrink-0"
-                    />
-                  ) : (
-                    <div className="min-w-4">
-                      {isSelected(option.value) && (
-                        <Check className="size-3.5 shrink-0" strokeWidth="3" />
-                      )}
-                    </div>
-                  )}
-
-                  <div className="min-w-0 flex-1">
-                    <div className="comet-body-s truncate">{option.label}</div>
-                    {option.description && (
-                      <div className="comet-body-xs truncate text-muted-foreground">
-                        {option.description}
+              {filteredOptions.map((option) => {
+                const optionContent = (
+                  <div
+                    key={option.value}
+                    className={cn(
+                      "group flex cursor-pointer items-center gap-2 rounded-md px-4 hover:bg-primary-foreground",
+                      option.description ? "min-h-12 py-2" : "h-10",
+                    )}
+                    onClick={() => {
+                      if (multiselect) {
+                        const newSelectedValues = isSelected(option.value)
+                          ? selectedValues.filter((v) => v !== option.value)
+                          : [...selectedValues, option.value];
+                        onChange &&
+                          (onChange as (value: string[]) => void)(
+                            newSelectedValues,
+                          );
+                      } else {
+                        onChange &&
+                          (onChange as (value: string) => void)(option.value);
+                        openChangeHandler(false);
+                      }
+                    }}
+                  >
+                    {multiselect ? (
+                      <Checkbox
+                        checked={isSelected(option.value)}
+                        className="shrink-0"
+                      />
+                    ) : (
+                      <div className="min-w-4">
+                        {isSelected(option.value) && (
+                          <Check
+                            className="size-3.5 shrink-0"
+                            strokeWidth="3"
+                          />
+                        )}
                       </div>
                     )}
-                  </div>
 
-                  {option.action && (
-                    <TooltipWrapper content="Open in a new tab">
-                      <Button
-                        type="button"
-                        variant="minimal"
-                        size="icon-xs"
-                        asChild
-                      >
-                        <Link
-                          to={option.action.href}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="inline-flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100"
-                          onClick={(e) => e.stopPropagation()}
+                    <div className="min-w-0 flex-1">
+                      <div className="comet-body-s truncate">
+                        {option.label}
+                      </div>
+                      {option.description && (
+                        <div className="comet-body-xs truncate text-muted-foreground">
+                          {option.description}
+                        </div>
+                      )}
+                    </div>
+
+                    {option.action && (
+                      <TooltipWrapper content="Open in a new tab">
+                        <Button
+                          type="button"
+                          variant="minimal"
+                          size="icon-xs"
+                          asChild
                         >
-                          <ExternalLink className="size-3.5 shrink-0" />
-                        </Link>
-                      </Button>
-                    </TooltipWrapper>
-                  )}
-                </div>
-              ))}
+                          <Link
+                            to={option.action.href}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <ExternalLink className="size-3.5 shrink-0" />
+                          </Link>
+                        </Button>
+                      </TooltipWrapper>
+                    )}
+                  </div>
+                );
+
+                return showTooltip ? (
+                  <TooltipWrapper key={option.value} content={option.label}>
+                    {optionContent}
+                  </TooltipWrapper>
+                ) : (
+                  optionContent
+                );
+              })}
             </>
           ) : emptyState ? (
             emptyState

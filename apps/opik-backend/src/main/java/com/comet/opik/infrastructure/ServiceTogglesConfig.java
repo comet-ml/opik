@@ -12,6 +12,8 @@ public class ServiceTogglesConfig {
     @JsonProperty
     @NotNull boolean traceThreadPythonEvaluatorEnabled;
     @JsonProperty
+    @NotNull boolean spanLlmAsJudgeEnabled;
+    @JsonProperty
     @NotNull boolean guardrailsEnabled;
     @JsonProperty
     @NotNull boolean opikAIEnabled;
@@ -23,4 +25,8 @@ public class ServiceTogglesConfig {
     @NotNull boolean csvUploadEnabled;
     @JsonProperty
     @NotNull boolean exportEnabled;
+    @JsonProperty
+    @NotNull boolean dashboardsEnabled;
+    @JsonProperty
+    @NotNull boolean datasetVersioningEnabled;
 }

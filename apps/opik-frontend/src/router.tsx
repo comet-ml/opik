@@ -39,8 +39,10 @@ import OptimizationsPage from "@/components/pages/OptimizationsPage/Optimization
 import OptimizationPage from "@/components/pages/OptimizationPage/OptimizationPage";
 import CompareOptimizationsPage from "@/components/pages/CompareOptimizationsPage/CompareOptimizationsPage";
 import CompareTrialsPage from "@/components/pages/CompareTrialsPage/CompareTrialsPage";
-import AddEditAlertPage from "@/components/pages/ConfigurationPage/AlertsTab/AddEditAlertPage/AddEditAlertPage";
-import AlertNestedRoute from "@/components/pages/ConfigurationPage/AlertsTab/AddEditAlertPage/AlertNestedRoute";
+import AddEditAlertPage from "@/components/pages/AlertsPage/AddEditAlertPage/AddEditAlertPage";
+import AlertsRouteWrapper from "@/components/pages/AlertsPage/AlertsRouteWrapper";
+import DashboardPage from "@/components/pages/DashboardPage/DashboardPage";
+import DashboardsPage from "@/components/pages/DashboardsPage/DashboardsPage";
 
 declare module "@tanstack/react-router" {
   interface StaticDataRouteOption {
@@ -151,6 +153,30 @@ const homeRouteNew = createRoute({
   component: HomePage,
   staticData: {
     title: "Home",
+  },
+});
+
+// ----------- dashboards
+const dashboardsRoute = createRoute({
+  path: "/dashboards",
+  getParentRoute: () => workspaceRoute,
+  staticData: {
+    title: "Dashboards",
+  },
+});
+
+const dashboardsPageRoute = createRoute({
+  path: "/",
+  getParentRoute: () => dashboardsRoute,
+  component: DashboardsPage,
+});
+
+const dashboardDetailRoute = createRoute({
+  path: "/$dashboardId",
+  getParentRoute: () => dashboardsRoute,
+  component: DashboardPage,
+  staticData: {
+    param: "dashboardId",
   },
 });
 
@@ -370,11 +396,11 @@ const configurationRoute = createRoute({
 
 const alertsRoute = createRoute({
   path: "/alerts",
-  getParentRoute: () => configurationRoute,
+  getParentRoute: () => workspaceRoute,
   staticData: {
     title: "Alerts",
   },
-  component: AlertNestedRoute,
+  component: AlertsRouteWrapper,
 });
 
 const alertNewRoute = createRoute({
@@ -449,6 +475,7 @@ const routeTree = rootRoute.addChildren([
     homeRoute,
     homeRouteNew,
     workspaceRoute.addChildren([
+      dashboardsRoute.addChildren([dashboardsPageRoute, dashboardDetailRoute]),
       projectsRoute.addChildren([
         projectsListRoute,
         projectRoute.addChildren([tracesRoute]),
@@ -476,9 +503,8 @@ const routeTree = rootRoute.addChildren([
         redirectDatasetsRoute,
       ]),
       playgroundRoute,
-      configurationRoute.addChildren([
-        alertsRoute.addChildren([alertNewRoute, alertEditRoute]),
-      ]),
+      configurationRoute,
+      alertsRoute.addChildren([alertNewRoute, alertEditRoute]),
       onlineEvaluationRoute,
       annotationQueuesRoute.addChildren([
         annotationQueuesListRoute,
