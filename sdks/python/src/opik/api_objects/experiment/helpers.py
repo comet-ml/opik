@@ -66,7 +66,7 @@ def handle_prompt_args(
     return prompts
 
 
-def generate_unique_experiment_name(experiment_name_prefix: str) -> str:
+def generate_unique_experiment_name(experiment_name_prefix: Optional[str]) -> str:
     if experiment_name_prefix is None:
         return id_helpers.generate_id()
 

@@ -1,12 +1,28 @@
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 from unittest import mock
 
 from opik import evaluation
 from opik import url_helpers
 from opik.api_objects import opik_client
 from opik.api_objects.dataset import dataset_item
-from opik.evaluation import metrics
 from opik.evaluation.models import models_factory
+
+
+def _extract_experiment_name_from_call_args(call_args: Any) -> Optional[str]:
+    """Extract the experiment name from mock call arguments.
+
+    Args:
+        call_args: A mock.call object containing the call arguments.
+
+    Returns:
+        The experiment name if found in kwargs or args, None otherwise.
+    """
+    if "name" in call_args.kwargs:
+        return call_args.kwargs["name"]
+    elif len(call_args.args) > 1:
+        return call_args.args[1]
+    else:
+        return None
 
 
 def test_evaluate__with_experiment_name_prefix__generates_name_with_prefix(
@@ -21,8 +37,6 @@ def test_evaluate__with_experiment_name_prefix__generates_name_with_prefix(
     mock_dataset.__internal_api__get_items_as_dataclasses__.return_value = [
         dataset_item.DatasetItem(
             id="dataset-item-id-1",
-            input={"message": "say hello"},
-            reference="hello",
         ),
     ]
 
@@ -53,20 +67,13 @@ def test_evaluate__with_experiment_name_prefix__generates_name_with_prefix(
                     dataset=mock_dataset,
                     task=say_task,
                     experiment_name_prefix="my-prefix",
-                    scoring_metrics=[metrics.Equals()],
                     task_threads=1,
                 )
 
     # Verify that create_experiment was called with a name that starts with the prefix
     mock_create_experiment.assert_called_once()
     call_args = mock_create_experiment.call_args
-    # Extract name from kwargs or args
-    if "name" in call_args.kwargs:
-        experiment_name = call_args.kwargs["name"]
-    elif len(call_args.args) > 1:
-        experiment_name = call_args.args[1]
-    else:
-        experiment_name = None
+    experiment_name = _extract_experiment_name_from_call_args(call_args)
 
     assert experiment_name is not None, "Experiment name should not be None"
     assert experiment_name == f"my-prefix-{mock_generated_id}", (
@@ -87,8 +94,6 @@ def test_evaluate__with_experiment_name_prefix_and_experiment_name__experiment_n
     mock_dataset.__internal_api__get_items_as_dataclasses__.return_value = [
         dataset_item.DatasetItem(
             id="dataset-item-id-1",
-            input={"message": "say hello"},
-            reference="hello",
         ),
     ]
 
@@ -112,7 +117,6 @@ def test_evaluate__with_experiment_name_prefix_and_experiment_name__experiment_n
                 task=say_task,
                 experiment_name="explicit-experiment-name",
                 experiment_name_prefix="my-prefix",
-                scoring_metrics=[metrics.Equals()],
                 task_threads=1,
             )
 
@@ -137,8 +141,6 @@ def test_evaluate__with_experiment_name_prefix_only__generates_unique_name(
     mock_dataset.__internal_api__get_items_as_dataclasses__.return_value = [
         dataset_item.DatasetItem(
             id="dataset-item-id-1",
-            input={"message": "say hello"},
-            reference="hello",
         ),
     ]
 
@@ -169,20 +171,13 @@ def test_evaluate__with_experiment_name_prefix_only__generates_unique_name(
                     dataset=mock_dataset,
                     task=say_task,
                     experiment_name_prefix="test-prefix",
-                    scoring_metrics=[metrics.Equals()],
                     task_threads=1,
                 )
 
     # Verify that create_experiment was called with a name that starts with the prefix
     mock_create_experiment.assert_called_once()
     call_args = mock_create_experiment.call_args
-    # Extract name from kwargs or args
-    if "name" in call_args.kwargs:
-        experiment_name = call_args.kwargs["name"]
-    elif len(call_args.args) > 1:
-        experiment_name = call_args.args[1]
-    else:
-        experiment_name = None
+    experiment_name = _extract_experiment_name_from_call_args(call_args)
 
     assert experiment_name is not None, "Experiment name should not be None"
     assert experiment_name.startswith(
@@ -204,11 +199,7 @@ def test_evaluate__without_experiment_name_prefix_or_name__generates_default_nam
     mock_dataset.name = "the-dataset-name"
     mock_dataset.id = "dataset-id"
     mock_dataset.__internal_api__get_items_as_dataclasses__.return_value = [
-        dataset_item.DatasetItem(
-            id="dataset-item-id-1",
-            input={"message": "say hello"},
-            reference="hello",
-        ),
+        dataset_item.DatasetItem(id="dataset-item-id-1"),
     ]
 
     def say_task(dataset_item: Dict[str, Any]):
@@ -232,7 +223,6 @@ def test_evaluate__without_experiment_name_prefix_or_name__generates_default_nam
             evaluation.evaluate(
                 dataset=mock_dataset,
                 task=say_task,
-                scoring_metrics=[metrics.Equals()],
                 task_threads=1,
             )
 
@@ -255,11 +245,7 @@ def test_evaluate__with_experiment_name_prefix__multiple_calls_generate_unique_n
     mock_dataset.name = "the-dataset-name"
     mock_dataset.id = "dataset-id"
     mock_dataset.__internal_api__get_items_as_dataclasses__.return_value = [
-        dataset_item.DatasetItem(
-            id="dataset-item-id-1",
-            input={"message": "say hello"},
-            reference="hello",
-        ),
+        dataset_item.DatasetItem(id="dataset-item-id-1")
     ]
 
     def say_task(dataset_item: Dict[str, Any]):
@@ -301,7 +287,6 @@ def test_evaluate__with_experiment_name_prefix__multiple_calls_generate_unique_n
                     dataset=mock_dataset,
                     task=say_task,
                     experiment_name_prefix="shared-prefix",
-                    scoring_metrics=[metrics.Equals()],
                     task_threads=1,
                 )
 
@@ -311,7 +296,6 @@ def test_evaluate__with_experiment_name_prefix__multiple_calls_generate_unique_n
                     dataset=mock_dataset,
                     task=say_task,
                     experiment_name_prefix="shared-prefix",
-                    scoring_metrics=[metrics.Equals()],
                     task_threads=1,
                 )
 
@@ -322,21 +306,11 @@ def test_evaluate__with_experiment_name_prefix__multiple_calls_generate_unique_n
 
     # Extract name from first call
     first_call_args = mock_create_experiment.call_args_list[0]
-    if "name" in first_call_args.kwargs:
-        first_call_name = first_call_args.kwargs["name"]
-    elif len(first_call_args.args) > 1:
-        first_call_name = first_call_args.args[1]
-    else:
-        first_call_name = None
+    first_call_name = _extract_experiment_name_from_call_args(first_call_args)
 
     # Extract name from the second call
     second_call_args = mock_create_experiment.call_args_list[1]
-    if "name" in second_call_args.kwargs:
-        second_call_name = second_call_args.kwargs["name"]
-    elif len(second_call_args.args) > 1:
-        second_call_name = second_call_args.args[1]
-    else:
-        second_call_name = None
+    second_call_name = _extract_experiment_name_from_call_args(second_call_args)
 
     assert first_call_name == f"shared-prefix-{mock_generated_ids[0]}", (
         f"First experiment name should be 'shared-prefix-{mock_generated_ids[0]}', "
@@ -363,11 +337,7 @@ def test_evaluate_prompt__with_experiment_name_prefix__generates_name_with_prefi
     mock_dataset.name = "the-dataset-name"
     mock_dataset.id = "dataset-id"
     mock_dataset.__internal_api__get_items_as_dataclasses__.return_value = [
-        dataset_item.DatasetItem(
-            id="dataset-item-id-1",
-            question="Hello, world!",
-            reference="Hello, world!",
-        ),
+        dataset_item.DatasetItem(id="dataset-item-id-1")
     ]
 
     mock_create_experiment = mock.Mock()
@@ -406,20 +376,13 @@ def test_evaluate_prompt__with_experiment_name_prefix__generates_name_with_prefi
                         ],
                         experiment_name_prefix="prompt-prefix",
                         model=MODEL_NAME,
-                        scoring_metrics=[metrics.Equals()],
                         task_threads=1,
                     )
 
     # Verify that create_experiment was called with a name that starts with the prefix
     mock_create_experiment.assert_called_once()
     call_args = mock_create_experiment.call_args
-    # Extract name from kwargs or args
-    if "name" in call_args.kwargs:
-        experiment_name = call_args.kwargs["name"]
-    elif len(call_args.args) > 1:
-        experiment_name = call_args.args[1]
-    else:
-        experiment_name = None
+    experiment_name = _extract_experiment_name_from_call_args(call_args)
 
     assert experiment_name is not None, "Experiment name should not be None"
     assert experiment_name == f"prompt-prefix-{mock_generated_id}", (
@@ -440,11 +403,7 @@ def test_evaluate_prompt__with_experiment_name_prefix_and_experiment_name__exper
     mock_dataset.name = "the-dataset-name"
     mock_dataset.id = "dataset-id"
     mock_dataset.__internal_api__get_items_as_dataclasses__.return_value = [
-        dataset_item.DatasetItem(
-            id="dataset-item-id-1",
-            question="Hello, world!",
-            reference="Hello, world!",
-        ),
+        dataset_item.DatasetItem(id="dataset-item-id-1")
     ]
 
     mock_create_experiment = mock.Mock()
@@ -476,7 +435,6 @@ def test_evaluate_prompt__with_experiment_name_prefix_and_experiment_name__exper
                     experiment_name="explicit-prompt-experiment-name",
                     experiment_name_prefix="prompt-prefix",
                     model=MODEL_NAME,
-                    scoring_metrics=[metrics.Equals()],
                     task_threads=1,
                 )
 
@@ -504,11 +462,7 @@ def test_evaluate_prompt__with_experiment_name_prefix_only__generates_unique_nam
     mock_dataset.name = "the-dataset-name"
     mock_dataset.id = "dataset-id"
     mock_dataset.__internal_api__get_items_as_dataclasses__.return_value = [
-        dataset_item.DatasetItem(
-            id="dataset-item-id-1",
-            question="Hello, world!",
-            reference="Hello, world!",
-        ),
+        dataset_item.DatasetItem(id="dataset-item-id-1")
     ]
 
     mock_create_experiment = mock.Mock()
@@ -547,20 +501,13 @@ def test_evaluate_prompt__with_experiment_name_prefix_only__generates_unique_nam
                         ],
                         experiment_name_prefix="test-prompt-prefix",
                         model=MODEL_NAME,
-                        scoring_metrics=[metrics.Equals()],
                         task_threads=1,
                     )
 
     # Verify that create_experiment was called with a name that starts with the prefix
     mock_create_experiment.assert_called_once()
     call_args = mock_create_experiment.call_args
-    # Extract name from kwargs or args
-    if "name" in call_args.kwargs:
-        experiment_name = call_args.kwargs["name"]
-    elif len(call_args.args) > 1:
-        experiment_name = call_args.args[1]
-    else:
-        experiment_name = None
+    experiment_name = _extract_experiment_name_from_call_args(call_args)
 
     assert experiment_name is not None, "Experiment name should not be None"
     assert experiment_name.startswith(
@@ -584,11 +531,7 @@ def test_evaluate_prompt__without_experiment_name_prefix_or_name__generates_defa
     mock_dataset.name = "the-dataset-name"
     mock_dataset.id = "dataset-id"
     mock_dataset.__internal_api__get_items_as_dataclasses__.return_value = [
-        dataset_item.DatasetItem(
-            id="dataset-item-id-1",
-            question="Hello, world!",
-            reference="Hello, world!",
-        ),
+        dataset_item.DatasetItem(id="dataset-item-id-1")
     ]
 
     mock_create_experiment = mock.Mock()
@@ -618,7 +561,6 @@ def test_evaluate_prompt__without_experiment_name_prefix_or_name__generates_defa
                         {"role": "user", "content": "LLM response: {{input}}"},
                     ],
                     model=MODEL_NAME,
-                    scoring_metrics=[metrics.Equals()],
                     task_threads=1,
                 )
 
@@ -646,11 +588,7 @@ def test_evaluate_prompt__with_experiment_name_prefix__multiple_calls_generate_u
     mock_dataset.name = "the-dataset-name"
     mock_dataset.id = "dataset-id"
     mock_dataset.__internal_api__get_items_as_dataclasses__.return_value = [
-        dataset_item.DatasetItem(
-            id="dataset-item-id-1",
-            question="Hello, world!",
-            reference="Hello, world!",
-        ),
+        dataset_item.DatasetItem(id="dataset-item-id-1")
     ]
 
     mock_create_experiment = mock.Mock()
@@ -696,7 +634,6 @@ def test_evaluate_prompt__with_experiment_name_prefix__multiple_calls_generate_u
                         ],
                         experiment_name_prefix="shared-prompt-prefix",
                         model=MODEL_NAME,
-                        scoring_metrics=[metrics.Equals()],
                         task_threads=1,
                     )
 
@@ -709,7 +646,6 @@ def test_evaluate_prompt__with_experiment_name_prefix__multiple_calls_generate_u
                         ],
                         experiment_name_prefix="shared-prompt-prefix",
                         model=MODEL_NAME,
-                        scoring_metrics=[metrics.Equals()],
                         task_threads=1,
                     )
 
@@ -720,21 +656,11 @@ def test_evaluate_prompt__with_experiment_name_prefix__multiple_calls_generate_u
 
     # Extract name from first call
     first_call_args = mock_create_experiment.call_args_list[0]
-    if "name" in first_call_args.kwargs:
-        first_call_name = first_call_args.kwargs["name"]
-    elif len(first_call_args.args) > 1:
-        first_call_name = first_call_args.args[1]
-    else:
-        first_call_name = None
+    first_call_name = _extract_experiment_name_from_call_args(first_call_args)
 
     # Extract name from the second call
     second_call_args = mock_create_experiment.call_args_list[1]
-    if "name" in second_call_args.kwargs:
-        second_call_name = second_call_args.kwargs["name"]
-    elif len(second_call_args.args) > 1:
-        second_call_name = second_call_args.args[1]
-    else:
-        second_call_name = None
+    second_call_name = _extract_experiment_name_from_call_args(second_call_args)
 
     assert first_call_name == f"shared-prompt-prefix-{mock_generated_ids[0]}", (
         f"First experiment name should be 'shared-prompt-prefix-{mock_generated_ids[0]}', "
