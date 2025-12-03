@@ -5,6 +5,7 @@ import com.comet.opik.api.DatasetVersion.DatasetVersionPage;
 import com.comet.opik.api.DatasetVersionCreate;
 import com.comet.opik.api.DatasetVersionDiff;
 import com.comet.opik.api.DatasetVersionTag;
+import com.comet.opik.api.DatasetVersionUpdate;
 import com.comet.opik.api.error.EntityAlreadyExistsException;
 import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.infrastructure.auth.RequestContext;
@@ -101,6 +102,24 @@ public interface DatasetVersionService {
      * @throws ClientErrorException if attempting to delete the 'latest' tag
      */
     void deleteTag(UUID datasetId, String tag);
+
+    /**
+     * Updates an existing dataset version's change_description and/or adds new tags.
+     * <p>
+     * This operation:
+     * <ul>
+     *   <li>Updates the change_description if provided</li>
+     *   <li>Adds new tags to the version if provided</li>
+     * </ul>
+     *
+     * @param datasetId the unique identifier of the dataset
+     * @param versionHash the hash of the version to update
+     * @param request the update request containing optional change_description and tags_to_add
+     * @return the updated dataset version
+     * @throws NotFoundException if the version with the specified hash is not found
+     * @throws ConflictException if any of the tags already exist for this dataset
+     */
+    DatasetVersion updateVersion(UUID datasetId, String versionHash, DatasetVersionUpdate request);
 
     /**
      * Resolves a version identifier (hash or tag) to a version ID.
@@ -226,7 +245,21 @@ class DatasetVersionServiceImpl implements DatasetVersionService {
             datasetVersionDAO.insertTag(datasetId, LATEST_TAG, versionId, userName, workspaceId);
             log.info("Added '{}' tag to version '{}' for dataset '{}'", LATEST_TAG, versionHash, datasetId);
 
-            // Add custom tag if provided
+            // Add custom tags from the new 'tags' field
+            if (CollectionUtils.isNotEmpty(request.tags())) {
+                for (String customTag : request.tags()) {
+                    if (StringUtils.isNotBlank(customTag)) {
+                        final String tagToInsert = customTag;
+                        EntityConstraintHandler.handle(() -> {
+                            datasetVersionDAO.insertTag(datasetId, tagToInsert, versionId, userName, workspaceId);
+                            return null;
+                        }).withError(() -> new EntityAlreadyExistsException(
+                                new ErrorMessage(List.of(ERROR_TAG_EXISTS.formatted(tagToInsert)))));
+                    }
+                }
+            }
+
+            // Add custom tag from deprecated 'tag' field (for backward compatibility)
             if (StringUtils.isNotBlank(request.tag())) {
                 EntityConstraintHandler.handle(() -> {
                     datasetVersionDAO.insertTag(datasetId, request.tag(), versionId, userName, workspaceId);
@@ -235,7 +268,7 @@ class DatasetVersionServiceImpl implements DatasetVersionService {
                         new ErrorMessage(List.of(ERROR_TAG_EXISTS.formatted(request.tag())))));
             }
 
-            return datasetVersionDAO.findById(versionId, workspaceId).orElseThrow();
+            return enrichWithIsLatest(datasetVersionDAO.findById(versionId, workspaceId).orElseThrow());
         });
     }
 
@@ -252,7 +285,10 @@ class DatasetVersionServiceImpl implements DatasetVersionService {
             var dao = handle.attach(DatasetVersionDAO.class);
 
             int offset = (page - 1) * size;
-            var versions = dao.findByDatasetId(datasetId, workspaceId, size, offset);
+            var versions = dao.findByDatasetId(datasetId, workspaceId, size, offset)
+                    .stream()
+                    .map(this::enrichWithIsLatest)
+                    .toList();
             var total = dao.countByDatasetId(datasetId, workspaceId);
 
             return new DatasetVersionPage(versions, page, size, total);
@@ -265,12 +301,20 @@ class DatasetVersionServiceImpl implements DatasetVersionService {
 
         return template.inTransaction(READ_ONLY, handle -> {
             var dao = handle.attach(DatasetVersionDAO.class);
-            return dao.findByTag(datasetId, tag, workspaceId);
+            return dao.findByTag(datasetId, tag, workspaceId).map(this::enrichWithIsLatest);
         });
     }
 
     private Optional<DatasetVersion> getLatestVersion(@NonNull UUID datasetId, @NonNull String workspaceId) {
         return getVersionByTag(datasetId, LATEST_TAG, workspaceId);
+    }
+
+    /**
+     * Enriches a DatasetVersion with the isLatest field based on whether it has the 'latest' tag.
+     */
+    private DatasetVersion enrichWithIsLatest(DatasetVersion version) {
+        boolean isLatest = version.tags() != null && version.tags().contains(LATEST_TAG);
+        return version.toBuilder().isLatest(isLatest).build();
     }
 
     @Override
@@ -324,6 +368,48 @@ class DatasetVersionServiceImpl implements DatasetVersionService {
         });
 
         log.info("Deleted tag, tag='{}', dataset='{}'", tag, datasetId);
+    }
+
+    @Override
+    public DatasetVersion updateVersion(@NonNull UUID datasetId, @NonNull String versionHash,
+            @NonNull DatasetVersionUpdate request) {
+        log.info("Updating version, hash='{}', dataset='{}'", versionHash, datasetId);
+
+        String workspaceId = requestContext.get().getWorkspaceId();
+        String userName = requestContext.get().getUserName();
+
+        return template.inTransaction(WRITE, handle -> {
+            var dao = handle.attach(DatasetVersionDAO.class);
+
+            // Find version by hash
+            var version = dao.findByHash(datasetId, versionHash, workspaceId)
+                    .orElseThrow(() -> new NotFoundException(
+                            ERROR_VERSION_HASH_NOT_FOUND.formatted(versionHash, datasetId)));
+
+            // Update change_description if provided
+            if (request.changeDescription() != null) {
+                dao.updateChangeDescription(version.id(), request.changeDescription(), userName, workspaceId);
+                log.info("Updated change_description for version '{}' of dataset '{}'", versionHash, datasetId);
+            }
+
+            // Add new tags if provided
+            if (CollectionUtils.isNotEmpty(request.tagsToAdd())) {
+                for (String tagToAdd : request.tagsToAdd()) {
+                    if (StringUtils.isNotBlank(tagToAdd)) {
+                        final String tag = tagToAdd;
+                        EntityConstraintHandler.handle(() -> {
+                            dao.insertTag(datasetId, tag, version.id(), userName, workspaceId);
+                            return null;
+                        }).withError(() -> new EntityAlreadyExistsException(
+                                new ErrorMessage(List.of(ERROR_TAG_EXISTS.formatted(tag)))));
+                        log.info("Added tag '{}' to version '{}' of dataset '{}'", tag, versionHash, datasetId);
+                    }
+                }
+            }
+
+            log.info("Updated version, hash='{}', dataset='{}'", versionHash, datasetId);
+            return enrichWithIsLatest(dao.findById(version.id(), workspaceId).orElseThrow());
+        });
     }
 
     @Override
