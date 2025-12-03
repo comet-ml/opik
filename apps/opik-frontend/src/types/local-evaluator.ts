@@ -1,0 +1,52 @@
+/**
+ * Types for local evaluator (eval_app) integration with Playground
+ */
+
+export interface LocalMetricParam {
+  name: string;
+  required: boolean;
+  type: string | null;
+  default: unknown;
+}
+
+export interface LocalMetricDescriptor {
+  name: string;
+  description: string;
+  init_params: LocalMetricParam[];
+  score_params: LocalMetricParam[];
+}
+
+export interface LocalMetricsListResponse {
+  metrics: LocalMetricDescriptor[];
+}
+
+/**
+ * A configured metric for the playground.
+ * Each metric can have its own init args and field mapping.
+ */
+export interface PlaygroundMetricConfig {
+  id: string;
+  metric_name: string;
+  init_args: Record<string, unknown>;
+  // Mapping from metric score() argument names to trace field paths
+  // e.g., { "input": "input.messages", "output": "output.output" }
+  arguments: Record<string, string>;
+}
+
+export interface LocalEvaluationRequest {
+  rules: LocalEvaluationRequestConfig[];
+}
+
+export interface LocalEvaluationRequestConfig {
+  metric_name: string;
+  init_args: Record<string, unknown>;
+  arguments: Record<string, string>;
+}
+
+export interface LocalEvaluationResponse {
+  trace_id: string;
+  rules_count: number;
+  message: string;
+}
+
+export const DEFAULT_LOCAL_EVALUATOR_URL = "http://localhost:5001";

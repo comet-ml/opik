@@ -28,217 +28,181 @@ class EvalService:
 
     def evaluate_trace(
         self,
+        trace_id: str,
         request: schemas.EvaluationRequest,
     ) -> schemas.EvaluationAcceptedResponse:
-        """
-        Evaluate a trace using specified metrics and log feedback scores.
-
-        Args:
-            request: Evaluation request containing trace_id, metrics, and field mapping.
-
-        Returns:
-            EvaluationAcceptedResponse confirming the request was processed.
-
-        Raises:
-            TraceNotFoundError: If the trace is not found.
-            UnknownMetricError: If a requested metric is not in the registry.
-            MetricInstantiationError: If a metric cannot be instantiated.
-            InvalidFieldMappingError: If field mapping is invalid.
-            EvaluationError: If evaluation fails.
-        """
+        """Evaluate a trace with the specified rules."""
         opik_client = opik.api_objects.opik_client.get_client_cached()
 
-        trace = self._fetch_trace(opik_client, request.trace_id)
-        project_name = request.project_name or trace.project_id
+        trace = self._fetch_trace(opik_client, trace_id)
 
-        scoring_metrics = self._instantiate_metrics(request.metrics)
-        metric_inputs = self._extract_metric_inputs(trace, request.field_mapping)
-
-        self._run_evaluation_and_log_scores(
+        self._run_rules_and_log_scores(
             opik_client=opik_client,
-            trace_id=request.trace_id,
-            project_name=project_name,
-            scoring_metrics=scoring_metrics,
-            metric_inputs=metric_inputs,
+            trace_id=trace_id,
+            trace=trace,
+            rules=request.rules,
         )
 
         return schemas.EvaluationAcceptedResponse(
-            trace_id=request.trace_id,
-            metrics_count=len(scoring_metrics),
+            trace_id=trace_id,
+            rules_count=len(request.rules),
         )
 
     def _fetch_trace(
         self, opik_client: opik.Opik, trace_id: str
     ) -> trace_public.TracePublic:
-        """Fetch trace data from Opik."""
+        """Fetch trace data from the backend."""
         try:
-            return opik_client.get_trace_content(trace_id)
+            trace = opik_client._rest_client.traces.get_trace_by_id(id=trace_id)
+            return trace
         except Exception as e:
-            LOGGER.error("Failed to fetch trace %s: %s", trace_id, str(e))
-            raise exceptions.TraceNotFoundError(trace_id)
+            LOGGER.error("Failed to fetch trace %s: %s", trace_id, e)
+            raise exceptions.TraceNotFoundError(trace_id) from e
 
-    def _instantiate_metrics(
-        self, metric_configs: List[schemas.MetricConfig]
-    ) -> List[base_metric.BaseMetric]:
-        """Instantiate metrics from configurations."""
-        scoring_metrics: List[base_metric.BaseMetric] = []
+    def _instantiate_metric(
+        self, rule: schemas.LocalEvaluationRuleConfig
+    ) -> base_metric.BaseMetric:
+        """Instantiate a metric from a rule configuration."""
+        metric_class = self._registry.get_metric_class(rule.metric_name)
+        if metric_class is None:
+            raise exceptions.UnknownMetricError(rule.metric_name)
 
-        for config in metric_configs:
-            metric_class = self._registry.get_metric_class(config.name)
-            if metric_class is None:
-                raise exceptions.UnknownMetricError(config.name)
-
-            try:
-                init_args = {"track": False, **config.init_args}
-                metric_instance = metric_class(**init_args)
-                scoring_metrics.append(metric_instance)
-                LOGGER.debug("Instantiated metric: %s", config.name)
-            except Exception as e:
-                LOGGER.error(
-                    "Failed to instantiate metric %s: %s",
-                    config.name,
-                    str(e),
-                    exc_info=True,
-                )
-                raise exceptions.MetricInstantiationError(config.name, str(e))
-
-        return scoring_metrics
+        try:
+            return metric_class(**rule.init_args)
+        except Exception as e:
+            raise exceptions.MetricInstantiationError(rule.metric_name, str(e)) from e
 
     def _extract_metric_inputs(
         self,
         trace: trace_public.TracePublic,
-        field_mapping: schemas.TraceFieldMapping,
+        arguments: Dict[str, str],
     ) -> Dict[str, Any]:
-        """Extract metric inputs from trace based on field mapping."""
+        """Extract metric inputs from trace using argument mapping."""
         metric_inputs: Dict[str, Any] = {}
 
-        for metric_arg, trace_field_path in field_mapping.mapping.items():
-            value = self._get_trace_field_value(trace, trace_field_path)
-            metric_inputs[metric_arg] = value
+        for arg_name, field_path in arguments.items():
+            try:
+                value = self._get_trace_field_value(trace, field_path)
+                metric_inputs[arg_name] = value
+            except Exception as e:
+                raise exceptions.InvalidFieldMappingError(field_path, str(e)) from e
 
         return metric_inputs
 
     def _get_trace_field_value(
         self, trace: trace_public.TracePublic, field_path: str
     ) -> Any:
-        """Get a value from trace using dot notation path."""
+        """Get a value from a trace using dot notation path.
+
+        Special handling:
+        - 'dataset_item_data.*' is mapped to 'metadata.dataset_item_data.*'
+          since the frontend uses this shorthand
+        """
+        # Handle special dataset_item_data prefix
+        if field_path.startswith("dataset_item_data."):
+            field_path = "metadata." + field_path
+
         parts = field_path.split(".")
-        root_field = parts[0]
+        current = trace
 
-        trace_field_map = {
-            "input": trace.input,
-            "output": trace.output,
-            "metadata": trace.metadata,
-            "name": trace.name,
-            "tags": trace.tags,
-        }
-
-        if root_field not in trace_field_map:
-            raise exceptions.InvalidFieldMappingError(
-                field_path,
-                f"Unknown trace field '{root_field}'. "
-                f"Supported fields: {list(trace_field_map.keys())}",
-            )
-
-        value = trace_field_map[root_field]
-
-        for part in parts[1:]:
-            if value is None:
-                return None
-            if isinstance(value, dict):
-                value = value.get(part)
+        for part in parts:
+            if hasattr(current, part):
+                current = getattr(current, part)
+            elif isinstance(current, dict) and part in current:
+                current = current[part]
             else:
-                raise exceptions.InvalidFieldMappingError(
-                    field_path,
-                    f"Cannot access '{part}' on non-dict value",
-                )
+                # Return None for missing fields instead of raising error
+                return None
 
-        return value
+        # Convert to appropriate Python type
+        if current is None:
+            return None
+        if isinstance(current, (str, int, float, bool, list, dict)):
+            return current
+        # Convert Pydantic models or other objects to dict
+        if hasattr(current, "model_dump"):
+            return current.model_dump()
+        if hasattr(current, "dict"):
+            return current.dict()
+        return str(current)
 
-    def _run_evaluation_and_log_scores(
+    def _run_rules_and_log_scores(
         self,
         opik_client: opik.Opik,
         trace_id: str,
-        project_name: Optional[str],
-        scoring_metrics: List[base_metric.BaseMetric],
-        metric_inputs: Dict[str, Any],
+        trace: trace_public.TracePublic,
+        rules: List[schemas.LocalEvaluationRuleConfig],
     ) -> None:
-        """Run evaluation and log feedback scores to the trace."""
-        try:
-            LOGGER.info(
-                "Running evaluation on trace %s with %d metrics",
-                trace_id,
-                len(scoring_metrics),
-            )
+        """Run all rules and log feedback scores to the trace."""
+        feedback_scores: List[FeedbackScoreDict] = []
 
-            feedback_scores: List[FeedbackScoreDict] = []
+        for rule in rules:
+            try:
+                # Instantiate metric
+                metric = self._instantiate_metric(rule)
+                metric_name = metric.__class__.__name__
 
-            for metric in scoring_metrics:
-                try:
-                    result = metric.score(**metric_inputs)
+                # Extract inputs from trace using the rule's argument mapping
+                metric_inputs = self._extract_metric_inputs(trace, rule.arguments)
 
-                    # Handle both single result and list of results
-                    if isinstance(result, list):
-                        for score_result in result:
-                            feedback_scores.append(
-                                FeedbackScoreDict(
-                                    id=trace_id,
-                                    name=score_result.name,
-                                    value=score_result.value,
-                                    reason=getattr(score_result, "reason", None),
-                                )
-                            )
-                            LOGGER.debug(
-                                "Metric %s scored: %s",
-                                score_result.name,
-                                score_result.value,
-                            )
-                    else:
-                        feedback_scores.append(
-                            FeedbackScoreDict(
-                                id=trace_id,
-                                name=result.name,
-                                value=result.value,
-                                reason=getattr(result, "reason", None),
-                            )
-                        )
-                        LOGGER.debug("Metric %s scored: %s", result.name, result.value)
-                except Exception as e:
-                    LOGGER.warning(
-                        "Metric %s failed to score: %s",
-                        metric.name,
-                        str(e),
+                # Run the metric
+                result = metric.score(**metric_inputs)
+
+                # Handle both single result and list of results
+                if isinstance(result, list):
+                    results = result
+                else:
+                    results = [result]
+
+                for score_result in results:
+                    feedback_score: FeedbackScoreDict = {
+                        "name": score_result.name,
+                        "value": score_result.value,
+                        "reason": score_result.reason,
+                    }
+                    feedback_scores.append(feedback_score)
+                    LOGGER.info(
+                        "Rule %s (metric %s) scored: %s = %s",
+                        rule.metric_name,
+                        metric_name,
+                        score_result.name,
+                        score_result.value,
                     )
-
-            if feedback_scores:
-                opik_client.log_traces_feedback_scores(
-                    scores=feedback_scores,
-                    project_name=project_name,
+            except Exception as e:
+                LOGGER.error(
+                    "Rule with metric %s failed: %s", rule.metric_name, e
                 )
-                opik_client.flush()
+                # Continue with other rules even if one fails
+                continue
+
+        if feedback_scores:
+            try:
+                # Each score needs the trace_id as the 'id' key
+                scores_with_trace_id: List[FeedbackScoreDict] = [
+                    {
+                        "id": trace_id,
+                        "name": score["name"],
+                        "value": score["value"],
+                        "reason": score.get("reason"),
+                    }
+                    for score in feedback_scores
+                ]
+                opik_client.log_traces_feedback_scores(scores_with_trace_id)
                 LOGGER.info(
                     "Logged %d feedback scores for trace %s",
                     len(feedback_scores),
                     trace_id,
                 )
-
-        except Exception as e:
-            LOGGER.error("Evaluation failed: %s", str(e), exc_info=True)
-            raise exceptions.EvaluationError(str(e))
+            except Exception as e:
+                LOGGER.error(
+                    "Failed to log feedback scores for trace %s: %s", trace_id, e
+                )
 
 
 def create_service(
     registry: Optional[MetricsRegistry] = None,
 ) -> EvalService:
-    """
-    Create an EvalService instance.
-
-    Args:
-        registry: Optional metrics registry. If not provided, uses the default registry.
-
-    Returns:
-        Configured EvalService instance.
-    """
+    """Create an EvalService instance."""
     if registry is None:
         registry = get_default_registry()
-    return EvalService(registry=registry)
+    return EvalService(registry)

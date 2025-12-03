@@ -42,8 +42,8 @@ def cli(ctx: click.Context, api_key: Optional[str]) -> None:
 # Register all commands
 cli.add_command(configure)
 cli.add_command(eval_app)
-cli.add_command(export)
-cli.add_command(healthcheck)
-cli.add_command(import_data)
 cli.add_command(proxy)
+cli.add_command(healthcheck)
+cli.add_command(export)
+cli.add_command(import_data)
 cli.add_command(usage_report)

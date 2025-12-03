@@ -1,17 +1,20 @@
-"""Registry for supported metrics."""
+"""Registry for available metrics."""
 
 import logging
-from typing import Dict, List, Optional, Type
+from typing import Any, Dict, List, Optional, Type
 
+from opik.evaluation import metrics
 from opik.evaluation.metrics import base_metric
 
 from .descriptor import MetricDescriptor, MetricInfo
 
 LOGGER = logging.getLogger(__name__)
 
+_default_registry: Optional["MetricsRegistry"] = None
+
 
 class MetricsRegistry:
-    """Registry of supported metrics."""
+    """Registry of available metrics."""
 
     def __init__(self) -> None:
         self._metrics: Dict[str, MetricDescriptor] = {}
@@ -20,11 +23,22 @@ class MetricsRegistry:
         self,
         metric_class: Type[base_metric.BaseMetric],
         description: Optional[str] = None,
+        init_defaults: Optional[Dict[str, Any]] = None,
+        score_defaults: Optional[Dict[str, Any]] = None,
     ) -> None:
-        """Register a metric."""
+        """Register a metric class.
+
+        Args:
+            metric_class: The metric class to register.
+            description: Optional custom description (uses class docstring if not provided).
+            init_defaults: Optional custom default values for __init__ parameters.
+            score_defaults: Optional custom default values for score() parameters.
+        """
         descriptor = MetricDescriptor(
             metric_class=metric_class,
             description=description,
+            init_defaults=init_defaults,
+            score_defaults=score_defaults,
         )
         self._metrics[metric_class.__name__] = descriptor
         LOGGER.debug("Registered metric: %s", metric_class.__name__)
@@ -37,16 +51,16 @@ class MetricsRegistry:
         """List all registered metrics."""
         return [descriptor.to_metric_info() for descriptor in self._metrics.values()]
 
-    def get_metric_class(self, name: str) -> Optional[Type[base_metric.BaseMetric]]:
+    def get_metric_class(
+        self, name: str
+    ) -> Optional[Type[base_metric.BaseMetric]]:
         """Get a metric class by name."""
         descriptor = self._metrics.get(name)
         return descriptor.metric_class if descriptor else None
 
 
 def create_default_registry() -> MetricsRegistry:
-    """Create the default metrics registry with supported metrics."""
-    from opik.evaluation import metrics
-
+    """Create a registry with default metrics."""
     registry = MetricsRegistry()
 
     # Heuristic metrics
@@ -58,22 +72,19 @@ def create_default_registry() -> MetricsRegistry:
 
     # LLM Judge metrics
     registry.register(metrics.AnswerRelevance)
-    registry.register(metrics.Hallucination)
-    registry.register(metrics.Moderation)
     registry.register(metrics.ContextPrecision)
     registry.register(metrics.ContextRecall)
-    registry.register(metrics.Usefulness)
+    registry.register(metrics.Hallucination)
+    registry.register(metrics.Moderation)
+    registry.register(metrics.GEval)
 
-    LOGGER.debug("Created default registry with %d metrics", len(registry._metrics))
     return registry
 
 
-_default_registry: Optional[MetricsRegistry] = None
-
-
 def get_default_registry() -> MetricsRegistry:
-    """Get the default metrics registry, creating it if necessary."""
+    """Get the default metrics registry singleton."""
     global _default_registry
     if _default_registry is None:
         _default_registry = create_default_registry()
     return _default_registry
+

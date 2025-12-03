@@ -1,14 +1,13 @@
-"""Metrics namespace for the eval app."""
+"""Metrics module for the eval app."""
 
-from .descriptor import MetricDescriptor, MetricInfo
-from .param_extractor import ParamInfo
 from .registry import MetricsRegistry, create_default_registry, get_default_registry
+from .descriptor import MetricDescriptor, MetricInfo
 
 __all__ = [
+    "MetricsRegistry",
     "MetricDescriptor",
     "MetricInfo",
-    "MetricsRegistry",
-    "ParamInfo",
     "create_default_registry",
     "get_default_registry",
 ]
+

@@ -4,6 +4,10 @@ import pick from "lodash/pick";
 
 import { LogExperiment, PlaygroundPromptType } from "@/types/playground";
 import { Filters } from "@/types/filters";
+import {
+  PlaygroundMetricConfig,
+  DEFAULT_LOCAL_EVALUATOR_URL,
+} from "@/types/local-evaluator";
 import isUndefined from "lodash/isUndefined";
 import get from "lodash/get";
 import lodashSet from "lodash/set";
@@ -99,6 +103,11 @@ export type PlaygroundStore = {
   datasetSize: number;
   progressTotal: number;
   progressCompleted: number;
+  // Local evaluator state
+  localEvaluatorEnabled: boolean;
+  localEvaluatorUrl: string;
+  playgroundMetrics: PlaygroundMetricConfig[];
+  selectedPlaygroundMetricIds: string[] | null;
 
   setPromptMap: (
     promptIds: string[],
@@ -133,6 +142,13 @@ export type PlaygroundStore = {
   resetDatasetFilters: () => void;
   setProgress: (completed: number, total: number) => void;
   resetProgress: () => void;
+  // Local evaluator actions
+  setLocalEvaluatorEnabled: (enabled: boolean) => void;
+  setLocalEvaluatorUrl: (url: string) => void;
+  addPlaygroundMetric: (metric: PlaygroundMetricConfig) => void;
+  updatePlaygroundMetric: (metricId: string, updates: Partial<PlaygroundMetricConfig>) => void;
+  deletePlaygroundMetric: (metricId: string) => void;
+  setSelectedPlaygroundMetricIds: (metricIds: string[] | null) => void;
 };
 
 const usePlaygroundStore = create<PlaygroundStore>()(
@@ -151,6 +167,11 @@ const usePlaygroundStore = create<PlaygroundStore>()(
       datasetSize: 100,
       progressTotal: 0,
       progressCompleted: 0,
+      // Local evaluator initial state
+      localEvaluatorEnabled: false,
+      localEvaluatorUrl: DEFAULT_LOCAL_EVALUATOR_URL,
+      playgroundMetrics: [],
+      selectedPlaygroundMetricIds: null,
 
       updatePrompt: (promptId, changes) => {
         set((state) => {
@@ -365,6 +386,65 @@ const usePlaygroundStore = create<PlaygroundStore>()(
           };
         });
       },
+      setLocalEvaluatorEnabled: (enabled) => {
+        set((state) => {
+          return {
+            ...state,
+            localEvaluatorEnabled: enabled,
+          };
+        });
+      },
+      setLocalEvaluatorUrl: (url) => {
+        set((state) => {
+          return {
+            ...state,
+            localEvaluatorUrl: url,
+          };
+        });
+      },
+      addPlaygroundMetric: (metric) => {
+        set((state) => {
+          return {
+            ...state,
+            playgroundMetrics: [...state.playgroundMetrics, metric],
+          };
+        });
+      },
+      updatePlaygroundMetric: (metricId, updates) => {
+        set((state) => {
+          return {
+            ...state,
+            playgroundMetrics: state.playgroundMetrics.map((metric) =>
+              metric.id === metricId ? { ...metric, ...updates } : metric,
+            ),
+          };
+        });
+      },
+      deletePlaygroundMetric: (metricId) => {
+        set((state) => {
+          const newSelectedIds = state.selectedPlaygroundMetricIds?.filter(
+            (id) => id !== metricId,
+          );
+          return {
+            ...state,
+            playgroundMetrics: state.playgroundMetrics.filter(
+              (metric) => metric.id !== metricId,
+            ),
+            selectedPlaygroundMetricIds:
+              newSelectedIds && newSelectedIds.length > 0
+                ? newSelectedIds
+                : null,
+          };
+        });
+      },
+      setSelectedPlaygroundMetricIds: (metricIds) => {
+        set((state) => {
+          return {
+            ...state,
+            selectedPlaygroundMetricIds: metricIds,
+          };
+        });
+      },
     }),
     {
       name: "PLAYGROUND_STATE",
@@ -526,5 +606,36 @@ export const useSetProgress = () =>
 
 export const useResetProgress = () =>
   usePlaygroundStore((state) => state.resetProgress);
+
+// Local evaluator hooks
+export const useLocalEvaluatorEnabled = () =>
+  usePlaygroundStore((state) => state.localEvaluatorEnabled);
+
+export const useSetLocalEvaluatorEnabled = () =>
+  usePlaygroundStore((state) => state.setLocalEvaluatorEnabled);
+
+export const useLocalEvaluatorUrl = () =>
+  usePlaygroundStore((state) => state.localEvaluatorUrl);
+
+export const useSetLocalEvaluatorUrl = () =>
+  usePlaygroundStore((state) => state.setLocalEvaluatorUrl);
+
+export const usePlaygroundMetrics = () =>
+  usePlaygroundStore((state) => state.playgroundMetrics);
+
+export const useAddPlaygroundMetric = () =>
+  usePlaygroundStore((state) => state.addPlaygroundMetric);
+
+export const useUpdatePlaygroundMetric = () =>
+  usePlaygroundStore((state) => state.updatePlaygroundMetric);
+
+export const useDeletePlaygroundMetric = () =>
+  usePlaygroundStore((state) => state.deletePlaygroundMetric);
+
+export const useSelectedPlaygroundMetricIds = () =>
+  usePlaygroundStore((state) => state.selectedPlaygroundMetricIds);
+
+export const useSetSelectedPlaygroundMetricIds = () =>
+  usePlaygroundStore((state) => state.setSelectedPlaygroundMetricIds);
 
 export default usePlaygroundStore;

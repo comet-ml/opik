@@ -4,20 +4,20 @@ This module is only imported when running the eval-app CLI command.
 It requires optional dependencies: fastapi, uvicorn.
 """
 
-import fastapi
-from fastapi import middleware
 
-
-def create_app() -> fastapi.FastAPI:
+def create_app():
     """Create and configure the FastAPI application."""
+    import fastapi
+    from starlette.middleware.cors import CORSMiddleware
+
     app = fastapi.FastAPI(
         title="Opik Eval App",
-        description="API for running Opik metric evaluations",
+        description="API for running Opik metric evaluations on playground traces",
         version="1.0.0",
     )
 
     app.add_middleware(
-        middleware.cors.CORSMiddleware,
+        CORSMiddleware,
         allow_origins=["*"],
         allow_credentials=True,
         allow_methods=["*"],
@@ -31,3 +31,4 @@ def create_app() -> fastapi.FastAPI:
     routes.register_exception_handlers(app)
 
     return app
+

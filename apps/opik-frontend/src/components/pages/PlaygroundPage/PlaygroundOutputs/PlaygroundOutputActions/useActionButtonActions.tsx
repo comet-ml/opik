@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useRef } from "react";
 import asyncLib from "async";
 import { useQueryClient } from "@tanstack/react-query";
+import axios from "axios";
 
 import { PROJECTS_KEY } from "@/api/api";
 import { DatasetItem } from "@/types/datasets";
@@ -17,6 +18,10 @@ import {
   useSetIsRunning,
   useSetProgress,
   useResetProgress,
+  useLocalEvaluatorEnabled,
+  useLocalEvaluatorUrl,
+  usePlaygroundMetrics,
+  useSelectedPlaygroundMetricIds,
 } from "@/store/PlaygroundStore";
 
 import { useToast } from "@/components/ui/use-toast";
@@ -27,6 +32,7 @@ import createLogPlaygroundProcessor, {
 import usePromptDatasetItemCombination from "@/components/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundOutputActions/usePromptDatasetItemCombination";
 import { useNavigateToExperiment } from "@/hooks/useNavigateToExperiment";
 import { useUpdateOutputTraceId } from "@/store/PlaygroundStore";
+import { LocalEvaluationRequestConfig } from "@/types/local-evaluator";
 
 const DEFAULT_MAX_CONCURRENT_REQUESTS = 5;
 
@@ -63,6 +69,12 @@ const useActionButtonActions = ({
   const promptMap = usePromptMap();
   const selectedRuleIds = useSelectedRuleIds();
   const abortControllersRef = useRef(new Map<string, AbortController>());
+
+  // Local evaluator state
+  const localEvaluatorEnabled = useLocalEvaluatorEnabled();
+  const localEvaluatorUrl = useLocalEvaluatorUrl();
+  const playgroundMetrics = usePlaygroundMetrics();
+  const selectedPlaygroundMetricIds = useSelectedPlaygroundMetricIds();
 
   // Get the minimum maxConcurrentRequests from all prompts
   const maxConcurrentRequests = useMemo(() => {
@@ -126,6 +138,17 @@ const useActionButtonActions = ({
     [setCreatedExperiments],
   );
 
+  // Get the selected metrics to evaluate
+  const selectedMetrics = useMemo(() => {
+    if (!localEvaluatorEnabled) return [];
+
+    // Filter metrics: either all selected (selectedPlaygroundMetricIds === null) or specifically selected
+    return playgroundMetrics.filter((metric) => {
+      if (selectedPlaygroundMetricIds === null) return true; // all selected
+      return selectedPlaygroundMetricIds.includes(metric.id);
+    });
+  }, [localEvaluatorEnabled, playgroundMetrics, selectedPlaygroundMetricIds]);
+
   const logProcessorHandlers: LogProcessorArgs = useMemo(() => {
     return {
       onAddExperimentRegistry: (experiments) => {
@@ -157,6 +180,34 @@ const useActionButtonActions = ({
         queryClient.invalidateQueries({
           queryKey: [PROJECTS_KEY],
         });
+
+        // Trigger local evaluator evaluation if enabled and metrics are selected
+        if (selectedMetrics.length > 0) {
+          // Convert playground metrics to API format
+          const metricConfigs: LocalEvaluationRequestConfig[] = selectedMetrics.map(
+            (metric) => ({
+              metric_name: metric.metric_name,
+              init_args: metric.init_args,
+              arguments: metric.arguments,
+            }),
+          );
+
+          traces.forEach((trace) => {
+            axios
+              .post(
+                `${localEvaluatorUrl}/api/v1/evaluation/traces/${trace.id}`,
+                { rules: metricConfigs },
+                { timeout: 30000 },
+              )
+              .catch((error) => {
+                console.error(
+                  "Local evaluator evaluation failed for trace:",
+                  trace.id,
+                  error,
+                );
+              });
+          });
+        }
       },
       onExperimentItemsComplete: () => {
         // Invalidate experiments to refresh the experiments list
@@ -171,6 +222,8 @@ const useActionButtonActions = ({
     storeExperiments,
     toast,
     updateOutputTraceId,
+    selectedMetrics,
+    localEvaluatorUrl,
   ]);
 
   const addAbortController = useCallback(

@@ -1,74 +1,76 @@
-"""Eval app command for Opik CLI."""
+"""CLI command to run the eval app server."""
 
 import click
 
 
-@click.command(name="eval-app")
+@click.command(
+    context_settings={"ignore_unknown_options": True},
+    help="""
+Start the Opik Eval App server.
+
+This server provides API endpoints to:
+- GET  /api/v1/evaluation/metrics - List available metrics
+- POST /api/v1/evaluation/traces/{trace_id} - Evaluate a trace and log feedback scores
+- GET  /healthcheck - Health check
+
+The server connects to your local Opik instance to fetch traces and log feedback scores.
+""",
+)
 @click.option(
     "--host",
-    default="localhost",
-    help="Host to bind to",
+    default="127.0.0.1",
+    help="Host to bind the server to",
     show_default=True,
 )
 @click.option(
     "--port",
-    default=8000,
-    help="Port to bind to",
+    default=5001,
+    type=int,
+    help="Port to bind the server to",
     show_default=True,
 )
-def eval_app(host: str, port: int) -> None:
-    """Start the Opik evaluation app server.
-
-    This command starts a FastAPI server that evaluates traces and logs
-    feedback scores. Endpoints:
-    - GET  /api/v1/evaluation/metrics - List available metrics
-    - POST /api/v1/evaluation/traces  - Evaluate a trace
-    - GET  /healthcheck               - Health check
-    """
+@click.option(
+    "--reload",
+    is_flag=True,
+    default=False,
+    help="Enable auto-reload on code changes",
+)
+def eval_app(host: str, port: int, reload: bool) -> None:
+    """Start the Opik Eval App server."""
     try:
-        import fastapi  # noqa
-        import uvicorn  # noqa
+        import uvicorn
     except ImportError:
-        raise click.ClickException(
-            "Eval app dependencies not found. Please install them with: pip install opik[eval-app]"
+        click.echo(
+            "Error: uvicorn is required. Install with: pip install opik[eval-app]",
+            err=True,
         )
+        raise click.Abort()
 
-    from opik.eval_app import create_app
+    try:
+        import fastapi  # noqa: F401
+    except ImportError:
+        click.echo(
+            "Error: fastapi is required. Install with: pip install opik[eval-app]",
+            err=True,
+        )
+        raise click.Abort()
 
-    app = create_app()
+    # Import and create the app
+    from opik import eval_app as eval_app_module
 
-    # Print startup message
-    click.echo()
-    click.echo(click.style("=" * 70, fg="cyan"))
-    click.echo(click.style("  Opik Eval App", fg="cyan", bold=True))
-    click.echo(click.style("=" * 70, fg="cyan"))
-    click.echo()
-    click.echo(
-        f"  Server running at: {click.style(f'http://{host}:{port}', fg='green', bold=True)}"
-    )
-    click.echo()
-    click.echo("  Available endpoints:")
-    click.echo(
-        f"    • GET  {click.style('/api/v1/evaluation/metrics', fg='yellow')} - List available metrics"
-    )
-    click.echo(
-        f"    • POST {click.style('/api/v1/evaluation/traces', fg='yellow')}  - Evaluate trace & log scores"
-    )
-    click.echo(
-        f"    • GET  {click.style('/healthcheck', fg='yellow')}               - Health check"
-    )
-    click.echo()
-    click.echo("  Example request:")
-    click.echo("    curl -X POST http://localhost:8000/api/v1/evaluation/traces \\")
-    click.echo('      -H "Content-Type: application/json" \\')
-    click.echo('      -d \'{"trace_id": "...", "metrics": [{"name": "Equals"}],')
-    click.echo(
-        '           "field_mapping": {"mapping": {"output": "output", "reference": "input"}}}\''
-    )
-    click.echo()
-    click.echo(click.style("=" * 70, fg="cyan"))
-    click.echo()
+    app = eval_app_module.create_app()
 
-    import uvicorn
+    click.echo(f"Starting Opik Eval App server at http://{host}:{port}")
+    click.echo("Available endpoints:")
+    click.echo(f"  GET  http://{host}:{port}/api/v1/evaluation/metrics")
+    click.echo(f"  POST http://{host}:{port}/api/v1/evaluation/traces/{{trace_id}}")
+    click.echo(f"  GET  http://{host}:{port}/healthcheck")
+    click.echo("")
 
-    uvicorn.run(app, host=host, port=port, log_level="info")
+    uvicorn.run(
+        app,
+        host=host,
+        port=port,
+        reload=reload,
+    )
+

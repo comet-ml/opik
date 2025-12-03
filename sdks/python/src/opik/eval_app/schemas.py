@@ -1,4 +1,4 @@
-"""Pydantic schemas for the eval app API."""
+"""Pydantic models for the eval app API."""
 
 from typing import Any, Dict, List, Optional
 
@@ -6,7 +6,7 @@ import pydantic
 
 
 class MetricParamDescriptor(pydantic.BaseModel):
-    """Descriptor for a metric parameter."""
+    """Describes a single parameter of a metric."""
 
     name: str
     required: bool
@@ -15,7 +15,7 @@ class MetricParamDescriptor(pydantic.BaseModel):
 
 
 class MetricDescriptorResponse(pydantic.BaseModel):
-    """Response schema for a metric descriptor."""
+    """Describes a metric with its parameters."""
 
     name: str
     description: str
@@ -24,59 +24,46 @@ class MetricDescriptorResponse(pydantic.BaseModel):
 
 
 class MetricsListResponse(pydantic.BaseModel):
-    """Response schema for listing all metrics."""
+    """Response containing list of available metrics."""
 
     metrics: List[MetricDescriptorResponse]
 
 
-class MetricConfig(pydantic.BaseModel):
-    """Configuration for a single metric to evaluate."""
+class MetricEvaluationConfig(pydantic.BaseModel):
+    """Configuration for a single metric evaluation."""
 
-    name: str = pydantic.Field(description="Name of the metric class")
+    metric_name: str = pydantic.Field(description="Name of the metric class")
     init_args: Dict[str, Any] = pydantic.Field(
         default_factory=dict,
         description="Arguments to pass to metric __init__",
     )
-
-
-class TraceFieldMapping(pydantic.BaseModel):
-    """Mapping from trace fields to metric score arguments.
-
-    Keys are the metric argument names (e.g., 'input', 'output', 'context').
-    Values are trace field paths (e.g., 'input', 'output', 'metadata.context').
-    """
-
-    mapping: Dict[str, str] = pydantic.Field(
+    arguments: Dict[str, str] = pydantic.Field(
         description=(
-            "Mapping from metric argument names to trace field paths. "
-            "Supported trace fields: 'input', 'output', 'metadata', 'name', 'tags'. "
+            "Mapping from metric score() argument names to trace field paths. "
+            "Supported trace fields: 'input', 'output', 'metadata'. "
             "Use dot notation for nested fields (e.g., 'metadata.context')."
         )
     )
 
 
-class EvaluationRequest(pydantic.BaseModel):
-    """Request schema for running evaluation on a trace."""
+# Keep alias for backward compatibility
+LocalEvaluationRuleConfig = MetricEvaluationConfig
 
-    trace_id: str = pydantic.Field(description="ID of the trace to evaluate")
-    metrics: List[MetricConfig] = pydantic.Field(
+
+class EvaluationRequest(pydantic.BaseModel):
+    """Request to evaluate a trace with specified metrics."""
+
+    rules: List[MetricEvaluationConfig] = pydantic.Field(
         min_length=1,
-        description="List of metric configurations",
-    )
-    field_mapping: TraceFieldMapping = pydantic.Field(
-        description="Mapping from metric arguments to trace fields"
-    )
-    project_name: Optional[str] = pydantic.Field(
-        default=None,
-        description="Project name (if not provided, will be inferred from trace)",
+        description="List of metric evaluation configurations",
     )
 
 
 class EvaluationAcceptedResponse(pydantic.BaseModel):
-    """Response schema for accepted evaluation request."""
+    """Response indicating evaluation request was accepted."""
 
     trace_id: str
-    metrics_count: int
+    rules_count: int
     message: str = (
         "Evaluation request accepted. Feedback scores will be logged to the trace."
     )

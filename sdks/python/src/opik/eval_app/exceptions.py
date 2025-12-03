@@ -1,54 +1,68 @@
 """Custom exceptions for the eval app."""
 
-from opik.exceptions import OpikException
+import opik.exceptions as opik_exceptions
 
 
-class EvalAppError(OpikException):
-    """Base exception for eval app errors."""
+class EvalAppError(opik_exceptions.OpikException):
+    """Base exception for eval app related errors."""
 
     pass
 
 
 class UnknownMetricError(EvalAppError):
-    """Raised when a requested metric is not found in the registry."""
+    """Raised when an unknown metric is requested."""
 
-    def __init__(self, metric_name: str) -> None:
+    def __init__(self, metric_name: str):
         self.metric_name = metric_name
-        super().__init__(
-            f"Unknown metric: {metric_name}. "
-            f"Use GET /api/v1/evaluation/metrics to see available metrics."
-        )
+        super().__init__(self._get_error_message())
+
+    def _get_error_message(self) -> str:
+        return f"Unknown metric: {self.metric_name}. Use GET /api/v1/evaluation/metrics to see available metrics."
 
 
 class MetricInstantiationError(EvalAppError):
-    """Raised when a metric cannot be instantiated with the given arguments."""
+    """Raised when a metric cannot be instantiated."""
 
-    def __init__(self, metric_name: str, reason: str) -> None:
+    def __init__(self, metric_name: str, error: str):
         self.metric_name = metric_name
-        self.reason = reason
-        super().__init__(f"Failed to instantiate metric {metric_name}: {reason}")
+        self.error = error
+        super().__init__(self._get_error_message())
+
+    def _get_error_message(self) -> str:
+        return f"Failed to instantiate metric '{self.metric_name}': {self.error}"
 
 
 class TraceNotFoundError(EvalAppError):
-    """Raised when the requested trace is not found."""
+    """Raised when a trace cannot be found."""
 
-    def __init__(self, trace_id: str) -> None:
+    def __init__(self, trace_id: str):
         self.trace_id = trace_id
-        super().__init__(f"Trace not found: {trace_id}")
+        super().__init__(self._get_error_message())
+
+    def _get_error_message(self) -> str:
+        return f"Trace not found: {self.trace_id}"
 
 
 class InvalidFieldMappingError(EvalAppError):
-    """Raised when field mapping references invalid trace fields."""
+    """Raised when field mapping is invalid."""
 
-    def __init__(self, field_path: str, reason: str) -> None:
-        self.field_path = field_path
-        self.reason = reason
-        super().__init__(f"Invalid field mapping '{field_path}': {reason}")
+    def __init__(self, field: str, error: str):
+        self.field = field
+        self.error = error
+        super().__init__(self._get_error_message())
+
+    def _get_error_message(self) -> str:
+        return f"Invalid field mapping for '{self.field}': {self.error}"
 
 
 class EvaluationError(EvalAppError):
     """Raised when evaluation fails."""
 
-    def __init__(self, reason: str) -> None:
-        self.reason = reason
-        super().__init__(f"Evaluation failed: {reason}")
+    def __init__(self, metric_name: str, error: str):
+        self.metric_name = metric_name
+        self.error = error
+        super().__init__(self._get_error_message())
+
+    def _get_error_message(self) -> str:
+        return f"Evaluation failed for metric '{self.metric_name}': {self.error}"
+

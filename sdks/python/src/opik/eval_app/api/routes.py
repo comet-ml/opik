@@ -14,7 +14,9 @@ from ..services import eval_service as eval_service_module
 
 LOGGER = logging.getLogger(__name__)
 
-evaluation_router = fastapi.APIRouter(prefix="/api/v1/evaluation", tags=["evaluation"])
+evaluation_router = fastapi.APIRouter(
+    prefix="/api/v1/evaluation", tags=["evaluation"]
+)
 healthcheck_router = fastapi.APIRouter(tags=["healthcheck"])
 
 _service_instance: Optional[eval_service_module.EvalService] = None
@@ -30,140 +32,120 @@ def _get_service() -> eval_service_module.EvalService:
 
 @evaluation_router.get("/metrics", response_model=schemas.MetricsListResponse)
 async def list_metrics() -> schemas.MetricsListResponse:
-    """
-    List all supported metrics with their descriptors.
-
-    Returns information about available metrics including:
-    - Metric name and description
-    - Parameters for __init__ (to configure the metric)
-    - Parameters for score() (data to provide for evaluation)
-    """
+    """List all available metrics with their parameters."""
     service = _get_service()
     metrics_list = service.list_metrics()
-
     return schemas.MetricsListResponse(
         metrics=[
             schemas.MetricDescriptorResponse(
-                name=metric.name,
-                description=metric.description,
+                name=m.name,
+                description=m.description,
                 init_params=[
-                    schemas.MetricParamDescriptor(**dataclasses.asdict(p))
-                    for p in metric.init_params
+                    schemas.MetricParamDescriptor(
+                        name=p.name,
+                        required=p.required,
+                        type=p.type,
+                        default=p.default,
+                    )
+                    for p in m.init_params
                 ],
                 score_params=[
-                    schemas.MetricParamDescriptor(**dataclasses.asdict(p))
-                    for p in metric.score_params
+                    schemas.MetricParamDescriptor(
+                        name=p.name,
+                        required=p.required,
+                        type=p.type,
+                        default=p.default,
+                    )
+                    for p in m.score_params
                 ],
             )
-            for metric in metrics_list
+            for m in metrics_list
         ]
     )
 
 
 @evaluation_router.post(
-    "/traces",
+    "/traces/{trace_id}",
     response_model=schemas.EvaluationAcceptedResponse,
     status_code=fastapi.status.HTTP_202_ACCEPTED,
 )
 async def evaluate_trace(
+    trace_id: str,
     request: schemas.EvaluationRequest,
 ) -> schemas.EvaluationAcceptedResponse:
-    """
-    Evaluate a trace using specified metrics and log feedback scores.
-
-    This endpoint:
-    1. Fetches the trace by ID
-    2. Extracts data from trace fields based on the field mapping
-    3. Runs the configured metrics on the extracted data
-    4. Logs feedback scores to the trace
-
-    Request body:
-    - trace_id: ID of the trace to evaluate
-    - metrics: List of metric configurations with name and init_args
-    - field_mapping: Mapping from metric arguments to trace fields
-    - project_name: Optional project name (inferred from trace if not provided)
-
-    Returns 202 Accepted - feedback scores are logged asynchronously to the trace.
-    """
+    """Evaluate a trace and log feedback scores."""
     service = _get_service()
-    return service.evaluate_trace(request)
+    return service.evaluate_trace(trace_id, request)
 
 
 @healthcheck_router.get("/healthcheck")
 async def healthcheck() -> responses.JSONResponse:
     """Health check endpoint."""
-    return responses.JSONResponse(content={"status": "ok"}, status_code=200)
+    return responses.JSONResponse(content={"status": "ok"})
 
 
 def register_exception_handlers(app: fastapi.FastAPI) -> None:
-    """Register exception handlers on the FastAPI app."""
-
-    @app.exception_handler(pydantic.ValidationError)
-    async def handle_validation_error(
-        request: fastapi.Request, error: pydantic.ValidationError
-    ) -> responses.JSONResponse:
-        LOGGER.warning("Validation error: %s", error.errors())
-        return responses.JSONResponse(
-            content={"error": "Invalid input", "details": error.errors()},
-            status_code=400,
-        )
+    """Register exception handlers for the app."""
 
     @app.exception_handler(exceptions.UnknownMetricError)
-    async def handle_unknown_metric_error(
-        request: fastapi.Request, error: exceptions.UnknownMetricError
+    async def unknown_metric_handler(
+        request: fastapi.Request, exc: exceptions.UnknownMetricError
     ) -> responses.JSONResponse:
-        LOGGER.warning("Unknown metric requested: %s", error.metric_name)
         return responses.JSONResponse(
-            content={"error": str(error)},
-            status_code=400,
-        )
-
-    @app.exception_handler(exceptions.MetricInstantiationError)
-    async def handle_metric_instantiation_error(
-        request: fastapi.Request, error: exceptions.MetricInstantiationError
-    ) -> responses.JSONResponse:
-        LOGGER.warning("Metric instantiation failed: %s", error.metric_name)
-        return responses.JSONResponse(
-            content={"error": str(error)},
-            status_code=400,
+            status_code=fastapi.status.HTTP_404_NOT_FOUND,
+            content={"detail": str(exc), "metric_name": exc.metric_name},
         )
 
     @app.exception_handler(exceptions.TraceNotFoundError)
-    async def handle_trace_not_found_error(
-        request: fastapi.Request, error: exceptions.TraceNotFoundError
+    async def trace_not_found_handler(
+        request: fastapi.Request, exc: exceptions.TraceNotFoundError
     ) -> responses.JSONResponse:
-        LOGGER.warning("Trace not found: %s", error.trace_id)
         return responses.JSONResponse(
-            content={"error": str(error)},
-            status_code=404,
+            status_code=fastapi.status.HTTP_404_NOT_FOUND,
+            content={"detail": str(exc), "trace_id": exc.trace_id},
+        )
+
+    @app.exception_handler(exceptions.MetricInstantiationError)
+    async def metric_instantiation_handler(
+        request: fastapi.Request, exc: exceptions.MetricInstantiationError
+    ) -> responses.JSONResponse:
+        return responses.JSONResponse(
+            status_code=fastapi.status.HTTP_400_BAD_REQUEST,
+            content={
+                "detail": str(exc),
+                "metric_name": exc.metric_name,
+                "error": exc.error,
+            },
         )
 
     @app.exception_handler(exceptions.InvalidFieldMappingError)
-    async def handle_invalid_field_mapping_error(
-        request: fastapi.Request, error: exceptions.InvalidFieldMappingError
+    async def invalid_field_mapping_handler(
+        request: fastapi.Request, exc: exceptions.InvalidFieldMappingError
     ) -> responses.JSONResponse:
-        LOGGER.warning("Invalid field mapping: %s", error.field_path)
         return responses.JSONResponse(
-            content={"error": str(error)},
-            status_code=400,
+            status_code=fastapi.status.HTTP_400_BAD_REQUEST,
+            content={"detail": str(exc), "field": exc.field, "error": exc.error},
         )
 
     @app.exception_handler(exceptions.EvaluationError)
-    async def handle_evaluation_error(
-        request: fastapi.Request, error: exceptions.EvaluationError
+    async def evaluation_error_handler(
+        request: fastapi.Request, exc: exceptions.EvaluationError
     ) -> responses.JSONResponse:
-        LOGGER.error("Evaluation failed: %s", error.reason)
         return responses.JSONResponse(
-            content={"error": str(error)},
-            status_code=500,
+            status_code=fastapi.status.HTTP_500_INTERNAL_SERVER_ERROR,
+            content={
+                "detail": str(exc),
+                "metric_name": exc.metric_name,
+                "error": exc.error,
+            },
         )
 
-    @app.exception_handler(Exception)
-    async def handle_generic_exception(
-        request: fastapi.Request, error: Exception
+    @app.exception_handler(pydantic.ValidationError)
+    async def validation_error_handler(
+        request: fastapi.Request, exc: pydantic.ValidationError
     ) -> responses.JSONResponse:
-        LOGGER.error("Unexpected error: %s", str(error), exc_info=True)
         return responses.JSONResponse(
-            content={"error": f"Internal server error: {str(error)}"},
-            status_code=500,
+            status_code=fastapi.status.HTTP_422_UNPROCESSABLE_ENTITY,
+            content={"detail": exc.errors()},
         )
+

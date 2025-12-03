@@ -14,6 +14,7 @@ import DataTablePagination from "@/components/shared/DataTablePagination/DataTab
 import MetricSelector from "./MetricSelector";
 import DatasetEmptyState from "./DatasetEmptyState";
 import PlaygroundProgressIndicator from "@/components/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundProgressIndicator";
+import PlaygroundMetricsSelector from "@/components/pages/PlaygroundPage/LocalEvaluator/PlaygroundMetricsSelector";
 
 import useDatasetsList from "@/api/datasets/useDatasetsList";
 import useProjectByName from "@/api/projects/useProjectByName";
@@ -558,6 +559,13 @@ const PlaygroundOutputActions = ({
             datasetId={datasetId}
             onCreateRuleClick={handleCreateRuleClick}
             workspaceName={workspaceName}
+          />
+        </div>
+        <div className="mt-2.5 flex">
+          <PlaygroundMetricsSelector
+            projectId={playgroundProject?.id}
+            projectName={PLAYGROUND_PROJECT_NAME}
+            datasetColumnNames={datasetColumns.map((c) => c.name)}
           />
         </div>
         {datasetId && (
