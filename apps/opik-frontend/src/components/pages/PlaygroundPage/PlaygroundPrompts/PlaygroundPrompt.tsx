@@ -506,11 +506,16 @@ const PlaygroundPrompt = ({
           // Update the loaded chat prompt ID to the saved prompt
           if (savedPromptId) {
             updatePrompt(promptId, { loadedChatPromptId: savedPromptId });
-          }
 
-          // Invalidate prompt queries to ensure the latest version is selected
-          queryClient.invalidateQueries({ queryKey: ["prompts"] });
-          queryClient.invalidateQueries({ queryKey: ["prompt-versions"] });
+            // Invalidate only the specific prompt that was saved/created
+            // This ensures the latest data is fetched without affecting other loaded prompts
+            queryClient.invalidateQueries({
+              queryKey: ["prompt", { promptId: savedPromptId }],
+            });
+            queryClient.invalidateQueries({
+              queryKey: ["prompt-versions", { promptId: savedPromptId }],
+            });
+          }
         }}
       />
     </div>
