@@ -75,13 +75,21 @@ const PlaygroundMetricsSelector: React.FC<PlaygroundMetricsSelectorProps> = ({
 
   const availableMetrics = metricsData?.metrics || [];
 
+  // Helper to get display name (custom name or metric class name)
+  const getDisplayName = useCallback(
+    (metric: PlaygroundMetricConfig) => metric.name || metric.metric_name,
+    [],
+  );
+
   const filteredMetrics = useMemo(() => {
     if (!search) return playgroundMetrics;
     const searchLower = toLower(search);
-    return playgroundMetrics.filter((m) =>
-      toLower(m.metric_name).includes(searchLower),
+    return playgroundMetrics.filter(
+      (m) =>
+        toLower(getDisplayName(m)).includes(searchLower) ||
+        toLower(m.metric_name).includes(searchLower),
     );
-  }, [playgroundMetrics, search]);
+  }, [playgroundMetrics, search, getDisplayName]);
 
   const isAllSelected =
     selectedMetricIds === null ||
@@ -147,10 +155,10 @@ const PlaygroundMetricsSelector: React.FC<PlaygroundMetricsSelectorProps> = ({
         selectedMetricIds === null
           ? playgroundMetrics[0]
           : playgroundMetrics.find((m) => m.id === selectedMetricIds[0]);
-      return selectedMetric?.metric_name || "1 metric";
+      return selectedMetric ? getDisplayName(selectedMetric) : "1 metric";
     }
     return `${selectedCount} metrics`;
-  }, [enabled, isHealthy, playgroundMetrics, selectedMetricIds]);
+  }, [enabled, isHealthy, playgroundMetrics, selectedMetricIds, getDisplayName]);
 
   const tooltipContent = useMemo(() => {
     if (!enabled)
@@ -166,9 +174,9 @@ const PlaygroundMetricsSelector: React.FC<PlaygroundMetricsSelectorProps> = ({
     }
     return playgroundMetrics
       .filter((m) => selectedMetricIds?.includes(m.id))
-      .map((m) => m.metric_name)
+      .map((m) => getDisplayName(m))
       .join(", ");
-  }, [enabled, isHealthy, playgroundMetrics, selectedMetricIds]);
+  }, [enabled, isHealthy, playgroundMetrics, selectedMetricIds, getDisplayName]);
 
   const handleSaveMetric = useCallback(
     (metric: PlaygroundMetricConfig) => {
@@ -285,8 +293,13 @@ const PlaygroundMetricsSelector: React.FC<PlaygroundMetricsSelectorProps> = ({
                     />
                     <div className="min-w-0 flex-1">
                       <div className="comet-body-s truncate">
-                        {metric.metric_name}
+                        {getDisplayName(metric)}
                       </div>
+                      {metric.name && (
+                        <div className="comet-body-xs truncate text-muted-slate">
+                          {metric.metric_name}
+                        </div>
+                      )}
                     </div>
                     <div
                       className="flex shrink-0 items-center gap-1 opacity-0 group-hover:opacity-100"
