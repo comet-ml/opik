@@ -1262,6 +1262,9 @@ def test_opik_client__update_trace__happy_flow(
         thread_id=new_thread_id,
     )
 
+    # flush to make sure the update was logged to server
+    opik_client.flush()
+
     input = new_input or input
     output = new_output or output
     tags = new_tags or tags
