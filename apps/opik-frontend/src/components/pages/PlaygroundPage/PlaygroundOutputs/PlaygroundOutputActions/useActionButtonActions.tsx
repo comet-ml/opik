@@ -187,6 +187,7 @@ const useActionButtonActions = ({
           const metricConfigs: LocalEvaluationRequestConfig[] = selectedMetrics.map(
             (metric) => ({
               metric_name: metric.metric_name,
+              name: metric.name,
               init_args: metric.init_args,
               arguments: metric.arguments,
             }),

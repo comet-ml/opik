@@ -34,6 +34,10 @@ class MetricEvaluationConfig(pydantic.BaseModel):
     """Configuration for a single metric evaluation."""
 
     metric_name: str = pydantic.Field(description="Name of the metric class")
+    name: Optional[str] = pydantic.Field(
+        default=None,
+        description="Custom name for the feedback score. Defaults to metric class name.",
+    )
     init_args: Dict[str, Any] = pydantic.Field(
         default_factory=dict,
         description="Arguments to pass to metric __init__",

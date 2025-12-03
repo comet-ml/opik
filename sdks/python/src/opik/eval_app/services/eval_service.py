@@ -140,7 +140,10 @@ class EvalService:
             try:
                 # Instantiate metric
                 metric = self._instantiate_metric(rule)
-                metric_name = metric.__class__.__name__
+                metric_class_name = metric.__class__.__name__
+
+                # Use custom name if provided, otherwise use the metric's score name
+                custom_name = rule.name
 
                 # Extract inputs from trace using the rule's argument mapping
                 metric_inputs = self._extract_metric_inputs(trace, rule.arguments)
@@ -155,22 +158,23 @@ class EvalService:
                     results = [result]
 
                 for score_result in results:
+                    # Use custom name if provided, otherwise use the score result name
+                    score_name = custom_name if custom_name else score_result.name
                     feedback_score: FeedbackScoreDict = {
-                        "name": score_result.name,
+                        "name": score_name,
                         "value": score_result.value,
                         "reason": score_result.reason,
                     }
                     feedback_scores.append(feedback_score)
                     LOGGER.info(
-                        "Rule %s (metric %s) scored: %s = %s",
-                        rule.metric_name,
-                        metric_name,
-                        score_result.name,
+                        "Metric %s scored: %s = %s",
+                        metric_class_name,
+                        score_name,
                         score_result.value,
                     )
             except Exception as e:
                 LOGGER.error(
-                    "Rule with metric %s failed: %s", rule.metric_name, e
+                    "Metric %s failed: %s", rule.metric_name, e
                 )
                 # Continue with other rules even if one fails
                 continue

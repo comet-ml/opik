@@ -74,6 +74,7 @@ const createFormSchema = (selectedMetric: LocalMetricDescriptor | undefined) => 
 
   return z.object({
     metric_name: z.string().min(1, { message: "Metric is required" }),
+    name: z.string().optional(),
     init_args: z.object(initArgsSchema).optional().default({}),
     arguments: z.object(argumentsSchema),
   });
@@ -81,6 +82,7 @@ const createFormSchema = (selectedMetric: LocalMetricDescriptor | undefined) => 
 
 type FormType = {
   metric_name: string;
+  name?: string;
   init_args: Record<string, unknown>;
   arguments: Record<string, string>;
 };
@@ -201,6 +203,7 @@ const AddPlaygroundMetricDialog: React.FC<AddPlaygroundMetricDialogProps> = ({
   const form = useForm<FormType>({
     defaultValues: {
       metric_name: metric?.metric_name || "",
+      name: metric?.name || "",
       init_args: metric?.init_args || {},
       arguments: metric?.arguments || {},
     },
@@ -254,6 +257,7 @@ const AddPlaygroundMetricDialog: React.FC<AddPlaygroundMetricDialogProps> = ({
     if (open) {
       form.reset({
         metric_name: metric?.metric_name || "",
+        name: metric?.name || "",
         init_args: metric?.init_args || {},
         arguments: metric?.arguments || {},
       });
@@ -293,6 +297,7 @@ const AddPlaygroundMetricDialog: React.FC<AddPlaygroundMetricDialogProps> = ({
       const newMetric: PlaygroundMetricConfig = {
         id: metric?.id || uuidv4(),
         metric_name: data.metric_name,
+        name: data.name?.trim() || undefined,
         init_args: cleanedInitArgs,
         arguments: cleanedArguments,
       };
@@ -365,6 +370,31 @@ const AddPlaygroundMetricDialog: React.FC<AddPlaygroundMetricDialogProps> = ({
                   );
                 }}
               />
+
+              {/* Custom Name */}
+              {selectedMetric && (
+                <FormField
+                  control={form.control}
+                  name="name"
+                  render={({ field }) => (
+                    <FormItem>
+                      <Label>Score name</Label>
+                      <Description className="text-sm">
+                        Custom name for the feedback score. Defaults to metric
+                        class name if empty.
+                      </Description>
+                      <FormControl>
+                        <Input
+                          {...field}
+                          placeholder={selectedMetricName}
+                          value={field.value || ""}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              )}
 
               {/* Metric Description */}
               {selectedMetric && (

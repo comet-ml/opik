@@ -28,6 +28,8 @@ export interface LocalMetricsListResponse {
 export interface PlaygroundMetricConfig {
   id: string;
   metric_name: string;
+  // Custom name for the feedback score. Defaults to metric class name if not set.
+  name?: string;
   init_args: Record<string, unknown>;
   // Mapping from metric score() argument names to trace field paths
   // e.g., { "input": "input.messages", "output": "output.output" }
@@ -40,6 +42,7 @@ export interface LocalEvaluationRequest {
 
 export interface LocalEvaluationRequestConfig {
   metric_name: string;
+  name?: string;
   init_args: Record<string, unknown>;
   arguments: Record<string, string>;
 }
