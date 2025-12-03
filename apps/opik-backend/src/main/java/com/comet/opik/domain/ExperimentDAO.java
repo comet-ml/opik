@@ -227,6 +227,7 @@ class ExperimentDAO {
                        entity_id,
                        name,
                        value,
+                       reason,
                        last_updated_at,
                        feedback_scores.last_updated_by AS author
                 FROM feedback_scores FINAL
@@ -240,6 +241,7 @@ class ExperimentDAO {
                     entity_id,
                     name,
                     value,
+                    reason,
                     last_updated_at,
                     author
                 FROM authored_feedback_scores FINAL
@@ -252,6 +254,7 @@ class ExperimentDAO {
                        entity_id,
                        name,
                        value,
+                       reason,
                        last_updated_at,
                        author,
                        ROW_NUMBER() OVER (
@@ -265,6 +268,7 @@ class ExperimentDAO {
                        entity_id,
                        name,
                        value,
+                       reason,
                        last_updated_at,
                        author
                 FROM feedback_scores_with_ranking
@@ -275,7 +279,8 @@ class ExperimentDAO {
                     project_id,
                     entity_id,
                     name,
-                    groupArray(value) AS values
+                    groupArray(value) AS values,
+                    groupArray(reason) AS reasons
                 FROM feedback_scores_combined
                 GROUP BY workspace_id, project_id, entity_id, name
             ), feedback_scores_final AS (
@@ -284,7 +289,8 @@ class ExperimentDAO {
                     project_id,
                     entity_id,
                     name,
-                    IF(length(values) = 1, arrayElement(values, 1), toDecimal64(arrayAvg(values), 9)) AS value
+                    IF(length(values) = 1, arrayElement(values, 1), toDecimal64(arrayAvg(values), 9)) AS value,
+                    IF(length(reasons) = 1, arrayElement(reasons, 1), arrayStringConcat(arrayFilter(x -> x != '', reasons), ', ')) AS reason
                 FROM feedback_scores_combined_grouped
             ),
             feedback_scores_agg AS (
@@ -293,12 +299,17 @@ class ExperimentDAO {
                     mapFromArrays(
                         groupArray(fs_avg.name),
                         groupArray(fs_avg.avg_value)
-                    ) AS feedback_scores
+                    ) AS feedback_scores,
+                    mapFromArrays(
+                        groupArray(fs_avg.name),
+                        groupArray(fs_avg.agg_reason)
+                    ) AS feedback_score_reasons
                 FROM (
                     SELECT
                         et.experiment_id,
                         fs.name,
-                        avg(fs.value) AS avg_value
+                        avg(fs.value) AS avg_value,
+                        arrayStringConcat(arrayFilter(x -> x != '', groupArray(fs.reason)), ', ') AS agg_reason
                     FROM (
                         SELECT
                             DISTINCT
@@ -310,7 +321,8 @@ class ExperimentDAO {
                         SELECT
                             name,
                             entity_id AS trace_id,
-                            value
+                            value,
+                            reason
                         FROM feedback_scores_final
                     ) fs ON fs.trace_id = et.trace_id
                     GROUP BY et.experiment_id, fs.name
@@ -384,6 +396,7 @@ class ExperimentDAO {
                 e.status as status,
                 e.experiment_scores as experiment_scores,
                 fs.feedback_scores as feedback_scores,
+                fs.feedback_score_reasons as feedback_score_reasons,
                 es.experiment_scores as experiment_scores_agg,
                 ed.trace_count as trace_count,
                 ed.duration_values AS duration,
@@ -894,7 +907,7 @@ class ExperimentDAO {
                     .lastUpdatedAt(row.get("last_updated_at", Instant.class))
                     .createdBy(row.get("created_by", String.class))
                     .lastUpdatedBy(row.get("last_updated_by", String.class))
-                    .feedbackScores(getFeedbackScores(row, "feedback_scores"))
+                    .feedbackScores(getFeedbackScoresWithReasons(row, "feedback_scores", "feedback_score_reasons"))
                     .comments(getComments(row.get("comments_array_agg", List[].class)))
                     .traceCount(row.get("trace_count", Long.class))
                     .duration(getDuration(row))
@@ -968,20 +981,38 @@ class ExperimentDAO {
     }
 
     public static List<FeedbackScoreAverage> getFeedbackScores(Row row, String columnName) {
-        return getScoresAggregation(row, columnName);
+        return getScoresAggregation(row, columnName, null);
     }
 
-    private static List<FeedbackScoreAverage> getScoresAggregation(Row row, String columnName) {
-        List<FeedbackScoreAverage> scoresAvg = Optional
-                .ofNullable(row.get(columnName, Map.class))
+    public static List<FeedbackScoreAverage> getFeedbackScoresWithReasons(Row row, String valuesColumnName,
+            String reasonsColumnName) {
+        return getScoresAggregation(row, valuesColumnName, reasonsColumnName);
+    }
+
+    @SuppressWarnings("unchecked")
+    private static List<FeedbackScoreAverage> getScoresAggregation(Row row, String valuesColumnName,
+            String reasonsColumnName) {
+        Map<String, ? extends Number> valuesMap = Optional
+                .ofNullable(row.get(valuesColumnName, Map.class))
                 .map(map -> (Map<String, ? extends Number>) map)
-                .orElse(Map.of())
+                .orElse(Map.of());
+
+        Map<String, String> reasonsMap = reasonsColumnName != null
+                ? Optional.ofNullable(row.get(reasonsColumnName, Map.class))
+                        .map(map -> (Map<String, String>) map)
+                        .orElse(Map.of())
+                : Map.of();
+
+        List<FeedbackScoreAverage> scoresAvg = valuesMap
                 .entrySet()
                 .stream()
                 .map(scores -> {
-                    return new FeedbackScoreAverage(scores.getKey(),
+                    String reason = reasonsMap.get(scores.getKey());
+                    return new FeedbackScoreAverage(
+                            scores.getKey(),
                             BigDecimal.valueOf(scores.getValue().doubleValue()).setScale(SCALE,
-                                    RoundingMode.HALF_EVEN));
+                                    RoundingMode.HALF_EVEN),
+                            StringUtils.isBlank(reason) ? null : reason);
                 })
                 .toList();
 

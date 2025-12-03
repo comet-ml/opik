@@ -163,7 +163,7 @@ public class StatsMapper {
                         .stream()
                         .filter(k -> k.startsWith(FEEDBACK_SCORE))
                         .map(k -> new FeedbackScoreAverage(k.substring("%s.".formatted(FEEDBACK_SCORE).length()),
-                                BigDecimal.valueOf((Double) map.get(k))))
+                                BigDecimal.valueOf((Double) map.get(k)), null))
                         .toList())
                 .orElse(null);
     }

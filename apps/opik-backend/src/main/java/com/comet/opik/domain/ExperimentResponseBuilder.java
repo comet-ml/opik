@@ -248,7 +248,7 @@ public class ExperimentResponseBuilder {
                     BigDecimal avg = count > 0
                             ? sum.divide(BigDecimal.valueOf(count), 9, RoundingMode.HALF_UP)
                             : BigDecimal.ZERO;
-                    return new FeedbackScoreAverage(name, avg);
+                    return new FeedbackScoreAverage(name, avg, null);
                 })
                 .toList();
     }
