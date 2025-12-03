@@ -1,5 +1,6 @@
 import uniqid from "uniqid";
 import {
+  BaseDashboardConfig,
   DashboardSection,
   DashboardSections,
   DashboardState,
@@ -28,6 +29,12 @@ export const generateEmptySection = (
   };
 };
 
+export const generateEmptyConfig = (): BaseDashboardConfig => ({
+  dateRange: DEFAULT_DATE_PRESET,
+  projectIds: [],
+  experimentIds: [],
+});
+
 export const generateEmptyDashboard = (): DashboardState => {
   const defaultSection = generateEmptySection("Overview");
 
@@ -35,10 +42,7 @@ export const generateEmptyDashboard = (): DashboardState => {
     version: DASHBOARD_VERSION,
     sections: [defaultSection],
     lastModified: Date.now(),
-    config: {
-      projectId: "",
-      dateRange: DEFAULT_DATE_PRESET,
-    },
+    config: generateEmptyConfig(),
   };
 };
 
