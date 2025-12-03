@@ -27,4 +27,6 @@ public class ServiceTogglesConfig {
     @NotNull boolean exportEnabled;
     @JsonProperty
     @NotNull boolean dashboardsEnabled;
+    @JsonProperty
+    @NotNull boolean datasetVersioningEnabled;
 }

@@ -383,22 +383,71 @@ class DatasetItemServiceImpl implements DatasetItemService {
             log.info("Finding versioned dataset items by '{}', page '{}', size '{}'", datasetItemSearchCriteria, page,
                     size);
 
-            // Resolve version hash/tag to version ID
-            UUID versionId = versionService.resolveVersionId(datasetItemSearchCriteria.datasetId(),
-                    datasetItemSearchCriteria.versionHashOrTag());
-            log.info("Resolved version '{}' to version ID '{}' for dataset '{}'",
-                    datasetItemSearchCriteria.versionHashOrTag(), versionId, datasetItemSearchCriteria.datasetId());
+            return Mono.deferContextual(ctx -> {
+                String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
 
-            return versionDao.getItems(datasetItemSearchCriteria, page, size, versionId)
-                    .defaultIfEmpty(DatasetItemPage.empty(page, sortingFactory.getSortableFields()));
+                // Resolve version hash/tag to version ID
+                UUID versionId = versionService.resolveVersionId(workspaceId,
+                        datasetItemSearchCriteria.datasetId(),
+                        datasetItemSearchCriteria.versionHashOrTag());
+                log.info("Resolved version '{}' to version ID '{}' for dataset '{}'",
+                        datasetItemSearchCriteria.versionHashOrTag(), versionId, datasetItemSearchCriteria.datasetId());
+
+                // For versioned items, hasDraft is always false (concept doesn't apply to immutable versions)
+                return versionDao.getItems(datasetItemSearchCriteria, page, size, versionId)
+                        .defaultIfEmpty(DatasetItemPage.empty(page, sortingFactory.getSortableFields()));
+            });
         } else {
             // Fetch draft (current) items from dataset_items table
             log.info("Finding draft dataset items by '{}', page '{}', size '{}'",
                     datasetItemSearchCriteria, page, size);
 
             return dao.getItems(datasetItemSearchCriteria, page, size)
+                    .flatMap(itemPage -> computeHasDraft(datasetItemSearchCriteria.datasetId(), itemPage))
                     .defaultIfEmpty(DatasetItemPage.empty(page, sortingFactory.getSortableFields()));
         }
+    }
+
+    private Mono<DatasetItemPage> computeHasDraft(UUID datasetId, DatasetItemPage itemPage) {
+        // Get the latest version to compare with draft
+        return Mono.deferContextual(ctx -> {
+            String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
+
+            // Call DAO directly with workspaceId to avoid RequestContext issues in reactive context
+            return Mono.fromCallable(() -> template.inTransaction(READ_ONLY, handle -> {
+                var dao = handle.attach(DatasetVersionDAO.class);
+                return dao.findByTag(datasetId, DatasetVersionService.LATEST_TAG, workspaceId);
+            })).subscribeOn(Schedulers.boundedElastic())
+                    .flatMap(latestVersionOpt -> {
+                        if (latestVersionOpt.isEmpty()) {
+                            // No version exists yet, has draft if any items exist
+                            boolean hasDraft = itemPage.total() > 0;
+                            return Mono.just(itemPage.toBuilder().hasDraft(hasDraft).build());
+                        }
+
+                        UUID latestVersionId = latestVersionOpt.get().id();
+
+                        // Compare hashes of draft items vs latest version items
+                        // We compare both ID hash and data hash to detect any differences
+                        Mono<ItemsHash> draftHash = dao.getDraftItemsHashAgg(datasetId);
+                        Mono<ItemsHash> versionHash = versionDao.getVersionItemsHashAgg(datasetId, latestVersionId);
+
+                        return Mono.zip(draftHash, versionHash)
+                                .map(tuple -> {
+                                    ItemsHash draft = tuple.getT1();
+                                    ItemsHash version = tuple.getT2();
+                                    // Has draft if either ID hash or data hash differs
+                                    boolean hasDraft = draft.idHash() != version.idHash()
+                                            || draft.dataHash() != version.dataHash();
+                                    log.debug(
+                                            "Dataset '{}' hasDraft='{}' (draftIdHash='{}', versionIdHash='{}', draftDataHash='{}', versionDataHash='{}')",
+                                            datasetId, hasDraft, draft.idHash(), version.idHash(), draft.dataHash(),
+                                            version.dataHash());
+                                    return itemPage.toBuilder().hasDraft(hasDraft).build();
+                                });
+                    })
+                    .defaultIfEmpty(itemPage.toBuilder().hasDraft(false).build());
+        });
     }
 
     public Mono<ProjectStats> getExperimentItemsStats(@NonNull UUID datasetId,
