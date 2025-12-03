@@ -4,6 +4,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { JsonSchemaValidatorMetricParameters } from "@/types/optimizations";
 import { DEFAULT_JSON_SCHEMA_VALIDATOR_METRIC_CONFIGS } from "@/constants/optimizations";
 import ExplainerIcon from "@/components/shared/ExplainerIcon/ExplainerIcon";
+import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 
 interface JsonSchemaValidatorMetricConfigsProps {
   configs: Partial<JsonSchemaValidatorMetricParameters>;
@@ -47,7 +48,9 @@ const JsonSchemaValidatorMetricConfigs = ({
           <Label htmlFor="json_schema" className="text-s mr-1.5">
             JSON Schema
           </Label>
-          <ExplainerIcon description="Define a JSON schema to validate the structure of the LLM output" />
+          <ExplainerIcon
+            {...EXPLAINERS_MAP[EXPLAINER_ID.metric_json_schema]}
+          />
         </div>
         <Textarea
           id="json_schema"

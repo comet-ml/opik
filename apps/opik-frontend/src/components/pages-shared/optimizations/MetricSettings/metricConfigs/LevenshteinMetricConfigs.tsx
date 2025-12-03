@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input";
 import { LevenshteinMetricParameters } from "@/types/optimizations";
 import { DEFAULT_LEVENSHTEIN_METRIC_CONFIGS } from "@/constants/optimizations";
 import ExplainerIcon from "@/components/shared/ExplainerIcon/ExplainerIcon";
+import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 
 interface LevenshteinMetricConfigsProps {
   configs: Partial<LevenshteinMetricParameters>;
@@ -23,7 +24,9 @@ const LevenshteinMetricConfigs = ({
             <Label htmlFor="reference_key" className="text-sm">
               Reference key
             </Label>
-            <ExplainerIcon description="The key in the dataset item to compare against" />
+            <ExplainerIcon
+              {...EXPLAINERS_MAP[EXPLAINER_ID.metric_reference_key]}
+            />
           </div>
           <Input
             id="reference_key"
@@ -46,7 +49,9 @@ const LevenshteinMetricConfigs = ({
           <Label htmlFor="case_sensitive" className="cursor-pointer text-sm">
             Case sensitive
           </Label>
-          <ExplainerIcon description="Enable case-sensitive comparison when evaluating outputs" />
+          <ExplainerIcon
+            {...EXPLAINERS_MAP[EXPLAINER_ID.metric_case_sensitive]}
+          />
         </div>
       </div>
     </div>

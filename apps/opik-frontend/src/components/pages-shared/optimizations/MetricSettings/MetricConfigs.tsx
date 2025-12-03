@@ -19,6 +19,8 @@ import EqualsMetricConfigs from "@/components/pages-shared/optimizations/MetricS
 import JsonSchemaValidatorMetricConfigs from "@/components/pages-shared/optimizations/MetricSettings/metricConfigs/JsonSchemaValidatorMetricConfigs";
 import GEvalMetricConfigs from "@/components/pages-shared/optimizations/MetricSettings/metricConfigs/GEvalMetricConfigs";
 import LevenshteinMetricConfigs from "@/components/pages-shared/optimizations/MetricSettings/metricConfigs/LevenshteinMetricConfigs";
+import ExplainerIcon from "@/components/shared/ExplainerIcon/ExplainerIcon";
+import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 
 interface MetricConfigsProps {
   metricType: METRIC_TYPE;
@@ -91,7 +93,12 @@ const MetricConfigs = ({
         align="end"
       >
         <div className="mb-5 w-72">
-          <h3 className="comet-body-s-accented mb-1">Metric settings</h3>
+          <div className="mb-1 flex items-center gap-1">
+            <h3 className="comet-body-s-accented">Metric settings</h3>
+            <ExplainerIcon
+              {...EXPLAINERS_MAP[EXPLAINER_ID.whats_the_metric_settings]}
+            />
+          </div>
           <p className="comet-body-xs text-muted-slate">
             Configure parameters for the selected evaluation metric
           </p>

@@ -5,6 +5,7 @@ import SliderInputControl from "@/components/shared/SliderInputControl/SliderInp
 import { HierarchicalReflectiveOptimizerParameters } from "@/types/optimizations";
 import { DEFAULT_HIERARCHICAL_REFLECTIVE_OPTIMIZER_CONFIGS } from "@/constants/optimizations";
 import ExplainerIcon from "@/components/shared/ExplainerIcon/ExplainerIcon";
+import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 
 interface HierarchicalReflectiveOptimizerConfigsProps {
   configs: Partial<HierarchicalReflectiveOptimizerParameters>;
@@ -51,7 +52,9 @@ const HierarchicalReflectiveOptimizerConfigs = ({
           <Label htmlFor="verbose" className="cursor-pointer text-sm">
             Verbose
           </Label>
-          <ExplainerIcon description="Enable detailed logging during optimization process" />
+          <ExplainerIcon
+            {...EXPLAINERS_MAP[EXPLAINER_ID.optimizer_verbose]}
+          />
         </div>
       </div>
 

@@ -17,6 +17,8 @@ import { Button, ButtonProps } from "@/components/ui/button";
 import GepaOptimizerConfigs from "@/components/pages-shared/optimizations/AlgorithmSettings/algorithmConfigs/GepaOptimizerConfigs";
 import EvolutionaryOptimizerConfigs from "@/components/pages-shared/optimizations/AlgorithmSettings/algorithmConfigs/EvolutionaryOptimizerConfigs";
 import HierarchicalReflectiveOptimizerConfigs from "@/components/pages-shared/optimizations/AlgorithmSettings/algorithmConfigs/HierarchicalReflectiveOptimizerConfigs";
+import ExplainerIcon from "@/components/shared/ExplainerIcon/ExplainerIcon";
+import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 
 interface AlgorithmConfigsProps {
   optimizerType: OPTIMIZER_TYPE;
@@ -82,7 +84,12 @@ const AlgorithmConfigs = ({
         align="end"
       >
         <div className="mb-5 w-72">
-          <h3 className="comet-body-s-accented mb-1">Algorithm settings</h3>
+          <div className="mb-1 flex items-center gap-1">
+            <h3 className="comet-body-s-accented">Algorithm settings</h3>
+            <ExplainerIcon
+              {...EXPLAINERS_MAP[EXPLAINER_ID.whats_the_algorithm_settings]}
+            />
+          </div>
           <p className="comet-body-xs text-muted-slate">
             Configure parameters for the selected optimization algorithm
           </p>

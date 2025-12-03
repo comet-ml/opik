@@ -6,6 +6,7 @@ import SliderInputControl from "@/components/shared/SliderInputControl/SliderInp
 import { EvolutionaryOptimizerParameters } from "@/types/optimizations";
 import { DEFAULT_EVOLUTIONARY_OPTIMIZER_CONFIGS } from "@/constants/optimizations";
 import ExplainerIcon from "@/components/shared/ExplainerIcon/ExplainerIcon";
+import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 
 interface EvolutionaryOptimizerConfigsProps {
   configs: Partial<EvolutionaryOptimizerParameters>;
@@ -123,7 +124,9 @@ const EvolutionaryOptimizerConfigs = ({
           <Label htmlFor="adaptive_mutation" className="cursor-pointer text-sm">
             Adaptive mutation
           </Label>
-          <ExplainerIcon description="Automatically adjust mutation rate based on optimization progress" />
+          <ExplainerIcon
+            {...EXPLAINERS_MAP[EXPLAINER_ID.optimizer_adaptive_mutation]}
+          />
         </div>
       </div>
 
@@ -142,7 +145,9 @@ const EvolutionaryOptimizerConfigs = ({
           <Label htmlFor="enable_moo" className="cursor-pointer text-sm">
             Enable multi-objective optimization
           </Label>
-          <ExplainerIcon description="Optimize for multiple objectives simultaneously" />
+          <ExplainerIcon
+            {...EXPLAINERS_MAP[EXPLAINER_ID.optimizer_enable_moo]}
+          />
         </div>
       </div>
 
@@ -164,7 +169,9 @@ const EvolutionaryOptimizerConfigs = ({
           >
             Enable LLM crossover
           </Label>
-          <ExplainerIcon description="Use LLM to intelligently combine solutions" />
+          <ExplainerIcon
+            {...EXPLAINERS_MAP[EXPLAINER_ID.optimizer_enable_llm_crossover]}
+          />
         </div>
       </div>
 
@@ -173,7 +180,9 @@ const EvolutionaryOptimizerConfigs = ({
           <Label htmlFor="output_style_guidance" className="text-sm">
             Output style guidance
           </Label>
-          <ExplainerIcon description="Optional guidance on desired output format or style" />
+          <ExplainerIcon
+            {...EXPLAINERS_MAP[EXPLAINER_ID.optimizer_output_style_guidance]}
+          />
         </div>
         <Input
           id="output_style_guidance"
@@ -207,7 +216,9 @@ const EvolutionaryOptimizerConfigs = ({
           >
             Infer output style
           </Label>
-          <ExplainerIcon description="Automatically detect and maintain output style from examples" />
+          <ExplainerIcon
+            {...EXPLAINERS_MAP[EXPLAINER_ID.optimizer_infer_output_style]}
+          />
         </div>
       </div>
 
@@ -239,7 +250,9 @@ const EvolutionaryOptimizerConfigs = ({
           <Label htmlFor="verbose" className="cursor-pointer text-sm">
             Verbose
           </Label>
-          <ExplainerIcon description="Enable detailed logging during optimization process" />
+          <ExplainerIcon
+            {...EXPLAINERS_MAP[EXPLAINER_ID.optimizer_verbose]}
+          />
         </div>
       </div>
 

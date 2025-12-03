@@ -4,6 +4,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { GEvalMetricParameters } from "@/types/optimizations";
 import { DEFAULT_G_EVAL_METRIC_CONFIGS } from "@/constants/optimizations";
 import ExplainerIcon from "@/components/shared/ExplainerIcon/ExplainerIcon";
+import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 
 interface GEvalMetricConfigsProps {
   configs: Partial<GEvalMetricParameters>;
@@ -18,7 +19,9 @@ const GEvalMetricConfigs = ({ configs, onChange }: GEvalMetricConfigsProps) => {
           <Label htmlFor="task_introduction" className="text-sm mr-1.5">
             Task introduction
           </Label>
-          <ExplainerIcon description="Provide context about the task being evaluated" />
+          <ExplainerIcon
+            {...EXPLAINERS_MAP[EXPLAINER_ID.geval_task_introduction]}
+          />
         </div>
         <Textarea
           id="task_introduction"
@@ -40,7 +43,9 @@ const GEvalMetricConfigs = ({ configs, onChange }: GEvalMetricConfigsProps) => {
           <Label htmlFor="evaluation_criteria" className="text-s mr-1.5">
             Evaluation criteria
           </Label>
-          <ExplainerIcon description="Define specific criteria for evaluating the output quality" />
+          <ExplainerIcon
+            {...EXPLAINERS_MAP[EXPLAINER_ID.geval_evaluation_criteria]}
+          />
         </div>
         <Textarea
           id="evaluation_criteria"

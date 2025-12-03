@@ -80,6 +80,22 @@ export enum EXPLAINER_ID {
   prompt_improvement_optimizer = "prompt_improvement_optimizer",
   whats_an_alert = "whats_an_alert",
   what_are_dashboards = "what_are_dashboards",
+  whats_the_optimization_studio = "whats_the_optimization_studio",
+  whats_the_metric_settings = "whats_the_metric_settings",
+  whats_the_algorithm_settings = "whats_the_algorithm_settings",
+  // Metric config explainers
+  geval_task_introduction = "geval_task_introduction",
+  geval_evaluation_criteria = "geval_evaluation_criteria",
+  metric_reference_key = "metric_reference_key",
+  metric_case_sensitive = "metric_case_sensitive",
+  metric_json_schema = "metric_json_schema",
+  // Optimizer config explainers
+  optimizer_verbose = "optimizer_verbose",
+  optimizer_adaptive_mutation = "optimizer_adaptive_mutation",
+  optimizer_enable_moo = "optimizer_enable_moo",
+  optimizer_enable_llm_crossover = "optimizer_enable_llm_crossover",
+  optimizer_output_style_guidance = "optimizer_output_style_guidance",
+  optimizer_infer_output_style = "optimizer_infer_output_style",
 }
 
 export const EXPLAINERS_MAP: Record<EXPLAINER_ID, Explainer> = {
@@ -562,5 +578,74 @@ export const EXPLAINERS_MAP: Record<EXPLAINER_ID, Explainer> = {
     description:
       "Set up a new dashboard to organize, isolate, and monitor different scenarios.",
     docLink: "/production/dashboards",
+  },
+  [EXPLAINER_ID.whats_the_optimization_studio]: {
+    id: EXPLAINER_ID.whats_the_optimization_studio,
+    description:
+      "Test multiple variations for your agent or prompt to find the best one based on your metrics.",
+    docLink: "/agent_optimization/overview",
+  },
+  [EXPLAINER_ID.whats_the_metric_settings]: {
+    id: EXPLAINER_ID.whats_the_metric_settings,
+    description:
+      "Configure parameters for the selected evaluation metric to customize how your outputs are scored.",
+    docLink: "/evaluation/metrics/overview",
+  },
+  [EXPLAINER_ID.whats_the_algorithm_settings]: {
+    id: EXPLAINER_ID.whats_the_algorithm_settings,
+    description:
+      "Configure parameters for the selected optimization algorithm to control how prompts are improved.",
+    docLink: "/agent_optimization/opik_optimizer/concepts",
+  },
+  // Metric config explainers
+  [EXPLAINER_ID.geval_task_introduction]: {
+    id: EXPLAINER_ID.geval_task_introduction,
+    description: "Provide context about the task being evaluated.",
+  },
+  [EXPLAINER_ID.geval_evaluation_criteria]: {
+    id: EXPLAINER_ID.geval_evaluation_criteria,
+    description:
+      "Define specific criteria for evaluating the output quality.",
+  },
+  [EXPLAINER_ID.metric_reference_key]: {
+    id: EXPLAINER_ID.metric_reference_key,
+    description: "The key in the dataset item to compare against.",
+  },
+  [EXPLAINER_ID.metric_case_sensitive]: {
+    id: EXPLAINER_ID.metric_case_sensitive,
+    description:
+      "Enable case-sensitive comparison when evaluating outputs.",
+  },
+  [EXPLAINER_ID.metric_json_schema]: {
+    id: EXPLAINER_ID.metric_json_schema,
+    description:
+      "Define a JSON schema to validate the structure of the LLM output.",
+  },
+  // Optimizer config explainers
+  [EXPLAINER_ID.optimizer_verbose]: {
+    id: EXPLAINER_ID.optimizer_verbose,
+    description: "Enable detailed logging during optimization process.",
+  },
+  [EXPLAINER_ID.optimizer_adaptive_mutation]: {
+    id: EXPLAINER_ID.optimizer_adaptive_mutation,
+    description:
+      "Automatically adjust mutation rate based on optimization progress.",
+  },
+  [EXPLAINER_ID.optimizer_enable_moo]: {
+    id: EXPLAINER_ID.optimizer_enable_moo,
+    description: "Optimize for multiple objectives simultaneously.",
+  },
+  [EXPLAINER_ID.optimizer_enable_llm_crossover]: {
+    id: EXPLAINER_ID.optimizer_enable_llm_crossover,
+    description: "Use LLM to intelligently combine solutions.",
+  },
+  [EXPLAINER_ID.optimizer_output_style_guidance]: {
+    id: EXPLAINER_ID.optimizer_output_style_guidance,
+    description: "Optional guidance on desired output format or style.",
+  },
+  [EXPLAINER_ID.optimizer_infer_output_style]: {
+    id: EXPLAINER_ID.optimizer_infer_output_style,
+    description:
+      "Automatically detect and maintain output style from examples.",
   },
 };

@@ -14,6 +14,8 @@ import useOptimizationsList from "@/api/optimizations/useOptimizationsList";
 import Loader from "@/components/shared/Loader/Loader";
 import { ACTIVE_OPTIMIZATION_FILTER } from "@/lib/optimizations";
 import { DEMO_TEMPLATES } from "@/constants/optimizations";
+import ExplainerIcon from "@/components/shared/ExplainerIcon/ExplainerIcon";
+import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 
 const OptimizationStudioPage = () => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
@@ -44,7 +46,12 @@ const OptimizationStudioPage = () => {
     <div className="flex min-h-[calc(100vh-200px)] items-center justify-center">
       <div className="flex w-full max-w-4xl flex-col items-center">
         <div className="mb-12 flex w-full max-w-2xl flex-col items-center text-center">
-          <h1 className="comet-title-xl mb-4">Optimization studio</h1>
+          <div className="mb-4 flex items-center gap-2">
+            <h1 className="comet-title-xl">Optimization studio</h1>
+            <ExplainerIcon
+              {...EXPLAINERS_MAP[EXPLAINER_ID.whats_the_optimization_studio]}
+            />
+          </div>
           <p className="comet-body-s mb-8 text-muted-foreground">
             Test multiple variations for your agent or prompt to find the best
             one based on your metrics.
