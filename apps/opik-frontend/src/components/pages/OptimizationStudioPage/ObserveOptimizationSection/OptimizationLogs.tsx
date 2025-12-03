@@ -20,8 +20,7 @@ const OptimizationLogs: React.FC<OptimizationLogsProps> = ({
         "not",
         "available",
         "...",
-        "...",
-        "Optimization finished.",
+        "..."
       ]
     : [];
 
@@ -51,7 +50,7 @@ const OptimizationLogs: React.FC<OptimizationLogsProps> = ({
                   target="_blank"
                   className="comet-body-s inline-block text-primary underline"
                 >
-                  View all trial
+                  View all trials
                 </Link>
               )}
             </>

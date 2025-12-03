@@ -22,10 +22,14 @@ const OptimizationStudioActions: React.FC = () => {
   const renderActionButton = () => {
     if (isRunning) {
       return (
-        <Button size="sm" variant="outline" className="h-8">
+        <Button size="sm" variant="outline" className="h-8" disabled>
           Stop optimization
         </Button>
       );
+    }
+
+    if (activeOptimization) {
+      return null;
     }
 
     return (
