@@ -1651,6 +1651,57 @@ class AlertResourceTest {
                     HttpStatus.SC_NO_CONTENT);
         }
 
+        @Test
+        @DisplayName("when alert has empty trigger configs, then job handles gracefully without webhook")
+        void whenAlertHasEmptyTriggerConfigs_thenJobHandlesGracefullyWithoutWebhook() {
+            var mock = prepareMockWorkspace();
+
+            // Create a project
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
+            projectResourceClient.createProject(projectName, mock.getLeft(), mock.getRight());
+
+            // Create an alert with empty trigger configs
+            var alertTrigger = AlertTrigger.builder()
+                    .eventType(AlertEventType.TRACE_COST)
+                    .triggerConfigs(List.of()) // Empty configs
+                    .build();
+            var alert = createAlertForEvent(alertTrigger);
+            var alertId = alertResourceClient.createAlert(
+                    alert, mock.getLeft(), mock.getRight(), HttpStatus.SC_CREATED);
+
+            // Create a trace with cost to ensure there's data to process
+            var trace = factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(projectName)
+                    .usage(null)
+                    .visibilityMode(null)
+                    .build();
+            traceResourceClient.createTrace(trace, mock.getLeft(), mock.getRight());
+
+            // Create span with cost
+            var span = factory.manufacturePojo(Span.class).toBuilder()
+                    .projectName(projectName)
+                    .traceId(trace.id())
+                    .totalEstimatedCost(new BigDecimal("100.00"))
+                    .build();
+            spanResourceClient.createSpan(span, mock.getLeft(), mock.getRight());
+
+            // Wait a reasonable time for the job to process
+            // We just need to ensure it doesn't crash immediately when processing this alert
+            // The job runs every 2 seconds in the test configuration
+            Awaitility.await().pollDelay(java.time.Duration.ofSeconds(4))
+                    .until(() -> true);
+
+            // Verify no webhook was sent (job should skip the alert gracefully)
+            var requests = externalWebhookServer.findAll(postRequestedFor(urlEqualTo(WEBHOOK_PATH)));
+            assertThat(requests).isEmpty();
+
+            var batchDelete = BatchDelete.builder()
+                    .ids(Set.of(alertId))
+                    .build();
+            alertResourceClient.deleteAlertBatch(
+                    batchDelete, mock.getLeft(), mock.getRight(), HttpStatus.SC_NO_CONTENT);
+        }
+
         private void verifyMetricsPayload(MetricsAlertPayload payload, String eventType, String metricValue,
                 String threshold, String windowSeconds, UUID projectId, String projectName) {
             assertThat(payload.eventType()).isEqualTo(eventType);
