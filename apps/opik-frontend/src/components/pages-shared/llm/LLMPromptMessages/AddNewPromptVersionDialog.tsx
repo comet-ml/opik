@@ -55,7 +55,11 @@ type AddNewPromptVersionDialogProps = {
   templateStructure?: PROMPT_TEMPLATE_STRUCTURE;
   defaultName?: string;
   metadata?: object;
-  onSave: (version: PromptVersion, promptName?: string, promptId?: string) => void;
+  onSave: (
+    version: PromptVersion,
+    promptName?: string,
+    promptId?: string,
+  ) => void;
 };
 
 const AddNewPromptVersionDialog: React.FC<AddNewPromptVersionDialogProps> = ({
@@ -142,7 +146,8 @@ const AddNewPromptVersionDialog: React.FC<AddNewPromptVersionDialogProps> = ({
           changeDescription,
           ...(finalMetadata && { metadata: finalMetadata }),
           ...(templateStructure && { templateStructure }),
-          onSuccess: (data) => onSave(data, selectedPrompt?.name, selectedPrompt?.id),
+          onSuccess: (data) =>
+            onSave(data, selectedPrompt?.name, selectedPrompt?.id),
         });
 
         setOpen(false);
@@ -161,7 +166,8 @@ const AddNewPromptVersionDialog: React.FC<AddNewPromptVersionDialogProps> = ({
         },
         {
           onSuccess: (data?: PromptWithLatestVersion) => {
-            if (data?.latest_version) onSave(data.latest_version, data.name, data.id);
+            if (data?.latest_version)
+              onSave(data.latest_version, data.name, data.id);
           },
         },
       );
