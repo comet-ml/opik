@@ -179,7 +179,7 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
 
                 // Save project associations
                 for (UUID projectId : projectIds) {
-                    projectsDAO.saveRuleProjects(id, Set.of(projectId), workspaceId);
+                    projectsDAO.saveRuleProject(id, projectId, workspaceId);
                 }
 
                 return evaluator;
@@ -216,7 +216,7 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
                 // Update project associations
                 projectsDAO.deleteByRuleId(id, workspaceId);
                 for (UUID projectId : projectIds) {
-                    projectsDAO.saveRuleProjects(id, Set.of(projectId), workspaceId);
+                    projectsDAO.saveRuleProject(id, projectId, workspaceId);
                 }
 
                 AutomationRuleEvaluatorModel<?> modelUpdate = switch (evaluatorUpdate) {
