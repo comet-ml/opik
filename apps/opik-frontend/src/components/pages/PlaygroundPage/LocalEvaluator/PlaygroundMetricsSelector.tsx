@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useCallback, useEffect } from "react";
+import React, { useMemo, useState, useCallback } from "react";
 import {
   ChevronDown,
   Pencil,
@@ -214,20 +214,13 @@ const PlaygroundMetricsSelector: React.FC<PlaygroundMetricsSelectorProps> = ({
   }, []);
 
   const hasNoMetrics = playgroundMetrics.length === 0;
-  const isDisabled = !enabled || !isHealthy;
-
-  // Close popover when disabled
-  useEffect(() => {
-    if (isDisabled && open) {
-      setOpen(false);
-    }
-  }, [isDisabled, open]);
+  const isServerReady = enabled && isHealthy;
 
   return (
     <>
-      <Popover open={open && !isDisabled} onOpenChange={setOpen}>
+      <Popover open={open} onOpenChange={setOpen}>
         <TooltipWrapper content={tooltipContent}>
-          <PopoverTrigger asChild disabled={isDisabled}>
+          <PopoverTrigger asChild>
             <Button
               className={cn("group w-[200px] justify-between", {
                 "text-muted-foreground": !enabled,
@@ -341,15 +334,28 @@ const PlaygroundMetricsSelector: React.FC<PlaygroundMetricsSelectorProps> = ({
             )}
 
             <Separator className="my-1" />
-            <div
-              className="flex h-10 cursor-pointer items-center rounded-md px-4 hover:bg-primary-foreground"
-              onClick={handleAddMetric}
+            <TooltipWrapper
+              content={
+                !isServerReady
+                  ? "Start the local eval_app server to add metrics"
+                  : undefined
+              }
             >
-              <div className="comet-body-s flex items-center gap-2 text-primary">
-                <Plus className="size-3.5 shrink-0" />
-                <span>Add metric</span>
+              <div
+                className={cn(
+                  "flex h-10 items-center rounded-md px-4",
+                  isServerReady
+                    ? "cursor-pointer hover:bg-primary-foreground"
+                    : "cursor-not-allowed opacity-50",
+                )}
+                onClick={isServerReady ? handleAddMetric : undefined}
+              >
+                <div className="comet-body-s flex items-center gap-2 text-primary">
+                  <Plus className="size-3.5 shrink-0" />
+                  <span>Add metric</span>
+                </div>
               </div>
-            </div>
+            </TooltipWrapper>
 
             <Separator className="my-1" />
             <div
