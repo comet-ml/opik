@@ -13,12 +13,9 @@ const ProviderGrid: React.FC<ProviderGridProps> = ({
   selectedProvider,
   onSelectProvider,
 }) => {
-  // Filter out OPIK_BUILTIN - it's a system provider that users don't configure
+  // Filter out read-only providers - they are system-managed and users don't configure them
   const configurableProviders = useMemo(
-    () =>
-      PROVIDERS_OPTIONS.filter(
-        (provider) => provider.value !== PROVIDER_TYPE.OPIK_BUILTIN,
-      ),
+    () => PROVIDERS_OPTIONS.filter((provider) => !provider.readOnly),
     [],
   );
 

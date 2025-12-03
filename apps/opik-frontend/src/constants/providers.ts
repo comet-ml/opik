@@ -18,6 +18,8 @@ export type PROVIDER_OPTION_TYPE = {
   defaultModel: PROVIDER_MODEL_TYPE | "";
   description?: string;
   apiKeyURL?: string;
+  /** If true, this provider is system-managed and users cannot configure it */
+  readOnly?: boolean;
 };
 
 type PROVIDERS_TYPE = {
@@ -32,6 +34,7 @@ export const PROVIDERS: PROVIDERS_TYPE = {
     apiKeyName: "Opik Built-in",
     defaultModel: PROVIDER_MODEL_TYPE.OPIK_BUILTIN_MODEL,
     description: "Built-in model provided by Opik - no API key required",
+    readOnly: true,
   },
   [PROVIDER_TYPE.OPEN_AI]: {
     label: "OpenAI",
