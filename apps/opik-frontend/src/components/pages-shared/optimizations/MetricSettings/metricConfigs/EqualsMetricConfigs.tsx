@@ -3,7 +3,6 @@ import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { EqualsMetricParameters } from "@/types/optimizations";
-import { DEFAULT_EQUALS_METRIC_CONFIGS } from "@/constants/optimizations";
 import ExplainerIcon from "@/components/shared/ExplainerIcon/ExplainerIcon";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 
@@ -41,10 +40,7 @@ const EqualsMetricConfigs = ({
         <div className="flex items-center space-x-2">
           <Checkbox
             id="case_sensitive"
-            checked={
-              configs.case_sensitive ??
-              DEFAULT_EQUALS_METRIC_CONFIGS.CASE_SENSITIVE
-            }
+            checked={configs.case_sensitive}
             onCheckedChange={(checked) =>
               onChange({ ...configs, case_sensitive: checked === true })
             }

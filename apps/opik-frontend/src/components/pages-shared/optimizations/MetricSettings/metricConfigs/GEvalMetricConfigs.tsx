@@ -2,7 +2,6 @@ import React from "react";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { GEvalMetricParameters } from "@/types/optimizations";
-import { DEFAULT_G_EVAL_METRIC_CONFIGS } from "@/constants/optimizations";
 import ExplainerIcon from "@/components/shared/ExplainerIcon/ExplainerIcon";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 
@@ -25,10 +24,7 @@ const GEvalMetricConfigs = ({ configs, onChange }: GEvalMetricConfigsProps) => {
         </div>
         <Textarea
           id="task_introduction"
-          value={
-            configs.task_introduction ??
-            DEFAULT_G_EVAL_METRIC_CONFIGS.TASK_INTRODUCTION
-          }
+          value={configs.task_introduction ?? ""}
           onChange={(e) =>
             onChange({ ...configs, task_introduction: e.target.value })
           }
@@ -49,10 +45,7 @@ const GEvalMetricConfigs = ({ configs, onChange }: GEvalMetricConfigsProps) => {
         </div>
         <Textarea
           id="evaluation_criteria"
-          value={
-            configs.evaluation_criteria ??
-            DEFAULT_G_EVAL_METRIC_CONFIGS.EVALUATION_CRITERIA
-          }
+          value={configs.evaluation_criteria ?? ""}
           onChange={(e) =>
             onChange({ ...configs, evaluation_criteria: e.target.value })
           }
