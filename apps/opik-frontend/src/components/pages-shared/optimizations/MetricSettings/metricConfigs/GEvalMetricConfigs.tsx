@@ -16,7 +16,7 @@ const GEvalMetricConfigs = ({ configs, onChange }: GEvalMetricConfigsProps) => {
     <div className="flex w-72 flex-col gap-6">
       <div className="space-y-2">
         <div className="flex items-center">
-          <Label htmlFor="task_introduction" className="text-sm mr-1.5">
+          <Label htmlFor="task_introduction" className="mr-1.5 text-sm">
             Task introduction
           </Label>
           <ExplainerIcon
@@ -40,7 +40,7 @@ const GEvalMetricConfigs = ({ configs, onChange }: GEvalMetricConfigsProps) => {
 
       <div className="space-y-2">
         <div className="flex items-center">
-          <Label htmlFor="evaluation_criteria" className="text-sm mr-1.5">
+          <Label htmlFor="evaluation_criteria" className="mr-1.5 text-sm">
             Evaluation criteria
           </Label>
           <ExplainerIcon
