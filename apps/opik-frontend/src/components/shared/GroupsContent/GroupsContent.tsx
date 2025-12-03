@@ -1,9 +1,22 @@
 import React, { useCallback, useMemo } from "react";
 import filter from "lodash/filter";
 import uniq from "lodash/uniq";
+import {
+  DndContext,
+  closestCenter,
+  useSensor,
+  useSensors,
+  MouseSensor,
+} from "@dnd-kit/core";
+import {
+  arrayMove,
+  SortableContext,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import type { DragEndEvent } from "@dnd-kit/core/dist/types";
 import { Group, GroupRowConfig, Groups } from "@/types/groups";
 import { ColumnData, OnChangeFn } from "@/types/shared";
-import GroupRow from "@/components/shared/GroupsButton/GroupRow";
+import GroupRow from "@/components/shared/GroupsContent/GroupRow";
 import { cn } from "@/lib/utils";
 
 type GroupsContentProps<TColumnData> = {
@@ -12,6 +25,7 @@ type GroupsContentProps<TColumnData> = {
   columns: ColumnData<TColumnData>[];
   config?: { rowsMap: Record<string, GroupRowConfig> };
   className?: string;
+  hideSorting?: boolean;
 };
 
 const GroupsContent = <TColumnData,>({
@@ -20,7 +34,16 @@ const GroupsContent = <TColumnData,>({
   columns,
   config,
   className,
+  hideSorting = false,
 }: GroupsContentProps<TColumnData>) => {
+  const sensors = useSensors(
+    useSensor(MouseSensor, {
+      activationConstraint: {
+        distance: 2,
+      },
+    }),
+  );
+
   const onRemoveRow = useCallback(
     (id: string) => {
       setGroups((prev) => filter(prev, (g) => g.id !== id));
@@ -33,6 +56,21 @@ const GroupsContent = <TColumnData,>({
       setGroups((prev) =>
         prev.map((g) => (updateGroup.id === g.id ? updateGroup : g)),
       );
+    },
+    [setGroups],
+  );
+
+  const handleDragEnd = useCallback(
+    (event: DragEndEvent) => {
+      const { active, over } = event;
+
+      if (over && active.id !== over.id) {
+        setGroups((items) => {
+          const oldIndex = items.findIndex((item) => item.id === active.id);
+          const newIndex = items.findIndex((item) => item.id === over.id);
+          return arrayMove(items, oldIndex, newIndex);
+        });
+      }
     },
     [setGroups],
   );
@@ -70,7 +108,8 @@ const GroupsContent = <TColumnData,>({
           prefix={prefix}
           onRemove={onRemoveRow}
           onChange={onChangeRow}
-          disabledSorting={true}
+          disabledSorting={hideSorting || groups.length <= 1}
+          hideSorting={hideSorting}
         />
       );
     });
@@ -78,9 +117,17 @@ const GroupsContent = <TColumnData,>({
 
   return (
     <div className={cn("overflow-y-auto overflow-x-hidden py-4", className)}>
-      <table className="table-auto">
-        <tbody>{renderGroups()}</tbody>
-      </table>
+      <DndContext
+        sensors={sensors}
+        collisionDetection={closestCenter}
+        onDragEnd={handleDragEnd}
+      >
+        <SortableContext items={groups} strategy={verticalListSortingStrategy}>
+          <table className="table-auto">
+            <tbody>{renderGroups()}</tbody>
+          </table>
+        </SortableContext>
+      </DndContext>
     </div>
   );
 };

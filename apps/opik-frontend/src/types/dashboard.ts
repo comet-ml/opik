@@ -163,12 +163,9 @@ export interface Dashboard {
 }
 
 export interface BaseDashboardConfig {
-  [key: string]: unknown;
-}
-
-export interface ProjectDashboardConfig extends BaseDashboardConfig {
-  projectId: string;
   dateRange: DateRangeSerializedValue;
+  projectIds: string[];
+  experimentIds: string[];
 }
 
 export interface DashboardWidgetComponentProps {

@@ -12,6 +12,7 @@ import {
 import { Filters } from "@/types/filters";
 import { Groups } from "@/types/groups";
 import { isFilterValid } from "@/lib/filters";
+import { isGroupValid, calculateGroupLabel } from "@/lib/groups";
 import useExperimentsList from "@/api/datasets/useExperimentsList";
 import useExperimentsGroupsAggregations from "@/api/datasets/useExperimentsGroupsAggregations";
 import useAppStore from "@/store/AppStore";
@@ -68,12 +69,15 @@ const ExperimentsFeedbackScoresWidget: React.FunctionComponent<
   const widgetConfig = widget?.config as
     | ExperimentsFeedbackScoresWidgetType["config"]
     | undefined;
-  const groups = (widgetConfig?.groups || []) as Groups;
   const validFilters = useMemo(() => {
     const filters = (widgetConfig?.filters || []) as Filters;
     return filters.filter(isFilterValid);
   }, [widgetConfig?.filters]);
-  const hasGroups = groups.length > 0;
+  const validGroups = useMemo(() => {
+    const groups = (widgetConfig?.groups || []) as Groups;
+    return groups.filter(isGroupValid);
+  }, [widgetConfig?.groups]);
+  const hasGroups = validGroups.length > 0;
   const chartType = widgetConfig?.chartType || CHART_TYPE.line;
 
   const { data: experimentsData, isPending: isExperimentsPending } =
@@ -82,7 +86,7 @@ const ExperimentsFeedbackScoresWidget: React.FunctionComponent<
         workspaceName,
         filters: validFilters,
         page: 1,
-        size: 100,
+        size: MAX_EXPERIMENTS_LIMIT,
       },
       {
         enabled: !hasGroups,
@@ -96,7 +100,7 @@ const ExperimentsFeedbackScoresWidget: React.FunctionComponent<
     {
       workspaceName,
       filters: validFilters,
-      groups,
+      groups: validGroups,
     },
     {
       enabled: hasGroups,
@@ -107,16 +111,28 @@ const ExperimentsFeedbackScoresWidget: React.FunctionComponent<
     if (hasGroups && groupsAggregationsData) {
       const data: DataRecord[] = [];
       const allLines: string[] = [];
+      const isMultiLevel = validGroups.length > 1;
 
       const processGroup = (
         groupContent: Record<string, ExperimentsGroupNodeWithAggregations>,
-        parentLabel = "",
+        depth = 0,
+        parentValues: string[] = [],
       ) => {
-        Object.entries(groupContent).forEach(([key, value]) => {
-          const label = value.label || key;
-          const groupName = parentLabel ? `${parentLabel} / ${label}` : label;
+        const currentGroup = validGroups[depth];
+        const fieldLabel = calculateGroupLabel(currentGroup);
 
-          if (value.aggregations) {
+        Object.entries(groupContent).forEach(([key, value]) => {
+          const valueLabel = value.label || key || "Undefined";
+          const currentValues = [...parentValues, valueLabel];
+          const groupName = isMultiLevel
+            ? currentValues.join(" / ")
+            : `${fieldLabel}: ${valueLabel}`;
+          const hasNestedGroups =
+            value.groups && Object.keys(value.groups).length > 0;
+
+          if (hasNestedGroups) {
+            processGroup(value.groups!, depth + 1, currentValues);
+          } else if (value.aggregations) {
             const scores: Record<string, number> = {};
             const feedbackScores = value.aggregations.feedback_scores || [];
             const experimentScores = value.aggregations.experiment_scores || [];
@@ -140,10 +156,6 @@ const ExperimentsFeedbackScoresWidget: React.FunctionComponent<
                 scores,
               });
             }
-          }
-
-          if (value.groups) {
-            processGroup(value.groups, groupName);
           }
         });
       };
@@ -191,7 +203,7 @@ const ExperimentsFeedbackScoresWidget: React.FunctionComponent<
     }
 
     return { data: [], lines: [] };
-  }, [hasGroups, groupsAggregationsData, experimentsData]);
+  }, [hasGroups, groupsAggregationsData, experimentsData, validGroups]);
 
   const isPending = hasGroups
     ? isGroupsAggregationsPending
@@ -243,7 +255,7 @@ const ExperimentsFeedbackScoresWidget: React.FunctionComponent<
 
       return (
         <>
-          <div className="comet-body-xs-accented mb-0.5 truncate">
+          <div className="comet-body-xs-accented mb-0.5 line-clamp-3 max-w-64 break-words">
             {entityName}
           </div>
           {createdDate && (

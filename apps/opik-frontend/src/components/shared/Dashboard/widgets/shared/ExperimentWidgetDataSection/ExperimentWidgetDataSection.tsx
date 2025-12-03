@@ -6,31 +6,21 @@ import {
   useController,
   useFormState,
 } from "react-hook-form";
-import { Plus } from "lucide-react";
 import isArray from "lodash/isArray";
 
-import { Button } from "@/components/ui/button";
-import { Label } from "@/components/ui/label";
-import { Description } from "@/components/ui/description";
-import { FormErrorSkeleton } from "@/components/ui/form";
 import { cn } from "@/lib/utils";
-import {
-  Accordion,
-  AccordionContent,
-  AccordionItem,
-  AccordionTrigger,
-} from "@/components/ui/accordion";
 import { FilterOperator, Filters } from "@/types/filters";
-import { Groups, Group } from "@/types/groups";
+import { Groups } from "@/types/groups";
 import {
   COLUMN_DATASET_ID,
   COLUMN_METADATA_ID,
   COLUMN_TYPE,
   ColumnData,
 } from "@/types/shared";
-import { generateRandomString } from "@/lib/utils";
-import GroupsContent from "@/components/shared/GroupsContent/GroupsContent";
 import FiltersAccordionSection from "@/components/shared/FiltersAccordionSection/FiltersAccordionSection";
+import GroupsAccordionSection, {
+  GroupValidationError,
+} from "@/components/shared/GroupsAccordionSection/GroupsAccordionSection";
 import DatasetSelectBox from "@/components/pages-shared/experiments/DatasetSelectBox/DatasetSelectBox";
 import ExperimentsPathsAutocomplete from "@/components/pages-shared/experiments/ExperimentsPathsAutocomplete/ExperimentsPathsAutocomplete";
 
@@ -39,7 +29,7 @@ type ExperimentColumnData = {
   dataset_id?: string;
 };
 
-const FILTER_AND_GROUP_COLUMNS: ColumnData<ExperimentColumnData>[] = [
+const EXPERIMENT_DATA_COLUMNS: ColumnData<ExperimentColumnData>[] = [
   {
     id: COLUMN_DATASET_ID,
     label: "Dataset",
@@ -53,7 +43,7 @@ const FILTER_AND_GROUP_COLUMNS: ColumnData<ExperimentColumnData>[] = [
   },
 ];
 
-interface ExperimentWidgetFiltersSectionProps<T extends FieldValues> {
+interface ExperimentWidgetDataSectionProps<T extends FieldValues> {
   control: Control<T>;
   filtersFieldName: FieldPath<T>;
   groupsFieldName: FieldPath<T>;
@@ -64,7 +54,7 @@ interface ExperimentWidgetFiltersSectionProps<T extends FieldValues> {
   className?: string;
 }
 
-const ExperimentWidgetFiltersSection = <T extends FieldValues>({
+const ExperimentWidgetDataSection = <T extends FieldValues>({
   control,
   filtersFieldName,
   groupsFieldName,
@@ -73,7 +63,7 @@ const ExperimentWidgetFiltersSection = <T extends FieldValues>({
   onFiltersChange,
   onGroupsChange,
   className = "",
-}: ExperimentWidgetFiltersSectionProps<T>) => {
+}: ExperimentWidgetDataSectionProps<T>) => {
   const { field: filtersField } = useController({
     control,
     name: filtersFieldName,
@@ -84,7 +74,7 @@ const ExperimentWidgetFiltersSection = <T extends FieldValues>({
     name: groupsFieldName,
   });
 
-  const filtersAndGroupsConfig = useMemo(
+  const dataConfig = useMemo(
     () => ({
       rowsMap: {
         [COLUMN_DATASET_ID]: {
@@ -146,28 +136,15 @@ const ExperimentWidgetFiltersSection = <T extends FieldValues>({
         updatedGroups = groupsOrUpdater;
       }
 
-      const limitedGroups = updatedGroups.slice(0, 1);
-      groupsField.onChange(limitedGroups);
-      onGroupsChange?.(limitedGroups);
+      groupsField.onChange(updatedGroups);
+      onGroupsChange?.(updatedGroups);
     },
     [groupsField, onGroupsChange],
   );
 
-  const handleAddGroup = useCallback(() => {
-    if (groups.length >= 1) return;
-    const newGroup: Group = {
-      id: generateRandomString(),
-      field: "",
-      key: "",
-      direction: "" as Group["direction"],
-      type: "",
-    };
-    setGroups((prev) => [...prev, newGroup]);
-  }, [groups.length, setGroups]);
-
   const { errors: formErrors } = useFormState({ control });
   const filterErrors = formErrors[filtersFieldName];
-  const errors =
+  const parsedFilterErrors =
     filterErrors && isArray(filterErrors)
       ? (filterErrors as unknown[]).map((e) =>
           e
@@ -182,95 +159,37 @@ const ExperimentWidgetFiltersSection = <T extends FieldValues>({
       : undefined;
 
   const groupErrors = formErrors[groupsFieldName];
-  const hasGroupErrors = groupErrors && isArray(groupErrors);
+  const parsedGroupErrors =
+    groupErrors && isArray(groupErrors)
+      ? (groupErrors as unknown[]).map((e) =>
+          e ? (e as GroupValidationError) : undefined,
+        )
+      : undefined;
 
   return (
     <div className={cn("flex flex-col gap-4", className)}>
       <FiltersAccordionSection
-        columns={FILTER_AND_GROUP_COLUMNS as ColumnData<unknown>[]}
-        config={filtersAndGroupsConfig}
+        columns={EXPERIMENT_DATA_COLUMNS as ColumnData<unknown>[]}
+        config={dataConfig}
         filters={filters}
         onChange={setFilters}
         label="Filters"
         description="Add filters to focus the widget on specific experiments."
-        errors={errors}
+        errors={parsedFilterErrors}
       />
 
-      <Accordion type="single" collapsible className="w-full">
-        <AccordionItem value="groups" className="border-t">
-          <AccordionTrigger className="py-3 hover:no-underline">
-            <Label className="text-sm font-medium">
-              Group by {groups.length > 0 && `(${groups.length})`}
-            </Label>
-          </AccordionTrigger>
-          <AccordionContent className="flex flex-col gap-4 px-3 pb-3">
-            <Description>
-              Group experiments by configuration to aggregate feedback scores.
-            </Description>
-            <div className="space-y-3">
-              {groups.length > 0 && (
-                <GroupsContent
-                  groups={groups}
-                  setGroups={setGroups}
-                  columns={FILTER_AND_GROUP_COLUMNS as ColumnData<unknown>[]}
-                  config={filtersAndGroupsConfig}
-                  className="py-0"
-                />
-              )}
-
-              {hasGroupErrors && (groupErrors as unknown[]).length > 0 && (
-                <div className="space-y-1">
-                  {(groupErrors as unknown[]).map((groupError, index) => {
-                    if (!groupError) return null;
-
-                    const errorMessages: string[] = [];
-                    const error = groupError as Record<
-                      string,
-                      { message?: string }
-                    >;
-
-                    if (error.field?.message) {
-                      errorMessages.push(error.field.message);
-                    }
-                    if (error.key?.message) {
-                      errorMessages.push(error.key.message);
-                    }
-
-                    if (errorMessages.length === 0) return null;
-
-                    return (
-                      <FormErrorSkeleton key={index}>
-                        Group {index + 1}: {errorMessages.join(", ")}
-                      </FormErrorSkeleton>
-                    );
-                  })}
-                </div>
-              )}
-
-              {groups.length < 1 && (
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={handleAddGroup}
-                  className="w-fit"
-                >
-                  <Plus className="mr-1 size-3.5" />
-                  Add group
-                </Button>
-              )}
-
-              {groups.length >= 1 && (
-                <Description className="text-muted-foreground">
-                  Only one level of grouping is supported.
-                </Description>
-              )}
-            </div>
-          </AccordionContent>
-        </AccordionItem>
-      </Accordion>
+      <GroupsAccordionSection
+        columns={EXPERIMENT_DATA_COLUMNS as ColumnData<unknown>[]}
+        config={dataConfig}
+        groups={groups}
+        onChange={setGroups}
+        label="Group by"
+        description="Group experiments by configuration to aggregate feedback scores."
+        errors={parsedGroupErrors}
+        className="w-full"
+      />
     </div>
   );
 };
 
-export default ExperimentWidgetFiltersSection;
+export default ExperimentWidgetDataSection;

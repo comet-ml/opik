@@ -7,7 +7,7 @@ import { FiltersArraySchema } from "@/components/shared/FiltersAccordionSection/
 const GroupSchema = z.object({
   id: z.string(),
   field: z.string(),
-  direction: z.nativeEnum(SORT_DIRECTION),
+  direction: z.nativeEnum(SORT_DIRECTION).or(z.literal("")),
   type: z.nativeEnum(COLUMN_TYPE).or(z.literal("")),
   key: z.string().optional(),
   error: z.string().optional(),
@@ -21,7 +21,7 @@ export const ExperimentsFeedbackScoresWidgetSchema = z.object({
     .min(1, { message: "Widget title is required" }),
   subtitle: z.string().optional(),
   filters: FiltersArraySchema.optional(),
-  groups: z.array(GroupSchema).max(1).optional(),
+  groups: z.array(GroupSchema).optional(),
   chartType: z.nativeEnum(CHART_TYPE).optional(),
 });
 
