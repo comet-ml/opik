@@ -33,7 +33,6 @@ interface DatasetSelectBoxProps {
   disabled?: boolean;
   showClearButton?: boolean;
   buttonClassName?: string;
-  /** Callback to handle additional actions when dataset changes (like resetting state) */
   onDatasetChangeExtra?: () => void;
 }
 
