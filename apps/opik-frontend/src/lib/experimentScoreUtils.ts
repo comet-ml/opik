@@ -12,6 +12,7 @@ import {
 export interface FormattedScore {
   name: string;
   value: string | number;
+  reason?: string;
 }
 
 /**

@@ -7,6 +7,7 @@ import { TraceFeedbackScore } from "@/types/traces";
 import React from "react";
 import ColoredTagNew from "../ColoredTag/ColoredTagNew";
 import { cn } from "@/lib/utils";
+import { isValidReason } from "@/lib/feedback-scores";
 
 type FeedbackScoreHoverCardProps = {
   title?: string;
@@ -54,20 +55,24 @@ const FeedbackScoreHoverCard: React.FC<FeedbackScoreHoverCardProps> = ({
           )}
           <div className="flex flex-col gap-1.5 pb-1 pt-1.5">
             {scores.map((tag) => {
+              const hasReason = isValidReason(tag.reason);
               return (
-                <div
-                  key={tag.name}
-                  className="flex items-center justify-between"
-                >
-                  <ColoredTagNew
-                    label={tag.name}
-                    className="min-w-0 flex-1"
-                    size="sm"
-                  />
-
-                  <div className="comet-body-xs-accented pr-2 text-foreground">
-                    {tag.value}
+                <div key={tag.name} className="flex flex-col gap-1 px-2">
+                  <div className="flex items-center justify-between">
+                    <ColoredTagNew
+                      label={tag.name}
+                      className="min-w-0 flex-1"
+                      size="sm"
+                    />
+                    <div className="comet-body-xs-accented text-foreground">
+                      {tag.value}
+                    </div>
                   </div>
+                  {hasReason && (
+                    <div className="comet-body-xs break-words text-muted-slate">
+                      {tag.reason}
+                    </div>
+                  )}
                 </div>
               );
             })}

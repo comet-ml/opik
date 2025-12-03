@@ -175,6 +175,7 @@ export interface UsageData {
 export interface AggregatedFeedbackScore {
   name: string;
   value: number;
+  reason?: string;
 }
 
 export interface AggregatedDuration {

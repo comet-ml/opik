@@ -155,6 +155,7 @@ const FeedbackScoreListCell = <TData,>(
                       key={item.name}
                       label={item.name}
                       value={item.value}
+                      reason={item.reason}
                       className="min-w-0"
                     />
                   ))}
