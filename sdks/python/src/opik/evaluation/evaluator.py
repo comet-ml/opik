@@ -101,7 +101,7 @@ def evaluate(
             as input and returns dict which will later be used for scoring.
 
         experiment_name_prefix: The prefix to be added to automatically generated experiment names to make them unique
-            but grouped uder the same prefix. For example, if you set `experiment_name_prefix="my-experiment"`,
+            but grouped under the same prefix. For example, if you set `experiment_name_prefix="my-experiment"`,
             the first experiment created will be named `my-experiment-<unique-random-part>`.
 
         experiment_name: The name of the experiment associated with evaluation run.
@@ -525,7 +525,7 @@ def evaluate_prompt(
                 • task_span - the data collected during the LLM task execution [optional].
 
         experiment_name_prefix: The prefix to be added to automatically generated experiment names to make them unique
-            but grouped uder the same prefix. For example, if you set `experiment_name_prefix="my-experiment"`,
+            but grouped under the same prefix. For example, if you set `experiment_name_prefix="my-experiment"`,
             the first experiment created will be named `my-experiment-<unique-random-part>`.
 
         experiment_name: name of the experiment.
@@ -708,7 +708,7 @@ def evaluate_optimization_trial(
                 • task_span - the data collected during the LLM task execution [optional].
 
         experiment_name_prefix: The prefix to be added to automatically generated experiment names to make them unique
-                    but grouped uder the same prefix. For example, if you set `experiment_name_prefix="my-experiment"`,
+                    but grouped under the same prefix. For example, if you set `experiment_name_prefix="my-experiment"`,
                     the first experiment created will be named `my-experiment-<unique-random-part>`.
 
         experiment_name: The name of the experiment associated with evaluation run.
