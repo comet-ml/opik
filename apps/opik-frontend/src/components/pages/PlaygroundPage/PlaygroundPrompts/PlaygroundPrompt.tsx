@@ -160,10 +160,19 @@ const PlaygroundPrompt = ({
     }
 
     // Parse both templates as objects to compare semantically, not by string formatting
+    // IMPORTANT: Only compare role and content, ignore text prompt metadata fields
     try {
       const currentTemplate = JSON.parse(chatPromptTemplate);
       const loadedTemplate = JSON.parse(chatPromptVersionData.template);
-      return !isEqual(currentTemplate, loadedTemplate);
+      
+      // Normalize both templates to only include role and content
+      const normalizeTemplate = (template: Array<{ role: string; content: unknown; promptId?: string; promptVersionId?: string }>) =>
+        template.map(({ role, content }) => ({ role, content }));
+      
+      const normalizedCurrent = normalizeTemplate(currentTemplate);
+      const normalizedLoaded = normalizeTemplate(loadedTemplate);
+      
+      return !isEqual(normalizedCurrent, normalizedLoaded);
     } catch {
       // If parsing fails, fall back to string comparison
       return !isEqual(chatPromptTemplate, chatPromptVersionData.template);
@@ -340,11 +349,14 @@ const PlaygroundPrompt = ({
         const parsedMessages = JSON.parse(chatPromptVersionData.template);
 
         // Convert to LLMMessage format - this will OVERWRITE existing messages
+        // Clear any text prompt metadata (promptId, promptVersionId) from chat prompts
         const newMessages: LLMMessage[] = parsedMessages.map(
           (msg: { role: string; content: unknown }) =>
             generateDefaultLLMPromptMessage({
               role: msg.role as LLM_MESSAGE_ROLE,
               content: msg.content as LLMMessage["content"],
+              // Explicitly exclude promptId and promptVersionId to ensure
+              // chat prompts don't carry text prompt metadata
             }),
         );
 
@@ -507,13 +519,19 @@ const PlaygroundPrompt = ({
           if (savedPromptId) {
             updatePrompt(promptId, { loadedChatPromptId: savedPromptId });
 
-            // Invalidate only the specific prompt that was saved/created
-            // This ensures the latest data is fetched without affecting other loaded prompts
-            queryClient.invalidateQueries({
-              queryKey: ["prompt", { promptId: savedPromptId }],
+            // Update the ref to mark this new version as "already loaded"
+            // This prevents the useEffect from re-loading messages when we invalidate queries
+            const newChatPromptKey = `${savedPromptId}-${version.id}`;
+            loadedChatPromptRef.current = newChatPromptKey;
+            
+            // Invalidate the prompt queries to refetch the latest data
+            // This ensures the unsaved changes indicator updates correctly
+            // CRITICAL: Query keys must match the format used in the hooks (objects, not strings)
+            queryClient.invalidateQueries({ 
+              queryKey: ["prompt", { promptId: savedPromptId }] 
             });
-            queryClient.invalidateQueries({
-              queryKey: ["prompt-versions", { promptId: savedPromptId }],
+            queryClient.invalidateQueries({ 
+              queryKey: ["prompt-version", { versionId: version.id }] 
             });
           }
         }}

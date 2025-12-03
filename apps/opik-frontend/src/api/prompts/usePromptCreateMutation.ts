@@ -66,6 +66,14 @@ const usePromptCreateMutation = () => {
         variant: "destructive",
       });
     },
+    onSuccess: (data) => {
+      // If we have a specific prompt ID, invalidate its query to ensure fresh data
+      if (data?.id) {
+        queryClient.invalidateQueries({
+          queryKey: ["prompt", { promptId: data.id }],
+        });
+      }
+    },
     onSettled: () => {
       return queryClient.invalidateQueries({ queryKey: ["prompts"] });
     },

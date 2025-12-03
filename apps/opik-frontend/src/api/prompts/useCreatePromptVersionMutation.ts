@@ -54,10 +54,12 @@ const useCreatePromptVersionMutation = () => {
     },
     onSuccess: async (data: PromptVersion, { onSuccess }) => {
       onSuccess(data);
-    },
-    onSettled: () => {
-      queryClient.invalidateQueries({ queryKey: ["prompt-versions"] });
-      queryClient.invalidateQueries({ queryKey: ["prompt"] });
+      
+      // Invalidate the specific prompt query to update the unsaved indicator
+      // The loadedChatPromptRef in PlaygroundPrompt prevents unwanted re-loading
+      queryClient.invalidateQueries({
+        queryKey: ["prompt", { promptId: data.prompt_id }],
+      });
     },
   });
 };
