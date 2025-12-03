@@ -271,6 +271,16 @@ public class CsvDatasetItemProcessor {
 
                     batch.add(item);
 
+                    // TODO: REMOVE THIS - Debug delay for testing UI processing status (5 seconds per item)
+                    try {
+                        log.warn("DEBUG: Adding 5 second delay after item '{}' for dataset '{}'", recordCount,
+                                datasetId);
+                        Thread.sleep(5_000);
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                        log.warn("DEBUG: Sleep interrupted");
+                    }
+
                     if (batch.size() >= batchSize) {
                         batchNumber++;
                         log.debug("Saving batch '{}' for dataset '{}', batch size: '{}'",

@@ -1,26 +1,26 @@
 package com.comet.opik.api.validation;
 
-import com.comet.opik.api.DatasetItemBatchUpdate;
+import com.comet.opik.api.DatasetItemsDelete;
 import jakarta.validation.ConstraintValidator;
 import jakarta.validation.ConstraintValidatorContext;
 import org.apache.commons.collections4.CollectionUtils;
 
-public class DatasetItemBatchUpdateValidator
+public class DatasetItemsDeleteValidator
         implements
-            ConstraintValidator<DatasetItemBatchUpdateValidation, DatasetItemBatchUpdate> {
+            ConstraintValidator<DatasetItemsDeleteValidation, DatasetItemsDelete> {
 
     @Override
-    public boolean isValid(DatasetItemBatchUpdate batchUpdate, ConstraintValidatorContext context) {
-        if (batchUpdate == null) {
+    public boolean isValid(DatasetItemsDelete deleteRequest, ConstraintValidatorContext context) {
+        if (deleteRequest == null) {
             return false;
         }
 
         context.disableDefaultConstraintViolation();
 
         // Check if `ids` is provided
-        boolean hasIds = CollectionUtils.isNotEmpty(batchUpdate.ids());
+        boolean hasIds = CollectionUtils.isNotEmpty(deleteRequest.ids());
         // Check if filters are provided (empty array means "select all items", null means not provided)
-        boolean hasFilters = batchUpdate.filters() != null;
+        boolean hasFilters = deleteRequest.filters() != null;
 
         // Validate that at least one of ids or filters is provided
         if (!hasIds && !hasFilters) {
@@ -32,7 +32,7 @@ public class DatasetItemBatchUpdateValidator
         // Validate that both ids and filters are not provided at the same time
         if (hasIds && hasFilters) {
             context.buildConstraintViolationWithTemplate(
-                    "Cannot provide both 'ids' and 'filters'. Use 'ids' for specific items or 'filters' to update items matching the filter criteria.")
+                    "Cannot provide both 'ids' and 'filters'. Use 'ids' for specific items or 'filters' to delete items matching the filter criteria.")
                     .addConstraintViolation();
             return false;
         }
