@@ -1,5 +1,5 @@
 import React from "react";
-import { CellContext } from "@tanstack/react-table";
+import { CellContext, TableMeta } from "@tanstack/react-table";
 
 import { ExperimentItem, ExperimentsCompare } from "@/types/datasets";
 import VerticallySplitCellWrapper, {
@@ -16,6 +16,7 @@ import { FeedbackScoreCustomMeta } from "@/types/feedback-scores";
 import useFeedbackScoreInlineEdit from "@/hooks/useFeedbackScoreInlineEdit";
 import { cn } from "@/lib/utils";
 import FeedbackScoreEditDropdown from "@/components/shared/DataTableCells/FeedbackScoreEditDropdown";
+import { ROW_HEIGHT } from "@/types/shared";
 
 const CompareExperimentsFeedbackScoreCell: React.FC<
   CellContext<ExperimentsCompare, unknown>
@@ -37,12 +38,15 @@ const CompareExperimentsFeedbackScoreCell: React.FC<
     feedbackScore,
   });
 
-  const enableUserFeedbackEditing =
+  const { enableUserFeedbackEditing = false, rowHeight = ROW_HEIGHT.small } =
+    (context.table.options.meta ?? {}) as TableMeta<ExperimentsCompare>;
+
+  const isEditingEnabled =
     experimentCompare.experiment_items.length === 1 &&
-    (context.table.options.meta?.enableUserFeedbackEditing ?? false);
+    enableUserFeedbackEditing;
   const isUserFeedbackColumn =
-    enableUserFeedbackEditing &&
-    context.column.id === "feedback_scores_User feedback";
+    isEditingEnabled && context.column.id === "feedback_scores_User feedback";
+  const isSmall = rowHeight === ROW_HEIGHT.small;
 
   const renderContent = (item: ExperimentItem | undefined) => {
     const feedbackScore = item?.feedback_scores?.find(
@@ -82,7 +86,10 @@ const CompareExperimentsFeedbackScoreCell: React.FC<
     return (
       <div
         className={cn(
-          "flex h-4 w-full items-center justify-end gap-1",
+          "flex w-full justify-end gap-1",
+          isSmall
+            ? "h-4 items-center"
+            : "flex-col items-end justify-start overflow-hidden",
           isUserFeedbackColumn && "group",
         )}
       >
@@ -94,7 +101,19 @@ const CompareExperimentsFeedbackScoreCell: React.FC<
         />
         {reasons.length > 0 && (
           <FeedbackScoreReasonTooltip reasons={reasons}>
-            <MessageSquareMore className="size-3.5 shrink-0 text-light-slate" />
+            {!isSmall ? (
+              <span
+                className={cn(
+                  "break-words text-xs text-muted-foreground",
+                  rowHeight === ROW_HEIGHT.medium && "line-clamp-3",
+                  rowHeight === ROW_HEIGHT.large && "line-clamp-[16]",
+                )}
+              >
+                {reasons.map((r) => r.reason).join(", ")}
+              </span>
+            ) : (
+              <MessageSquareMore className="size-3.5 shrink-0 text-light-slate" />
+            )}
           </FeedbackScoreReasonTooltip>
         )}
       </div>

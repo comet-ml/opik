@@ -67,6 +67,8 @@ declare module "@tanstack/react-table" {
     onCommentsReply?: (row: TData, idx?: number) => void;
     aggregationMap?: Record<string, unknown>;
     enableUserFeedbackEditing?: boolean;
+    projectId?: string;
+    projectName?: string;
   }
 
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
