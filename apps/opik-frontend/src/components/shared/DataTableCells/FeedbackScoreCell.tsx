@@ -64,8 +64,10 @@ const FeedbackScoreCell = (context: CellContext<unknown, unknown>) => {
   const isEditingEnabled =
     (!isObjectThread(row) || row.status === ThreadStatus.INACTIVE) &&
     enableUserFeedbackEditing;
+
   const isUserFeedbackColumn =
     isEditingEnabled && context.column.id === "feedback_scores_User feedback";
+  const isSmall = rowHeight === ROW_HEIGHT.small;
 
   return (
     <CellWrapper
@@ -73,7 +75,7 @@ const FeedbackScoreCell = (context: CellContext<unknown, unknown>) => {
       tableMetadata={context.table.options.meta}
       className={cn(
         "flex w-full justify-end gap-1",
-        rowHeight === ROW_HEIGHT.small
+        isSmall
           ? "h-4 items-center"
           : "flex-col items-end justify-start overflow-hidden",
         isUserFeedbackColumn && "group",
@@ -87,11 +89,11 @@ const FeedbackScoreCell = (context: CellContext<unknown, unknown>) => {
 
       {reasons.length > 0 && (
         <FeedbackScoreReasonTooltip reasons={reasons}>
-          {rowHeight !== ROW_HEIGHT.small ? (
+          {!isSmall ? (
             <span
               className={cn(
                 "break-words text-xs text-muted-foreground",
-                rowHeight === ROW_HEIGHT.medium && "line-clamp-6",
+                rowHeight === ROW_HEIGHT.medium && "line-clamp-3",
                 rowHeight === ROW_HEIGHT.large && "line-clamp-[16]",
               )}
             >

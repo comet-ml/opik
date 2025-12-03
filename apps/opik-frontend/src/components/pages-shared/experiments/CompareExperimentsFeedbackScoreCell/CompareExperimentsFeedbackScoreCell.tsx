@@ -46,6 +46,7 @@ const CompareExperimentsFeedbackScoreCell: React.FC<
     enableUserFeedbackEditing;
   const isUserFeedbackColumn =
     isEditingEnabled && context.column.id === "feedback_scores_User feedback";
+  const isSmall = rowHeight === ROW_HEIGHT.small;
 
   const renderContent = (item: ExperimentItem | undefined) => {
     const feedbackScore = item?.feedback_scores?.find(
@@ -82,16 +83,13 @@ const CompareExperimentsFeedbackScoreCell: React.FC<
 
     const color = feedbackKey && colorMap ? colorMap[feedbackKey] : undefined;
 
-    const shouldShowInlineReasons =
-      rowHeight !== ROW_HEIGHT.small && reasons.length > 0;
-
     return (
       <div
         className={cn(
           "flex w-full justify-end gap-1",
-          shouldShowInlineReasons
-            ? "flex-col items-end justify-start overflow-hidden"
-            : "h-4 items-center",
+          isSmall
+            ? "h-4 items-center"
+            : "flex-col items-end justify-start overflow-hidden",
           isUserFeedbackColumn && "group",
         )}
       >
@@ -103,11 +101,11 @@ const CompareExperimentsFeedbackScoreCell: React.FC<
         />
         {reasons.length > 0 && (
           <FeedbackScoreReasonTooltip reasons={reasons}>
-            {shouldShowInlineReasons ? (
+            {!isSmall ? (
               <span
                 className={cn(
                   "break-words text-xs text-muted-foreground",
-                  rowHeight === ROW_HEIGHT.medium && "line-clamp-6",
+                  rowHeight === ROW_HEIGHT.medium && "line-clamp-3",
                   rowHeight === ROW_HEIGHT.large && "line-clamp-[16]",
                 )}
               >
