@@ -39,7 +39,6 @@ import DataTable from "@/components/shared/DataTable/DataTable";
 import DataTableNoData from "@/components/shared/DataTableNoData/DataTableNoData";
 import DataTablePagination from "@/components/shared/DataTablePagination/DataTablePagination";
 import IdCell from "@/components/shared/DataTableCells/IdCell";
-import ResourceCell from "@/components/shared/DataTableCells/ResourceCell";
 import StatusCell from "@/components/shared/DataTableCells/StatusCell";
 import useRulesList from "@/api/automations/useRulesList";
 import { formatDate } from "@/lib/date";
@@ -49,7 +48,6 @@ import AddEditRuleDialog from "@/components/pages-shared/automations/AddEditRule
 import RulesActionsPanel from "@/components/pages-shared/automations/RulesActionsPanel";
 import RuleRowActionsCell from "@/components/pages-shared/automations/RuleRowActionsCell";
 import RuleLogsCell from "@/components/pages-shared/automations/RuleLogsCell";
-import { RESOURCE_TYPE } from "@/components/shared/ResourceLink/ResourceLink";
 import ExplainerDescription from "@/components/shared/ExplainerDescription/ExplainerDescription";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 import { capitalizeFirstLetter } from "@/lib/utils";
@@ -70,16 +68,13 @@ const DEFAULT_COLUMNS: ColumnData<EvaluatorsRule>[] = [
     type: COLUMN_TYPE.string,
   },
   {
-    id: "project_name",
-    label: "Project",
+    id: "project_names",
+    label: "Projects",
     type: COLUMN_TYPE.string,
-    cell: ResourceCell as never,
-    accessorFn: (row) => row.project_name,
-    customMeta: {
-      nameKey: "project_name",
-      idKey: "project_id",
-      resource: RESOURCE_TYPE.project,
-    },
+    accessorFn: (row) =>
+      row.project_names && row.project_names.length > 0
+        ? row.project_names.join(", ")
+        : "N/A",
   },
   {
     id: "last_updated_at",
@@ -129,7 +124,7 @@ const DEFAULT_SELECTED_COLUMNS: string[] = [
   "created_at",
   "sampling_rate",
   "enabled",
-  "project_name",
+  "project_names",
   "type",
 ];
 
