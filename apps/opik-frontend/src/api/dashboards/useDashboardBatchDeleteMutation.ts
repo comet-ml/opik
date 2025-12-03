@@ -16,7 +16,7 @@ const useDashboardBatchDeleteMutation = () => {
       const { data } = await api.post(
         `${DASHBOARDS_REST_ENDPOINT}delete-batch`,
         {
-          ids: ids,
+          ids,
         },
       );
       return data;
