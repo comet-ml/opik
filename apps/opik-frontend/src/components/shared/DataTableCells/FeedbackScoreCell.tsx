@@ -68,8 +68,7 @@ const FeedbackScoreCell = (context: CellContext<unknown, unknown>) => {
     isEditingEnabled && context.column.id === "feedback_scores_User feedback";
 
   const shouldShowInlineReasons =
-    [ROW_HEIGHT.medium, ROW_HEIGHT.large].includes(rowHeight) &&
-    reasons.length > 0;
+    rowHeight !== ROW_HEIGHT.small && reasons.length > 0;
 
   return (
     <CellWrapper

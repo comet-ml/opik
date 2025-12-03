@@ -83,8 +83,7 @@ const CompareExperimentsFeedbackScoreCell: React.FC<
     const color = feedbackKey && colorMap ? colorMap[feedbackKey] : undefined;
 
     const shouldShowInlineReasons =
-      [ROW_HEIGHT.medium, ROW_HEIGHT.large].includes(rowHeight) &&
-      reasons.length > 0;
+      rowHeight !== ROW_HEIGHT.small && reasons.length > 0;
 
     return (
       <div

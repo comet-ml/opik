@@ -801,9 +801,8 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
       },
       columnsStatistic,
       enableUserFeedbackEditing: true,
-      rowHeight: height,
     }),
-    [handleRowClick, setExpandedCommentSections, columnsStatistic, height],
+    [handleRowClick, setExpandedCommentSections, columnsStatistic],
   );
 
   if (isPending || isFeedbackScoresPending || isExperimentsOutputPending) {
