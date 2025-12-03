@@ -8,11 +8,13 @@ import org.jdbi.v3.sqlobject.config.RegisterArgumentFactory;
 import org.jdbi.v3.sqlobject.config.RegisterColumnMapper;
 import org.jdbi.v3.sqlobject.config.RegisterConstructorMapper;
 import org.jdbi.v3.sqlobject.customizer.Bind;
+import org.jdbi.v3.sqlobject.customizer.BindList;
 import org.jdbi.v3.sqlobject.customizer.BindMethods;
 import org.jdbi.v3.sqlobject.statement.SqlBatch;
 import org.jdbi.v3.sqlobject.statement.SqlQuery;
 import org.jdbi.v3.sqlobject.statement.SqlUpdate;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -137,4 +139,22 @@ public interface DatasetVersionDAO {
             """)
     int updateChangeDescription(@Bind("id") UUID id, @Bind("change_description") String changeDescription,
             @Bind("last_updated_by") String lastUpdatedBy, @Bind("workspace_id") String workspaceId);
+
+    @SqlQuery("""
+            SELECT
+                dv.*,
+                COALESCE(t.tags, JSON_ARRAY()) AS tags,
+                COALESCE(JSON_CONTAINS(t.tags, '"latest"'), false) AS is_latest
+            FROM dataset_versions AS dv
+            LEFT JOIN (
+                SELECT version_id, JSON_ARRAYAGG(tag) AS tags
+                FROM dataset_version_tags
+                GROUP BY version_id
+            ) AS t ON t.version_id = dv.id
+            WHERE dv.dataset_id IN (<dataset_ids>)
+                AND dv.workspace_id = :workspace_id
+                AND JSON_CONTAINS(t.tags, '"latest"')
+            """)
+    List<DatasetVersion> findLatestVersionsByDatasetIds(@BindList("dataset_ids") Collection<UUID> datasetIds,
+            @Bind("workspace_id") String workspaceId);
 }
