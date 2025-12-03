@@ -39,6 +39,7 @@ import DatasetItemEditor from "@/components/pages/DatasetItemsPage/DatasetItemEd
 import DatasetItemsActionsPanelLegacy from "@/components/pages/DatasetItemsPage/DatasetItemsActionsPanelLegacy";
 import { DatasetItemRowActionsCell } from "@/components/pages/DatasetItemsPage/DatasetItemRowActionsCell";
 import DataTableRowHeightSelector from "@/components/shared/DataTableRowHeightSelector/DataTableRowHeightSelector";
+import SelectAllBanner from "@/components/shared/SelectAllBanner/SelectAllBanner";
 import AddEditDatasetItemDialog from "@/components/pages/DatasetItemsPage/AddEditDatasetItemDialog";
 import AddDatasetItemSidebar from "@/components/pages/DatasetItemsPage/AddDatasetItemSidebar";
 import DatasetTagsList from "@/components/pages/DatasetItemsPage/DatasetTagsList";
@@ -112,6 +113,7 @@ const DatasetItemsPageLegacy = () => {
   });
 
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
+  const [isAllItemsSelected, setIsAllItemsSelected] = useState(false);
 
   const [height, setHeight] = useQueryParamAndLocalStorageState<
     string | null | undefined
@@ -160,6 +162,7 @@ const DatasetItemsPageLegacy = () => {
         refetchInterval: isProcessing ? POLLING_INTERVAL_MS : false,
       },
     );
+  const totalCount = data?.total ?? 0;
 
   const datasetColumns = useMemo(
     () =>
@@ -173,6 +176,20 @@ const DatasetItemsPageLegacy = () => {
       filters,
       page: page as number,
       size: size as number,
+      search: search!,
+      truncate: false,
+    },
+    {
+      enabled: false,
+    },
+  );
+
+  const { refetch: refetchAllItemsForExport } = useDatasetItemsList(
+    {
+      datasetId,
+      filters,
+      page: 1,
+      size: totalCount || 1,
       search: search!,
       truncate: false,
     },
@@ -218,8 +235,40 @@ const DatasetItemsPageLegacy = () => {
     return rows.filter((row) => rowSelection[row.id]);
   }, [rowSelection, rows]);
 
+  const handleRowSelectionChange: typeof setRowSelection = useCallback(
+    (updaterOrValue) => {
+      setRowSelection((prev) => {
+        const next =
+          typeof updaterOrValue === "function"
+            ? updaterOrValue(prev)
+            : updaterOrValue;
+
+        // Reset isAllItemsSelected if selection count decreases (row deselected)
+        if (
+          isAllItemsSelected &&
+          Object.keys(next).length < Object.keys(prev).length
+        ) {
+          setIsAllItemsSelected(false);
+        }
+
+        return next;
+      });
+    },
+    [isAllItemsSelected],
+  );
+
+  const effectiveIsAllItemsSelected = useMemo(() => {
+    return (
+      isAllItemsSelected &&
+      selectedRows.length === rows.length &&
+      rows.length > 0
+    );
+  }, [isAllItemsSelected, selectedRows.length, rows.length]);
+
   const getDataForExport = useCallback(async (): Promise<DatasetItem[]> => {
-    const result = await refetchExportData();
+    const result = effectiveIsAllItemsSelected
+      ? await refetchAllItemsForExport()
+      : await refetchExportData();
 
     if (result.error) {
       throw result.error;
@@ -229,11 +278,19 @@ const DatasetItemsPageLegacy = () => {
       throw new Error("Failed to fetch data");
     }
 
-    const allRows = result.data.content;
+    if (effectiveIsAllItemsSelected) {
+      return result.data.content;
+    }
+
     const selectedIds = Object.keys(rowSelection);
 
-    return allRows.filter((row) => selectedIds.includes(row.id));
-  }, [refetchExportData, rowSelection]);
+    return result.data.content.filter((row) => selectedIds.includes(row.id));
+  }, [
+    refetchExportData,
+    refetchAllItemsForExport,
+    rowSelection,
+    effectiveIsAllItemsSelected,
+  ]);
 
   const dynamicDatasetColumns = useMemo(() => {
     return datasetColumns.map<DynamicColumn>((c) => ({
@@ -370,6 +427,16 @@ const DatasetItemsPageLegacy = () => {
     [columnsWidth, setColumnsWidth],
   );
 
+  const handleClearSelection = useCallback(() => {
+    setRowSelection({});
+    setIsAllItemsSelected(false);
+  }, []);
+
+  const showSelectAllBanner =
+    selectedRows.length > 0 &&
+    selectedRows.length === rows.length &&
+    selectedRows.length < totalCount;
+
   if (isPending || isDatasetPending) {
     return <Loader />;
   }
@@ -430,6 +497,10 @@ const DatasetItemsPageLegacy = () => {
             datasetName={dataset?.name ?? ""}
             columnsToExport={columnsToExport}
             dynamicColumns={dynamicColumnsIds}
+            isAllItemsSelected={effectiveIsAllItemsSelected}
+            filters={filters}
+            search={search ?? ""}
+            totalCount={totalCount}
           />
           <Separator orientation="vertical" className="mx-2 h-4" />
           <DataTableRowHeightSelector
@@ -469,6 +540,14 @@ const DatasetItemsPageLegacy = () => {
           className="mb-4"
         />
       )}
+      {showSelectAllBanner && (
+        <SelectAllBanner
+          selectedCount={isAllItemsSelected ? totalCount : selectedRows.length}
+          totalCount={totalCount}
+          onSelectAll={() => setIsAllItemsSelected(true)}
+          onClearSelection={handleClearSelection}
+        />
+      )}
       <DataTable
         columns={columns}
         data={rows}
@@ -478,7 +557,7 @@ const DatasetItemsPageLegacy = () => {
         showLoadingOverlay={isPlaceholderData && isFetching}
         selectionConfig={{
           rowSelection,
-          setRowSelection,
+          setRowSelection: handleRowSelectionChange,
         }}
         getRowId={getRowId}
         rowHeight={height as ROW_HEIGHT}

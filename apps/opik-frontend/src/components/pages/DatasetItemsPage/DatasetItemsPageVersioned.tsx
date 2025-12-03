@@ -83,7 +83,7 @@ const DatasetItemsPageVersioned = () => {
         setOpen={setDiscardDialogOpen}
         onConfirm={handleDiscardChanges}
         title="Discard changes"
-        description="This will discard all uncommitted changes and restore the dataset to its last saved version. This action cannot be undone."
+        description="Discarding will remove all unsaved edits to this dataset. This action can't be undone. Are you sure you want to continue?"
         confirmText="Discard changes"
         confirmButtonVariant="destructive"
       />

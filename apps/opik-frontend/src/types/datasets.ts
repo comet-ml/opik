@@ -22,7 +22,10 @@ export interface Dataset {
   created_at: string;
   last_updated_at: string;
   status?: DATASET_STATUS;
-  latest_version?: DatasetVersion;
+  latest_version?: Pick<
+    DatasetVersion,
+    "id" | "version_hash" | "tags" | "change_description"
+  >;
 }
 
 export interface DatasetVersion {
