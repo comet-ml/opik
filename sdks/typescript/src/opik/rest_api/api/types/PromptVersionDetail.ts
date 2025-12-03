@@ -15,6 +15,7 @@ export interface PromptVersionDetail {
     type?: OpikApi.PromptVersionDetailType;
     changeDescription?: string;
     variables?: string[];
+    templateStructure?: OpikApi.PromptVersionDetailTemplateStructure;
     createdAt?: Date;
     createdBy?: string;
 }

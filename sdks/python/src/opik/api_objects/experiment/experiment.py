@@ -8,7 +8,7 @@ from opik.rest_api import client as rest_api_client
 from opik.rest_api import types as rest_api_types
 from . import experiment_item, experiments_client
 from .. import constants, helpers
-from ...api_objects.prompt import Prompt
+from ...api_objects.prompt import base_prompt
 
 if TYPE_CHECKING:
     from opik.evaluation.metrics import score_result
@@ -25,7 +25,7 @@ class Experiment:
         rest_client: rest_api_client.OpikApi,
         streamer: streamer.Streamer,
         experiments_client: experiments_client.ExperimentsClient,
-        prompts: Optional[List[Prompt]] = None,
+        prompts: Optional[List[base_prompt.BasePrompt]] = None,
     ) -> None:
         self._id = id
         self._name = name

@@ -7,6 +7,7 @@ import * as OpikApi from "../../api/index";
 import * as core from "../../core";
 import { JsonNode } from "./JsonNode";
 import { PromptType } from "./PromptType";
+import { PromptTemplateStructure } from "./PromptTemplateStructure";
 import { PromptVersion } from "./PromptVersion";
 
 export const Prompt: core.serialization.ObjectSchema<serializers.Prompt.Raw, OpikApi.Prompt> =
@@ -18,6 +19,7 @@ export const Prompt: core.serialization.ObjectSchema<serializers.Prompt.Raw, Opi
         metadata: JsonNode.optional(),
         changeDescription: core.serialization.property("change_description", core.serialization.string().optional()),
         type: PromptType.optional(),
+        templateStructure: core.serialization.property("template_structure", PromptTemplateStructure.optional()),
         tags: core.serialization.list(core.serialization.string()).optional(),
         createdAt: core.serialization.property("created_at", core.serialization.date().optional()),
         createdBy: core.serialization.property("created_by", core.serialization.string().optional()),
@@ -36,6 +38,7 @@ export declare namespace Prompt {
         metadata?: JsonNode.Raw | null;
         change_description?: string | null;
         type?: PromptType.Raw | null;
+        template_structure?: PromptTemplateStructure.Raw | null;
         tags?: string[] | null;
         created_at?: string | null;
         created_by?: string | null;

@@ -13,4 +13,5 @@ export interface ServiceTogglesConfig {
     csvUploadEnabled: boolean;
     exportEnabled: boolean;
     dashboardsEnabled: boolean;
+    datasetVersioningEnabled: boolean;
 }
