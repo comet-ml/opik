@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { AxiosError } from "axios";
+import { AxiosError, HttpStatusCode } from "axios";
 import get from "lodash/get";
 import api, { DATASETS_REST_ENDPOINT } from "@/api/api";
 import { Dataset } from "@/types/datasets";
@@ -36,6 +36,11 @@ const useDatasetCreateMutation = () => {
       };
     },
     onError: (error: AxiosError) => {
+      const statusCode = get(error, ["response", "status"]);
+      if (statusCode === HttpStatusCode.Conflict) {
+        return;
+      }
+
       // Backend returns {errors: ["error message"]} for 409 conflicts
       const errors = get(error, ["response", "data", "errors"], []);
       const message =

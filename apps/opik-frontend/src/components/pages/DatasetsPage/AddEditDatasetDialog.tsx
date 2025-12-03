@@ -393,11 +393,13 @@ const AddEditDatasetDialog: React.FunctionComponent<
                 }
               }}
             />
-            {nameError && (
-              <span className="comet-body-xs text-destructive">
-                {nameError}
-              </span>
-            )}
+            <span
+              className={`comet-body-xs min-h-4 ${
+                nameError ? "text-destructive" : "invisible"
+              }`}
+            >
+              {nameError || " "}
+            </span>
           </div>
           <div className="flex flex-col gap-2 pb-4">
             <Label htmlFor="datasetDescription">Description</Label>
