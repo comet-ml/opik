@@ -163,7 +163,7 @@ export const DEMO_TEMPLATES: OptimizationTemplate[] = [
   //     evaluation: {
   //       metrics: [
   //         {
-  //           type: METRIC_TYPE.LAVENSHTEIN,
+  //           type: METRIC_TYPE.LEVENSHTEIN,
   //           parameters: {
   //             case_sensitive: DEFAULT_LEVENSHTEIN_METRIC_CONFIGS.CASE_SENSITIVE,
   //             reference_key: DEFAULT_LEVENSHTEIN_METRIC_CONFIGS.REFERENCE_KEY,

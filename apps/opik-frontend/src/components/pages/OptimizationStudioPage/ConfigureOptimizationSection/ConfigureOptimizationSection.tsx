@@ -194,7 +194,7 @@ const ConfigureOptimizationSection: React.FC = () => {
       label: "JSON Schema Validator",
     },
     { value: METRIC_TYPE.G_EVAL, label: "Custom (G-Eval)" },
-    { value: METRIC_TYPE.LAVENSHTEIN, label: "Levenshtein" },
+    { value: METRIC_TYPE.LEVENSHTEIN, label: "Levenshtein" },
   ];
 
   const getFirstMetricParamsError = useCallback(() => {

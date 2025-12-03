@@ -27,7 +27,7 @@ export enum METRIC_TYPE {
   EQUALS = "equals",
   JSON_SCHEMA_VALIDATOR = "json_schema_validator",
   G_EVAL = "geval",
-  LAVENSHTEIN = "levenshtein_ratio",
+  LEVENSHTEIN = "levenshtein_ratio",
 }
 
 export interface EqualsMetricParameters {

@@ -112,7 +112,7 @@ const GEvalMetricConfigSchema = BaseOptimizationConfigSchema.extend({
 });
 
 const LevenshteinMetricConfigSchema = BaseOptimizationConfigSchema.extend({
-  metricType: z.literal(METRIC_TYPE.LAVENSHTEIN),
+  metricType: z.literal(METRIC_TYPE.LEVENSHTEIN),
   metricParams: LevenshteinMetricParamsSchema,
 });
 

@@ -86,7 +86,7 @@ export const getDefaultMetricConfig = (
         task_introduction: DEFAULT_G_EVAL_METRIC_CONFIGS.TASK_INTRODUCTION,
         evaluation_criteria: DEFAULT_G_EVAL_METRIC_CONFIGS.EVALUATION_CRITERIA,
       };
-    case METRIC_TYPE.LAVENSHTEIN:
+    case METRIC_TYPE.LEVENSHTEIN:
       return {
         case_sensitive: DEFAULT_LEVENSHTEIN_METRIC_CONFIGS.CASE_SENSITIVE,
         reference_key: DEFAULT_LEVENSHTEIN_METRIC_CONFIGS.REFERENCE_KEY,

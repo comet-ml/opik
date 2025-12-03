@@ -65,7 +65,7 @@ const MetricConfigs = ({
       );
     }
 
-    if (metricType === METRIC_TYPE.LAVENSHTEIN) {
+    if (metricType === METRIC_TYPE.LEVENSHTEIN) {
       return (
         <LevenshteinMetricConfigs
           configs={configs as Partial<LevenshteinMetricParameters>}
