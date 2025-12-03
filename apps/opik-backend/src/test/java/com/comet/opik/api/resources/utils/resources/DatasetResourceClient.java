@@ -536,6 +536,28 @@ public class DatasetResourceClient {
                 .get();
     }
 
+    public DatasetVersion restoreVersion(UUID datasetId, String versionRef, String apiKey, String workspaceName) {
+        try (var response = callRestoreVersion(datasetId, versionRef, apiKey, workspaceName)) {
+            assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
+            return response.readEntity(DatasetVersion.class);
+        }
+    }
+
+    public Response callRestoreVersion(UUID datasetId, String versionRef, String apiKey, String workspaceName) {
+        var restoreRequest = com.comet.opik.api.DatasetVersionRestore.builder()
+                .versionRef(versionRef)
+                .build();
+
+        return client.target(RESOURCE_PATH.formatted(baseURI))
+                .path(datasetId.toString())
+                .path("versions")
+                .path("restore")
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .post(Entity.json(restoreRequest));
+    }
+
     public void deleteDatasetItems(List<UUID> itemIds, String apiKey, String workspaceName) {
         try (var response = callDeleteDatasetItems(itemIds, apiKey, workspaceName)) {
             assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_NO_CONTENT);
