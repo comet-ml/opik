@@ -74,6 +74,7 @@ def evaluate(
     task: LLMTask,
     scoring_metrics: Optional[List[base_metric.BaseMetric]] = None,
     scoring_functions: Optional[List[scorer_function.ScorerFunction]] = None,
+    experiment_name_prefix: Optional[str] = None,
     experiment_name: Optional[str] = None,
     project_name: Optional[str] = None,
     experiment_config: Optional[Dict[str, Any]] = None,
@@ -98,6 +99,10 @@ def evaluate(
 
         task: A callable object that takes dict with dataset item content
             as input and returns dict which will later be used for scoring.
+
+        experiment_name_prefix: The prefix to be added to automatically generated experiment names to make them unique
+            but grouped uder the same prefix. For example, if you set `experiment_name_prefix="my-experiment"`,
+            the first experiment created will be named `my-experiment-<unique-random-part>`.
 
         experiment_name: The name of the experiment associated with evaluation run.
             If None, a generated name will be used.
@@ -162,6 +167,11 @@ def evaluate(
     )
 
     client = opik_client.get_client_cached()
+
+    experiment_name = _use_or_create_experiment_name(
+        experiment_name=experiment_name,
+        experiment_name_prefix=experiment_name_prefix,
+    )
 
     experiment = client.create_experiment(
         name=experiment_name,
@@ -481,6 +491,7 @@ def evaluate_prompt(
     model: Optional[Union[str, base_model.OpikBaseModel]] = None,
     scoring_metrics: Optional[List[base_metric.BaseMetric]] = None,
     scoring_functions: Optional[List[scorer_function.ScorerFunction]] = None,
+    experiment_name_prefix: Optional[str] = None,
     experiment_name: Optional[str] = None,
     project_name: Optional[str] = None,
     experiment_config: Optional[Dict[str, Any]] = None,
@@ -512,6 +523,10 @@ def evaluate_prompt(
                 • dataset_item — a dictionary containing the dataset item content,
                 • task_outputs — a dictionary containing the LLM task output.
                 • task_span - the data collected during the LLM task execution [optional].
+
+        experiment_name_prefix: The prefix to be added to automatically generated experiment names to make them unique
+            but grouped uder the same prefix. For example, if you set `experiment_name_prefix="my-experiment"`,
+            the first experiment created will be named `my-experiment-<unique-random-part>`.
 
         experiment_name: name of the experiment.
 
@@ -564,6 +579,11 @@ def evaluate_prompt(
     client = opik_client.get_client_cached()
 
     prompts = [prompt] if prompt else None
+
+    experiment_name = _use_or_create_experiment_name(
+        experiment_name=experiment_name,
+        experiment_name_prefix=experiment_name_prefix,
+    )
 
     experiment = client.create_experiment(
         name=experiment_name,
@@ -654,6 +674,7 @@ def evaluate_optimization_trial(
     task: LLMTask,
     scoring_metrics: Optional[List[base_metric.BaseMetric]] = None,
     scoring_functions: Optional[List[scorer_function.ScorerFunction]] = None,
+    experiment_name_prefix: Optional[str] = None,
     experiment_name: Optional[str] = None,
     project_name: Optional[str] = None,
     experiment_config: Optional[Dict[str, Any]] = None,
@@ -685,6 +706,10 @@ def evaluate_optimization_trial(
                 • dataset_item — a dictionary containing the dataset item content,
                 • task_outputs — a dictionary containing the LLM task output.
                 • task_span - the data collected during the LLM task execution [optional].
+
+        experiment_name_prefix: The prefix to be added to automatically generated experiment names to make them unique
+                    but grouped uder the same prefix. For example, if you set `experiment_name_prefix="my-experiment"`,
+                    the first experiment created will be named `my-experiment-<unique-random-part>`.
 
         experiment_name: The name of the experiment associated with evaluation run.
             If None, a generated name will be used.
@@ -751,6 +776,11 @@ def evaluate_optimization_trial(
     )
 
     client = opik_client.get_client_cached()
+
+    experiment_name = _use_or_create_experiment_name(
+        experiment_name=experiment_name,
+        experiment_name_prefix=experiment_name_prefix,
+    )
 
     experiment = client.create_experiment(
         name=experiment_name,
@@ -908,3 +938,17 @@ def _wrap_scoring_functions(
             scoring_metrics = function_metrics
 
     return scoring_metrics if scoring_metrics else []
+
+
+def _use_or_create_experiment_name(
+    experiment_name: Optional[str], experiment_name_prefix: Optional[str]
+) -> Optional[str]:
+    if experiment_name:
+        return experiment_name
+
+    if experiment_name_prefix:
+        return experiment_helpers.generate_unique_experiment_name(
+            experiment_name_prefix
+        )
+    else:
+        return None

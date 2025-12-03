@@ -3,6 +3,7 @@ import opik.jsonable_encoder as jsonable_encoder
 from typing import Any, Dict, List, Mapping, Optional, Tuple
 import copy
 from .. import prompt
+from ... import id_helpers
 
 LOGGER = logging.getLogger(__name__)
 
@@ -63,3 +64,10 @@ def handle_prompt_args(
         prompts = None
 
     return prompts
+
+
+def generate_unique_experiment_name(experiment_name_prefix: str) -> str:
+    if experiment_name_prefix is None:
+        return id_helpers.generate_id()
+
+    return f"{experiment_name_prefix}-{id_helpers.generate_id()}"
