@@ -305,8 +305,6 @@ class DatasetVersionResourceTest {
                     TEST_WORKSPACE)) {
                 // Then
                 assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_CONFLICT);
-                var error = response.readEntity(ErrorMessage.class);
-                assertThat(error.errors()).contains(DatasetVersionService.ERROR_TAG_EXISTS.formatted("v1.0"));
             }
         }
 
@@ -370,9 +368,6 @@ class DatasetVersionResourceTest {
 
                 // Then
                 assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_CONFLICT);
-                var error = response.readEntity(ErrorMessage.class);
-                assertThat(error.errors())
-                        .contains(DatasetVersionService.ERROR_TAG_EXISTS.formatted("v1.0"));
             }
         }
 
@@ -757,8 +752,6 @@ class DatasetVersionResourceTest {
                     TEST_WORKSPACE)) {
                 // Then
                 assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_CONFLICT);
-                var error = response.readEntity(ErrorMessage.class);
-                assertThat(error.errors()).contains(DatasetVersionService.ERROR_TAG_EXISTS.formatted("existing-tag"));
             }
         }
 

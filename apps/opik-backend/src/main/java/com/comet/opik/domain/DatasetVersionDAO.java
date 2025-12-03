@@ -9,6 +9,7 @@ import org.jdbi.v3.sqlobject.config.RegisterColumnMapper;
 import org.jdbi.v3.sqlobject.config.RegisterConstructorMapper;
 import org.jdbi.v3.sqlobject.customizer.Bind;
 import org.jdbi.v3.sqlobject.customizer.BindMethods;
+import org.jdbi.v3.sqlobject.statement.SqlBatch;
 import org.jdbi.v3.sqlobject.statement.SqlQuery;
 import org.jdbi.v3.sqlobject.statement.SqlUpdate;
 
@@ -96,6 +97,14 @@ public interface DatasetVersionDAO {
             """)
     void insertTag(@Bind("dataset_id") UUID datasetId, @Bind("tag") String tag, @Bind("version_id") UUID versionId,
             @Bind("created_by") String createdBy, @Bind("workspace_id") String workspaceId);
+
+    @SqlBatch("""
+            INSERT INTO dataset_version_tags (dataset_id, tag, version_id, created_by, last_updated_by, workspace_id)
+            VALUES (:dataset_id, :tag, :version_id, :created_by, :created_by, :workspace_id)
+            """)
+    void insertTags(@Bind("dataset_id") UUID datasetId, @Bind("tag") List<String> tags,
+            @Bind("version_id") UUID versionId, @Bind("created_by") String createdBy,
+            @Bind("workspace_id") String workspaceId);
 
     @SqlUpdate("DELETE FROM dataset_version_tags WHERE dataset_id = :dataset_id AND tag = :tag AND workspace_id = :workspace_id")
     int deleteTag(@Bind("dataset_id") UUID datasetId, @Bind("tag") String tag,

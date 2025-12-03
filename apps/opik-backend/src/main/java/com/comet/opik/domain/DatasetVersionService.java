@@ -26,6 +26,7 @@ import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -245,19 +246,8 @@ class DatasetVersionServiceImpl implements DatasetVersionService {
             datasetVersionDAO.insertTag(datasetId, LATEST_TAG, versionId, userName, workspaceId);
             log.info("Added '{}' tag to version '{}' for dataset '{}'", LATEST_TAG, versionHash, datasetId);
 
-            // Add custom tags from the new 'tags' field
-            if (CollectionUtils.isNotEmpty(request.tags())) {
-                for (String customTag : request.tags()) {
-                    if (StringUtils.isNotBlank(customTag)) {
-                        final String tagToInsert = customTag;
-                        EntityConstraintHandler.handle(() -> {
-                            datasetVersionDAO.insertTag(datasetId, tagToInsert, versionId, userName, workspaceId);
-                            return null;
-                        }).withError(() -> new EntityAlreadyExistsException(
-                                new ErrorMessage(List.of(ERROR_TAG_EXISTS.formatted(tagToInsert)))));
-                    }
-                }
-            }
+            // Add custom tags from the request
+            insertTags(datasetVersionDAO, datasetId, versionId, request.tags(), userName, workspaceId);
 
             return datasetVersionDAO.findById(versionId, workspaceId).orElseThrow();
         });
@@ -295,6 +285,35 @@ class DatasetVersionServiceImpl implements DatasetVersionService {
 
     private Optional<DatasetVersion> getLatestVersion(@NonNull UUID datasetId, @NonNull String workspaceId) {
         return getVersionByTag(datasetId, LATEST_TAG, workspaceId);
+    }
+
+    /**
+     * Inserts multiple tags for a dataset version in a single batch operation.
+     * Filters out blank tags before insertion.
+     *
+     * @throws EntityAlreadyExistsException if any tag already exists for the dataset
+     */
+    private void insertTags(DatasetVersionDAO dao, UUID datasetId, UUID versionId,
+            Collection<String> tags, String userName, String workspaceId) {
+        if (CollectionUtils.isEmpty(tags)) {
+            return;
+        }
+
+        List<String> validTags = tags.stream()
+                .filter(StringUtils::isNotBlank)
+                .toList();
+
+        if (validTags.isEmpty()) {
+            return;
+        }
+
+        EntityConstraintHandler.handle(() -> {
+            dao.insertTags(datasetId, validTags, versionId, userName, workspaceId);
+            return null;
+        }).withError(() -> new EntityAlreadyExistsException(
+                new ErrorMessage(List.of("One or more tags already exist for this dataset"))));
+
+        log.info("Added '{}' tags to version for dataset '{}'", validTags.size(), datasetId);
     }
 
     @Override
@@ -373,19 +392,7 @@ class DatasetVersionServiceImpl implements DatasetVersionService {
             }
 
             // Add new tags if provided
-            if (CollectionUtils.isNotEmpty(request.tagsToAdd())) {
-                for (String tagToAdd : request.tagsToAdd()) {
-                    if (StringUtils.isNotBlank(tagToAdd)) {
-                        final String tag = tagToAdd;
-                        EntityConstraintHandler.handle(() -> {
-                            dao.insertTag(datasetId, tag, version.id(), userName, workspaceId);
-                            return null;
-                        }).withError(() -> new EntityAlreadyExistsException(
-                                new ErrorMessage(List.of(ERROR_TAG_EXISTS.formatted(tag)))));
-                        log.info("Added tag '{}' to version '{}' of dataset '{}'", tag, versionHash, datasetId);
-                    }
-                }
-            }
+            insertTags(dao, datasetId, version.id(), request.tagsToAdd(), userName, workspaceId);
 
             log.info("Updated version, hash='{}', dataset='{}'", versionHash, datasetId);
             return dao.findById(version.id(), workspaceId).orElseThrow();
