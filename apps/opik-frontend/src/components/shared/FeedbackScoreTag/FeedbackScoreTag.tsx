@@ -57,14 +57,15 @@ const FeedbackScoreTag: React.FunctionComponent<FeedbackScoreTagProps> = ({
 
     if (!reason) return [];
 
-    // Split aggregated reasons by newline or comma pattern, then number them
-    // Support both "\n" (new format) and ", " followed by capital letter (old format)
-    let splitReasons = reason.split("\n").filter((r) => r.trim());
+    // Split aggregated reasons by any newline variant or comma pattern, then number them
+    // Support both newlines (new format) and ", " followed by capital letter (old format)
+    let splitReasons = reason.split(/\r?\n/).filter((r) => r.trim());
     if (splitReasons.length === 1) {
       // Try splitting by ", " followed by capital letter or opening bracket (sentence boundary)
       splitReasons = reason.split(/,\s+(?=[A-Z[])/).filter((r) => r.trim());
     }
 
+    // Always add numbers if there are multiple reasons
     if (splitReasons.length > 1) {
       return splitReasons.map((r, idx) => ({
         reason: `${idx + 1}. ${r}`,

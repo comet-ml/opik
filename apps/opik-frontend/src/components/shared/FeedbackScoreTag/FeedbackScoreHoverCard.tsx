@@ -56,10 +56,11 @@ const FeedbackScoreHoverCard: React.FC<FeedbackScoreHoverCardProps> = ({
           <div className="flex flex-col gap-1.5 pb-1 pt-1.5">
             {scores.map((tag) => {
               const hasReason = isValidReason(tag.reason);
-              // Split by newline or comma pattern (sentence boundary)
+              // Split by any newline variant or comma pattern (sentence boundary)
               let reasons: string[] = [];
               if (hasReason) {
-                reasons = tag.reason!.split("\n").filter((r) => r.trim());
+                // Try splitting by any newline variant first
+                reasons = tag.reason!.split(/\r?\n/).filter((r) => r.trim());
                 if (reasons.length === 1) {
                   // Try splitting by ", " followed by capital letter or bracket
                   reasons = tag
@@ -67,6 +68,7 @@ const FeedbackScoreHoverCard: React.FC<FeedbackScoreHoverCardProps> = ({
                     .filter((r) => r.trim());
                 }
               }
+              const showNumbers = reasons.length > 1;
 
               return (
                 <div key={tag.name} className="flex flex-col gap-1 px-2">
@@ -84,7 +86,7 @@ const FeedbackScoreHoverCard: React.FC<FeedbackScoreHoverCardProps> = ({
                     <div className="comet-body-xs flex flex-col gap-0.5 break-words text-muted-slate">
                       {reasons.map((reason, idx) => (
                         <div key={idx}>
-                          {reasons.length > 1 ? `${idx + 1}. ` : ""}
+                          {showNumbers ? `${idx + 1}. ` : ""}
                           {reason}
                         </div>
                       ))}
