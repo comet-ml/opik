@@ -35,6 +35,7 @@ import {
   COLUMN_METADATA_ID,
   COLUMN_TYPE,
   ColumnData,
+  ROW_HEIGHT,
 } from "@/types/shared";
 import { DELETED_DATASET_LABEL } from "@/constants/groups";
 import ColumnsButton from "@/components/shared/ColumnsButton/ColumnsButton";
@@ -77,10 +78,12 @@ import { ChartData } from "@/components/pages-shared/experiments/FeedbackScoresC
 import GroupsButton from "@/components/shared/GroupsButton/GroupsButton";
 import useQueryParamAndLocalStorageState from "@/hooks/useQueryParamAndLocalStorageState";
 import TextCell from "@/components/shared/DataTableCells/TextCell";
+import DataTableRowHeightSelector from "@/components/shared/DataTableRowHeightSelector/DataTableRowHeightSelector";
 
 const STORAGE_KEY_PREFIX = "experiments";
 const PAGINATION_SIZE_KEY = "experiments-pagination-size";
 const COLUMNS_SORT_KEY = "experiments-columns-sort";
+const ROW_HEIGHT_KEY = "experiments-row-height";
 
 export const DEFAULT_COLUMNS: ColumnData<GroupedExperiment>[] = [
   {
@@ -277,6 +280,13 @@ const ExperimentsPage: React.FC = () => {
     COLUMNS_SORT_KEY,
     {
       defaultValue: [],
+    },
+  );
+
+  const [rowHeight, setRowHeight] = useLocalStorageState<ROW_HEIGHT>(
+    ROW_HEIGHT_KEY,
+    {
+      defaultValue: ROW_HEIGHT.small,
     },
   );
 
@@ -635,6 +645,7 @@ const ExperimentsPage: React.FC = () => {
               <RotateCw />
             </Button>
           </TooltipWrapper>
+          <DataTableRowHeightSelector type={rowHeight} setType={setRowHeight} />
           <ColumnsButton
             columns={availableColumns}
             selectedColumns={selectedColumns}
@@ -670,6 +681,7 @@ const ExperimentsPage: React.FC = () => {
         groupingConfig={groupingConfig}
         getRowId={getRowId}
         columnPinning={columnPinningConfig}
+        rowHeight={rowHeight}
         noData={
           <DataTableNoData title={noDataText}>
             {noData && (
