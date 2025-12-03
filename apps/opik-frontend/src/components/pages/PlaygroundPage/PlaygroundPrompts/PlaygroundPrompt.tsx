@@ -500,8 +500,14 @@ const PlaygroundPrompt = ({
         template={chatPromptTemplate}
         templateStructure={PROMPT_TEMPLATE_STRUCTURE.CHAT}
         defaultName={lastImportedPromptName}
-        onSave={() => {
+        onSave={(version, promptName, savedPromptId) => {
           setShowSaveChatPromptDialog(false);
+          
+          // Update the loaded chat prompt ID to the saved prompt
+          if (savedPromptId) {
+            updatePrompt(promptId, { loadedChatPromptId: savedPromptId });
+          }
+          
           // Invalidate prompt queries to ensure the latest version is selected
           queryClient.invalidateQueries({ queryKey: ["prompts"] });
           queryClient.invalidateQueries({ queryKey: ["prompt-versions"] });

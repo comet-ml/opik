@@ -55,7 +55,7 @@ type AddNewPromptVersionDialogProps = {
   templateStructure?: PROMPT_TEMPLATE_STRUCTURE;
   defaultName?: string;
   metadata?: object;
-  onSave: (version: PromptVersion) => void;
+  onSave: (version: PromptVersion, promptName?: string, promptId?: string) => void;
 };
 
 const AddNewPromptVersionDialog: React.FC<AddNewPromptVersionDialogProps> = ({
@@ -95,11 +95,13 @@ const AddNewPromptVersionDialog: React.FC<AddNewPromptVersionDialogProps> = ({
   }, [prompt?.id]);
 
   useEffect(() => {
-    // Reset name to defaultName when dialog opens
+    // Reset name when dialog opens:
+    // - If editing existing prompt (promptId exists), use defaultName
+    // - If creating new prompt (no promptId), clear the name field
     if (open) {
-      setName(defaultName);
+      setName(promptId ? defaultName : "");
     }
-  }, [open, defaultName]);
+  }, [open, defaultName, promptId]);
 
   const selectedPrompt = useMemo(() => {
     return !promptId
@@ -140,7 +142,7 @@ const AddNewPromptVersionDialog: React.FC<AddNewPromptVersionDialogProps> = ({
           changeDescription,
           ...(finalMetadata && { metadata: finalMetadata }),
           ...(templateStructure && { templateStructure }),
-          onSuccess: (data) => onSave(data),
+          onSuccess: (data) => onSave(data, selectedPrompt?.name, selectedPrompt?.id),
         });
 
         setOpen(false);
@@ -159,7 +161,7 @@ const AddNewPromptVersionDialog: React.FC<AddNewPromptVersionDialogProps> = ({
         },
         {
           onSuccess: (data?: PromptWithLatestVersion) => {
-            if (data?.latest_version) onSave(data.latest_version);
+            if (data?.latest_version) onSave(data.latest_version, data.name, data.id);
           },
         },
       );
