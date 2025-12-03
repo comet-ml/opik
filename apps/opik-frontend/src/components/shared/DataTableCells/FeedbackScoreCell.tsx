@@ -73,7 +73,9 @@ const FeedbackScoreCell = (context: CellContext<unknown, unknown>) => {
       tableMetadata={context.table.options.meta}
       className={cn(
         "gap-1 overflow-hidden",
-        rowHeight === ROW_HEIGHT.small ? "flex-wrap" : "flex-col items-end",
+        rowHeight === ROW_HEIGHT.small
+          ? "flex-wrap"
+          : "flex-col items-end self-start",
         isUserFeedbackColumn && "group",
       )}
     >
