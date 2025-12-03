@@ -17,19 +17,13 @@ from pydantic import BaseModel, Field
 from ....api_objects import chat_prompt, types
 from .... import _llm_calls
 from ....base_optimizer import OptimizationRound
-from ....utils.prompt_segments import (
-    extract_prompt_segments,
-    apply_segment_updates,
-)
 from ..prompts import (
     build_reasoning_system_prompt,
     build_candidate_generation_user_prompt,
-    build_mcp_tool_description_user_prompt,
 )
 from .. import reporting
 from litellm.exceptions import BadRequestError
 from ...._llm_calls import StructuredOutputParsingError
-from ....mcp_utils.mcp_workflow import MCPExecutionConfig
 
 logger = logging.getLogger(__name__)
 
@@ -102,63 +96,6 @@ class AgentBundleCandidate:
         """Get the improvement focus for a specific agent."""
         agent_meta = self.metadata.get(agent_name)
         return agent_meta.improvement_focus if agent_meta else None
-
-
-def _sync_tool_description_in_system(prompt: chat_prompt.ChatPrompt) -> None:
-    """
-    Synchronize tool descriptions in the system message.
-
-    Updates the system message to reflect changes in tool descriptions.
-    """
-    from ....mcp_utils.mcp import PROMPT_TOOL_HEADER, PROMPT_TOOL_FOOTER
-
-    if not prompt.tools:
-        return
-
-    system_text = prompt.system or ""
-    if PROMPT_TOOL_HEADER not in system_text or PROMPT_TOOL_FOOTER not in system_text:
-        return
-
-    start = system_text.index(PROMPT_TOOL_HEADER) + len(PROMPT_TOOL_HEADER)
-    end = system_text.index(PROMPT_TOOL_FOOTER)
-
-    before_block = system_text[: start - len(PROMPT_TOOL_HEADER)]
-    middle_block = system_text[start:end]
-    after_block = system_text[end + len(PROMPT_TOOL_FOOTER) :]
-
-    import re
-
-    for tool in prompt.tools:
-        tool_name = tool.get("function", {}).get("name", "")
-        if not tool_name:
-            continue
-
-        description_text = tool.get("function", {}).get("description", "")
-
-        # Update tool list in the before block (e.g., "- tool-name: description")
-        tool_list_pattern = rf"(-\s*{re.escape(tool_name)}:\s)(.*)"
-        before_block = re.sub(
-            tool_list_pattern,
-            lambda match: f"{match.group(1)}{description_text}",
-            before_block,
-        )
-
-        # Update description in the middle block (just the description text)
-        # The middle block may contain just the description or have other formatting
-        middle_block = middle_block.strip()
-        if middle_block:
-            middle_block = f"\n{description_text}\n"
-        else:
-            middle_block = description_text
-
-    new_system = (
-        before_block
-        + PROMPT_TOOL_HEADER
-        + middle_block
-        + PROMPT_TOOL_FOOTER
-        + after_block
-    )
-    prompt.system = new_system
 
 
 def sanitize_generated_prompts(
@@ -523,7 +460,6 @@ def generate_agent_bundle_candidates(
     optimization_id: str | None = None,
     project_name: str | None = None,
     winning_patterns: list[str] | None = None,
-    mcp_config: MCPExecutionConfig | None = None,
 ) -> list[AgentBundleCandidate]:
     """
     Generate updated prompts for multiple named agents in a single meta-prompt pass.
@@ -532,11 +468,6 @@ def generate_agent_bundle_candidates(
         List of AgentBundleCandidate objects, each containing updated prompts
         and strongly-typed metadata for all agents in the bundle.
     """
-    if mcp_config is not None:
-        raise ValueError(
-            "Multi-agent prompt generation is disabled for MCP tool optimization."
-        )
-
     with reporting.display_candidate_generation_report(
         optimizer.prompts_per_round, verbose=optimizer.verbose
     ) as candidate_generation_report:
@@ -657,7 +588,6 @@ def generate_agent_bundle_candidates(
                             function_map=current_prompts[name].function_map,
                             model=current_prompts[name].model,
                             model_parameters=current_prompts[name].model_kwargs,
-                            invoke=current_prompts[name].invoke,
                         )
                         updated_prompts[name] = updated_prompt
                         agent_metadata[name] = AgentMetadata(
@@ -693,6 +623,7 @@ def generate_agent_bundle_candidates(
             raise ValueError(
                 f"Unexpected error during agent bundle prompt generation: {e}"
             )
+
 
 def generate_synthesis_prompts(
     optimizer: Any,

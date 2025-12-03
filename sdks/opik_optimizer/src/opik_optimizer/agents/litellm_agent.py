@@ -11,6 +11,7 @@ from . import optimizable_agent
 
 _limiter = _throttle.get_rate_limiter_for_current_opik_installation()
 
+
 class LiteLLMAgent(optimizable_agent.OptimizableAgent):
     def __init__(
         self,
@@ -18,7 +19,7 @@ class LiteLLMAgent(optimizable_agent.OptimizableAgent):
         trace_metadata: dict[str, Any] | None = None,
     ) -> None:
         self.project_name = project_name
-    
+
         self.init_llm()
         self.trace_metadata: dict[str, Any] = {}
 
@@ -27,7 +28,7 @@ class LiteLLMAgent(optimizable_agent.OptimizableAgent):
         # Litellm bug requires this (maybe problematic if multi-threaded)
         if "OPIK_PROJECT_NAME" not in os.environ:
             os.environ["OPIK_PROJECT_NAME"] = str(self.project_name)
-        
+
         # Attach default metadata; subclasses may override per-run via start_bundle_trace.
         self.trace_metadata = {"project_name": self.project_name}
 
@@ -55,14 +56,6 @@ class LiteLLMAgent(optimizable_agent.OptimizableAgent):
         )
         return response
 
-    def invoke(
-        self,
-        messages: list[dict[str, str]] | None = None,
-        seed: int | None = None,
-        allow_tool_use: bool = True,
-    ) -> str:
-        raise NotImplementedError("invoke is not implemented for LiteLLMAgent")
-
     def invoke_agent(
         self,
         prompts: dict[str, "chat_prompt.ChatPrompt"],
@@ -72,12 +65,14 @@ class LiteLLMAgent(optimizable_agent.OptimizableAgent):
     ) -> str:
         """Invoke multiple prompts"""
         if len(prompts.keys()) > 1:
-            raise ValueError("To optimize multiple prompts, you will need to define a specific agent class.")
+            raise ValueError(
+                "To optimize multiple prompts, you will need to define a specific agent class."
+            )
         else:
             prompt = list(prompts.values())[0]
 
         messages = prompt.get_messages(dataset_item)
-        
+
         all_messages = []
         if messages is not None:
             all_messages.extend(messages)
@@ -101,7 +96,7 @@ class LiteLLMAgent(optimizable_agent.OptimizableAgent):
                     seed=seed,
                     model_kwargs=prompt.model_kwargs,
                 )
-                
+
                 _llm_calls._increment_llm_counter_if_in_optimizer()
 
                 msg = response.choices[0].message

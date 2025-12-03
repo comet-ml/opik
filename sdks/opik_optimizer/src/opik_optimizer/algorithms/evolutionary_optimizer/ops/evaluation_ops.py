@@ -4,7 +4,7 @@ from collections.abc import Callable
 
 from .... import task_evaluator, helpers
 from ....api_objects import chat_prompt
-from ....mcp_utils.mcp_workflow import MCPExecutionConfig
+from ....api_objects.types import Messages
 import opik
 from opik import opik_context
 import copy
@@ -16,7 +16,7 @@ if TYPE_CHECKING:  # pragma: no cover - typing only
 def evaluate_prompt(
     optimizer: "evolutionary_optimizer.EvolutionaryOptimizer",
     prompt: chat_prompt.ChatPrompt,
-    messages: list[dict[str, str]],
+    messages: Messages,
     dataset: opik.Dataset,
     metric: Callable,
     n_samples: int | None = None,
@@ -57,68 +57,17 @@ def evaluate_prompt(
         prompt=new_prompt,
         dataset=dataset,
         metric=metric,
+        agent=optimizer.agent,
         experiment_config=experiment_config,
         configuration_updates=configuration_updates,
         additional_metadata=additional_metadata,
     )
-    try:
-        agent = optimizer._instantiate_agent(new_prompt)
-    except Exception:
-        return 0.0
-
-    mcp_execution_config: MCPExecutionConfig | None = kwargs.get("mcp_config")
 
     def llm_task(dataset_item: dict[str, Any]) -> dict[str, str]:
-        messages = new_prompt.get_messages(dataset_item)
-
-        if mcp_execution_config is None:
-            model_output = agent.invoke(messages)
-
-            # Add tags to trace for optimization tracking
-            if (
-                hasattr(optimizer, "current_optimization_id")
-                and optimizer.current_optimization_id
-            ):
-                opik_context.update_current_trace(
-                    tags=[optimizer.current_optimization_id, "Evaluation"]
-                )
-
-            return {"llm_output": model_output}
-
-        coordinator = mcp_execution_config.coordinator
-        coordinator.reset()
-
-        raw_model_output = agent.invoke(
-            messages=messages,
-            seed=getattr(optimizer, "seed", None)
-        )
-
-        second_pass_messages = coordinator.build_second_pass_messages(
-            base_messages=messages,
+        model_output = optimizer.agent.invoke_agent(
+            prompts={new_prompt.name: new_prompt},
             dataset_item=dataset_item,
         )
-
-        if (
-            second_pass_messages is None
-            and mcp_execution_config.fallback_invoker is not None
-        ):
-            fallback_args = mcp_execution_config.fallback_arguments(dataset_item)
-            if fallback_args:
-                summary_override = mcp_execution_config.fallback_invoker(fallback_args)
-                second_pass_messages = coordinator.build_second_pass_messages(
-                    base_messages=messages,
-                    dataset_item=dataset_item,
-                    summary_override=summary_override,
-                )
-
-        if second_pass_messages is not None:
-            final_response = agent.invoke(
-                messages=second_pass_messages,
-                seed=getattr(optimizer, "seed", None),
-                allow_tool_use=mcp_execution_config.allow_tool_use_on_second_pass,
-            )
-        else:
-            final_response = raw_model_output
 
         # Add tags to trace for optimization tracking
         if (
@@ -129,7 +78,118 @@ def evaluate_prompt(
                 tags=[optimizer.current_optimization_id, "Evaluation"]
             )
 
-        return {"llm_output": final_response.strip()}
+        return {"llm_output": model_output}
+
+    score = task_evaluator.evaluate(
+        dataset=dataset,
+        dataset_item_ids=dataset_item_ids,
+        metric=metric,
+        evaluated_task=llm_task,
+        num_threads=optimizer.n_threads,
+        project_name=optimizer.project_name,
+        n_samples=n_samples if dataset_item_ids is None else None,
+        experiment_config=experiment_config,
+        optimization_id=optimization_id,
+        verbose=verbose,
+    )
+    return score
+
+
+def evaluate_bundle(
+    optimizer: "evolutionary_optimizer.EvolutionaryOptimizer",
+    bundle_messages: dict[str, Messages],
+    prompts_metadata: dict[str, dict[str, Any]],
+    dataset: opik.Dataset,
+    metric: Callable,
+    n_samples: int | None = None,
+    dataset_item_ids: list[str] | None = None,
+    experiment_config: dict | None = None,
+    optimization_id: str | None = None,
+    verbose: int = 0,
+    **kwargs: Any,
+) -> float:
+    """
+    Evaluate a bundle of prompts (multi-prompt individual) against the dataset.
+
+    Args:
+        optimizer: The evolutionary optimizer instance.
+        bundle_messages: Dict mapping prompt names to their messages.
+        prompts_metadata: Dict mapping prompt names to their metadata (tools, function_map, name).
+        dataset: The dataset to evaluate on.
+        metric: The metric function to score the output.
+        n_samples: Optional number of samples to evaluate.
+        dataset_item_ids: Optional list of specific dataset item IDs to evaluate.
+        experiment_config: Optional experiment configuration.
+        optimization_id: Optional optimization ID for tracking.
+        verbose: Verbosity level.
+        **kwargs: Additional keyword arguments.
+
+    Returns:
+        The evaluation score.
+    """
+    total_items = len(dataset.get_items())
+
+    # Reconstruct ChatPrompt objects from messages and metadata
+    prompts_bundle: dict[str, chat_prompt.ChatPrompt] = {}
+    for name, messages in bundle_messages.items():
+        metadata = prompts_metadata.get(name, {})
+        prompts_bundle[name] = chat_prompt.ChatPrompt(
+            messages=messages,
+            tools=metadata.get("tools"),
+            function_map=metadata.get("function_map"),
+            name=metadata.get("name", name),
+        )
+
+    # Use first prompt as reference for experiment config (arbitrary choice)
+    reference_prompt = list(prompts_bundle.values())[0]
+
+    configuration_updates = helpers.drop_none(
+        {
+            "n_samples_for_eval": (
+                len(dataset_item_ids) if dataset_item_ids is not None else n_samples
+            ),
+            "total_dataset_items": total_items,
+            "bundle_mode": True,
+            "num_prompts_in_bundle": len(prompts_bundle),
+        }
+    )
+    evaluation_details = helpers.drop_none(
+        {
+            "dataset_item_ids": dataset_item_ids,
+            "optimization_id": optimization_id,
+        }
+    )
+    additional_metadata = (
+        {"evaluation": evaluation_details} if evaluation_details else None
+    )
+
+    experiment_config = optimizer._prepare_experiment_config(
+        prompt=reference_prompt,
+        dataset=dataset,
+        metric=metric,
+        agent=optimizer.agent,
+        experiment_config=experiment_config,
+        configuration_updates=configuration_updates,
+        additional_metadata=additional_metadata,
+    )
+
+    def llm_task(dataset_item: dict[str, Any]) -> dict[str, str]:
+        # Pass full bundle to the agent
+        model_output = optimizer.agent.invoke_agent(
+            prompts=prompts_bundle,
+            dataset_item=dataset_item,
+        )
+
+        # Add tags to trace for optimization tracking
+        if (
+            hasattr(optimizer, "current_optimization_id")
+            and optimizer.current_optimization_id
+        ):
+            opik_context.update_current_trace(
+                tags=[optimizer.current_optimization_id, "Evaluation", "Bundle"]
+            )
+
+        return {"llm_output": model_output}
 
     score = task_evaluator.evaluate(
         dataset=dataset,

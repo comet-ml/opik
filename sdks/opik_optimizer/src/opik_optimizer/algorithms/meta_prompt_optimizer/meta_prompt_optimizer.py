@@ -1,11 +1,8 @@
 import logging
 from typing import Any, cast
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from collections.abc import Callable
 
-import opik
 from opik import Dataset
-from ... import task_evaluator
 from ...base_optimizer import BaseOptimizer, OptimizationRound
 from ...api_objects import chat_prompt
 from ...optimization_result import OptimizationResult
@@ -13,13 +10,11 @@ from ...agents import OptimizableAgent, LiteLLMAgent
 from ... import _throttle
 from . import reporting
 from .ops.halloffame_ops import PromptHallOfFame
-from .ops.candidate_ops import _sync_tool_description_in_system
 from ..._llm_calls import StructuredOutputParsingError
 from litellm.exceptions import BadRequestError
 
 # Import ops modules
 from .ops import candidate_ops, context_ops, result_ops
-from .ops.candidate_ops import AgentBundleCandidate
 
 # Set up logging
 logger = logging.getLogger(__name__)  # Gets logger configured by setup_logging
@@ -283,7 +278,6 @@ class MetaPromptOptimizer(BaseOptimizer):
             optimizable_prompts = prompt
             is_single_prompt_optimization = False
 
-        
         # Set project name from parameter
         self.project_name = project_name
 
@@ -331,10 +325,8 @@ class MetaPromptOptimizer(BaseOptimizer):
             dataset_id=dataset_id,
             verbose=self.verbose,
         )
-        display_messages = []
-        display_tools = None
         reporting.display_configuration(
-            messages=display_messages,
+            messages=optimizable_prompts,
             optimizer_config={
                 "optimizer": self.__class__.__name__,
                 "max_trials": max_trials,
@@ -346,7 +338,6 @@ class MetaPromptOptimizer(BaseOptimizer):
                 else None,
             },
             verbose=self.verbose,
-            tools=display_tools,
         )
 
         try:
@@ -473,7 +464,7 @@ class MetaPromptOptimizer(BaseOptimizer):
                 prompts_this_round = min(
                     self.prompts_per_round, max_trials - trials_used
                 )
-                
+
                 try:
                     bundle_candidates = candidate_ops.generate_agent_bundle_candidates(
                         optimizer=self,
@@ -485,11 +476,12 @@ class MetaPromptOptimizer(BaseOptimizer):
                         optimization_id=optimization_id,
                         project_name=self.project_name,
                         build_history_context_fn=self._build_history_context,
-                        get_task_context_fn=self._get_task_context,                    
+                        get_task_context_fn=self._get_task_context,
                     )
                     # Extract prompts from bundle candidates and limit to prompts_this_round
                     candidate_prompts = [
-                        bundle.prompts for bundle in bundle_candidates[:prompts_this_round]
+                        bundle.prompts
+                        for bundle in bundle_candidates[:prompts_this_round]
                     ]
 
                 except Exception as e:
@@ -502,14 +494,14 @@ class MetaPromptOptimizer(BaseOptimizer):
 
                 # Step 2. Score each candidate prompt
                 prompt_scores: list[tuple[Any, float]] = []
-                current_round_best_score = best_score  # Track best score within this round
+                current_round_best_score = (
+                    best_score  # Track best score within this round
+                )
                 for candidate_count, prompts in enumerate(candidate_prompts):
                     with reporting.display_prompt_candidate_scoring_report(
                         verbose=self.verbose
                     ) as eval_report:
-                        eval_report.set_generated_prompts(
-                            candidate_count, prompts
-                        )
+                        eval_report.set_generated_prompts(candidate_count, prompts)
 
                         prompt_score = self.evaluate_prompt(
                             prompt=prompts,
@@ -522,9 +514,11 @@ class MetaPromptOptimizer(BaseOptimizer):
                         )
 
                         # Compare against the best score seen so far in this round
-                        eval_report.set_final_score(current_round_best_score, prompt_score)
+                        eval_report.set_final_score(
+                            current_round_best_score, prompt_score
+                        )
                         trials_used += 1
-                        
+
                         # Update the round's best score if this candidate is better
                         if prompt_score > current_round_best_score:
                             current_round_best_score = prompt_score
@@ -695,4 +689,5 @@ class MetaPromptOptimizer(BaseOptimizer):
             top_prompts_per_round=top_prompts_to_show,
         )
 
-__all__ = ["MetaPromptOptimizer", "_sync_tool_description_in_system"]
+
+__all__ = ["MetaPromptOptimizer"]

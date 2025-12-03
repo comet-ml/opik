@@ -795,21 +795,23 @@ def display_optimized_prompt_diff(
 
     console.print(Text("│"))
     console.print(Text("│"))
-    
+
     # Display prompt name if provided
     if prompt_name:
-        console.print(Text("│ ").append(Text(f"> Optimization Results for '{prompt_name}'", style="bold green")))
+        console.print(
+            Text("│ ").append(
+                Text(f"> Optimization Results for '{prompt_name}'", style="bold green")
+            )
+        )
     else:
-        console.print(Text("│ ").append(Text("> Optimization Results", style="bold green")))
+        console.print(
+            Text("│ ").append(Text("> Optimization Results", style="bold green"))
+        )
     console.print(Text("│"))
 
     # Check if prompt is unchanged
     if initial_messages == optimized_messages:
-        console.print(
-            Text("│   ").append(
-                Text("Prompt unchanged", style="dim")
-            )
-        )
+        console.print(Text("│   ").append(Text("Prompt unchanged", style="dim")))
         console.print(Text("│"))
         return
 

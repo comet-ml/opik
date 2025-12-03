@@ -327,7 +327,10 @@ def _search_wikipedia_bm25(
 
         # Tokenize query
         query_tokens = bm25s.tokenize(
-            [query], stopwords="en", stemmer=stemmer if stemmer else None, show_progress=False
+            [query],
+            stopwords="en",
+            stemmer=stemmer if stemmer else None,
+            show_progress=False,
         )
 
         # Get top k results

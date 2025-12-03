@@ -1,12 +1,10 @@
 import logging
 import sys
-from typing import Any, Literal, overload
+from typing import Any
 from collections.abc import Callable
 
 import opik
-from opik import Dataset, opik_context
-from opik.evaluation import evaluator as opik_evaluator
-from opik.evaluation.metrics.score_result import ScoreResult
+from opik import Dataset
 
 from ...base_optimizer import BaseOptimizer
 from ...reporting_utils import (
@@ -16,16 +14,13 @@ from ...reporting_utils import (
 )
 from ...api_objects import chat_prompt
 from ...optimization_result import OptimizationResult
-from ...agents import OptimizableAgent
+from ...agents import OptimizableAgent, LiteLLMAgent
 from ...utils import (
     optimization_context,
-    create_litellm_agent_class,
     disable_experiment_reporting,
     enable_experiment_reporting,
     unique_ordered_by_key,
 )
-from ...task_evaluator import _create_metric_class
-from ... import task_evaluator, helpers
 from . import reporting as gepa_reporting
 from .adapter import OpikDataInst, OpikGEPAAdapter
 
@@ -134,21 +129,6 @@ class GepaOptimizer(BaseOptimizer):
             )
         return data_insts
 
-    def _apply_system_text(
-        self, prompt_obj: chat_prompt.ChatPrompt, system_text: str
-    ) -> chat_prompt.ChatPrompt:
-        updated = prompt_obj.copy()
-        if updated.messages is not None:
-            messages = updated.get_messages()
-            if messages and messages[0].get("role") == "system":
-                messages[0]["content"] = system_text
-            else:
-                messages.insert(0, {"role": "system", "content": system_text})
-            updated.set_messages(messages)
-        else:
-            updated.system = system_text
-        return updated
-
     def _infer_dataset_keys(self, dataset: Dataset) -> tuple[str, str]:
         items = dataset.get_items(1)
         if not items:
@@ -166,13 +146,13 @@ class GepaOptimizer(BaseOptimizer):
 
     def optimize_prompt(
         self,
-        prompt: chat_prompt.ChatPrompt,
+        prompt: chat_prompt.ChatPrompt | dict[str, chat_prompt.ChatPrompt],
         dataset: Dataset,
         metric: Callable,
+        agent: OptimizableAgent | None = None,
         experiment_config: dict | None = None,
         n_samples: int | None = None,
         auto_continue: bool = False,
-        agent_class: type[OptimizableAgent] | None = None,
         project_name: str = "Optimization",
         optimization_id: str | None = None,
         validation_dataset: Dataset | None = None,
@@ -195,14 +175,15 @@ class GepaOptimizer(BaseOptimizer):
         Optimize a prompt using GEPA (Genetic-Pareto) algorithm.
 
         Args:
-            prompt: The prompt to optimize
+            prompt: The prompt(s) to optimize. Can be a single ChatPrompt or a dict of ChatPrompts.
+                All message types (system, user, assistant) will be optimized.
             dataset: Opik Dataset to optimize on
             metric: Metric function to evaluate on
+            agent: Optional agent instance to use for evaluation. If None, uses LiteLLMAgent.
             experiment_config: Optional configuration for the experiment
             max_trials: Maximum number of different prompts to test (default: 10)
             n_samples: Optional number of items to test in the dataset
             auto_continue: Whether to auto-continue optimization
-            agent_class: Optional agent class to use
             reflection_minibatch_size: Size of reflection minibatches (default: 3)
             candidate_selection_strategy: Strategy for candidate selection (default: "pareto")
             skip_perfect_score: Skip candidates with perfect scores (default: True)
@@ -223,20 +204,56 @@ class GepaOptimizer(BaseOptimizer):
         Returns:
             OptimizationResult: Result of the optimization
         """
-        # Use base class validation and setup methods
+        # Use base class validation
         self._validate_optimization_inputs(prompt, dataset, metric)
-        # Keep a single agent class for the entire optimization (baseline +
-        # GEPA adapter + final evaluation) so we never downgrade to the default
-        # when we use GEPAs own internal evaluator.
-        self.agent_class = self._setup_agent_class(prompt, agent_class)
 
-        prompt = prompt.copy()
-        if prompt.model is None:
-            prompt.model = self.model
-        if not prompt.model_kwargs:
-            prompt.model_kwargs = dict(self.model_parameters)
+        # Create default agent if None
+        if agent is None:
+            agent = LiteLLMAgent(project_name=project_name)
+        self.agent = agent
 
-        seed_prompt_text = self._extract_system_text(prompt)
+        # Normalize prompt input: convert single prompt to dict
+        optimizable_prompts: dict[str, chat_prompt.ChatPrompt]
+        if isinstance(prompt, chat_prompt.ChatPrompt):
+            optimizable_prompts = {prompt.name: prompt}
+            is_single_prompt_optimization = True
+        else:
+            optimizable_prompts = prompt
+            is_single_prompt_optimization = False
+
+        # Work with a copy of prompts to avoid mutating the original
+        optimizable_prompts = {
+            name: p.copy() for name, p in optimizable_prompts.items()
+        }
+
+        # Get the first prompt as working prompt for display/config purposes
+        working_prompt = list(optimizable_prompts.values())[0]
+
+        # Set model defaults on all prompts
+        for p in optimizable_prompts.values():
+            if p.model is None:
+                p.model = self.model
+            if not p.model_kwargs:
+                p.model_kwargs = dict(self.model_parameters)
+
+        # Build multi-component seed_candidate from all messages in all prompts
+        seed_candidate: dict[str, str] = {}
+        for prompt_name, prompt_obj in optimizable_prompts.items():
+            messages = prompt_obj.get_messages()
+            for idx, msg in enumerate(messages):
+                component_key = f"{prompt_name}_{msg['role']}_{idx}"
+                content = msg.get("content", "")
+                # Handle content that might be a list (multimodal)
+                if isinstance(content, list):
+                    # Extract text from content parts
+                    text_parts = [
+                        part.get("text", "")
+                        for part in content
+                        if isinstance(part, dict) and part.get("type") == "text"
+                    ]
+                    content = " ".join(text_parts)
+                seed_candidate[component_key] = str(content)
+
         input_key, output_key = self._infer_dataset_keys(dataset)
 
         train_items = dataset.get_items()
@@ -275,8 +292,6 @@ class GepaOptimizer(BaseOptimizer):
         val_insts = self._build_data_insts(val_items, input_key, output_key)
 
         self._gepa_live_metric_calls = 0
-
-        base_prompt = prompt.copy()
 
         # Set project name from parameter
         self.project_name = project_name
@@ -317,9 +332,8 @@ class GepaOptimizer(BaseOptimizer):
                 dataset_id=getattr(dataset, "id", None),
                 verbose=self.verbose,
             )
-
             display_configuration(
-                messages=prompt.get_messages(),
+                messages=optimizable_prompts,
                 optimizer_config={
                     "optimizer": self.__class__.__name__,
                     "model": self.model,
@@ -329,49 +343,40 @@ class GepaOptimizer(BaseOptimizer):
                     "reflection_minibatch_size": reflection_minibatch_size,
                     "candidate_selection_strategy": candidate_selection_strategy,
                     "validation_dataset": getattr(val_source, "name", None),
+                    "num_prompts": len(optimizable_prompts),
+                    "num_components": len(seed_candidate),
                 },
                 verbose=self.verbose,
             )
 
             baseline_eval_result: Any | None = None
-            # Baseline evaluation
-            initial_prompt_messages = prompt.get_messages()
+            # Store initial prompts for result
+            initial_prompts = {
+                name: p.copy() for name, p in optimizable_prompts.items()
+            }
             initial_score = 0.0
             with gepa_reporting.baseline_evaluation(verbose=self.verbose) as baseline:
                 try:
-                    eval_kwargs = dict(
-                        prompt=prompt,
+                    # For baseline evaluation, use the base class evaluate_prompt
+                    # which handles dict prompts via agent.invoke_agent
+                    initial_score = self.evaluate_prompt(
+                        prompt=optimizable_prompts,
                         dataset=dataset,
                         metric=metric,
+                        agent=self.agent,
                         n_samples=n_samples,
-                        optimization_id=opt_id,
-                        extra_metadata={"phase": "baseline"},
                         verbose=0,
-                        return_result=True,
                     )
-                    with suppress_opik_logs():
-                        initial_score, baseline_eval_result = (
-                            self._evaluate_prompt_logged(**eval_kwargs)
-                        )
                     baseline.set_score(initial_score)
                 except Exception:
                     logger.exception("Baseline evaluation failed")
 
-            adapter_prompt = self._apply_system_text(base_prompt, seed_prompt_text)
-            adapter_prompt.model = self.model
-            # Filter out GEPA-specific parameters that shouldn't be passed to LLM
-            filtered_model_kwargs = {
-                k: v
-                for k, v in self.model_parameters.items()
-                if k not in ["num_prompts_per_round", "rounds"]
-            }
-            adapter_prompt.model_kwargs = filtered_model_kwargs
-
+            # Create the adapter with multi-prompt support
             adapter = OpikGEPAAdapter(
-                base_prompt=adapter_prompt,
+                base_prompts=optimizable_prompts,
+                agent=self.agent,
                 optimizer=self,
                 metric=metric,
-                system_fallback=seed_prompt_text,
                 dataset=dataset,
                 experiment_config=experiment_config,
             )
@@ -398,7 +403,7 @@ class GepaOptimizer(BaseOptimizer):
                 )
 
                 kwargs_gepa: dict[str, Any] = {
-                    "seed_candidate": {"system_prompt": seed_prompt_text},
+                    "seed_candidate": seed_candidate,
                     "trainset": train_insts,
                     "valset": val_insts,
                     "adapter": adapter,
@@ -428,7 +433,7 @@ class GepaOptimizer(BaseOptimizer):
                 if optimize_sig and "stop_callbacks" not in optimize_sig.parameters:
                     kwargs_gepa["max_metric_calls"] = max_metric_calls
 
-                gepa_result = gepa.optimize(**kwargs_gepa)
+                gepa_result: Any = gepa.optimize(**kwargs_gepa)
 
                 try:
                     opt_id = optimization.id if optimization is not None else None
@@ -454,14 +459,13 @@ class GepaOptimizer(BaseOptimizer):
         candidates: list[dict[str, str]] = getattr(gepa_result, "candidates", []) or []
         val_scores: list[float] = list(getattr(gepa_result, "val_aggregate_scores", []))
 
+        # Filter duplicate candidates based on content
         indexed_candidates: list[tuple[int, dict[str, str]]] = list(
             enumerate(candidates)
         )
         filtered_indexed_candidates = unique_ordered_by_key(
             indexed_candidates,
-            key=lambda item: self._extract_system_text_from_candidate(
-                item[1], seed_prompt_text
-            ).strip(),
+            key=lambda item: str(sorted(item[1].items())),
         )
         filtered_candidates: list[dict[str, str]] = [
             candidate for _, candidate in filtered_indexed_candidates
@@ -481,33 +485,22 @@ class GepaOptimizer(BaseOptimizer):
                 for idx, (original_idx, candidate) in enumerate(
                     filtered_indexed_candidates
                 ):
-                    candidate_prompt = self._extract_system_text_from_candidate(
-                        candidate, seed_prompt_text
+                    # Rebuild prompts from candidate
+                    prompt_variants = self._rebuild_prompts_from_candidate(
+                        optimizable_prompts, candidate
                     )
-                    prompt_variant = self._apply_system_text(prompt, candidate_prompt)
-                    prompt_variant.model = self.model
-                    # Filter out GEPA-specific parameters that shouldn't be passed to LLM
-                    filtered_model_kwargs = {
-                        k: v
-                        for k, v in self.model_parameters.items()
-                        if k not in ["num_prompts_per_round", "rounds"]
-                    }
-                    prompt_variant.model_kwargs = filtered_model_kwargs
 
-                    eval_kwargs = dict(
-                        prompt=prompt_variant,
-                        dataset=dataset,
-                        metric=metric,
-                        n_samples=n_samples,
-                        optimization_id=opt_id,
-                        extra_metadata={"phase": "rescoring", "candidate_index": idx},
-                        verbose=0,
-                    )
                     try:
-                        # TODO(opik-gepa): This rescoring round-trips through Opik's evaluator for every GEPA
-                        # candidate. Once the GEPA→Opik adapter can stream scores back natively, remove this
-                        # redundant evaluation loop and reuse GEPA's own scoring trace instead.
-                        score = float(self._evaluate_prompt_logged(**eval_kwargs))
+                        # Use base class evaluate_prompt which handles dict prompts
+                        score = self.evaluate_prompt(
+                            prompt=prompt_variants,
+                            dataset=dataset,
+                            metric=metric,
+                            agent=self.agent,
+                            n_samples=n_samples,
+                            verbose=0,
+                        )
+                        score = float(score)
                     except Exception:
                         logger.debug(
                             "Rescoring failed for candidate %s", idx, exc_info=True
@@ -515,19 +508,28 @@ class GepaOptimizer(BaseOptimizer):
                         score = 0.0
 
                     rescored.append(score)
+                    # Get a summary text for display (backward compatible)
+                    candidate_summary_text = self._get_candidate_summary_text(
+                        candidate, optimizable_prompts
+                    )
                     candidate_rows.append(
                         {
                             "iteration": idx + 1,
-                            "system_prompt": candidate_prompt,
+                            "system_prompt": candidate_summary_text,
                             "gepa_score": filtered_val_scores[idx],
                             "opik_score": score,
                             "source": self.__class__.__name__,
+                            "components": {
+                                k: v
+                                for k, v in candidate.items()
+                                if not k.startswith("_") and k not in ("source", "id")
+                            },
                         }
                     )
                     history.append(
                         {
                             "iteration": idx + 1,
-                            "prompt_candidate": candidate_prompt,
+                            "prompt_candidate": candidate,
                             "scores": [
                                 {
                                     "metric_name": f"GEPA-{metric.__name__}",
@@ -575,151 +577,28 @@ class GepaOptimizer(BaseOptimizer):
                 best_idx = 0
                 best_score = float(initial_score)
 
+        # Get best candidate and rebuild final prompts
         best_candidate = (
-            filtered_candidates[best_idx]
-            if filtered_candidates
-            else {"system_prompt": seed_prompt_text}
+            filtered_candidates[best_idx] if filtered_candidates else seed_candidate
         )
-        best_prompt_text = self._extract_system_text_from_candidate(
-            best_candidate, seed_prompt_text
+        final_prompts = self._rebuild_prompts_from_candidate(
+            optimizable_prompts, best_candidate
         )
-        best_matches_seed = best_prompt_text.strip() == seed_prompt_text.strip()
 
-        final_prompt = self._apply_system_text(prompt, best_prompt_text)
-        final_prompt.model = self.model
-        # Filter out GEPA-specific parameters that shouldn't be passed to LLM
-        filtered_model_kwargs = {
-            k: v
-            for k, v in self.model_parameters.items()
-            if k not in ["num_prompts_per_round", "rounds"]
-        }
-        final_prompt.model_kwargs = filtered_model_kwargs
+        # Check if best matches initial seed
+        best_matches_seed = best_candidate == seed_candidate
 
-        final_eval_result: Any | None = None
-        final_experiment_config: dict[str, Any] | None = None
-        analysis_project_name: str | None = self.project_name
-
-        reuse_baseline_eval = best_matches_seed and baseline_eval_result is not None
-
-        if not reuse_baseline_eval:
-            with suppress_opik_logs():
-                try:
-                    configuration_updates = helpers.drop_none(
-                        {"gepa": {"phase": "final", "selected": True}}
-                    )
-                    final_experiment_config = self._prepare_experiment_config(
-                        prompt=final_prompt,
-                        dataset=dataset,
-                        metric=metric,
-                        experiment_config=experiment_config,
-                        configuration_updates=configuration_updates,
-                    )
-                    analysis_project_name = (
-                        final_experiment_config.get("project_name")
-                        if final_experiment_config
-                        else self.project_name
-                    )
-                    final_llm_agent = self._create_agent_for_prompt(
-                        final_prompt, project_name=analysis_project_name
-                    )
-
-                    def final_llm_task(dataset_item: dict[str, Any]) -> dict[str, str]:
-                        messages = final_prompt.get_messages(dataset_item)
-                        raw = final_llm_agent.invoke(messages)
-                        if self.current_optimization_id:
-                            opik_context.update_current_trace(
-                                tags=[self.current_optimization_id, "Evaluation"]
-                            )
-                        return {"llm_output": raw.strip()}
-
-                    metric_class = _create_metric_class(metric)
-
-                    if opt_id:
-                        final_eval_result = opik_evaluator.evaluate_optimization_trial(
-                            optimization_id=opt_id,
-                            dataset=dataset,
-                            task=final_llm_task,
-                            project_name=final_experiment_config.get("project_name"),
-                            dataset_item_ids=None,
-                            scoring_metrics=[metric_class],
-                            task_threads=self.n_threads,
-                            nb_samples=n_samples,
-                            experiment_config=final_experiment_config,
-                            verbose=0,
-                        )
-                    else:
-                        final_eval_result = opik_evaluator.evaluate(
-                            dataset=dataset,
-                            task=final_llm_task,
-                            project_name=final_experiment_config.get("project_name"),
-                            dataset_item_ids=None,
-                            scoring_metrics=[metric_class],
-                            task_threads=self.n_threads,
-                            nb_samples=n_samples,
-                            experiment_config=final_experiment_config,
-                            verbose=0,
-                        )
-                except Exception:
-                    logger.debug("Final evaluation failed", exc_info=True)
-        else:
-            final_eval_result = baseline_eval_result
-
-        per_item_scores: list[dict[str, Any]] = []
-        try:
-            analysis_prompt = final_prompt.copy()
-            agent = self._create_agent_for_prompt(
-                analysis_prompt, project_name=analysis_project_name
-            )
-            for item in train_items:
-                messages = analysis_prompt.get_messages(item)
-                output_text = agent.invoke(messages).strip()
-                metric_result = metric(item, output_text)
-                if hasattr(metric_result, "value"):
-                    score_val = float(metric_result.value)
-                elif hasattr(metric_result, "score"):
-                    score_val = float(metric_result.score)
-                else:
-                    score_val = float(metric_result)
-                per_item_scores.append(
-                    {
-                        "dataset_item_id": item.get("id"),
-                        "score": score_val,
-                        "answer": item.get(output_key),
-                        "output": output_text,
-                    }
-                )
-        except Exception:
-            logger.debug("Per-item diagnostics failed", exc_info=True)
-
-        trial_info: dict[str, Any] | None = None
-        if final_eval_result is not None:
-            experiment_name = getattr(final_eval_result, "experiment_name", None)
-            experiment_url = getattr(final_eval_result, "experiment_url", None)
-            trial_ids = []
-            try:
-                trial_ids = sorted(
-                    {
-                        str(test_result.trial_id)
-                        for test_result in getattr(
-                            final_eval_result, "test_results", []
-                        )
-                        if getattr(test_result, "trial_id", None) is not None
-                    }
-                )
-            except Exception:
-                logger.debug("Failed to extract trial IDs", exc_info=True)
-
-            trial_info = {
-                "experiment_name": experiment_name,
-                "experiment_url": experiment_url,
-                "trial_ids": trial_ids,
-            }
+        # Get summary text for display
+        best_prompt_text = self._get_candidate_summary_text(
+            best_candidate, optimizable_prompts
+        )
 
         details: dict[str, Any] = {
             "model": self.model,
             "temperature": self.model_parameters.get("temperature"),
             "optimizer": self.__class__.__name__,
             "num_candidates": len(filtered_candidates),
+            "num_components": len(seed_candidate),
             "total_metric_calls": getattr(gepa_result, "total_metric_calls", None),
             "parents": getattr(gepa_result, "parents", None),
             "val_scores": filtered_val_scores,
@@ -737,16 +616,12 @@ class GepaOptimizer(BaseOptimizer):
             "selected_candidate_opik_score": best_score,
             "gepa_live_metric_used": True,
             "gepa_live_metric_call_count": self._gepa_live_metric_calls,
-            "selected_candidate_item_scores": per_item_scores,
             "dataset_item_ids": [item.get("id") for item in train_items],
-            "selected_candidate_trial_info": trial_info,
         }
-        if reuse_baseline_eval:
+        if best_matches_seed:
             details["final_evaluation_reused_baseline"] = True
         if experiment_config:
             details["experiment"] = experiment_config
-
-        final_messages = final_prompt.get_messages()
 
         if self.verbose >= 1:
             gepa_reporting.display_candidate_scores(
@@ -756,7 +631,7 @@ class GepaOptimizer(BaseOptimizer):
                 best_prompt_text,
                 best_score,
                 verbose=self.verbose,
-                trial_info=trial_info,
+                trial_info=None,
             )
 
         if logger.isEnabledFor(logging.DEBUG):
@@ -775,14 +650,26 @@ class GepaOptimizer(BaseOptimizer):
                 best_score,
             )
 
+        # Convert result format based on input type
+        result_prompt: chat_prompt.ChatPrompt | dict[str, chat_prompt.ChatPrompt]
+        result_initial_prompt: (
+            chat_prompt.ChatPrompt | dict[str, chat_prompt.ChatPrompt]
+        )
+        if is_single_prompt_optimization:
+            result_prompt = list(final_prompts.values())[0]
+            result_initial_prompt = list(initial_prompts.values())[0]
+        else:
+            result_prompt = final_prompts
+            result_initial_prompt = initial_prompts
+
         return OptimizationResult(
             optimizer=self.__class__.__name__,
-            prompt=final_messages,
+            prompt=result_prompt,
             score=best_score,
             metric_name=metric.__name__,
             optimization_id=opt_id,
             dataset_id=ds_id,
-            initial_prompt=initial_prompt_messages,
+            initial_prompt=result_initial_prompt,
             initial_score=initial_score,
             details=details,
             history=history,
@@ -790,156 +677,57 @@ class GepaOptimizer(BaseOptimizer):
         )
 
     # ------------------------------------------------------------------
-    # Helpers used by BaseOptimizer.evaluate_prompt
+    # Helpers for multi-prompt optimization
     # ------------------------------------------------------------------
 
-    def _extract_system_text(self, prompt: chat_prompt.ChatPrompt) -> str:
-        messages = prompt.get_messages()
-        for message in messages:
-            if message.get("role") == "system":
-                return str(message.get("content", "")).strip()
-        for message in messages:
-            if message.get("role") == "user":
-                return f"You are a helpful assistant. Respond to: {message.get('content', '')}"
-        return "You are a helpful assistant."
-
-    def _extract_system_text_from_candidate(
-        self, candidate: dict[str, Any], fallback: str
-    ) -> str:
-        for key in ("system_prompt", "system", "prompt"):
-            value = candidate.get(key)
-            if isinstance(value, str) and value.strip():
-                return value
-        return fallback
-
-    def _create_agent_for_prompt(
+    def _rebuild_prompts_from_candidate(
         self,
-        prompt_obj: chat_prompt.ChatPrompt,
-        project_name: str | None = None,
-    ) -> OptimizableAgent:
-        # Late initialization only happens if GEPA is being used stand-alone.
-        # NOTE: OptimizableAgent defaults to LiteLLM. We cache whichever agent class the
-        # user provided so GEPA never downgrades to LiteLLM (which breaks tracing).
-        if not hasattr(self, "agent_class") or self.agent_class is None:
-            self.agent_class = create_litellm_agent_class(
-                prompt_obj, optimizer_ref=self
-            )
-        instantiate_kwargs: dict[str, Any] = {}
-        if project_name is not None:
-            instantiate_kwargs["project_name"] = project_name
+        base_prompts: dict[str, chat_prompt.ChatPrompt],
+        candidate: dict[str, str],
+    ) -> dict[str, chat_prompt.ChatPrompt]:
+        """Rebuild prompts with optimized messages from a GEPA candidate.
 
-        try:
-            return self._instantiate_agent(
-                prompt_obj, agent_class=self.agent_class, **instantiate_kwargs
-            )
-        except TypeError:
-            return self._instantiate_agent(prompt_obj, agent_class=self.agent_class)
+        Args:
+            base_prompts: Dict of original prompts to use as templates.
+            candidate: Dict mapping component keys (e.g., "prompt_name_role_idx") to optimized content.
+
+        Returns:
+            Dict of ChatPrompt objects with optimized message content,
+            preserving tools, function_map, model, and model_kwargs.
+        """
+        rebuilt: dict[str, chat_prompt.ChatPrompt] = {}
+        for prompt_name, prompt_obj in base_prompts.items():
+            original_messages = prompt_obj.get_messages()
+            new_messages = []
+            for idx, msg in enumerate(original_messages):
+                component_key = f"{prompt_name}_{msg['role']}_{idx}"
+                # Use optimized content if available, otherwise keep original
+                original_content = msg.get("content", "")
+                optimized_content = candidate.get(component_key, original_content)
+                new_messages.append({"role": msg["role"], "content": optimized_content})
+
+            # prompt.copy() preserves tools, function_map, model, model_kwargs
+            new_prompt = prompt_obj.copy()
+            new_prompt.set_messages(new_messages)
+            rebuilt[prompt_name] = new_prompt
+        return rebuilt
+
+    def _get_candidate_summary_text(
+        self,
+        candidate: dict[str, str],
+        base_prompts: dict[str, chat_prompt.ChatPrompt],
+    ) -> str:
+        """Get a summary text representation of a candidate for display."""
+        # Try to get system prompt content first for backward-compatible display
+        for prompt_name in base_prompts:
+            system_key = f"{prompt_name}_system_0"
+            if system_key in candidate:
+                return candidate[system_key][:200]
+        # Fall back to first component
+        for key, value in candidate.items():
+            if not key.startswith("_") and key not in ("source", "id"):
+                return str(value)[:200]
+        return "<no content>"
 
     def _build_optimization_config(self) -> dict[str, Any]:
         return self._build_optimization_metadata()
-
-    @overload
-    def _evaluate_prompt_logged(
-        self,
-        prompt: chat_prompt.ChatPrompt,
-        dataset: Dataset,
-        metric: Callable[[dict[str, Any], str], ScoreResult],
-        n_samples: int | None = None,
-        dataset_item_ids: list[str] | None = None,
-        experiment_config: dict[str, Any] | None = None,
-        optimization_id: str | None = None,
-        extra_metadata: dict[str, Any] | None = None,
-        verbose: int = 1,
-        return_result: Literal[True] = True,
-    ) -> tuple[float, Any | None]: ...
-
-    @overload
-    def _evaluate_prompt_logged(
-        self,
-        prompt: chat_prompt.ChatPrompt,
-        dataset: Dataset,
-        metric: Callable[[dict[str, Any], str], ScoreResult],
-        n_samples: int | None = None,
-        dataset_item_ids: list[str] | None = None,
-        experiment_config: dict[str, Any] | None = None,
-        optimization_id: str | None = None,
-        extra_metadata: dict[str, Any] | None = None,
-        verbose: int = 1,
-        return_result: Literal[False] = False,
-    ) -> float: ...
-
-    def _evaluate_prompt_logged(
-        self,
-        prompt: chat_prompt.ChatPrompt,
-        dataset: Dataset,
-        metric: Callable[[dict[str, Any], str], ScoreResult],
-        n_samples: int | None = None,
-        dataset_item_ids: list[str] | None = None,
-        experiment_config: dict[str, Any] | None = None,
-        optimization_id: str | None = None,
-        extra_metadata: dict[str, Any] | None = None,
-        verbose: int = 1,
-        return_result: bool = False,
-    ) -> float | tuple[float, Any | None]:
-        """
-        Run an evaluation (baseline/rescoring/final) and optionally capture the full
-        Opik EvaluationResult when callers need trace/test metadata (GEPA baseline).
-        FIXME(opik-gepa): Once GEPA exposes a clean scoring API, this helper should be
-        replaced with a dedicated adapter rather than invoking task_evaluator directly.
-        """
-        if prompt.model is None:
-            prompt.model = self.model
-        if prompt.model_kwargs is None:
-            prompt.model_kwargs = self.model_parameters
-
-        agent = self._create_agent_for_prompt(prompt)
-
-        def llm_task(dataset_item: dict[str, Any]) -> dict[str, str]:
-            messages = prompt.get_messages(dataset_item)
-            raw = agent.invoke(messages)
-
-            # Add tags to trace for optimization tracking
-            if self.current_optimization_id:
-                opik_context.update_current_trace(
-                    tags=[self.current_optimization_id, "Evaluation"]
-                )
-
-            return {"llm_output": raw.strip()}
-
-        configuration_updates = helpers.drop_none({"gepa": extra_metadata})
-        experiment_config = self._prepare_experiment_config(
-            prompt=prompt,
-            dataset=dataset,
-            metric=metric,
-            experiment_config=experiment_config,
-            configuration_updates=configuration_updates,
-        )
-
-        if return_result:
-            score, eval_result = task_evaluator.evaluate_with_result(
-                dataset=dataset,
-                dataset_item_ids=dataset_item_ids,
-                metric=metric,
-                evaluated_task=llm_task,
-                num_threads=self.n_threads,
-                project_name=experiment_config.get("project_name"),
-                experiment_config=experiment_config,
-                optimization_id=optimization_id,
-                n_samples=n_samples,
-                verbose=verbose,
-            )
-            return score, eval_result
-
-        score = task_evaluator.evaluate(
-            dataset=dataset,
-            dataset_item_ids=dataset_item_ids,
-            metric=metric,
-            evaluated_task=llm_task,
-            num_threads=self.n_threads,
-            project_name=experiment_config.get("project_name"),
-            experiment_config=experiment_config,
-            optimization_id=optimization_id,
-            n_samples=n_samples,
-            verbose=verbose,
-        )
-        return score

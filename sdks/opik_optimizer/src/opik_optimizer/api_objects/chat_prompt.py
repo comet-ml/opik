@@ -7,18 +7,22 @@ from opik import track
 
 from . import types
 
+
 class ModelParameters(BaseModel):
     """Wrapper for model parameters that allows arbitrary key-value pairs."""
+
     model_config = ConfigDict(extra="allow")
+
 
 class ChatPromptObject(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    
+
     name: str
     messages: list[types.Message]
     model: str
     tools: list[types.Tool]
     model_parameters: ModelParameters
+
 
 class ChatPrompt:
     """
@@ -177,14 +181,18 @@ class ChatPrompt:
                     if isinstance(url, str) and label in url:
                         image_url_data["url"] = url.replace(label, value)
 
-    def replace_in_messages(self, messages: list[dict[str, Any]], label: str, value: str) -> list[dict[str, Any]]:
+    def replace_in_messages(
+        self, messages: list[dict[str, Any]], label: str, value: str
+    ) -> list[dict[str, Any]]:
         for message in messages:
             content = message["content"]
             if isinstance(content, str):
-                message["content"] = self._update_string_content(content, label, str(value))
+                message["content"] = self._update_string_content(
+                    content, label, str(value)
+                )
             elif isinstance(content, list):
                 self._update_content_parts(content, label, str(value))
-        
+
         return messages
 
     def get_messages(
@@ -254,8 +262,6 @@ class ChatPrompt:
     def copy(self) -> "ChatPrompt":
         """Shallow clone preserving model configuration and tools."""
 
-        # TODO(opik-mcp): once we introduce a dedicated MCP prompt subclass,
-        # migrate callers away from generic copies so optimizer metadata stays typed.
         model_parameters = (
             copy.deepcopy(self.model_kwargs) if self.model_kwargs else None
         )
@@ -274,14 +280,6 @@ class ChatPrompt:
         self.system = None
         self.user = None
         self.messages = copy.deepcopy(messages)
-
-    # TODO(opik): remove this stop-gap once MetaPromptOptimizer supports MCP.
-    # Provides a second-pass flow so tool results can be appended before
-    # rerunning the model.
-    def with_messages(self, messages: list[dict[str, Any]]) -> "ChatPrompt":
-        cloned = self.copy()
-        cloned.set_messages(messages)
-        return cloned
 
     @classmethod
     def model_validate(

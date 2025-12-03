@@ -1,16 +1,19 @@
 from typing import Any
 
+import copy
 import logging
 import random
-import json
 
+from pydantic import BaseModel
 from deap import creator as _creator
 
 from .. import prompts as evo_prompts
 from .. import reporting
-from .... import utils, _llm_calls
+from .... import _llm_calls
+from ...._llm_calls import StructuredOutputParsingError
 from ....api_objects.types import (
     Content,
+    Messages,
     extract_text_from_content,
     rebuild_content_with_new_text,
 )
@@ -20,38 +23,19 @@ logger = logging.getLogger(__name__)
 creator = _creator  # backward compt.
 
 
-def _extract_json_arrays(text: str) -> list[str]:
-    """Extract top-level JSON array substrings from arbitrary text.
-    This helps when models return multiple arrays like `[...],\n[...]`.
+class CrossoverResponse(BaseModel):
+    """Response containing two child prompts from crossover operation.
+
+    Each child is a list of messages representing a complete prompt.
+    Example:
+        {
+            "child_1": [{"role": "system", "content": "..."}, {"role": "user", "content": "..."}],
+            "child_2": [{"role": "system", "content": "..."}, {"role": "user", "content": "..."}]
+        }
     """
-    arrays: list[str] = []
-    depth = 0
-    start: int | None = None
-    in_str = False
-    escape = False
-    for i, ch in enumerate(text):
-        if escape:
-            # current char is escaped; skip special handling
-            escape = False
-            continue
-        if ch == "\\":
-            escape = True
-            continue
-        if ch == '"':
-            in_str = not in_str
-            continue
-        if in_str:
-            continue
-        if ch == "[":
-            if depth == 0:
-                start = i
-            depth += 1
-        elif ch == "]" and depth > 0:
-            depth -= 1
-            if depth == 0 and start is not None:
-                arrays.append(text[start : i + 1])
-                start = None
-    return arrays
+
+    child_1: Messages
+    child_2: Messages
 
 
 def _deap_crossover_chunking_strategy(
@@ -88,23 +72,21 @@ def _deap_crossover_word_level(
     return " ".join(child1_words), " ".join(child2_words)
 
 
-def deap_crossover(ind1: Any, ind2: Any, verbose: int = 1) -> tuple[Any, Any]:
-    """Crossover operation that preserves semantic meaning.
-    Attempts chunk-level crossover first, then falls back to word-level.
+def _crossover_messages(
+    messages_1: Messages, messages_2: Messages
+) -> tuple[Messages, Messages]:
+    """Apply crossover to a single prompt's messages.
+
     Handles both string content and content parts (preserving images/video).
     """
-    reporting.display_message(
-        "      Recombining prompts by mixing and matching words and sentences.",
-        verbose=verbose,
-    )
-    messages_1_orig: list[dict[str, Any]] = ind1
-    messages_2_orig: list[dict[str, Any]] = ind2
+    messages_1_result = copy.deepcopy(messages_1)
+    messages_2_result = copy.deepcopy(messages_2)
 
-    for i, message_1 in enumerate(messages_1_orig):
+    for i, message_1 in enumerate(messages_1_result):
         role: str = message_1["role"]
         content_1: Content = message_1["content"]
-        if (len(messages_2_orig) >= i + 1) and (messages_2_orig[i]["role"] == role):
-            message_2 = messages_2_orig[i]
+        if (len(messages_2_result) >= i + 1) and (messages_2_result[i]["role"] == role):
+            message_2 = messages_2_result[i]
             content_2: Content = message_2["content"]
 
             # Extract text from content (handles both string and content parts)
@@ -116,34 +98,102 @@ def deap_crossover(ind1: Any, ind2: Any, verbose: int = 1) -> tuple[Any, Any]:
                     text_1, text_2
                 )
             except ValueError:
-                child1_text, child2_text = _deap_crossover_word_level(
-                    text_1, text_2
-                )
+                child1_text, child2_text = _deap_crossover_word_level(text_1, text_2)
 
             # Rebuild content preserving non-text parts (images/video)
-            messages_1_orig[i]["content"] = rebuild_content_with_new_text(
+            messages_1_result[i]["content"] = rebuild_content_with_new_text(
                 content_1, child1_text
             )
-            messages_2_orig[i]["content"] = rebuild_content_with_new_text(
+            messages_2_result[i]["content"] = rebuild_content_with_new_text(
                 content_2, child2_text
             )
+
+    return messages_1_result, messages_2_result
+
+
+def deap_crossover(ind1: Any, ind2: Any, verbose: int = 1) -> tuple[Any, Any]:
+    """Crossover operation that preserves semantic meaning.
+
+    Operates on dict-based individuals (prompt_name -> messages).
+    Applies crossover to ALL prompts in the dict.
+    Handles both string content and content parts (preserving images/video).
+    """
+    reporting.display_message(
+        "      Recombining prompts by mixing and matching words and sentences.",
+        verbose=verbose,
+    )
+
+    # Individuals are dicts mapping prompt_name -> messages
+    child1_data: dict[str, Messages] = {}
+    child2_data: dict[str, Messages] = {}
+
+    # Apply crossover to each prompt in the dict
+    for prompt_name in ind1.keys():
+        if prompt_name in ind2:
+            messages_1 = ind1[prompt_name]
+            messages_2 = ind2[prompt_name]
+            child1_messages, child2_messages = _crossover_messages(messages_1, messages_2)
+            child1_data[prompt_name] = child1_messages
+            child2_data[prompt_name] = child2_messages
         else:
-            pass
+            # Prompt only in ind1 - keep as is in both children
+            child1_data[prompt_name] = copy.deepcopy(ind1[prompt_name])
+            child2_data[prompt_name] = copy.deepcopy(ind1[prompt_name])
 
-    child1 = creator.Individual(messages_1_orig)
-    child2 = creator.Individual(messages_2_orig)
+    # Handle prompts only in ind2
+    for prompt_name in ind2.keys():
+        if prompt_name not in ind1:
+            child1_data[prompt_name] = copy.deepcopy(ind2[prompt_name])
+            child2_data[prompt_name] = copy.deepcopy(ind2[prompt_name])
 
-    # Preserve tools and function_map from parents
-    if hasattr(ind1, "tools"):
-        setattr(child1, "tools", getattr(ind1, "tools"))
-    if hasattr(ind1, "function_map"):
-        setattr(child1, "function_map", getattr(ind1, "function_map"))
-    if hasattr(ind2, "tools"):
-        setattr(child2, "tools", getattr(ind2, "tools"))
-    if hasattr(ind2, "function_map"):
-        setattr(child2, "function_map", getattr(ind2, "function_map"))
+    child1 = creator.Individual(child1_data)
+    child2 = creator.Individual(child2_data)
+
+    # Preserve prompts_metadata from parents (merge, preferring ind1)
+    metadata_1 = getattr(ind1, "prompts_metadata", {})
+    metadata_2 = getattr(ind2, "prompts_metadata", {})
+    merged_metadata = {**metadata_2, **metadata_1}
+    setattr(child1, "prompts_metadata", copy.deepcopy(merged_metadata))
+    setattr(child2, "prompts_metadata", copy.deepcopy(merged_metadata))
 
     return child1, child2
+
+
+def _llm_crossover_messages(
+    messages_1: Messages,
+    messages_2: Messages,
+    output_style_guidance: str,
+    model: str,
+    model_parameters: dict[str, Any],
+) -> tuple[Messages, Messages]:
+    """Apply LLM-based crossover to a single prompt's messages."""
+    user_prompt_for_llm_crossover = evo_prompts.llm_crossover_user_prompt(
+        messages_1, messages_2, output_style_guidance
+    )
+
+    response = _llm_calls.call_model(
+        messages=[
+            {
+                "role": "system",
+                "content": evo_prompts.llm_crossover_system_prompt(
+                    output_style_guidance
+                ),
+            },
+            {"role": "user", "content": user_prompt_for_llm_crossover},
+        ],
+        model=model,
+        model_parameters=model_parameters,
+        response_model=CrossoverResponse,
+        is_reasoning=True,
+    )
+
+    assert isinstance(response, CrossoverResponse)
+
+    # Convert Pydantic models to dicts
+    first_child_messages = [msg.model_dump() for msg in response.child_1]
+    second_child_messages = [msg.model_dump() for msg in response.child_2]
+
+    return first_child_messages, second_child_messages
 
 
 def llm_deap_crossover(
@@ -155,87 +205,74 @@ def llm_deap_crossover(
     verbose: int = 1,
 ) -> tuple[Any, Any]:
     """Perform crossover by asking an LLM to blend two parent prompts.
-    LLM handles content parts naturally since it receives the full messages.
+
+    Operates on dict-based individuals (prompt_name -> messages).
+    Applies LLM crossover to ALL prompts in the dict.
+    Falls back to deap_crossover on failure.
     """
     reporting.display_message(
         "      Recombining prompts using an LLM.", verbose=verbose
     )
 
-    parent1_messages: list[dict[str, Any]] = ind1
-    parent2_messages: list[dict[str, Any]] = ind2
-    current_output_style_guidance = output_style_guidance
+    # Individuals are dicts mapping prompt_name -> messages
+    child1_data: dict[str, Messages] = {}
+    child2_data: dict[str, Messages] = {}
 
-    user_prompt_for_llm_crossover = evo_prompts.llm_crossover_user_prompt(
-        parent1_messages, parent2_messages, current_output_style_guidance
-    )
     try:
-        logger.debug(
-            f"Attempting LLM-driven crossover between: '{parent1_messages[:50]}...' and '{parent2_messages[:50]}...' aiming for style: '{current_output_style_guidance[:30]}...'"
-        )
-        response_content = _llm_calls.call_model(
-            messages=[
-                {
-                    "role": "system",
-                    "content": evo_prompts.llm_crossover_system_prompt(
-                        current_output_style_guidance
-                    ),
-                },
-                {"role": "user", "content": user_prompt_for_llm_crossover},
-            ],
-            model=model,
-            model_parameters=model_parameters,
-            is_reasoning=True,
-        )
-        logger.debug(f"Raw LLM response for crossover: {response_content}")
+        # Apply LLM crossover to each prompt in the dict
+        for prompt_name in ind1.keys():
+            if prompt_name in ind2:
+                messages_1 = ind1[prompt_name]
+                messages_2 = ind2[prompt_name]
 
-        # First, try strict JSON parsing
-        json_response = None
-        try:
-            json_response = utils.json_to_dict(response_content)
-        except Exception:
-            # Continue with heuristic extraction below
-            json_response = None
-        children: list[list[dict[str, Any]]] = []
-        if isinstance(json_response, list):
-            children = [c for c in json_response if isinstance(c, list)]
+                logger.debug(
+                    f"Attempting LLM-driven crossover for prompt '{prompt_name}'"
+                )
 
-        # If strict parse failed to yield children, try extracting arrays heuristically
-        if not children:
-            extracted = _extract_json_arrays(response_content)
-            for arr in extracted:
                 try:
-                    parsed = json.loads(arr)
-                    if isinstance(parsed, list) and all(
-                        isinstance(m, dict) and {"role", "content"} <= set(m.keys())
-                        for m in parsed
-                    ):
-                        children.append(parsed)
-                except Exception:
-                    continue
+                    child1_messages, child2_messages = _llm_crossover_messages(
+                        messages_1,
+                        messages_2,
+                        output_style_guidance,
+                        model,
+                        model_parameters,
+                    )
+                    child1_data[prompt_name] = child1_messages
+                    child2_data[prompt_name] = child2_messages
+                except (StructuredOutputParsingError, Exception) as e:
+                    logger.warning(
+                        f"LLM crossover failed for prompt '{prompt_name}': {e}. Using DEAP crossover."
+                    )
+                    child1_messages, child2_messages = _crossover_messages(
+                        messages_1, messages_2
+                    )
+                    child1_data[prompt_name] = child1_messages
+                    child2_data[prompt_name] = child2_messages
+            else:
+                # Prompt only in ind1 - keep as is in both children
+                child1_data[prompt_name] = copy.deepcopy(ind1[prompt_name])
+                child2_data[prompt_name] = copy.deepcopy(ind1[prompt_name])
 
-        if len(children) == 0:
-            raise ValueError("LLM response did not include any valid child prompts")
+        # Handle prompts only in ind2
+        for prompt_name in ind2.keys():
+            if prompt_name not in ind1:
+                child1_data[prompt_name] = copy.deepcopy(ind2[prompt_name])
+                child2_data[prompt_name] = copy.deepcopy(ind2[prompt_name])
 
-        # We only need two children; if only one returned, duplicate pattern from DEAP
-        first_child_messages = children[0]
-        second_child_messages = children[1] if len(children) > 1 else children[0]
+        child1 = creator.Individual(child1_data)
+        child2 = creator.Individual(child2_data)
 
-        child1 = creator.Individual(first_child_messages)
-        child2 = creator.Individual(second_child_messages)
-
-        # Preserve tools and function_map from parents
-        if hasattr(ind1, "tools"):
-            setattr(child1, "tools", getattr(ind1, "tools"))
-        if hasattr(ind1, "function_map"):
-            setattr(child1, "function_map", getattr(ind1, "function_map"))
-        if hasattr(ind2, "tools"):
-            setattr(child2, "tools", getattr(ind2, "tools"))
-        if hasattr(ind2, "function_map"):
-            setattr(child2, "function_map", getattr(ind2, "function_map"))
+        # Preserve prompts_metadata from parents (merge, preferring ind1)
+        metadata_1 = getattr(ind1, "prompts_metadata", {})
+        metadata_2 = getattr(ind2, "prompts_metadata", {})
+        merged_metadata = {**metadata_2, **metadata_1}
+        setattr(child1, "prompts_metadata", copy.deepcopy(merged_metadata))
+        setattr(child2, "prompts_metadata", copy.deepcopy(merged_metadata))
 
         return child1, child2
+
     except Exception as e:
         logger.warning(
             f"LLM-driven crossover failed: {e}. Falling back to DEAP crossover."
         )
-        return deap_crossover(ind1, ind2)
+        return deap_crossover(ind1, ind2, verbose=verbose)

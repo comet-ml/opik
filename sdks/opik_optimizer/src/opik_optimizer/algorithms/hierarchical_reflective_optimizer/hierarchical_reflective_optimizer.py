@@ -136,11 +136,11 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
         self,
         prompts: dict[str, chat_prompt.ChatPrompt],
         root_cause: FailureMode,
-        attempt: int = 1
+        attempt: int = 1,
     ) -> dict[str, ImprovedPrompt]:
         """
         Improve all prompts in the dict based on the root cause analysis.
-        
+
         Makes a single LLM call to improve all prompts at once for efficiency.
 
         Args:
@@ -175,8 +175,11 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
 
         # Create dynamic response model for all prompts
         from . import types as hierarchical_types
-        DynamicImprovedPromptsResponse = hierarchical_types.create_improved_prompts_response_model(
-            prompt_names=list(prompts.keys())
+
+        DynamicImprovedPromptsResponse = (
+            hierarchical_types.create_improved_prompts_response_model(
+                prompt_names=list(prompts.keys())
+            )
         )
 
         improve_prompt_response = _llm_calls.call_model(
@@ -190,7 +193,9 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
         # Extract improved prompts from response
         improved_prompts = {}
         for prompt_name in prompts.keys():
-            improved_prompts[prompt_name] = getattr(improve_prompt_response, prompt_name)
+            improved_prompts[prompt_name] = getattr(
+                improve_prompt_response, prompt_name
+            )
 
         return improved_prompts
 
@@ -211,7 +216,7 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
     ) -> tuple[dict[str, chat_prompt.ChatPrompt], float, EvaluationResult]:
         """
         Generate and evaluate a single improvement attempt for a failure mode.
-        
+
         Now works with dict of prompts and makes a single LLM call to improve all.
 
         Args:
@@ -253,7 +258,7 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
         for prompt_name, improved_prompt in improved_prompts_response.items():
             messages_as_dicts = [x.model_dump() for x in improved_prompt.messages]
             original = original_prompts[prompt_name]
-            
+
             improved_chat_prompts[prompt_name] = chat_prompt.ChatPrompt(
                 name=original.name,
                 messages=messages_as_dicts,
@@ -368,10 +373,8 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
             dataset_id=dataset.id,
             verbose=self.verbose,
         )
-        display_messages: list[dict[str, str]] = []
-        display_tools = None
         reporting.display_configuration(
-            messages=display_messages,
+            messages=optimizable_prompts,
             optimizer_config={
                 "optimizer": self.__class__.__name__,
                 "n_samples": n_samples,
@@ -381,7 +384,6 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
                 "convergence_threshold": self.convergence_threshold,
             },
             verbose=self.verbose,
-            tools=display_tools,
         )
 
         evaluation_dataset = (
@@ -391,7 +393,7 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
         # Create agent for prompt execution
         if agent is None:
             agent = LiteLLMAgent(project_name=project_name)
-        
+
         # First we will evaluate the prompt on the dataset
         with reporting.display_evaluation(verbose=self.verbose) as baseline_reporter:
             experiment_result = self.evaluate_prompt(
@@ -620,7 +622,9 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
 
         # Convert result format based on input type
         result_best_prompt: chat_prompt.ChatPrompt | dict[str, chat_prompt.ChatPrompt]
-        result_initial_prompt: chat_prompt.ChatPrompt | dict[str, chat_prompt.ChatPrompt]
+        result_initial_prompt: (
+            chat_prompt.ChatPrompt | dict[str, chat_prompt.ChatPrompt]
+        )
         if is_single_prompt_optimization:
             result_best_prompt = list(best_prompts.values())[0]
             result_initial_prompt = list(optimizable_prompts.values())[0]
@@ -644,10 +648,6 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
             "iterations_completed": iteration,
             "trials_used": trials_used,
         }
-
-        # Extract tool prompts if tools exist
-        final_tools = getattr(first_best_prompt, "tools", None)
-        tool_prompts = self._extract_tool_prompts(final_tools)
 
         return OptimizationResult(
             optimizer=self.__class__.__name__,

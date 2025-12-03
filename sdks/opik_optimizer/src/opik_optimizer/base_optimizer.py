@@ -154,7 +154,7 @@ class BaseOptimizer(ABC):
             for prompt_value in prompt.values():
                 if not isinstance(prompt_value, chat_prompt.ChatPrompt):
                     raise ValueError("Prompt must be a ChatPrompt object")
-                
+
             if prompt_value._has_content_parts() and not support_content_parts:
                 raise ValueError(
                     "Prompt has content parts, which are not supported by this optimizer - You can use the Hierarchical Reflective Optimizer instead."
@@ -165,7 +165,9 @@ class BaseOptimizer(ABC):
                     "Prompt has content parts, which are not supported by this optimizer - You can use the Hierarchical Reflective Optimizer instead."
                 )
         else:
-            raise ValueError("Prompt must be a ChatPrompt object or a dictionary of ChatPrompt objects")
+            raise ValueError(
+                "Prompt must be a ChatPrompt object or a dictionary of ChatPrompt objects"
+            )
 
         if not isinstance(dataset, Dataset):
             raise ValueError("Dataset must be a Dataset object")
@@ -174,77 +176,6 @@ class BaseOptimizer(ABC):
             raise ValueError(
                 "Metric must be a function that takes `dataset_item` and `llm_output` as arguments."
             )
-
-    def _setup_agent_class(
-        self, prompt: "chat_prompt.ChatPrompt", agent_class: Any = None
-    ) -> Any:
-        """Resolve the agent class used for prompt evaluations.
-
-        Ensures custom implementations inherit from :class:`OptimizableAgent` and that
-        the optimizer reference is always available to track metrics.
-
-        Args:
-            prompt: The chat prompt driving the agent instance.
-            agent_class: Optional custom agent class supplied by the caller.
-
-        Returns:
-            The agent class to instantiate for dataset evaluations.
-        """
-        if agent_class is None:
-            return create_litellm_agent_class(prompt, optimizer_ref=self)
-        if not issubclass(agent_class, OptimizableAgent):
-            raise TypeError(
-                f"agent_class must inherit from OptimizableAgent, got {agent_class.__name__}"
-            )
-        return agent_class
-
-    def _bind_optimizer_to_agent(self, agent: OptimizableAgent) -> OptimizableAgent:
-        """Attach this optimizer to the agent instance without mutating the class."""
-        try:
-            agent.optimizer = self  # type: ignore[attr-defined]
-        except Exception:  # pragma: no cover - custom agents may forbid new attrs
-            logger.debug(
-                "Unable to record optimizer on agent instance of %s",
-                agent.__class__.__name__,
-            )
-        return agent
-
-    def _instantiate_agent(
-        self,
-        *args: Any,
-        agent_class: type[OptimizableAgent] | None = None,
-        **kwargs: Any,
-    ) -> OptimizableAgent:
-        """
-        Instantiate the provided agent_class (or self.agent_class) and bind optimizer.
-        """
-        resolved_class = agent_class or getattr(self, "agent_class", None)
-        if resolved_class is None:
-            raise ValueError("agent_class must be provided before instantiation")
-        agent = resolved_class(*args, **kwargs)
-        return self._bind_optimizer_to_agent(agent)
-
-    def _extract_tool_prompts(
-        self, tools: list[dict[str, Any]] | None
-    ) -> dict[str, str] | None:
-        """
-        Extract tool names and descriptions from tools list.
-
-        Args:
-            tools: List of tool definitions in OpenAI/LiteLLM format
-
-        Returns:
-            Dictionary mapping tool names to descriptions, or None if no tools
-        """
-        if not tools:
-            return None
-
-        return {
-            (tool.get("function", {}).get("name") or f"tool_{idx}"): tool.get(
-                "function", {}
-            ).get("description", "")
-            for idx, tool in enumerate(tools)
-        }
 
     # ------------------------------------------------------------------
     # Experiment metadata helpers
@@ -422,7 +353,7 @@ class BaseOptimizer(ABC):
             first_prompt = next(iter(prompt.values()))
             agent_config = self._build_agent_config(first_prompt)
             tool_signatures = self._summarize_tool_signatures(first_prompt)
-            
+
             # If this is single prompt optimization, log as single prompt not dict
             if is_single_prompt_optimization:
                 prompt_messages = first_prompt.get_messages()
@@ -431,8 +362,10 @@ class BaseOptimizer(ABC):
             else:
                 prompt_messages = {k: p.get_messages() for k, p in prompt.items()}
                 prompt_name = {k: getattr(p, "name", None) for k, p in prompt.items()}
-                prompt_project_name = {k: getattr(p, "project_name", None) for k, p in prompt.items()}
-            
+                prompt_project_name = {
+                    k: getattr(p, "project_name", None) for k, p in prompt.items()
+                }
+
             tools = self._serialize_tools(first_prompt)
         else:
             agent_config = self._build_agent_config(prompt)
@@ -570,7 +503,7 @@ class BaseOptimizer(ABC):
         experiment_config: dict | None = None,
         n_samples: int | None = None,
         seed: int | None = None,
-        return_evaluation_result: Literal[False] = False
+        return_evaluation_result: Literal[False] = False,
     ) -> float: ...
 
     @overload
@@ -607,7 +540,7 @@ class BaseOptimizer(ABC):
 
         if agent is None:
             agent = LiteLLMAgent(project_name=self.project_name)
-        
+
         def llm_task(dataset_item: dict[str, Any]) -> dict[str, str]:
             raw_model_output = agent.invoke_agent(
                 prompts=prompt, dataset_item=dataset_item

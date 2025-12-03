@@ -1,4 +1,4 @@
-from typing import Any, Literal, Union
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -60,7 +60,9 @@ class EvaluationStage(BaseModel):
     stage: str
     split: str | None = None
     evaluation: TaskEvaluationResult | None = None
-    prompt_snapshot: Union[opik_optimizer.ChatPrompt, dict[str, opik_optimizer.ChatPrompt], None] = None
+    prompt_snapshot: (
+        opik_optimizer.ChatPrompt | dict[str, opik_optimizer.ChatPrompt] | None
+    ) = None
     step_ref: str | None = None
     notes: str | None = None
 
@@ -75,8 +77,12 @@ class TaskResult(BaseModel):
     model_parameters: dict[str, Any] | None = None
     timestamp_start: float
     status: TaskStatus
-    initial_prompt: Union[opik_optimizer.ChatPrompt, dict[str, opik_optimizer.ChatPrompt], None] = None
-    optimized_prompt: Union[opik_optimizer.ChatPrompt, dict[str, opik_optimizer.ChatPrompt], None] = None
+    initial_prompt: (
+        opik_optimizer.ChatPrompt | dict[str, opik_optimizer.ChatPrompt] | None
+    ) = None
+    optimized_prompt: (
+        opik_optimizer.ChatPrompt | dict[str, opik_optimizer.ChatPrompt] | None
+    ) = None
     evaluations: dict[str, EvaluationSet] = Field(default_factory=dict)
     stages: list[EvaluationStage] = Field(default_factory=list)
     optimization_history: dict[str, Any] = Field(default_factory=dict)
@@ -104,7 +110,9 @@ class TaskResult(BaseModel):
     ) -> "TaskResult":
         """Custom validation method to handle nested objects during deserialization."""
 
-        def _deserialize_prompt(prompt_data: Any) -> Union[opik_optimizer.ChatPrompt, dict[str, opik_optimizer.ChatPrompt], None]:
+        def _deserialize_prompt(
+            prompt_data: Any,
+        ) -> opik_optimizer.ChatPrompt | dict[str, opik_optimizer.ChatPrompt] | None:
             """Deserialize a prompt which can be single ChatPrompt or dict of ChatPrompts."""
             if prompt_data is None:
                 return None
@@ -123,7 +131,9 @@ class TaskResult(BaseModel):
                         if isinstance(value, opik_optimizer.ChatPrompt):
                             result[key] = value
                         elif isinstance(value, dict):
-                            result[key] = opik_optimizer.ChatPrompt.model_validate(value)
+                            result[key] = opik_optimizer.ChatPrompt.model_validate(
+                                value
+                            )
                     return result
             return prompt_data
 

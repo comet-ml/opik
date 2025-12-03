@@ -7,8 +7,7 @@ from deap import tools
 from deap import creator as _creator
 
 from .. import prompts as evo_prompts
-from .. import reporting, helpers, mcp, evolutionary_optimizer  # noqa: F401
-from ..mcp import initialize_population_mcp
+from .. import reporting, helpers, evolutionary_optimizer  # noqa: F401
 from ....api_objects import chat_prompt
 from .... import utils, _llm_calls
 
@@ -45,7 +44,6 @@ def restart_population(
     prompt_variants = initialize_population(
         prompt=seed_prompt,
         output_style_guidance=optimizer.output_style_guidance,
-        mcp_context=optimizer._mcp_context,
         model=optimizer.model,
         model_parameters=optimizer.model_parameters,
         optimization_id=optimizer.current_optimization_id,
@@ -66,7 +64,6 @@ def restart_population(
 def initialize_population(
     prompt: chat_prompt.ChatPrompt,
     output_style_guidance: str,
-    mcp_context: mcp.EvolutionaryMCPContext | None,
     model: str,
     model_parameters: dict[str, Any],
     optimization_id: str | None,
@@ -77,16 +74,6 @@ def initialize_population(
     including some 'fresh start' prompts based purely on task description.
     All generated prompts should aim to elicit answers matching self.output_style_guidance.
     """
-    if mcp_context is not None:
-        return initialize_population_mcp(
-            prompt=prompt,
-            context=mcp_context,
-            model=model,
-            model_parameters=model_parameters,
-            optimization_id=optimization_id,
-            population_size=population_size,
-            verbose=verbose,
-        )
     with reporting.initializing_population(verbose=verbose) as init_pop_report:
         init_pop_report.start(population_size)
 

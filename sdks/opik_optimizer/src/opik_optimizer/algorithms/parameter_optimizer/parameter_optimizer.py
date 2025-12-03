@@ -205,7 +205,7 @@ class ParameterOptimizer(BaseOptimizer):
 
         # Display configuration
         reporting.display_configuration(
-            messages=prompt.get_messages(),
+            messages=prompt,
             optimizer_config={
                 "optimizer": self.__class__.__name__,
                 "n_trials": max_trials
@@ -217,7 +217,6 @@ class ParameterOptimizer(BaseOptimizer):
                 "local_search_scale": self.local_search_scale,
             },
             verbose=self.verbose,
-            tools=getattr(prompt, "tools", None),
         )
 
         self.agent_class = self._setup_agent_class(base_prompt, agent_class)

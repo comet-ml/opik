@@ -1,21 +1,26 @@
 from typing import Any, cast
 
+import copy
 import json
 import logging
 import random
+
+from deap import creator as _creator
 
 from .. import prompts as evo_prompts
 from ....api_objects import chat_prompt
 from ....api_objects.types import (
     Content,
+    Messages,
     extract_text_from_content,
     rebuild_content_with_new_text,
 )
 from .... import utils, _llm_calls
-from .. import reporting, helpers, mcp
+from .. import reporting, helpers
 
 
 logger = logging.getLogger(__name__)
+creator = _creator
 
 
 def _get_synonym(word: str, model: str, model_parameters: dict[str, Any]) -> str:
@@ -314,83 +319,101 @@ def deap_mutation(
     individual: Any,
     current_population: list[Any] | None,
     output_style_guidance: str,
-    initial_prompt: chat_prompt.ChatPrompt,
+    initial_prompts: dict[str, chat_prompt.ChatPrompt],
     model: str,
     model_parameters: dict[str, Any],
     diversity_threshold: float,
-    mcp_context: mcp.EvolutionaryMCPContext | None,
     optimization_id: str | None,
     verbose: int,
 ) -> Any:
-    """Enhanced mutation operation with multiple strategies."""
-    prompt = chat_prompt.ChatPrompt(
-        messages=individual,
-        tools=initial_prompt.tools,
-        function_map=initial_prompt.function_map,
-    )
+    """Enhanced mutation operation with multiple strategies.
 
-    mcp_context = mcp_context
-    if mcp_context is not None:
-        mutated_prompt = mcp.tool_description_mutation(
-            prompt=prompt,
-            context=mcp_context,
-            model=model,
-            model_parameters=model_parameters,
-            optimization_id=optimization_id,
-        )
-        if mutated_prompt is not None:
-            reporting.display_success(
-                "      Mutation successful, tool description updated (MCP mutation).",
-                verbose=verbose,
+    Operates on dict-based individuals (prompt_name -> messages).
+    Randomly selects ONE prompt to mutate.
+    """
+    # Individual is a dict mapping prompt_name -> messages
+    prompts_metadata = getattr(individual, "prompts_metadata", {})
+    prompt_names = list(individual.keys())
+
+    # Randomly select ONE prompt to mutate
+    prompt_to_mutate = random.choice(prompt_names)
+
+    # Create mutated data dict
+    mutated_data: dict[str, Messages] = {}
+
+    for prompt_name in prompt_names:
+        messages = individual[prompt_name]
+        metadata = prompts_metadata.get(prompt_name, {})
+
+        if prompt_name == prompt_to_mutate:
+            # Get the initial prompt for this prompt_name (for context in semantic mutation)
+            initial_prompt = initial_prompts.get(prompt_name)
+            if initial_prompt is None:
+                # Fallback: use first prompt
+                initial_prompt = list(initial_prompts.values())[0]
+
+            # Create a ChatPrompt for mutation
+            prompt = chat_prompt.ChatPrompt(
+                messages=messages,
+                tools=metadata.get("tools"),
+                function_map=metadata.get("function_map"),
+                name=metadata.get("name", prompt_name),
             )
-            return helpers.update_individual_with_prompt(individual, mutated_prompt)
 
-    # Choose mutation strategy based on current diversity
-    diversity = helpers.calculate_population_diversity(current_population)
+            # Choose mutation strategy based on current diversity
+            diversity = helpers.calculate_population_diversity(current_population)
 
-    # Determine thresholds based on diversity
-    if diversity < diversity_threshold:
-        # Low diversity - use more aggressive mutations (higher chance for semantic)
-        semantic_threshold = 0.5
-        structural_threshold = 0.8  # semantic_threshold + 0.3
-    else:
-        # Good diversity - use more conservative mutations (higher chance for word_level)
-        semantic_threshold = 0.4
-        structural_threshold = 0.7  # semantic_threshold + 0.3
+            # Determine thresholds based on diversity
+            if diversity < diversity_threshold:
+                # Low diversity - use more aggressive mutations
+                semantic_threshold = 0.5
+                structural_threshold = 0.8
+            else:
+                # Good diversity - use more conservative mutations
+                semantic_threshold = 0.4
+                structural_threshold = 0.7
 
-    mutation_choice = random.random()
+            mutation_choice = random.random()
 
-    if mutation_choice > structural_threshold:
-        mutated_prompt = _word_level_mutation_prompt(
-            prompt=prompt, model=model, model_parameters=model_parameters
-        )
-        reporting.display_success(
-            "      Mutation successful, prompt has been edited by randomizing words (word-level mutation).",
-            verbose=verbose,
-        )
-        return helpers.update_individual_with_prompt(individual, mutated_prompt)
-    elif mutation_choice > semantic_threshold:
-        mutated_prompt = _structural_mutation(
-            prompt=prompt,
-            model=model,
-            model_parameters=model_parameters,
-        )
-        reporting.display_success(
-            "      Mutation successful, prompt has been edited by reordering, combining, or splitting sentences (structural mutation).",
-            verbose=verbose,
-        )
-        return helpers.update_individual_with_prompt(individual, mutated_prompt)
-    else:
-        mutated_prompt = _semantic_mutation(
-            prompt=prompt,
-            initial_prompt=initial_prompt,
-            model=model,
-            model_parameters=model_parameters,
-            verbose=verbose,
-            output_style_guidance=output_style_guidance,
-        )
-        reporting.display_success(
-            "      Mutation successful, prompt has been edited using an LLM (semantic mutation).",
-            verbose=verbose,
-        )
-        return helpers.update_individual_with_prompt(individual, mutated_prompt)
+            if mutation_choice > structural_threshold:
+                mutated_prompt = _word_level_mutation_prompt(
+                    prompt=prompt, model=model, model_parameters=model_parameters
+                )
+                reporting.display_success(
+                    f"      Mutation successful for '{prompt_name}', prompt has been edited by randomizing words (word-level mutation).",
+                    verbose=verbose,
+                )
+            elif mutation_choice > semantic_threshold:
+                mutated_prompt = _structural_mutation(
+                    prompt=prompt,
+                    model=model,
+                    model_parameters=model_parameters,
+                )
+                reporting.display_success(
+                    f"      Mutation successful for '{prompt_name}', prompt has been edited by reordering, combining, or splitting sentences (structural mutation).",
+                    verbose=verbose,
+                )
+            else:
+                mutated_prompt = _semantic_mutation(
+                    prompt=prompt,
+                    initial_prompt=initial_prompt,
+                    model=model,
+                    model_parameters=model_parameters,
+                    verbose=verbose,
+                    output_style_guidance=output_style_guidance,
+                )
+                reporting.display_success(
+                    f"      Mutation successful for '{prompt_name}', prompt has been edited using an LLM (semantic mutation).",
+                    verbose=verbose,
+                )
+
+            mutated_data[prompt_name] = mutated_prompt.get_messages()
+        else:
+            # Keep other prompts unchanged
+            mutated_data[prompt_name] = copy.deepcopy(messages)
+
+    # Create new Individual
+    new_individual = creator.Individual(mutated_data)
+    setattr(new_individual, "prompts_metadata", copy.deepcopy(prompts_metadata))
+
+    return new_individual

@@ -13,7 +13,6 @@ import random
 import string
 import urllib.parse
 from types import TracebackType
-import re
 
 
 import opik
@@ -23,7 +22,7 @@ from opik.api_objects.optimization import Optimization
 from ..agents import OptimizableAgent
 
 if TYPE_CHECKING:
-    from ..api_objects import chat_prompt
+    pass
 
 ALLOWED_URL_CHARACTERS: Final[str] = ":/&?="
 logger = logging.getLogger(__name__)
@@ -337,8 +336,7 @@ def get_trial_compare_url(
     return urllib.parse.urljoin(base, compare_path)
 
 
-def create_litellm_agent_class(
-) -> type["OptimizableAgent"]:
+def create_litellm_agent_class() -> type["OptimizableAgent"]:
     """
     Create an `OptimizableAgent` subclass scoped to the provided chat prompt.
 

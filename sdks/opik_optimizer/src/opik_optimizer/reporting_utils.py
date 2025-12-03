@@ -298,27 +298,27 @@ def _display_chat_prompt_messages_and_tools(
 ) -> list[RenderableType]:
     """
     Extract and format messages and tools from a ChatPrompt for display.
-    
+
     Args:
         chat_p: The ChatPrompt to display
         key: Optional key name if this is part of a dictionary of prompts
-        
+
     Returns:
         List of Rich renderable items
     """
     items: list[RenderableType] = []
-    
+
     # Add key header if provided
     if key:
         items.append(Text(f"\n[{key}]", style="bold yellow"))
-    
+
     # Display messages
     messages = chat_p.get_messages()
     for msg in messages:
         content_value: str | list[dict[str, Any]] = msg.get("content", "")
         formatted_content = _format_message_content(content_value)
         role = msg.get("role", "message")
-        
+
         items.append(
             Panel(
                 formatted_content,
@@ -329,16 +329,14 @@ def _display_chat_prompt_messages_and_tools(
                 padding=(1, 2),
             )
         )
-    
+
     # Display tool summary if tools exist
     if chat_p.tools:
         tool_summary_lines = ["Tools:"]
         for tool in chat_p.tools:
             tool_summary_lines.append(_format_tool_summary(tool))
-        items.append(
-            Text("\n".join(tool_summary_lines), style="dim cyan")
-        )
-    
+        items.append(Text("\n".join(tool_summary_lines), style="dim cyan"))
+
     return items
 
 
@@ -396,7 +394,7 @@ def display_result(
 ) -> None:
     """
     Display optimization results including score improvement and optimized prompts.
-    
+
     Args:
         initial_score: The initial score before optimization
         best_score: The best score achieved after optimization
@@ -437,7 +435,7 @@ def display_result(
         )
 
     content.append(Text("\nOptimized prompt:"))
-    
+
     # Handle both single ChatPrompt and dict of ChatPrompts
     if isinstance(prompt, dict):
         # Dictionary of prompts - display each with its key
@@ -462,22 +460,57 @@ def display_result(
 
 
 def display_configuration(
-    messages: list[dict[str, str]],
+    messages: list[dict[str, str]]
+    | dict[str, chat_prompt.ChatPrompt]
+    | chat_prompt.ChatPrompt
+    | None,
     optimizer_config: dict[str, Any],
     verbose: int = 1,
     tools: list[dict[str, Any]] | None = None,
 ) -> None:
-    """Displays the LLM messages and optimizer configuration using Rich panels."""
+    """Displays the LLM messages and optimizer configuration using Rich panels.
+
+    Args:
+        messages: Either a list of message dicts, a single ChatPrompt,
+                  a dict of ChatPrompts, or None to skip prompt display.
+                  For dict with single item, displays without key header.
+        optimizer_config: Configuration dict with optimizer parameters.
+        verbose: Verbosity level (0 = silent, 1+ = display).
+        tools: Optional list of tool definitions to display (legacy, prefer ChatPrompt.tools).
+    """
 
     if verbose < 1:
         return
 
-    # Panel for Optimizer configuration
     console = get_console()
     console.print(Text("> Let's optimize the prompt:\n"))
 
-    display_messages(messages)
-    _display_tools(tools)
+    # Handle different message formats
+    if messages is None:
+        pass  # Skip prompt display
+    elif isinstance(messages, dict):
+        # Dictionary of ChatPrompts
+        if len(messages) == 1:
+            # Single-prompt optimization: display without key header
+            chat_p = list(messages.values())[0]
+            prompt_items = _display_chat_prompt_messages_and_tools(chat_p, key=None)
+            for item in prompt_items:
+                console.print(item)
+        else:
+            # Multi-prompt optimization: display each with its key
+            for key, chat_p in messages.items():
+                prompt_items = _display_chat_prompt_messages_and_tools(chat_p, key=key)
+                for item in prompt_items:
+                    console.print(item)
+    elif isinstance(messages, chat_prompt.ChatPrompt):
+        # Single ChatPrompt
+        prompt_items = _display_chat_prompt_messages_and_tools(messages, key=None)
+        for item in prompt_items:
+            console.print(item)
+    elif isinstance(messages, list):
+        # Legacy: list of message dicts
+        display_messages(messages)
+        _display_tools(tools)
 
     # Panel for configuration
     console.print(
