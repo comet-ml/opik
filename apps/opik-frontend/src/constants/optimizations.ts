@@ -4,6 +4,7 @@ import {
   Optimization,
 } from "@/types/optimizations";
 import { LLM_MESSAGE_ROLE } from "@/types/llm";
+import { PROVIDER_MODEL_TYPE } from "@/types/providers";
 
 export const DEFAULT_GEPA_OPTIMIZER_CONFIGS = {
   VERBOSE: false,
@@ -35,21 +36,25 @@ export const DEFAULT_HIERARCHICAL_REFLECTIVE_OPTIMIZER_CONFIGS = {
 
 export const DEFAULT_EQUALS_METRIC_CONFIGS = {
   CASE_SENSITIVE: false,
-  REFERENCE_KEY: ""
+  REFERENCE_KEY: "",
 };
 
 export const DEFAULT_JSON_SCHEMA_VALIDATOR_METRIC_CONFIGS = {
-  SCHEMA: {},
+  SCHEMA: {
+    key: "value",
+  },
 };
 
 export const DEFAULT_G_EVAL_METRIC_CONFIGS = {
-  TASK_INTRODUCTION: "",
-  EVALUATION_CRITERIA: "",
+  TASK_INTRODUCTION:
+    "You are evaluating how well an AI assistant answers questions based on context.",
+  EVALUATION_CRITERIA:
+    "The answer should be accurate, relevant, and directly address the question. Consider: 1) Factual correctness, 2) Completeness of the answer, 3) Clarity and coherence",
 };
 
 export const DEFAULT_LEVENSHTEIN_METRIC_CONFIGS = {
   CASE_SENSITIVE: false,
-  REFERENCE_KEY: ""
+  REFERENCE_KEY: "",
 };
 
 export type OptimizationTemplate = Partial<Optimization> & {
@@ -73,8 +78,7 @@ export const DEMO_TEMPLATES: OptimizationTemplate[] = [
         ],
       },
       llm_model: {
-        provider: "openai",
-        name: "openai/gpt-4o-mini",
+        model: PROVIDER_MODEL_TYPE.GPT_4O_MINI,
         parameters: { temperature: 0.7, max_tokens: 800 },
       },
       evaluation: {
@@ -115,8 +119,7 @@ export const DEMO_TEMPLATES: OptimizationTemplate[] = [
         ],
       },
       llm_model: {
-        provider: "openai",
-        name: "openai/gpt-4o-mini",
+        model: PROVIDER_MODEL_TYPE.GPT_4O_MINI,
         parameters: { temperature: 0.7 },
       },
       evaluation: {
