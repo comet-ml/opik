@@ -57,7 +57,7 @@ const FeedbackScoreHoverCard: React.FC<FeedbackScoreHoverCardProps> = ({
             {scores.map((tag) => {
               const hasReason = isValidReason(tag.reason);
               const reasons = hasReason
-                ? tag.reason!.split(", ").filter((r) => r.trim())
+                ? tag.reason!.split("\n").filter((r) => r.trim())
                 : [];
 
               return (

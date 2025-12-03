@@ -290,7 +290,7 @@ class ExperimentDAO {
                     entity_id,
                     name,
                     IF(length(values) = 1, arrayElement(values, 1), toDecimal64(arrayAvg(values), 9)) AS value,
-                    IF(length(reasons) = 1, arrayElement(reasons, 1), arrayStringConcat(arrayFilter(x -> x != '', reasons), ', ')) AS reason
+                    IF(length(reasons) = 1, arrayElement(reasons, 1), arrayStringConcat(arrayFilter(x -> x != '', reasons), '\\n')) AS reason
                 FROM feedback_scores_combined_grouped
             ),
             feedback_scores_agg AS (
@@ -309,7 +309,7 @@ class ExperimentDAO {
                         et.experiment_id,
                         fs.name,
                         avg(fs.value) AS avg_value,
-                        arrayStringConcat(arrayFilter(x -> x != '', groupArray(fs.reason)), ', ') AS agg_reason
+                        arrayStringConcat(arrayFilter(x -> x != '', groupArray(fs.reason)), '\\n') AS agg_reason
                     FROM (
                         SELECT
                             DISTINCT
