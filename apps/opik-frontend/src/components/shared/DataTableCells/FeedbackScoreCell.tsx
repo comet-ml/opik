@@ -72,10 +72,10 @@ const FeedbackScoreCell = (context: CellContext<unknown, unknown>) => {
       metadata={context.column.columnDef.meta}
       tableMetadata={context.table.options.meta}
       className={cn(
-        "gap-1 overflow-hidden",
+        "flex w-full justify-end gap-1",
         rowHeight === ROW_HEIGHT.small
-          ? "flex-wrap"
-          : "flex-col items-end self-start",
+          ? "h-4 items-center"
+          : "flex-col items-end justify-start overflow-hidden",
         isUserFeedbackColumn && "group",
       )}
     >
@@ -91,8 +91,8 @@ const FeedbackScoreCell = (context: CellContext<unknown, unknown>) => {
             <span
               className={cn(
                 "break-words text-xs text-muted-foreground",
-                rowHeight === ROW_HEIGHT.medium && "line-clamp-3",
-                rowHeight === ROW_HEIGHT.large && "line-clamp-[10]",
+                rowHeight === ROW_HEIGHT.medium && "line-clamp-6",
+                rowHeight === ROW_HEIGHT.large && "line-clamp-[16]",
               )}
             >
               {reasons.map((r) => r.reason).join(", ")}

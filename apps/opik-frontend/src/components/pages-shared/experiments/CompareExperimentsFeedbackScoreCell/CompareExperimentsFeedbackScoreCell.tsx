@@ -90,7 +90,7 @@ const CompareExperimentsFeedbackScoreCell: React.FC<
         className={cn(
           "flex w-full justify-end gap-1",
           shouldShowInlineReasons
-            ? "flex-col items-end self-start overflow-hidden"
+            ? "flex-col items-end justify-start overflow-hidden"
             : "h-4 items-center",
           isUserFeedbackColumn && "group",
         )}
@@ -107,8 +107,8 @@ const CompareExperimentsFeedbackScoreCell: React.FC<
               <span
                 className={cn(
                   "break-words text-xs text-muted-foreground",
-                  rowHeight === ROW_HEIGHT.medium && "line-clamp-3",
-                  rowHeight === ROW_HEIGHT.large && "line-clamp-[10]",
+                  rowHeight === ROW_HEIGHT.medium && "line-clamp-6",
+                  rowHeight === ROW_HEIGHT.large && "line-clamp-[16]",
                 )}
               >
                 {reasons.map((r) => r.reason).join(", ")}
