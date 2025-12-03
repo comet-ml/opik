@@ -38,6 +38,7 @@ import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
@@ -358,6 +359,155 @@ class DashboardsResourceTest {
     }
 
     @Nested
+    @DisplayName("Sort dashboards")
+    class SortDashboards {
+
+        @Test
+        @DisplayName("Sort dashboards by name ascending")
+        void sortDashboardsByNameAscending() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+            String workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var dashboardA = dashboardResourceClient.createPartialDashboard().name("AAA Dashboard").build();
+            var dashboardB = dashboardResourceClient.createPartialDashboard().name("BBB Dashboard").build();
+            var dashboardC = dashboardResourceClient.createPartialDashboard().name("CCC Dashboard").build();
+
+            var idA = dashboardResourceClient.create(dashboardA, apiKey, workspaceName);
+            var idB = dashboardResourceClient.create(dashboardB, apiKey, workspaceName);
+            var idC = dashboardResourceClient.create(dashboardC, apiKey, workspaceName);
+
+            var page = dashboardResourceClient.find(apiKey, workspaceName, 1, 10, null,
+                    "[{\"field\":\"name\",\"direction\":\"ASC\"}]", HttpStatus.SC_OK);
+
+            assertThat(page.sortableBy()).isNotEmpty();
+            assertThat(page.content()).hasSize(3);
+            assertThat(page.content().get(0).name()).isEqualTo("AAA Dashboard");
+            assertThat(page.content().get(1).name()).isEqualTo("BBB Dashboard");
+            assertThat(page.content().get(2).name()).isEqualTo("CCC Dashboard");
+        }
+
+        @Test
+        @DisplayName("Sort dashboards by name descending")
+        void sortDashboardsByNameDescending() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+            String workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var dashboardA = dashboardResourceClient.createPartialDashboard().name("AAA Dashboard").build();
+            var dashboardB = dashboardResourceClient.createPartialDashboard().name("BBB Dashboard").build();
+            var dashboardC = dashboardResourceClient.createPartialDashboard().name("CCC Dashboard").build();
+
+            dashboardResourceClient.create(dashboardA, apiKey, workspaceName);
+            dashboardResourceClient.create(dashboardB, apiKey, workspaceName);
+            dashboardResourceClient.create(dashboardC, apiKey, workspaceName);
+
+            var page = dashboardResourceClient.find(apiKey, workspaceName, 1, 10, null,
+                    "[{\"field\":\"name\",\"direction\":\"DESC\"}]", HttpStatus.SC_OK);
+
+            assertThat(page.content()).hasSize(3);
+            assertThat(page.content().get(0).name()).isEqualTo("CCC Dashboard");
+            assertThat(page.content().get(1).name()).isEqualTo("BBB Dashboard");
+            assertThat(page.content().get(2).name()).isEqualTo("AAA Dashboard");
+        }
+
+        @Test
+        @DisplayName("Sort dashboards by created_at ascending")
+        void sortDashboardsByCreatedAtAscending() throws InterruptedException {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+            String workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var dashboard1 = dashboardResourceClient.createPartialDashboard().name("First").build();
+            var id1 = dashboardResourceClient.create(dashboard1, apiKey, workspaceName);
+            Thread.sleep(100);
+
+            var dashboard2 = dashboardResourceClient.createPartialDashboard().name("Second").build();
+            var id2 = dashboardResourceClient.create(dashboard2, apiKey, workspaceName);
+            Thread.sleep(100);
+
+            var dashboard3 = dashboardResourceClient.createPartialDashboard().name("Third").build();
+            var id3 = dashboardResourceClient.create(dashboard3, apiKey, workspaceName);
+
+            var page = dashboardResourceClient.find(apiKey, workspaceName, 1, 10, null,
+                    "[{\"field\":\"created_at\",\"direction\":\"ASC\"}]", HttpStatus.SC_OK);
+
+            assertThat(page.content()).hasSize(3);
+            assertThat(page.content().get(0).id()).isEqualTo(id1);
+            assertThat(page.content().get(1).id()).isEqualTo(id2);
+            assertThat(page.content().get(2).id()).isEqualTo(id3);
+        }
+
+        @Test
+        @DisplayName("Sort dashboards by created_at descending")
+        void sortDashboardsByCreatedAtDescending() throws InterruptedException {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+            String workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var dashboard1 = dashboardResourceClient.createPartialDashboard().name("First").build();
+            var id1 = dashboardResourceClient.create(dashboard1, apiKey, workspaceName);
+            Thread.sleep(100);
+
+            var dashboard2 = dashboardResourceClient.createPartialDashboard().name("Second").build();
+            var id2 = dashboardResourceClient.create(dashboard2, apiKey, workspaceName);
+            Thread.sleep(100);
+
+            var dashboard3 = dashboardResourceClient.createPartialDashboard().name("Third").build();
+            var id3 = dashboardResourceClient.create(dashboard3, apiKey, workspaceName);
+
+            var page = dashboardResourceClient.find(apiKey, workspaceName, 1, 10, null,
+                    "[{\"field\":\"created_at\",\"direction\":\"DESC\"}]", HttpStatus.SC_OK);
+
+            assertThat(page.content()).hasSize(3);
+            assertThat(page.content().get(0).id()).isEqualTo(id3);
+            assertThat(page.content().get(1).id()).isEqualTo(id2);
+            assertThat(page.content().get(2).id()).isEqualTo(id1);
+        }
+
+        @Test
+        @DisplayName("Default sorting without sorting parameter")
+        void defaultSortingWithoutSortingParameter() throws InterruptedException {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+            String workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var dashboard1 = dashboardResourceClient.createPartialDashboard().name("First").build();
+            var id1 = dashboardResourceClient.create(dashboard1, apiKey, workspaceName);
+            Thread.sleep(100);
+
+            var dashboard2 = dashboardResourceClient.createPartialDashboard().name("Second").build();
+            var id2 = dashboardResourceClient.create(dashboard2, apiKey, workspaceName);
+
+            var page = dashboardResourceClient.find(apiKey, workspaceName, 1, 10, null, HttpStatus.SC_OK);
+
+            assertThat(page.sortableBy()).isNotEmpty();
+            assertThat(page.content()).hasSize(2);
+            assertThat(page.content().get(0).id()).isEqualTo(id2);
+            assertThat(page.content().get(1).id()).isEqualTo(id1);
+        }
+
+        @Test
+        @DisplayName("Sortable by fields are returned in response")
+        void sortableByFieldsAreReturned() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+            String workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var page = dashboardResourceClient.find(apiKey, workspaceName, 1, 10, null, HttpStatus.SC_OK);
+
+            assertThat(page.sortableBy()).containsExactlyInAnyOrder(
+                    "id", "name", "description", "created_at", "last_updated_at", "created_by", "last_updated_by");
+        }
+    }
+
+    @Nested
     @DisplayName("Update dashboard")
     class UpdateDashboard {
 
@@ -493,6 +643,104 @@ class DashboardsResourceTest {
 
             // Verify original dashboard still exists
             dashboardResourceClient.get(id, API_KEY, TEST_WORKSPACE_NAME, HttpStatus.SC_OK);
+        }
+    }
+
+    @Nested
+    @DisplayName("Batch delete dashboards")
+    class BatchDeleteDashboards {
+
+        @Test
+        @DisplayName("Batch delete multiple existing dashboards")
+        void batchDeleteMultipleExistingDashboards() {
+            var dashboard1 = dashboardResourceClient.createPartialDashboard().build();
+            var id1 = dashboardResourceClient.create(dashboard1, API_KEY, TEST_WORKSPACE_NAME);
+
+            var dashboard2 = dashboardResourceClient.createPartialDashboard().build();
+            var id2 = dashboardResourceClient.create(dashboard2, API_KEY, TEST_WORKSPACE_NAME);
+
+            var dashboard3 = dashboardResourceClient.createPartialDashboard().build();
+            var id3 = dashboardResourceClient.create(dashboard3, API_KEY, TEST_WORKSPACE_NAME);
+
+            // Verify dashboards exist
+            dashboardResourceClient.get(id1, API_KEY, TEST_WORKSPACE_NAME, HttpStatus.SC_OK);
+            dashboardResourceClient.get(id2, API_KEY, TEST_WORKSPACE_NAME, HttpStatus.SC_OK);
+            dashboardResourceClient.get(id3, API_KEY, TEST_WORKSPACE_NAME, HttpStatus.SC_OK);
+
+            // Batch delete dashboards
+            dashboardResourceClient.batchDelete(Set.of(id1, id2, id3), API_KEY, TEST_WORKSPACE_NAME);
+
+            // Verify dashboards are deleted
+            dashboardResourceClient.get(id1, API_KEY, TEST_WORKSPACE_NAME, HttpStatus.SC_NOT_FOUND);
+            dashboardResourceClient.get(id2, API_KEY, TEST_WORKSPACE_NAME, HttpStatus.SC_NOT_FOUND);
+            dashboardResourceClient.get(id3, API_KEY, TEST_WORKSPACE_NAME, HttpStatus.SC_NOT_FOUND);
+        }
+
+        @Test
+        @DisplayName("Batch delete single dashboard")
+        void batchDeleteSingleDashboard() {
+            var dashboard = dashboardResourceClient.createPartialDashboard().build();
+            var id = dashboardResourceClient.create(dashboard, API_KEY, TEST_WORKSPACE_NAME);
+
+            // Verify dashboard exists
+            dashboardResourceClient.get(id, API_KEY, TEST_WORKSPACE_NAME, HttpStatus.SC_OK);
+
+            // Batch delete single dashboard
+            dashboardResourceClient.batchDelete(Set.of(id), API_KEY, TEST_WORKSPACE_NAME);
+
+            // Verify dashboard is deleted
+            dashboardResourceClient.get(id, API_KEY, TEST_WORKSPACE_NAME, HttpStatus.SC_NOT_FOUND);
+        }
+
+        @Test
+        @DisplayName("Batch delete with non-existent IDs returns 204")
+        void batchDeleteWithNonExistentIdsReturns204() {
+            var nonExistentId1 = UUID.randomUUID();
+            var nonExistentId2 = UUID.randomUUID();
+
+            dashboardResourceClient.batchDelete(Set.of(nonExistentId1, nonExistentId2), API_KEY, TEST_WORKSPACE_NAME,
+                    HttpStatus.SC_NO_CONTENT);
+        }
+
+        @Test
+        @DisplayName("Batch delete with mixed existing and non-existent IDs")
+        void batchDeleteWithMixedIds() {
+            var dashboard = dashboardResourceClient.createPartialDashboard().build();
+            var existingId = dashboardResourceClient.create(dashboard, API_KEY, TEST_WORKSPACE_NAME);
+            var nonExistentId = UUID.randomUUID();
+
+            // Verify dashboard exists
+            dashboardResourceClient.get(existingId, API_KEY, TEST_WORKSPACE_NAME, HttpStatus.SC_OK);
+
+            // Batch delete with mixed IDs
+            dashboardResourceClient.batchDelete(Set.of(existingId, nonExistentId), API_KEY, TEST_WORKSPACE_NAME);
+
+            // Verify existing dashboard is deleted
+            dashboardResourceClient.get(existingId, API_KEY, TEST_WORKSPACE_NAME, HttpStatus.SC_NOT_FOUND);
+        }
+
+        @Test
+        @DisplayName("Batch delete from different workspace returns 204 but doesn't delete")
+        void batchDeleteFromDifferentWorkspaceReturns204() {
+            // Create dashboards in one workspace
+            var dashboard1 = dashboardResourceClient.createPartialDashboard().build();
+            var id1 = dashboardResourceClient.create(dashboard1, API_KEY, TEST_WORKSPACE_NAME);
+
+            var dashboard2 = dashboardResourceClient.createPartialDashboard().build();
+            var id2 = dashboardResourceClient.create(dashboard2, API_KEY, TEST_WORKSPACE_NAME);
+
+            // Try to delete from a different workspace
+            String differentApiKey = UUID.randomUUID().toString();
+            String differentWorkspaceName = "different-workspace-" + UUID.randomUUID();
+            String differentWorkspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(differentApiKey, differentWorkspaceName, differentWorkspaceId);
+
+            dashboardResourceClient.batchDelete(Set.of(id1, id2), differentApiKey, differentWorkspaceName,
+                    HttpStatus.SC_NO_CONTENT);
+
+            // Verify original dashboards still exist
+            dashboardResourceClient.get(id1, API_KEY, TEST_WORKSPACE_NAME, HttpStatus.SC_OK);
+            dashboardResourceClient.get(id2, API_KEY, TEST_WORKSPACE_NAME, HttpStatus.SC_OK);
         }
     }
 
