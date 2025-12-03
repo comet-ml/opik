@@ -53,25 +53,25 @@ def _fix_schema_for_openai(schema: dict[str, Any]) -> None:
     """
     if not isinstance(schema, dict):
         return
-    
+
     # Add type: object for schemas with properties but no type
     if "properties" in schema and "type" not in schema:
         schema["type"] = "object"
-    
+
     # Set additionalProperties: false for all object types
     if schema.get("type") == "object":
         schema["additionalProperties"] = False
-    
+
     # Process all nested schemas
     for key in ["properties", "$defs", "definitions"]:
         if key in schema and isinstance(schema[key], dict):
             for nested in schema[key].values():
                 _fix_schema_for_openai(nested)
-    
+
     # Process array items
     if "items" in schema and isinstance(schema["items"], dict):
         _fix_schema_for_openai(schema["items"])
-    
+
     # Process anyOf/oneOf/allOf - ensure each variant has a type
     for key in ["anyOf", "oneOf", "allOf"]:
         if key in schema and isinstance(schema[key], list):
@@ -89,32 +89,32 @@ def _fix_schema_for_openai(schema: dict[str, Any]) -> None:
 def create_improved_prompts_response_model(prompt_names: list[str]) -> type[BaseModel]:
     """
     Create a dynamic Pydantic model for improved prompts response.
-    
+
     Generates a model with explicit fields for each prompt name, where each field
     contains the improved prompt (reasoning + messages) for that specific prompt.
-    
+
     Args:
         prompt_names: List of prompt names to create fields for
-        
+
     Returns:
         A dynamic Pydantic model class with fields for each prompt name
     """
     # Create fields mapping prompt_name -> ImprovedPrompt
     fields = {name: (ImprovedPrompt, ...) for name in prompt_names}
-    
+
     DynamicModel = create_model(
-        'ImprovedPromptsResponse',
-        **fields  # type: ignore[call-overload]
+        "ImprovedPromptsResponse",
+        **fields,  # type: ignore[call-overload]
     )
     DynamicModel.model_config = ConfigDict(extra="forbid")
-    
+
     # Apply schema fixes for OpenAI compatibility
     original_schema = DynamicModel.model_json_schema
-    
+
     def fixed_schema(cls: type[BaseModel], **kwargs: Any) -> dict[str, Any]:
         schema = original_schema(**kwargs)
         _fix_schema_for_openai(schema)
         return schema
-    
+
     DynamicModel.model_json_schema = classmethod(fixed_schema)  # type: ignore[assignment]
     return DynamicModel

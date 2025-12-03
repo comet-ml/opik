@@ -1,6 +1,6 @@
 """Module containing the OptimizationResult class."""
 
-from typing import Any, Union
+from typing import Any
 
 import pydantic
 import rich
@@ -24,7 +24,7 @@ def _format_float(value: Any, digits: int = 6) -> str:
 
 
 def _format_prompt_for_plaintext(
-    prompt: Union[chat_prompt.ChatPrompt, dict[str, chat_prompt.ChatPrompt]]
+    prompt: chat_prompt.ChatPrompt | dict[str, chat_prompt.ChatPrompt],
 ) -> str:
     """Format a prompt (single or dict) for plain text display."""
     if isinstance(prompt, dict):
@@ -60,7 +60,7 @@ class OptimizationResult(pydantic.BaseModel):
 
     optimizer: str = "Optimizer"
 
-    prompt: Union[chat_prompt.ChatPrompt, dict[str, chat_prompt.ChatPrompt]]
+    prompt: chat_prompt.ChatPrompt | dict[str, chat_prompt.ChatPrompt]
     score: float
     metric_name: str
 
@@ -68,9 +68,9 @@ class OptimizationResult(pydantic.BaseModel):
     dataset_id: str | None = None
 
     # Initial score
-    initial_prompt: Union[
-        chat_prompt.ChatPrompt, dict[str, chat_prompt.ChatPrompt], None
-    ] = None
+    initial_prompt: (
+        chat_prompt.ChatPrompt | dict[str, chat_prompt.ChatPrompt] | None
+    ) = None
     initial_score: float | None = None
 
     details: dict[str, Any] = pydantic.Field(default_factory=dict)
@@ -319,7 +319,7 @@ class OptimizationResult(pydantic.BaseModel):
         panel_title = "[bold]Final Optimized Prompt[/bold]"
         try:
             chat_group_items: list[rich.console.RenderableType] = []
-            
+
             # Handle both single ChatPrompt and dict of ChatPrompts
             if isinstance(self.prompt, dict):
                 # Dictionary of prompts
@@ -328,7 +328,7 @@ class OptimizationResult(pydantic.BaseModel):
                     key_header = rich.text.Text(f"[{key}]", style="bold yellow")
                     chat_group_items.append(key_header)
                     chat_group_items.append(rich.text.Text("---", style="dim"))
-                    
+
                     # Add messages for this prompt
                     for msg in chat_p.get_messages():
                         role = msg.get("role", "unknown")
@@ -343,12 +343,16 @@ class OptimizationResult(pydantic.BaseModel):
                             )
                         )
                         formatted_content = _format_message_content(content)
-                        role_text = rich.text.Text(f"{role.capitalize()}:", style=role_style)
+                        role_text = rich.text.Text(
+                            f"{role.capitalize()}:", style=role_style
+                        )
                         chat_group_items.append(
                             rich.console.Group(role_text, formatted_content)
                         )
                         chat_group_items.append(rich.text.Text("---", style="dim"))
-                    chat_group_items.append(rich.text.Text(""))  # Extra space between prompts
+                    chat_group_items.append(
+                        rich.text.Text("")
+                    )  # Extra space between prompts
             else:
                 # Single ChatPrompt
                 for msg in self.prompt.get_messages():
@@ -364,12 +368,14 @@ class OptimizationResult(pydantic.BaseModel):
                         )
                     )
                     formatted_content = _format_message_content(content)
-                    role_text = rich.text.Text(f"{role.capitalize()}:", style=role_style)
+                    role_text = rich.text.Text(
+                        f"{role.capitalize()}:", style=role_style
+                    )
                     chat_group_items.append(
                         rich.console.Group(role_text, formatted_content)
                     )
                     chat_group_items.append(rich.text.Text("---", style="dim"))
-            
+
             prompt_renderable: rich.console.RenderableType = rich.console.Group(
                 *chat_group_items
             )

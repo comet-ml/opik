@@ -121,13 +121,7 @@ Consider the following when generating children:
 
 All generated prompts must aim for eliciting answers in the style: '{style}'.
 
-Return a JSON object that is a list of both child prompts. Each child prompt is a list of LLM messages. Example:
-[
-    {{"role": "<role>", "content": "<content>"}},
-    {{"role": "<role>", "content": "<content>"}}
-]
-
-
+Return two child prompts as "child_1" and "child_2". Each child is a list of LLM messages with role ("system", "user", or "assistant") and content.
 """
 
 
@@ -162,10 +156,7 @@ Parent Prompt 2:
 Desired output style from target LLM for children prompts: '{style}'
 
 Please generate TWO child prompts by intelligently blending the ideas, styles, or structures from these two parents, ensuring the children aim to elicit the desired output style.
-Follow the instructions provided in the system prompt regarding the JSON output format:
-[
-    {{"role": "<role>", "content": "<content>"}}, {{"role": "<role>", "content": "<content>"}}
-]
+Follow the instructions provided in the system prompt regarding the JSON output format.
 """
 
 
@@ -205,53 +196,6 @@ def mutation_strategy_prompts(output_style_guidance: str | None) -> dict[str, st
             f"'{style}'. The prompt can be long if needed to achieve this output style."
         ),
     }
-
-
-# ---------------------------------------------------------------------------
-# MCP prompts
-# ---------------------------------------------------------------------------
-
-
-def mcp_tool_rewrite_system_prompt() -> str:
-    return (
-        "You are an expert prompt engineer tasked with refining MCP tool descriptions. "
-        "Always respond with strictly valid JSON matching the requested schema."
-    )
-
-
-def mcp_tool_rewrite_user_prompt(
-    *,
-    tool_name: str,
-    current_description: str,
-    tool_metadata_json: str,
-    num_variations: int,
-) -> str:
-    current_description = current_description.strip() or "(no description provided)"
-    return f"""You are improving the description of the MCP tool `{tool_name}`.
-
-Current description:
----
-{current_description}
----
-
-Tool metadata (JSON):
-{tool_metadata_json}
-
-Generate {num_variations} improved descriptions for this tool. Each description should:
-- Clarify expected arguments and their semantics.
-- Explain how the tool output should be used in the final response.
-- Avoid changing the tool name or introducing unsupported behaviour.
-
-Respond strictly as JSON of the form:
-{{
-  "prompts": [
-    {{
-      "tool_description": "...",
-      "improvement_focus": "..."
-    }}
-  ]
-}}
-"""
 
 
 def semantic_mutation_user_prompt(

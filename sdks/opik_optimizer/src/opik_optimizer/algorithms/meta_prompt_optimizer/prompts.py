@@ -3,7 +3,6 @@
 This module contains all the prompt templates used by the optimizer for:
 - Meta-reasoning about prompt improvements
 - Generating candidate prompt variations
-- MCP tool description optimization
 """
 
 import textwrap
@@ -259,17 +258,29 @@ def build_candidate_generation_user_prompt(
         )
 
     # Build conditional sections
-    history_section = META_PROMPT_SECTIONS["history"].format(history=history_context) if history_context else ""
-    
+    history_section = (
+        META_PROMPT_SECTIONS["history"].format(history=history_context)
+        if history_context
+        else ""
+    )
+
     pattern_section = ""
     if pattern_guidance:
-        pattern_section = f"\n{META_PROMPT_SECTIONS['patterns'].format(patterns=pattern_guidance)}\n"
-    
+        pattern_section = (
+            f"\n{META_PROMPT_SECTIONS['patterns'].format(patterns=pattern_guidance)}\n"
+        )
+
     task_context_section = ""
     if task_context_str:
-        task_context_section = f"\n{META_PROMPT_SECTIONS['examples'].format(examples=task_context_str)}\n"
-    
-    pattern_integration_note = "\n- Creatively integrate the winning patterns provided - adapt, don't just copy" if pattern_guidance else ""
+        task_context_section = (
+            f"\n{META_PROMPT_SECTIONS['examples'].format(examples=task_context_str)}\n"
+        )
+
+    pattern_integration_note = (
+        "\n- Creatively integrate the winning patterns provided - adapt, don't just copy"
+        if pattern_guidance
+        else ""
+    )
 
     # Use the template
     result = CANDIDATE_GENERATION_USER_PROMPT_TEMPLATE.format(
@@ -283,62 +294,8 @@ def build_candidate_generation_user_prompt(
         metric_focus_instruction=metric_focus_instruction,
         pattern_integration_note=pattern_integration_note,
     )
-    
+
     return result.replace("{start}", START_DELIM).replace("{end}", END_DELIM)
-
-
-def build_mcp_tool_description_user_prompt(
-    tool_name: str,
-    current_description: str,
-    tool_metadata_json: str,
-    best_score: float,
-    history_context: str,
-    prompts_per_round: int,
-) -> str:
-    """Build the user prompt for generating improved MCP tool descriptions.
-
-    Args:
-        tool_name: Name of the tool being optimized
-        current_description: Current tool description
-        tool_metadata_json: JSON string of tool metadata
-        best_score: Current best evaluation score
-        history_context: Context from previous optimization rounds
-        prompts_per_round: Number of descriptions to generate
-
-    Returns:
-        Formatted user prompt string
-    """
-    return textwrap.dedent(
-        f"""
-            Current tool name: {tool_name}
-            Current tool description:
-            ---
-            {current_description}
-            ---
-
-            Tool metadata (JSON):
-            {tool_metadata_json}
-
-            Current best score: {best_score:.4f}
-            {history_context}
-
-            Generate [{prompts_per_round}] improved descriptions for this tool.
-            Each description should clarify expected input arguments and set explicit expectations
-            for how the tool output must be used in the final response.
-            Avoid changing unrelated parts of the prompt. Focus only on the description text for `{tool_name}`.
-
-            Return a JSON object of the form:
-            {{
-              "prompts": [
-                {{
-                  "tool_description": "...",
-                  "improvement_focus": "...",
-                  "reasoning": "..."
-                }}
-              ]
-            }}
-            """
-    ).strip()
 
 
 def build_pattern_extraction_system_prompt() -> str:
@@ -535,10 +492,22 @@ def build_agent_bundle_user_prompt(
     User prompt for generating improved prompts across multiple named agents.
     """
     # Build conditional sections
-    history_section = META_PROMPT_SECTIONS["history"].format(history=history_context) if history_context else ""
-    examples_section = META_PROMPT_SECTIONS["examples"].format(examples=task_context_str) if task_context_str else ""
-    patterns_section = META_PROMPT_SECTIONS["patterns"].format(patterns=pattern_guidance) if pattern_guidance else ""
-    
+    history_section = (
+        META_PROMPT_SECTIONS["history"].format(history=history_context)
+        if history_context
+        else ""
+    )
+    examples_section = (
+        META_PROMPT_SECTIONS["examples"].format(examples=task_context_str)
+        if task_context_str
+        else ""
+    )
+    patterns_section = (
+        META_PROMPT_SECTIONS["patterns"].format(patterns=pattern_guidance)
+        if pattern_guidance
+        else ""
+    )
+
     # Use the template
     result = AGENT_BUNDLE_USER_PROMPT_TEMPLATE.format(
         agent_blocks=agent_blocks,
@@ -550,5 +519,5 @@ def build_agent_bundle_user_prompt(
         prompts_per_round=prompts_per_round,
         metric_focus_instruction=metric_focus_instruction,
     )
-    
+
     return result.replace("{start}", START_DELIM).replace("{end}", END_DELIM)

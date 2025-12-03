@@ -182,7 +182,7 @@ def evaluate(
         experiment_config=experiment_config,
         verbose=verbose,
     )
-    
+
     if return_evaluation_result:
         if result is None:
             raise ValueError("EvaluationResult is None, cannot return it")

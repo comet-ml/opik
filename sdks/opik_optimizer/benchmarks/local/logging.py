@@ -415,7 +415,9 @@ class BenchmarkLogger:
             def _render_chat_prompt(chat_prompt: Any, prefix: str = "") -> None:
                 """Render a single ChatPrompt's messages."""
                 if prefix:
-                    prompt_elements.append(Text(f"\n[{prefix}]", style=Style(color="yellow", bold=True)))
+                    prompt_elements.append(
+                        Text(f"\n[{prefix}]", style=Style(color="yellow", bold=True))
+                    )
                 for msg in chat_prompt.get_messages():
                     style = Style()
                     if msg.get("role") == "system":
@@ -427,7 +429,9 @@ class BenchmarkLogger:
                     else:
                         style = Style(dim=True)
                     prompt_elements.append(Text(f"{msg.get('role')}: ", style=style))
-                    prompt_elements.append(Text(msg.get("content", ""), overflow="fold"))
+                    prompt_elements.append(
+                        Text(msg.get("content", ""), overflow="fold")
+                    )
 
             # Handle both single ChatPrompt and dict of ChatPrompts
             if isinstance(task_detail_data.optimized_prompt, dict):

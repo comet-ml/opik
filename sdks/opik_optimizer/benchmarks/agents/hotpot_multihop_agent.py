@@ -26,13 +26,9 @@ from opik.integrations.litellm import track_completion
 from pydantic import BaseModel
 
 from opik_optimizer import ChatPrompt, OptimizableAgent
-from opik_optimizer.utils.llm_logger import LLMLogger
 from opik_optimizer.utils.tools.wikipedia import search_wikipedia
 
 logger = logging.getLogger(__name__)
-tool_logger = LLMLogger(
-    "hotpot_multihop_agent", agent_name="Hotpot Multi-Hop", log_level=logging.WARNING
-)
 
 tracked_completion = track_completion()(litellm.completion)
 
@@ -47,62 +43,62 @@ class SummaryObject(BaseModel):
 def get_initial_prompts() -> dict[str, ChatPrompt]:
     """Return the initial prompts for the HotpotQA multi-hop pipeline."""
     return {
-            "create_query_1": ChatPrompt(
-                system=(
-                    "Generate a Wikipedia search query to answer the question. "
-                    "Identify key entities, relations, and disambiguating details."
-                ),
-                user="{question}",
+        "create_query_1": ChatPrompt(
+            system=(
+                "Generate a Wikipedia search query to answer the question. "
+                "Identify key entities, relations, and disambiguating details."
             ),
-            "summarize_1": ChatPrompt(
-                system=(
-                    "Summarize the retrieved passages focusing on facts relevant to the question. "
-                    "Identify what information is still missing or unclear."
-                ),
-                user=(
-                    "Question: {question}\n\n"
-                    "Retrieved passages from first search:\n{passages_1}\n\n"
-                    "Provide:\n"
-                    "1. Summary: Key facts from passages\n"
-                    "2. Gaps: What's still missing to answer the question"
-                ),
+            user="{question}",
+        ),
+        "summarize_1": ChatPrompt(
+            system=(
+                "Summarize the retrieved passages focusing on facts relevant to the question. "
+                "Identify what information is still missing or unclear."
             ),
-            "create_query_2": ChatPrompt(
-                system=(
-                    "Generate a refined Wikipedia search query targeting the identified gaps. "
-                    "Use different terms/angles than the first query."
-                ),
-                user=(
-                    "Question: {question}\n\n"
-                    "First summary: {summary_1}\n\n"
-                    "Identified gaps: {gaps_1}\n\n"
-                    "Generate a second search query to fill these gaps."
-                ),
+            user=(
+                "Question: {question}\n\n"
+                "Retrieved passages from first search:\n{passages_1}\n\n"
+                "Provide:\n"
+                "1. Summary: Key facts from passages\n"
+                "2. Gaps: What's still missing to answer the question"
             ),
-            "summarize_2": ChatPrompt(
-                system=(
-                    "Update the summary with new information from the second search. "
-                    "Synthesize information from both searches."
-                ),
-                user=(
-                    "Question: {question}\n\n"
-                    "First summary: {summary_1}\n\n"
-                    "New passages from second search:\n{passages_2}\n\n"
-                    "Provide an updated comprehensive summary."
-                ),
+        ),
+        "create_query_2": ChatPrompt(
+            system=(
+                "Generate a refined Wikipedia search query targeting the identified gaps. "
+                "Use different terms/angles than the first query."
             ),
-            "final_answer": ChatPrompt(
-                system=(
-                    "Answer the question based on the accumulated evidence. "
+            user=(
+                "Question: {question}\n\n"
+                "First summary: {summary_1}\n\n"
+                "Identified gaps: {gaps_1}\n\n"
+                "Generate a second search query to fill these gaps."
+            ),
+        ),
+        "summarize_2": ChatPrompt(
+            system=(
+                "Update the summary with new information from the second search. "
+                "Synthesize information from both searches."
+            ),
+            user=(
+                "Question: {question}\n\n"
+                "First summary: {summary_1}\n\n"
+                "New passages from second search:\n{passages_2}\n\n"
+                "Provide an updated comprehensive summary."
+            ),
+        ),
+        "final_answer": ChatPrompt(
+            system=(
+                "Answer the question based on the accumulated evidence. "
                 "Be concise and factual. Keep answers as short as possible, ideally a single word or phrase."
-                ),
-                user=(
-                    "Question: {question}\n\n"
-                    "Evidence from searches:\n{summary_2}\n\n"
-                    "Provide a direct answer to the question."
-                ),
             ),
-        }
+            user=(
+                "Question: {question}\n\n"
+                "Evidence from searches:\n{summary_2}\n\n"
+                "Provide a direct answer to the question."
+            ),
+        ),
+    }
 
 
 def bm25_wikipedia_search(query: str, n: int = 5) -> list[str]:
@@ -127,23 +123,23 @@ def bm25_wikipedia_search(query: str, n: int = 5) -> list[str]:
         query = query[:256] + "..."
 
     try:
-        with tool_logger.log_tool("wikipedia_bm25", query):
-            results = search_wikipedia(
-                query,
-                search_type="bm25",
-                k=n,
-                bm25_hf_repo="Comet/wikipedia-2017-bm25",
-            )
+        results = search_wikipedia(
+            query,
+            search_type="bm25",
+            k=n,
+            bm25_hf_repo="Comet/wikipedia-2017-bm25",
+        )
         return results[:n] if len(results) >= n else results + [""] * (n - len(results))
 
     except Exception as e:
         logger.warning(f"BM25 search failed (will fallback to API): {e}")
         # Fallback to API search
         try:
-            with tool_logger.log_tool("wikipedia_search", query):
-                results = search_wikipedia(query, search_type="api", k=n)
+            results = search_wikipedia(query, search_type="api", k=n)
             return (
-                results[:n] if len(results) >= n else results + [""] * (n - len(results))
+                results[:n]
+                if len(results) >= n
+                else results + [""] * (n - len(results))
             )
         except Exception:
             logger.exception("Wikipedia API search also failed")

@@ -154,7 +154,7 @@ class BaseOptimizer(ABC):
             for prompt_value in prompt.values():
                 if not isinstance(prompt_value, chat_prompt.ChatPrompt):
                     raise ValueError("Prompt must be a ChatPrompt object")
-                
+
             if prompt_value._has_content_parts() and not support_content_parts:
                 raise ValueError(
                     "Prompt has content parts, which are not supported by this optimizer - You can use the Hierarchical Reflective Optimizer instead."
@@ -165,7 +165,9 @@ class BaseOptimizer(ABC):
                     "Prompt has content parts, which are not supported by this optimizer - You can use the Hierarchical Reflective Optimizer instead."
                 )
         else:
-            raise ValueError("Prompt must be a ChatPrompt object or a dictionary of ChatPrompt objects")
+            raise ValueError(
+                "Prompt must be a ChatPrompt object or a dictionary of ChatPrompt objects"
+            )
 
         if not isinstance(dataset, Dataset):
             raise ValueError("Dataset must be a Dataset object")
@@ -175,12 +177,6 @@ class BaseOptimizer(ABC):
                 "Metric must be a callable that takes `dataset_item` and `llm_output` as arguments, "
                 "and optionally `task_span` for metrics that need access to span information."
             )
-
-        if prompt._has_content_parts() and not support_content_parts:
-            raise ValueError(
-                "Prompt has content parts, which are not supported by this optimizer - You can use the Hierarchical Reflective Prompt Optimizer instead."
-            )
-
 
     def _setup_agent_class(
         self, prompt: "chat_prompt.ChatPrompt", agent_class: Any = None
@@ -252,7 +248,6 @@ class BaseOptimizer(ABC):
             ).get("description", "")
             for idx, tool in enumerate(tools)
         }
-
     # ------------------------------------------------------------------
     # Experiment metadata helpers
     # ------------------------------------------------------------------
@@ -429,7 +424,7 @@ class BaseOptimizer(ABC):
             first_prompt = next(iter(prompt.values()))
             agent_config = self._build_agent_config(first_prompt)
             tool_signatures = self._summarize_tool_signatures(first_prompt)
-            
+
             # If this is single prompt optimization, log as single prompt not dict
             if is_single_prompt_optimization:
                 prompt_messages = first_prompt.get_messages()
@@ -438,8 +433,10 @@ class BaseOptimizer(ABC):
             else:
                 prompt_messages = {k: p.get_messages() for k, p in prompt.items()}
                 prompt_name = {k: getattr(p, "name", None) for k, p in prompt.items()}
-                prompt_project_name = {k: getattr(p, "project_name", None) for k, p in prompt.items()}
-            
+                prompt_project_name = {
+                    k: getattr(p, "project_name", None) for k, p in prompt.items()
+                }
+
             tools = self._serialize_tools(first_prompt)
         else:
             agent_config = self._build_agent_config(prompt)
@@ -577,7 +574,7 @@ class BaseOptimizer(ABC):
         experiment_config: dict | None = None,
         n_samples: int | None = None,
         seed: int | None = None,
-        return_evaluation_result: Literal[False] = False
+        return_evaluation_result: Literal[False] = False,
     ) -> float: ...
 
     @overload
@@ -614,7 +611,7 @@ class BaseOptimizer(ABC):
 
         if agent is None:
             agent = LiteLLMAgent(project_name=self.project_name)
-        
+
         def llm_task(dataset_item: dict[str, Any]) -> dict[str, str]:
             raw_model_output = agent.invoke_agent(
                 prompts=prompt, dataset_item=dataset_item

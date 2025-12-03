@@ -22,21 +22,20 @@ from opik_optimizer.datasets import hotpot
 from benchmarks.metrics.hotpot import hotpot_f1
 
 from opik_optimizer.utils.tools.wikipedia import search_wikipedia
-from opik_optimizer.utils.llm_logger import LLMLogger
 from opik_optimizer.logging_config import setup_logging
-from opik_optimizer import MetaPromptOptimizer, HierarchicalReflectiveOptimizer, OptimizableAgent, ChatPrompt
-from typing import Any, Callable, List
+from opik_optimizer import HierarchicalReflectiveOptimizer, OptimizableAgent, ChatPrompt
+from typing import Any
+from collections.abc import Callable
 
 from opik.integrations.litellm import track_completion
 import litellm
 
 # Disable tqdm progress bars (used by bm25s)
-os.environ['TQDM_DISABLE'] = '1'
+os.environ["TQDM_DISABLE"] = "1"
 
 # Configure logging
 setup_logging()
 logger = logging.getLogger(__name__)
-tool_logger = LLMLogger("hotpot_multihop_benchmark", agent_name="Hotpot Multi-Hop", log_level=logging.WARNING)
 
 tracked_completion = track_completion()(litellm.completion)
 
@@ -60,15 +59,11 @@ print()
 
 # Dataset splits (matching GEPA paper: 150 train, 300 val, 300 test)
 print("Loading datasets...")
-train_dataset = hotpot(
-    count=150, split="train", dataset_name="hotpot_train"
-)
+train_dataset = hotpot(count=150, split="train", dataset_name="hotpot_train")
 validation_dataset = hotpot(
     count=300, split="validation", dataset_name="hotpot_validation"
 )
-test_dataset = hotpot(
-    count=300, split="test", dataset_name="hotpot_test"
-)
+test_dataset = hotpot(count=300, split="test", dataset_name="hotpot_test")
 
 print(f"  - Train: {len(train_dataset.get_items())} samples")
 print(f"  - Validation: {len(validation_dataset.get_items())} samples")
@@ -98,21 +93,20 @@ def wikipedia_search(query: str, n: int = 5) -> list[str]:
     if disable_flag in ("1", "true", "yes", "on"):
         return []
 
-    # Cap query length for logging; avoid model overrun
+    # Cap query length to avoid model overrun
     if len(query) > 256:
         query = query[:256] + "..."
 
-    with tool_logger.log_tool("wikipedia_search", query):
-        try:
-            results = search_wikipedia(
-                query,
-                search_type="bm25",
-                k=n,
-                bm25_hf_repo="Comet/wikipedia-2017-bm25",
-            )
-        except Exception:
-            logger.exception("BM25 search failed, falling back to Wikipedia API")
-            results = search_wikipedia(query, search_type="api", k=n)
+    try:
+        results = search_wikipedia(
+            query,
+            search_type="bm25",
+            k=n,
+            bm25_hf_repo="Comet/wikipedia-2017-bm25",
+        )
+    except Exception:
+        logger.exception("BM25 search failed, falling back to Wikipedia API")
+        results = search_wikipedia(query, search_type="api", k=n)
 
     return results[:n] if len(results) >= n else results + [""] * (n - len(results))
 
@@ -137,13 +131,12 @@ def bm25_wikipedia_search(query: str, n: int = 5) -> list[str]:
         return []
 
     try:
-        with tool_logger.log_tool("wikipedia_bm25", query):
-            results = search_wikipedia(
-                query,
-                search_type="bm25",
-                k=n,
-                bm25_hf_repo="Comet/wikipedia-2017-bm25",
-            )
+        results = search_wikipedia(
+            query,
+            search_type="bm25",
+            k=n,
+            bm25_hf_repo="Comet/wikipedia-2017-bm25",
+        )
         return results
 
     except Exception as e:
@@ -234,9 +227,11 @@ initial_prompts = {
 # - summarize_2: Update summary with new information
 # - final_answer: Generate answer from accumulated evidence
 
+
 class SummaryObject(BaseModel):
     summary: str
-    gaps: List[str]
+    gaps: list[str]
+
 
 class HotpotMultiHopAgent(OptimizableAgent):
     def __init__(
@@ -257,7 +252,9 @@ class HotpotMultiHopAgent(OptimizableAgent):
         seed: int | None = None,
         allow_tool_use: bool = True,
     ) -> str:
-        raise NotImplementedError("invoke_agent is not implemented for HotpotMultiHopAgent")
+        raise NotImplementedError(
+            "invoke_agent is not implemented for HotpotMultiHopAgent"
+        )
 
     def create_agent_graph(self):
         return {
@@ -271,19 +268,21 @@ class HotpotMultiHopAgent(OptimizableAgent):
         prompts: dict[str, ChatPrompt],
         dataset_item: dict[str, Any],
         seed: int | None = None,
-        allow_tool_use: bool = True
+        allow_tool_use: bool = True,
     ):
-        opik_context.update_current_trace(metadata={"_opik_graph_definition": self.create_agent_graph()})
+        opik_context.update_current_trace(
+            metadata={"_opik_graph_definition": self.create_agent_graph()}
+        )
 
         # Run first search query:
         messages = prompts["create_query_1"].get_messages(dataset_item)
         search_query_1 = tracked_completion(
             model=self.model,
             messages=messages,
-            metadata = {
+            metadata={
                 "opik": {
                     "current_span_data": opik_context.get_current_span_data(),
-                    "tags": ["streaming-test"]
+                    "tags": ["streaming-test"],
                 },
             },
             **self.model_parameters,
@@ -294,18 +293,20 @@ class HotpotMultiHopAgent(OptimizableAgent):
         search_query_1_result = self.search_fn(search_query_1, self.num_passages)
 
         # Do the first summarization
-        messages = prompts["summarize_1"].get_messages({
-            "question": dataset_item["question"],
-            "passages_1": "\n\n".join(search_query_1_result)
-        })
+        messages = prompts["summarize_1"].get_messages(
+            {
+                "question": dataset_item["question"],
+                "passages_1": "\n\n".join(search_query_1_result),
+            }
+        )
         response = tracked_completion(
             model=self.model,
             messages=messages,
             response_format=SummaryObject,
-            metadata = {
+            metadata={
                 "opik": {
                     "current_span_data": opik_context.get_current_span_data(),
-                    "tags": ["streaming-test"]
+                    "tags": ["streaming-test"],
                 },
             },
             **self.model_parameters,
@@ -325,10 +326,10 @@ class HotpotMultiHopAgent(OptimizableAgent):
         search_query_2 = tracked_completion(
             model=self.model,
             messages=messages,
-            metadata = {
+            metadata={
                 "opik": {
                     "current_span_data": opik_context.get_current_span_data(),
-                    "tags": ["streaming-test"]
+                    "tags": ["streaming-test"],
                 },
             },
             **self.model_parameters,
@@ -347,10 +348,10 @@ class HotpotMultiHopAgent(OptimizableAgent):
         search_query_2_summary = tracked_completion(
             model=self.model,
             messages=messages,
-            metadata = {
+            metadata={
                 "opik": {
                     "current_span_data": opik_context.get_current_span_data(),
-                    "tags": ["streaming-test"]
+                    "tags": ["streaming-test"],
                 },
             },
             **self.model_parameters,
@@ -368,16 +369,17 @@ class HotpotMultiHopAgent(OptimizableAgent):
         final_answer = tracked_completion(
             model=self.model,
             messages=messages,
-            metadata = {
+            metadata={
                 "opik": {
                     "current_span_data": opik_context.get_current_span_data(),
-                    "tags": ["streaming-test"]
+                    "tags": ["streaming-test"],
                 },
             },
             **self.model_parameters,
         )
         final_answer = final_answer.choices[0].message.content
         return final_answer
+
 
 MODEL_NAME = "openai/gpt-4.1-mini"
 MODEL_PARAMS = {"temperature": 1.0}
@@ -407,6 +409,7 @@ print()
 print("Training on hotpot_train (150 samples)...")
 print("Validation on hotpot_validation (300 samples)...")
 print()
+
 
 def hotpot_multihop_metric(dataset_item: dict, llm_output: str) -> float:
     return hotpot_f1(dataset_item, llm_output)
@@ -447,4 +450,3 @@ test_score = optimizer.evaluate_prompt(
     n_threads=1,
 )
 print(f"Test score: {test_score:.4f}")
-
