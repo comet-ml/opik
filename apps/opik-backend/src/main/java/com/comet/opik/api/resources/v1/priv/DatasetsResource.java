@@ -702,6 +702,6 @@ public class DatasetsResource {
      */
     @Path("/{id}/versions")
     public DatasetVersionsResource versions(@PathParam("id") UUID datasetId) {
-        return new DatasetVersionsResource(datasetId, versionService, requestContext);
+        return new DatasetVersionsResource(datasetId, versionService, requestContext, config);
     }
 }

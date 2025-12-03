@@ -110,7 +110,7 @@ class OptimizationDAOImpl implements OptimizationDAO {
             WITH optimization_final AS (
                 SELECT
                     *
-                FROM optimizations
+                FROM optimizations FINAL
                 WHERE workspace_id = :workspace_id
                 <if(id)>AND id = :id <endif>
                 <if(name)>AND ilike(name, CONCAT('%%', :name ,'%%'))<endif>
@@ -118,8 +118,6 @@ class OptimizationDAOImpl implements OptimizationDAO {
                 <if(dataset_deleted)>AND dataset_deleted = :dataset_deleted<endif>
                 <if(studio_only)>AND studio_config != ''<endif>
                 <if(filters)>AND <filters><endif>
-                ORDER BY id DESC, last_updated_at DESC
-                LIMIT 1 BY id
             ), experiments_final AS (
                 SELECT
                     id,
@@ -246,7 +244,7 @@ class OptimizationDAOImpl implements OptimizationDAO {
             FROM (
                 SELECT
                     id
-                FROM optimizations
+                FROM optimizations FINAL
                 WHERE workspace_id = :workspace_id
                 <if(id)>AND id = :id <endif>
                 <if(name)>AND ilike(name, CONCAT('%%', :name ,'%%'))<endif>
@@ -254,8 +252,6 @@ class OptimizationDAOImpl implements OptimizationDAO {
                 <if(dataset_deleted)>AND dataset_deleted = :dataset_deleted<endif>
                 <if(studio_only)>AND studio_config != ''<endif>
                 <if(filters)>AND <filters><endif>
-                ORDER BY id DESC, last_updated_at DESC
-                LIMIT 1 BY id
             )
             ;
             """;
