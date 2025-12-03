@@ -73,11 +73,14 @@ const FeedbackScoreHoverCard: React.FC<FeedbackScoreHoverCardProps> = ({
                     </div>
                   </div>
                   {reasons.length > 0 && (
-                    <ol className="comet-body-xs list-decimal break-words pl-4 text-muted-slate">
+                    <div className="comet-body-xs flex flex-col gap-0.5 break-words text-muted-slate">
                       {reasons.map((reason, idx) => (
-                        <li key={idx}>{reason}</li>
+                        <div key={idx}>
+                          {reasons.length > 1 ? `${idx + 1}. ` : ""}
+                          {reason}
+                        </div>
                       ))}
-                    </ol>
+                    </div>
                   )}
                 </div>
               );

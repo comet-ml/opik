@@ -55,7 +55,19 @@ const FeedbackScoreTag: React.FunctionComponent<FeedbackScoreTagProps> = ({
       return extractReasonsFromValueByAuthor(valueByAuthor);
     }
 
-    return reason ? [{ reason, author: lastUpdatedBy, lastUpdatedAt }] : [];
+    if (!reason) return [];
+
+    // Split aggregated reasons by newline and number them
+    const splitReasons = reason.split("\n").filter((r) => r.trim());
+    if (splitReasons.length > 1) {
+      return splitReasons.map((r, idx) => ({
+        reason: `${idx + 1}. ${r}`,
+        author: lastUpdatedBy,
+        lastUpdatedAt,
+      }));
+    }
+
+    return [{ reason, author: lastUpdatedBy, lastUpdatedAt }];
   }, [valueByAuthor, reason, lastUpdatedBy, lastUpdatedAt]);
 
   const hasReasons = reasons.length > 0;
