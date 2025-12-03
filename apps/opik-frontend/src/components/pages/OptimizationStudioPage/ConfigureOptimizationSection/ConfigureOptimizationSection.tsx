@@ -151,7 +151,10 @@ const ConfigureOptimizationSection: React.FC = () => {
   const handleMetricTypeChange = useCallback(
     (newMetricType: METRIC_TYPE) => {
       const defaultConfig = getDefaultMetricConfig(newMetricType);
-      form.setValue("metricParams", defaultConfig);
+      form.setValue(
+        "metricParams",
+        defaultConfig as OptimizationConfigFormType["metricParams"],
+      );
       form.setValue("metricType", newMetricType);
     },
     [form],
@@ -159,7 +162,10 @@ const ConfigureOptimizationSection: React.FC = () => {
 
   const handleMetricParamsChange = useCallback(
     (newParams: Partial<MetricParameters>) => {
-      form.setValue("metricParams", newParams);
+      form.setValue(
+        "metricParams",
+        newParams as OptimizationConfigFormType["metricParams"],
+      );
     },
     [form],
   );
