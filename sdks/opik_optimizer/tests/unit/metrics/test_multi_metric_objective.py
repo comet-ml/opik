@@ -1,11 +1,13 @@
 import pytest
 from typing import Any
-from collections.abc import Callable
 from unittest.mock import Mock
 
 from opik.evaluation.metrics.score_result import ScoreResult
 from opik.message_processing.emulation.models import SpanModel
-from opik_optimizer.metrics.multi_metric_objective import MultiMetricObjective
+from opik_optimizer.metrics.multi_metric_objective import (
+    MultiMetricObjective,
+    MetricType,
+)
 
 
 # Mock metric functions for testing
@@ -28,7 +30,7 @@ class TestMultiMetricObjective:
     def test_weights_are_applied_correctly(self) -> None:
         """Test that custom weights are properly applied to metrics"""
         # Arrange
-        metrics: list[Callable[[dict[str, Any], str], ScoreResult]] = [
+        metrics: list[MetricType] = [
             metric_returning_0_5,
             metric_returning_0_2,
         ]
@@ -48,7 +50,7 @@ class TestMultiMetricObjective:
     def test_final_score_is_weighted_average__three_metrics(self) -> None:
         """Test that the final score is correct weighted average with three metrics"""
         # Arrange
-        metrics: list[Callable[[dict[str, Any], str], ScoreResult]] = [
+        metrics: list[MetricType] = [
             metric_returning_0_5,
             metric_returning_0_2,
             metric_returning_0_1,
@@ -69,7 +71,7 @@ class TestMultiMetricObjective:
     def test_metadata_contains_raw_score_results(self) -> None:
         """Test that metadata contains all raw score results from subscores"""
         # Arrange
-        metrics: list[Callable[[dict[str, Any], str], ScoreResult]] = [
+        metrics: list[MetricType] = [
             metric_returning_0_5,
             metric_returning_0_2,
             metric_returning_0_1,
@@ -103,9 +105,7 @@ class TestMultiMetricObjective:
     def test_equal_weights_when_no_weights_provided__one_metric(self) -> None:
         """Test that single metric works correctly (edge case)"""
         # Arrange
-        metrics: list[Callable[[dict[str, Any], str], ScoreResult]] = [
-            metric_returning_0_5
-        ]
+        metrics: list[MetricType] = [metric_returning_0_5]
         multi_metric = MultiMetricObjective(metrics=metrics)
 
         # Act
@@ -131,7 +131,7 @@ class TestMultiMetricObjective:
     def test_equal_weights_when_no_weights_provided__two_metrics(self) -> None:
         """Test that weights are equal when not provided (two metrics)"""
         # Arrange
-        metrics: list[Callable[[dict[str, Any], str], ScoreResult]] = [
+        metrics: list[MetricType] = [
             metric_returning_0_5,
             metric_returning_0_2,
         ]
@@ -154,7 +154,7 @@ class TestMultiMetricObjective:
     def test_equal_weights_when_no_weights_provided__three_metrics(self) -> None:
         """Test that weights are equal when not provided (three metrics)"""
         # Arrange
-        metrics: list[Callable[[dict[str, Any], str], ScoreResult]] = [
+        metrics: list[MetricType] = [
             metric_returning_0_5,
             metric_returning_0_2,
             metric_returning_0_1,
@@ -179,7 +179,7 @@ class TestMultiMetricObjective:
     def test_custom_name_is_set(self) -> None:
         """Test that custom name is properly set"""
         # Arrange
-        metrics: list[Callable[[dict[str, Any], str], ScoreResult]] = [
+        metrics: list[MetricType] = [
             metric_returning_0_5,
             metric_returning_0_2,
         ]
@@ -200,7 +200,7 @@ class TestMultiMetricObjective:
     def test_default_name_is_set(self) -> None:
         """Test that default name is set when not provided"""
         # Arrange
-        metrics: list[Callable[[dict[str, Any], str], ScoreResult]] = [
+        metrics: list[MetricType] = [
             metric_returning_0_5,
             metric_returning_0_2,
         ]
@@ -240,7 +240,7 @@ class TestMultiMetricObjective:
             received_outputs_2.append(llm_output)
             return ScoreResult(name="tracking_metric_returning_0_2", value=0.2)
 
-        metrics: list[Callable[[dict[str, Any], str], ScoreResult]] = [
+        metrics: list[MetricType] = [
             tracking_metric_1,
             tracking_metric_2,
         ]
@@ -263,7 +263,7 @@ class TestMultiMetricObjective:
     def test_weights_sum_not_required_to_be_one(self) -> None:
         """Test that weights don't need to sum to 1.0"""
         # Arrange
-        metrics: list[Callable[[dict[str, Any], str], ScoreResult]] = [
+        metrics: list[MetricType] = [
             metric_returning_0_5,
             metric_returning_0_2,
         ]
@@ -283,7 +283,7 @@ class TestMultiMetricObjective:
     def test_zero_weight_excludes_metric_from_result(self) -> None:
         """Test that a metric with zero weight doesn't contribute to final score"""
         # Arrange
-        metrics: list[Callable[[dict[str, Any], str], ScoreResult]] = [
+        metrics: list[MetricType] = [
             metric_returning_0_5,
             metric_returning_0_2,
             metric_returning_0_1,
@@ -315,7 +315,7 @@ class TestMultiMetricObjective:
         ) -> ScoreResult:
             return ScoreResult(name="metric_with_task_span", value=0.5)
 
-        metrics: list[Callable] = [metric_with_task_span]
+        metrics: list[MetricType] = [metric_with_task_span]
         multi_metric = MultiMetricObjective(metrics=metrics)
 
         # Act & Assert
@@ -332,7 +332,7 @@ class TestMultiMetricObjective:
     def test_metric_without_task_span_signature__needs_task_span_is_false(self) -> None:
         """Test that needs_task_span property is False when no metric needs it"""
         # Arrange
-        metrics: list[Callable[[dict[str, Any], str], ScoreResult]] = [
+        metrics: list[MetricType] = [
             metric_returning_0_5,
             metric_returning_0_2,
         ]
@@ -368,7 +368,7 @@ class TestMultiMetricObjective:
         ) -> ScoreResult:
             return ScoreResult(name="metric_without_task_span", value=0.6)
 
-        metrics: list[Callable] = [
+        metrics: list[MetricType] = [
             metric_with_task_span,
             metric_without_task_span,
         ]
