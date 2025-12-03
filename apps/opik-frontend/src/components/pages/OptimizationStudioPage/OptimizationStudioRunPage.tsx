@@ -16,6 +16,8 @@ import ConfigureOptimizationSection from "./ConfigureOptimizationSection/Configu
 import ObserveOptimizationSection from "@/components/pages/OptimizationStudioPage/ObserveOptimizationSection/ObserveOptimizationSection";
 import { DEMO_TEMPLATES } from "@/constants/optimizations";
 import useOptimizationStudioById from "@/api/optimizations/useOptimizationStudioById";
+import { Tag } from "@/components/ui/tag";
+import { STATUS_TO_VARIANT_MAP } from "@/constants/experiments";
 const REFETCH_INTERVAL = 30000;
 const ACTIVE_REFETCH_INTERVAL = 3000;
 const MAX_EXPERIMENTS_LOADED = 1000;
@@ -131,6 +133,18 @@ const OptimizationStudioRunPageContent = () => {
         </h1>
         <OptimizationStudioActions />
       </div>
+      {activeOptimization && (
+        <div className="-mt-3 mb-4 flex items-center gap-2 text-muted-slate">
+          <span className="truncate">{activeOptimization.name}</span>
+          <Tag
+            variant={STATUS_TO_VARIANT_MAP[activeOptimization.status]}
+            className="capitalize"
+            size="md"
+          >
+            {activeOptimization.status}
+          </Tag>
+        </div>
+      )}
       <div className="flex flex-col gap-6 lg:flex-row">
         <div className="flex w-full flex-col gap-4 lg:w-1/3">
           <ConfigureOptimizationSection />
