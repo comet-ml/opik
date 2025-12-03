@@ -45,6 +45,7 @@ import SidebarMenuItem, {
   MenuItemGroup,
 } from "@/components/layout/SideBar/MenuItem/SidebarMenuItem";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
+import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
 import { ACTIVE_OPTIMIZATION_FILTER } from "@/lib/optimizations";
 
 const HOME_PATH = "/$workspaceName/home";
@@ -155,7 +156,7 @@ const MENU_ITEMS: MenuItemGroup[] = [
         icon: Zap,
         label: "Optimization studio",
         showIndicator: "running_optimizations",
-        // featureFlag: FeatureToggleKeys.OPTIMIZATION_STUDIO_ENABLED, TODO lala uncomment
+        featureFlag: FeatureToggleKeys.OPTIMIZATION_STUDIO_ENABLED,
       },
       {
         id: "optimizations",
@@ -205,6 +206,9 @@ const SideBar: React.FunctionComponent<SideBarProps> = ({
   const { open: openQuickstart } = useOpenQuickStartDialog();
 
   const { activeWorkspaceName: workspaceName } = useAppStore();
+  const isOptimizationStudioEnabled = useIsFeatureEnabled(
+    FeatureToggleKeys.OPTIMIZATION_STUDIO_ENABLED,
+  );
   const LogoComponent = usePluginsStore((state) => state.Logo);
   const SidebarInviteDevButton = usePluginsStore(
     (state) => state.SidebarInviteDevButton,
@@ -291,7 +295,7 @@ const SideBar: React.FunctionComponent<SideBarProps> = ({
     },
     {
       placeholderData: keepPreviousData,
-      enabled: !!workspaceName,
+      enabled: !!workspaceName && isOptimizationStudioEnabled,
       refetchInterval: (query) => {
         // refetch every 5 seconds if there are running optimizations
         const data = query.state.data;
