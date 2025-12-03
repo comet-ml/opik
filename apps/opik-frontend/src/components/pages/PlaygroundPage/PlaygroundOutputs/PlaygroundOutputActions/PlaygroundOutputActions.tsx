@@ -137,10 +137,7 @@ const PlaygroundOutputActions = ({
 
   const rules = rulesData?.content || [];
 
-  const {
-    data: datasetsData,
-    isLoading: isLoadingDatasets,
-  } = useDatasetsList({
+  const { data: datasetsData, isLoading: isLoadingDatasets } = useDatasetsList({
     workspaceName,
     page: 1,
     size: DEFAULT_LOADED_DATASETS,
