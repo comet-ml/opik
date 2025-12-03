@@ -40,4 +40,3 @@ public class DatasetItemsDeleteValidator
         return true;
     }
 }
-

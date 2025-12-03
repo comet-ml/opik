@@ -273,7 +273,8 @@ public class CsvDatasetItemProcessor {
 
                     // TODO: REMOVE THIS - Debug delay for testing UI processing status (5 seconds per item)
                     try {
-                        log.warn("DEBUG: Adding 5 second delay after item '{}' for dataset '{}'", recordCount, datasetId);
+                        log.warn("DEBUG: Adding 5 second delay after item '{}' for dataset '{}'", recordCount,
+                                datasetId);
                         Thread.sleep(5_000);
                     } catch (InterruptedException e) {
                         Thread.currentThread().interrupt();

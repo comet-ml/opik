@@ -4599,7 +4599,8 @@ class DatasetsResourceTest {
 
                 assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(422);
                 assertThat(actualResponse.hasEntity()).isTrue();
-                assertThat(actualResponse.readEntity(ErrorMessage.class).errors()).contains("ids size must be between 1 and 1000");
+                assertThat(actualResponse.readEntity(ErrorMessage.class).errors())
+                        .contains("ids size must be between 1 and 1000");
             }
         }
 
