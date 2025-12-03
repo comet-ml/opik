@@ -88,10 +88,10 @@ const CompareExperimentsFeedbackScoreCell: React.FC<
     return (
       <div
         className={cn(
-          "flex w-full items-center justify-end gap-1",
-          !shouldShowInlineReasons && "h-4",
-          shouldShowInlineReasons && "flex-wrap",
-          shouldShowInlineReasons && "overflow-hidden",
+          "flex w-full justify-end gap-1",
+          shouldShowInlineReasons
+            ? "flex-col items-end overflow-hidden"
+            : "h-4 items-center",
           isUserFeedbackColumn && "group",
         )}
       >

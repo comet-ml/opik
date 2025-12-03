@@ -67,15 +67,13 @@ const FeedbackScoreCell = (context: CellContext<unknown, unknown>) => {
   const isUserFeedbackColumn =
     isEditingEnabled && context.column.id === "feedback_scores_User feedback";
 
-  const shouldShowInlineReasons =
-    rowHeight !== ROW_HEIGHT.small && reasons.length > 0;
-
   return (
     <CellWrapper
       metadata={context.column.columnDef.meta}
       tableMetadata={context.table.options.meta}
       className={cn(
-        "gap-1 flex-wrap overflow-hidden",
+        "gap-1 overflow-hidden",
+        rowHeight === ROW_HEIGHT.small ? "flex-wrap" : "flex-col items-end",
         isUserFeedbackColumn && "group",
       )}
     >
@@ -87,7 +85,7 @@ const FeedbackScoreCell = (context: CellContext<unknown, unknown>) => {
 
       {reasons.length > 0 && (
         <FeedbackScoreReasonTooltip reasons={reasons}>
-          {shouldShowInlineReasons ? (
+          {rowHeight !== ROW_HEIGHT.small ? (
             <span
               className={cn(
                 "break-words text-xs text-muted-foreground",
