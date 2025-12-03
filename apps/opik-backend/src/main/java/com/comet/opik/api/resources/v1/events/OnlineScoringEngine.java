@@ -411,7 +411,8 @@ public class OnlineScoringEngine {
         }
 
         try {
-            return JsonPath.parse(forcedObject).read(path);
+            var value = JsonPath.parse(forcedObject).read(path);
+            return value != null ? value.toString() : null;
         } catch (Exception e) {
             log.warn("couldn't find path inside json, trying flat structure, path={}, json={}", path, json, e);
             return Optional.ofNullable(forcedObject.get(path.replace("$.", "")))
