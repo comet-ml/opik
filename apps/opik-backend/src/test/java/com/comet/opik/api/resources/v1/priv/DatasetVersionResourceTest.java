@@ -46,6 +46,7 @@ import uk.co.jemos.podam.api.PodamFactory;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
@@ -173,7 +174,7 @@ class DatasetVersionResourceTest {
                 .request()
                 .header(HttpHeaders.AUTHORIZATION, API_KEY)
                 .header(WORKSPACE_HEADER, TEST_WORKSPACE)
-                .post(Entity.json(new com.comet.opik.api.DatasetItemsDelete(List.of(itemId))))) {
+                .post(Entity.json(new com.comet.opik.api.DatasetItemsDelete(Set.of(itemId), null)))) {
 
             assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(204);
         }
