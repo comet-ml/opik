@@ -54,7 +54,7 @@ const useCreatePromptVersionMutation = () => {
     },
     onSuccess: async (data: PromptVersion, { onSuccess }) => {
       onSuccess(data);
-      
+
       // Invalidate the specific prompt query to update the unsaved indicator
       // The loadedChatPromptRef in PlaygroundPrompt prevents unwanted re-loading
       queryClient.invalidateQueries({

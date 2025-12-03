@@ -164,14 +164,20 @@ const PlaygroundPrompt = ({
     try {
       const currentTemplate = JSON.parse(chatPromptTemplate);
       const loadedTemplate = JSON.parse(chatPromptVersionData.template);
-      
+
       // Normalize both templates to only include role and content
-      const normalizeTemplate = (template: Array<{ role: string; content: unknown; promptId?: string; promptVersionId?: string }>) =>
-        template.map(({ role, content }) => ({ role, content }));
-      
+      const normalizeTemplate = (
+        template: Array<{
+          role: string;
+          content: unknown;
+          promptId?: string;
+          promptVersionId?: string;
+        }>,
+      ) => template.map(({ role, content }) => ({ role, content }));
+
       const normalizedCurrent = normalizeTemplate(currentTemplate);
       const normalizedLoaded = normalizeTemplate(loadedTemplate);
-      
+
       return !isEqual(normalizedCurrent, normalizedLoaded);
     } catch {
       // If parsing fails, fall back to string comparison
@@ -523,15 +529,15 @@ const PlaygroundPrompt = ({
             // This prevents the useEffect from re-loading messages when we invalidate queries
             const newChatPromptKey = `${savedPromptId}-${version.id}`;
             loadedChatPromptRef.current = newChatPromptKey;
-            
+
             // Invalidate the prompt queries to refetch the latest data
             // This ensures the unsaved changes indicator updates correctly
             // CRITICAL: Query keys must match the format used in the hooks (objects, not strings)
-            queryClient.invalidateQueries({ 
-              queryKey: ["prompt", { promptId: savedPromptId }] 
+            queryClient.invalidateQueries({
+              queryKey: ["prompt", { promptId: savedPromptId }],
             });
-            queryClient.invalidateQueries({ 
-              queryKey: ["prompt-version", { versionId: version.id }] 
+            queryClient.invalidateQueries({
+              queryKey: ["prompt-version", { versionId: version.id }],
             });
           }
         }}
