@@ -1,5 +1,7 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { SquareArrowOutUpRight } from "lucide-react";
+import { AxiosError, HttpStatusCode } from "axios";
+import get from "lodash/get";
 
 import useAppStore from "@/store/AppStore";
 import useDatasetCreateMutation from "@/api/datasets/useDatasetCreateMutation";
@@ -204,15 +206,52 @@ const AddEditDatasetDialog: React.FunctionComponent<
     ],
   );
 
+  const handleMutationError = useCallback(
+    (error: AxiosError, action: "create" | "update") => {
+      const statusCode = get(error, ["response", "status"]);
+      const errorMessage =
+        get(error, ["response", "data", "message"]) ||
+        get(error, ["response", "data", "errors", 0]) ||
+        get(error, ["message"]);
+
+      if (statusCode === HttpStatusCode.Conflict) {
+        toast({
+          title: "Dataset name already exists",
+          description:
+            errorMessage || "A dataset with this name already exists",
+          variant: "destructive",
+        });
+      } else {
+        toast({
+          title: `Error ${
+            action === "create" ? "creating" : "updating"
+          } dataset`,
+          description: errorMessage || `Failed to ${action} dataset`,
+          variant: "destructive",
+        });
+        setOpen(false);
+      }
+    },
+    [toast, setOpen],
+  );
+
   const submitHandler = useCallback(() => {
     if (isEdit) {
-      updateMutate({
-        dataset: {
-          id: dataset!.id,
-          name,
-          ...(description && { description }),
+      updateMutate(
+        {
+          dataset: {
+            id: dataset!.id,
+            name,
+            ...(description && { description }),
+          },
         },
-      });
+        {
+          onSuccess: () => {
+            setOpen(false);
+          },
+          onError: (error: AxiosError) => handleMutationError(error, "update"),
+        },
+      );
     } else {
       createMutate(
         {
@@ -223,14 +262,12 @@ const AddEditDatasetDialog: React.FunctionComponent<
         },
         {
           onSuccess: onCreateSuccessHandler,
-          onError: () => setOpen(false),
+          onError: (error: AxiosError) => handleMutationError(error, "create"),
         },
       );
     }
     if (hasValidCsvFile) {
       setIsOverlayShown(true);
-    } else {
-      setOpen(false);
     }
   }, [
     isEdit,
@@ -242,6 +279,7 @@ const AddEditDatasetDialog: React.FunctionComponent<
     createMutate,
     onCreateSuccessHandler,
     setOpen,
+    handleMutationError,
   ]);
 
   const handleFileSelect = useCallback(
@@ -345,7 +383,6 @@ const AddEditDatasetDialog: React.FunctionComponent<
             <Input
               id="datasetName"
               placeholder="Dataset name"
-              disabled={isEdit}
               value={name}
               onChange={(event) => setName(event.target.value)}
             />
