@@ -22,7 +22,6 @@ const _Base = core.serialization.object({
     createdBy: core.serialization.property("created_by", core.serialization.string().optional()),
     lastUpdatedAt: core.serialization.property("last_updated_at", core.serialization.date().optional()),
     lastUpdatedBy: core.serialization.property("last_updated_by", core.serialization.string().optional()),
-    filters: core.serialization.list(FilterPublic),
     action: core.serialization.stringLiteral("evaluator"),
 });
 export const AutomationRuleEvaluatorPublic: core.serialization.Schema<
@@ -82,7 +81,6 @@ export declare namespace AutomationRuleEvaluatorPublic {
         created_by?: string | null;
         last_updated_at?: string | null;
         last_updated_by?: string | null;
-        filters: FilterPublic.Raw[];
         action: "evaluator";
     }
 }
