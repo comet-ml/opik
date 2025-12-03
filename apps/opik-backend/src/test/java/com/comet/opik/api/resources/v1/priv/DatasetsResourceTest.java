@@ -1422,7 +1422,7 @@ class DatasetsResourceTest {
 
             createAndAssert(dataset);
 
-            createAndAssertConflict(dataset, "Dataset with name '%s' already exists".formatted(dataset.name()));
+            createAndAssertConflict(dataset, "Dataset already exists with name '%s'".formatted(dataset.name()));
         }
 
         @Test
@@ -1436,7 +1436,7 @@ class DatasetsResourceTest {
 
             createAndAssert(dataset);
 
-            createAndAssertConflict(dataset2, "Dataset with name '%s' already exists".formatted(dataset2.name()));
+            createAndAssertConflict(dataset2, "Dataset already exists with name '%s'".formatted(dataset2.name()));
         }
 
         private void createAndAssertConflict(Dataset dataset, String conflictMessage) {

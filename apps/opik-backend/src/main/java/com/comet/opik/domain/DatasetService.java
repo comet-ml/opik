@@ -118,7 +118,7 @@ class DatasetServiceImpl implements DatasetService {
     private final @NonNull EventBus eventBus;
 
     private static String formatDatasetAlreadyExistsMessage(String datasetName) {
-        return "Dataset with name '%s' already exists".formatted(datasetName);
+        return "Dataset already exists with name '%s'".formatted(datasetName);
     }
 
     @Override
