@@ -179,6 +179,7 @@ const LLMPromptMessage = ({
                   setIsLoading={setIsLoading}
                   setIsHoldActionsVisible={setIsHoldActionsVisible}
                   improvePromptConfig={improvePromptConfig}
+                  disabled={disabled}
                 />
               )}
               {!hideRemoveButton && (
@@ -188,6 +189,7 @@ const LLMPromptMessage = ({
                     size="icon-sm"
                     onClick={onRemoveMessage}
                     type="button"
+                    disabled={disabled}
                   >
                     <Trash />
                   </Button>
@@ -199,6 +201,7 @@ const LLMPromptMessage = ({
                   size="icon-sm"
                   onClick={onDuplicateMessage}
                   type="button"
+                  disabled={disabled}
                 >
                   <CopyPlus />
                 </Button>
@@ -209,6 +212,7 @@ const LLMPromptMessage = ({
                   className="cursor-move"
                   size="icon-sm"
                   type="button"
+                  disabled={disabled}
                   {...listeners}
                 >
                   <GripHorizontal />
