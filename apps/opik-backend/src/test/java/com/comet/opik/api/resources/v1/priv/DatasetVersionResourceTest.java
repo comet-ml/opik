@@ -308,6 +308,8 @@ class DatasetVersionResourceTest {
                     TEST_WORKSPACE)) {
                 // Then
                 assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_CONFLICT);
+                var error = response.readEntity(ErrorMessage.class);
+                assertThat(error.errors()).contains("One or more tags already exist for this dataset");
             }
         }
 
@@ -371,6 +373,8 @@ class DatasetVersionResourceTest {
 
                 // Then
                 assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_CONFLICT);
+                var error = response.readEntity(ErrorMessage.class);
+                assertThat(error.errors()).contains("One or more tags already exist for this dataset");
             }
         }
 
@@ -736,6 +740,8 @@ class DatasetVersionResourceTest {
                     TEST_WORKSPACE)) {
                 // Then
                 assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_CONFLICT);
+                var error = response.readEntity(ErrorMessage.class);
+                assertThat(error.errors()).contains("One or more tags already exist for this dataset");
             }
         }
 
