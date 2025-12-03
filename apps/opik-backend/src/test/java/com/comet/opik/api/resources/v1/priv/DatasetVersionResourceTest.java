@@ -284,6 +284,27 @@ class DatasetVersionResourceTest {
         }
 
         @Test
+        @DisplayName("Success: Duplicate tags in request payload are deduplicated")
+        void createVersion__whenDuplicateTagsInPayload__thenDeduplicatedAndCreated() {
+            // Given
+            var datasetId = createDataset(UUID.randomUUID().toString());
+            createDatasetItems(datasetId, 2);
+
+            // When - Create version with duplicate tags in the request
+            var versionCreate = DatasetVersionCreate.builder()
+                    .tags(List.of("v1", "production", "v1", "production", "v1"))
+                    .changeDescription("Version with duplicate tags in request")
+                    .build();
+
+            var version = datasetResourceClient.commitVersion(datasetId, versionCreate, API_KEY, TEST_WORKSPACE);
+
+            // Then - Verify tags were deduplicated (only unique tags created)
+            assertThat(version.tags())
+                    .containsExactlyInAnyOrder("v1", "production", DatasetVersionService.LATEST_TAG);
+            assertThat(version.changeDescription()).isEqualTo("Version with duplicate tags in request");
+        }
+
+        @Test
         @DisplayName("Error: Duplicate tag in multiple tags list")
         void createVersion__whenDuplicateTagInList__thenReturnConflict() {
             // Given
@@ -743,6 +764,33 @@ class DatasetVersionResourceTest {
                 var error = response.readEntity(ErrorMessage.class);
                 assertThat(error.errors()).contains("One or more tags already exist for this dataset");
             }
+        }
+
+        @Test
+        @DisplayName("Success: Update version with duplicate tags in payload are deduplicated")
+        void updateVersion__whenDuplicateTagsInPayload__thenDeduplicatedAndAdded() {
+            // Given
+            var datasetId = createDataset(UUID.randomUUID().toString());
+            createDatasetItems(datasetId, 2);
+
+            var versionCreate = DatasetVersionCreate.builder()
+                    .tags(List.of("v1"))
+                    .build();
+
+            var version = datasetResourceClient.commitVersion(datasetId, versionCreate, API_KEY, TEST_WORKSPACE);
+            String versionHash = version.versionHash();
+
+            // When - Update with duplicate tags in the request
+            var updateRequest = DatasetVersionUpdate.builder()
+                    .tagsToAdd(List.of("new-tag", "another-tag", "new-tag", "another-tag"))
+                    .build();
+
+            var updatedVersion = datasetResourceClient.updateVersion(datasetId, versionHash, updateRequest, API_KEY,
+                    TEST_WORKSPACE);
+
+            // Then - Verify tags were deduplicated
+            assertThat(updatedVersion.tags())
+                    .containsExactlyInAnyOrder("v1", "new-tag", "another-tag", DatasetVersionService.LATEST_TAG);
         }
 
         @Test

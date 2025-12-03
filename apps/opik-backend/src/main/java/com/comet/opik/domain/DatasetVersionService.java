@@ -289,7 +289,7 @@ class DatasetVersionServiceImpl implements DatasetVersionService {
 
     /**
      * Inserts multiple tags for a dataset version in a single batch operation.
-     * Filters out blank tags before insertion.
+     * Filters out blank tags and duplicates before insertion.
      *
      * @throws EntityAlreadyExistsException if any tag already exists for the dataset
      */
@@ -301,6 +301,7 @@ class DatasetVersionServiceImpl implements DatasetVersionService {
 
         List<String> validTags = tags.stream()
                 .filter(StringUtils::isNotBlank)
+                .distinct()
                 .toList();
 
         if (validTags.isEmpty()) {
