@@ -83,6 +83,7 @@ const AddEditDatasetDialog: React.FunctionComponent<
   const [csvError, setCsvError] = useState<string | undefined>(undefined);
 
   const [name, setName] = useState<string>(dataset ? dataset.name : "");
+  const [nameError, setNameError] = useState<string | undefined>(undefined);
   const [description, setDescription] = useState<string>(
     dataset ? dataset.description || "" : "",
   );
@@ -96,6 +97,7 @@ const AddEditDatasetDialog: React.FunctionComponent<
       setCsvError(undefined);
       setCsvData(undefined);
       setConfirmOpen(false);
+      setNameError(undefined);
       if (!dataset) {
         setName("");
         setDescription("");
@@ -104,6 +106,7 @@ const AddEditDatasetDialog: React.FunctionComponent<
       // Reset state when dialog opens (in case of stale state)
       setIsOverlayShown(false);
       setConfirmOpen(false);
+      setNameError(undefined);
       if (dataset) {
         setName(dataset.name);
         setDescription(dataset.description || "");
@@ -215,12 +218,7 @@ const AddEditDatasetDialog: React.FunctionComponent<
         get(error, ["message"]);
 
       if (statusCode === HttpStatusCode.Conflict) {
-        toast({
-          title: "Dataset name already exists",
-          description:
-            errorMessage || "A dataset with this name already exists",
-          variant: "destructive",
-        });
+        setNameError(errorMessage || "A dataset with this name already exists");
       } else {
         toast({
           title: `Error ${
@@ -384,8 +382,22 @@ const AddEditDatasetDialog: React.FunctionComponent<
               id="datasetName"
               placeholder="Dataset name"
               value={name}
-              onChange={(event) => setName(event.target.value)}
+              onChange={(event) => {
+                setName(event.target.value);
+                setNameError(undefined);
+              }}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" && isValid) {
+                  event.preventDefault();
+                  csvError ? setConfirmOpen(true) : submitHandler();
+                }
+              }}
             />
+            {nameError && (
+              <span className="comet-body-xs text-destructive">
+                {nameError}
+              </span>
+            )}
           </div>
           <div className="flex flex-col gap-2 pb-4">
             <Label htmlFor="datasetDescription">Description</Label>
