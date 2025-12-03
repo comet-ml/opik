@@ -45,15 +45,31 @@ const FeedbackScoreCell = (context: CellContext<unknown, unknown>) => {
       return extractReasonsFromValueByAuthor(feedbackScore?.value_by_author);
     }
 
-    return reason
-      ? [
-          {
-            reason,
-            author: feedbackScore?.last_updated_by,
-            lastUpdatedAt: feedbackScore?.last_updated_at,
-          },
-        ]
-      : [];
+    if (!reason) return [];
+
+    // Split aggregated reasons by any newline variant or comma pattern, then number them
+    let splitReasons = reason.split(/\r?\n/).filter((r) => r.trim());
+    if (splitReasons.length === 1) {
+      // Try splitting by ", " followed by capital letter or opening bracket
+      splitReasons = reason.split(/,\s+(?=[A-Z[])/).filter((r) => r.trim());
+    }
+
+    // Add numbers if there are multiple reasons
+    if (splitReasons.length > 1) {
+      return splitReasons.map((r, idx) => ({
+        reason: `${idx + 1}. ${r}`,
+        author: feedbackScore?.last_updated_by,
+        lastUpdatedAt: feedbackScore?.last_updated_at,
+      }));
+    }
+
+    return [
+      {
+        reason,
+        author: feedbackScore?.last_updated_by,
+        lastUpdatedAt: feedbackScore?.last_updated_at,
+      },
+    ];
   }, [
     feedbackScore?.value_by_author,
     reason,
@@ -90,15 +106,17 @@ const FeedbackScoreCell = (context: CellContext<unknown, unknown>) => {
       {reasons.length > 0 && (
         <FeedbackScoreReasonTooltip reasons={reasons}>
           {!isSmall ? (
-            <span
+            <div
               className={cn(
-                "break-words text-xs text-muted-foreground",
+                "flex flex-col gap-0.5 break-words text-xs text-muted-foreground",
                 rowHeight === ROW_HEIGHT.medium && "line-clamp-3",
                 rowHeight === ROW_HEIGHT.large && "line-clamp-[16]",
               )}
             >
-              {reasons.map((r) => r.reason).join(", ")}
-            </span>
+              {reasons.map((r, idx) => (
+                <span key={idx}>{r.reason}</span>
+              ))}
+            </div>
           ) : (
             <div className="flex h-[20px] items-center">
               <MessageSquareMore className="mt-0.5 size-3.5 shrink-0 text-light-slate" />
