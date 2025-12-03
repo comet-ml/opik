@@ -2430,4 +2430,214 @@ class AutomationRuleEvaluatorsResourceTest {
             }
         }
     }
+
+    @Nested
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    @DisplayName("Multi-Project Automation Rules:")
+    class MultiProjectAutomationRules {
+
+        private final String projectId1 = UUID.randomUUID().toString();
+        private final String projectId2 = UUID.randomUUID().toString();
+        private final String projectId3 = UUID.randomUUID().toString();
+
+        @BeforeAll
+        void setUp() {
+            // Create test projects
+            projectsResourceClient.createProject(projectId1, WORKSPACE_NAME, API_KEY);
+            projectsResourceClient.createProject(projectId2, WORKSPACE_NAME, API_KEY);
+            projectsResourceClient.createProject(projectId3, WORKSPACE_NAME, API_KEY);
+        }
+
+        @Test
+        @DisplayName("should create automation rule with multiple projects")
+        void shouldCreateAutomationRuleWithMultipleProjects() {
+            // Given
+            mockLlmProvider();
+
+            AutomationRuleEvaluatorLlmAsJudge evaluator = factory
+                    .manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class)
+                    .toBuilder()
+                    .projectIds(Set.of(UUID.fromString(projectId1), UUID.fromString(projectId2)))
+                    .build();
+
+            // When
+            UUID ruleId = evaluatorsResourceClient.createEvaluator(evaluator, WORKSPACE_NAME, API_KEY);
+
+            // Then
+            try (var actualResponse = evaluatorsResourceClient.getEvaluator(
+                    ruleId, null, WORKSPACE_NAME, API_KEY, HttpStatus.SC_OK)) {
+
+                var actualEvaluator = actualResponse.readEntity(AutomationRuleEvaluator.class);
+                assertThat(actualEvaluator.getProjectIds()).hasSize(2);
+                assertThat(actualEvaluator.getProjectIds())
+                        .containsExactlyInAnyOrder(UUID.fromString(projectId1), UUID.fromString(projectId2));
+            }
+        }
+
+        @Test
+        @DisplayName("should update automation rule to different set of projects")
+        void shouldUpdateAutomationRuleToDifferentSetOfProjects() {
+            // Given - Create rule with 2 projects
+            mockLlmProvider();
+
+            AutomationRuleEvaluatorLlmAsJudge evaluator = factory
+                    .manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class)
+                    .toBuilder()
+                    .projectIds(Set.of(UUID.fromString(projectId1), UUID.fromString(projectId2)))
+                    .build();
+
+            UUID ruleId = evaluatorsResourceClient.createEvaluator(evaluator, WORKSPACE_NAME, API_KEY);
+
+            // When - Update to 3 different projects
+            AutomationRuleEvaluatorUpdateLlmAsJudge update = AutomationRuleEvaluatorUpdateLlmAsJudge.builder()
+                    .name("Updated Rule")
+                    .samplingRate(0.5f)
+                    .enabled(true)
+                    .filters(List.of())
+                    .projectIds(Set.of(UUID.fromString(projectId2), UUID.fromString(projectId3)))
+                    .code(evaluator.getCode())
+                    .build();
+
+            evaluatorsResourceClient.updateEvaluator(ruleId, update, WORKSPACE_NAME, API_KEY);
+
+            // Then
+            try (var actualResponse = evaluatorsResourceClient.getEvaluator(
+                    ruleId, null, WORKSPACE_NAME, API_KEY, HttpStatus.SC_OK)) {
+
+                var actualEvaluator = actualResponse.readEntity(AutomationRuleEvaluator.class);
+                assertThat(actualEvaluator.getProjectIds()).hasSize(2);
+                assertThat(actualEvaluator.getProjectIds())
+                        .containsExactlyInAnyOrder(UUID.fromString(projectId2), UUID.fromString(projectId3));
+                assertThat(actualEvaluator.getName()).isEqualTo("Updated Rule");
+            }
+        }
+
+        @Test
+        @DisplayName("should allow same projects for different rules")
+        void shouldAllowSameProjectsForDifferentRules() {
+            // Given - Same project set for both rules
+            mockLlmProvider();
+
+            Set<UUID> sharedProjects = Set.of(UUID.fromString(projectId1), UUID.fromString(projectId2));
+
+            AutomationRuleEvaluatorLlmAsJudge evaluator1 = factory
+                    .manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class)
+                    .toBuilder()
+                    .name("Rule 1")
+                    .projectIds(sharedProjects)
+                    .build();
+
+            AutomationRuleEvaluatorLlmAsJudge evaluator2 = factory
+                    .manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class)
+                    .toBuilder()
+                    .name("Rule 2")
+                    .projectIds(sharedProjects)
+                    .build();
+
+            // When - Create both rules
+            UUID ruleId1 = evaluatorsResourceClient.createEvaluator(evaluator1, WORKSPACE_NAME, API_KEY);
+            UUID ruleId2 = evaluatorsResourceClient.createEvaluator(evaluator2, WORKSPACE_NAME, API_KEY);
+
+            // Then - Both rules should be created successfully
+            try (var response1 = evaluatorsResourceClient.getEvaluator(
+                    ruleId1, null, WORKSPACE_NAME, API_KEY, HttpStatus.SC_OK)) {
+
+                var rule1 = response1.readEntity(AutomationRuleEvaluator.class);
+                assertThat(rule1.getProjectIds()).isEqualTo(sharedProjects);
+            }
+
+            try (var response2 = evaluatorsResourceClient.getEvaluator(
+                    ruleId2, null, WORKSPACE_NAME, API_KEY, HttpStatus.SC_OK)) {
+
+                var rule2 = response2.readEntity(AutomationRuleEvaluator.class);
+                assertThat(rule2.getProjectIds()).isEqualTo(sharedProjects);
+            }
+        }
+
+        @Test
+        @DisplayName("should delete rule and remove all project associations")
+        void shouldDeleteRuleAndRemoveAllProjectAssociations() {
+            // Given - Create rule with multiple projects
+            mockLlmProvider();
+
+            AutomationRuleEvaluatorLlmAsJudge evaluator = factory
+                    .manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class)
+                    .toBuilder()
+                    .projectIds(Set.of(
+                            UUID.fromString(projectId1),
+                            UUID.fromString(projectId2),
+                            UUID.fromString(projectId3)))
+                    .build();
+
+            UUID ruleId = evaluatorsResourceClient.createEvaluator(evaluator, WORKSPACE_NAME, API_KEY);
+
+            // When - Delete the rule
+            evaluatorsResourceClient.deleteEvaluators(Set.of(ruleId), null, WORKSPACE_NAME, API_KEY);
+
+            // Then - Rule should be deleted
+            evaluatorsResourceClient.getEvaluator(ruleId, null, WORKSPACE_NAME, API_KEY, HttpStatus.SC_NOT_FOUND);
+        }
+
+        @Test
+        @DisplayName("should require at least one project")
+        void shouldRequireAtLeastOneProject() {
+            // Given - Rule with no projects
+            mockLlmProvider();
+
+            AutomationRuleEvaluatorLlmAsJudge evaluator = factory
+                    .manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class)
+                    .toBuilder()
+                    .projectIds(Set.of())
+                    .build();
+
+            // When - Try to create rule
+            try (var response = client
+                    .targetRest()
+                    .path(RULE_EVALUATORS_RESOURCE_URL)
+                    .request()
+                    .accept(MediaType.APPLICATION_JSON)
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(AuthTestUtils.WORKSPACE_HEADER, WORKSPACE_NAME)
+                    .post(jakarta.ws.rs.client.Entity.json(evaluator))) {
+
+                // Then - Should get bad request
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
+            }
+        }
+
+        @Test
+        @DisplayName("should handle single project case")
+        void shouldHandleSingleProjectCase() {
+            // Given - Rule with single project
+            mockLlmProvider();
+
+            AutomationRuleEvaluatorLlmAsJudge evaluator = factory
+                    .manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class)
+                    .toBuilder()
+                    .projectIds(Set.of(UUID.fromString(projectId1)))
+                    .build();
+
+            // When
+            UUID ruleId = evaluatorsResourceClient.createEvaluator(evaluator, WORKSPACE_NAME, API_KEY);
+
+            // Then
+            try (var actualResponse = evaluatorsResourceClient.getEvaluator(
+                    ruleId, null, WORKSPACE_NAME, API_KEY, HttpStatus.SC_OK)) {
+
+                var actualEvaluator = actualResponse.readEntity(AutomationRuleEvaluator.class);
+                assertThat(actualEvaluator.getProjectIds()).hasSize(1);
+                assertThat(actualEvaluator.getProjectIds()).containsExactly(UUID.fromString(projectId1));
+            }
+        }
+
+        private void mockLlmProvider() {
+            ChatResponse mockChatResponse = ChatResponse.builder()
+                    .aiMessage(AiMessage.from(VALID_AI_MSG_TXT))
+                    .build();
+
+            when(llmProviderFactory.getLlmProvider(anyString())
+                    .chat(any(ChatRequest.class)))
+                    .thenReturn(mockChatResponse);
+        }
+    }
 }

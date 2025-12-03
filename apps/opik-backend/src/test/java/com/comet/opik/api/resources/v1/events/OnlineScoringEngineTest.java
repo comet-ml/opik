@@ -81,6 +81,7 @@ import java.math.BigDecimal;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -457,7 +458,7 @@ class OnlineScoringEngineTest {
         return Trace.builder()
                 .id(traceId)
                 .projectName(PROJECT_NAME)
-                .projectId(projectId)
+                .projectIds(Set.of(projectId))
                 .createdBy(USER_NAME)
                 .input(JsonUtils.getJsonNodeFromString(INPUT))
                 .output(JsonUtils.getJsonNodeFromString(OUTPUT)).build();
@@ -465,7 +466,7 @@ class OnlineScoringEngineTest {
 
     private AutomationRuleEvaluatorLlmAsJudge createRule(UUID projectId, LlmAsJudgeCode evaluatorCode) {
         return AutomationRuleEvaluatorLlmAsJudge.builder()
-                .projectId(projectId)
+                .projectIds(Set.of(projectId))
                 .name("evaluator-test-" + RandomStringUtils.secure().nextAlphanumeric(36))
                 .createdBy(USER_NAME)
                 .code(evaluatorCode)
@@ -710,7 +711,7 @@ class OnlineScoringEngineTest {
         var trace = Trace.builder()
                 .id(UUID.randomUUID())
                 .projectName(PROJECT_NAME)
-                .projectId(UUID.randomUUID())
+                .projectIds(Set.of(UUID.randomUUID()))
                 .createdBy(USER_NAME)
                 .input(JsonUtils.getJsonNodeFromString(jsonBody))
                 .build();
@@ -1420,7 +1421,7 @@ class OnlineScoringEngineTest {
         return com.comet.opik.api.Span.builder()
                 .id(spanId)
                 .projectName(PROJECT_NAME)
-                .projectId(projectId)
+                .projectIds(Set.of(projectId))
                 .createdBy(USER_NAME)
                 .traceId(generator.generate())
                 .input(JsonUtils.getJsonNodeFromString(INPUT))
