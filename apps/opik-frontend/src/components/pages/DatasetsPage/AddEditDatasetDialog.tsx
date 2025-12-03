@@ -380,6 +380,11 @@ const AddEditDatasetDialog: React.FunctionComponent<
               id="datasetName"
               placeholder="Dataset name"
               value={name}
+              className={
+                nameError
+                  ? "!border-destructive focus-visible:!border-destructive"
+                  : ""
+              }
               onChange={(event) => {
                 setName(event.target.value);
                 setNameError(undefined);
