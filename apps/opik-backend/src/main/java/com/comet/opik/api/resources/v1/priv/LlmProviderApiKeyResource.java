@@ -80,7 +80,9 @@ public class LlmProviderApiKeyResource {
                             "models", builtinConfig.getModel()))
                     .readOnly(true)
                     .build();
-            content.add(virtualProvider); // Add at the end so user-configured providers are selected first
+            // Add at the end so user-configured providers are auto-selected by default in the Playground
+            // (frontend selects the first provider/model when user hasn't made a selection yet)
+            content.add(virtualProvider);
         }
 
         log.info("Found LLM Provider's ApiKeys for workspaceId '{}'", workspaceId);

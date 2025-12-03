@@ -85,8 +85,6 @@ class LlmProviderApiKeyResourceBuiltinProviderTest {
                         .redisUrl(REDIS.getRedisURI())
                         .customConfigs(List.of(
                                 new TestDropwizardAppExtensionUtils.CustomConfig("builtinLlmProvider.enabled", "true"),
-                                new TestDropwizardAppExtensionUtils.CustomConfig("builtinLlmProvider.model",
-                                        BUILTIN_MODEL),
                                 new TestDropwizardAppExtensionUtils.CustomConfig("builtinLlmProvider.actualModel",
                                         ACTUAL_MODEL),
                                 new TestDropwizardAppExtensionUtils.CustomConfig("builtinLlmProvider.spanProvider",
