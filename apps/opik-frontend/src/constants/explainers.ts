@@ -604,8 +604,7 @@ export const EXPLAINERS_MAP: Record<EXPLAINER_ID, Explainer> = {
   },
   [EXPLAINER_ID.geval_evaluation_criteria]: {
     id: EXPLAINER_ID.geval_evaluation_criteria,
-    description:
-      "Define specific criteria for evaluating the output quality.",
+    description: "Define specific criteria for evaluating the output quality.",
   },
   [EXPLAINER_ID.metric_reference_key]: {
     id: EXPLAINER_ID.metric_reference_key,
@@ -613,8 +612,7 @@ export const EXPLAINERS_MAP: Record<EXPLAINER_ID, Explainer> = {
   },
   [EXPLAINER_ID.metric_case_sensitive]: {
     id: EXPLAINER_ID.metric_case_sensitive,
-    description:
-      "Enable case-sensitive comparison when evaluating outputs.",
+    description: "Enable case-sensitive comparison when evaluating outputs.",
   },
   [EXPLAINER_ID.metric_json_schema]: {
     id: EXPLAINER_ID.metric_json_schema,

@@ -56,7 +56,6 @@ const OptimizationStudioRunPageContent = () => {
       },
     );
 
-
   const isActiveOptimization =
     activeOptimization?.status === OPTIMIZATION_STATUS.RUNNING ||
     activeOptimization?.status === OPTIMIZATION_STATUS.INITIALIZED;

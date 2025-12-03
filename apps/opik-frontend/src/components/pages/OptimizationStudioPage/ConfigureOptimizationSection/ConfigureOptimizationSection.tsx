@@ -20,9 +20,7 @@ import PromptModelConfigs from "@/components/pages-shared/llm/PromptModelSetting
 import LLMPromptMessages from "@/components/pages-shared/llm/LLMPromptMessages/LLMPromptMessages";
 import AlgorithmConfigs from "@/components/pages-shared/optimizations/AlgorithmSettings/AlgorithmConfigs";
 import MetricConfigs from "@/components/pages-shared/optimizations/MetricSettings/MetricConfigs";
-import {
-  OptimizationConfigFormType,
-} from "./schema";
+import { OptimizationConfigFormType } from "./schema";
 import {
   OPTIMIZER_TYPE,
   METRIC_TYPE,
@@ -81,9 +79,7 @@ const ConfigureOptimizationSection: React.FC = () => {
   const model = form.watch("modelName") as PROVIDER_MODEL_TYPE | "";
   const config = form.watch("modelConfig");
 
-  const {
-    data: datasetsData,
-  } = useDatasetsList({
+  const { data: datasetsData } = useDatasetsList({
     workspaceName,
     page: 1,
     size: 1000,
@@ -203,7 +199,11 @@ const ConfigureOptimizationSection: React.FC = () => {
     const firstKey = Object.keys(errors)[0];
     const firstError = errors[firstKey as keyof typeof errors];
 
-    if (firstError && typeof firstError === "object" && "message" in firstError) {
+    if (
+      firstError &&
+      typeof firstError === "object" &&
+      "message" in firstError
+    ) {
       return firstError.message as string;
     }
 
@@ -211,230 +211,230 @@ const ConfigureOptimizationSection: React.FC = () => {
   }, [form.formState.errors.metricParams]);
 
   return (
-      <form className="space-y-4">
-        <Card>
-          <CardHeader className="space-y-0.5 px-4 pt-3">
-            <CardTitle className="comet-body-s-accented">
-              Configure optimization
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4 p-6">
-            <FormField
-              control={form.control}
-              name="datasetName"
-              render={({ field }) => (
-                <FormItem>
-                  <div className="mb-2 flex items-center justify-between">
-                    <FormLabel className="comet-body-s">Dataset</FormLabel>
-                    {selectedDataset && (
-                      <Link
-                        to="/$workspaceName/datasets/$datasetId/items"
-                        params={{
-                          workspaceName,
-                          datasetId: selectedDataset.id,
-                        }}
-                        target="_blank"
+    <form className="space-y-4">
+      <Card>
+        <CardHeader className="space-y-0.5 px-4 pt-3">
+          <CardTitle className="comet-body-s-accented">
+            Configure optimization
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4 p-6">
+          <FormField
+            control={form.control}
+            name="datasetName"
+            render={({ field }) => (
+              <FormItem>
+                <div className="mb-2 flex items-center justify-between">
+                  <FormLabel className="comet-body-s">Dataset</FormLabel>
+                  {selectedDataset && (
+                    <Link
+                      to="/$workspaceName/datasets/$datasetId/items"
+                      params={{
+                        workspaceName,
+                        datasetId: selectedDataset.id,
+                      }}
+                      target="_blank"
+                    >
+                      <Button
+                        type="button"
+                        variant="link"
+                        size="sm"
+                        className="h-auto p-0 text-xs"
                       >
-                        <Button
-                          type="button"
-                          variant="link"
-                          size="sm"
-                          className="h-auto p-0 text-xs"
-                        >
-                          <SquareArrowOutUpRight className="mr-1 size-3" />
-                          Open dataset
-                        </Button>
-                      </Link>
-                    )}
-                  </div>
-                  <FormControl>
-                    <DatasetSelectBox
-                      value={selectedDataset?.id || null}
-                      onChange={(id) => {
-                        const dataset = datasets.find((ds) => ds.id === id);
-                        field.onChange(dataset?.name || "");
-                      }}
-                      workspaceName={workspaceName}
-                      disabled={disableForm}
-                      showClearButton={false}
-                      buttonClassName="h-8 w-full"
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            <FormField
-              control={form.control}
-              name="optimizerType"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Algorithm</FormLabel>
-                  <FormControl>
-                    <div className="flex h-8 items-center gap-2">
-                      <SelectBox
-                        value={field.value}
-                        onChange={handleOptimizerTypeChange}
-                        options={optimizerOptions}
-                        placeholder="Select algorithm"
-                        className="h-8 w-full"
-                        disabled={disableForm}
-                      />
-
-                      <FormField
-                        control={form.control}
-                        name="optimizerParams"
-                        render={({ field: paramsField }) => (
-                          <AlgorithmConfigs
-                            size="icon-sm"
-                            optimizerType={optimizerType}
-                            configs={
-                              paramsField.value as Partial<OptimizerParameters>
-                            }
-                            onChange={handleOptimizerParamsChange}
-                            disabled={disableForm}
-                          />
-                        )}
-                      />
-                    </div>
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            <FormField
-              control={form.control}
-              name="metricType"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Metric</FormLabel>
-                  <FormControl>
-                    <div className="flex h-8 items-center gap-2">
-                      <SelectBox
-                        value={field.value}
-                        onChange={handleMetricTypeChange}
-                        options={metricOptions}
-                        placeholder="Select metric"
-                        className="h-8 w-full"
-                        disabled={disableForm}
-                      />
-
-                      <FormField
-                        control={form.control}
-                        name="metricParams"
-                        render={({ field: paramsField }) => (
-                          <MetricConfigs
-                            size="icon-sm"
-                            metricType={metricType}
-                            configs={
-                              paramsField.value as Partial<MetricParameters>
-                            }
-                            onChange={handleMetricParamsChange}
-                            disabled={disableForm}
-                          />
-                        )}
-                      />
-                    </div>
-                  </FormControl>
-                  <FormMessage />
-                  {form.formState.errors.metricParams && (
-                    <p className="text-sm text-destructive">
-                      {getFirstMetricParamsError()}
-                    </p>
+                        <SquareArrowOutUpRight className="mr-1 size-3" />
+                        Open dataset
+                      </Button>
+                    </Link>
                   )}
-                </FormItem>
-              )}
-            />
+                </div>
+                <FormControl>
+                  <DatasetSelectBox
+                    value={selectedDataset?.id || null}
+                    onChange={(id) => {
+                      const dataset = datasets.find((ds) => ds.id === id);
+                      field.onChange(dataset?.name || "");
+                    }}
+                    workspaceName={workspaceName}
+                    disabled={disableForm}
+                    showClearButton={false}
+                    buttonClassName="h-8 w-full"
+                  />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
 
-            <FormField
-              control={form.control}
-              name="modelName"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Model</FormLabel>
-                  <FormControl>
-                    <div className="flex h-8 items-center gap-2">
-                      <PromptModelSelect
-                        value={field.value as PROVIDER_MODEL_TYPE | ""}
-                        onChange={(m) => {
-                          if (m) {
-                            field.onChange(m);
-                            const providerType = calculateModelProvider(m);
-                            console.log(m, providerType, "m, providerType");
+          <FormField
+            control={form.control}
+            name="optimizerType"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Algorithm</FormLabel>
+                <FormControl>
+                  <div className="flex h-8 items-center gap-2">
+                    <SelectBox
+                      value={field.value}
+                      onChange={handleOptimizerTypeChange}
+                      options={optimizerOptions}
+                      placeholder="Select algorithm"
+                      className="h-8 w-full"
+                      disabled={disableForm}
+                    />
+
+                    <FormField
+                      control={form.control}
+                      name="optimizerParams"
+                      render={({ field: paramsField }) => (
+                        <AlgorithmConfigs
+                          size="icon-sm"
+                          optimizerType={optimizerType}
+                          configs={
+                            paramsField.value as Partial<OptimizerParameters>
                           }
-                        }}
-                        provider={provider}
-                        hasError={Boolean(form.formState.errors.modelName)}
-                        workspaceName={workspaceName}
-                        onAddProvider={handleAddProvider}
-                        onDeleteProvider={handleDeleteProvider}
-                        disabled={true}
-                      />
+                          onChange={handleOptimizerParamsChange}
+                          disabled={disableForm}
+                        />
+                      )}
+                    />
+                  </div>
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
 
-                      <FormField
-                        control={form.control}
-                        name="modelConfig"
-                        render={({ field: configField }) => (
-                          <PromptModelConfigs
-                            size="icon-sm"
-                            provider={provider}
-                            model={model}
-                            configs={
-                              configField.value as Partial<LLMPromptConfigsType>
-                            }
-                            onChange={configField.onChange}
-                            disabled={disableForm}
-                          />
-                        )}
-                      />
-                    </div>
-                  </FormControl>
+          <FormField
+            control={form.control}
+            name="metricType"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Metric</FormLabel>
+                <FormControl>
+                  <div className="flex h-8 items-center gap-2">
+                    <SelectBox
+                      value={field.value}
+                      onChange={handleMetricTypeChange}
+                      options={metricOptions}
+                      placeholder="Select metric"
+                      className="h-8 w-full"
+                      disabled={disableForm}
+                    />
+
+                    <FormField
+                      control={form.control}
+                      name="metricParams"
+                      render={({ field: paramsField }) => (
+                        <MetricConfigs
+                          size="icon-sm"
+                          metricType={metricType}
+                          configs={
+                            paramsField.value as Partial<MetricParameters>
+                          }
+                          onChange={handleMetricParamsChange}
+                          disabled={disableForm}
+                        />
+                      )}
+                    />
+                  </div>
+                </FormControl>
+                <FormMessage />
+                {form.formState.errors.metricParams && (
+                  <p className="text-sm text-destructive">
+                    {getFirstMetricParamsError()}
+                  </p>
+                )}
+              </FormItem>
+            )}
+          />
+
+          <FormField
+            control={form.control}
+            name="modelName"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Model</FormLabel>
+                <FormControl>
+                  <div className="flex h-8 items-center gap-2">
+                    <PromptModelSelect
+                      value={field.value as PROVIDER_MODEL_TYPE | ""}
+                      onChange={(m) => {
+                        if (m) {
+                          field.onChange(m);
+                          const providerType = calculateModelProvider(m);
+                          console.log(m, providerType, "m, providerType");
+                        }
+                      }}
+                      provider={provider}
+                      hasError={Boolean(form.formState.errors.modelName)}
+                      workspaceName={workspaceName}
+                      onAddProvider={handleAddProvider}
+                      onDeleteProvider={handleDeleteProvider}
+                      disabled={true}
+                    />
+
+                    <FormField
+                      control={form.control}
+                      name="modelConfig"
+                      render={({ field: configField }) => (
+                        <PromptModelConfigs
+                          size="icon-sm"
+                          provider={provider}
+                          model={model}
+                          configs={
+                            configField.value as Partial<LLMPromptConfigsType>
+                          }
+                          onChange={configField.onChange}
+                          disabled={disableForm}
+                        />
+                      )}
+                    />
+                  </div>
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardContent className="space-y-4 p-6">
+          <FormField
+            control={form.control}
+            name="messages"
+            render={({ field }) => {
+              const messages = field.value;
+
+              return (
+                <FormItem>
+                  <FormLabel>Prompt</FormLabel>
+                  <LLMPromptMessages
+                    messages={messages}
+                    possibleTypes={MESSAGE_TYPE_OPTIONS}
+                    hidePromptActions={true}
+                    disableMedia
+                    disabled={disableForm}
+                    onChange={(messages: LLMMessage[]) => {
+                      field.onChange(messages);
+                    }}
+                    onAddMessage={() =>
+                      field.onChange([
+                        ...messages,
+                        generateDefaultLLMPromptMessage({
+                          role: LLM_MESSAGE_ROLE.user,
+                        }),
+                      ])
+                    }
+                  />
                   <FormMessage />
                 </FormItem>
-              )}
-            />
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="space-y-4 p-6">
-            <FormField
-              control={form.control}
-              name="messages"
-              render={({ field }) => {
-                const messages = field.value;
-
-                return (
-                  <FormItem>
-                    <FormLabel>Prompt</FormLabel>
-                    <LLMPromptMessages
-                      messages={messages}
-                      possibleTypes={MESSAGE_TYPE_OPTIONS}
-                      hidePromptActions={true}
-                      disableMedia
-                      disabled={disableForm}
-                      onChange={(messages: LLMMessage[]) => {
-                        field.onChange(messages);
-                      }}
-                      onAddMessage={() =>
-                        field.onChange([
-                          ...messages,
-                          generateDefaultLLMPromptMessage({
-                            role: LLM_MESSAGE_ROLE.user,
-                          }),
-                        ])
-                      }
-                    />
-                    <FormMessage />
-                  </FormItem>
-                );
-              }}
-            />
-          </CardContent>
-        </Card>
-      </form>
+              );
+            }}
+          />
+        </CardContent>
+      </Card>
+    </form>
   );
 };
 

@@ -3,7 +3,7 @@ import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { LevenshteinMetricParameters } from "@/types/optimizations";
-import { DEFAULT_LEVENSHTEIN_METRIC_CONFIGS } from "@/constants/optimizations";
+// import { DEFAULT_LEVENSHTEIN_METRIC_CONFIGS } from "@/constants/optimizations";
 import ExplainerIcon from "@/components/shared/ExplainerIcon/ExplainerIcon";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 

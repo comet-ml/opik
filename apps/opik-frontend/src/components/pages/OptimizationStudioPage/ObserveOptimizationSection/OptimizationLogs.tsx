@@ -14,14 +14,7 @@ const OptimizationLogs: React.FC<OptimizationLogsProps> = ({
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
 
   const logs = optimization
-    ? [
-        "Logs",
-        "are",
-        "not",
-        "available",
-        "...",
-        "..."
-      ]
+    ? ["Logs", "are", "not", "available", "...", "..."]
     : [];
 
   return (
@@ -34,7 +27,7 @@ const OptimizationLogs: React.FC<OptimizationLogsProps> = ({
             </div>
           ) : (
             <>
-              {logs.map((log, index) => (
+              {logs.map((log) => (
                 <div key={log} className="comet-body-s text-muted-slate">
                   {log}
                 </div>

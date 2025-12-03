@@ -48,9 +48,7 @@ const JsonSchemaValidatorMetricConfigs = ({
           <Label htmlFor="json_schema" className="text-s mr-1.5">
             JSON Schema
           </Label>
-          <ExplainerIcon
-            {...EXPLAINERS_MAP[EXPLAINER_ID.metric_json_schema]}
-          />
+          <ExplainerIcon {...EXPLAINERS_MAP[EXPLAINER_ID.metric_json_schema]} />
         </div>
         <Textarea
           id="json_schema"
