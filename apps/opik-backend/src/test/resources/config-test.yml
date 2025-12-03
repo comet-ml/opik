@@ -7,7 +7,6 @@ logging:
   #  Default: com.comet: DEBUG
   #  Description: Individual logger configuration
   loggers:
-    com.clickhouse.client: DEBUG
     com.comet: DEBUG
 
 # Description: state database configuration
@@ -419,6 +418,9 @@ serviceToggles:
   # Default: true
   # Description: Whether or not export/download functionality is enabled
   exportEnabled: "true"
+  # Default: false
+  # Description: Whether or not Dashboards feature is enabled
+  dashboardsEnabled: "false"
 
 # Trace Thread configuration
 traceThreadConfig:

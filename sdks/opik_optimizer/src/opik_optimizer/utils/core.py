@@ -69,15 +69,23 @@ class OptimizationContextManager:
         self.optimization: Optimization | None = None
 
     def __enter__(self) -> Optimization | None:
-        """Create and return the optimization."""
+        """Get existing optimization or create a new one."""
         try:
-            self.optimization = self.client.create_optimization(
-                dataset_name=self.dataset_name,
-                objective_name=self.objective_name,
-                name=self.name,
-                metadata=self.metadata,
-                optimization_id=self.optimization_id,
-            )
+            if self.optimization_id:
+                # If optimization_id is provided, get the existing optimization
+                # instead of creating a new one. This is used by Optimization Studio
+                # where the optimization is pre-created by the Java backend.
+                self.optimization = self.client.get_optimization_by_id(
+                    self.optimization_id
+                )
+            else:
+                # Create a new optimization
+                self.optimization = self.client.create_optimization(
+                    dataset_name=self.dataset_name,
+                    objective_name=self.objective_name,
+                    name=self.name,
+                    metadata=self.metadata,
+                )
 
             if self.optimization:
                 return self.optimization

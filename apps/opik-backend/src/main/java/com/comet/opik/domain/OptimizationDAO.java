@@ -651,7 +651,7 @@ class OptimizationDAOImpl implements OptimizationDAO {
                     .lastUpdatedAt(row.get("last_updated_at", Instant.class))
                     .createdBy(row.get("created_by", String.class))
                     .lastUpdatedBy(row.get("last_updated_by", String.class))
-                    .feedbackScores(getFeedbackScores(row))
+                    .feedbackScores(getFeedbackScores(row, "feedback_scores"))
                     .numTrials(row.get("num_trials", Long.class))
                     .build();
         });
