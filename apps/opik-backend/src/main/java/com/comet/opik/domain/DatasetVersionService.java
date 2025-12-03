@@ -259,15 +259,6 @@ class DatasetVersionServiceImpl implements DatasetVersionService {
                 }
             }
 
-            // Add custom tag from deprecated 'tag' field (for backward compatibility)
-            if (StringUtils.isNotBlank(request.tag())) {
-                EntityConstraintHandler.handle(() -> {
-                    datasetVersionDAO.insertTag(datasetId, request.tag(), versionId, userName, workspaceId);
-                    return null;
-                }).withError(() -> new EntityAlreadyExistsException(
-                        new ErrorMessage(List.of(ERROR_TAG_EXISTS.formatted(request.tag())))));
-            }
-
             return enrichWithIsLatest(datasetVersionDAO.findById(versionId, workspaceId).orElseThrow());
         });
     }

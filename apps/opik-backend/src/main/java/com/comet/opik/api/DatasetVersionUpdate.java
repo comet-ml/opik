@@ -15,5 +15,5 @@ import java.util.List;
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
 public record DatasetVersionUpdate(
         @Schema(description = "Optional description of changes in this version", example = "Updated baseline version") String changeDescription,
-        @Valid @Schema(description = "Optional list of tags to add to this version", example = "[\"production\", \"reviewed\"]") List<@Size(max = 100, message = "Each tag must be at most 100 characters") String> tagsToAdd) {
+        @Valid @Size(min = 1, max = 100) @Schema(description = "Optional list of tags to add to this version", example = "[\"production\", \"reviewed\"]") List<@Size(max = 100, message = "Each tag must be at most 100 characters") String> tagsToAdd) {
 }

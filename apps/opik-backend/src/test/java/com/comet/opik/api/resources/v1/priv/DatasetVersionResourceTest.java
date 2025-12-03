@@ -199,7 +199,7 @@ class DatasetVersionResourceTest {
                     Arguments.of(
                             "Create version with tag",
                             DatasetVersionCreate.builder()
-                                    .tag("baseline")
+                                    .tags(List.of("baseline"))
                                     .changeDescription("Baseline version")
                                     .build(),
                             List.of("baseline", DatasetVersionService.LATEST_TAG),
@@ -281,27 +281,6 @@ class DatasetVersionResourceTest {
         }
 
         @Test
-        @DisplayName("Success: Create version with both tag and tags fields (backward compatibility)")
-        void createVersion__whenBothTagAndTags__thenAllTagsCreated() {
-            // Given
-            var datasetId = createDataset(UUID.randomUUID().toString());
-            createDatasetItems(datasetId, 3);
-
-            // When - Create version with both deprecated 'tag' and new 'tags' fields
-            var versionCreate = DatasetVersionCreate.builder()
-                    .tag("deprecated-tag")
-                    .tags(List.of("new-tag-1", "new-tag-2"))
-                    .changeDescription("Version with both tag fields")
-                    .build();
-
-            var version = datasetResourceClient.commitVersion(datasetId, versionCreate, API_KEY, TEST_WORKSPACE);
-
-            // Then - Verify all tags were created (from both fields + 'latest')
-            assertThat(version.tags())
-                    .containsAll(List.of("deprecated-tag", "new-tag-1", "new-tag-2", DatasetVersionService.LATEST_TAG));
-        }
-
-        @Test
         @DisplayName("Error: Duplicate tag in multiple tags list")
         void createVersion__whenDuplicateTagInList__thenReturnConflict() {
             // Given
@@ -340,7 +319,7 @@ class DatasetVersionResourceTest {
 
             // When - Create first version
             var versionCreate1 = DatasetVersionCreate.builder()
-                    .tag("v1")
+                    .tags(List.of("v1"))
                     .changeDescription("Version 1")
                     .build();
 
@@ -353,7 +332,7 @@ class DatasetVersionResourceTest {
 
             // When - Create second version with different content
             var versionCreate2 = DatasetVersionCreate.builder()
-                    .tag("v2")
+                    .tags(List.of("v2"))
                     .changeDescription("Version 2")
                     .build();
 
@@ -371,7 +350,7 @@ class DatasetVersionResourceTest {
             createDatasetItems(datasetId, 2);
 
             var versionCreate1 = DatasetVersionCreate.builder()
-                    .tag("v1.0")
+                    .tags(List.of("v1.0"))
                     .build();
 
             // Create first version with tag
@@ -382,7 +361,7 @@ class DatasetVersionResourceTest {
 
             // Try to create another version with same tag
             var versionCreate2 = DatasetVersionCreate.builder()
-                    .tag("v1.0") // Duplicate tag
+                    .tags(List.of("v1.0")) // Duplicate tag
                     .build();
 
             // When
@@ -406,7 +385,7 @@ class DatasetVersionResourceTest {
 
             // When - Create first version
             var versionCreate1 = DatasetVersionCreate.builder()
-                    .tag("v1")
+                    .tags(List.of("v1"))
                     .changeDescription("First version")
                     .build();
 
@@ -416,7 +395,7 @@ class DatasetVersionResourceTest {
 
             // When - Create second version
             var versionCreate2 = DatasetVersionCreate.builder()
-                    .tag("v2")
+                    .tags(List.of("v2"))
                     .changeDescription("Second version")
                     .build();
 
@@ -464,7 +443,7 @@ class DatasetVersionResourceTest {
                 createDatasetItems(datasetId, 1);
 
                 var versionCreate = DatasetVersionCreate.builder()
-                        .tag("v" + i)
+                        .tags(List.of("v" + i))
                         .changeDescription("Version " + i)
                         .build();
 
@@ -546,7 +525,7 @@ class DatasetVersionResourceTest {
             createDatasetItems(datasetId, 2);
 
             var versionCreate = DatasetVersionCreate.builder()
-                    .tag("v1.0")
+                    .tags(List.of("v1.0"))
                     .build();
 
             var version = datasetResourceClient.commitVersion(datasetId, versionCreate, API_KEY, TEST_WORKSPACE);
@@ -596,7 +575,7 @@ class DatasetVersionResourceTest {
             createDatasetItems(datasetId, 2);
 
             var versionCreate = DatasetVersionCreate.builder()
-                    .tag("staging")
+                    .tags(List.of("staging"))
                     .build();
 
             var version = datasetResourceClient.commitVersion(datasetId, versionCreate, API_KEY, TEST_WORKSPACE);
@@ -637,7 +616,7 @@ class DatasetVersionResourceTest {
 
             // Create a version (which automatically gets 'latest' tag)
             var versionCreate = DatasetVersionCreate.builder()
-                    .tag("v1")
+                    .tags(List.of("v1"))
                     .build();
 
             var version = datasetResourceClient.commitVersion(datasetId, versionCreate, API_KEY, TEST_WORKSPACE);
@@ -916,7 +895,7 @@ class DatasetVersionResourceTest {
 
             // When - Commit version
             var versionCreate = DatasetVersionCreate.builder()
-                    .tag("v1")
+                    .tags(List.of("v1"))
                     .changeDescription("Initial version with 3 items")
                     .build();
 
@@ -944,7 +923,7 @@ class DatasetVersionResourceTest {
             createDatasetItems(datasetId, 2);
 
             var versionCreate = DatasetVersionCreate.builder()
-                    .tag("baseline")
+                    .tags(List.of("baseline"))
                     .build();
 
             var version = datasetResourceClient.commitVersion(datasetId, versionCreate, API_KEY, TEST_WORKSPACE);
@@ -987,7 +966,7 @@ class DatasetVersionResourceTest {
             // Commit first version
             var version1 = datasetResourceClient.commitVersion(
                     datasetId,
-                    DatasetVersionCreate.builder().tag("v1").build(),
+                    DatasetVersionCreate.builder().tags(List.of("v1")).build(),
                     API_KEY,
                     TEST_WORKSPACE);
 
@@ -1014,7 +993,7 @@ class DatasetVersionResourceTest {
             // Commit second version
             var version2 = datasetResourceClient.commitVersion(
                     datasetId,
-                    DatasetVersionCreate.builder().tag("v2").build(),
+                    DatasetVersionCreate.builder().tags(List.of("v2")).build(),
                     API_KEY,
                     TEST_WORKSPACE);
 
@@ -1119,7 +1098,7 @@ class DatasetVersionResourceTest {
             // When - Commit version 1 (snapshot the current items)
             datasetResourceClient.commitVersion(
                     datasetId,
-                    DatasetVersionCreate.builder().tag("v1").build(),
+                    DatasetVersionCreate.builder().tags(List.of("v1")).build(),
                     API_KEY,
                     TEST_WORKSPACE);
 
@@ -1133,7 +1112,7 @@ class DatasetVersionResourceTest {
             // When - Commit version 2 (snapshot the same items without any changes)
             datasetResourceClient.commitVersion(
                     datasetId,
-                    DatasetVersionCreate.builder().tag("v2").build(),
+                    DatasetVersionCreate.builder().tags(List.of("v2")).build(),
                     API_KEY,
                     TEST_WORKSPACE);
 
@@ -1190,7 +1169,7 @@ class DatasetVersionResourceTest {
 
             // Commit first version
             var versionCreate1 = DatasetVersionCreate.builder()
-                    .tag("v1")
+                    .tags(List.of("v1"))
                     .build();
 
             datasetResourceClient.commitVersion(datasetId, versionCreate1, API_KEY, TEST_WORKSPACE);
@@ -1253,7 +1232,7 @@ class DatasetVersionResourceTest {
 
             // Commit version
             var versionCreate = DatasetVersionCreate.builder()
-                    .tag("v1")
+                    .tags(List.of("v1"))
                     .build();
 
             datasetResourceClient.commitVersion(datasetId, versionCreate, API_KEY, TEST_WORKSPACE);
@@ -1343,7 +1322,7 @@ class DatasetVersionResourceTest {
 
             // When - Commit version
             var versionCreate = DatasetVersionCreate.builder()
-                    .tag("v1")
+                    .tags(List.of("v1"))
                     .changeDescription("First version")
                     .build();
 
@@ -1367,7 +1346,7 @@ class DatasetVersionResourceTest {
             createDatasetItems(datasetId, 2);
 
             var versionCreate = DatasetVersionCreate.builder()
-                    .tag("v1")
+                    .tags(List.of("v1"))
                     .build();
 
             datasetResourceClient.commitVersion(datasetId, versionCreate, API_KEY, TEST_WORKSPACE);
@@ -1399,7 +1378,7 @@ class DatasetVersionResourceTest {
 
             datasetResourceClient.commitVersion(
                     datasetId,
-                    DatasetVersionCreate.builder().tag("v1").build(),
+                    DatasetVersionCreate.builder().tags(List.of("v1")).build(),
                     API_KEY,
                     TEST_WORKSPACE);
 
@@ -1434,7 +1413,7 @@ class DatasetVersionResourceTest {
 
             datasetResourceClient.commitVersion(
                     datasetId,
-                    DatasetVersionCreate.builder().tag("v1").build(),
+                    DatasetVersionCreate.builder().tags(List.of("v1")).build(),
                     API_KEY,
                     TEST_WORKSPACE);
 
@@ -1467,7 +1446,7 @@ class DatasetVersionResourceTest {
 
             datasetResourceClient.commitVersion(
                     datasetId,
-                    DatasetVersionCreate.builder().tag("v1").build(),
+                    DatasetVersionCreate.builder().tags(List.of("v1")).build(),
                     API_KEY,
                     TEST_WORKSPACE);
 
@@ -1498,7 +1477,7 @@ class DatasetVersionResourceTest {
 
             datasetResourceClient.commitVersion(
                     datasetId,
-                    DatasetVersionCreate.builder().tag("v1").build(),
+                    DatasetVersionCreate.builder().tags(List.of("v1")).build(),
                     API_KEY,
                     TEST_WORKSPACE);
 
@@ -1514,7 +1493,7 @@ class DatasetVersionResourceTest {
             // Commit new version
             datasetResourceClient.commitVersion(
                     datasetId,
-                    DatasetVersionCreate.builder().tag("v2").build(),
+                    DatasetVersionCreate.builder().tags(List.of("v2")).build(),
                     API_KEY,
                     TEST_WORKSPACE);
 
@@ -1547,7 +1526,7 @@ class DatasetVersionResourceTest {
             // Commit version 1
             var version1 = datasetResourceClient.commitVersion(
                     datasetId,
-                    DatasetVersionCreate.builder().tag("v1").build(),
+                    DatasetVersionCreate.builder().tags(List.of("v1")).build(),
                     API_KEY,
                     TEST_WORKSPACE);
 
@@ -1568,7 +1547,7 @@ class DatasetVersionResourceTest {
             // Commit version 2
             var version2 = datasetResourceClient.commitVersion(
                     datasetId,
-                    DatasetVersionCreate.builder().tag("v2").build(),
+                    DatasetVersionCreate.builder().tags(List.of("v2")).build(),
                     API_KEY,
                     TEST_WORKSPACE);
 
@@ -1622,7 +1601,7 @@ class DatasetVersionResourceTest {
             // Commit version
             var version1 = datasetResourceClient.commitVersion(
                     datasetId,
-                    DatasetVersionCreate.builder().tag("v1").build(),
+                    DatasetVersionCreate.builder().tags(List.of("v1")).build(),
                     API_KEY,
                     TEST_WORKSPACE);
 
@@ -1666,7 +1645,7 @@ class DatasetVersionResourceTest {
 
             var version1 = datasetResourceClient.commitVersion(
                     datasetId,
-                    DatasetVersionCreate.builder().tag("v1").build(),
+                    DatasetVersionCreate.builder().tags(List.of("v1")).build(),
                     API_KEY,
                     TEST_WORKSPACE);
 
@@ -1675,7 +1654,7 @@ class DatasetVersionResourceTest {
 
             var version2 = datasetResourceClient.commitVersion(
                     datasetId,
-                    DatasetVersionCreate.builder().tag("v2").build(),
+                    DatasetVersionCreate.builder().tags(List.of("v2")).build(),
                     API_KEY,
                     TEST_WORKSPACE);
 
@@ -1697,7 +1676,7 @@ class DatasetVersionResourceTest {
 
             var version1 = datasetResourceClient.commitVersion(
                     datasetId,
-                    DatasetVersionCreate.builder().tag("baseline").build(),
+                    DatasetVersionCreate.builder().tags(List.of("baseline")).build(),
                     API_KEY,
                     TEST_WORKSPACE);
 
@@ -1706,7 +1685,7 @@ class DatasetVersionResourceTest {
 
             var version2 = datasetResourceClient.commitVersion(
                     datasetId,
-                    DatasetVersionCreate.builder().tag("v2").build(),
+                    DatasetVersionCreate.builder().tags(List.of("v2")).build(),
                     API_KEY,
                     TEST_WORKSPACE);
 
@@ -1743,7 +1722,7 @@ class DatasetVersionResourceTest {
 
             var version1 = datasetResourceClient.commitVersion(
                     datasetId,
-                    DatasetVersionCreate.builder().tag("v1").build(),
+                    DatasetVersionCreate.builder().tags(List.of("v1")).build(),
                     API_KEY,
                     TEST_WORKSPACE);
 
@@ -1751,7 +1730,7 @@ class DatasetVersionResourceTest {
 
             var version2 = datasetResourceClient.commitVersion(
                     datasetId,
-                    DatasetVersionCreate.builder().tag("v2").build(),
+                    DatasetVersionCreate.builder().tags(List.of("v2")).build(),
                     API_KEY,
                     TEST_WORKSPACE);
 
@@ -1779,7 +1758,7 @@ class DatasetVersionResourceTest {
 
             var version1 = datasetResourceClient.commitVersion(
                     datasetId,
-                    DatasetVersionCreate.builder().tag("v1").build(),
+                    DatasetVersionCreate.builder().tags(List.of("v1")).build(),
                     API_KEY,
                     TEST_WORKSPACE);
 
@@ -1788,7 +1767,7 @@ class DatasetVersionResourceTest {
 
             var version2 = datasetResourceClient.commitVersion(
                     datasetId,
-                    DatasetVersionCreate.builder().tag("v2").build(),
+                    DatasetVersionCreate.builder().tags(List.of("v2")).build(),
                     API_KEY,
                     TEST_WORKSPACE);
 
