@@ -24,12 +24,12 @@ const VersionChangeSummaryCell: React.FC<
       ) : (
         <div className="flex items-center gap-2">
           {itemsAdded > 0 && (
-            <Tag variant="green" size="sm">
+            <Tag variant="green" size="md">
               + {itemsAdded}
             </Tag>
           )}
           {itemsDeleted > 0 && (
-            <Tag variant="red" size="sm">
+            <Tag variant="red" size="md">
               − {itemsDeleted}
             </Tag>
           )}

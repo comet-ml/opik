@@ -11,7 +11,12 @@ import { Button } from "@/components/ui/button";
 import CellWrapper from "@/components/shared/DataTableCells/CellWrapper";
 import ConfirmDialog from "@/components/shared/ConfirmDialog/ConfirmDialog";
 import { DatasetVersion } from "@/types/datasets";
+import useRestoreDatasetVersionMutation from "@/api/datasets/useRestoreDatasetVersionMutation";
 import EditVersionDialog from "./EditVersionDialog";
+
+type CustomMeta = {
+  datasetId: string;
+};
 
 const EDIT_KEY = 1;
 const RESTORE_KEY = 2;
@@ -22,6 +27,21 @@ const VersionRowActionsCell: React.FC<CellContext<DatasetVersion, unknown>> = (
   const resetKeyRef = useRef(0);
   const version = context.row.original;
   const [open, setOpen] = useState<boolean | number>(false);
+
+  const { custom } = context.column.columnDef.meta ?? {};
+  const { datasetId } = (custom ?? {}) as CustomMeta;
+
+  const restoreMutation = useRestoreDatasetVersionMutation();
+
+  const isLatestVersion = version.tags?.includes("latest");
+
+  const handleRestore = () => {
+    restoreMutation.mutate({
+      datasetId,
+      versionRef: version.version_hash,
+    });
+    setOpen(false);
+  };
 
   return (
     <CellWrapper
@@ -41,7 +61,7 @@ const VersionRowActionsCell: React.FC<CellContext<DatasetVersion, unknown>> = (
         key={`restore-${resetKeyRef.current}`}
         open={open === RESTORE_KEY}
         setOpen={setOpen}
-        onConfirm={() => {}}
+        onConfirm={handleRestore}
         title="Restore version"
         description={`Restoring this version will create a new version based on version ${version.version_hash}. All previous versions will stay in your history.`}
         confirmText="Restore version"
@@ -65,6 +85,7 @@ const VersionRowActionsCell: React.FC<CellContext<DatasetVersion, unknown>> = (
             Edit
           </DropdownMenuItem>
           <DropdownMenuItem
+            disabled={isLatestVersion}
             onClick={() => {
               setOpen(RESTORE_KEY);
               resetKeyRef.current = resetKeyRef.current + 1;

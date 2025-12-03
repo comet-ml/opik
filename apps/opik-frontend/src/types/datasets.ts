@@ -22,13 +22,14 @@ export interface Dataset {
   created_at: string;
   last_updated_at: string;
   status?: DATASET_STATUS;
+  latest_version?: DatasetVersion;
 }
 
 export interface DatasetVersion {
   id: string;
   dataset_id: string;
   version_hash: string;
-  items_count: number;
+  items_total: number;
   items_added: number;
   items_modified: number;
   items_deleted: number;

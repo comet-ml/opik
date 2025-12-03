@@ -35,6 +35,7 @@ const COLUMNS: ColumnData<DatasetVersion>[] = [
     id: "change_summary",
     label: "Changes summary",
     type: COLUMN_TYPE.string,
+    iconType: COLUMN_TYPE.list,
     cell: VersionChangeSummaryCell as never,
   },
   {
@@ -50,10 +51,10 @@ const COLUMNS: ColumnData<DatasetVersion>[] = [
     cell: ListCell as never,
   },
   {
-    id: "items_count",
+    id: "items_total",
     label: "Item count",
     type: COLUMN_TYPE.number,
-    accessorFn: (row) => row.items_count.toLocaleString(),
+    accessorFn: (row) => row.items_total.toLocaleString(),
   },
   {
     id: "created_at",
@@ -88,9 +89,10 @@ const VersionHistoryTab: React.FC<VersionHistoryTabProps> = ({ datasetId }) => {
       ...baseColumns,
       generateActionsColumDef<DatasetVersion>({
         cell: VersionRowActionsCell,
+        customMeta: { datasetId },
       }),
     ];
-  }, []);
+  }, [datasetId]);
 
   const data = versionsData?.content || [];
   const total = versionsData?.total ?? 0;

@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { useToast } from "@/components/ui/use-toast";
 import RemovableTag from "@/components/shared/RemovableTag/RemovableTag";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
+import { cn } from "@/lib/utils";
 
 export type TagListRendererProps = {
   tags: string[];
@@ -17,6 +18,7 @@ export type TagListRendererProps = {
   onDeleteTag: (tag: string) => void;
   align?: "start" | "end";
   size?: "md" | "sm";
+  className?: string;
 };
 
 const TagListRenderer: React.FC<TagListRendererProps> = ({
@@ -25,6 +27,7 @@ const TagListRenderer: React.FC<TagListRendererProps> = ({
   onDeleteTag,
   align = "end",
   size = "md",
+  className,
 }) => {
   const { toast } = useToast();
   const [open, setOpen] = useState(false);
@@ -51,7 +54,12 @@ const TagListRenderer: React.FC<TagListRendererProps> = ({
   };
 
   return (
-    <div className="flex min-h-7 w-full flex-wrap items-center gap-2 overflow-x-hidden">
+    <div
+      className={cn(
+        "flex min-h-7 w-full flex-wrap items-center gap-2 overflow-x-hidden",
+        className,
+      )}
+    >
       <TooltipWrapper content="Tags list">
         <Tag className={`${tagMarginClass} ${tagSizeClass} text-muted-slate`} />
       </TooltipWrapper>
