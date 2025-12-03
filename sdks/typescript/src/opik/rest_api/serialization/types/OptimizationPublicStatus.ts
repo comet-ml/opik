@@ -9,8 +9,8 @@ import * as core from "../../core";
 export const OptimizationPublicStatus: core.serialization.Schema<
     serializers.OptimizationPublicStatus.Raw,
     OpikApi.OptimizationPublicStatus
-> = core.serialization.enum_(["running", "completed", "cancelled"]);
+> = core.serialization.enum_(["running", "completed", "cancelled", "initialized", "error"]);
 
 export declare namespace OptimizationPublicStatus {
-    export type Raw = "running" | "completed" | "cancelled";
+    export type Raw = "running" | "completed" | "cancelled" | "initialized" | "error";
 }

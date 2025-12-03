@@ -47,20 +47,21 @@ public final class AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython
             @NotBlank String name, float samplingRate, boolean enabled, List<TraceThreadFilter> filters,
             @NotNull TraceThreadUserDefinedMetricPythonCode code,
             Instant createdAt, String createdBy, Instant lastUpdatedAt, String lastUpdatedBy) {
-        super(id, projectId, projectName, name, samplingRate, enabled, code, createdAt, createdBy, lastUpdatedAt,
-                lastUpdatedBy, filters);
+        super(id, projectId, projectName, name, samplingRate, enabled, filters, code, createdAt, createdBy,
+                lastUpdatedAt,
+                lastUpdatedBy);
+    }
+
+    @JsonView({View.Public.class, View.Write.class})
+    @Override
+    public List<TraceThreadFilter> getFilters() {
+        return super.getFilters();
     }
 
     @JsonView({View.Public.class, View.Write.class})
     @Override
     public TraceThreadUserDefinedMetricPythonCode getCode() {
         return super.getCode();
-    }
-
-    @JsonView({View.Public.class, View.Write.class})
-    @Override
-    public List<TraceThreadFilter> getFilters() {
-        return super.filters;
     }
 
     @Override

@@ -5,6 +5,7 @@ import TracesOrSpansPathsAutocomplete, {
 } from "@/components/pages-shared/traces/TracesOrSpansPathsAutocomplete/TracesOrSpansPathsAutocomplete";
 import { Tag } from "@/components/ui/tag";
 import { FormErrorSkeleton } from "@/components/ui/form";
+import { TRACE_DATA_TYPE } from "@/hooks/useTracesOrSpansList";
 
 const ROOT_KEYS: TRACE_AUTOCOMPLETE_ROOT_KEY[] = [
   "input",
@@ -19,6 +20,7 @@ interface LLMPromptMessagesVariableProps {
   projectId: string;
   projectName?: string;
   datasetColumnNames?: string[];
+  type?: TRACE_DATA_TYPE;
 }
 
 const LLMPromptMessagesVariable = ({
@@ -28,6 +30,7 @@ const LLMPromptMessagesVariable = ({
   projectId,
   projectName,
   datasetColumnNames,
+  type = TRACE_DATA_TYPE.traces,
 }: LLMPromptMessagesVariableProps) => {
   return (
     <div className="relative flex justify-between">
@@ -48,6 +51,7 @@ const LLMPromptMessagesVariable = ({
             }
             projectName={projectName}
             datasetColumnNames={datasetColumnNames}
+            type={type}
           />
           {errorText && (
             <FormErrorSkeleton className="mt-2">{errorText}</FormErrorSkeleton>

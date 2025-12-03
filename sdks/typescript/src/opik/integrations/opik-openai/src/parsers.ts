@@ -164,6 +164,10 @@ export const parseCompletionOutput = (
       : (extracted as Record<string, unknown>);
   }
 
+  if (isEmbeddingDataFormat(res)) {
+    return extractEmbeddingOutput(res);
+  }
+
   return undefined;
 };
 
@@ -233,6 +237,64 @@ const extractFromChoices = (res: {
     : "";
 };
 
+interface EmbeddingObject {
+  embedding: number[];
+  index: number;
+  object?: string;
+}
+
+interface EmbeddingResponse {
+  data: EmbeddingObject[];
+  model?: string;
+  object?: string;
+}
+
+const isEmbeddingDataFormat = (res: unknown): res is EmbeddingResponse => {
+  if (
+    !res ||
+    typeof res !== "object" ||
+    !("data" in res) ||
+    !Array.isArray((res as { data: unknown }).data)
+  ) {
+    return false;
+  }
+
+  const data = (res as { data: unknown[] }).data;
+  if (data.length === 0) {
+    return false;
+  }
+
+  const firstItem = data[0];
+  return (
+    typeof firstItem === "object" &&
+    firstItem !== null &&
+    "embedding" in firstItem &&
+    Array.isArray((firstItem as { embedding: unknown }).embedding)
+  );
+};
+
+const EMBEDDING_TRUNCATE_LENGTH = 5;
+
+const extractEmbeddingOutput = (
+  res: EmbeddingResponse
+): Record<string, unknown> => {
+  const embeddings = res.data.map((item) => {
+    const embedding = item.embedding;
+    const truncated =
+      embedding.length > EMBEDDING_TRUNCATE_LENGTH
+        ? [...embedding.slice(0, EMBEDDING_TRUNCATE_LENGTH), "..."]
+        : embedding;
+
+    return {
+      embedding: truncated,
+      index: item.index,
+      dimensions: embedding.length,
+    };
+  });
+
+  return { embeddings };
+};
+
 export const parseUsage = (
   res: unknown
 ): Record<string, number> | undefined => {
@@ -249,6 +311,15 @@ export const parseUsage = (
     return {
       completion_tokens: res.usage.input_tokens,
       prompt_tokens: res.usage.output_tokens,
+      total_tokens: res.usage.total_tokens,
+      ...flattenObject(res.usage, "original_usage"),
+    };
+  }
+
+  if (hasEmbeddingUsage(res)) {
+    return {
+      completion_tokens: 0,
+      prompt_tokens: res.usage.prompt_tokens,
       total_tokens: res.usage.total_tokens,
       ...flattenObject(res.usage, "original_usage"),
     };
@@ -298,6 +369,34 @@ const hasResponseUsage = (
     typeof usage.total_tokens === "number" &&
     typeof usage.input_tokens === "number" &&
     typeof usage.output_tokens === "number"
+  );
+};
+
+interface EmbeddingUsage {
+  prompt_tokens: number;
+  total_tokens: number;
+}
+
+const hasEmbeddingUsage = (
+  obj: unknown
+): obj is CompletionUsageObject<EmbeddingUsage> => {
+  if (
+    !obj ||
+    typeof obj !== "object" ||
+    !("usage" in obj) ||
+    !obj.usage ||
+    typeof obj.usage !== "object"
+  ) {
+    return false;
+  }
+
+  const usage = obj.usage as Record<string, unknown>;
+
+  // Embedding usage has prompt_tokens and total_tokens, but NO completion_tokens
+  return (
+    typeof usage.prompt_tokens === "number" &&
+    typeof usage.total_tokens === "number" &&
+    !("completion_tokens" in usage)
   );
 };
 

@@ -54,7 +54,7 @@ def _create_metric_class(metric: Callable) -> base_metric.BaseMetric:
 
     if not needs_task_span:
 
-        class MetricClass(base_metric.BaseMetric):
+        class _MetricClassWithoutSpan(base_metric.BaseMetric):
             def __init__(self) -> None:
                 super().__init__(name=metric_name, track=True)
 
@@ -68,9 +68,11 @@ def _create_metric_class(metric: Callable) -> base_metric.BaseMetric:
                     return score_result.ScoreResult(
                         name=self.name, value=0, scoring_failed=True
                     )
+
+        return _MetricClassWithoutSpan()
     else:
 
-        class MetricClass(base_metric.BaseMetric):
+        class _MetricClassWithSpan(base_metric.BaseMetric):
             def __init__(self) -> None:
                 super().__init__(name=metric_name, track=True)
 
@@ -87,7 +89,7 @@ def _create_metric_class(metric: Callable) -> base_metric.BaseMetric:
                         name=self.name, value=0, scoring_failed=True
                     )
 
-    return MetricClass()
+        return _MetricClassWithSpan()
 
 
 def evaluate(

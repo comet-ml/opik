@@ -135,7 +135,11 @@ export const LoadableSelectBox = ({
 
   const renderTitle = () => {
     if (!selectedOptions.length) {
-      return <div className="truncate text-light-slate">{placeholder}</div>;
+      return (
+        <div className="truncate font-normal text-light-slate">
+          {placeholder}
+        </div>
+      );
     }
 
     if (isFunction(parentRenderTitle)) {
@@ -233,7 +237,7 @@ export const LoadableSelectBox = ({
 
   const buttonElement = (
     <Button
-      className={cn("group justify-between", buttonClassName, {
+      className={cn("group justify-between px-3", buttonClassName, {
         "disabled:cursor-not-allowed disabled:border-input disabled:bg-muted-disabled disabled:text-muted-gray disabled:placeholder:text-muted-gray hover:disabled:shadow-none":
           disabled,
       })}

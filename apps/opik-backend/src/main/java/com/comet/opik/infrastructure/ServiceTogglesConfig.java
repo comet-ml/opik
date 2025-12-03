@@ -25,4 +25,8 @@ public class ServiceTogglesConfig {
     @NotNull boolean csvUploadEnabled;
     @JsonProperty
     @NotNull boolean exportEnabled;
+    @JsonProperty
+    @NotNull boolean dashboardsEnabled;
+    @JsonProperty
+    @NotNull boolean datasetVersioningEnabled;
 }
