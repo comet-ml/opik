@@ -1,5 +1,5 @@
 --liquibase formatted sql
---changeset danield:000038_add_automation_rule_projects_table
+--changeset JetoPistola:000038_add_automation_rule_projects_table
 --comment: Add automation_rule_projects junction table to support multiple projects per automation rule
 
 -- Create junction table for many-to-many relationship between automation rules and projects

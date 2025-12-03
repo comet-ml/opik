@@ -458,7 +458,7 @@ class OnlineScoringEngineTest {
         return Trace.builder()
                 .id(traceId)
                 .projectName(PROJECT_NAME)
-                .projectIds(Set.of(projectId))
+                .projectId(projectId)
                 .createdBy(USER_NAME)
                 .input(JsonUtils.getJsonNodeFromString(INPUT))
                 .output(JsonUtils.getJsonNodeFromString(OUTPUT)).build();
@@ -711,7 +711,7 @@ class OnlineScoringEngineTest {
         var trace = Trace.builder()
                 .id(UUID.randomUUID())
                 .projectName(PROJECT_NAME)
-                .projectIds(Set.of(UUID.randomUUID()))
+                .projectId(UUID.randomUUID())
                 .createdBy(USER_NAME)
                 .input(JsonUtils.getJsonNodeFromString(jsonBody))
                 .build();
@@ -1421,7 +1421,7 @@ class OnlineScoringEngineTest {
         return com.comet.opik.api.Span.builder()
                 .id(spanId)
                 .projectName(PROJECT_NAME)
-                .projectIds(Set.of(projectId))
+                .projectId(projectId)
                 .createdBy(USER_NAME)
                 .traceId(generator.generate())
                 .input(JsonUtils.getJsonNodeFromString(INPUT))
