@@ -97,6 +97,7 @@ export const OptimizationStudioProvider: React.FC<
         studio_config: studioConfig,
         dataset_name: formData.datasetName,
         objective_name: studioConfig.evaluation.metrics[0].type,
+        status: OPTIMIZATION_STATUS.INITIALIZED,
       };
 
       const result = await createOptimizationMutation.mutateAsync({
