@@ -1,6 +1,5 @@
 """API routes for the eval app."""
 
-import dataclasses
 import logging
 from typing import Optional
 
@@ -31,7 +30,7 @@ def _get_service() -> eval_service_module.EvalService:
 
 
 @evaluation_router.get("/metrics", response_model=schemas.MetricsListResponse)
-async def list_metrics() -> schemas.MetricsListResponse:
+def list_metrics() -> schemas.MetricsListResponse:
     """List all available metrics with their parameters."""
     service = _get_service()
     metrics_list = service.list_metrics()
@@ -71,7 +70,7 @@ async def list_metrics() -> schemas.MetricsListResponse:
     response_model=schemas.EvaluationAcceptedResponse,
     status_code=fastapi.status.HTTP_202_ACCEPTED,
 )
-async def evaluate_trace(
+def evaluate_trace(
     trace_id: str,
     request: schemas.EvaluationRequest,
 ) -> schemas.EvaluationAcceptedResponse:
@@ -81,7 +80,7 @@ async def evaluate_trace(
 
 
 @healthcheck_router.get("/healthcheck")
-async def healthcheck() -> responses.JSONResponse:
+def healthcheck() -> responses.JSONResponse:
     """Health check endpoint."""
     return responses.JSONResponse(content={"status": "ok"})
 
@@ -90,7 +89,7 @@ def register_exception_handlers(app: fastapi.FastAPI) -> None:
     """Register exception handlers for the app."""
 
     @app.exception_handler(exceptions.UnknownMetricError)
-    async def unknown_metric_handler(
+    def unknown_metric_handler(
         request: fastapi.Request, exc: exceptions.UnknownMetricError
     ) -> responses.JSONResponse:
         return responses.JSONResponse(
@@ -99,7 +98,7 @@ def register_exception_handlers(app: fastapi.FastAPI) -> None:
         )
 
     @app.exception_handler(exceptions.TraceNotFoundError)
-    async def trace_not_found_handler(
+    def trace_not_found_handler(
         request: fastapi.Request, exc: exceptions.TraceNotFoundError
     ) -> responses.JSONResponse:
         return responses.JSONResponse(
@@ -108,7 +107,7 @@ def register_exception_handlers(app: fastapi.FastAPI) -> None:
         )
 
     @app.exception_handler(exceptions.MetricInstantiationError)
-    async def metric_instantiation_handler(
+    def metric_instantiation_handler(
         request: fastapi.Request, exc: exceptions.MetricInstantiationError
     ) -> responses.JSONResponse:
         return responses.JSONResponse(
@@ -121,7 +120,7 @@ def register_exception_handlers(app: fastapi.FastAPI) -> None:
         )
 
     @app.exception_handler(exceptions.InvalidFieldMappingError)
-    async def invalid_field_mapping_handler(
+    def invalid_field_mapping_handler(
         request: fastapi.Request, exc: exceptions.InvalidFieldMappingError
     ) -> responses.JSONResponse:
         return responses.JSONResponse(
@@ -130,7 +129,7 @@ def register_exception_handlers(app: fastapi.FastAPI) -> None:
         )
 
     @app.exception_handler(exceptions.EvaluationError)
-    async def evaluation_error_handler(
+    def evaluation_error_handler(
         request: fastapi.Request, exc: exceptions.EvaluationError
     ) -> responses.JSONResponse:
         return responses.JSONResponse(
@@ -143,7 +142,7 @@ def register_exception_handlers(app: fastapi.FastAPI) -> None:
         )
 
     @app.exception_handler(pydantic.ValidationError)
-    async def validation_error_handler(
+    def validation_error_handler(
         request: fastapi.Request, exc: pydantic.ValidationError
     ) -> responses.JSONResponse:
         return responses.JSONResponse(
