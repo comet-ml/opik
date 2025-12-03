@@ -14,6 +14,7 @@ import { cn } from "@/lib/utils";
 
 export type TagListRendererProps = {
   tags: string[];
+  immutableTags?: string[];
   onAddTag: (tag: string) => void;
   onDeleteTag: (tag: string) => void;
   align?: "start" | "end";
@@ -23,6 +24,7 @@ export type TagListRendererProps = {
 
 const TagListRenderer: React.FC<TagListRendererProps> = ({
   tags = [],
+  immutableTags = [],
   onAddTag,
   onDeleteTag,
   align = "end",
@@ -36,10 +38,13 @@ const TagListRenderer: React.FC<TagListRendererProps> = ({
   const tagSizeClass = size === "sm" ? "w-3" : "w-4";
   const tagMarginClass = size === "sm" ? "mx-0" : "mx-1";
 
+  const isImmutableTag = (tag: string): boolean =>
+    immutableTags.some((t) => t.toLowerCase() === tag.toLowerCase());
+
   const handleAddTag = () => {
     if (!newTag) return;
 
-    if (tags.includes(newTag)) {
+    if (tags.includes(newTag) || isImmutableTag(newTag)) {
       toast({
         title: "Error",
         description: `The tag "${newTag}" already exists`,
@@ -63,16 +68,17 @@ const TagListRenderer: React.FC<TagListRendererProps> = ({
       <TooltipWrapper content="Tags list">
         <Tag className={`${tagMarginClass} ${tagSizeClass} text-muted-slate`} />
       </TooltipWrapper>
-      {[...tags].sort().map((tag) => {
-        return (
-          <RemovableTag
-            label={tag}
-            key={tag}
-            size="md"
-            onDelete={() => onDeleteTag(tag)}
-          />
-        );
-      })}
+      {[...immutableTags].sort().map((tag) => (
+        <RemovableTag label={tag} key={`immutable-${tag}`} size="md" />
+      ))}
+      {[...tags].sort().map((tag) => (
+        <RemovableTag
+          label={tag}
+          key={tag}
+          size="md"
+          onDelete={() => onDeleteTag(tag)}
+        />
+      ))}
       <Popover onOpenChange={setOpen} open={open}>
         <PopoverTrigger asChild>
           <Button

@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import CellWrapper from "@/components/shared/DataTableCells/CellWrapper";
 import ConfirmDialog from "@/components/shared/ConfirmDialog/ConfirmDialog";
 import { DatasetVersion } from "@/types/datasets";
+import { isLatestVersionTag } from "@/constants/datasets";
 import useRestoreDatasetVersionMutation from "@/api/datasets/useRestoreDatasetVersionMutation";
 import EditVersionDialog from "./EditVersionDialog";
 
@@ -33,7 +34,7 @@ const VersionRowActionsCell: React.FC<CellContext<DatasetVersion, unknown>> = (
 
   const restoreMutation = useRestoreDatasetVersionMutation();
 
-  const isLatestVersion = version.tags?.includes("latest");
+  const isLatestVersion = version.tags?.some(isLatestVersionTag) ?? false;
 
   const handleRestore = () => {
     restoreMutation.mutate({

@@ -1,7 +1,4 @@
-import React from "react";
-import { useForm, Controller } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { z } from "zod";
+import React, { useMemo } from "react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -11,23 +8,15 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import {
-  Form,
-  FormControl,
-  FormField,
-  FormItem,
-  FormLabel,
-} from "@/components/ui/form";
-import { Textarea } from "@/components/ui/textarea";
-import TagListRenderer from "@/components/shared/TagListRenderer/TagListRenderer";
 import { DatasetVersion } from "@/types/datasets";
+import {
+  LATEST_VERSION_TAG,
+  isLatestVersionTag,
+  filterOutLatestTag,
+} from "@/constants/datasets";
+import VersionForm, { VersionFormData } from "./VersionForm";
 
-const editVersionSchema = z.object({
-  versionNote: z.string().optional(),
-  tags: z.array(z.string()),
-});
-
-type EditVersionFormData = z.infer<typeof editVersionSchema>;
+const EDIT_VERSION_FORM_ID = "edit-version-form";
 
 type EditVersionDialogProps = {
   open: boolean;
@@ -35,20 +24,22 @@ type EditVersionDialogProps = {
   version: DatasetVersion;
 };
 
-const EditVersionDialog: React.FunctionComponent<EditVersionDialogProps> = ({
+const EditVersionDialog: React.FC<EditVersionDialogProps> = ({
   open,
   setOpen,
   version,
 }) => {
-  const form = useForm<EditVersionFormData>({
-    resolver: zodResolver(editVersionSchema),
-    defaultValues: {
-      versionNote: version.change_description || "",
-      tags: version.tags || [],
-    },
-  });
+  const isLatestVersion = version.tags?.some(isLatestVersionTag) ?? false;
 
-  const onSubmit = (data: EditVersionFormData) => {
+  const initialValues = useMemo(
+    () => ({
+      versionNote: version.change_description || "",
+      tags: filterOutLatestTag(version.tags || []),
+    }),
+    [version.change_description, version.tags],
+  );
+
+  const handleSubmit = (data: VersionFormData) => {
     console.log("Edit version form data:", {
       versionId: version.id,
       versionHash: version.version_hash,
@@ -58,15 +49,11 @@ const EditVersionDialog: React.FunctionComponent<EditVersionDialogProps> = ({
   };
 
   const handleCancel = () => {
-    form.reset();
     setOpen(false);
   };
 
   const handleOpenChange = (newOpen: boolean) => {
     setOpen(newOpen);
-    if (!newOpen) {
-      form.reset();
-    }
   };
 
   return (
@@ -76,63 +63,26 @@ const EditVersionDialog: React.FunctionComponent<EditVersionDialogProps> = ({
           <DialogTitle>Edit version</DialogTitle>
         </DialogHeader>
 
-        <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-            <p className="text-sm text-muted-foreground">
-              Edit the version note and tags to keep your dataset versions
-              organized.
-            </p>
+        <p className="text-sm text-muted-foreground">
+          Edit the version note and tags to keep your dataset versions
+          organized.
+        </p>
 
-            <FormField
-              control={form.control}
-              name="versionNote"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Version note (optional)</FormLabel>
-                  <FormControl>
-                    <Textarea
-                      {...field}
-                      placeholder="Refined tags and category mappings."
-                      className="min-h-32 resize-none"
-                    />
-                  </FormControl>
-                </FormItem>
-              )}
-            />
+        <VersionForm
+          id={EDIT_VERSION_FORM_ID}
+          initialValues={initialValues}
+          onSubmit={handleSubmit}
+          immutableTags={isLatestVersion ? [LATEST_VERSION_TAG] : []}
+        />
 
-            <Controller
-              control={form.control}
-              name="tags"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Tags</FormLabel>
-                  <FormControl>
-                    <TagListRenderer
-                      tags={field.value}
-                      onAddTag={(newTag) =>
-                        form.setValue("tags", [...field.value, newTag])
-                      }
-                      onDeleteTag={(tagToDelete) =>
-                        form.setValue(
-                          "tags",
-                          field.value.filter((tag) => tag !== tagToDelete),
-                        )
-                      }
-                      align="start"
-                    />
-                  </FormControl>
-                </FormItem>
-              )}
-            />
-
-            <DialogFooter className="gap-3 border-t pt-6 md:gap-0">
-              <Button type="button" variant="outline" onClick={handleCancel}>
-                Cancel
-              </Button>
-              <Button type="submit">Update version</Button>
-            </DialogFooter>
-          </form>
-        </Form>
+        <DialogFooter className="gap-3 border-t pt-6 md:gap-0">
+          <Button type="button" variant="outline" onClick={handleCancel}>
+            Cancel
+          </Button>
+          <Button type="submit" form={EDIT_VERSION_FORM_ID}>
+            Update version
+          </Button>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );
