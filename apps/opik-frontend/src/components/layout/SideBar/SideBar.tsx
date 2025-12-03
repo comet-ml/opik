@@ -48,6 +48,7 @@ import { FeatureToggleKeys } from "@/types/feature-toggles";
 import { ACTIVE_OPTIMIZATION_FILTER } from "@/lib/optimizations";
 
 const HOME_PATH = "/$workspaceName/home";
+const RUNNING_OPTIMIZATION_REFETCH_INTERVAL = 5000;
 
 const CONFIGURATION_ITEM: MenuItem = {
   id: "configuration",
@@ -286,12 +287,16 @@ const SideBar: React.FunctionComponent<SideBarProps> = ({
       workspaceName,
       page: 1,
       size: 1,
-      studioOnly: true,
       filters: ACTIVE_OPTIMIZATION_FILTER,
     },
     {
       placeholderData: keepPreviousData,
-      enabled: expanded,
+      enabled: !!workspaceName,
+      refetchInterval: (query) => {
+        // refetch every 5 seconds if there are running optimizations
+        const data = query.state.data;
+        return data?.total && data.total > 0 ? RUNNING_OPTIMIZATION_REFETCH_INTERVAL : false;
+      },
     },
   );
 

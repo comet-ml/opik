@@ -11,6 +11,7 @@ import {
   getDefaultOptimizerConfig,
   getDefaultMetricConfig,
 } from "@/lib/optimizations";
+import { PROVIDER_MODEL_TYPE } from "@/types/providers";
 
 export const GepaOptimizerParamsSchema = z.object({
   model: z.string().optional(),
@@ -99,8 +100,7 @@ export const OptimizationConfigSchema = z.object({
   messages: z
     .array(z.custom<LLMMessage>())
     .min(1, "At least one message is required"),
-  modelProvider: z.string().min(1, "Model provider is required"),
-  modelName: z.string().min(1, "Model name is required"),
+  modelName: z.nativeEnum(PROVIDER_MODEL_TYPE),
   modelConfig: z.record(z.unknown()).default({ temperature: 1.0 }),
 });
 
@@ -115,7 +115,6 @@ export const convertOptimizationStudioToFormData = (
     | Record<string, unknown>
     | undefined;
 
-    
   const messages: LLMMessage[] =
     optimization?.studio_config?.prompt?.messages?.map((m) => ({
       id: crypto.randomUUID(),
@@ -126,7 +125,7 @@ export const convertOptimizationStudioToFormData = (
       generateDefaultLLMPromptMessage({ role: LLM_MESSAGE_ROLE.user }),
     ];
 
-    console.log(optimization, 'OPTIMIZATION_LOL')
+  console.log(optimization, "OPTIMIZATION_LOL");
 
   const optimizerType =
     (optimization?.studio_config?.optimizer.type as OPTIMIZER_TYPE) ||
@@ -147,9 +146,10 @@ export const convertOptimizationStudioToFormData = (
       optimization?.studio_config?.evaluation?.metrics?.[0]?.parameters ||
       getDefaultMetricConfig(metricType),
     messages,
-    // ALEX
-    modelProvider: optimization?.studio_config?.llm_model?.provider || "openai",
-    modelName: optimization?.studio_config?.llm_model?.name || "gpt-4o-mini",
+    // Expand it later
+    modelName:
+      optimization?.studio_config?.llm_model?.model ||
+      PROVIDER_MODEL_TYPE.GPT_4O_MINI,
     modelConfig: existingConfig || { temperature: 1.0 },
   };
 };
@@ -159,7 +159,8 @@ export const convertFormDataToStudioConfig = (
 ): OptimizationStudioConfig => {
   const messages = formData.messages.map((m) => ({
     role: m.role,
-    content: typeof m.content === "string" ? m.content : JSON.stringify(m.content),
+    content:
+      typeof m.content === "string" ? m.content : JSON.stringify(m.content),
   }));
 
   return {
@@ -168,9 +169,7 @@ export const convertFormDataToStudioConfig = (
       messages,
     },
     llm_model: {
-      // ALEX TODO
-      provider: "openai",
-      name: "gpt-4o-mini",
+      model: formData.modelName,
       parameters: formData.modelConfig,
     },
     evaluation: {

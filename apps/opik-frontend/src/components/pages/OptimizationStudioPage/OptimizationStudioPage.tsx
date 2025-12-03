@@ -15,7 +15,6 @@ import Loader from "@/components/shared/Loader/Loader";
 import { ACTIVE_OPTIMIZATION_FILTER } from "@/lib/optimizations";
 import { DEMO_TEMPLATES } from "@/constants/optimizations";
 
-// TODO lala breadcrumbs is not working as expected
 const OptimizationStudioPage = () => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
 
@@ -23,7 +22,6 @@ const OptimizationStudioPage = () => {
     workspaceName,
     page: 1,
     size: 1,
-    studioOnly: true,
     filters: ACTIVE_OPTIMIZATION_FILTER,
   });
 

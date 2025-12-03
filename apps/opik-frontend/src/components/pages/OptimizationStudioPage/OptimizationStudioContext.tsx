@@ -76,10 +76,12 @@ export const OptimizationStudioProvider: React.FC<
     defaultValues,
   });
 
-  // Reset form when activeOptimization or templateData changes
+  // reset form when activeOptimization or templateData changes
   useEffect(() => {
     form.reset(
-      convertOptimizationStudioToFormData(activeOptimization || templateData || null),
+      convertOptimizationStudioToFormData(
+        activeOptimization || templateData || null,
+      ),
     );
   }, [activeOptimization, templateData, form.reset]);
 
@@ -91,23 +93,13 @@ export const OptimizationStudioProvider: React.FC<
     try {
       const studioConfig = convertFormDataToStudioConfig(formData);
 
-      // ALEX
       const optimizationPayload = {
+        studio_config: studioConfig,
         dataset_name: formData.datasetName,
         objective_name: studioConfig.evaluation.metrics[0].type,
-        status: OPTIMIZATION_STATUS.RUNNING,
-        studio_config: {
-          ...studioConfig,
-          llm_model: {
-            model: studioConfig.llm_model.name,
-            parameters: studioConfig.llm_model.parameters,
-          },
-        },
       };
 
       const result = await createOptimizationMutation.mutateAsync({
-        // ALEX
-        // @ts-ignore
         optimization: optimizationPayload,
       });
 

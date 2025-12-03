@@ -1,4 +1,5 @@
 import { AggregatedFeedbackScore } from "@/types/shared";
+import { PROVIDER_MODEL_TYPE } from "./providers";
 
 export enum OPTIMIZATION_STATUS {
   RUNNING = "running",
@@ -18,8 +19,7 @@ export interface StudioPrompt {
 }
 
 export interface StudioLlmModel {
-  provider: string;
-  name: string;
+  model: PROVIDER_MODEL_TYPE;
   parameters?: Record<string, unknown>;
 }
 

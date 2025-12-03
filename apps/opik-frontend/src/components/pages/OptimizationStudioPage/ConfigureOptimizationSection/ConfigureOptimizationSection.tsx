@@ -113,7 +113,8 @@ const ConfigureOptimizationSection: React.FC = () => {
       if (!modelValue) {
         return "";
       }
-      // ALEX
+
+      // ToDo: expand it later
       const result = "openai";
 
       return result;
