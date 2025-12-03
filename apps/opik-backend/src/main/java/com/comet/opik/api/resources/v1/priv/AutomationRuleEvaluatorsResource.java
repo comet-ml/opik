@@ -47,6 +47,7 @@ import lombok.extern.slf4j.Slf4j;
 
 import java.net.URI;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 import static com.comet.opik.api.LogItem.LogPage;
@@ -120,7 +121,8 @@ public class AutomationRuleEvaluatorsResource {
         String workspaceId = requestContext.get().getWorkspaceId();
 
         log.info("Looking for automated evaluator: id '{}' on project_id '{}'", projectId, workspaceId);
-        AutomationRuleEvaluator<?, ?> evaluator = service.findById(evaluatorId, projectId, workspaceId);
+        AutomationRuleEvaluator<?, ?> evaluator = service.findById(evaluatorId,
+                projectId != null ? Set.of(projectId) : null, workspaceId);
         log.info("Found automated evaluator: id '{}' on project_id '{}'", projectId, workspaceId);
 
         return Response.ok().entity(evaluator).build();
@@ -189,7 +191,7 @@ public class AutomationRuleEvaluatorsResource {
         log.info("Deleting automation rule evaluators by ids, count '{}', on workspace_id '{}'",
                 batchDelete.ids().size(),
                 workspaceId);
-        service.delete(batchDelete.ids(), projectId, workspaceId);
+        service.delete(batchDelete.ids(), projectId != null ? Set.of(projectId) : null, workspaceId);
         log.info("Deleted automation rule evaluators by ids, count '{}', on workspace_id '{}'",
                 batchDelete.ids().size(),
                 workspaceId);

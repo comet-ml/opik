@@ -290,10 +290,11 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
             var singleIdSet = Collections.singleton(id);
             var criteria = AutomationRuleEvaluatorCriteria.builder().ids(singleIdSet).build();
             List<UUID> projectIdsList = projectIds != null ? new java.util.ArrayList<>(projectIds) : null;
-            return dao.find(workspaceId, projectIdsList, criteria)
-                    .stream()
+            List<AutomationRuleEvaluatorModel<?>> models = dao.find(workspaceId, projectIdsList, criteria, null, null,
+                    Map.of(), null, null);
+            return models.stream()
                     .findFirst()
-                    .map(ruleEvaluator -> switch (ruleEvaluator) {
+                    .map(ruleEvaluator -> (AutomationRuleEvaluator<?, ?>) switch (ruleEvaluator) {
                         case LlmAsJudgeAutomationRuleEvaluatorModel llmAsJudge ->
                             AutomationModelEvaluatorMapper.INSTANCE.map(llmAsJudge);
                         case UserDefinedMetricPythonAutomationRuleEvaluatorModel userDefinedMetricPython ->
@@ -321,9 +322,10 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
             var dao = handle.attach(AutomationRuleEvaluatorDAO.class);
             var criteria = AutomationRuleEvaluatorCriteria.builder().ids(ids).build();
             List<UUID> projectIdsList = projectIds != null ? new java.util.ArrayList<>(projectIds) : null;
-            return dao.find(workspaceId, projectIdsList, criteria)
-                    .stream()
-                    .map(ruleEvaluator -> switch (ruleEvaluator) {
+            List<AutomationRuleEvaluatorModel<?>> models = dao.find(workspaceId, projectIdsList, criteria, null, null,
+                    Map.of(), null, null);
+            return models.stream()
+                    .map(ruleEvaluator -> (AutomationRuleEvaluator<?, ?>) switch (ruleEvaluator) {
                         case LlmAsJudgeAutomationRuleEvaluatorModel llmAsJudge ->
                             AutomationModelEvaluatorMapper.INSTANCE.map(llmAsJudge);
                         case UserDefinedMetricPythonAutomationRuleEvaluatorModel userDefinedMetricPython ->
