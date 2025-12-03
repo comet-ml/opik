@@ -39,7 +39,7 @@ public interface DatasetVersionDAO {
             SELECT
                 dv.*,
                 COALESCE(t.tags, JSON_ARRAY()) AS tags,
-                false AS is_latest
+                COALESCE(JSON_CONTAINS(t.tags, '"latest"'), false) AS is_latest
             FROM dataset_versions AS dv
             LEFT JOIN (
                 SELECT version_id, JSON_ARRAYAGG(tag) AS tags
@@ -54,7 +54,7 @@ public interface DatasetVersionDAO {
             SELECT
                 dv.*,
                 COALESCE(t.tags, JSON_ARRAY()) AS tags,
-                false AS is_latest
+                COALESCE(JSON_CONTAINS(t.tags, '"latest"'), false) AS is_latest
             FROM dataset_versions AS dv
             LEFT JOIN (
                 SELECT version_id, JSON_ARRAYAGG(tag) AS tags
@@ -72,7 +72,7 @@ public interface DatasetVersionDAO {
             SELECT
                 dv.*,
                 COALESCE(t.tags, JSON_ARRAY()) AS tags,
-                false AS is_latest
+                COALESCE(JSON_CONTAINS(t.tags, '"latest"'), false) AS is_latest
             FROM dataset_versions AS dv
             LEFT JOIN (
                 SELECT version_id, JSON_ARRAYAGG(tag) AS tags
@@ -105,7 +105,7 @@ public interface DatasetVersionDAO {
             SELECT
                 dv.*,
                 COALESCE(t.tags, JSON_ARRAY()) AS tags,
-                false AS is_latest
+                COALESCE(JSON_CONTAINS(t.tags, '"latest"'), false) AS is_latest
             FROM dataset_versions AS dv
             INNER JOIN dataset_version_tags dvt ON dv.id = dvt.version_id
             LEFT JOIN (

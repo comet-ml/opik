@@ -259,7 +259,7 @@ class DatasetVersionServiceImpl implements DatasetVersionService {
                 }
             }
 
-            return enrichWithIsLatest(datasetVersionDAO.findById(versionId, workspaceId).orElseThrow());
+            return datasetVersionDAO.findById(versionId, workspaceId).orElseThrow();
         });
     }
 
@@ -276,10 +276,7 @@ class DatasetVersionServiceImpl implements DatasetVersionService {
             var dao = handle.attach(DatasetVersionDAO.class);
 
             int offset = (page - 1) * size;
-            var versions = dao.findByDatasetId(datasetId, workspaceId, size, offset)
-                    .stream()
-                    .map(this::enrichWithIsLatest)
-                    .toList();
+            var versions = dao.findByDatasetId(datasetId, workspaceId, size, offset);
             var total = dao.countByDatasetId(datasetId, workspaceId);
 
             return new DatasetVersionPage(versions, page, size, total);
@@ -292,20 +289,12 @@ class DatasetVersionServiceImpl implements DatasetVersionService {
 
         return template.inTransaction(READ_ONLY, handle -> {
             var dao = handle.attach(DatasetVersionDAO.class);
-            return dao.findByTag(datasetId, tag, workspaceId).map(this::enrichWithIsLatest);
+            return dao.findByTag(datasetId, tag, workspaceId);
         });
     }
 
     private Optional<DatasetVersion> getLatestVersion(@NonNull UUID datasetId, @NonNull String workspaceId) {
         return getVersionByTag(datasetId, LATEST_TAG, workspaceId);
-    }
-
-    /**
-     * Enriches a DatasetVersion with the isLatest field based on whether it has the 'latest' tag.
-     */
-    private DatasetVersion enrichWithIsLatest(DatasetVersion version) {
-        boolean isLatest = version.tags() != null && version.tags().contains(LATEST_TAG);
-        return version.toBuilder().isLatest(isLatest).build();
     }
 
     @Override
@@ -399,7 +388,7 @@ class DatasetVersionServiceImpl implements DatasetVersionService {
             }
 
             log.info("Updated version, hash='{}', dataset='{}'", versionHash, datasetId);
-            return enrichWithIsLatest(dao.findById(version.id(), workspaceId).orElseThrow());
+            return dao.findById(version.id(), workspaceId).orElseThrow();
         });
     }
 
