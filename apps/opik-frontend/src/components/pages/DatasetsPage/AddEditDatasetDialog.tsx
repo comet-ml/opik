@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { SquareArrowOutUpRight } from "lucide-react";
-import { StatusCodes } from "http-status-codes";
+import { AxiosError, HttpStatusCode } from "axios";
+import get from "lodash/get";
 
 import useAppStore from "@/store/AppStore";
 import useDatasetCreateMutation from "@/api/datasets/useDatasetCreateMutation";
@@ -219,18 +220,14 @@ const AddEditDatasetDialog: React.FunctionComponent<
           onSuccess: () => {
             setOpen(false);
           },
-          onError: (error: unknown) => {
-            // Check if it's a 409 Conflict error (dataset already exists)
-            const statusCode = (error as { response?: { status?: number } })
-              .response?.status;
+          onError: (error: AxiosError) => {
+            const statusCode = get(error, ["response", "status"]);
             const errorMessage =
-              (error as { response?: { data?: { message?: string } } }).response
-                ?.data?.message ||
-              (error as { response?: { data?: { errors?: string[] } } })
-                .response?.data?.errors?.[0] ||
-              (error as { message?: string }).message;
+              get(error, ["response", "data", "message"]) ||
+              get(error, ["response", "data", "errors", 0]) ||
+              get(error, ["message"]);
 
-            if (statusCode === StatusCodes.CONFLICT) {
+            if (statusCode === HttpStatusCode.Conflict) {
               // Keep dialog open - user can see error in toast and retry
               toast({
                 title: "Dataset name already exists",
@@ -260,18 +257,14 @@ const AddEditDatasetDialog: React.FunctionComponent<
         },
         {
           onSuccess: onCreateSuccessHandler,
-          onError: (error: unknown) => {
-            // Check if it's a 409 Conflict error (dataset already exists)
-            const statusCode = (error as { response?: { status?: number } })
-              .response?.status;
+          onError: (error: AxiosError) => {
+            const statusCode = get(error, ["response", "status"]);
             const errorMessage =
-              (error as { response?: { data?: { message?: string } } }).response
-                ?.data?.message ||
-              (error as { response?: { data?: { errors?: string[] } } })
-                .response?.data?.errors?.[0] ||
-              (error as { message?: string }).message;
+              get(error, ["response", "data", "message"]) ||
+              get(error, ["response", "data", "errors", 0]) ||
+              get(error, ["message"]);
 
-            if (statusCode === 409) {
+            if (statusCode === HttpStatusCode.Conflict) {
               // Keep dialog open - user can see error in toast and retry
               toast({
                 title: "Dataset name already exists",
