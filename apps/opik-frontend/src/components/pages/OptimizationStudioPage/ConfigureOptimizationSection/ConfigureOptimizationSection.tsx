@@ -75,15 +75,6 @@ const ConfigureOptimizationSection: React.FC = () => {
     [OPTIMIZER_TYPE.HIERARCHICAL_REFLECTIVE]: {},
   });
 
-  const metricConfigsCache = useRef<
-    Record<METRIC_TYPE, Partial<MetricParameters>>
-  >({
-    [METRIC_TYPE.EQUALS]: {},
-    [METRIC_TYPE.JSON_SCHEMA_VALIDATOR]: {},
-    [METRIC_TYPE.G_EVAL]: {},
-    [METRIC_TYPE.LAVENSHTEIN]: {},
-  });
-
   const datasetName = form.watch("datasetName");
   const optimizerType = form.watch("optimizerType");
   const metricType = form.watch("metricType");
@@ -163,24 +154,9 @@ const ConfigureOptimizationSection: React.FC = () => {
 
   const handleMetricTypeChange = useCallback(
     (newMetricType: METRIC_TYPE) => {
-      const currentMetricType = form.getValues("metricType");
-      const currentParams = form.getValues("metricParams");
-
-      if (currentMetricType && currentParams) {
-        metricConfigsCache.current[currentMetricType] = currentParams;
-      }
-
+      const defaultConfig = getDefaultMetricConfig(newMetricType);
+      form.setValue("metricParams", defaultConfig);
       form.setValue("metricType", newMetricType);
-
-      const cachedConfig = metricConfigsCache.current[newMetricType];
-
-      if (Object.keys(cachedConfig).length > 0) {
-        form.setValue("metricParams", cachedConfig);
-      } else {
-        const defaultConfig = getDefaultMetricConfig(newMetricType);
-        form.setValue("metricParams", defaultConfig);
-        metricConfigsCache.current[newMetricType] = defaultConfig;
-      }
     },
     [form],
   );
@@ -188,11 +164,8 @@ const ConfigureOptimizationSection: React.FC = () => {
   const handleMetricParamsChange = useCallback(
     (newParams: Partial<MetricParameters>) => {
       form.setValue("metricParams", newParams);
-      if (metricType) {
-        metricConfigsCache.current[metricType] = newParams;
-      }
     },
-    [form, metricType],
+    [form],
   );
 
   useEffect(() => {
@@ -221,6 +194,21 @@ const ConfigureOptimizationSection: React.FC = () => {
     { value: METRIC_TYPE.G_EVAL, label: "Custom (G-Eval)" },
     { value: METRIC_TYPE.LAVENSHTEIN, label: "Levenshtein" },
   ];
+
+  const getFirstMetricParamsError = useCallback(() => {
+    const errors = form.formState.errors.metricParams;
+    if (!errors) return null;
+    if (errors.message) return errors.message;
+
+    const firstKey = Object.keys(errors)[0];
+    const firstError = errors[firstKey as keyof typeof errors];
+
+    if (firstError && typeof firstError === "object" && "message" in firstError) {
+      return firstError.message as string;
+    }
+
+    return null;
+  }, [form.formState.errors.metricParams]);
 
   return (
       <form className="space-y-4">
@@ -351,6 +339,11 @@ const ConfigureOptimizationSection: React.FC = () => {
                     </div>
                   </FormControl>
                   <FormMessage />
+                  {form.formState.errors.metricParams && (
+                    <p className="text-sm text-destructive">
+                      {getFirstMetricParamsError()}
+                    </p>
+                  )}
                 </FormItem>
               )}
             />
@@ -370,8 +363,6 @@ const ConfigureOptimizationSection: React.FC = () => {
                             field.onChange(m);
                             const providerType = calculateModelProvider(m);
                             console.log(m, providerType, "m, providerType");
-
-                            form.setValue("modelProvider", providerType);
                           }
                         }}
                         provider={provider}

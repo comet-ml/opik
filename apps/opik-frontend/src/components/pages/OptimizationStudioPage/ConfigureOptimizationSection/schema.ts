@@ -60,17 +60,19 @@ export const HierarchicalReflectiveOptimizerParamsSchema = z.object({
 });
 
 export const EqualsMetricParamsSchema = z.object({
-  case_sensitive: z.boolean().optional(),
+  case_sensitive: z.boolean(),
   reference_key: z.string().optional(),
 });
 
 export const JsonSchemaValidatorMetricParamsSchema = z.object({
-  schema: z.record(z.unknown()).optional(),
+  schema: z
+    .record(z.unknown())
+    .refine((obj) => Object.keys(obj).length > 0, "Schema cannot be empty"),
 });
 
 export const GEvalMetricParamsSchema = z.object({
-  task_introduction: z.string().optional(),
-  evaluation_criteria: z.string().optional(),
+  task_introduction: z.string().min(1, "Task introduction is required"),
+  evaluation_criteria: z.string().min(1, "Evaluation criteria is required"),
 });
 
 export const LevenshteinMetricParamsSchema = z.object({
@@ -78,31 +80,48 @@ export const LevenshteinMetricParamsSchema = z.object({
   reference_key: z.string().optional(),
 });
 
-export const OptimizationConfigSchema = z.object({
+const BaseOptimizationConfigSchema = z.object({
   datasetName: z.string().min(1, "Dataset is required"),
   optimizerType: z.nativeEnum(OPTIMIZER_TYPE),
-  optimizerParams: z
-    .union([
-      GepaOptimizerParamsSchema,
-      // EvolutionaryOptimizerParamsSchema,
-      HierarchicalReflectiveOptimizerParamsSchema,
-    ])
-    .optional(),
-  metricType: z.nativeEnum(METRIC_TYPE),
-  metricParams: z
-    .union([
-      EqualsMetricParamsSchema,
-      JsonSchemaValidatorMetricParamsSchema,
-      GEvalMetricParamsSchema,
-      LevenshteinMetricParamsSchema,
-    ])
-    .optional(),
+  optimizerParams: z.union([
+    GepaOptimizerParamsSchema,
+    // EvolutionaryOptimizerParamsSchema,
+    HierarchicalReflectiveOptimizerParamsSchema,
+  ]),
   messages: z
     .array(z.custom<LLMMessage>())
     .min(1, "At least one message is required"),
   modelName: z.nativeEnum(PROVIDER_MODEL_TYPE),
   modelConfig: z.record(z.unknown()).default({ temperature: 1.0 }),
 });
+
+const EqualsMetricConfigSchema = BaseOptimizationConfigSchema.extend({
+  metricType: z.literal(METRIC_TYPE.EQUALS),
+  metricParams: EqualsMetricParamsSchema,
+});
+
+const JsonSchemaValidatorMetricConfigSchema =
+  BaseOptimizationConfigSchema.extend({
+    metricType: z.literal(METRIC_TYPE.JSON_SCHEMA_VALIDATOR),
+    metricParams: JsonSchemaValidatorMetricParamsSchema,
+  });
+
+const GEvalMetricConfigSchema = BaseOptimizationConfigSchema.extend({
+  metricType: z.literal(METRIC_TYPE.G_EVAL),
+  metricParams: GEvalMetricParamsSchema,
+});
+
+const LevenshteinMetricConfigSchema = BaseOptimizationConfigSchema.extend({
+  metricType: z.literal(METRIC_TYPE.LAVENSHTEIN),
+  metricParams: LevenshteinMetricParamsSchema,
+});
+
+export const OptimizationConfigSchema = z.discriminatedUnion("metricType", [
+  EqualsMetricConfigSchema,
+  JsonSchemaValidatorMetricConfigSchema,
+  GEvalMetricConfigSchema,
+  LevenshteinMetricConfigSchema,
+]);
 
 export type OptimizationConfigFormType = z.infer<
   typeof OptimizationConfigSchema
@@ -151,7 +170,7 @@ export const convertOptimizationStudioToFormData = (
       optimization?.studio_config?.llm_model?.model ||
       PROVIDER_MODEL_TYPE.GPT_4O_MINI,
     modelConfig: existingConfig || { temperature: 1.0 },
-  };
+  } as OptimizationConfigFormType;
 };
 
 export const convertFormDataToStudioConfig = (

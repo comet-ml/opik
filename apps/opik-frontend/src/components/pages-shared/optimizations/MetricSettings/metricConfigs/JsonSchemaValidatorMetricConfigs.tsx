@@ -44,7 +44,7 @@ const JsonSchemaValidatorMetricConfigs = ({
     <div className="flex w-72 flex-col gap-6">
       <div className="space-y-2">
         <div className="flex items-center">
-          <Label htmlFor="json_schema" className="text-sm">
+          <Label htmlFor="json_schema" className="text-s mr-1.5">
             JSON Schema
           </Label>
           <ExplainerIcon description="Define a JSON schema to validate the structure of the LLM output" />

@@ -1,7 +1,6 @@
 import React from "react";
 import { Button } from "@/components/ui/button";
 import { Link } from "@tanstack/react-router";
-import { useFormContext } from "react-hook-form";
 import { useOptimizationStudioContext } from "./OptimizationStudioContext";
 import { OPTIMIZATION_STATUS } from "@/types/optimizations";
 import useAppStore from "@/store/AppStore";
@@ -10,13 +9,10 @@ const OptimizationStudioActions: React.FC = () => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const { activeOptimization, isSubmitting, submitOptimization } =
     useOptimizationStudioContext();
-  const form = useFormContext();
-  const isFormValid = form.formState.isValid;
 
   const isRunning =
     activeOptimization?.status === OPTIMIZATION_STATUS.RUNNING ||
     activeOptimization?.status === OPTIMIZATION_STATUS.INITIALIZED;
-    
   const showViewTrials = Boolean(activeOptimization?.id);
 
   const renderActionButton = () => {
@@ -37,7 +33,7 @@ const OptimizationStudioActions: React.FC = () => {
         size="sm"
         className="h-8"
         onClick={submitOptimization}
-        disabled={!isFormValid || isSubmitting}
+        disabled={isSubmitting}
       >
         {isSubmitting ? "Starting..." : "Run optimization"}
       </Button>
