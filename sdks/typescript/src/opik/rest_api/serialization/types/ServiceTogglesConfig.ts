@@ -20,6 +20,7 @@ export const ServiceTogglesConfig: core.serialization.ObjectSchema<
     csvUploadEnabled: core.serialization.boolean(),
     exportEnabled: core.serialization.boolean(),
     dashboardsEnabled: core.serialization.boolean(),
+    datasetVersioningEnabled: core.serialization.boolean(),
 });
 
 export declare namespace ServiceTogglesConfig {
@@ -34,5 +35,6 @@ export declare namespace ServiceTogglesConfig {
         csvUploadEnabled: boolean;
         exportEnabled: boolean;
         dashboardsEnabled: boolean;
+        datasetVersioningEnabled: boolean;
     }
 }
