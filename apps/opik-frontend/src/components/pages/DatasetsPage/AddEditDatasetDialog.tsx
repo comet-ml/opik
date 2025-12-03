@@ -218,12 +218,10 @@ const AddEditDatasetDialog: React.FunctionComponent<
         get(error, ["message"]);
 
       if (statusCode === HttpStatusCode.Conflict) {
-        setNameError(errorMessage || "A dataset with this name already exists");
+        setNameError("This name already exists");
       } else {
         toast({
-          title: `Error ${
-            action === "create" ? "creating" : "updating"
-          } dataset`,
+          title: `Error ${`${action.slice(0, -1)}ing`} dataset`,
           description: errorMessage || `Failed to ${action} dataset`,
           variant: "destructive",
         });
