@@ -1,5 +1,5 @@
 import { INTERVAL_TYPE } from "@/api/projects/useProjectMetric";
-import { ChartTooltipRenderValueArguments } from "@/components/shared/ChartTooltipContent/ChartTooltipContent";
+import { ChartTooltipRenderValueArguments } from "@/components/shared/Charts/ChartTooltipContent/ChartTooltipContent";
 import { formatDuration } from "@/lib/date";
 import { formatCost } from "@/lib/money";
 import { formatNumberInK } from "@/lib/utils";

@@ -1,0 +1,355 @@
+import React, { memo, useMemo, useCallback } from "react";
+import { useShallow } from "zustand/react/shallow";
+import isEmpty from "lodash/isEmpty";
+import uniq from "lodash/uniq";
+
+import DashboardWidget from "@/components/shared/Dashboard/DashboardWidget/DashboardWidget";
+import { useDashboardStore } from "@/store/DashboardStore";
+import {
+  DashboardWidgetComponentProps,
+  ExperimentsFeedbackScoresWidgetType,
+} from "@/types/dashboard";
+import { Filters } from "@/types/filters";
+import { Groups } from "@/types/groups";
+import { isFilterValid } from "@/lib/filters";
+import useExperimentsList from "@/api/datasets/useExperimentsList";
+import useExperimentsGroupsAggregations from "@/api/datasets/useExperimentsGroupsAggregations";
+import useAppStore from "@/store/AppStore";
+import { getDefaultHashedColorsChartConfig } from "@/lib/charts";
+import { formatDate } from "@/lib/date";
+import { CHART_TYPE } from "@/constants/chart";
+import { ChartTooltipRenderHeaderArguments } from "@/components/shared/Charts/ChartTooltipContent/ChartTooltipContent";
+import { Spinner } from "@/components/ui/spinner";
+import { ExperimentsGroupNodeWithAggregations } from "@/types/datasets";
+import LineChart from "@/components/shared/Charts/LineChart/LineChart";
+import BarChart from "@/components/shared/Charts/BarChart/BarChart";
+import RadarChart from "@/components/shared/Charts/RadarChart/RadarChart";
+
+const MAX_EXPERIMENTS_LIMIT = 100;
+
+type DataRecord = {
+  entityId: string;
+  entityName: string;
+  createdDate: string;
+  scores: Record<string, number>;
+};
+
+type ChartData = {
+  data: DataRecord[];
+  lines: string[];
+};
+
+const ExperimentsFeedbackScoresWidget: React.FunctionComponent<
+  DashboardWidgetComponentProps
+> = ({ sectionId, widgetId, preview = false }) => {
+  const workspaceName = useAppStore((state) => state.activeWorkspaceName);
+
+  const widget = useDashboardStore(
+    useShallow((state) => {
+      if (preview) {
+        return state.previewWidget;
+      }
+      if (!sectionId || !widgetId) return null;
+      const section = state.sections.find((s) => s.id === sectionId);
+      return section?.widgets.find((w) => w.id === widgetId);
+    }),
+  );
+
+  const onAddEditWidgetCallback = useDashboardStore(
+    (state) => state.onAddEditWidgetCallback,
+  );
+
+  const handleEdit = useCallback(() => {
+    if (sectionId && widgetId) {
+      onAddEditWidgetCallback?.({ sectionId, widgetId });
+    }
+  }, [sectionId, widgetId, onAddEditWidgetCallback]);
+
+  const widgetConfig = widget?.config as
+    | ExperimentsFeedbackScoresWidgetType["config"]
+    | undefined;
+  const groups = (widgetConfig?.groups || []) as Groups;
+  const validFilters = useMemo(() => {
+    const filters = (widgetConfig?.filters || []) as Filters;
+    return filters.filter(isFilterValid);
+  }, [widgetConfig?.filters]);
+  const hasGroups = groups.length > 0;
+  const chartType = widgetConfig?.chartType || CHART_TYPE.line;
+
+  const { data: experimentsData, isPending: isExperimentsPending } =
+    useExperimentsList(
+      {
+        workspaceName,
+        filters: validFilters,
+        page: 1,
+        size: 100,
+      },
+      {
+        enabled: !hasGroups,
+      },
+    );
+
+  const {
+    data: groupsAggregationsData,
+    isPending: isGroupsAggregationsPending,
+  } = useExperimentsGroupsAggregations(
+    {
+      workspaceName,
+      filters: validFilters,
+      groups,
+    },
+    {
+      enabled: hasGroups,
+    },
+  );
+
+  const chartData = useMemo<ChartData>(() => {
+    if (hasGroups && groupsAggregationsData) {
+      const data: DataRecord[] = [];
+      const allLines: string[] = [];
+
+      const processGroup = (
+        groupContent: Record<string, ExperimentsGroupNodeWithAggregations>,
+        parentKey = "",
+      ) => {
+        Object.entries(groupContent).forEach(([key, value]) => {
+          const groupName = parentKey ? `${parentKey} / ${key}` : key;
+
+          if (value.aggregations) {
+            const scores: Record<string, number> = {};
+            const feedbackScores = value.aggregations.feedback_scores || [];
+            const experimentScores = value.aggregations.experiment_scores || [];
+
+            feedbackScores.forEach((score) => {
+              const scoreName = `${score.name} (avg)`;
+              scores[scoreName] = score.value;
+              allLines.push(scoreName);
+            });
+
+            experimentScores.forEach((score) => {
+              scores[score.name] = score.value;
+              allLines.push(score.name);
+            });
+
+            if (Object.keys(scores).length > 0) {
+              data.push({
+                entityId: groupName,
+                entityName: groupName,
+                createdDate: "",
+                scores,
+              });
+            }
+          }
+
+          if (value.groups) {
+            processGroup(value.groups, groupName);
+          }
+        });
+      };
+
+      if (groupsAggregationsData.content) {
+        processGroup(groupsAggregationsData.content);
+      }
+
+      return {
+        data,
+        lines: uniq(allLines),
+      };
+    }
+
+    if (!hasGroups && experimentsData) {
+      const experiments = experimentsData.content || [];
+      const allLines: string[] = [];
+
+      const data: DataRecord[] = experiments.map((experiment) => {
+        const scores: Record<string, number> = {};
+
+        (experiment.feedback_scores || []).forEach((score) => {
+          const scoreName = `${score.name} (avg)`;
+          scores[scoreName] = score.value;
+          allLines.push(scoreName);
+        });
+
+        (experiment.experiment_scores || []).forEach((score) => {
+          scores[score.name] = score.value;
+          allLines.push(score.name);
+        });
+
+        return {
+          entityId: experiment.id,
+          entityName: experiment.name,
+          createdDate: formatDate(experiment.created_at),
+          scores,
+        };
+      });
+
+      return {
+        data,
+        lines: uniq(allLines),
+      };
+    }
+
+    return { data: [], lines: [] };
+  }, [hasGroups, groupsAggregationsData, experimentsData]);
+
+  const isPending = hasGroups
+    ? isGroupsAggregationsPending
+    : isExperimentsPending;
+  const noData =
+    !isPending && chartData.data.every((record) => isEmpty(record.scores));
+
+  const totalExperiments = experimentsData?.total ?? 0;
+  const hasMoreThanLimit =
+    !hasGroups && totalExperiments > MAX_EXPERIMENTS_LIMIT;
+  const warningMessage = hasMoreThanLimit
+    ? `Showing first ${MAX_EXPERIMENTS_LIMIT} of ${totalExperiments} experiments`
+    : undefined;
+
+  const { transformedData, chartConfig } = useMemo(() => {
+    if (chartType === CHART_TYPE.radar) {
+      const entityNames = chartData.data.map((record) => record.entityName);
+      const radarData = chartData.lines.map((scoreName) => {
+        const point: Record<string, string | number> = { name: scoreName };
+        chartData.data.forEach((record) => {
+          if (record.scores[scoreName] !== undefined) {
+            point[record.entityName] = record.scores[scoreName];
+          }
+        });
+        return point;
+      });
+      return {
+        transformedData: radarData,
+        chartConfig: getDefaultHashedColorsChartConfig(entityNames),
+      };
+    }
+
+    const flatData = chartData.data.map((record) => ({
+      name: record.entityName,
+      entityId: record.entityId,
+      entityName: record.entityName,
+      createdDate: record.createdDate,
+      ...record.scores,
+    }));
+    return {
+      transformedData: flatData,
+      chartConfig: getDefaultHashedColorsChartConfig(chartData.lines),
+    };
+  }, [chartData, chartType]);
+
+  const renderHeader = useCallback(
+    ({ payload }: ChartTooltipRenderHeaderArguments) => {
+      const { entityName, createdDate } = payload[0].payload;
+
+      return (
+        <>
+          <div className="comet-body-xs-accented mb-0.5 truncate">
+            {entityName}
+          </div>
+          {createdDate && (
+            <div className="comet-body-xs mb-1 text-light-slate">
+              {createdDate}
+            </div>
+          )}
+        </>
+      );
+    },
+    [],
+  );
+
+  if (!widget) {
+    return null;
+  }
+
+  const renderChartContent = () => {
+    if (isPending) {
+      return (
+        <div className="flex size-full min-h-32 items-center justify-center">
+          <Spinner />
+        </div>
+      );
+    }
+
+    if (chartData.data.length === 0 || noData) {
+      return (
+        <DashboardWidget.EmptyState
+          title="No data available"
+          message="Configure filters to display experiment feedback scores"
+          onAction={!preview ? handleEdit : undefined}
+          actionLabel="Configure widget"
+        />
+      );
+    }
+
+    if (chartType === CHART_TYPE.bar) {
+      return (
+        <BarChart
+          chartId={`${widgetId}_chart`}
+          config={chartConfig}
+          data={transformedData}
+          xAxisKey="name"
+          renderTooltipHeader={renderHeader}
+          className="size-full"
+        />
+      );
+    }
+
+    if (chartType === CHART_TYPE.radar) {
+      return (
+        <RadarChart
+          chartId={`${widgetId}_chart`}
+          config={chartConfig}
+          data={transformedData}
+          angleAxisKey="name"
+          showLegend
+          className="size-full"
+        />
+      );
+    }
+
+    return (
+      <LineChart
+        chartId={`${widgetId}_chart`}
+        config={chartConfig}
+        data={transformedData}
+        xAxisKey="name"
+        renderTooltipHeader={renderHeader}
+        showArea={false}
+        connectNulls={false}
+        className="size-full"
+      />
+    );
+  };
+
+  return (
+    <DashboardWidget>
+      <DashboardWidget.Header
+        title={widget.title}
+        subtitle={widget.subtitle}
+        warningMessage={warningMessage}
+        preview={preview}
+        actions={
+          !preview ? (
+            <DashboardWidget.ActionsMenu
+              sectionId={sectionId!}
+              widgetId={widgetId!}
+              widgetTitle={widget.title}
+            />
+          ) : undefined
+        }
+        dragHandle={!preview ? <DashboardWidget.DragHandle /> : undefined}
+      />
+      <DashboardWidget.Content>{renderChartContent()}</DashboardWidget.Content>
+    </DashboardWidget>
+  );
+};
+
+const arePropsEqual = (
+  prev: DashboardWidgetComponentProps,
+  next: DashboardWidgetComponentProps,
+) => {
+  if (prev.preview !== next.preview) return false;
+  if (prev.preview && next.preview) return true;
+  return prev.sectionId === next.sectionId && prev.widgetId === next.widgetId;
+};
+
+export default memo(ExperimentsFeedbackScoresWidget, arePropsEqual);

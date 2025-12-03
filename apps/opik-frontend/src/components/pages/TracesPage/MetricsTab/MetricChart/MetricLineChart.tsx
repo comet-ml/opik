@@ -1,76 +1,36 @@
-import React, { useCallback, useState } from "react";
-import {
-  Area,
-  CartesianGrid,
-  ComposedChart,
-  Line,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from "recharts";
+import React, { useCallback } from "react";
 import { ValueType } from "recharts/types/component/DefaultTooltipContent";
 import dayjs from "dayjs";
-import snakeCase from "lodash/snakeCase";
 
-import {
-  ChartConfig,
-  ChartContainer,
-  ChartLegend,
-  ChartTooltip,
-} from "@/components/ui/chart";
-import {
-  DEFAULT_CHART_GRID_PROPS,
-  DEFAULT_CHART_TICK,
-} from "@/constants/chart";
+import { ChartConfig } from "@/components/ui/chart";
 import { Spinner } from "@/components/ui/spinner";
 import { INTERVAL_TYPE } from "@/api/projects/useProjectMetric";
-import ChartTooltipContent, {
-  ChartTooltipRenderHeaderArguments,
-  ChartTooltipRenderValueArguments,
-} from "@/components/shared/ChartTooltipContent/ChartTooltipContent";
+import { ChartTooltipRenderHeaderArguments } from "@/components/shared/Charts/ChartTooltipContent/ChartTooltipContent";
 import { formatDate } from "@/lib/date";
-import useChartTickDefaultConfig from "@/hooks/charts/useChartTickDefaultConfig";
-import ChartHorizontalLegendContent from "@/components/shared/ChartHorizontalLegendContent/ChartHorizontalLegendContent";
-import { ProjectMetricValue, TransformedData } from "@/types/projects";
+import { TransformedData } from "@/types/projects";
+import LineChart from "@/components/shared/Charts/LineChart/LineChart";
 
-const renderTooltipValue = ({ value }: ChartTooltipRenderValueArguments) =>
-  value;
+const renderTooltipValue = ({ value }: { value: ValueType }) => value;
 
-interface MetricChartProps {
+interface MetricLineChartProps {
   config: ChartConfig;
   interval: INTERVAL_TYPE;
-  renderValue?: (data: ChartTooltipRenderValueArguments) => ValueType;
+  renderValue?: (data: { value: ValueType }) => ValueType;
   customYTickFormatter?: (value: number, maxDecimalLength?: number) => string;
   chartId: string;
   data: TransformedData[];
-  lines: string[];
-  values: ProjectMetricValue[];
   isPending: boolean;
 }
 
-const MetricLineChart = ({
+const MetricLineChart: React.FunctionComponent<MetricLineChartProps> = ({
   config,
   interval,
   renderValue = renderTooltipValue,
   customYTickFormatter,
   chartId,
   isPending,
-  values,
   data,
-  lines,
-}: MetricChartProps) => {
-  const [activeLine, setActiveLine] = useState<string | null>(null);
-
-  const {
-    width: yTickWidth,
-    ticks,
-    domain,
-    interval: yTickInterval,
-    yTickFormatter,
-  } = useChartTickDefaultConfig(values, {
-    tickFormatter: customYTickFormatter,
-  });
-
+}) => {
   const renderChartTooltipHeader = useCallback(
     ({ payload }: ChartTooltipRenderHeaderArguments) => {
       return (
@@ -93,146 +53,28 @@ const MetricLineChart = ({
     [interval],
   );
 
-  const isSingleLine = lines.length === 1;
-  const isSinglePoint =
-    data.filter((point) => lines.every((line) => point[line] !== null))
-      .length === 1;
-
-  const [firstLine] = lines;
-
-  const activeDot = { strokeWidth: 1.5, r: 4, stroke: "white" };
-
   if (isPending) {
     return (
-      <div className="flex h-[var(--chart-height)] w-full  items-center justify-center">
+      <div className="flex h-[var(--chart-height)] w-full items-center justify-center">
         <Spinner />
       </div>
     );
   }
 
   return (
-    <ChartContainer config={config} className="h-[var(--chart-height)] w-full">
-      <ComposedChart
-        data={data}
-        margin={{
-          top: 5,
-          right: 10,
-          left: 5,
-          bottom: 5,
-        }}
-      >
-        <CartesianGrid vertical={false} {...DEFAULT_CHART_GRID_PROPS} />
-        <XAxis
-          dataKey="time"
-          axisLine={false}
-          tickLine={false}
-          tick={DEFAULT_CHART_TICK}
-          tickFormatter={xTickFormatter}
-        />
-        <YAxis
-          tick={DEFAULT_CHART_TICK}
-          axisLine={false}
-          width={yTickWidth}
-          tickLine={false}
-          tickFormatter={yTickFormatter}
-          ticks={ticks}
-          domain={domain}
-          interval={yTickInterval}
-        />
-        <ChartTooltip
-          isAnimationActive={false}
-          content={
-            <ChartTooltipContent
-              renderHeader={renderChartTooltipHeader}
-              renderValue={renderValue}
-            />
-          }
-        />
-        <Tooltip />
-
-        <ChartLegend
-          content={
-            <ChartHorizontalLegendContent
-              setActiveLine={setActiveLine}
-              chartId={chartId}
-            />
-          }
-        />
-
-        {isSingleLine ? (
-          <>
-            <defs>
-              <linearGradient
-                id={`chart-area-gradient-${snakeCase(firstLine)}`}
-                x1="0"
-                y1="0"
-                x2="0"
-                y2="1"
-              >
-                <stop
-                  offset="0%"
-                  stopColor={config[firstLine].color}
-                  stopOpacity={0.3}
-                ></stop>
-                <stop
-                  offset="50%"
-                  stopColor={config[firstLine].color}
-                  stopOpacity={0}
-                ></stop>
-              </linearGradient>
-            </defs>
-            <Area
-              type="monotone"
-              dataKey={firstLine}
-              stroke={config[firstLine].color}
-              fill={`url(#chart-area-gradient-${snakeCase(firstLine)})`}
-              connectNulls
-              strokeWidth={1.5}
-              activeDot={activeDot}
-              dot={
-                isSinglePoint
-                  ? {
-                      fill: config[firstLine].color,
-                      strokeWidth: 0,
-                      fillOpacity: 1,
-                    }
-                  : false
-              }
-              strokeOpacity={1}
-            />
-          </>
-        ) : (
-          lines.map((line) => {
-            const isActive = line === activeLine;
-
-            let strokeOpacity = 1;
-
-            if (activeLine) {
-              strokeOpacity = isActive ? 1 : 0.4;
-            }
-
-            return (
-              <Line
-                key={line}
-                type="linear"
-                dataKey={line}
-                stroke={config[line].color || ""}
-                dot={
-                  isSinglePoint
-                    ? { fill: config[line].color, strokeWidth: 0 }
-                    : false
-                }
-                activeDot={activeDot}
-                connectNulls
-                strokeWidth={1.5}
-                strokeOpacity={strokeOpacity}
-                animationDuration={800}
-              />
-            );
-          })
-        )}
-      </ComposedChart>
-    </ChartContainer>
+    <LineChart
+      chartId={chartId}
+      config={config}
+      data={data}
+      xAxisKey="time"
+      xTickFormatter={xTickFormatter}
+      customYTickFormatter={customYTickFormatter}
+      renderTooltipValue={renderValue}
+      renderTooltipHeader={renderChartTooltipHeader}
+      showLegend
+      showArea
+      connectNulls
+    />
   );
 };
 
