@@ -99,7 +99,7 @@ const OptimizationStudioRunPageContent = () => {
     } else {
       setBreadcrumbParam("optimizationStudioRun", "run", "Start optimization");
     }
-  }, [activeOptimization?.name]);
+  }, [activeOptimization?.name, setBreadcrumbParam]);
 
   useEffect(() => {
     if (templateId) {

@@ -83,24 +83,18 @@ export const OptimizationStudioProvider: React.FC<
         activeOptimization || templateData || null,
       ),
     );
-  }, [activeOptimization, templateData]);
+  }, [activeOptimization, templateData, form.reset]);
 
   const submitOptimization = useCallback(async () => {
-    // Validate form before submission
     const isValid = await form.trigger();
-    console.log(form.formState.errors, "ERRORS_NEW_LOL");
-    console.log(isValid, "IS_VALID_LOL");
+
     if (!isValid) {
       return;
     }
 
     const formData = form.getValues();
 
-    console.log(formData, "FORM_DATA_LOL");
-
     setIsSubmitting(true);
-
-    return;
 
     try {
       const studioConfig = convertFormDataToStudioConfig(formData);

@@ -1,6 +1,5 @@
 import { QueryFunctionContext, useQuery } from "@tanstack/react-query";
 import isBoolean from "lodash/isBoolean";
-import isEqual from "lodash/isEqual";
 import api, {
   OPTIMIZATIONS_KEY,
   OPTIMIZATIONS_REST_ENDPOINT,

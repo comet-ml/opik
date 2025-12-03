@@ -52,9 +52,7 @@ const HierarchicalReflectiveOptimizerConfigs = ({
           <Label htmlFor="verbose" className="cursor-pointer text-sm">
             Verbose
           </Label>
-          <ExplainerIcon
-            {...EXPLAINERS_MAP[EXPLAINER_ID.optimizer_verbose]}
-          />
+          <ExplainerIcon {...EXPLAINERS_MAP[EXPLAINER_ID.optimizer_verbose]} />
         </div>
       </div>
 

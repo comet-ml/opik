@@ -9,10 +9,7 @@ import api, {
   OPTIMIZATIONS_STUDIO_REST_ENDPOINT,
   QueryConfig,
 } from "@/api/api";
-import {
-  OptimizationStudio,
-  OPTIMIZATION_STATUS,
-} from "@/types/optimizations";
+import { OptimizationStudio, OPTIMIZATION_STATUS } from "@/types/optimizations";
 
 type UseOptimizationStudioByIdParams = {
   optimizationId: string;

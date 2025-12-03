@@ -299,7 +299,9 @@ const SideBar: React.FunctionComponent<SideBarProps> = ({
       refetchInterval: (query) => {
         // refetch every 5 seconds if there are running optimizations
         const data = query.state.data;
-        return data?.total && data.total > 0 ? RUNNING_OPTIMIZATION_REFETCH_INTERVAL : false;
+        return data?.total && data.total > 0
+          ? RUNNING_OPTIMIZATION_REFETCH_INTERVAL
+          : false;
       },
     },
   );

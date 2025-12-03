@@ -40,7 +40,7 @@ const GEvalMetricConfigs = ({ configs, onChange }: GEvalMetricConfigsProps) => {
 
       <div className="space-y-2">
         <div className="flex items-center">
-          <Label htmlFor="evaluation_criteria" className="text-s mr-1.5">
+          <Label htmlFor="evaluation_criteria" className="text-sm mr-1.5">
             Evaluation criteria
           </Label>
           <ExplainerIcon
