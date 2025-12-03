@@ -206,6 +206,35 @@ const AddEditDatasetDialog: React.FunctionComponent<
     ],
   );
 
+  const handleMutationError = useCallback(
+    (error: AxiosError, action: "create" | "update") => {
+      const statusCode = get(error, ["response", "status"]);
+      const errorMessage =
+        get(error, ["response", "data", "message"]) ||
+        get(error, ["response", "data", "errors", 0]) ||
+        get(error, ["message"]);
+
+      if (statusCode === HttpStatusCode.Conflict) {
+        toast({
+          title: "Dataset name already exists",
+          description:
+            errorMessage || "A dataset with this name already exists",
+          variant: "destructive",
+        });
+      } else {
+        toast({
+          title: `Error ${
+            action === "create" ? "creating" : "updating"
+          } dataset`,
+          description: errorMessage || `Failed to ${action} dataset`,
+          variant: "destructive",
+        });
+        setOpen(false);
+      }
+    },
+    [toast, setOpen],
+  );
+
   const submitHandler = useCallback(() => {
     if (isEdit) {
       updateMutate(
@@ -220,31 +249,7 @@ const AddEditDatasetDialog: React.FunctionComponent<
           onSuccess: () => {
             setOpen(false);
           },
-          onError: (error: AxiosError) => {
-            const statusCode = get(error, ["response", "status"]);
-            const errorMessage =
-              get(error, ["response", "data", "message"]) ||
-              get(error, ["response", "data", "errors", 0]) ||
-              get(error, ["message"]);
-
-            if (statusCode === HttpStatusCode.Conflict) {
-              // Keep dialog open - user can see error in toast and retry
-              toast({
-                title: "Dataset name already exists",
-                description:
-                  errorMessage || "A dataset with this name already exists",
-                variant: "destructive",
-              });
-            } else {
-              // For other errors, show toast and close dialog
-              toast({
-                title: "Error updating dataset",
-                description: errorMessage || "Failed to update dataset",
-                variant: "destructive",
-              });
-              setOpen(false);
-            }
-          },
+          onError: (error: AxiosError) => handleMutationError(error, "update"),
         },
       );
     } else {
@@ -257,31 +262,7 @@ const AddEditDatasetDialog: React.FunctionComponent<
         },
         {
           onSuccess: onCreateSuccessHandler,
-          onError: (error: AxiosError) => {
-            const statusCode = get(error, ["response", "status"]);
-            const errorMessage =
-              get(error, ["response", "data", "message"]) ||
-              get(error, ["response", "data", "errors", 0]) ||
-              get(error, ["message"]);
-
-            if (statusCode === HttpStatusCode.Conflict) {
-              // Keep dialog open - user can see error in toast and retry
-              toast({
-                title: "Dataset name already exists",
-                description:
-                  errorMessage || "A dataset with this name already exists",
-                variant: "destructive",
-              });
-            } else {
-              // For other errors, show toast and close dialog
-              toast({
-                title: "Error creating dataset",
-                description: errorMessage || "Failed to create dataset",
-                variant: "destructive",
-              });
-              setOpen(false);
-            }
-          },
+          onError: (error: AxiosError) => handleMutationError(error, "create"),
         },
       );
     }
@@ -298,7 +279,7 @@ const AddEditDatasetDialog: React.FunctionComponent<
     createMutate,
     onCreateSuccessHandler,
     setOpen,
-    toast,
+    handleMutationError,
   ]);
 
   const handleFileSelect = useCallback(
