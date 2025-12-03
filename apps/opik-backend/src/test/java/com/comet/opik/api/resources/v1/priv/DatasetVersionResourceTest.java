@@ -251,6 +251,9 @@ class DatasetVersionResourceTest {
             // Then - Tag assertions
             assertThat(version.tags()).containsAll(expectedTags);
 
+            // Then - isLatest should be true for newly created versions
+            assertThat(version.isLatest()).isTrue();
+
             // Then - Metadata assertions (if expected)
             if (expectedMetadata != null) {
                 assertThat(version.metadata()).isNotNull();
@@ -412,11 +415,13 @@ class DatasetVersionResourceTest {
                     .findFirst()
                     .orElseThrow();
 
-            // Verify first version no longer has 'latest' tag
+            // Verify first version no longer has 'latest' tag and isLatest is false
             assertThat(version1Retrieved.tags()).contains("v1").doesNotContain(DatasetVersionService.LATEST_TAG);
+            assertThat(version1Retrieved.isLatest()).isFalse();
 
-            // Verify second version has 'latest' tag
+            // Verify second version has 'latest' tag and isLatest is true
             assertThat(version2Retrieved.tags()).contains("v2", DatasetVersionService.LATEST_TAG);
+            assertThat(version2Retrieved.isLatest()).isTrue();
         }
     }
 
@@ -645,88 +650,67 @@ class DatasetVersionResourceTest {
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
     class UpdateVersion {
 
-        @Test
-        @DisplayName("Success: Update change_description")
-        void updateVersion__whenValidRequest__thenUpdateChangeDescription() {
+        Stream<Arguments> updateVersionSuccessProvider() {
+            return Stream.of(
+                    // Test case 1: Update change_description only
+                    Arguments.of(
+                            "Update change_description only",
+                            DatasetVersionCreate.builder()
+                                    .changeDescription("Original description")
+                                    .build(),
+                            DatasetVersionUpdate.builder()
+                                    .changeDescription("Updated description")
+                                    .build(),
+                            "Updated description",
+                            List.of(DatasetVersionService.LATEST_TAG)),
+                    // Test case 2: Add tags only
+                    Arguments.of(
+                            "Add tags to existing version",
+                            DatasetVersionCreate.builder()
+                                    .tags(List.of("v1"))
+                                    .build(),
+                            DatasetVersionUpdate.builder()
+                                    .tagsToAdd(List.of("production", "reviewed"))
+                                    .build(),
+                            null,
+                            List.of("v1", "production", "reviewed", DatasetVersionService.LATEST_TAG)),
+                    // Test case 3: Update both change_description and add tags
+                    Arguments.of(
+                            "Update both change_description and add tags",
+                            DatasetVersionCreate.builder()
+                                    .changeDescription("Original")
+                                    .build(),
+                            DatasetVersionUpdate.builder()
+                                    .changeDescription("Updated description")
+                                    .tagsToAdd(List.of("new-tag"))
+                                    .build(),
+                            "Updated description",
+                            List.of("new-tag", DatasetVersionService.LATEST_TAG)));
+        }
+
+        @ParameterizedTest(name = "{0}")
+        @MethodSource("updateVersionSuccessProvider")
+        @DisplayName("Success:")
+        void updateVersion__whenValidRequest__thenVersionUpdated(String testName, DatasetVersionCreate versionCreate,
+                DatasetVersionUpdate updateRequest, String expectedDescription, List<String> expectedTags) {
             // Given
             var datasetId = createDataset(UUID.randomUUID().toString());
             createDatasetItems(datasetId, 2);
 
-            var versionCreate = DatasetVersionCreate.builder()
-                    .changeDescription("Original description")
-                    .build();
-
             var version = datasetResourceClient.commitVersion(datasetId, versionCreate, API_KEY, TEST_WORKSPACE);
             String versionHash = version.versionHash();
 
-            // When - Update change_description
-            var updateRequest = DatasetVersionUpdate.builder()
-                    .changeDescription("Updated description")
-                    .build();
-
+            // When
             var updatedVersion = datasetResourceClient.updateVersion(datasetId, versionHash, updateRequest, API_KEY,
                     TEST_WORKSPACE);
 
             // Then
-            assertThat(updatedVersion.changeDescription()).isEqualTo("Updated description");
             assertThat(updatedVersion.versionHash()).isEqualTo(versionHash);
             assertThat(updatedVersion.isLatest()).isTrue();
-        }
-
-        @Test
-        @DisplayName("Success: Add tags to existing version")
-        void updateVersion__whenAddingTags__thenTagsAdded() {
-            // Given
-            var datasetId = createDataset(UUID.randomUUID().toString());
-            createDatasetItems(datasetId, 2);
-
-            var versionCreate = DatasetVersionCreate.builder()
-                    .tags(List.of("v1"))
-                    .build();
-
-            var version = datasetResourceClient.commitVersion(datasetId, versionCreate, API_KEY, TEST_WORKSPACE);
-            String versionHash = version.versionHash();
-            assertThat(version.tags()).contains("v1", DatasetVersionService.LATEST_TAG);
-
-            // When - Add new tags
-            var updateRequest = DatasetVersionUpdate.builder()
-                    .tagsToAdd(List.of("production", "reviewed"))
-                    .build();
-
-            var updatedVersion = datasetResourceClient.updateVersion(datasetId, versionHash, updateRequest, API_KEY,
-                    TEST_WORKSPACE);
-
-            // Then - Verify all tags exist
-            assertThat(updatedVersion.tags())
-                    .containsAll(List.of("v1", "production", "reviewed", DatasetVersionService.LATEST_TAG));
-        }
-
-        @Test
-        @DisplayName("Success: Update both change_description and add tags")
-        void updateVersion__whenUpdatingBoth__thenBothUpdated() {
-            // Given
-            var datasetId = createDataset(UUID.randomUUID().toString());
-            createDatasetItems(datasetId, 2);
-
-            var versionCreate = DatasetVersionCreate.builder()
-                    .changeDescription("Original")
-                    .build();
-
-            var version = datasetResourceClient.commitVersion(datasetId, versionCreate, API_KEY, TEST_WORKSPACE);
-            String versionHash = version.versionHash();
-
-            // When - Update both
-            var updateRequest = DatasetVersionUpdate.builder()
-                    .changeDescription("Updated description")
-                    .tagsToAdd(List.of("new-tag"))
-                    .build();
-
-            var updatedVersion = datasetResourceClient.updateVersion(datasetId, versionHash, updateRequest, API_KEY,
-                    TEST_WORKSPACE);
-
-            // Then
-            assertThat(updatedVersion.changeDescription()).isEqualTo("Updated description");
-            assertThat(updatedVersion.tags()).contains("new-tag", DatasetVersionService.LATEST_TAG);
+            if (expectedDescription != null) {
+                assertThat(updatedVersion.changeDescription()).isEqualTo(expectedDescription);
+            }
+            assertThat(updatedVersion.tags()).containsAll(expectedTags);
         }
 
         @Test
@@ -771,105 +755,6 @@ class DatasetVersionResourceTest {
                     API_KEY, TEST_WORKSPACE)) {
                 // Then
                 assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_NOT_FOUND);
-            }
-        }
-    }
-
-    @Nested
-    @DisplayName("Is Latest Field:")
-    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
-    class IsLatestField {
-
-        @Test
-        @DisplayName("Success: is_latest is true for newly created version")
-        void getVersion__whenNewlyCreated__thenIsLatestTrue() {
-            // Given
-            var datasetId = createDataset(UUID.randomUUID().toString());
-            createDatasetItems(datasetId, 2);
-
-            // When
-            var versionCreate = DatasetVersionCreate.builder()
-                    .changeDescription("First version")
-                    .build();
-
-            var version = datasetResourceClient.commitVersion(datasetId, versionCreate, API_KEY, TEST_WORKSPACE);
-
-            // Then
-            assertThat(version.isLatest()).isTrue();
-        }
-
-        @Test
-        @DisplayName("Success: is_latest moves to newest version")
-        void listVersions__whenMultipleVersions__thenOnlyLatestHasIsLatestTrue() {
-            // Given
-            var datasetId = createDataset(UUID.randomUUID().toString());
-            createDatasetItems(datasetId, 2);
-
-            // Create first version
-            var version1 = datasetResourceClient.commitVersion(
-                    datasetId,
-                    DatasetVersionCreate.builder().tags(List.of("v1")).build(),
-                    API_KEY,
-                    TEST_WORKSPACE);
-            assertThat(version1.isLatest()).isTrue();
-
-            // Create second version
-            var version2 = datasetResourceClient.commitVersion(
-                    datasetId,
-                    DatasetVersionCreate.builder().tags(List.of("v2")).build(),
-                    API_KEY,
-                    TEST_WORKSPACE);
-            assertThat(version2.isLatest()).isTrue();
-
-            // When - List all versions
-            var page = datasetResourceClient.listVersions(datasetId, API_KEY, TEST_WORKSPACE);
-
-            // Then - Only the latest version should have is_latest = true
-            assertThat(page.content()).hasSize(2);
-
-            var latestVersion = page.content().stream()
-                    .filter(v -> v.tags().contains("v2"))
-                    .findFirst()
-                    .orElseThrow();
-            var olderVersion = page.content().stream()
-                    .filter(v -> v.tags().contains("v1"))
-                    .findFirst()
-                    .orElseThrow();
-
-            assertThat(latestVersion.isLatest()).isTrue();
-            assertThat(olderVersion.isLatest()).isFalse();
-        }
-
-        @Test
-        @DisplayName("Success: is_latest consistent with latest tag")
-        void getVersionByTag__whenLatestTag__thenIsLatestTrue() {
-            // Given
-            var datasetId = createDataset(UUID.randomUUID().toString());
-            createDatasetItems(datasetId, 2);
-
-            // Create multiple versions
-            datasetResourceClient.commitVersion(
-                    datasetId,
-                    DatasetVersionCreate.builder().tags(List.of("v1")).build(),
-                    API_KEY,
-                    TEST_WORKSPACE);
-
-            datasetResourceClient.commitVersion(
-                    datasetId,
-                    DatasetVersionCreate.builder().tags(List.of("v2")).build(),
-                    API_KEY,
-                    TEST_WORKSPACE);
-
-            // When - List versions and check
-            var page = datasetResourceClient.listVersions(datasetId, API_KEY, TEST_WORKSPACE);
-
-            // Then - The version with 'latest' tag should have is_latest = true
-            for (var version : page.content()) {
-                if (version.tags().contains(DatasetVersionService.LATEST_TAG)) {
-                    assertThat(version.isLatest()).isTrue();
-                } else {
-                    assertThat(version.isLatest()).isFalse();
-                }
             }
         }
     }
