@@ -67,7 +67,6 @@ declare module "@tanstack/react-table" {
     onCommentsReply?: (row: TData, idx?: number) => void;
     aggregationMap?: Record<string, unknown>;
     enableUserFeedbackEditing?: boolean;
-    showReasons?: boolean;
     projectId?: string;
     projectName?: string;
   }
