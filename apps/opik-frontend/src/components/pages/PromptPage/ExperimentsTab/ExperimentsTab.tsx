@@ -21,11 +21,18 @@ import DataTableNoData from "@/components/shared/DataTableNoData/DataTableNoData
 import DataTableVirtualBody from "@/components/shared/DataTable/DataTableVirtualBody";
 import ResourceCell from "@/components/shared/DataTableCells/ResourceCell";
 import CodeCell from "@/components/shared/DataTableCells/CodeCell";
-import DurationCell from "@/components/shared/DataTableCells/DurationCell";
 import IdCell from "@/components/shared/DataTableCells/IdCell";
 import CostCell from "@/components/shared/DataTableCells/CostCell";
 import CommentsCell from "@/components/shared/DataTableCells/CommentsCell";
+import DurationMetricsCell, {
+  DURATION_PERCENTILE_STORAGE_KEY,
+} from "@/components/shared/DataTableCells/DurationMetricsCell";
+import CostMetricsCell, {
+  COST_PERCENTILE_STORAGE_KEY,
+} from "@/components/shared/DataTableCells/CostMetricsCell";
 import FeedbackScoreListCell from "@/components/shared/DataTableCells/FeedbackScoreListCell";
+import PercentileMetricsHeader from "@/components/shared/DataTableHeaders/PercentileMetricsHeader";
+import { formatCost } from "@/lib/money";
 import TextCell from "@/components/shared/DataTableCells/TextCell";
 import useAppStore from "@/store/AppStore";
 import { transformExperimentScores } from "@/lib/experimentScoreUtils";
@@ -41,7 +48,7 @@ import {
   COLUMN_FEEDBACK_SCORES_ID,
   COLUMN_COMMENTS_ID,
 } from "@/types/shared";
-import { formatDate } from "@/lib/date";
+import { formatDate, formatDuration } from "@/lib/date";
 import { RESOURCE_TYPE } from "@/components/shared/ResourceLink/ResourceLink";
 import { Separator } from "@/components/ui/separator";
 import MultiResourceCell from "@/components/shared/DataTableCells/MultiResourceCell";
@@ -114,36 +121,18 @@ export const DEFAULT_COLUMNS: ColumnData<GroupedExperiment>[] = [
     type: COLUMN_TYPE.string,
   },
   {
-    id: "duration.p50",
-    label: "Duration (avg.)",
+    id: "duration",
+    label: "Duration",
     type: COLUMN_TYPE.duration,
-    accessorFn: (row) => row.duration?.p50,
-    cell: DurationCell as never,
-    aggregatedCell: DurationCell.Aggregation as never,
+    accessorFn: (row) => row.duration,
+    header: PercentileMetricsHeader as never,
+    cell: DurationMetricsCell as never,
+    aggregatedCell: DurationMetricsCell.Aggregation as never,
     customMeta: {
-      aggregationKey: "duration.p50",
-    },
-  },
-  {
-    id: "duration.p90",
-    label: "Duration (p90)",
-    type: COLUMN_TYPE.duration,
-    accessorFn: (row) => row.duration?.p90,
-    cell: DurationCell as never,
-    aggregatedCell: DurationCell.Aggregation as never,
-    customMeta: {
-      aggregationKey: "duration.p90",
-    },
-  },
-  {
-    id: "duration.p99",
-    label: "Duration (p99)",
-    type: COLUMN_TYPE.duration,
-    accessorFn: (row) => row.duration?.p99,
-    cell: DurationCell as never,
-    aggregatedCell: DurationCell.Aggregation as never,
-    customMeta: {
-      aggregationKey: "duration.p99",
+      metricsKey: "duration",
+      aggregationKey: "duration",
+      storageKey: DURATION_PERCENTILE_STORAGE_KEY,
+      dataFormatter: formatDuration,
     },
   },
   {
@@ -173,6 +162,21 @@ export const DEFAULT_COLUMNS: ColumnData<GroupedExperiment>[] = [
     aggregatedCell: CostCell.Aggregation as never,
     customMeta: {
       aggregationKey: "total_estimated_cost_avg",
+    },
+  },
+  {
+    id: "total_estimated_cost_metrics",
+    label: "Cost per trace",
+    type: COLUMN_TYPE.cost,
+    accessorFn: (row) => row.total_estimated_cost_metrics,
+    header: PercentileMetricsHeader as never,
+    cell: CostMetricsCell as never,
+    aggregatedCell: CostMetricsCell.Aggregation as never,
+    customMeta: {
+      metricsKey: "total_estimated_cost_metrics",
+      aggregationKey: "total_estimated_cost_metrics",
+      storageKey: COST_PERCENTILE_STORAGE_KEY,
+      dataFormatter: formatCost,
     },
   },
   {

@@ -29,7 +29,7 @@ export const hasAnyVisibleColumns = <TColumnData>(
  * Handles multiple matching patterns:
  * 1. Direct match: column id exactly matches a sortable field
  * 2. Wildcard match: "data.*" allows sorting any field under "data." prefix
- * 3. Legacy single field: fields without dots that match wildcard patterns
+ * 3. Reverse wildcard: column "duration" is sortable if "duration.*" is in sortable list
  * 4. Prefix match: "output.field" matches if "output" is sortable
  *
  * @param id - The column identifier (e.g., "id", "data.field", "output.result")
@@ -48,6 +48,11 @@ export const isColumnSortable = (id: string, sortableColumns: string[]) => {
   }
 
   if (keys.length > 1 && sortableColumns.includes(keys[0])) {
+    return true;
+  }
+
+  // Reverse wildcard: column "duration" is sortable if "duration.*" is in sortable list
+  if (sortableColumns.includes(`${id}.*`)) {
     return true;
   }
 

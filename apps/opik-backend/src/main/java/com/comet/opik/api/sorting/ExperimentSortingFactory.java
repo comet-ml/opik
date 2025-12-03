@@ -13,6 +13,7 @@ import static com.comet.opik.api.sorting.SortableFields.LAST_UPDATED_BY;
 import static com.comet.opik.api.sorting.SortableFields.NAME;
 import static com.comet.opik.api.sorting.SortableFields.TOTAL_ESTIMATED_COST;
 import static com.comet.opik.api.sorting.SortableFields.TOTAL_ESTIMATED_COST_AVG;
+import static com.comet.opik.api.sorting.SortableFields.TOTAL_ESTIMATED_COST_METRICS;
 import static com.comet.opik.api.sorting.SortableFields.TRACE_COUNT;
 
 public class ExperimentSortingFactory extends SortingFactory {
@@ -29,6 +30,7 @@ public class ExperimentSortingFactory extends SortingFactory {
                 TRACE_COUNT,
                 TOTAL_ESTIMATED_COST,
                 TOTAL_ESTIMATED_COST_AVG,
+                TOTAL_ESTIMATED_COST_METRICS,
                 FEEDBACK_SCORES,
                 EXPERIMENT_METRICS,
                 DURATION_AGG);

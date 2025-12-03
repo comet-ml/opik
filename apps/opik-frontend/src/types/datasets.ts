@@ -7,6 +7,11 @@ import {
 } from "@/types/shared";
 import { CommentItems } from "./comment";
 
+export interface FeedbackScoreMetric {
+  name: string;
+  values: AggregatedDuration;
+}
+
 export interface Dataset {
   id: string;
   name: string;
@@ -76,7 +81,9 @@ export interface Experiment {
   name: string;
   feedback_scores?: AggregatedFeedbackScore[];
   experiment_scores?: AggregatedFeedbackScore[];
+  feedback_score_metrics?: FeedbackScoreMetric[];
   duration?: AggregatedDuration;
+  total_estimated_cost_metrics?: AggregatedDuration;
   // @deprecated
   prompt_version?: ExperimentPromptVersion;
   prompt_versions?: ExperimentPromptVersion[];
@@ -115,8 +122,10 @@ export interface ExperimentsAggregations {
   total_estimated_cost?: number;
   total_estimated_cost_avg?: number;
   duration?: AggregatedDuration;
+  total_estimated_cost_metrics?: AggregatedDuration;
   feedback_scores?: AggregatedFeedbackScore[];
   experiment_scores?: AggregatedFeedbackScore[];
+  feedback_score_metrics?: FeedbackScoreMetric[];
 }
 
 export interface ExperimentsGroupNode {

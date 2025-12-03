@@ -30,6 +30,7 @@ public class SortableFields {
     public static final String PROVIDER = "provider";
     public static final String TOTAL_ESTIMATED_COST = "total_estimated_cost";
     public static final String TOTAL_ESTIMATED_COST_AVG = "total_estimated_cost_avg";
+    public static final String TOTAL_ESTIMATED_COST_METRICS = "total_estimated_cost_metrics.*";
     public static final String ERROR_INFO = "error_info";
     public static final String CREATED_BY = "created_by";
     public static final String LAST_UPDATED_BY = "last_updated_by";

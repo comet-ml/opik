@@ -193,7 +193,7 @@ class ExperimentsResourceTest {
 
     private static final String[] EXPERIMENT_IGNORED_FIELDS = new String[]{
             "id", "datasetId", "name", "feedbackScores", "traceCount", "createdAt", "lastUpdatedAt", "createdBy",
-            "lastUpdatedBy", "comments"};
+            "lastUpdatedBy", "comments", "feedbackScoreMetrics", "totalEstimatedCostMetrics"};
 
     private static final String WORKSPACE_ID = UUID.randomUUID().toString();
     private static final String USER = "user-" + RandomStringUtils.secure().nextAlphanumeric(36);
@@ -1717,6 +1717,138 @@ class ExperimentsResourceTest {
                     List.of(), apiKey, false, Map.of(), null);
         }
 
+        @Test
+        void find__whenExperimentsHaveSpanDataAndFeedbackScores__thenReturnAggregatedMetrics() {
+            var workspaceName = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var dataset = podamFactory.manufacturePojo(Dataset.class);
+            datasetResourceClient.createDataset(dataset, apiKey, workspaceName);
+
+            var experiment = experimentResourceClient.createPartialExperiment()
+                    .datasetName(dataset.name())
+                    .usage(null)
+                    .build();
+
+            experimentResourceClient.create(experiment, apiKey, workspaceName);
+
+            List<Span> spans = new ArrayList<>();
+            List<Trace> traces = new ArrayList<>();
+            List<FeedbackScoreBatchItem> allScores = new ArrayList<>();
+
+            // Create traces with spans having known cost values for predictable percentile calculation
+            List<BigDecimal> costValues = List.of(
+                    BigDecimal.valueOf(1.0),
+                    BigDecimal.valueOf(2.0),
+                    BigDecimal.valueOf(3.0),
+                    BigDecimal.valueOf(4.0),
+                    BigDecimal.valueOf(5.0));
+
+            // Feedback scores with known values for predictable percentile calculation
+            String feedbackScoreName = "accuracy";
+            List<BigDecimal> feedbackScoreValues = List.of(
+                    BigDecimal.valueOf(0.5),
+                    BigDecimal.valueOf(0.6),
+                    BigDecimal.valueOf(0.7),
+                    BigDecimal.valueOf(0.8),
+                    BigDecimal.valueOf(0.9));
+
+            IntStream.range(0, 5).forEach(i -> {
+                var trace = podamFactory.manufacturePojo(Trace.class);
+                traceResourceClient.createTrace(trace, apiKey, workspaceName);
+
+                var span = podamFactory.manufacturePojo(Span.class).toBuilder()
+                        .traceId(trace.id())
+                        .projectName(trace.projectName())
+                        .type(SpanType.llm)
+                        .totalEstimatedCost(costValues.get(i))
+                        .build();
+
+                spanResourceClient.createSpan(span, apiKey, workspaceName);
+
+                var experimentItem = podamFactory.manufacturePojo(ExperimentItem.class).toBuilder()
+                        .experimentId(experiment.id())
+                        .usage(null)
+                        .traceId(trace.id())
+                        .feedbackScores(null)
+                        .build();
+
+                experimentResourceClient.createExperimentItem(Set.of(experimentItem), apiKey, workspaceName);
+
+                // Create feedback scores for each trace
+                var feedbackScore = FeedbackScoreBatchItem.builder()
+                        .id(trace.id())
+                        .name(feedbackScoreName)
+                        .value(feedbackScoreValues.get(i))
+                        .source(ScoreSource.SDK)
+                        .projectName(trace.projectName())
+                        .build();
+
+                allScores.add(feedbackScore);
+                traces.add(trace);
+                spans.add(span);
+            });
+
+            // Create feedback scores
+            traceResourceClient.feedbackScores(allScores, apiKey, workspaceName);
+
+            // Calculate expected percentiles for totalEstimatedCost (from spans)
+            List<BigDecimal> costQuantiles = StatsUtils.calculateQuantiles(
+                    costValues.stream().map(BigDecimal::doubleValue).toList(),
+                    List.of(0.50, 0.90, 0.99));
+
+            // Calculate expected percentiles for feedback scores
+            List<BigDecimal> feedbackQuantiles = StatsUtils.calculateQuantiles(
+                    feedbackScoreValues.stream().map(BigDecimal::doubleValue).toList(),
+                    List.of(0.50, 0.90, 0.99));
+
+            // Retrieve the experiment and verify the aggregated metrics
+            var datasetId = getExperiment(experiment.id(), workspaceName, apiKey).datasetId();
+            var actualPage = experimentResourceClient.findExperiments(
+                    1, 1, datasetId, null, null, null, false, null, null, null,
+                    apiKey, workspaceName, HttpStatus.SC_OK);
+
+            assertThat(actualPage.content()).hasSize(1);
+            var actualExperiment = actualPage.content().get(0);
+
+            // Verify totalEstimatedCostMetrics (p50, p90, p99 for cost)
+            assertThat(actualExperiment.totalEstimatedCostMetrics()).isNotNull();
+            assertThat(actualExperiment.totalEstimatedCostMetrics().p50())
+                    .usingComparator(StatsUtils::bigDecimalComparator)
+                    .isEqualTo(costQuantiles.get(0));
+            assertThat(actualExperiment.totalEstimatedCostMetrics().p90())
+                    .usingComparator(StatsUtils::bigDecimalComparator)
+                    .isEqualTo(costQuantiles.get(1));
+            assertThat(actualExperiment.totalEstimatedCostMetrics().p99())
+                    .usingComparator(StatsUtils::bigDecimalComparator)
+                    .isEqualTo(costQuantiles.get(2));
+
+            // Verify feedbackScoreMetrics (p50, p90, p99 for each feedback score)
+            assertThat(actualExperiment.feedbackScoreMetrics()).isNotNull();
+            assertThat(actualExperiment.feedbackScoreMetrics()).hasSize(1);
+
+            var actualFeedbackScoreMetric = actualExperiment.feedbackScoreMetrics().stream()
+                    .filter(m -> feedbackScoreName.equals(m.name()))
+                    .findFirst()
+                    .orElse(null);
+
+            assertThat(actualFeedbackScoreMetric).isNotNull();
+            assertThat(actualFeedbackScoreMetric.name()).isEqualTo(feedbackScoreName);
+            assertThat(actualFeedbackScoreMetric.values()).isNotNull();
+            assertThat(actualFeedbackScoreMetric.values().p50())
+                    .usingComparator(StatsUtils::bigDecimalComparator)
+                    .isEqualTo(feedbackQuantiles.get(0));
+            assertThat(actualFeedbackScoreMetric.values().p90())
+                    .usingComparator(StatsUtils::bigDecimalComparator)
+                    .isEqualTo(feedbackQuantiles.get(1));
+            assertThat(actualFeedbackScoreMetric.values().p99())
+                    .usingComparator(StatsUtils::bigDecimalComparator)
+                    .isEqualTo(feedbackQuantiles.get(2));
+        }
+
         private Map<String, Double> getUsage(List<Span> spans) {
             return spans.stream()
                     .map(Span::usage)
@@ -2190,6 +2322,168 @@ class ExperimentsResourceTest {
                     null)) {
                 assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
             }
+        }
+
+        @ParameterizedTest
+        @MethodSource("durationAndCostMetricsSortingFields")
+        @DisplayName("when sorting by duration and cost metrics percentiles, then return page sorted correctly")
+        void whenSortingByDurationAndCostMetricsPercentiles__thenReturnPage(
+                String sortField, Direction direction) {
+
+            var workspaceName = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var dataset = podamFactory.manufacturePojo(Dataset.class);
+            datasetResourceClient.createDataset(dataset, apiKey, workspaceName);
+
+            // Create multiple experiments with different cost values for predictable sorting
+            List<BigDecimal> costValues = List.of(
+                    BigDecimal.valueOf(1.0),
+                    BigDecimal.valueOf(3.0),
+                    BigDecimal.valueOf(5.0),
+                    BigDecimal.valueOf(2.0),
+                    BigDecimal.valueOf(4.0));
+
+            List<Long> durationMillis = List.of(100L, 300L, 500L, 200L, 400L);
+
+            List<Experiment> experiments = new ArrayList<>();
+
+            for (int i = 0; i < 5; i++) {
+                var experiment = experimentResourceClient.createPartialExperiment()
+                        .datasetName(dataset.name())
+                        .usage(null)
+                        .build();
+
+                experimentResourceClient.create(experiment, apiKey, workspaceName);
+
+                // Create trace with specific duration
+                var startTime = Instant.now();
+                var endTime = startTime.plusMillis(durationMillis.get(i));
+                var trace = podamFactory.manufacturePojo(Trace.class).toBuilder()
+                        .startTime(startTime)
+                        .endTime(endTime)
+                        .build();
+
+                traceResourceClient.createTrace(trace, apiKey, workspaceName);
+
+                // Create span with specific cost
+                var span = podamFactory.manufacturePojo(Span.class).toBuilder()
+                        .traceId(trace.id())
+                        .projectName(trace.projectName())
+                        .type(SpanType.llm)
+                        .totalEstimatedCost(costValues.get(i))
+                        .build();
+
+                spanResourceClient.createSpan(span, apiKey, workspaceName);
+
+                // Create experiment item linking trace to experiment
+                var experimentItem = podamFactory.manufacturePojo(ExperimentItem.class).toBuilder()
+                        .experimentId(experiment.id())
+                        .usage(null)
+                        .traceId(trace.id())
+                        .feedbackScores(null)
+                        .build();
+
+                experimentResourceClient.createExperimentItem(Set.of(experimentItem), apiKey, workspaceName);
+
+                experiments.add(experiment);
+            }
+
+            // Create the sorting field
+            var sortingField = SortingField.builder()
+                    .field(sortField)
+                    .direction(direction)
+                    .build();
+
+            // Get sorted results from API
+            try (var actualResponse = findExperiment(
+                    workspaceName, apiKey, 1, 10, dataset.id(), null, false, null,
+                    List.of(sortingField), null, null, null)) {
+
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
+                var actualPage = actualResponse.readEntity(ExperimentPage.class);
+                assertThat(actualPage.content()).hasSize(5);
+
+                // Verify sorting order
+                List<Experiment> actualExperiments = actualPage.content();
+
+                // Extract values based on sort field for verification
+                if (sortField.startsWith("duration.")) {
+                    String percentile = sortField.split("\\.")[1];
+                    List<BigDecimal> actualValues = actualExperiments.stream()
+                            .map(e -> {
+                                if (e.duration() == null) return null;
+                                return switch (percentile) {
+                                    case "p50" -> e.duration().p50();
+                                    case "p90" -> e.duration().p90();
+                                    case "p99" -> e.duration().p99();
+                                    default -> null;
+                                };
+                            })
+                            .toList();
+
+                    assertValuesAreSorted(actualValues, direction);
+                } else if (sortField.startsWith("total_estimated_cost_metrics.")) {
+                    String percentile = sortField.split("\\.")[1];
+                    List<BigDecimal> actualValues = actualExperiments.stream()
+                            .map(e -> {
+                                if (e.totalEstimatedCostMetrics() == null) return null;
+                                return switch (percentile) {
+                                    case "p50" -> e.totalEstimatedCostMetrics().p50();
+                                    case "p90" -> e.totalEstimatedCostMetrics().p90();
+                                    case "p99" -> e.totalEstimatedCostMetrics().p99();
+                                    default -> null;
+                                };
+                            })
+                            .toList();
+
+                    assertValuesAreSorted(actualValues, direction);
+                }
+            }
+        }
+
+        private void assertValuesAreSorted(List<BigDecimal> values, Direction direction) {
+            for (int i = 0; i < values.size() - 1; i++) {
+                BigDecimal current = values.get(i);
+                BigDecimal next = values.get(i + 1);
+
+                if (current == null || next == null) {
+                    continue;
+                }
+
+                if (direction == Direction.ASC) {
+                    assertThat(current.compareTo(next))
+                            .as("Value at index '%d' ('%s') should be <= value at index '%d' ('%s')", i, current, i + 1,
+                                    next)
+                            .isLessThanOrEqualTo(0);
+                } else {
+                    assertThat(current.compareTo(next))
+                            .as("Value at index '%d' ('%s') should be >= value at index '%d' ('%s')", i, current, i + 1,
+                                    next)
+                            .isGreaterThanOrEqualTo(0);
+                }
+            }
+        }
+
+        Stream<Arguments> durationAndCostMetricsSortingFields() {
+            return Stream.of(
+                    // Duration metrics sorting
+                    arguments("duration.p50", Direction.ASC),
+                    arguments("duration.p50", Direction.DESC),
+                    arguments("duration.p90", Direction.ASC),
+                    arguments("duration.p90", Direction.DESC),
+                    arguments("duration.p99", Direction.ASC),
+                    arguments("duration.p99", Direction.DESC),
+                    // Cost metrics sorting
+                    arguments("total_estimated_cost_metrics.p50", Direction.ASC),
+                    arguments("total_estimated_cost_metrics.p50", Direction.DESC),
+                    arguments("total_estimated_cost_metrics.p90", Direction.ASC),
+                    arguments("total_estimated_cost_metrics.p90", Direction.DESC),
+                    arguments("total_estimated_cost_metrics.p99", Direction.ASC),
+                    arguments("total_estimated_cost_metrics.p99", Direction.DESC));
         }
 
         @Test
