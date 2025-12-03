@@ -89,7 +89,7 @@ class ManualEvaluationServiceImpl implements ManualEvaluationService {
 
         return Mono.fromCallable(() -> {
             Set<UUID> ruleIdSet = new HashSet<>(request.ruleIds());
-            List<?> rawRules = automationRuleEvaluatorService.findByIds(ruleIdSet, projectId, workspaceId);
+            List<?> rawRules = automationRuleEvaluatorService.findByIds(ruleIdSet, Set.of(projectId), workspaceId);
             @SuppressWarnings("unchecked")
             List<AutomationRuleEvaluator<?, ?>> rules = (List<AutomationRuleEvaluator<?, ?>>) rawRules;
 

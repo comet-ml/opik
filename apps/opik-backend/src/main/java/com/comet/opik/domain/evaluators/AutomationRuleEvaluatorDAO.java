@@ -29,6 +29,7 @@ import java.util.UUID;
 @RegisterConstructorMapper(TraceThreadLlmAsJudgeAutomationRuleEvaluatorModel.class)
 @RegisterConstructorMapper(TraceThreadUserDefinedMetricPythonAutomationRuleEvaluatorModel.class)
 @RegisterRowMapper(AutomationRuleEvaluatorRowMapper.class)
+@RegisterRowMapper(AutomationRuleEvaluatorWithProjectRowMapper.class)
 public interface AutomationRuleEvaluatorDAO extends AutomationRuleDAO {
 
     @SqlUpdate("INSERT INTO automation_rule_evaluators(id, `type`, code, created_by, last_updated_by) " +
@@ -44,15 +45,17 @@ public interface AutomationRuleEvaluatorDAO extends AutomationRuleDAO {
     <T> int updateEvaluator(@Bind("id") UUID id, @BindMethods("rule") AutomationRuleEvaluatorModel<T> rule);
 
     @SqlQuery("""
-            SELECT rule.id, rule.project_id, p.name AS project_name, rule.action, rule.name AS name, rule.sampling_rate, rule.enabled, rule.filters, evaluator.type, evaluator.code,
-                   evaluator.created_at, evaluator.created_by, evaluator.last_updated_at, evaluator.last_updated_by
+            SELECT rule.id, rule.action, rule.name AS name, rule.sampling_rate, rule.enabled, rule.filters,
+                   evaluator.type, evaluator.code,
+                   evaluator.created_at, evaluator.created_by, evaluator.last_updated_at, evaluator.last_updated_by,
+                   arp.project_id
             FROM automation_rules rule
             JOIN automation_rule_evaluators evaluator
               ON rule.id = evaluator.id
-            LEFT JOIN projects p
-              ON rule.project_id = p.id
+            LEFT JOIN automation_rule_projects arp
+              ON rule.id = arp.rule_id AND rule.workspace_id = arp.workspace_id
             WHERE rule.workspace_id = :workspaceId AND rule.action = :action
-            <if(projectIds)> AND rule.project_id IN (<projectIds>) <endif>
+            <if(projectIds)> AND arp.project_id IN (<projectIds>) <endif>
             <if(type)> AND evaluator.type = :type <endif>
             <if(ids)> AND rule.id IN (<ids>) <endif>
             <if(id)> AND rule.id like concat('%', :id, '%') <endif>
@@ -80,8 +83,10 @@ public interface AutomationRuleEvaluatorDAO extends AutomationRuleDAO {
     default List<AutomationRuleEvaluatorModel<?>> find(String workspaceId, List<UUID> projectIds,
             AutomationRuleEvaluatorCriteria criteria, String sortingFields, String filters,
             Map<String, Object> filterMapping, Integer offset, Integer limit) {
-        return find(workspaceId, projectIds, criteria.action(), criteria.type(), criteria.ids(), criteria.id(),
+        var rawResults = find(workspaceId, projectIds, criteria.action(), criteria.type(), criteria.ids(),
+                criteria.id(),
                 criteria.name(), sortingFields, filters, filterMapping, offset, limit);
+        return aggregateProjectIds(rawResults);
     }
 
     default List<AutomationRuleEvaluatorModel<?>> find(String workspaceId, UUID projectId,
@@ -97,13 +102,58 @@ public interface AutomationRuleEvaluatorDAO extends AutomationRuleDAO {
         return find(workspaceId, projectId, criteria, null, null, Map.of(), null, null);
     }
 
+    /**
+     * Aggregates multiple rows (one per project) into single rules with multiple project IDs.
+     * The query returns one row per rule-project combination, so we need to merge them.
+     */
+    private static List<AutomationRuleEvaluatorModel<?>> aggregateProjectIds(
+            List<AutomationRuleEvaluatorModel<?>> rawResults) {
+        var aggregated = new java.util.LinkedHashMap<UUID, AutomationRuleEvaluatorModel<?>>();
+
+        for (var result : rawResults) {
+            UUID ruleId = result.id();
+            if (aggregated.containsKey(ruleId)) {
+                // Merge project IDs
+                var existing = aggregated.get(ruleId);
+                var mergedProjectIds = new java.util.HashSet<>(existing.projectIds());
+                mergedProjectIds.addAll(result.projectIds());
+
+                // Rebuild the model with merged project IDs
+                aggregated.put(ruleId, rebuildWithProjectIds(existing, mergedProjectIds));
+            } else {
+                aggregated.put(ruleId, result);
+            }
+        }
+
+        return new java.util.ArrayList<>(aggregated.values());
+    }
+
+    /**
+     * Rebuilds an AutomationRuleEvaluatorModel with new project IDs.
+     */
+    private static AutomationRuleEvaluatorModel<?> rebuildWithProjectIds(
+            AutomationRuleEvaluatorModel<?> model, Set<UUID> projectIds) {
+        return switch (model) {
+            case LlmAsJudgeAutomationRuleEvaluatorModel m -> m.toBuilder().projectIds(projectIds).build();
+            case UserDefinedMetricPythonAutomationRuleEvaluatorModel m -> m.toBuilder().projectIds(projectIds).build();
+            case TraceThreadLlmAsJudgeAutomationRuleEvaluatorModel m -> m.toBuilder().projectIds(projectIds).build();
+            case TraceThreadUserDefinedMetricPythonAutomationRuleEvaluatorModel m ->
+                m.toBuilder().projectIds(projectIds).build();
+            case SpanLlmAsJudgeAutomationRuleEvaluatorModel m -> m.toBuilder().projectIds(projectIds).build();
+        };
+    }
+
     @SqlQuery("""
-            SELECT COUNT(*)
+            SELECT COUNT(DISTINCT rule.id)
             FROM automation_rules rule
             JOIN automation_rule_evaluators evaluator
               ON rule.id = evaluator.id
+            <if(projectIds)>
+            LEFT JOIN automation_rule_projects arp
+              ON rule.id = arp.rule_id AND rule.workspace_id = arp.workspace_id
+            <endif>
             WHERE workspace_id = :workspaceId AND rule.action = :action
-            <if(projectIds)> AND project_id IN (<projectIds>) <endif>
+            <if(projectIds)> AND arp.project_id IN (<projectIds>) <endif>
             <if(type)> AND evaluator.type = :type <endif>
             <if(ids)> AND rule.id IN (<ids>) <endif>
             <if(id)> AND rule.id like concat('%', :id, '%') <endif>
@@ -141,14 +191,12 @@ public interface AutomationRuleEvaluatorDAO extends AutomationRuleDAO {
                     SELECT id
                     FROM automation_rules
                     WHERE workspace_id = :workspaceId
-                    <if(projectId)> AND project_id = :projectId <endif>
                     <if(ids)> AND id IN (<ids>) <endif>
                 )
             """)
     @UseStringTemplateEngine
     @AllowUnusedBindings
     void deleteEvaluatorsByIds(@Bind("workspaceId") String workspaceId,
-            @Define("projectId") @Bind("projectId") UUID projectId,
             @Define("ids") @BindList("ids") Set<UUID> ids);
 
 }

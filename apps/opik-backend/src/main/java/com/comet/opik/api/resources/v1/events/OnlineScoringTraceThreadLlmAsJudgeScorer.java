@@ -147,7 +147,7 @@ public class OnlineScoringTraceThreadLlmAsJudgeScorer extends OnlineScoringBaseS
         final AutomationRuleEvaluator<?, ?> rule;
 
         try {
-            rule = automationRuleEvaluatorService.findById(message.ruleId(), message.projectId(),
+            rule = automationRuleEvaluatorService.findById(message.ruleId(), Set.of(message.projectId()),
                     message.workspaceId());
         } catch (NotFoundException ex) {
             log.warn(

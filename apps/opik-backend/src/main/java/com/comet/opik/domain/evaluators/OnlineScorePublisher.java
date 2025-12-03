@@ -107,7 +107,7 @@ class OnlineScorePublisherImpl implements OnlineScorePublisher {
         AutomationRuleEvaluator<?, ?> rule;
 
         try {
-            rule = automationRuleEvaluatorService.findById(ruleId, projectId, workspaceId);
+            rule = automationRuleEvaluatorService.findById(ruleId, Set.of(projectId), workspaceId);
         } catch (NotFoundException ex) {
             log.warn("Rule with ID '{}' not found for projectId '{}' and workspaceId '{}'", ruleId, projectId,
                     workspaceId, ex);

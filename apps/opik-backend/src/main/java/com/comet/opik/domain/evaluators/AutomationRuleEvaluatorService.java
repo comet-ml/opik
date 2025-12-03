@@ -55,20 +55,20 @@ import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
 public interface AutomationRuleEvaluatorService {
 
     <E, F extends Filter, T extends AutomationRuleEvaluator<E, F>> T save(T automationRuleEvaluator,
-            @NonNull UUID projectId,
+            @NonNull Set<UUID> projectIds,
             @NonNull String workspaceId, @NonNull String userName);
 
-    void update(@NonNull UUID id, @NonNull UUID projectId, @NonNull String workspaceId, @NonNull String userName,
+    void update(@NonNull UUID id, @NonNull Set<UUID> projectIds, @NonNull String workspaceId, @NonNull String userName,
             AutomationRuleEvaluatorUpdate<?, ?> automationRuleEvaluator);
 
-    <E, F extends Filter, T extends AutomationRuleEvaluator<E, F>> T findById(@NonNull UUID id, UUID projectId,
+    <E, F extends Filter, T extends AutomationRuleEvaluator<E, F>> T findById(@NonNull UUID id, Set<UUID> projectIds,
             @NonNull String workspaceId);
 
     <E, F extends Filter, T extends AutomationRuleEvaluator<E, F>> List<T> findByIds(@NonNull Set<UUID> ids,
-            UUID projectId,
+            Set<UUID> projectIds,
             @NonNull String workspaceId);
 
-    void delete(@NonNull Set<UUID> ids, UUID projectId, @NonNull String workspaceId);
+    void delete(@NonNull Set<UUID> ids, Set<UUID> projectIds, @NonNull String workspaceId);
 
     AutomationRuleEvaluatorPage find(int page, int size,
             @NonNull AutomationRuleEvaluatorSearchCriteria searchCriteria,
@@ -100,21 +100,22 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
     private final @NonNull SortingQueryBuilder sortingQueryBuilder;
 
     @Override
-    @CacheEvict(name = "automation_rule_evaluators_find_all", key = "$projectId + '-' + $workspaceId")
+    @CacheEvict(name = "automation_rule_evaluators_find_all", key = "$projectIds + '-' + $workspaceId")
     public <E, F extends Filter, T extends AutomationRuleEvaluator<E, F>> T save(@NonNull T inputRuleEvaluator,
-            @NonNull UUID projectId, @NonNull String workspaceId, @NonNull String userName) {
+            @NonNull Set<UUID> projectIds, @NonNull String workspaceId, @NonNull String userName) {
 
         UUID id = idGenerator.generateId();
         IdGenerator.validateVersion(id, "AutomationRuleEvaluator");
 
         var savedEvaluator = template.inTransaction(WRITE, handle -> {
             var evaluatorsDAO = handle.attach(AutomationRuleEvaluatorDAO.class);
+            var projectsDAO = handle.attach(AutomationRuleProjectsDAO.class);
 
             AutomationRuleEvaluatorModel<?> evaluator = switch (inputRuleEvaluator) {
                 case AutomationRuleEvaluatorLlmAsJudge llmAsJudge -> {
                     var definition = llmAsJudge.toBuilder()
                             .id(id)
-                            .projectId(projectId)
+                            .projectIds(projectIds)
                             .createdBy(userName)
                             .lastUpdatedBy(userName)
                             .build();
@@ -127,7 +128,7 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
                     }
                     var definition = userDefinedMetricPython.toBuilder()
                             .id(id)
-                            .projectId(projectId)
+                            .projectIds(projectIds)
                             .createdBy(userName)
                             .lastUpdatedBy(userName)
                             .build();
@@ -137,7 +138,7 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
                 case AutomationRuleEvaluatorTraceThreadLlmAsJudge traceThreadLlmAsJudge -> {
                     var definition = traceThreadLlmAsJudge.toBuilder()
                             .id(id)
-                            .projectId(projectId)
+                            .projectIds(projectIds)
                             .createdBy(userName)
                             .lastUpdatedBy(userName)
                             .build();
@@ -150,7 +151,7 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
                     }
                     var definition = userDefinedMetricPython.toBuilder()
                             .id(id)
-                            .projectId(projectId)
+                            .projectIds(projectIds)
                             .createdBy(userName)
                             .lastUpdatedBy(userName)
                             .build();
@@ -160,7 +161,7 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
                 case AutomationRuleEvaluatorSpanLlmAsJudge spanLlmAsJudge -> {
                     var definition = spanLlmAsJudge.toBuilder()
                             .id(id)
-                            .projectId(projectId)
+                            .projectIds(projectIds)
                             .createdBy(userName)
                             .lastUpdatedBy(userName)
                             .build();
@@ -170,11 +171,16 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
             };
 
             try {
-                log.debug("Creating {} AutomationRuleEvaluator with id '{}' in projectId '{}' and workspaceId '{}'",
-                        evaluator.type(), id, evaluator.projectId(), workspaceId);
+                log.debug("Creating {} AutomationRuleEvaluator with id '{}' in projectIds '{}' and workspaceId '{}'",
+                        evaluator.type(), id, evaluator.projectIds(), workspaceId);
 
                 evaluatorsDAO.saveBaseRule(evaluator, workspaceId);
                 evaluatorsDAO.saveEvaluator(evaluator);
+
+                // Save project associations
+                for (UUID projectId : projectIds) {
+                    projectsDAO.saveRuleProjects(id, Set.of(projectId), workspaceId);
+                }
 
                 return evaluator;
             } catch (UnableToExecuteStatementException e) {
@@ -187,23 +193,31 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
             }
         });
 
-        return findById(savedEvaluator.id(), savedEvaluator.projectId(), workspaceId);
+        return findById(savedEvaluator.id(), savedEvaluator.projectIds(), workspaceId);
     }
 
     @Override
-    @CacheEvict(name = "automation_rule_evaluators_find_all", key = "$projectId + '-' + $workspaceId")
-    public void update(@NonNull UUID id, @NonNull UUID projectId, @NonNull String workspaceId,
+    @CacheEvict(name = "automation_rule_evaluators_find_all", key = "$projectIds + '-' + $workspaceId")
+    public void update(@NonNull UUID id, @NonNull Set<UUID> projectIds, @NonNull String workspaceId,
             @NonNull String userName, @NonNull AutomationRuleEvaluatorUpdate<?, ?> evaluatorUpdate) {
 
-        log.debug("Updating AutomationRuleEvaluator with id '{}' in projectId '{}' and workspaceId '{}'", id, projectId,
+        log.debug("Updating AutomationRuleEvaluator with id '{}' in projectIds '{}' and workspaceId '{}'", id,
+                projectIds,
                 workspaceId);
         template.inTransaction(WRITE, handle -> {
             var dao = handle.attach(AutomationRuleEvaluatorDAO.class);
+            var projectsDAO = handle.attach(AutomationRuleProjectsDAO.class);
 
             try {
                 String filtersJson = AutomationModelEvaluatorMapper.INSTANCE.map(evaluatorUpdate.getFilters());
-                int resultBase = dao.updateBaseRule(id, projectId, workspaceId, evaluatorUpdate.getName(),
+                int resultBase = dao.updateBaseRule(id, workspaceId, evaluatorUpdate.getName(),
                         evaluatorUpdate.getSamplingRate(), evaluatorUpdate.isEnabled(), filtersJson);
+
+                // Update project associations
+                projectsDAO.deleteByRuleId(id, workspaceId);
+                for (UUID projectId : projectIds) {
+                    projectsDAO.saveRuleProjects(id, Set.of(projectId), workspaceId);
+                }
 
                 AutomationRuleEvaluatorModel<?> modelUpdate = switch (evaluatorUpdate) {
                     case AutomationRuleEvaluatorUpdateLlmAsJudge evaluatorUpdateLlmAsJudge ->
@@ -264,16 +278,19 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
     }
 
     @Override
-    public <E, F extends Filter, T extends AutomationRuleEvaluator<E, F>> T findById(@NonNull UUID id, UUID projectId,
+    public <E, F extends Filter, T extends AutomationRuleEvaluator<E, F>> T findById(@NonNull UUID id,
+            Set<UUID> projectIds,
             @NonNull String workspaceId) {
-        log.debug("Finding AutomationRuleEvaluator with id '{}' in projectId '{}' and workspaceId '{}'", id, projectId,
+        log.debug("Finding AutomationRuleEvaluator with id '{}' in projectIds '{}' and workspaceId '{}'", id,
+                projectIds,
                 workspaceId);
 
         return template.inTransaction(READ_ONLY, handle -> {
             var dao = handle.attach(AutomationRuleEvaluatorDAO.class);
             var singleIdSet = Collections.singleton(id);
             var criteria = AutomationRuleEvaluatorCriteria.builder().ids(singleIdSet).build();
-            return dao.find(workspaceId, projectId, criteria)
+            List<UUID> projectIdsList = projectIds != null ? new java.util.ArrayList<>(projectIds) : null;
+            return dao.find(workspaceId, projectIdsList, criteria)
                     .stream()
                     .findFirst()
                     .map(ruleEvaluator -> switch (ruleEvaluator) {
@@ -295,15 +312,16 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
 
     @Override
     public <E, F extends Filter, T extends AutomationRuleEvaluator<E, F>> List<T> findByIds(@NonNull Set<UUID> ids,
-            UUID projectId,
+            Set<UUID> projectIds,
             @NonNull String workspaceId) {
-        log.debug("Finding AutomationRuleEvaluators with ids '{}' in projectId '{}' and workspaceId '{}'", ids,
-                projectId, workspaceId);
+        log.debug("Finding AutomationRuleEvaluators with ids '{}' in projectIds '{}' and workspaceId '{}'", ids,
+                projectIds, workspaceId);
 
         return template.inTransaction(READ_ONLY, handle -> {
             var dao = handle.attach(AutomationRuleEvaluatorDAO.class);
             var criteria = AutomationRuleEvaluatorCriteria.builder().ids(ids).build();
-            return dao.find(workspaceId, projectId, criteria)
+            List<UUID> projectIdsList = projectIds != null ? new java.util.ArrayList<>(projectIds) : null;
+            return dao.find(workspaceId, projectIdsList, criteria)
                     .stream()
                     .map(ruleEvaluator -> switch (ruleEvaluator) {
                         case LlmAsJudgeAutomationRuleEvaluatorModel llmAsJudge ->
@@ -323,20 +341,22 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
     }
 
     @Override
-    @CacheEvict(name = "automation_rule_evaluators_find_all", key = "$projectId + '-' + $workspaceId")
-    public void delete(@NonNull Set<UUID> ids, UUID projectId, @NonNull String workspaceId) {
+    @CacheEvict(name = "automation_rule_evaluators_find_all", key = "$projectIds + '-' + $workspaceId")
+    public void delete(@NonNull Set<UUID> ids, Set<UUID> projectIds, @NonNull String workspaceId) {
         if (ids.isEmpty()) {
             log.info("Delete AutomationRuleEvaluator: ids list is empty, returning");
             return;
         }
 
-        log.debug("Deleting AutomationRuleEvaluators with ids {} in projectId '{}' and workspaceId '{}'", ids,
-                projectId, workspaceId);
+        log.debug("Deleting AutomationRuleEvaluators with ids {} in projectIds '{}' and workspaceId '{}'", ids,
+                projectIds, workspaceId);
 
         template.inTransaction(WRITE, handle -> {
             var dao = handle.attach(AutomationRuleEvaluatorDAO.class);
-            dao.deleteEvaluatorsByIds(workspaceId, projectId, ids);
-            dao.deleteBaseRules(ids, projectId, workspaceId);
+            var projectsDAO = handle.attach(AutomationRuleProjectsDAO.class);
+            dao.deleteEvaluatorsByIds(workspaceId, ids);
+            projectsDAO.deleteByRuleIds(ids, workspaceId);
+            dao.deleteBaseRules(ids, workspaceId);
             return null;
         });
     }

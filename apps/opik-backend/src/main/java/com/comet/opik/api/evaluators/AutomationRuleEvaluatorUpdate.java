@@ -17,6 +17,7 @@ import lombok.Data;
 import lombok.experimental.SuperBuilder;
 
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 @AllArgsConstructor
@@ -59,7 +60,7 @@ public abstract sealed class AutomationRuleEvaluatorUpdate<T, E extends Filter> 
     @JsonIgnore
     @NotNull private final T code;
 
-    @NotNull private final UUID projectId;
+    @NotNull private final Set<UUID> projectIds;
 
     public abstract AutomationRuleEvaluatorType getType();
 
