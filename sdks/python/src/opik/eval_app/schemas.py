@@ -12,6 +12,7 @@ class MetricParamDescriptor(pydantic.BaseModel):
     required: bool
     type: Optional[str] = None
     default: Optional[Any] = None
+    description: Optional[str] = None
 
 
 class MetricDescriptorResponse(pydantic.BaseModel):

@@ -7,6 +7,7 @@ export interface LocalMetricParam {
   required: boolean;
   type: string | null;
   default: unknown;
+  description: string | null;
 }
 
 export interface LocalMetricDescriptor {

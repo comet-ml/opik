@@ -46,6 +46,7 @@ async def list_metrics() -> schemas.MetricsListResponse:
                         required=p.required,
                         type=p.type,
                         default=p.default,
+                        description=p.description,
                     )
                     for p in m.init_params
                 ],
@@ -55,6 +56,7 @@ async def list_metrics() -> schemas.MetricsListResponse:
                         required=p.required,
                         type=p.type,
                         default=p.default,
+                        description=p.description,
                     )
                     for p in m.score_params
                 ],

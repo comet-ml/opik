@@ -395,34 +395,42 @@ const AddPlaygroundMetricDialog: React.FC<AddPlaygroundMetricDialogProps> = ({
                         Configure how the metric is initialized. All fields are
                         optional.
                       </Description>
-                      <div className="flex flex-col gap-3 rounded-md border p-3">
+                      <div className="flex flex-col gap-4 rounded-md border p-3">
                         {configurableInitParams.map((param) => (
                           <FormField
                             key={param.name}
                             control={form.control}
                             name={`init_args.${param.name}` as const}
                             render={({ field }) => (
-                              <FormItem>
-                                <div className="flex items-center justify-between">
-                                  <div className="flex items-center gap-2">
+                              <FormItem className="flex flex-col gap-1">
+                                <div className="flex items-center gap-2">
+                                  <TooltipWrapper
+                                    content={param.description || undefined}
+                                  >
                                     <Tag
                                       variant={
                                         param.required ? "green" : "gray"
                                       }
                                       size="sm"
+                                      className="cursor-help"
                                     >
                                       {param.name}
                                     </Tag>
+                                  </TooltipWrapper>
+                                  <span className="text-xs text-muted-slate">
+                                    {formatParamType(param.type)}
+                                  </span>
+                                  {!param.required && (
                                     <span className="text-xs text-muted-slate">
-                                      {formatParamType(param.type)}
+                                      (optional)
                                     </span>
-                                    {!param.required && (
-                                      <span className="text-xs text-muted-slate">
-                                        (optional)
-                                      </span>
-                                    )}
-                                  </div>
+                                  )}
                                 </div>
+                                {param.description && (
+                                  <Description className="text-xs">
+                                    {param.description}
+                                  </Description>
+                                )}
                                 <FormControl>
                                   <ParamInput
                                     param={param}
@@ -455,7 +463,7 @@ const AddPlaygroundMetricDialog: React.FC<AddPlaygroundMetricDialogProps> = ({
                         &apos;output.output&apos;, or
                         &apos;metadata.context&apos;.
                       </Description>
-                      <div className="flex flex-col gap-3 rounded-md border p-3">
+                      <div className="flex flex-col gap-4 rounded-md border p-3">
                         {selectedMetric.score_params.map((param) => (
                           <FormField
                             key={param.name}
@@ -467,41 +475,50 @@ const AddPlaygroundMetricDialog: React.FC<AddPlaygroundMetricDialogProps> = ({
                                 param.name,
                               ]);
                               return (
-                                <FormItem>
-                                  <div className="flex items-center gap-4">
-                                    <div className="flex min-w-[120px] items-center gap-2">
+                                <FormItem className="flex flex-col gap-1">
+                                  <div className="flex items-center gap-2">
+                                    <TooltipWrapper
+                                      content={param.description || undefined}
+                                    >
                                       <Tag
                                         variant={
                                           param.required ? "green" : "gray"
                                         }
                                         size="sm"
+                                        className="cursor-help"
                                       >
                                         {param.name}
                                       </Tag>
-                                      {param.required ? (
-                                        <span className="text-xs text-destructive">
-                                          *
-                                        </span>
-                                      ) : (
-                                        <span className="text-xs text-muted-slate">
-                                          (optional)
-                                        </span>
-                                      )}
-                                    </div>
-                                    <div className="flex-1">
-                                      <FormControl>
-                                        <TracesOrSpansPathsAutocomplete
-                                          projectId={projectId || ""}
-                                          rootKeys={[...TRACE_ROOT_KEYS]}
-                                          value={field.value || ""}
-                                          hasError={Boolean(error)}
-                                          onValueChange={field.onChange}
-                                          projectName={projectName}
-                                          datasetColumnNames={datasetColumnNames}
-                                        />
-                                      </FormControl>
-                                    </div>
+                                    </TooltipWrapper>
+                                    <span className="text-xs text-muted-slate">
+                                      {formatParamType(param.type)}
+                                    </span>
+                                    {param.required ? (
+                                      <span className="text-xs text-destructive">
+                                        *
+                                      </span>
+                                    ) : (
+                                      <span className="text-xs text-muted-slate">
+                                        (optional)
+                                      </span>
+                                    )}
                                   </div>
+                                  {param.description && (
+                                    <Description className="text-xs">
+                                      {param.description}
+                                    </Description>
+                                  )}
+                                  <FormControl>
+                                    <TracesOrSpansPathsAutocomplete
+                                      projectId={projectId || ""}
+                                      rootKeys={[...TRACE_ROOT_KEYS]}
+                                      value={field.value || ""}
+                                      hasError={Boolean(error)}
+                                      onValueChange={field.onChange}
+                                      projectName={projectName}
+                                      datasetColumnNames={datasetColumnNames}
+                                    />
+                                  </FormControl>
                                   {error && (
                                     <p className="text-xs text-destructive">
                                       {error.message as string}
