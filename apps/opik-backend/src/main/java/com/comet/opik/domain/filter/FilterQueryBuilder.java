@@ -90,7 +90,7 @@ public class FilterQueryBuilder {
     private static final String STATUS_DB = "status";
     public static final String FEEDBACK_DEFINITIONS_DB = "feedback_definitions";
     public static final String SCOPE_DB = "scope";
-    private static final String DATA_ANALYTICS_DB = "toString(data)";
+    private static final String DATA_ANALYTICS_DB = "data";
     private static final String SOURCE_DB = "source";
     private static final String TRACE_ID_DB = "trace_id";
     private static final String SPAN_ID_DB = "span_id";
@@ -126,20 +126,28 @@ public class FilterQueryBuilder {
                             FieldType.LIST,
                             "arrayExists(element -> (ilike(element, CONCAT('%%', :filter%2$d ,'%%'))), %1$s) = 1",
                             FieldType.DICTIONARY,
-                            "ilike(JSON_VALUE(%1$s, :filterKey%2$d), CONCAT('%%', :filter%2$d ,'%%'))")))
+                            "ilike(JSON_VALUE(%1$s, :filterKey%2$d), CONCAT('%%', :filter%2$d ,'%%'))",
+                            FieldType.MAP,
+                            "ilike(arrayElement(mapValues(%1$s),indexOf(mapKeys(%1$s), :filterKey%2$d)), CONCAT('%%', :filter%2$d ,'%%'))")))
                     .put(Operator.NOT_CONTAINS, new EnumMap<>(Map.of(
                             FieldType.STRING, "notILike(%1$s, CONCAT('%%', :filter%2$d ,'%%'))",
                             FieldType.STRING_STATE_DB, "%1$s NOT LIKE CONCAT('%%', :filter%2$d ,'%%')",
+                            FieldType.MAP,
+                            "notILike(arrayElement(mapValues(%1$s),indexOf(mapKeys(%1$s), :filterKey%2$d)), CONCAT('%%', :filter%2$d ,'%%'))",
                             FieldType.DICTIONARY,
                             "notILike(JSON_VALUE(%1$s, :filterKey%2$d), CONCAT('%%', :filter%2$d ,'%%'))")))
                     .put(Operator.STARTS_WITH, new EnumMap<>(Map.of(
                             FieldType.STRING, "startsWith(lower(%1$s), lower(:filter%2$d))",
                             FieldType.STRING_STATE_DB, "%1$s LIKE CONCAT(:filter%2$d ,'%%')",
+                            FieldType.MAP,
+                            "startsWith(lower(arrayElement(mapValues(%1$s),indexOf(mapKeys(%1$s), :filterKey%2$d))), lower(:filter%2$d))",
                             FieldType.DICTIONARY,
                             "startsWith(lower(JSON_VALUE(%1$s, :filterKey%2$d)), lower(:filter%2$d))")))
                     .put(Operator.ENDS_WITH, new EnumMap<>(Map.of(
                             FieldType.STRING, "endsWith(lower(%1$s), lower(:filter%2$d))",
                             FieldType.STRING_STATE_DB, "%1$s LIKE CONCAT('%%', :filter%2$d)",
+                            FieldType.MAP,
+                            "endsWith(lower(arrayElement(mapValues(%1$s),indexOf(mapKeys(%1$s), :filterKey%2$d))), lower(:filter%2$d))",
                             FieldType.DICTIONARY,
                             "endsWith(lower(JSON_VALUE(%1$s, :filterKey%2$d)), lower(:filter%2$d))")))
                     .put(Operator.EQUAL, new EnumMap<>(Map.ofEntries(
@@ -153,6 +161,8 @@ public class FilterQueryBuilder {
                                     "has(groupArray(tuple(lower(name), %1$s)), tuple(lower(:filterKey%2$d), toDecimal64(:filter%2$d, 9))) = 1"),
                             Map.entry(FieldType.DICTIONARY,
                                     "lower(JSON_VALUE(%1$s, :filterKey%2$d)) = lower(:filter%2$d)"),
+                            Map.entry(FieldType.MAP,
+                                    "lower(arrayElement(mapValues(%1$s),indexOf(mapKeys(%1$s), :filterKey%2$d))) = lower(:filter%2$d)"),
                             Map.entry(FieldType.ENUM, "%1$s = :filter%2$d"))))
                     .put(Operator.NOT_EQUAL, new EnumMap<>(Map.ofEntries(
                             Map.entry(FieldType.STRING, "lower(%1$s) != lower(:filter%2$d)"),
@@ -165,6 +175,8 @@ public class FilterQueryBuilder {
                                     "has(groupArray(tuple(lower(name), %1$s)), tuple(lower(:filterKey%2$d), toDecimal64(:filter%2$d, 9))) = 0"),
                             Map.entry(FieldType.DICTIONARY,
                                     "lower(JSON_VALUE(%1$s, :filterKey%2$d)) != lower(:filter%2$d)"),
+                            Map.entry(FieldType.MAP,
+                                    "lower(arrayElement(mapValues(%1$s),indexOf(mapKeys(%1$s), :filterKey%2$d))) != lower(:filter%2$d)"),
                             Map.entry(FieldType.ENUM, "%1$s != :filter%2$d"))))
                     .put(Operator.GREATER_THAN, new EnumMap<>(Map.ofEntries(
                             Map.entry(FieldType.STRING, "lower(%1$s) > lower(:filter%2$d)"),
@@ -577,6 +589,7 @@ public class FilterQueryBuilder {
 
     private static final Set<FieldType> KEY_SUPPORTED_FIELDS_SET = EnumSet.of(
             FieldType.DICTIONARY,
+            FieldType.MAP,
             FieldType.FEEDBACK_SCORES_NUMBER);
 
     public Map<Field, List<Operator>> getUnSupportedOperators(@NonNull Field... fields) {

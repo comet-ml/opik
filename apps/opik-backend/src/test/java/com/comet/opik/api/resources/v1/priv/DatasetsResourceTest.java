@@ -4761,7 +4761,7 @@ class DatasetsResourceTest {
             putAndAssert(batch, TEST_WORKSPACE, API_KEY);
 
             // Create filter for the new filter API
-            var filter = new DatasetItemFilter(DatasetItemField.DATA, Operator.CONTAINS, null, searchKey);
+            var filter = new DatasetItemFilter(DatasetItemField.DATA, Operator.CONTAINS, "query", searchKey);
 
             var actualEntity = datasetResourceClient.getDatasetItems(datasetId,
                     Map.of("filters", toURLEncodedQueryParam(List.of(filter))), API_KEY, TEST_WORKSPACE);
