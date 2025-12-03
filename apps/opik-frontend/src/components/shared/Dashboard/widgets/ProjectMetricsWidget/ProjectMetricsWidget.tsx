@@ -14,6 +14,7 @@ import {
 import { Filter } from "@/types/filters";
 import { isFilterValid } from "@/lib/filters";
 import MetricContainerChart from "@/components/pages/TracesPage/MetricsTab/MetricChart/MetricChartContainer";
+import { CHART_TYPE } from "@/constants/chart";
 import {
   INTERVAL_DESCRIPTIONS,
   renderDurationTooltipValue,
@@ -92,7 +93,9 @@ const ProjectMetricsWidget: React.FunctionComponent<
   }
 
   const renderChartContent = () => {
-    const chartType = (widget.config?.chartType as "line" | "bar") || "line";
+    const chartType =
+      (widget.config?.chartType as CHART_TYPE.line | CHART_TYPE.bar) ||
+      CHART_TYPE.line;
     const traceFilters = widget.config?.traceFilters as Filter[] | undefined;
     const threadFilters = widget.config?.threadFilters as Filter[] | undefined;
 

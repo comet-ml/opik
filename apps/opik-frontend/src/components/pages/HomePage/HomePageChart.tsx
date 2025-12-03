@@ -15,7 +15,7 @@ import dayjs from "dayjs";
 import ChartTooltipContent, {
   ChartTooltipRenderHeaderArguments,
   ChartTooltipRenderValueArguments,
-} from "@/components/shared/ChartTooltipContent/ChartTooltipContent";
+} from "@/components/shared/Charts/ChartTooltipContent/ChartTooltipContent";
 import { formatDate } from "@/lib/date";
 import { Props as DotProps } from "recharts/types/shape/Dot";
 import { ChartData } from "@/components/pages/HomePage/helpers";
