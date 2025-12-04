@@ -39,7 +39,7 @@ const useDatasetItemBatchDeleteMutation = () => {
           filters: processFiltersArray(combinedFilters),
         };
       } else {
-        payload = { ids };
+        payload = { item_ids: ids };
       }
 
       const { data } = await api.post(

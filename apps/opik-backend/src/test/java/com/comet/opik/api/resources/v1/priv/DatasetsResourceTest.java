@@ -756,7 +756,7 @@ class DatasetsResourceTest {
             mockTargetWorkspace(okApikey, TEST_WORKSPACE, WORKSPACE_ID);
 
             var delete = DatasetItemsDelete.builder()
-                    .ids(items.stream().map(DatasetItem::id).collect(Collectors.toSet()))
+                    .itemIds(items.stream().map(DatasetItem::id).collect(Collectors.toSet()))
                     .build();
 
             try (var actualResponse = client.target(BASE_RESOURCE_URI.formatted(baseURI))
@@ -1247,7 +1247,7 @@ class DatasetsResourceTest {
             mockSessionCookieTargetWorkspace(this.sessionToken, workspaceName, WORKSPACE_ID);
 
             var delete = DatasetItemsDelete.builder()
-                    .ids(items.stream().map(DatasetItem::id).collect(Collectors.toSet()))
+                    .itemIds(items.stream().map(DatasetItem::id).collect(Collectors.toSet()))
                     .build();
 
             try (var actualResponse = client.target(BASE_RESOURCE_URI.formatted(baseURI))
@@ -4489,7 +4489,7 @@ class DatasetsResourceTest {
             putAndAssert(batch, TEST_WORKSPACE, API_KEY);
 
             var deleteRequest = DatasetItemsDelete.builder()
-                    .ids(items.stream().map(DatasetItem::id).collect(Collectors.toSet()))
+                    .itemIds(items.stream().map(DatasetItem::id).collect(Collectors.toSet()))
                     .build();
 
             try (var actualResponse = client.target(BASE_RESOURCE_URI.formatted(baseURI))
@@ -4524,7 +4524,7 @@ class DatasetsResourceTest {
             var id = UUID.randomUUID();
 
             var deleteRequest = DatasetItemsDelete.builder()
-                    .ids(Set.of(id))
+                    .itemIds(Set.of(id))
                     .build();
 
             try (var actualResponse = client.target(BASE_RESOURCE_URI.formatted(baseURI))
@@ -4547,7 +4547,7 @@ class DatasetsResourceTest {
             var filter = new DatasetItemFilter(DatasetItemField.TAGS, Operator.CONTAINS, null, "tag");
 
             var deleteRequest = DatasetItemsDelete.builder()
-                    .ids(Set.of(UUID.randomUUID()))
+                    .itemIds(Set.of(UUID.randomUUID()))
                     .filters(List.of(filter))
                     .build();
 
@@ -4586,7 +4586,7 @@ class DatasetsResourceTest {
             var ids = IntStream.range(0, 1001).mapToObj(__ -> UUID.randomUUID()).collect(Collectors.toSet());
 
             var deleteRequest = DatasetItemsDelete.builder()
-                    .ids(ids)
+                    .itemIds(ids)
                     .build();
 
             try (var actualResponse = client.target(BASE_RESOURCE_URI.formatted(baseURI))
@@ -6121,7 +6121,7 @@ class DatasetsResourceTest {
 
             // Delete the dataset item using the correct POST endpoint
             var deleteRequest = DatasetItemsDelete.builder()
-                    .ids(Set.of(datasetItem.id()))
+                    .itemIds(Set.of(datasetItem.id()))
                     .build();
 
             try (var actualResponse = client.target(BASE_RESOURCE_URI.formatted(baseURI))
