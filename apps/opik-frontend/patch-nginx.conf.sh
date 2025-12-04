@@ -16,9 +16,8 @@ export NGINX_EXTRA_ERROR_LOG="${NGINX_EXTRA_ERROR_LOG:-}"
 
 VARS='$NGINX_PID $NGINX_PORT $OTEL_TRACE $OTEL_COLLECTOR_HOST $OTEL_COLLECTOR_PORT $OTEL_TRACES_EXPORTER $OTEL_EXPORTER_OTLP_TRACES_ENDPOINT $NGINX_EXTRA_ACCESS_LOG $NGINX_EXTRA_ERROR_LOG'
     
-echo "Some configs were processed by 20-envsubst-on-templates.sh, but performing additional processing here for variables (e.g., OTEL_TRACE_ID_JSON) not handled previously..."
 # Note: .template files in conf.d/ are handled by /docker-entrypoint.d/20-envsubst-on-templates.sh
-# but we need to process them manually here to set the OTEL_TRACE_ID_JSON and other variables
+# but we need to process them manually here to set the OTEL_TRACES_EXPORTER and other variables
 for template in /etc/nginx/conf.d/*.conf; do
     [ -f "$template" ] || continue
     
@@ -28,7 +27,6 @@ for template in /etc/nginx/conf.d/*.conf; do
     echo "Processing $template -> /etc/nginx/conf.d/$filename"
     
     TMP_FILE=$(mktemp)
-    # We only want to substitute OTEL_TRACE_ID_JSON, leaving other variables alone
     envsubst "$VARS" < "$template" > "$TMP_FILE"
     # We output to conf.d directly
     cat "$TMP_FILE" > "/etc/nginx/conf.d/$filename"
