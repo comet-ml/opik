@@ -4183,7 +4183,7 @@ class TraceDAOImpl implements TraceDAO {
     public Mono<Map<UUID, Instant>> getLastUpdatedTraceAt(
             @NonNull Set<UUID> projectIds, @NonNull String workspaceId, @NonNull Connection connection) {
 
-        log.info("Getting last updated trace at for projectIds {}", Arrays.toString(projectIds.toArray()));
+        log.info("Getting last updated trace at for projectIds, size '{}'", projectIds.size());
 
         var statement = connection.createStatement(SELECT_TRACE_LAST_UPDATED_AT)
                 .bind("project_ids", projectIds.toArray(UUID[]::new))
@@ -4195,7 +4195,7 @@ class TraceDAOImpl implements TraceDAO {
                 .collectMap(Map.Entry::getKey, Map.Entry::getValue)
                 .doFinally(signalType -> {
                     if (signalType == SignalType.ON_COMPLETE) {
-                        log.info("Got last updated trace at for projectIds {}", Arrays.toString(projectIds.toArray()));
+                        log.info("Got last updated trace at for projectIds, size '{}'", projectIds.size());
                     }
                 });
     }

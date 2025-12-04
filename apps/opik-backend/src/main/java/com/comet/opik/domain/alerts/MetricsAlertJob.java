@@ -213,8 +213,10 @@ public class MetricsAlertJob extends Job implements InterruptableJob {
         // Extract all configurations from trigger
         List<TriggerConfig> configs = extractTriggerConfig(trigger);
         if (configs.isEmpty()) {
-            log.warn("No trigger configs found for alert '{}' (id: '{}'), trigger: '{}'",
-                    alert.name(), alert.id(), trigger.eventType());
+            log.warn(
+                    "Skipping alert: no trigger configs found for alert '{}' (id: '{}'), trigger: '{}', trigger id: '{}'",
+                    alert.name(), alert.id(), trigger.eventType(), trigger.id());
+            alertsSkipped.add(1);
             return Mono.empty();
         }
 
@@ -356,7 +358,9 @@ public class MetricsAlertJob extends Job implements InterruptableJob {
 
     private List<TriggerConfig> extractTriggerConfig(AlertTrigger trigger) {
         if (CollectionUtils.isEmpty(trigger.triggerConfigs())) {
-            throw new IllegalArgumentException("Trigger must have configuration for metrics alerts");
+            log.warn("Trigger has no configuration for metrics alert: event type: '{}', trigger id: '{}'",
+                    trigger.eventType(), trigger.id());
+            return List.of();
         }
 
         // Extract project IDs from SCOPE_PROJECT config type (same for all configs)

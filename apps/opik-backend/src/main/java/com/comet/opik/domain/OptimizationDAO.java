@@ -30,7 +30,6 @@ import reactor.core.publisher.Mono;
 import reactor.core.publisher.SignalType;
 
 import java.time.Instant;
-import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -405,7 +404,7 @@ class OptimizationDAOImpl implements OptimizationDAO {
     @Override
     public Mono<Long> delete(Set<UUID> ids) {
         Preconditions.checkArgument(CollectionUtils.isNotEmpty(ids), "Argument 'ids' must not be empty");
-        log.info("Deleting optimizations by ids [{}]", Arrays.toString(ids.toArray()));
+        log.info("Deleting optimizations by ids, size '{}'", ids.size());
 
         return Mono.from(connectionFactory.create())
                 .flatMapMany(connection -> delete(ids, connection))
@@ -413,7 +412,7 @@ class OptimizationDAOImpl implements OptimizationDAO {
                 .reduce(Long::sum)
                 .doFinally(signalType -> {
                     if (signalType == SignalType.ON_COMPLETE) {
-                        log.info("Deleted optimizations by ids [{}]", Arrays.toString(ids.toArray()));
+                        log.info("Deleted optimizations by ids, size '{}'", ids.size());
                     }
                 });
     }

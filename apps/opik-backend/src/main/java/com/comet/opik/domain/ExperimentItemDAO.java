@@ -21,7 +21,6 @@ import reactor.core.publisher.Mono;
 import reactor.core.publisher.SignalType;
 
 import java.time.Instant;
-import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
 import java.util.Set;
@@ -485,7 +484,7 @@ class ExperimentItemDAO {
         Preconditions.checkArgument(CollectionUtils.isNotEmpty(experimentIds),
                 "Argument 'experimentIds' must not be empty");
 
-        log.info("Deleting experiment items by experiment ids [{}]", Arrays.toString(experimentIds.toArray()));
+        log.info("Deleting experiment items by experiment ids, size '{}'", experimentIds.size());
 
         return Mono.from(connectionFactory.create())
                 .flatMapMany(connection -> deleteByExperimentIds(experimentIds, connection))
@@ -493,8 +492,7 @@ class ExperimentItemDAO {
                 .reduce(0L, Long::sum)
                 .doFinally(signalType -> {
                     if (signalType == SignalType.ON_COMPLETE) {
-                        log.info("Deleted experiment items by experiment ids [{}]",
-                                Arrays.toString(experimentIds.toArray()));
+                        log.info("Deleted experiment items by experiment ids, size '{}'", experimentIds.size());
                     }
                 });
     }
