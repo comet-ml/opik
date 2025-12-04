@@ -330,16 +330,18 @@ export const LoadableSelectBox = ({
                       </div>
                     )}
 
-                    <div className="min-w-0 flex-1">
-                      <div className="comet-body-s truncate">
-                        {option.label}
-                      </div>
-                      {option.description && (
-                        <div className="comet-body-xs truncate text-muted-foreground">
-                          {option.description}
+                    <TooltipWrapper content={option.label}>
+                      <div className="min-w-0 flex-1">
+                        <div className="comet-body-s truncate">
+                          {option.label}
                         </div>
-                      )}
-                    </div>
+                        {option.description && (
+                          <div className="comet-body-xs truncate text-muted-foreground">
+                            {option.description}
+                          </div>
+                        )}
+                      </div>
+                    </TooltipWrapper>
 
                     {option.action && (
                       <TooltipWrapper content="Open in a new tab">
