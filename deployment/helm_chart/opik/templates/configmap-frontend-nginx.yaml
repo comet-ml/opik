@@ -5,16 +5,14 @@ metadata:
   labels:
     {{- include "opik.labels" $  | nindent 4 }}
 data:
-  default.conf: |
-    gzip on;
-    gzip_disable "msie6";
-    gzip_vary on;
-    gzip_proxied any;
-    gzip_comp_level 6;
-    gzip_buffers 16 8k;
-    gzip_http_version 1.1;
-    gzip_min_length 256;
-    gzip_types text/plain text/css application/json application/x-javascript text/xml application/xml application/xml+rss text/javascript application/vnd.ms-fontobject application/x-font-ttf font/opentype image/svg+xml image/x-icon application/javascript;
+  {{- with .Values.component.frontend.logFormats }}
+  log-formats.conf.template: |
+     # nginx log formats template
+    {{- range $name,$format := . }}
+    log_format {{ $name }} {{ $format }};
+    {{- end }}
+  {{- end }}
+  default.conf.template: |
     absolute_redirect off;
     real_ip_header      X-Forwarded-For;
     real_ip_recursive   on;
@@ -61,27 +59,39 @@ data:
     {{- range $name,$limit := .Values.component.frontend.throttling }}
     limit_req_zone {{ $limit.variable }} zone={{ $limit.zone | default $name }}:{{ $limit.size | default "1m" }} rate={{ $limit.rate | default "10r/m" }};
     {{- end }}
-
-    {{- range $name,$format := .Values.component.frontend.logFormats }}
-    log_format {{ $name }} {{ $format }};
-    {{- end }}
     
-    access_log /dev/stdout {{ .Values.component.frontend.logFormat | default "main" -}};
+    access_log /dev/stdout {{ .Values.component.frontend.logFormat | default "main" }};
 
     server {
         listen {{ (.Values.component.frontend.service.ports | first).targetPort }} default_server;
-        server_name localhost;
-        
+        server_name _;
+        root /usr/share/nginx/html;
+        index index.html;
+
         # Increased to 2GB to support large CSV uploads (OPIK-3077)
         client_max_body_size {{ .Values.component.frontend.clientMaxBodySize | default "500M" }};
+        client_header_buffer_size 16k;
+        large_client_header_buffers 4 64k;
         
         # Add custom header to identify this nginx instance in multi-proxy setups
         add_header X-Opik-Nginx "frontend" always;
+        # Add trace ID header for OpenTelemetry
+        add_header X-Trace-ID $otel_trace_id always;
         
         {{- $rootPath := ternary "" "/opik" .Values.standalone }}
-
+        # Dedicated healthcheck endpoint
+        # Returns 200 OK if nginx is running and can serve requests
+        location {{ $rootPath }}/health {
+            add_header Content-Type text/plain;
+            access_log off;
+            # Explicitly disable tracing for health checks to avoid unnecessary trace data,
+            # even if global tracing is enabled via OTEL_TRACE. Health endpoints are hit frequently
+            # by monitoring systems and should not be traced.
+            otel_trace off;
+            return 200 "healthy\n";
+        }
         location @api {
-            rewrite /api/(.*) /$1  break;
+            rewrite /api/(.*) /$1 break;
             proxy_pass http://backend;
             proxy_redirect  off;
             proxy_set_header Host $host;
@@ -97,24 +107,26 @@ data:
             proxy_set_header Connection "upgrade";
         }
         
-        location ^~ {{ $rootPath }}/api/ {
+        location {{ $rootPath }}/api/ {
           try_files /dev/null @api;
         }
 
-        location ^~ {{ $rootPath }}/swagger/ {
-            rewrite /swagger/(.*) /$1  break;
-            proxy_pass http://swagger/;
+        location @swagger {
+            rewrite /swagger/(.*) /$1 break;
+            proxy_pass http://swagger;
             proxy_redirect  off;
             proxy_set_header Host $host;
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
             proxy_set_header X-Forwarded-Proto $scheme;
+            otel_trace off;
         }
-      
-        location ~ ^{{ $rootPath }}/swagger$ {
-            try_files /dev/null @swagger;
+        location ^~ {{ $rootPath }}/swagger/ {
+          try_files /dev/null @swagger;
         }
-      
+        location = {{ $rootPath }}/swagger {
+            rewrite 308 ^(.*)$ $1/ permanent;
+        }
 
         {{- if not .Values.standalone }}
         location = {{ $rootPath }} {
