@@ -147,7 +147,7 @@ const OptimizationProgressChartContent: React.FC<
   const renderPopover = () => {
     if (!position) return null;
 
-    const leftCorrection = -9;
+    const topCorrection = 12;
 
     const bgStyles: React.CSSProperties = {
       backgroundColor: `color-mix(in srgb, ${mainObjectiveColor} 10%, white 100%)`,
@@ -159,7 +159,8 @@ const OptimizationProgressChartContent: React.FC<
           {
             "--main-objective-color": mainObjectiveColor,
             top: position.y,
-            left: position.x + leftCorrection,
+            left: position.x,
+            transform: `translate(-50%, calc(-100% - ${topCorrection}px))`,
           } as React.CSSProperties
         }
         className="pointer-events-none absolute z-10"
@@ -232,7 +233,7 @@ const OptimizationProgressChartContent: React.FC<
   };
 
   return (
-    <>
+    <div className="relative">
       {renderPopover()}
       <ChartContainer config={config} className="h-40 w-full">
         <AreaChart
@@ -335,7 +336,7 @@ const OptimizationProgressChartContent: React.FC<
           })}
         </AreaChart>
       </ChartContainer>
-    </>
+    </div>
   );
 };
 

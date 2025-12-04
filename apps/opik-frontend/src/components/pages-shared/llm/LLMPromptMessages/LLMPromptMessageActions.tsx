@@ -49,6 +49,7 @@ type LLMPromptLibraryActionsProps = {
   setIsLoading: OnChangeFn<boolean>;
   setIsHoldActionsVisible: OnChangeFn<boolean>;
   improvePromptConfig?: ImprovePromptConfig;
+  disabled?: boolean;
 };
 
 const LLMPromptMessageActions: React.FC<LLMPromptLibraryActionsProps> = ({
@@ -57,6 +58,7 @@ const LLMPromptMessageActions: React.FC<LLMPromptLibraryActionsProps> = ({
   setIsLoading,
   setIsHoldActionsVisible,
   improvePromptConfig,
+  disabled = false,
 }) => {
   const resetKeyRef = useRef(0);
   const [open, setOpen] = useState<boolean | ConfirmType>(false);
@@ -273,7 +275,7 @@ const LLMPromptMessageActions: React.FC<LLMPromptLibraryActionsProps> = ({
                 size="sm"
                 onClick={handleOpenWizard}
                 type="button"
-                disabled={isPromptButtonDisabled}
+                disabled={disabled || isPromptButtonDisabled}
               >
                 <Wand2 className="mr-2 size-4" />
                 Generate prompt
@@ -289,7 +291,7 @@ const LLMPromptMessageActions: React.FC<LLMPromptLibraryActionsProps> = ({
                 size="sm"
                 onClick={handleOpenWizard}
                 type="button"
-                disabled={isPromptButtonDisabled}
+                disabled={disabled || isPromptButtonDisabled}
               >
                 <Wand2 className="mr-2 size-4" />
                 Improve prompt
@@ -313,13 +315,14 @@ const LLMPromptMessageActions: React.FC<LLMPromptLibraryActionsProps> = ({
             }}
             onOpenChange={onPromptSelectBoxOpenChange}
             refetchOnMount
+            disabled={disabled}
           />
         </div>
         <TooltipWrapper content="Discard changes">
           <Button
             variant="outline"
             size="icon-sm"
-            disabled={resetDisabled}
+            disabled={disabled || resetDisabled}
             onClick={() => {
               resetKeyRef.current = resetKeyRef.current + 1;
               setOpen("reset");
@@ -333,7 +336,7 @@ const LLMPromptMessageActions: React.FC<LLMPromptLibraryActionsProps> = ({
           <Button
             variant="outline"
             size="icon-sm"
-            disabled={saveDisabled}
+            disabled={disabled || saveDisabled}
             badge={saveWarning}
             onClick={() => {
               resetKeyRef.current = resetKeyRef.current + 1;
@@ -348,7 +351,7 @@ const LLMPromptMessageActions: React.FC<LLMPromptLibraryActionsProps> = ({
           <Button
             variant="outline"
             size="icon-sm"
-            disabled={saveDisabled}
+            disabled={disabled || saveDisabled}
             onClick={handleCopyJson}
             type="button"
           >

@@ -26,6 +26,8 @@ export const ALERTS_REST_ENDPOINT = "/v1/private/alerts/";
 export const AUTOMATIONS_REST_ENDPOINT = "/v1/private/automations/";
 export const ATTACHMENTS_REST_ENDPOINT = "/v1/private/attachment/";
 export const OPTIMIZATIONS_REST_ENDPOINT = "/v1/private/optimizations/";
+export const OPTIMIZATIONS_STUDIO_REST_ENDPOINT =
+  "/v1/private/optimizations/studio/";
 export const ANNOTATION_QUEUES_REST_ENDPOINT = "/v1/private/annotation-queues/";
 export const WORKSPACES_REST_ENDPOINT = "/v1/private/workspaces/";
 export const WORKSPACE_CONFIG_REST_ENDPOINT =
@@ -47,6 +49,7 @@ export const PROJECTS_KEY = "projects";
 export const PROJECT_STATISTICS_KEY = "project-statistics";
 export const OPTIMIZATIONS_KEY = "optimizations";
 export const OPTIMIZATION_KEY = "optimization";
+export const OPTIMIZATION_STUDIO_KEY = "optimization-studio";
 export const ANNOTATION_QUEUES_KEY = "annotation-queues";
 export const ANNOTATION_QUEUE_KEY = "annotation-queue";
 export const WORKSPACE_CONFIG_KEY = "workspace-config";

@@ -7,7 +7,7 @@ import FeedbackScoreTag from "@/components/shared/FeedbackScoreTag/FeedbackScore
 import DateTag from "@/components/shared/DateTag/DateTag";
 import { RESOURCE_TYPE } from "@/components/shared/ResourceLink/ResourceLink";
 import { formatNumericData } from "@/lib/utils";
-import { generateDistinctColorMap } from "@/components/pages/CompareOptimizationsPage/optimizationChartUtils";
+import { generateDistinctColorMap } from "@/components/pages-shared/experiments/OptimizationProgressChart/optimizationChartUtils";
 import NavigationTag from "@/components/shared/NavigationTag";
 import ExperimentTag from "@/components/shared/ExperimentTag/ExperimentTag";
 

@@ -233,9 +233,11 @@ const MetricSelector: React.FC<MetricSelectorProps> = ({
                     checked={isSelected(rule.id)}
                     className="shrink-0"
                   />
-                  <div className="min-w-0 flex-1">
-                    <div className="comet-body-s truncate">{rule.name}</div>
-                  </div>
+                  <TooltipWrapper content={rule.name}>
+                    <div className="min-w-0 flex-1">
+                      <div className="comet-body-s truncate">{rule.name}</div>
+                    </div>
+                  </TooltipWrapper>
                   <div className="flex shrink-0 items-center justify-center rounded">
                     <TooltipWrapper content="Open in a new tab">
                       <Button

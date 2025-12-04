@@ -44,6 +44,7 @@ interface PromptModelSelectProps {
   provider: COMPOSED_PROVIDER_TYPE | "";
   onAddProvider?: (provider: COMPOSED_PROVIDER_TYPE) => void;
   onDeleteProvider?: (provider: COMPOSED_PROVIDER_TYPE) => void;
+  disabled?: boolean;
 }
 
 const STALE_TIME = 1000;
@@ -56,6 +57,7 @@ const PromptModelSelect = ({
   provider,
   onAddProvider,
   onDeleteProvider,
+  disabled = false,
 }: PromptModelSelectProps) => {
   const resetDialogKeyRef = useRef(0);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -310,6 +312,7 @@ const PromptModelSelect = ({
         value={value || ""}
         onValueChange={handleOnChange}
         onOpenChange={handleSelectOpenChange}
+        disabled={disabled}
       >
         {renderSelectTrigger()}
         <SelectContent onKeyDown={handleKeyDown} className="p-0">

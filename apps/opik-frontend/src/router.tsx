@@ -39,8 +39,10 @@ import OptimizationsPage from "@/components/pages/OptimizationsPage/Optimization
 import OptimizationPage from "@/components/pages/OptimizationPage/OptimizationPage";
 import CompareOptimizationsPage from "@/components/pages/CompareOptimizationsPage/CompareOptimizationsPage";
 import CompareTrialsPage from "@/components/pages/CompareTrialsPage/CompareTrialsPage";
-import AddEditAlertPage from "@/components/pages/AlertsPage/AddEditAlertPage/AddEditAlertPage";
+import OptimizationStudioPage from "@/components/pages/OptimizationStudioPage/OptimizationStudioPage";
+import OptimizationStudioRunPage from "@/components/pages/OptimizationStudioPage/OptimizationStudioRunPage";
 import AlertsRouteWrapper from "@/components/pages/AlertsPage/AlertsRouteWrapper";
+import AddEditAlertPage from "./components/pages/AlertsPage/AddEditAlertPage/AddEditAlertPage";
 import DashboardPage from "@/components/pages/DashboardPage/DashboardPage";
 import DashboardsPage from "@/components/pages/DashboardsPage/DashboardsPage";
 
@@ -284,6 +286,32 @@ const compareTrialsRoute = createRoute({
   },
 });
 
+// Optimization Studio
+const optimizationStudioRoute = createRoute({
+  path: "/optimization-studio",
+  getParentRoute: () => workspaceRoute,
+  component: () => <Outlet />,
+  staticData: {
+    title: "Optimization studio",
+  },
+});
+
+const optimizationStudioIndexRoute = createRoute({
+  path: "/",
+  getParentRoute: () => optimizationStudioRoute,
+  component: OptimizationStudioPage,
+});
+
+const optimizationStudioRunRoute = createRoute({
+  path: "/run",
+  getParentRoute: () => optimizationStudioRoute,
+  component: OptimizationStudioRunPage,
+  staticData: {
+    param: "optimizationStudioRun",
+    paramValue: "run",
+  },
+});
+
 // ----------- datasets
 const datasetsRoute = createRoute({
   path: "/datasets",
@@ -491,6 +519,10 @@ const routeTree = rootRoute.addChildren([
           optimizationRoute,
           compareTrialsRoute,
         ]),
+      ]),
+      optimizationStudioRoute.addChildren([
+        optimizationStudioIndexRoute,
+        optimizationStudioRunRoute,
       ]),
       datasetsRoute.addChildren([
         datasetsListRoute,

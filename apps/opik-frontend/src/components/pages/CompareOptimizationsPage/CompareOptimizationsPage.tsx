@@ -7,7 +7,6 @@ import { JsonParam, StringParam, useQueryParam } from "use-query-params";
 import { RotateCw } from "lucide-react";
 import get from "lodash/get";
 import isArray from "lodash/isArray";
-import isUndefined from "lodash/isUndefined";
 import isObject from "lodash/isObject";
 
 import {
@@ -27,10 +26,10 @@ import {
 } from "@/constants/experiments";
 import { Experiment, EXPERIMENT_TYPE } from "@/types/datasets";
 import { formatDate } from "@/lib/date";
-import { calculatePercentageChange, toString } from "@/lib/utils";
-import { getFeedbackScoreValue } from "@/lib/feedback-scores";
+import { toString } from "@/lib/utils";
 import { convertColumnDataToColumn, mapColumnDataFields } from "@/lib/table";
 import useAppStore from "@/store/AppStore";
+import { useOptimizationScores } from "@/components/pages-shared/experiments/useOptimizationScores";
 import { Button } from "@/components/ui/button";
 import { Tag } from "@/components/ui/tag";
 import { Card } from "@/components/ui/card";
@@ -53,8 +52,8 @@ import IdCell from "@/components/shared/DataTableCells/IdCell";
 import ResourceCell from "@/components/shared/DataTableCells/ResourceCell";
 import ObjectiveScoreCell from "@/components/pages/CompareOptimizationsPage/ObjectiveScoreCell";
 import FeedbackScoreHeader from "@/components/shared/DataTableHeaders/FeedbackScoreHeader";
-import BestPrompt from "@/components/pages/CompareOptimizationsPage/BestPrompt";
-import OptimizationProgressChartContainer from "@/components/pages/CompareOptimizationsPage/OptimizationProgressChartContainer";
+import { BestPrompt } from "@/components/pages-shared/experiments/BestPromptCard";
+import OptimizationProgressChartContainer from "@/components/pages-shared/experiments/OptimizationProgressChart";
 import { RESOURCE_TYPE } from "@/components/shared/ResourceLink/ResourceLink";
 
 const REFETCH_INTERVAL = 30000;
@@ -208,61 +207,18 @@ const CompareOptimizationsPage: React.FC = () => {
     [experiments, search],
   );
 
-  const { scoreMap, bestExperiment, baselineExperiment } = useMemo(() => {
-    const retVal: {
-      scoreMap: Record<string, { score: number; percentage?: number }>;
-      baseScore: number;
-      bestExperiment?: Experiment;
-      baselineExperiment?: Experiment;
-    } = {
-      scoreMap: {},
-      baseScore: 0,
-    };
-    let maxScoreValue: number;
+  const { scoreMap, bestExperiment } = useOptimizationScores(
+    experiments,
+    optimization?.objective_name,
+  );
 
+  const baselineExperiment = useMemo(() => {
+    if (!experiments.length) return undefined;
     const sortedRows = experiments
       .slice()
       .sort((e1, e2) => e1.created_at.localeCompare(e2.created_at));
-
-    retVal.baselineExperiment = sortedRows[0];
-
-    if (
-      !optimization?.objective_name ||
-      !experiments.length ||
-      !isArray(sortedRows?.[0]?.feedback_scores)
-    )
-      return retVal;
-
-    retVal.baseScore =
-      getFeedbackScoreValue(
-        sortedRows[0].feedback_scores,
-        optimization.objective_name,
-      ) ?? 0;
-
-    // if baseScore is 0, then we cannot calculate the relative score
-    if (retVal.baseScore === 0) return retVal;
-
-    experiments.forEach((e) => {
-      const score = getFeedbackScoreValue(
-        e.feedback_scores ?? [],
-        optimization.objective_name,
-      );
-
-      if (!isUndefined(score)) {
-        if (isUndefined(maxScoreValue) || score > maxScoreValue) {
-          maxScoreValue = score;
-          retVal.bestExperiment = e;
-        }
-
-        retVal.scoreMap[e.id] = {
-          score,
-          percentage: calculatePercentageChange(retVal.baseScore, score),
-        };
-      }
-    });
-
-    return retVal;
-  }, [experiments, optimization?.objective_name]);
+    return sortedRows[0];
+  }, [experiments]);
 
   const columnsDef: ColumnData<Experiment>[] = useMemo(() => {
     if (!optimization?.objective_name) return [];

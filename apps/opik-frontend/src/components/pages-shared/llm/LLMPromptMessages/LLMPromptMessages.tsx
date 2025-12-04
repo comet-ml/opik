@@ -35,6 +35,7 @@ interface LLMPromptMessagesProps {
   hint?: string;
   disableMedia?: boolean;
   improvePromptConfig?: ImprovePromptConfig;
+  disabled?: boolean;
 }
 
 const LLMPromptMessages = ({
@@ -47,6 +48,7 @@ const LLMPromptMessages = ({
   hint = "",
   disableMedia = false,
   improvePromptConfig,
+  disabled = false,
 }: LLMPromptMessagesProps) => {
   const sensors = useSensors(
     useSensor(MouseSensor, {
@@ -137,6 +139,7 @@ const LLMPromptMessages = ({
                 message={message}
                 disableMedia={disableMedia}
                 improvePromptConfig={improvePromptConfig}
+                disabled={disabled}
               />
             ))}
           </div>
@@ -150,6 +153,7 @@ const LLMPromptMessages = ({
           className="mt-2"
           onClick={onAddMessage}
           type="button"
+          disabled={disabled}
         >
           <Plus className="mr-2 size-4" />
           Message
