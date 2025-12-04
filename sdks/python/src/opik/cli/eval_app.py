@@ -27,7 +27,9 @@ def _print_startup_message(host: str, port: int, metrics_count: int) -> None:
         content.append(f"   - GET  {local_url}/healthcheck\n")
         content.append("\n")
         content.append("📚 Documentation:\n")
-        content.append("   - https://www.comet.com/docs/opik/evaluation/metrics/overview\n")
+        content.append(
+            "   - https://www.comet.com/docs/opik/evaluation/metrics/overview\n"
+        )
         content.append("\n")
         content.append("Note:", style="bold yellow")
         content.append(
@@ -108,7 +110,7 @@ def eval_app(host: str, port: int, reload: bool) -> None:
 
     # Import and create the app
     from opik import eval_app as eval_app_module
-    from opik.eval_app.metrics import get_default_registry
+    from opik.eval_app.services.metrics import get_default_registry
 
     app = eval_app_module.create_app()
 
@@ -125,4 +127,3 @@ def eval_app(host: str, port: int, reload: bool) -> None:
         reload=reload,
         log_level="error",  # Reduce uvicorn logging to keep output clean
     )
-

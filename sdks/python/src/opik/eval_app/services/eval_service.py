@@ -11,7 +11,7 @@ from opik.types import FeedbackScoreDict
 
 from .. import exceptions
 from .. import schemas
-from ..metrics import MetricInfo, MetricsRegistry, get_default_registry
+from .metrics import MetricInfo, MetricsRegistry, get_default_registry
 
 LOGGER = logging.getLogger(__name__)
 
@@ -139,11 +139,13 @@ class EvalService:
 
                 for score_result in results:
                     score_name = config.name if config.name else score_result.name
-                    feedback_scores.append({
-                        "name": score_name,
-                        "value": score_result.value,
-                        "reason": score_result.reason,
-                    })
+                    feedback_scores.append(
+                        {
+                            "name": score_name,
+                            "value": score_result.value,
+                            "reason": score_result.reason,
+                        }
+                    )
                     LOGGER.info(
                         "Metric %s scored: %s = %s",
                         metric.__class__.__name__,

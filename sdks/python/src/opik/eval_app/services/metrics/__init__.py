@@ -10,4 +10,3 @@ __all__ = [
     "create_default_registry",
     "get_default_registry",
 ]
-

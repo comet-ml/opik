@@ -98,4 +98,3 @@ class MetricDescriptor:
             init_params=self._get_init_params(),
             score_params=self._get_score_params(),
         )
-

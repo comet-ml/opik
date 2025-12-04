@@ -45,9 +45,7 @@ class MetricsRegistry:
         """List all registered metrics."""
         return [descriptor.to_metric_info() for descriptor in self._metrics.values()]
 
-    def get_metric_class(
-        self, name: str
-    ) -> Optional[Type[base_metric.BaseMetric]]:
+    def get_metric_class(self, name: str) -> Optional[Type[base_metric.BaseMetric]]:
         """Get a metric class by name."""
         descriptor = self._metrics.get(name)
         return descriptor.metric_class if descriptor else None
@@ -82,4 +80,3 @@ def get_default_registry() -> MetricsRegistry:
     if _default_registry is None:
         _default_registry = create_default_registry()
     return _default_registry
-

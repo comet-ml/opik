@@ -73,4 +73,3 @@ def _serialize_default(value: Any) -> Any:
         return {k: _serialize_default(v) for k, v in value.items()}
     # For complex objects, return their string representation
     return str(value)
-
