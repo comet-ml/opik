@@ -62,7 +62,7 @@ jobs:
 
       - name: Verify integration exists
         run: |
-          if [ ! -d "${{ env.WORKING_DIR }}" ]; then
+          if [ ! -d "${{ github.workspace }}/${{ env.WORKING_DIR }}" ]; then
             echo "Error: Integration '${{ env.INTEGRATION }}' not found at path: ${{ env.WORKING_DIR }}"
             exit 1
           fi
