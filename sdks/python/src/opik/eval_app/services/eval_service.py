@@ -16,6 +16,11 @@ from ..metrics import MetricInfo, MetricsRegistry, get_default_registry
 LOGGER = logging.getLogger(__name__)
 
 
+def _identity_task(item: Dict[str, Any]) -> Dict[str, Any]:
+    """Identity function - returns the input unchanged."""
+    return item
+
+
 class EvalService:
     """Service for running metric evaluations on traces."""
 
@@ -72,56 +77,39 @@ class EvalService:
         except Exception as e:
             raise exceptions.MetricInstantiationError(config.metric_name, str(e)) from e
 
-    def _extract_metric_inputs(
-        self,
-        trace: trace_public.TracePublic,
-        arguments: Dict[str, str],
-    ) -> Dict[str, Any]:
-        """Extract metric inputs from trace using argument mapping."""
-        metric_inputs: Dict[str, Any] = {}
+    def _extract_trace_data(self, trace: trace_public.TracePublic) -> Dict[str, Any]:
+        """Extract trace data as a flat dictionary for scoring."""
+        data: Dict[str, Any] = {}
 
-        for arg_name, field_path in arguments.items():
-            try:
-                value = self._get_trace_field_value(trace, field_path)
-                metric_inputs[arg_name] = value
-            except Exception as e:
-                raise exceptions.InvalidFieldMappingError(field_path, str(e)) from e
+        if trace.input is not None:
+            if isinstance(trace.input, dict):
+                for key, value in trace.input.items():
+                    data[f"input.{key}"] = value
+            data["input"] = trace.input
 
-        return metric_inputs
+        if trace.output is not None:
+            if isinstance(trace.output, dict):
+                for key, value in trace.output.items():
+                    data[f"output.{key}"] = value
+            data["output"] = trace.output
 
-    def _get_trace_field_value(
-        self, trace: trace_public.TracePublic, field_path: str
-    ) -> Any:
-        """Get a value from a trace using dot notation path.
+        if trace.metadata is not None:
+            if isinstance(trace.metadata, dict):
+                for key, value in trace.metadata.items():
+                    data[f"metadata.{key}"] = value
+                    # Special handling for dataset_item_data
+                    if key == "dataset_item_data" and isinstance(value, dict):
+                        for dk, dv in value.items():
+                            data[f"dataset_item_data.{dk}"] = dv
+            data["metadata"] = trace.metadata
 
-        Special handling:
-        - 'dataset_item_data.*' is mapped to 'metadata.dataset_item_data.*'
-          since the frontend uses this shorthand
-        """
-        # Handle special dataset_item_data prefix
-        if field_path.startswith("dataset_item_data."):
-            field_path = "metadata." + field_path
+        return data
 
-        parts = field_path.split(".")
-        current = trace
-
-        for part in parts:
-            if hasattr(current, part):
-                current = getattr(current, part)
-            elif isinstance(current, dict) and part in current:
-                current = current[part]
-            else:
-                return None
-
-        if current is None:
-            return None
-        if isinstance(current, (str, int, float, bool, list, dict)):
-            return current
-        if hasattr(current, "model_dump"):
-            return current.model_dump()
-        if hasattr(current, "dict"):
-            return current.dict()
-        return str(current)
+    def _build_scoring_key_mapping(
+        self, config: schemas.MetricEvaluationConfig
+    ) -> Dict[str, str]:
+        """Build scoring key mapping from metric config arguments."""
+        return dict(config.arguments)
 
     def _run_metrics_and_log_scores(
         self,
@@ -130,31 +118,40 @@ class EvalService:
         trace: trace_public.TracePublic,
         metric_configs: List[schemas.MetricEvaluationConfig],
     ) -> None:
-        """Run all metrics and log feedback scores to the trace."""
+        """Run all metrics using evaluate_on_dict_items and log scores to the trace."""
+        trace_data = self._extract_trace_data(trace)
         feedback_scores: List[FeedbackScoreDict] = []
 
         for config in metric_configs:
             try:
                 metric = self._instantiate_metric(config)
-                metric_inputs = self._extract_metric_inputs(trace, config.arguments)
-                result = metric.score(**metric_inputs)
+                scoring_key_mapping = self._build_scoring_key_mapping(config)
 
-                # Handle both single result and list of results
-                results = result if isinstance(result, list) else [result]
+                # Use evaluate_on_dict_items with identity task
+                result = opik.evaluate_on_dict_items(
+                    items=[trace_data],
+                    task=_identity_task,
+                    scoring_metrics=[metric],
+                    scoring_key_mapping=scoring_key_mapping,
+                    scoring_threads=1,
+                    verbose=0,
+                )
 
-                for score_result in results:
-                    score_name = config.name if config.name else score_result.name
-                    feedback_scores.append({
-                        "name": score_name,
-                        "value": score_result.value,
-                        "reason": score_result.reason,
-                    })
-                    LOGGER.info(
-                        "Metric %s scored: %s = %s",
-                        metric.__class__.__name__,
-                        score_name,
-                        score_result.value,
-                    )
+                # Extract scores from results
+                for test_result in result.test_results:
+                    for score_result in test_result.score_results:
+                        score_name = config.name if config.name else score_result.name
+                        feedback_scores.append({
+                            "name": score_name,
+                            "value": score_result.value,
+                            "reason": score_result.reason,
+                        })
+                        LOGGER.info(
+                            "Metric %s scored: %s = %s",
+                            metric.__class__.__name__,
+                            score_name,
+                            score_result.value,
+                        )
             except Exception as e:
                 LOGGER.error("Metric %s failed: %s", config.metric_name, e)
                 continue
