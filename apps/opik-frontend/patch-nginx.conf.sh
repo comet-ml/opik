@@ -18,6 +18,7 @@ VARS='$NGINX_PID $NGINX_PORT $OTEL_TRACE $OTEL_COLLECTOR_HOST $OTEL_COLLECTOR_PO
     
 echo "patch configs already updated on 20-envsubst-on-templates.sh..."
 # Note: .template files in conf.d/ are handled by /docker-entrypoint.d/20-envsubst-on-templates.sh
+# but we need to process them manually here to set the OTEL_TRACE_ID_JSON and other variables
 for template in /etc/nginx/conf.d/*.conf; do
     [ -f "$template" ] || continue
     
