@@ -35,6 +35,7 @@ interface LLMPromptMessagesProps {
   hint?: string;
   disableMedia?: boolean;
   improvePromptConfig?: ImprovePromptConfig;
+  hideAddButton?: boolean;
   disabled?: boolean;
 }
 
@@ -48,6 +49,7 @@ const LLMPromptMessages = ({
   hint = "",
   disableMedia = false,
   improvePromptConfig,
+  hideAddButton = false,
   disabled = false,
 }: LLMPromptMessagesProps) => {
   const sensors = useSensors(
@@ -81,6 +83,28 @@ const LLMPromptMessages = ({
     (messageId: string, changes: Partial<LLMMessage>) => {
       onChange(
         messages.map((m) => (m.id !== messageId ? m : { ...m, ...changes })),
+      );
+    },
+    [onChange, messages],
+  );
+
+  const handleReplaceWithChatPrompt = useCallback(
+    (newMessages: LLMMessage[]) => {
+      // Replace all messages with the chat prompt's messages
+      onChange(newMessages);
+    },
+    [onChange],
+  );
+
+  const handleClearOtherPromptLinks = useCallback(
+    (currentMessageId: string) => () => {
+      // Clear prompt links from all messages except the current one
+      onChange(
+        messages.map((m) =>
+          m.id !== currentMessageId
+            ? { ...m, promptId: undefined, promptVersionId: undefined }
+            : m,
+        ),
       );
     },
     [onChange, messages],
@@ -136,6 +160,10 @@ const LLMPromptMessages = ({
                 onChangeMessage={(changes) =>
                   handleChangeMessage(message.id, changes)
                 }
+                onReplaceWithChatPrompt={handleReplaceWithChatPrompt}
+                onClearOtherPromptLinks={handleClearOtherPromptLinks(
+                  message.id,
+                )}
                 message={message}
                 disableMedia={disableMedia}
                 improvePromptConfig={improvePromptConfig}
@@ -147,17 +175,18 @@ const LLMPromptMessages = ({
 
         {hint && <p className="comet-body-s mt-2 text-light-slate">{hint}</p>}
 
-        <Button
-          variant="outline"
-          size="sm"
-          className="mt-2"
-          onClick={onAddMessage}
-          type="button"
-          disabled={disabled}
-        >
-          <Plus className="mr-2 size-4" />
-          Message
-        </Button>
+        {!hideAddButton && (
+          <Button
+            variant="outline"
+            size="sm"
+            className="mt-2"
+            onClick={onAddMessage}
+            type="button"
+          >
+            <Plus className="mr-2 size-4" />
+            Message
+          </Button>
+        )}
       </div>
     </DndContext>
   );
