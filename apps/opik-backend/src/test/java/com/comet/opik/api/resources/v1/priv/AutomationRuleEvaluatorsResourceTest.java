@@ -1486,7 +1486,8 @@ class AutomationRuleEvaluatorsResourceTest {
     }
 
     private UUID createGetAndAssertId(Class<? extends AutomationRuleEvaluator<?, ?>> evaluatorClass, UUID projectId) {
-        var automationRuleEvaluator = factory.manufacturePojo(evaluatorClass).toBuilder().projectId(projectId).build();
+        var automationRuleEvaluator = factory.manufacturePojo(evaluatorClass).toBuilder().projectIds(Set.of(projectId))
+                .build();
         var id = evaluatorsResourceClient.createEvaluator(automationRuleEvaluator, WORKSPACE_NAME, API_KEY);
         try (var actualResponse = evaluatorsResourceClient.getEvaluator(
                 id, null, WORKSPACE_NAME, API_KEY, HttpStatus.SC_OK)) {
