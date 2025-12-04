@@ -24,6 +24,7 @@ interface PromptsSelectBoxProps {
   refetchOnMount?: boolean;
   asNewOption?: boolean;
   filterByTemplateStructure?: PROMPT_TEMPLATE_STRUCTURE;
+  disabled?: boolean;
 }
 
 const PromptsSelectBox: React.FC<PromptsSelectBoxProps> = ({
@@ -34,6 +35,7 @@ const PromptsSelectBox: React.FC<PromptsSelectBoxProps> = ({
   refetchOnMount = false,
   asNewOption = false,
   filterByTemplateStructure,
+  disabled = false,
 }) => {
   const [open, setOpen] = useState(false);
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
@@ -160,6 +162,7 @@ const PromptsSelectBox: React.FC<PromptsSelectBoxProps> = ({
         actionPanel={actionPanel}
         minWidth={540}
         showTooltip
+        disabled={disabled}
       />
 
       {isClearable && (
@@ -169,6 +172,7 @@ const PromptsSelectBox: React.FC<PromptsSelectBoxProps> = ({
             size="icon-sm"
             className="shrink-0 rounded-l-none border-l-0"
             onClick={() => onValueChange(undefined)}
+            disabled={disabled}
           >
             <X className="text-light-slate" />
           </Button>

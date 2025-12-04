@@ -964,6 +964,8 @@ class TraceDAOImpl implements TraceDAO {
                     FROM spans FINAL
                     WHERE workspace_id = :workspace_id
                       AND project_id = :project_id
+                      <if(uuid_from_time)>AND trace_id >= :uuid_from_time<endif>
+                      <if(uuid_to_time)>AND trace_id \\<= :uuid_to_time<endif>
                     ORDER BY (workspace_id, project_id, trace_id, parent_span_id, id) DESC, last_updated_at DESC
                     LIMIT 1 BY id
                 ) AS s ON sfs.entity_id = s.id
@@ -1035,6 +1037,8 @@ class TraceDAOImpl implements TraceDAO {
                 FROM spans final
                 WHERE workspace_id = :workspace_id
                 AND project_id = :project_id
+                <if(uuid_from_time)>AND trace_id >= :uuid_from_time<endif>
+                <if(uuid_to_time)>AND trace_id \\<= :uuid_to_time<endif>
                 GROUP BY workspace_id, project_id, trace_id
             ), comments_agg AS (
                 SELECT
@@ -1412,6 +1416,8 @@ class TraceDAOImpl implements TraceDAO {
                     FROM spans FINAL
                     WHERE workspace_id = :workspace_id
                       AND project_id = :project_id
+                      <if(uuid_from_time)>AND trace_id >= :uuid_from_time<endif>
+                      <if(uuid_to_time)>AND trace_id \\<= :uuid_to_time<endif>
                     ORDER BY (workspace_id, project_id, trace_id, parent_span_id, id) DESC, last_updated_at DESC
                     LIMIT 1 BY id
                 ) AS s ON sfs.entity_id = s.id
@@ -4177,7 +4183,7 @@ class TraceDAOImpl implements TraceDAO {
     public Mono<Map<UUID, Instant>> getLastUpdatedTraceAt(
             @NonNull Set<UUID> projectIds, @NonNull String workspaceId, @NonNull Connection connection) {
 
-        log.info("Getting last updated trace at for projectIds {}", Arrays.toString(projectIds.toArray()));
+        log.info("Getting last updated trace at for projectIds, size '{}'", projectIds.size());
 
         var statement = connection.createStatement(SELECT_TRACE_LAST_UPDATED_AT)
                 .bind("project_ids", projectIds.toArray(UUID[]::new))
@@ -4189,7 +4195,7 @@ class TraceDAOImpl implements TraceDAO {
                 .collectMap(Map.Entry::getKey, Map.Entry::getValue)
                 .doFinally(signalType -> {
                     if (signalType == SignalType.ON_COMPLETE) {
-                        log.info("Got last updated trace at for projectIds {}", Arrays.toString(projectIds.toArray()));
+                        log.info("Got last updated trace at for projectIds, size '{}'", projectIds.size());
                     }
                 });
     }

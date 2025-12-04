@@ -1,18 +1,16 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { Database, FlaskConical, Pause, Play, Plus, X } from "lucide-react";
+import { FlaskConical, Pause, Play } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
-import LoadableSelectBox from "@/components/shared/LoadableSelectBox/LoadableSelectBox";
 import ExplainerIcon from "@/components/shared/ExplainerIcon/ExplainerIcon";
 import FiltersButton from "@/components/shared/FiltersButton/FiltersButton";
 import AddEditRuleDialog from "@/components/pages-shared/automations/AddEditRuleDialog/AddEditRuleDialog";
-import AddEditDatasetDialog from "@/components/pages/DatasetsPage/AddEditDatasetDialog";
 import DataTablePagination from "@/components/shared/DataTablePagination/DataTablePagination";
 import MetricSelector from "./MetricSelector";
-import DatasetEmptyState from "./DatasetEmptyState";
+import DatasetSelectBox from "@/components/pages-shared/llm/DatasetSelectBox/DatasetSelectBox";
 import PlaygroundProgressIndicator from "@/components/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundProgressIndicator";
 
 import useDatasetsList from "@/api/datasets/useDatasetsList";
@@ -27,7 +25,6 @@ import {
   useSetSelectedRuleIds,
 } from "@/store/PlaygroundStore";
 import useActionButtonActions from "@/components/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundOutputActions/useActionButtonActions";
-import { cn } from "@/lib/utils";
 import {
   supportsImageInput,
   supportsVideoInput,
@@ -41,6 +38,7 @@ import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 import { PLAYGROUND_PROJECT_NAME } from "@/constants/shared";
 
 const EMPTY_DATASETS: Dataset[] = [];
+const DEFAULT_LOADED_DATASETS = 1000;
 
 interface PlaygroundOutputActionsProps {
   datasetId: string | null;
@@ -57,9 +55,6 @@ interface PlaygroundOutputActionsProps {
   onChangeSize: (size: number) => void;
   total: number;
 }
-
-const DEFAULT_LOADED_DATASETS = 1000;
-const MAX_LOADED_DATASETS = 10000;
 
 const RUN_HOT_KEYS = ["⌘", "⏎"];
 
@@ -78,10 +73,7 @@ const PlaygroundOutputActions = ({
   onChangeSize,
   total,
 }: PlaygroundOutputActionsProps) => {
-  const [isLoadedMore, setIsLoadedMore] = useState(false);
   const [isRuleDialogOpen, setIsRuleDialogOpen] = useState(false);
-  const [isDatasetDialogOpen, setIsDatasetDialogOpen] = useState(false);
-  const [isDatasetDropdownOpen, setIsDatasetDropdownOpen] = useState(false);
   const [ruleDialogProjectId, setRuleDialogProjectId] = useState<
     string | undefined
   >(undefined);
@@ -145,46 +137,14 @@ const PlaygroundOutputActions = ({
 
   const rules = rulesData?.content || [];
 
-  const {
-    data: datasetsData,
-    isLoading: isLoadingDatasets,
-    isFetching: isFetchingDatasets,
-  } = useDatasetsList({
+  const { data: datasetsData, isLoading: isLoadingDatasets } = useDatasetsList({
     workspaceName,
     page: 1,
-    size: !isLoadedMore ? DEFAULT_LOADED_DATASETS : MAX_LOADED_DATASETS,
+    size: DEFAULT_LOADED_DATASETS,
   });
 
   const datasets = datasetsData?.content || EMPTY_DATASETS;
-  const datasetTotal = datasetsData?.total;
-
-  const datasetOptions = useMemo(() => {
-    return datasets.map((ds) => ({
-      label: ds.name,
-      value: ds.id,
-      action: {
-        href: `/${workspaceName}/datasets/${ds.id}`,
-      },
-    }));
-  }, [datasets, workspaceName]);
-
   const datasetName = datasets?.find((ds) => ds.id === datasetId)?.name || null;
-
-  // Clear datasetId if the selected dataset no longer exists
-  useEffect(() => {
-    if (datasetId && !isLoadingDatasets && !isFetchingDatasets) {
-      const datasetExists = datasets.some((ds) => ds.id === datasetId);
-      if (!datasetExists) {
-        onChangeDatasetId(null);
-      }
-    }
-  }, [
-    datasetId,
-    datasets,
-    isLoadingDatasets,
-    isFetchingDatasets,
-    onChangeDatasetId,
-  ]);
 
   const {
     stopAll,
@@ -198,8 +158,6 @@ const PlaygroundOutputActions = ({
     datasetName,
     datasetId: datasetId ? datasetId : undefined,
   });
-
-  const loadMoreHandler = useCallback(() => setIsLoadedMore(true), []);
 
   const hasMediaCompatibilityIssues = useMemo(() => {
     return Object.values(promptMap).some((prompt) => {
@@ -221,31 +179,10 @@ const PlaygroundOutputActions = ({
     });
   }, [promptMap]);
 
-  const handleChangeDatasetId = useCallback(
-    (id: string | null) => {
-      if (datasetId !== id) {
-        onChangeDatasetId(id);
-        resetOutputMap();
-        stopAll();
-      }
-    },
-    [onChangeDatasetId, resetOutputMap, stopAll, datasetId],
-  );
-
-  const handleDatasetCreated = useCallback(
-    (newDataset: Dataset) => {
-      // Invalidate datasets query to refresh the list
-      queryClient.invalidateQueries({
-        queryKey: ["datasets"],
-      });
-      // Select the newly created dataset
-      if (newDataset.id) {
-        handleChangeDatasetId(newDataset.id);
-      }
-      setIsDatasetDialogOpen(false);
-    },
-    [queryClient, handleChangeDatasetId],
-  );
+  const handleDatasetChangeExtra = useCallback(() => {
+    resetOutputMap();
+    stopAll();
+  }, [resetOutputMap, stopAll]);
 
   const handleCreateRuleClick = useCallback(async () => {
     try {
@@ -476,69 +413,13 @@ const PlaygroundOutputActions = ({
             </Button>
           </TooltipWrapper>
         )}
-        <div className="mt-2.5 flex">
-          <LoadableSelectBox
-            options={datasetOptions}
-            value={datasetId || ""}
-            placeholder={
-              <div className="flex w-full items-center text-light-slate">
-                <Database className="mr-2 size-4" />
-                <span className="truncate font-normal">Select a dataset</span>
-              </div>
-            }
-            onChange={handleChangeDatasetId}
-            open={isDatasetDropdownOpen}
-            onOpenChange={setIsDatasetDropdownOpen}
-            buttonSize="sm"
-            onLoadMore={
-              (datasetTotal || 0) > DEFAULT_LOADED_DATASETS && !isLoadedMore
-                ? loadMoreHandler
-                : undefined
-            }
-            isLoading={isLoadingDatasets}
-            optionsCount={DEFAULT_LOADED_DATASETS}
-            buttonClassName={cn("w-[220px]", {
-              "rounded-r-none": !!datasetId,
-            })}
-            renderTitle={(option) => {
-              return (
-                <div className="flex w-full items-center text-foreground">
-                  <Database className="mr-2 size-4" />
-                  <span className="max-w-[90%] truncate">{option.label}</span>
-                </div>
-              );
-            }}
-            emptyState={<DatasetEmptyState />}
-            actionPanel={
-              <div className="sticky inset-x-0 bottom-0">
-                <Separator className="my-1" />
-                <div
-                  className="flex h-10 cursor-pointer items-center rounded-md px-4 hover:bg-primary-foreground"
-                  onClick={() => {
-                    setIsDatasetDropdownOpen(false);
-                    setIsDatasetDialogOpen(true);
-                  }}
-                >
-                  <div className="comet-body-s flex items-center gap-2 text-primary">
-                    <Plus className="size-3.5 shrink-0" />
-                    <span>Create a new dataset</span>
-                  </div>
-                </div>
-              </div>
-            }
-            showTooltip
+        <div className="mt-2.5">
+          <DatasetSelectBox
+            value={datasetId}
+            onChange={onChangeDatasetId}
+            workspaceName={workspaceName}
+            onDatasetChangeExtra={handleDatasetChangeExtra}
           />
-
-          {datasetId && (
-            <Button
-              variant="outline"
-              size="icon-sm"
-              className="rounded-l-none border-l-0 "
-              onClick={() => handleChangeDatasetId(null)}
-            >
-              <X className="text-light-slate" />
-            </Button>
-          )}
         </div>
         {datasetId && (
           <div className="mt-2.5 flex">
@@ -597,12 +478,6 @@ const PlaygroundOutputActions = ({
         projectName={PLAYGROUND_PROJECT_NAME}
         datasetColumnNames={datasetColumns.map((c) => c.name)}
         hideScopeSelector
-      />
-      <AddEditDatasetDialog
-        open={isDatasetDialogOpen}
-        setOpen={setIsDatasetDialogOpen}
-        onDatasetCreated={handleDatasetCreated}
-        csvRequired
       />
     </>
   );
