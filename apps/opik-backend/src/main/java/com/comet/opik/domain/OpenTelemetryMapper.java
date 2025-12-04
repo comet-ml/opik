@@ -24,7 +24,9 @@ import java.util.Set;
 import java.util.UUID;
 
 import static com.comet.opik.domain.mapping.OpenTelemetryEventsMapper.processEvents;
-import static com.comet.opik.domain.mapping.OpenTelemetryMappingUtils.*;
+import static com.comet.opik.domain.mapping.OpenTelemetryMappingUtils.extractTags;
+import static com.comet.opik.domain.mapping.OpenTelemetryMappingUtils.extractToJsonColumn;
+import static com.comet.opik.domain.mapping.OpenTelemetryMappingUtils.extractUsageField;
 
 @UtilityClass
 @Slf4j
