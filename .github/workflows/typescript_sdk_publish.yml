@@ -61,6 +61,8 @@ jobs:
           version: ${{ inputs.version || '' }}
           is_release: ${{ env.IS_RELEASE }}
           package_name: "TypeScript SDK"
+          npm_token: ${{ secrets.NPM_TOKEN }}
+          github_token: ${{ secrets.GH_PAT_TO_ACCESS_GITHUB_API }}
 
       - name: Summary
         run: |

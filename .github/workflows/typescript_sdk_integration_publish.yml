@@ -80,6 +80,8 @@ jobs:
           enable_cache: "true"
           cache_dependency_path: ${{ env.WORKING_DIR }}/package-lock.json
           test_package_installation: "true"
+          npm_token: ${{ secrets.NPM_TOKEN }}
+          github_token: ${{ secrets.GH_PAT_TO_ACCESS_GITHUB_API }}
 
       - name: Summary
         run: |

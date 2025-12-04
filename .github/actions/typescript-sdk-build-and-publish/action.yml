@@ -31,6 +31,12 @@ inputs:
     required: false
     description: Run npm pack --dry-run test
     default: "false"
+  npm_token:
+    required: false
+    description: NPM token for publishing
+  github_token:
+    required: false
+    description: GitHub token for pushing changes
 outputs:
   version:
     description: Generated or provided version
@@ -49,7 +55,6 @@ runs:
         registry-url: "https://registry.npmjs.org"
         cache: ${{ inputs.enable_cache == 'true' && 'npm' || '' }}
         cache-dependency-path: ${{ inputs.cache_dependency_path }}
-      shell: bash
 
     - name: Install dependencies
       shell: bash
@@ -178,13 +183,13 @@ runs:
         echo "PACKAGE_NAME=$PACKAGE_NAME" >> $GITHUB_ENV
         echo "PUBLISHED_VERSION=$NEW_VERSION" >> $GITHUB_ENV
       env:
-        NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        NODE_AUTH_TOKEN: ${{ inputs.npm_token }}
 
     - name: Push changes
       if: ${{ inputs.is_release == 'true' }}
       uses: ad-m/github-push-action@v0.8.0
       with:
-        github_token: ${{ secrets.GH_PAT_TO_ACCESS_GITHUB_API }}
+        github_token: ${{ inputs.github_token }}
         branch: ${{ github.ref }}
         force_with_lease: true
 
