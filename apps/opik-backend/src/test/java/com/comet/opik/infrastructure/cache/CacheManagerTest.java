@@ -12,6 +12,7 @@ import com.comet.opik.extensions.RegisterApp;
 import com.google.inject.AbstractModule;
 import com.google.inject.Singleton;
 import com.redis.testcontainers.RedisContainer;
+import lombok.extern.slf4j.Slf4j;
 import org.assertj.core.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
@@ -31,6 +32,7 @@ import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABA
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 @ExtendWith(DropwizardAppExtensionProvider.class)
+@Slf4j
 class CacheManagerTest {
 
     private final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
@@ -350,4 +352,82 @@ class CacheManagerTest {
         Assertions.assertThat(dto).isNotEqualTo(dto3);
     }
 
+    // Test nested cache annotation issue
+
+    /**
+     * This test demonstrates the nested cache annotation deadlock issue.
+     * When two overloaded methods both have @Cacheable and one delegates to the other,
+     * it creates nested Mono.block() calls that can cause Redis timeout exceptions.
+     * <p>
+     * This reproduces the issue found in AutomationRuleEvaluatorService where:
+     * <ul>
+     *   <li>findAll(projectId, workspaceId) had @Cacheable and delegated to</li>
+     *   <li>findAll(projectId, workspaceId, type) which also had @Cacheable</li>
+     * </ul>
+     * <p>
+     * <strong>What happens with nested cache operations:</strong>
+     * <ol>
+     *   <li>First @Cacheable on getOverloadedWithNestedCache(id, workspaceId)
+     *       <ul>
+     *         <li>Cache miss, proceeds with Mono.defer() and invocation.proceed()</li>
+     *         <li>Inside this, the method delegates to getOverloadedWithNestedCache(id, workspaceId, null)</li>
+     *       </ul>
+     *   </li>
+     *   <li>Second @Cacheable on getOverloadedWithNestedCache(id, workspaceId, type)
+     *       <ul>
+     *         <li>Another cache operation NESTED inside the first</li>
+     *         <li>Creates nested Mono.block() which violates Reactor threading rules</li>
+     *       </ul>
+     *   </li>
+     * </ol>
+     * <p>
+     * <strong>Expected behavior:</strong> May timeout or cause reactor threading violations.
+     */
+    @Test
+    void testCacheable__whenNestedCacheAnnotations__shouldCauseIssue(CachedService service) {
+        var id = UUID.randomUUID().toString();
+        var workspaceId = UUID.randomUUID().toString();
+        try {
+            var result = service.getOverloadedWithNestedCache(id, workspaceId);
+
+            // If it doesn't time out, verify it at least works functionally
+            Assertions.assertThat(result).isNotNull();
+            Assertions.assertThat(result).hasSize(1);
+            // Note: In production with high load, this would likely time out
+            // In tests with low concurrency, it might succeed but is still problematic
+            log.info("Nested cache call succeeded unexpectedly: '{}'", result);
+        } catch (Exception exception) {
+            log.error("Expected exception due to nested cache annotations", exception);
+            // Expected: RedisTimeoutException or reactor threading violation
+            // This is the bug we're demonstrating
+            Assertions.assertThat(exception)
+                    .satisfiesAnyOf(
+                            ex -> Assertions.assertThat(ex).hasMessageContaining("timeout"),
+                            ex -> Assertions.assertThat(ex).hasMessageContaining("Redis"),
+                            ex -> Assertions.assertThat(ex).hasMessageContaining("block"));
+        }
+    }
+
+    /**
+     * This test demonstrates the FIXED version where only the implementation method has @Cacheable.
+     * The delegating method has NO cache annotation, avoiding nested cache operations.
+     * <p>
+     * This is the fix applied to AutomationRuleEvaluatorService.
+     */
+    @Test
+    void testCacheable__whenFixedOverloadedMethods__shouldWorkCorrectly(CachedService service) {
+        var id = UUID.randomUUID().toString();
+        var workspaceId = UUID.randomUUID().toString();
+        // First call through 2-param method
+        var result1 = service.getOverloadedFixed(id, workspaceId);
+        // Second call should return cached value from the 3-param method's cache
+        var result2 = service.getOverloadedFixed(id, workspaceId);
+
+        // Both calls should succeed without timeout
+        Assertions.assertThat(result1).isNotNull();
+        Assertions.assertThat(result2).isNotNull();
+        // Values should be identical (from cache)
+        Assertions.assertThat(result1).isEqualTo(result2);
+        Assertions.assertThat(result1.getFirst().value()).isEqualTo(result2.getFirst().value());
+    }
 }

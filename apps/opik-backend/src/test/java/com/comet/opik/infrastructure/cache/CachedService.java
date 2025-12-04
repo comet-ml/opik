@@ -87,4 +87,34 @@ public class CachedService {
                 List.of(new DTO(id, workspaceId, UUID.randomUUID().toString())));
     }
 
+    // Methods to reproduce nested cache annotation issue (overloaded methods both with @Cacheable)
+    // This simulates the bug found in AutomationRuleEvaluatorService
+
+    /**
+     * 2-parameter overloaded method with @Cacheable that delegates to 3-parameter version.
+     * This creates a nested cache operation that can cause Redis timeout/deadlock.
+     * PROBLEMATIC: Should NOT have @Cacheable annotation when delegating to another cached method.
+     */
+    @Cacheable(name = CacheManagerTest.CACHE_NAME_1, key = "$id +'-'+ $workspaceId", returnType = DTO.class, wrapperType = List.class)
+    public List<DTO> getOverloadedWithNestedCache(String id, String workspaceId) {
+        return getOverloadedWithNestedCache(id, workspaceId, null);
+    }
+
+    /**
+     * FIXED version: 2-parameter method WITHOUT @Cacheable that safely delegates.
+     * This is the correct pattern - only the implementation method has caching.
+     */
+    public List<DTO> getOverloadedFixed(String id, String workspaceId) {
+        return getOverloadedWithNestedCache(id, workspaceId, null);
+    }
+
+    /**
+     * 3-parameter overloaded method with @Cacheable that has the actual implementation.
+     * This is the method that actually does the work.
+     */
+    @Cacheable(name = CacheManagerTest.CACHE_NAME_1, key = "$id +'-'+ $workspaceId + '-' + ($type != null ? $type : 'all')", returnType = DTO.class, wrapperType = List.class)
+    public List<DTO> getOverloadedWithNestedCache(String id, String workspaceId, String type) {
+        log.info("getOverloadedWithNestedCache: id={}, workspaceId={}, type={}", id, workspaceId, type);
+        return List.of(new DTO(id, workspaceId, UUID.randomUUID().toString()));
+    }
 }
