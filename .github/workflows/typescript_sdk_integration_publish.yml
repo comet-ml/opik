@@ -1,405 +1,102 @@
-name: TypeScript SDK Integration Publish
-run-name: "Publish ${{ inputs.integration }}${{ inputs.version && format(' v{0}', inputs.version) || ' (auto-bump patch)' }} by @${{ github.actor }}"
-permissions:
-  contents: write
+name: TypeScript SDK Integration Build & Publish
+run-name: "TypeScript SDK Integration Build & Publish ${{ github.event.inputs.version || inputs.version || 'auto' }} from ${{github.ref_name}} by @${{ github.actor }}"
 
 on:
+  push:
+    paths:
+      - "sdks/typescript/src/opik/integrations/**"
+      - ".github/workflows/typescript_sdk_integration_publish.yml"
+  pull_request:
+    paths:
+      - "sdks/typescript/src/opik/integrations/**"
+      - ".github/workflows/typescript_sdk_integration_publish.yml"
   workflow_dispatch:
     inputs:
-      integration:
-        type: choice
+      version:
+        type: string
         required: true
-        description: "Integration to publish"
-        options:
+        description: Version
+        default: ""
+      is_release:
+        type: boolean
+        required: false
+        default: false
+  workflow_call:
+    inputs:
+      version:
+        type: string
+        required: true
+        description: Version
+        default: ""
+      is_release:
+        type: boolean
+        required: false
+        default: false
+
+jobs:
+  build-and-publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      matrix:
+        integration:
           - opik-openai
           - opik-gemini
           - opik-langchain
           - opik-vercel
-      version:
-        type: string
-        required: false
-        description: "Version (e.g., 1.0.1) - leave empty to auto-bump patch version"
-  workflow_call:
-    inputs:
-      integration:
-        type: string
-        required: true
-      version:
-        type: string
-        required: false
-
-# Prevent concurrent publishes of same integration
-concurrency:
-  group: publish-${{ inputs.integration }}
-  cancel-in-progress: false
-
-jobs:
-  publish:
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
     env:
-      INTEGRATION: ${{ inputs.integration }}
-      INPUT_VERSION: ${{ inputs.version }}
-      WORKING_DIR: sdks/typescript/src/opik/integrations/${{ inputs.integration }}
+      IS_RELEASE: ${{ inputs.is_release }}
+      INTEGRATION: ${{ matrix.integration }}
+      WORKING_DIR: sdks/typescript/src/opik/integrations/${{ matrix.integration }}
+    defaults:
+      run:
+        working-directory: ${{ env.WORKING_DIR }}
 
     steps:
-      - name: Checkout code
+      - name: Checkout
         uses: actions/checkout@v4
         with:
           ref: ${{ github.ref }}
           fetch-depth: 0
           token: ${{ secrets.GH_PAT_TO_ACCESS_GITHUB_API }}
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: "20"
-          registry-url: "https://registry.npmjs.org"
-          cache: "npm"
-          cache-dependency-path: ${{ env.WORKING_DIR }}/package-lock.json
-
       - name: Verify integration exists
         run: |
           if [ ! -d "${{ env.WORKING_DIR }}" ]; then
-            echo "❌ Error: Integration '${{ env.INTEGRATION }}' not found at path: ${{ env.WORKING_DIR }}"
+            echo "Error: Integration '${{ env.INTEGRATION }}' not found at path: ${{ env.WORKING_DIR }}"
             exit 1
           fi
-          echo "✅ Integration '${{ env.INTEGRATION }}' found"
+          echo "Integration '${{ env.INTEGRATION }}' found"
 
-      - name: Validate NPM authentication
-        run: |
-          echo "🔑 Validating NPM authentication..."
-          if ! npm whoami &> /dev/null; then
-            echo "❌ NPM authentication failed"
-            echo "   Please check NPM_TOKEN secret configuration"
-            exit 1
-          fi
-          NPM_USER=$(npm whoami)
-          echo "✅ Authenticated as NPM user: $NPM_USER"
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-
-      - name: Install dependencies
-        working-directory: ${{ env.WORKING_DIR }}
-        run: |
-          echo "📦 Installing dependencies for ${{ env.INTEGRATION }}..."
-          npm ci
-          echo "✅ Dependencies installed"
-
-      - name: Determine version
-        id: version
-        working-directory: ${{ env.WORKING_DIR }}
-        run: |
-          CURRENT_VERSION=$(node -p "require('./package.json').version")
-          PACKAGE_NAME=$(node -p "require('./package.json').name")
-
-          echo "current_version=$CURRENT_VERSION" >> $GITHUB_OUTPUT
-          echo "📌 Current version in package.json: $CURRENT_VERSION"
-
-          if [ -z "${{ env.INPUT_VERSION }}" ]; then
-            # Auto-bump patch version
-            IFS='.' read -r MAJOR MINOR PATCH <<< "$CURRENT_VERSION"
-            NEW_VERSION="${MAJOR}.${MINOR}.$((PATCH + 1))"
-            echo "🔢 Auto-bumping patch: $CURRENT_VERSION → $NEW_VERSION"
-          else
-            # Use provided version
-            NEW_VERSION="${{ env.INPUT_VERSION }}"
-            echo "📝 Using provided version: $NEW_VERSION"
-          fi
-
-          echo "new_version=$NEW_VERSION" >> $GITHUB_OUTPUT
-
-          # Check if version already exists on NPM (fail fast)
-          echo "🔍 Checking NPM for $PACKAGE_NAME@$NEW_VERSION..."
-          if npm view "$PACKAGE_NAME@$NEW_VERSION" version 2>/dev/null; then
-            echo ""
-            echo "❌ Error: Version $NEW_VERSION already published on NPM"
-            echo "   Current: $CURRENT_VERSION"
-            echo "   Attempted: $NEW_VERSION"
-            echo ""
-            echo "💡 Solutions:"
-            echo "   - Leave version empty to auto-bump patch"
-            echo "   - Provide a higher version number"
-            exit 1
-          fi
-
-          echo "✅ Version $NEW_VERSION available for publishing"
-
-      - name: Validate package.json
-        working-directory: ${{ env.WORKING_DIR }}
-        run: |
-          echo "🔍 Validating package.json structure..."
-
-          # Check required fields
-          PACKAGE_NAME=$(node -p "require('./package.json').name" 2>/dev/null || echo "")
-          if [ -z "$PACKAGE_NAME" ]; then
-            echo "❌ package.json missing required 'name' field"
-            exit 1
-          fi
-
-          # Check description
-          DESCRIPTION=$(node -p "require('./package.json').description" 2>/dev/null || echo "")
-          if [ -z "$DESCRIPTION" ]; then
-            echo "⚠️  Warning: package.json missing 'description' field"
-          fi
-
-          # Check repository
-          REPOSITORY=$(node -p "require('./package.json').repository" 2>/dev/null || echo "")
-          if [ -z "$REPOSITORY" ]; then
-            echo "⚠️  Warning: package.json missing 'repository' field"
-          fi
-
-          # Check license
-          LICENSE=$(node -p "require('./package.json').license" 2>/dev/null || echo "")
-          if [ -z "$LICENSE" ]; then
-            echo "⚠️  Warning: package.json missing 'license' field"
-          fi
-
-          echo "✅ package.json validation passed"
-
-      - name: Update version in package.json
-        working-directory: ${{ env.WORKING_DIR }}
-        run: |
-          NEW_VERSION="${{ steps.version.outputs.new_version }}"
-          echo "📝 Updating version to $NEW_VERSION..."
-          npm version "$NEW_VERSION" --no-git-tag-version
-          echo "✅ Version updated to $NEW_VERSION"
-
-      - name: Build package
-        working-directory: ${{ env.WORKING_DIR }}
-        run: |
-          echo "🔨 Building ${{ env.INTEGRATION }}..."
-          npm run build
-          echo "✅ Build completed successfully"
-
-      - name: Run tests
-        working-directory: ${{ env.WORKING_DIR }}
-        run: |
-          echo "🧪 Running tests..."
-          npm test
-          echo "✅ Tests passed"
-
-      - name: Run linting
-        working-directory: ${{ env.WORKING_DIR }}
-        run: |
-          echo "🔍 Running linter..."
-          npm run lint
-          echo "✅ Linting passed"
-
-      - name: Run type checking
-        working-directory: ${{ env.WORKING_DIR }}
-        run: |
-          echo "📝 Running TypeScript type checking..."
-          npm run typecheck
-          echo "✅ Type checking passed"
-
-      - name: Test package installation (dry-run)
-        working-directory: ${{ env.WORKING_DIR }}
-        run: |
-          echo "📦 Testing package installation..."
-          npm pack --dry-run
-          echo "✅ Package can be installed successfully"
-
-      - name: Commit version changes
-        id: commit
-        run: |
-          NEW_VERSION="${{ steps.version.outputs.new_version }}"
-
-          git config --local user.email "github-actions@comet.com"
-          git config --local user.name "GitHub Actions Bot"
-
-          cd ${{ env.WORKING_DIR }}
-          git add package.json package-lock.json
-
-          if git diff --staged --quiet; then
-            echo "ℹ️  No version changes to commit"
-            echo "has_changes=false" >> $GITHUB_OUTPUT
-          else
-            git commit -m "chore(${{ env.INTEGRATION }}): bump version to $NEW_VERSION"
-            echo "✅ Version changes committed"
-            echo "has_changes=true" >> $GITHUB_OUTPUT
-          fi
-
-      - name: Push version changes to repository
-        if: steps.commit.outputs.has_changes == 'true'
-        run: |
-          echo "🚀 Pushing version changes to repository..."
-          git push origin ${{ github.ref }}
-          echo "✅ Changes pushed to repository"
-          echo "📍 Git is now source of truth - ready for NPM publish"
-
-      - name: Publish to NPM (with retry)
-        id: npm_publish
-        working-directory: ${{ env.WORKING_DIR }}
-        run: |
-          NEW_VERSION="${{ steps.version.outputs.new_version }}"
-          PACKAGE_NAME=$(node -p "require('./package.json').name")
-
-          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-          echo "📦 Publishing to NPM"
-          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-          echo "Package: $PACKAGE_NAME"
-          echo "Version: $NEW_VERSION"
-          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-
-          # Retry logic: 3 attempts with 10 second delays and 3-minute timeout per attempt
-          MAX_ATTEMPTS=3
-          ATTEMPT=1
-          SUCCESS=false
-          TIMEOUT_SECONDS=180  # 3 minutes per attempt
-
-          while [ $ATTEMPT -le $MAX_ATTEMPTS ]; do
-            echo "📤 Publish attempt $ATTEMPT of $MAX_ATTEMPTS (timeout: ${TIMEOUT_SECONDS}s)..."
-            
-            # Use timeout command to prevent hanging indefinitely
-            if timeout $TIMEOUT_SECONDS npm publish --access public; then
-              SUCCESS=true
-              break
-            else
-              EXIT_CODE=$?
-              if [ $EXIT_CODE -eq 124 ]; then
-                echo "⏱️  Attempt $ATTEMPT timed out after ${TIMEOUT_SECONDS}s"
-              else
-                echo "❌ Attempt $ATTEMPT failed with exit code $EXIT_CODE"
-              fi
-              
-              if [ $ATTEMPT -lt $MAX_ATTEMPTS ]; then
-                echo "⏳ Retrying in 10 seconds..."
-                sleep 10
-              fi
-              ATTEMPT=$((ATTEMPT + 1))
-            fi
-          done
-
-          if [ "$SUCCESS" = false ]; then
-            echo "❌ Failed to publish after $MAX_ATTEMPTS attempts"
-            exit 1
-          fi
-
-          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-          echo "✅ Successfully published to NPM"
-          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-          echo ""
-          echo "📦 Package: $PACKAGE_NAME@$NEW_VERSION"
-          echo "🔗 NPM: https://www.npmjs.com/package/$PACKAGE_NAME/v/$NEW_VERSION"
-          echo ""
-          echo "Install with:"
-          echo "  npm install $PACKAGE_NAME@$NEW_VERSION"
-          echo ""
-
-          # Save package name for later steps
-          echo "PACKAGE_NAME=$PACKAGE_NAME" >> $GITHUB_ENV
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-
-      - name: Verify package on NPM
-        run: |
-          NEW_VERSION="${{ steps.version.outputs.new_version }}"
-          PACKAGE_NAME="${{ env.PACKAGE_NAME }}"
-
-          echo "⏳ Waiting for NPM registry propagation..."
-          sleep 10
-
-          echo "🔍 Verifying $PACKAGE_NAME@$NEW_VERSION is available..."
-          npm view "$PACKAGE_NAME@$NEW_VERSION" version
-          echo "✅ Package verified on NPM"
-
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
+      - name: Build and Publish TypeScript SDK Integration
+        id: build_publish
+        uses: ./.github/actions/typescript-sdk-build-and-publish
         with:
-          tag_name: ${{ env.INTEGRATION }}-v${{ steps.version.outputs.new_version }}
-          name: ${{ env.INTEGRATION }} v${{ steps.version.outputs.new_version }}
-          fail_on_unset_tag: true
-          body: |
-            ## 📦 ${{ env.INTEGRATION }} v${{ steps.version.outputs.new_version }}
+          working_directory: ${{ env.WORKING_DIR }}
+          version: ${{ inputs.version || '' }}
+          is_release: ${{ env.IS_RELEASE }}
+          package_name: ${{ env.INTEGRATION }}
+          npm_access: "public"
+          enable_cache: "true"
+          cache_dependency_path: ${{ env.WORKING_DIR }}/package-lock.json
+          test_package_installation: "true"
 
-            Released ${{ env.INTEGRATION }} version ${{ steps.version.outputs.new_version }}
-
-            ### 📥 Installation
-            ```bash
-            npm install ${{ env.INTEGRATION }}@${{ steps.version.outputs.new_version }}
-            ```
-
-            ### 🔗 Links
-            - [NPM Package](https://www.npmjs.com/package/${{ env.INTEGRATION }}/v/${{ steps.version.outputs.new_version }})
-            - [Changelog](https://github.com/${{ github.repository }}/blob/main/CHANGELOG.md)
-
-            ### ⚙️ Compatibility
-            - Node.js: >= 18
-            - TypeScript: >= 5.0
-            - Opik SDK: See `peerDependencies` in [package.json](https://github.com/${{ github.repository }}/blob/${{ env.INTEGRATION }}-v${{ steps.version.outputs.new_version }}/sdks/typescript/src/opik/integrations/${{ env.INTEGRATION }}/package.json)
-          draft: false
-          prerelease: false
-          generate_release_notes: true
-        env:
-          GITHUB_TOKEN: ${{ secrets.GH_PAT_TO_ACCESS_GITHUB_API }}
-
-      - name: Rollback on failure
-        if: failure() && steps.npm_publish.outcome == 'success'
+      - name: Summary
         run: |
-          NEW_VERSION="${{ steps.version.outputs.new_version }}"
-          PACKAGE_NAME="${{ env.PACKAGE_NAME }}"
-
-          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-          echo "⚠️  WORKFLOW FAILED - ATTEMPTING ROLLBACK"
-          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-          echo ""
-          echo "Package was published to NPM but subsequent steps failed."
-          echo "Attempting to deprecate the published version..."
-          echo ""
-
-          # Try to deprecate the published version
-          npm deprecate "$PACKAGE_NAME@$NEW_VERSION" "⚠️ Publish workflow failed - DO NOT USE" || {
-            echo "❌ Failed to deprecate package automatically"
-          }
-
-          echo ""
-          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-          echo "📋 MANUAL CLEANUP REQUIRED"
-          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-          echo ""
-          echo "Please perform the following cleanup steps:"
-          echo ""
-          echo "1. Unpublish from NPM (if within 72 hours):"
-          echo "   npm unpublish $PACKAGE_NAME@$NEW_VERSION --force"
-          echo ""
-          echo "2. Delete git tag if created:"
-          echo "   git tag -d ${{ env.INTEGRATION }}-v$NEW_VERSION"
-          echo "   git push origin :refs/tags/${{ env.INTEGRATION }}-v$NEW_VERSION"
-          echo ""
-          echo "3. Revert version bump commit if needed:"
-          echo "   git revert HEAD"
-          echo "   git push origin ${{ github.ref }}"
-          echo ""
-          echo "4. Delete GitHub release if created:"
-          echo "   gh release delete ${{ env.INTEGRATION }}-v$NEW_VERSION"
-          echo ""
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-
-      - name: Create workflow summary
-        if: always()
-        run: |
-          NEW_VERSION="${{ steps.version.outputs.new_version }}"
-          CURRENT_VERSION="${{ steps.version.outputs.current_version }}"
-
-          if [ "${{ job.status }}" == "success" ]; then
-            echo "## ✅ ${{ env.INTEGRATION }} Published Successfully" >> $GITHUB_STEP_SUMMARY
+          echo "## ${{ env.INTEGRATION }} Build" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Version:** ${{ steps.build_publish.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Event:** ${{ github.event_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Is Release:** ${{ env.IS_RELEASE }}" >> $GITHUB_STEP_SUMMARY
+          if [ "${{ env.IS_RELEASE }}" = "true" ]; then
+            echo "**Published:** ✅ Published to NPM" >> $GITHUB_STEP_SUMMARY
+            echo "**Package:** 📦 ${{ steps.build_publish.outputs.package_name }}@${{ steps.build_publish.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+            echo "**NPM:** 🔗 https://www.npmjs.com/package/${{ steps.build_publish.outputs.package_name }}/v/${{ steps.build_publish.outputs.version }}" >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY
-            echo "- **Package**: \`${{ env.INTEGRATION }}\`" >> $GITHUB_STEP_SUMMARY
-            echo "- **Previous Version**: \`$CURRENT_VERSION\`" >> $GITHUB_STEP_SUMMARY
-            echo "- **New Version**: \`$NEW_VERSION\`" >> $GITHUB_STEP_SUMMARY
-            echo "- **NPM**: [View on NPM](https://www.npmjs.com/package/${{ env.INTEGRATION }}/v/$NEW_VERSION)" >> $GITHUB_STEP_SUMMARY
-            echo "- **GitHub Release**: [View Release](https://github.com/${{ github.repository }}/releases/tag/${{ env.INTEGRATION }}-v$NEW_VERSION)" >> $GITHUB_STEP_SUMMARY
-            echo "" >> $GITHUB_STEP_SUMMARY
-            echo "### 📥 Installation" >> $GITHUB_STEP_SUMMARY
+            echo "**Install with:**" >> $GITHUB_STEP_SUMMARY
             echo "\`\`\`bash" >> $GITHUB_STEP_SUMMARY
-            echo "npm install ${{ env.INTEGRATION }}@$NEW_VERSION" >> $GITHUB_STEP_SUMMARY
+            echo "npm install ${{ steps.build_publish.outputs.package_name }}@${{ steps.build_publish.outputs.version }}" >> $GITHUB_STEP_SUMMARY
             echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
           else
-            echo "## ❌ Workflow Failed" >> $GITHUB_STEP_SUMMARY
-            echo "" >> $GITHUB_STEP_SUMMARY
-            echo "The publish workflow encountered an error." >> $GITHUB_STEP_SUMMARY
-            echo "" >> $GITHUB_STEP_SUMMARY
-            echo "Please check the workflow logs for details and follow rollback instructions if needed." >> $GITHUB_STEP_SUMMARY
+            echo "**Status:** ⏭️ Build and tests only" >> $GITHUB_STEP_SUMMARY
           fi
