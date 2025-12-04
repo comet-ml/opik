@@ -1,4 +1,6 @@
 otel_trace ${OTEL_TRACE};
-otel_exporter {     endpoint http://${OTEL_COLLECTOR_HOST}:${OTEL_COLLECTOR_PORT}; }
+otel_exporter {
+  endpoint ${OTEL_EXPORTER_OTLP_TRACES_ENDPOINT};
+}
 otel_service_name "opik-frontend";
 otel_trace_context propagate;

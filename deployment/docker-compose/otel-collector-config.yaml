@@ -23,8 +23,10 @@ receivers:
       listen_address: "0.0.0.0:5140"
     protocol: rfc3164
     operators:
+      - type: regex_parser
+        regex: '^<[0-9]+>.*nginx: (?P<message_content>.*)$'
       - type: move
-        from: body
+        from: attributes.message_content
         to: attributes.message
 
 
@@ -57,6 +59,10 @@ processors:
 exporters:
   debug:
     verbosity: detailed
+  otlp/jaeger:
+    endpoint: "jaeger:4317"
+    tls:
+      insecure: true
 
 service:
 
@@ -65,7 +71,7 @@ service:
     traces:
       receivers: [otlp, jaeger, zipkin]
       processors: [batch]
-      exporters: [debug]
+      exporters: [debug, otlp/jaeger]
 
     metrics:
       receivers: [otlp, prometheus]
@@ -78,4 +84,3 @@ service:
       exporters: [debug]
 
   extensions: [health_check, pprof, zpages]
-
