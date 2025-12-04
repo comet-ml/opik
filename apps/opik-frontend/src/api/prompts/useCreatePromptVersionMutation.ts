@@ -55,10 +55,21 @@ const useCreatePromptVersionMutation = () => {
     onSuccess: async (data: PromptVersion, { onSuccess }) => {
       onSuccess(data);
 
-      // Invalidate the specific prompt query to update the unsaved indicator
+      // Invalidate prompt-related queries to ensure UI reflects the new version
       // The loadedChatPromptRef in PlaygroundPrompt prevents unwanted re-loading
       queryClient.invalidateQueries({
         queryKey: ["prompt", { promptId: data.prompt_id }],
+      });
+
+      // Invalidate the versions list query to show the new version in prompt details page
+      // Using predicate to match all versions queries for this specific prompt
+      queryClient.invalidateQueries({
+        predicate: (query) =>
+          query.queryKey[0] === "prompt-versions" &&
+          typeof query.queryKey[1] === "object" &&
+          query.queryKey[1] !== null &&
+          "promptId" in query.queryKey[1] &&
+          query.queryKey[1].promptId === data.prompt_id,
       });
     },
   });

@@ -72,6 +72,16 @@ const usePromptCreateMutation = () => {
         queryClient.invalidateQueries({
           queryKey: ["prompt", { promptId: data.id }],
         });
+
+        // Invalidate the versions list query as well
+        queryClient.invalidateQueries({
+          predicate: (query) =>
+            query.queryKey[0] === "prompt-versions" &&
+            typeof query.queryKey[1] === "object" &&
+            query.queryKey[1] !== null &&
+            "promptId" in query.queryKey[1] &&
+            query.queryKey[1].promptId === data.id,
+        });
       }
     },
     onSettled: () => {
