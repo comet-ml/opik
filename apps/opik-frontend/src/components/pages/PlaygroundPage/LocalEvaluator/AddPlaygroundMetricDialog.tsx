@@ -118,6 +118,32 @@ const formatDefaultValue = (value: unknown): string => {
   return JSON.stringify(value);
 };
 
+// Format docstrings by normalizing indentation
+const formatDocstring = (docstring: string): string => {
+  if (!docstring) return "";
+
+  const lines = docstring.split("\n");
+
+  // Find minimum indentation (excluding empty lines)
+  let minIndent = Infinity;
+  for (const line of lines) {
+    if (line.trim().length === 0) continue;
+    const indent = line.match(/^\s*/)?.[0].length || 0;
+    minIndent = Math.min(minIndent, indent);
+  }
+
+  // Remove common indentation
+  if (minIndent === Infinity) minIndent = 0;
+
+  return lines
+    .map((line) => {
+      if (line.trim().length === 0) return "";
+      return line.slice(minIndent);
+    })
+    .join("\n")
+    .trim();
+};
+
 const ParamInput: React.FC<{
   param: LocalMetricParam;
   value: unknown;
@@ -397,11 +423,14 @@ const AddPlaygroundMetricDialog: React.FC<AddPlaygroundMetricDialogProps> = ({
               )}
 
               {/* Metric Description */}
-              {selectedMetric && (
-                <div className="rounded-md border bg-muted/50 p-3">
-                  <Description className="text-sm">
-                    {selectedMetric.description}
-                  </Description>
+              {selectedMetric && selectedMetric.description && (
+                <div className="rounded-md border border-primary/20 bg-primary/5 p-4">
+                  <Label className="mb-2 block text-sm font-medium text-primary">
+                    Description
+                  </Label>
+                  <pre className="whitespace-pre-wrap font-mono text-xs leading-relaxed text-foreground">
+                    {formatDocstring(selectedMetric.description)}
+                  </pre>
                 </div>
               )}
 
@@ -476,10 +505,13 @@ const AddPlaygroundMetricDialog: React.FC<AddPlaygroundMetricDialogProps> = ({
                         </TooltipWrapper>
                       </div>
                       {selectedMetric.score_description && (
-                        <div className="rounded-md border bg-muted/50 p-3">
-                          <Description className="whitespace-pre-wrap text-sm">
-                            {selectedMetric.score_description}
-                          </Description>
+                        <div className="rounded-md border border-secondary/30 bg-secondary/10 p-4">
+                          <Label className="mb-2 block text-sm font-medium text-secondary-foreground">
+                            Score Method
+                          </Label>
+                          <pre className="whitespace-pre-wrap font-mono text-xs leading-relaxed text-foreground">
+                            {formatDocstring(selectedMetric.score_description)}
+                          </pre>
                         </div>
                       )}
                       <Description className="text-sm">

@@ -37,6 +37,7 @@ export interface PlaygroundMetricConfig {
 }
 
 export interface LocalEvaluationRequest {
+  trace_id: string;
   metrics: LocalEvaluationRequestConfig[];
 }
 

@@ -23,7 +23,7 @@ def _print_startup_message(host: str, port: int, metrics_count: int) -> None:
         content.append("\n")
         content.append("📡 API Endpoints:\n")
         content.append(f"   - GET  {local_url}/api/v1/evaluation/metrics\n")
-        content.append(f"   - POST {local_url}/api/v1/evaluation/traces/{{trace_id}}\n")
+        content.append(f"   - POST {local_url}/api/v1/evaluation/trace\n")
         content.append(f"   - GET  {local_url}/healthcheck\n")
         content.append("\n")
         content.append("📚 Documentation:\n")
@@ -62,7 +62,7 @@ Start the Opik Eval App server.
 
 This server provides API endpoints to:
 - GET  /api/v1/evaluation/metrics - List available metrics
-- POST /api/v1/evaluation/traces/{trace_id} - Evaluate a trace and log feedback scores
+- POST /api/v1/evaluation/trace - Evaluate a trace and log feedback scores
 - GET  /healthcheck - Health check
 
 The server connects to your local Opik instance to fetch traces and log feedback scores.

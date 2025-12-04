@@ -44,7 +44,7 @@ class EvalService:
         )
 
         return schemas.EvaluationAcceptedResponse(
-            trace_id=trace_id,
+            trace_id=request.trace_id,
             metrics_count=len(request.metrics),
         )
 

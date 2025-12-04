@@ -54,6 +54,7 @@ class MetricEvaluationConfig(pydantic.BaseModel):
 class EvaluationRequest(pydantic.BaseModel):
     """Request to evaluate a trace with specified metrics."""
 
+    trace_id: str = pydantic.Field(description="ID of the trace to evaluate")
     metrics: List[MetricEvaluationConfig] = pydantic.Field(
         min_length=1,
         description="List of metric evaluation configurations",

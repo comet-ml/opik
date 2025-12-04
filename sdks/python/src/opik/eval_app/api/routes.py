@@ -63,17 +63,16 @@ def list_metrics() -> schemas.MetricsListResponse:
 
 
 @evaluation_router.post(
-    "/traces/{trace_id}",
+    "/trace",
     response_model=schemas.EvaluationAcceptedResponse,
     status_code=fastapi.status.HTTP_202_ACCEPTED,
 )
 def evaluate_trace(
-    trace_id: str,
     request: schemas.EvaluationRequest,
 ) -> schemas.EvaluationAcceptedResponse:
     """Evaluate a trace and log feedback scores."""
     service = _get_service()
-    return service.evaluate_trace(trace_id, request)
+    return service.evaluate_trace(request.trace_id, request)
 
 
 @healthcheck_router.get("/healthcheck")
