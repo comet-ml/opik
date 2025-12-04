@@ -7,6 +7,29 @@ import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
+/**
+ * Annotation to evict entries from the cache.
+ * <p>
+ * <strong>CRITICAL WARNING - Avoid Nested Cache Operations:</strong>
+ * </p>
+ * <p>
+ * Do NOT use this annotation on overloaded methods where one delegates to another.
+ * When two overloaded methods both have {@code @CacheEvict} and one delegates to the other,
+ * it creates <strong>nested cache operations</strong> that cause:
+ * </p>
+ * <ul>
+ *   <li>Nested {@code Mono.block()} calls within the cache interceptor</li>
+ *   <li>Reactor threading violations</li>
+ *   <li>Redis timeout exceptions ({@code RedisTimeoutException})</li>
+ *   <li>Thread pool exhaustion under load</li>
+ * </ul>
+ * <p>
+ * <strong>Safe Usage:</strong> Only annotate the actual implementation method, not delegating methods.
+ * </p>
+ *
+ * @see Cacheable
+ * @see CachePut
+ */
 @Target({ElementType.METHOD})
 @Retention(RetentionPolicy.RUNTIME)
 @Inherited
@@ -29,7 +52,7 @@ public @interface CacheEvict {
      * @return whether the key is a pattern or not. Default is false.
      *
      * @see <a href="https://redis.io/commands/KEYS">Redis KEYS command documentation</a>
-     *
+     * <p>
      * This is useful when you want to evict multiple keys that match a pattern.
      * */
     boolean keyUsesPatternMatching() default false;
