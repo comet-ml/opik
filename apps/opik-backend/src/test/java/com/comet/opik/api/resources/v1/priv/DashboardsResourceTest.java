@@ -26,6 +26,9 @@ import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.lifecycle.Startables;
@@ -37,9 +40,12 @@ import uk.co.jemos.podam.api.PodamFactory;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.IntStream;
+import java.util.stream.Stream;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.newTestDropwizardAppExtension;
@@ -362,134 +368,94 @@ class DashboardsResourceTest {
     @DisplayName("Sort dashboards")
     class SortDashboards {
 
-        @Test
-        @DisplayName("Sort dashboards by name ascending")
-        void sortDashboardsByNameAscending() {
+        @ParameterizedTest
+        @MethodSource
+        @DisplayName("Sort dashboards by valid fields")
+        void findDashboards__whenSortingByValidFields__thenReturnDashboardsSorted(
+                Comparator<Dashboard> comparator, String sortingJson) {
             String apiKey = UUID.randomUUID().toString();
             String workspaceName = "test-workspace-" + UUID.randomUUID();
             String workspaceId = UUID.randomUUID().toString();
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
-            var dashboardA = dashboardResourceClient.createPartialDashboard().name("AAA Dashboard").build();
-            var dashboardB = dashboardResourceClient.createPartialDashboard().name("BBB Dashboard").build();
-            var dashboardC = dashboardResourceClient.createPartialDashboard().name("CCC Dashboard").build();
+            List<Dashboard> expectedDashboards = IntStream.range(0, 5)
+                    .mapToObj(i -> dashboardResourceClient.createPartialDashboard()
+                            .name("Dashboard " + (char) ('A' + i))
+                            .build())
+                    .map(dashboard -> {
+                        var id = dashboardResourceClient.create(dashboard, apiKey, workspaceName);
+                        return dashboardResourceClient.get(id, apiKey, workspaceName, HttpStatus.SC_OK);
+                    })
+                    .sorted(comparator)
+                    .toList();
 
-            var idA = dashboardResourceClient.create(dashboardA, apiKey, workspaceName);
-            var idB = dashboardResourceClient.create(dashboardB, apiKey, workspaceName);
-            var idC = dashboardResourceClient.create(dashboardC, apiKey, workspaceName);
-
-            var page = dashboardResourceClient.find(apiKey, workspaceName, 1, 10, null,
-                    "[{\"field\":\"name\",\"direction\":\"ASC\"}]", HttpStatus.SC_OK);
+            var page = dashboardResourceClient.find(apiKey, workspaceName, 1, 10, null, sortingJson, HttpStatus.SC_OK);
 
             assertThat(page.sortableBy()).isNotEmpty();
-            assertThat(page.content()).hasSize(3);
-            assertThat(page.content().get(0).name()).isEqualTo("AAA Dashboard");
-            assertThat(page.content().get(1).name()).isEqualTo("BBB Dashboard");
-            assertThat(page.content().get(2).name()).isEqualTo("CCC Dashboard");
+            assertThat(page.content()).hasSize(5);
+            assertThat(page.content())
+                    .extracting(Dashboard::id)
+                    .containsExactlyElementsOf(expectedDashboards.stream().map(Dashboard::id).toList());
         }
 
-        @Test
-        @DisplayName("Sort dashboards by name descending")
-        void sortDashboardsByNameDescending() {
-            String apiKey = UUID.randomUUID().toString();
-            String workspaceName = "test-workspace-" + UUID.randomUUID();
-            String workspaceId = UUID.randomUUID().toString();
-            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+        private Stream<Arguments> findDashboards__whenSortingByValidFields__thenReturnDashboardsSorted() {
+            Comparator<Dashboard> idComparator = Comparator.comparing(Dashboard::id);
+            Comparator<Dashboard> nameComparator = Comparator.comparing(Dashboard::name, String.CASE_INSENSITIVE_ORDER);
+            Comparator<Dashboard> createdAtComparator = Comparator.comparing(Dashboard::createdAt);
+            Comparator<Dashboard> lastUpdatedAtComparator = Comparator.comparing(Dashboard::lastUpdatedAt);
 
-            var dashboardA = dashboardResourceClient.createPartialDashboard().name("AAA Dashboard").build();
-            var dashboardB = dashboardResourceClient.createPartialDashboard().name("BBB Dashboard").build();
-            var dashboardC = dashboardResourceClient.createPartialDashboard().name("CCC Dashboard").build();
+            return Stream.of(
+                    // ID field sorting
+                    Arguments.of(idComparator,
+                            "[{\"field\":\"id\",\"direction\":\"ASC\"}]"),
+                    Arguments.of(idComparator.reversed(),
+                            "[{\"field\":\"id\",\"direction\":\"DESC\"}]"),
 
-            dashboardResourceClient.create(dashboardA, apiKey, workspaceName);
-            dashboardResourceClient.create(dashboardB, apiKey, workspaceName);
-            dashboardResourceClient.create(dashboardC, apiKey, workspaceName);
+                    // NAME field sorting
+                    Arguments.of(nameComparator,
+                            "[{\"field\":\"name\",\"direction\":\"ASC\"}]"),
+                    Arguments.of(nameComparator.reversed(),
+                            "[{\"field\":\"name\",\"direction\":\"DESC\"}]"),
 
-            var page = dashboardResourceClient.find(apiKey, workspaceName, 1, 10, null,
-                    "[{\"field\":\"name\",\"direction\":\"DESC\"}]", HttpStatus.SC_OK);
+                    // CREATED_AT field sorting
+                    Arguments.of(createdAtComparator,
+                            "[{\"field\":\"created_at\",\"direction\":\"ASC\"}]"),
+                    Arguments.of(createdAtComparator.reversed(),
+                            "[{\"field\":\"created_at\",\"direction\":\"DESC\"}]"),
 
-            assertThat(page.content()).hasSize(3);
-            assertThat(page.content().get(0).name()).isEqualTo("CCC Dashboard");
-            assertThat(page.content().get(1).name()).isEqualTo("BBB Dashboard");
-            assertThat(page.content().get(2).name()).isEqualTo("AAA Dashboard");
-        }
-
-        @Test
-        @DisplayName("Sort dashboards by created_at ascending")
-        void sortDashboardsByCreatedAtAscending() throws InterruptedException {
-            String apiKey = UUID.randomUUID().toString();
-            String workspaceName = "test-workspace-" + UUID.randomUUID();
-            String workspaceId = UUID.randomUUID().toString();
-            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
-
-            var dashboard1 = dashboardResourceClient.createPartialDashboard().name("First").build();
-            var id1 = dashboardResourceClient.create(dashboard1, apiKey, workspaceName);
-            Thread.sleep(100);
-
-            var dashboard2 = dashboardResourceClient.createPartialDashboard().name("Second").build();
-            var id2 = dashboardResourceClient.create(dashboard2, apiKey, workspaceName);
-            Thread.sleep(100);
-
-            var dashboard3 = dashboardResourceClient.createPartialDashboard().name("Third").build();
-            var id3 = dashboardResourceClient.create(dashboard3, apiKey, workspaceName);
-
-            var page = dashboardResourceClient.find(apiKey, workspaceName, 1, 10, null,
-                    "[{\"field\":\"created_at\",\"direction\":\"ASC\"}]", HttpStatus.SC_OK);
-
-            assertThat(page.content()).hasSize(3);
-            assertThat(page.content().get(0).id()).isEqualTo(id1);
-            assertThat(page.content().get(1).id()).isEqualTo(id2);
-            assertThat(page.content().get(2).id()).isEqualTo(id3);
-        }
-
-        @Test
-        @DisplayName("Sort dashboards by created_at descending")
-        void sortDashboardsByCreatedAtDescending() throws InterruptedException {
-            String apiKey = UUID.randomUUID().toString();
-            String workspaceName = "test-workspace-" + UUID.randomUUID();
-            String workspaceId = UUID.randomUUID().toString();
-            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
-
-            var dashboard1 = dashboardResourceClient.createPartialDashboard().name("First").build();
-            var id1 = dashboardResourceClient.create(dashboard1, apiKey, workspaceName);
-            Thread.sleep(100);
-
-            var dashboard2 = dashboardResourceClient.createPartialDashboard().name("Second").build();
-            var id2 = dashboardResourceClient.create(dashboard2, apiKey, workspaceName);
-            Thread.sleep(100);
-
-            var dashboard3 = dashboardResourceClient.createPartialDashboard().name("Third").build();
-            var id3 = dashboardResourceClient.create(dashboard3, apiKey, workspaceName);
-
-            var page = dashboardResourceClient.find(apiKey, workspaceName, 1, 10, null,
-                    "[{\"field\":\"created_at\",\"direction\":\"DESC\"}]", HttpStatus.SC_OK);
-
-            assertThat(page.content()).hasSize(3);
-            assertThat(page.content().get(0).id()).isEqualTo(id3);
-            assertThat(page.content().get(1).id()).isEqualTo(id2);
-            assertThat(page.content().get(2).id()).isEqualTo(id1);
+                    // LAST_UPDATED_AT field sorting
+                    Arguments.of(lastUpdatedAtComparator,
+                            "[{\"field\":\"last_updated_at\",\"direction\":\"ASC\"}]"),
+                    Arguments.of(lastUpdatedAtComparator.reversed(),
+                            "[{\"field\":\"last_updated_at\",\"direction\":\"DESC\"}]"));
         }
 
         @Test
         @DisplayName("Default sorting without sorting parameter")
-        void defaultSortingWithoutSortingParameter() throws InterruptedException {
+        void defaultSortingWithoutSortingParameter() {
             String apiKey = UUID.randomUUID().toString();
             String workspaceName = "test-workspace-" + UUID.randomUUID();
             String workspaceId = UUID.randomUUID().toString();
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
-            var dashboard1 = dashboardResourceClient.createPartialDashboard().name("First").build();
-            var id1 = dashboardResourceClient.create(dashboard1, apiKey, workspaceName);
-            Thread.sleep(100);
-
-            var dashboard2 = dashboardResourceClient.createPartialDashboard().name("Second").build();
-            var id2 = dashboardResourceClient.create(dashboard2, apiKey, workspaceName);
+            List<Dashboard> dashboards = IntStream.range(0, 3)
+                    .mapToObj(i -> dashboardResourceClient.createPartialDashboard()
+                            .name("Dashboard " + i)
+                            .build())
+                    .map(dashboard -> {
+                        var id = dashboardResourceClient.create(dashboard, apiKey, workspaceName);
+                        return dashboardResourceClient.get(id, apiKey, workspaceName, HttpStatus.SC_OK);
+                    })
+                    .toList();
 
             var page = dashboardResourceClient.find(apiKey, workspaceName, 1, 10, null, HttpStatus.SC_OK);
 
             assertThat(page.sortableBy()).isNotEmpty();
-            assertThat(page.content()).hasSize(2);
-            assertThat(page.content().get(0).id()).isEqualTo(id2);
-            assertThat(page.content().get(1).id()).isEqualTo(id1);
+            assertThat(page.content()).hasSize(3);
+            // Default sorting is by id DESC
+            assertThat(page.content().get(0).id()).isEqualTo(dashboards.get(2).id());
+            assertThat(page.content().get(1).id()).isEqualTo(dashboards.get(1).id());
+            assertThat(page.content().get(2).id()).isEqualTo(dashboards.get(0).id());
         }
 
         @Test

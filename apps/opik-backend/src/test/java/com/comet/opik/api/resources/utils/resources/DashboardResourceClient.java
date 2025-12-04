@@ -85,20 +85,6 @@ public class DashboardResourceClient {
 
     public DashboardPage find(String apiKey, String workspaceName, int page, int size, String name,
             String sorting, int expectedStatus) {
-        try (var response = callFind(apiKey, workspaceName, page, size, name, sorting)) {
-            assertThat(response.getStatus()).isEqualTo(expectedStatus);
-            if (expectedStatus == HttpStatus.SC_OK) {
-                return response.readEntity(DashboardPage.class);
-            }
-            return null;
-        }
-    }
-
-    public Response callFind(String apiKey, String workspaceName, int page, int size, String name) {
-        return callFind(apiKey, workspaceName, page, size, name, null);
-    }
-
-    public Response callFind(String apiKey, String workspaceName, int page, int size, String name, String sorting) {
         var target = client.target(RESOURCE_PATH.formatted(baseURI))
                 .queryParam("page", page)
                 .queryParam("size", size);
@@ -111,10 +97,16 @@ public class DashboardResourceClient {
             target = target.queryParam("sorting", URLEncoder.encode(sorting, StandardCharsets.UTF_8));
         }
 
-        return target.request()
+        try (var response = target.request()
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .header(WORKSPACE_HEADER, workspaceName)
-                .get();
+                .get()) {
+            assertThat(response.getStatus()).isEqualTo(expectedStatus);
+            if (expectedStatus == HttpStatus.SC_OK) {
+                return response.readEntity(DashboardPage.class);
+            }
+            return null;
+        }
     }
 
     public void update(UUID id, DashboardUpdate update, String apiKey, String workspaceName, int expectedStatus) {
@@ -163,21 +155,17 @@ public class DashboardResourceClient {
     }
 
     public void batchDelete(Set<UUID> ids, String apiKey, String workspaceName, int expectedStatus) {
-        try (var response = callBatchDelete(ids, apiKey, workspaceName)) {
-            assertThat(response.getStatus()).isEqualTo(expectedStatus);
-        }
-    }
-
-    public Response callBatchDelete(Set<UUID> ids, String apiKey, String workspaceName) {
         var batchDelete = com.comet.opik.api.BatchDelete.builder()
                 .ids(ids)
                 .build();
-        return client.target(RESOURCE_PATH.formatted(baseURI))
+        try (var response = client.target(RESOURCE_PATH.formatted(baseURI))
                 .path("delete-batch")
                 .request()
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .header(WORKSPACE_HEADER, workspaceName)
-                .post(Entity.json(batchDelete));
+                .post(Entity.json(batchDelete))) {
+            assertThat(response.getStatus()).isEqualTo(expectedStatus);
+        }
     }
 
     public Dashboard.DashboardBuilder createPartialDashboard() {
