@@ -405,6 +405,13 @@ export const useDashboardStore = create<DashboardStore<BaseDashboardConfig>>()(
           const widget = sourceSection.widgets.find((w) => w.id === widgetId);
           if (!widget) return;
 
+          const layoutItem = sourceSection.layout.find(
+            (item) => item.i === widgetId,
+          );
+          const size = layoutItem
+            ? { w: layoutItem.w, h: layoutItem.h }
+            : undefined;
+
           const updatedSourceWidgets = sourceSection.widgets.filter(
             (w) => w.id !== widgetId,
           );
@@ -415,6 +422,7 @@ export const useDashboardStore = create<DashboardStore<BaseDashboardConfig>>()(
           const updatedTargetLayout = calculateLayoutForAddingWidget(
             targetSection.layout,
             widget,
+            size,
           );
 
           set(
