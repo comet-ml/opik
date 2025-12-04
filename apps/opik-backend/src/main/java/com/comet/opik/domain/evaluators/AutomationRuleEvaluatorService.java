@@ -409,8 +409,24 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
         });
     }
 
+    /**
+     * Find all automation rule evaluators for a project.
+     * <p>
+     * <strong>WARNING:</strong> Do NOT add {@code @Cacheable} annotation to this method.
+     * This method delegates to the 3-parameter {@link #findAll(UUID, String, AutomationRuleEvaluatorType)}
+     * which already has caching. Adding {@code @Cacheable} here would create nested cache operations
+     * that cause nested {@code Mono.block()} calls, leading to reactor threading violations and
+     * Redis timeout exceptions.
+     * </p>
+     *
+     * @param projectId the project ID
+     * @param workspaceId the workspace ID
+     * @param <E> the entity type
+     * @param <F> the filter type
+     * @param <T> the automation rule evaluator type
+     * @return list of automation rule evaluators
+     */
     @Override
-    @Cacheable(name = "automation_rule_evaluators_find_all", key = "$projectId + '-' + $workspaceId", returnType = AutomationRuleEvaluator.class, wrapperType = List.class)
     public <E, F extends Filter, T extends AutomationRuleEvaluator<E, F>> List<T> findAll(
             @NonNull UUID projectId, @NonNull String workspaceId) {
         return findAll(projectId, workspaceId, null);

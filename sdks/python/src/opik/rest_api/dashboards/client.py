@@ -35,6 +35,7 @@ class DashboardsClient:
         page: typing.Optional[int] = None,
         size: typing.Optional[int] = None,
         name: typing.Optional[str] = None,
+        sorting: typing.Optional[str] = None,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> DashboardPagePublic:
         """
@@ -47,6 +48,8 @@ class DashboardsClient:
         size : typing.Optional[int]
 
         name : typing.Optional[str]
+
+        sorting : typing.Optional[str]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -62,7 +65,9 @@ class DashboardsClient:
         client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
         client.dashboards.find_dashboards()
         """
-        _response = self._raw_client.find_dashboards(page=page, size=size, name=name, request_options=request_options)
+        _response = self._raw_client.find_dashboards(
+            page=page, size=size, name=name, sorting=sorting, request_options=request_options
+        )
         return _response.data
 
     def create_dashboard(
@@ -196,6 +201,32 @@ class DashboardsClient:
         )
         return _response.data
 
+    def delete_dashboards_batch(
+        self, *, ids: typing.Sequence[str], request_options: typing.Optional[RequestOptions] = None
+    ) -> None:
+        """
+        Delete dashboards batch
+
+        Parameters
+        ----------
+        ids : typing.Sequence[str]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        None
+
+        Examples
+        --------
+        from Opik import OpikApi
+        client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        client.dashboards.delete_dashboards_batch(ids=['ids'], )
+        """
+        _response = self._raw_client.delete_dashboards_batch(ids=ids, request_options=request_options)
+        return _response.data
+
 
 class AsyncDashboardsClient:
     def __init__(self, *, client_wrapper: AsyncClientWrapper):
@@ -218,6 +249,7 @@ class AsyncDashboardsClient:
         page: typing.Optional[int] = None,
         size: typing.Optional[int] = None,
         name: typing.Optional[str] = None,
+        sorting: typing.Optional[str] = None,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> DashboardPagePublic:
         """
@@ -230,6 +262,8 @@ class AsyncDashboardsClient:
         size : typing.Optional[int]
 
         name : typing.Optional[str]
+
+        sorting : typing.Optional[str]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -249,7 +283,7 @@ class AsyncDashboardsClient:
         asyncio.run(main())
         """
         _response = await self._raw_client.find_dashboards(
-            page=page, size=size, name=name, request_options=request_options
+            page=page, size=size, name=name, sorting=sorting, request_options=request_options
         )
         return _response.data
 
@@ -396,4 +430,33 @@ class AsyncDashboardsClient:
         _response = await self._raw_client.update_dashboard(
             dashboard_id, name=name, description=description, config=config, request_options=request_options
         )
+        return _response.data
+
+    async def delete_dashboards_batch(
+        self, *, ids: typing.Sequence[str], request_options: typing.Optional[RequestOptions] = None
+    ) -> None:
+        """
+        Delete dashboards batch
+
+        Parameters
+        ----------
+        ids : typing.Sequence[str]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        None
+
+        Examples
+        --------
+        from Opik import AsyncOpikApi
+        import asyncio
+        client = AsyncOpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        async def main() -> None:
+            await client.dashboards.delete_dashboards_batch(ids=['ids'], )
+        asyncio.run(main())
+        """
+        _response = await self._raw_client.delete_dashboards_batch(ids=ids, request_options=request_options)
         return _response.data

@@ -11,4 +11,5 @@ export enum FeatureToggleKeys {
   DATASET_VERSIONING_ENABLED = "dataset_versioning_enabled",
   SPAN_LLM_AS_JUDGE_ENABLED = "span_llm_as_judge_enabled",
   DASHBOARDS_ENABLED = "dashboards_enabled",
+  OPTIMIZATION_STUDIO_ENABLED = "optimization_studio_enabled",
 }

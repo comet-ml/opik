@@ -6,6 +6,7 @@ import * as serializers from "../../../../index";
 import * as OpikApi from "../../../../../api/index";
 import * as core from "../../../../../core";
 import { PromptVersionDetail } from "../../../../types/PromptVersionDetail";
+import { CreatePromptVersionDetailTemplateStructure } from "../../types/CreatePromptVersionDetailTemplateStructure";
 
 export const CreatePromptVersionDetail: core.serialization.Schema<
     serializers.CreatePromptVersionDetail.Raw,
@@ -13,11 +14,16 @@ export const CreatePromptVersionDetail: core.serialization.Schema<
 > = core.serialization.object({
     name: core.serialization.string(),
     version: PromptVersionDetail,
+    templateStructure: core.serialization.property(
+        "template_structure",
+        CreatePromptVersionDetailTemplateStructure.optional(),
+    ),
 });
 
 export declare namespace CreatePromptVersionDetail {
     export interface Raw {
         name: string;
         version: PromptVersionDetail.Raw;
+        template_structure?: CreatePromptVersionDetailTemplateStructure.Raw | null;
     }
 }
