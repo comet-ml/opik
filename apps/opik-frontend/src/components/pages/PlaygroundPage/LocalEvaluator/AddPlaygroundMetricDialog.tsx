@@ -102,10 +102,6 @@ const TRACE_ROOT_KEYS = ["input", "output", "metadata"] as const;
 
 const formatParamType = (type: string | null): string => {
   if (!type) return "any";
-  // Simplify complex types
-  if (type.startsWith("Union")) return "Union";
-  if (type.startsWith("Optional")) return "Optional";
-  if (type.startsWith("List")) return "List";
   return type;
 };
 
@@ -152,35 +148,33 @@ const ParamInput: React.FC<{
 }> = ({ param, value, onChange, error }) => {
   const type = param.type?.toLowerCase() || "";
 
+  // Get the display value - use provided value, or default if value is undefined
+  const getDisplayValue = () => {
+    if (value !== undefined) return value;
+    if (param.default !== null && param.default !== undefined)
+      return param.default;
+    return undefined;
+  };
+
   // Boolean type - use switch
   if (type === "bool" || type === "boolean") {
     return (
-      <div className="flex items-center gap-2">
-        <Switch
-          checked={Boolean(value ?? param.default)}
-          onCheckedChange={onChange}
-        />
-        {param.default !== null && param.default !== undefined && (
-          <span className="text-xs text-muted-slate">
-            Default: {param.default ? "true" : "false"}
-          </span>
-        )}
-      </div>
+      <Switch
+        checked={Boolean(getDisplayValue())}
+        onCheckedChange={onChange}
+      />
     );
   }
 
   // Number types
   if (type === "int" || type === "float" || type === "number") {
+    const displayValue = getDisplayValue();
     return (
       <Input
         type="number"
         step={type === "float" ? "0.1" : "1"}
-        value={value !== undefined ? String(value) : ""}
-        placeholder={
-          param.default !== null && param.default !== undefined
-            ? `Default: ${param.default}`
-            : "Optional"
-        }
+        value={displayValue !== undefined ? String(displayValue) : ""}
+        placeholder="Optional"
         onChange={(e) => {
           const val = e.target.value;
           if (val === "") {
@@ -195,14 +189,11 @@ const ParamInput: React.FC<{
   }
 
   // String and other types - use text input
+  const displayValue = getDisplayValue();
   return (
     <Input
-      value={value !== undefined ? String(value) : ""}
-      placeholder={
-        param.default !== null && param.default !== undefined
-          ? `Default: ${formatDefaultValue(param.default)}`
-          : "Optional"
-      }
+      value={displayValue !== undefined ? String(displayValue) : ""}
+      placeholder="Optional"
       onChange={(e) => {
         const val = e.target.value;
         onChange(val === "" ? undefined : val);
