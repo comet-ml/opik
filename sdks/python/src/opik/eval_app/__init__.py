@@ -4,11 +4,12 @@ This module is only imported when running the eval-app CLI command.
 It requires optional dependencies: fastapi, uvicorn.
 """
 
+import fastapi
+import starlette.middleware.cors
 
-def create_app():
+
+def create_app() -> fastapi.FastAPI:
     """Create and configure the FastAPI application."""
-    import fastapi
-    from starlette.middleware.cors import CORSMiddleware
 
     app = fastapi.FastAPI(
         title="Opik Eval App",
@@ -17,7 +18,7 @@ def create_app():
     )
 
     app.add_middleware(
-        CORSMiddleware,
+        starlette.middleware.cors.CORSMiddleware,
         allow_origins=["*"],
         allow_credentials=True,
         allow_methods=["*"],
