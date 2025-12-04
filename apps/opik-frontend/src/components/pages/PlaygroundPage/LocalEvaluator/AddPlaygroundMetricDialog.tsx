@@ -434,19 +434,12 @@ const AddPlaygroundMetricDialog: React.FC<AddPlaygroundMetricDialogProps> = ({
                             render={({ field }) => (
                               <FormItem className="flex flex-col gap-1">
                                 <div className="flex items-center gap-2">
-                                  <TooltipWrapper
-                                    content={param.description || undefined}
+                                  <Tag
+                                    variant={param.required ? "green" : "gray"}
+                                    size="sm"
                                   >
-                                    <Tag
-                                      variant={
-                                        param.required ? "green" : "gray"
-                                      }
-                                      size="sm"
-                                      className="cursor-help"
-                                    >
-                                      {param.name}
-                                    </Tag>
-                                  </TooltipWrapper>
+                                    {param.name}
+                                  </Tag>
                                   <span className="text-xs text-muted-slate">
                                     {formatParamType(param.type)}
                                   </span>
@@ -456,11 +449,6 @@ const AddPlaygroundMetricDialog: React.FC<AddPlaygroundMetricDialogProps> = ({
                                     </span>
                                   )}
                                 </div>
-                                {param.description && (
-                                  <Description className="text-xs">
-                                    {param.description}
-                                  </Description>
-                                )}
                                 <FormControl>
                                   <ParamInput
                                     param={param}
@@ -487,6 +475,13 @@ const AddPlaygroundMetricDialog: React.FC<AddPlaygroundMetricDialogProps> = ({
                           <Info className="size-4 text-muted-slate" />
                         </TooltipWrapper>
                       </div>
+                      {selectedMetric.score_description && (
+                        <div className="rounded-md border bg-muted/50 p-3">
+                          <Description className="whitespace-pre-wrap text-sm">
+                            {selectedMetric.score_description}
+                          </Description>
+                        </div>
+                      )}
                       <Description className="text-sm">
                         Map each metric argument to a trace field. Use paths
                         like &apos;input.messages&apos;,
@@ -507,19 +502,12 @@ const AddPlaygroundMetricDialog: React.FC<AddPlaygroundMetricDialogProps> = ({
                               return (
                                 <FormItem className="flex flex-col gap-1">
                                   <div className="flex items-center gap-2">
-                                    <TooltipWrapper
-                                      content={param.description || undefined}
+                                    <Tag
+                                      variant={param.required ? "green" : "gray"}
+                                      size="sm"
                                     >
-                                      <Tag
-                                        variant={
-                                          param.required ? "green" : "gray"
-                                        }
-                                        size="sm"
-                                        className="cursor-help"
-                                      >
-                                        {param.name}
-                                      </Tag>
-                                    </TooltipWrapper>
+                                      {param.name}
+                                    </Tag>
                                     <span className="text-xs text-muted-slate">
                                       {formatParamType(param.type)}
                                     </span>
@@ -533,11 +521,6 @@ const AddPlaygroundMetricDialog: React.FC<AddPlaygroundMetricDialogProps> = ({
                                       </span>
                                     )}
                                   </div>
-                                  {param.description && (
-                                    <Description className="text-xs">
-                                      {param.description}
-                                    </Description>
-                                  )}
                                   <FormControl>
                                     <TracesOrSpansPathsAutocomplete
                                       projectId={projectId || ""}

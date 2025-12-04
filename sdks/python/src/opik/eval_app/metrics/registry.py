@@ -22,23 +22,17 @@ class MetricsRegistry:
     def register(
         self,
         metric_class: Type[base_metric.BaseMetric],
-        description: Optional[str] = None,
         init_defaults: Optional[Dict[str, Any]] = None,
-        score_defaults: Optional[Dict[str, Any]] = None,
     ) -> None:
         """Register a metric class.
 
         Args:
             metric_class: The metric class to register.
-            description: Optional custom description (uses class docstring if not provided).
             init_defaults: Optional custom default values for __init__ parameters.
-            score_defaults: Optional custom default values for score() parameters.
         """
         descriptor = MetricDescriptor(
             metric_class=metric_class,
-            description=description,
             init_defaults=init_defaults,
-            score_defaults=score_defaults,
         )
         self._metrics[metric_class.__name__] = descriptor
         LOGGER.debug("Registered metric: %s", metric_class.__name__)

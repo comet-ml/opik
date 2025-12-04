@@ -12,7 +12,6 @@ class MetricParamDescriptor(pydantic.BaseModel):
     required: bool
     type: Optional[str] = None
     default: Optional[Any] = None
-    description: Optional[str] = None
 
 
 class MetricDescriptorResponse(pydantic.BaseModel):
@@ -20,6 +19,7 @@ class MetricDescriptorResponse(pydantic.BaseModel):
 
     name: str
     description: str
+    score_description: str
     init_params: List[MetricParamDescriptor]
     score_params: List[MetricParamDescriptor]
 

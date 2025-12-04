@@ -7,12 +7,12 @@ export interface LocalMetricParam {
   required: boolean;
   type: string | null;
   default: unknown;
-  description: string | null;
 }
 
 export interface LocalMetricDescriptor {
   name: string;
   description: string;
+  score_description: string;
   init_params: LocalMetricParam[];
   score_params: LocalMetricParam[];
 }

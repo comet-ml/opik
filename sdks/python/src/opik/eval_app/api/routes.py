@@ -39,13 +39,13 @@ def list_metrics() -> schemas.MetricsListResponse:
             schemas.MetricDescriptorResponse(
                 name=m.name,
                 description=m.description,
+                score_description=m.score_description,
                 init_params=[
                     schemas.MetricParamDescriptor(
                         name=p.name,
                         required=p.required,
                         type=p.type,
                         default=p.default,
-                        description=p.description,
                     )
                     for p in m.init_params
                 ],
@@ -55,7 +55,6 @@ def list_metrics() -> schemas.MetricsListResponse:
                         required=p.required,
                         type=p.type,
                         default=p.default,
-                        description=p.description,
                     )
                     for p in m.score_params
                 ],

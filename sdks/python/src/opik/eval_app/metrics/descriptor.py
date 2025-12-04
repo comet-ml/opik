@@ -17,6 +17,7 @@ class MetricInfo:
 
     name: str
     description: str
+    score_description: str
     init_params: List[param_extractor.ParamInfo]
     score_params: List[param_extractor.ParamInfo]
 
@@ -27,49 +28,42 @@ class MetricDescriptor:
     def __init__(
         self,
         metric_class: Type[base_metric.BaseMetric],
-        description: Optional[str] = None,
         init_defaults: Optional[Dict[str, Any]] = None,
-        score_defaults: Optional[Dict[str, Any]] = None,
     ) -> None:
         self._metric_class = metric_class
-        self._raw_docstring = metric_class.__doc__ or ""
-        self._description = description or self._extract_full_docstring()
         self._init_defaults = init_defaults or {}
-        self._score_defaults = score_defaults or {}
-        # Parse argument descriptions from class docstring
-        self._init_param_descriptions = param_extractor.parse_docstring_args(
-            self._raw_docstring
-        )
-        # Parse argument descriptions from score method docstring
-        score_docstring = metric_class.score.__doc__ or ""
-        self._score_param_descriptions = param_extractor.parse_docstring_args(
-            score_docstring
-        )
 
     @property
     def metric_class(self) -> Type[base_metric.BaseMetric]:
         return self._metric_class
 
-    def _extract_full_docstring(self) -> str:
-        """Extract the full docstring."""
-        doc = self._raw_docstring
-        if not doc:
-            return ""
-        return doc.strip()
+    def _get_description(self) -> str:
+        """Get metric description from class and __init__ docstrings."""
+        parts = []
+
+        class_doc = self._metric_class.__doc__
+        if class_doc:
+            parts.append(class_doc.strip())
+
+        init_doc = self._metric_class.__init__.__doc__
+        if init_doc:
+            parts.append(init_doc.strip())
+
+        return "\n\n".join(parts)
+
+    def _get_score_description(self) -> str:
+        """Get score method docstring."""
+        doc = self._metric_class.score.__doc__
+        return doc.strip() if doc else ""
 
     def _get_init_params(self) -> List[param_extractor.ParamInfo]:
         """Get parameters from __init__ method with custom defaults applied."""
-        params = param_extractor.extract_params(
-            self._metric_class.__init__, self._init_param_descriptions
-        )
+        params = param_extractor.extract_params(self._metric_class.__init__)
         return self._apply_custom_defaults(params, self._init_defaults)
 
     def _get_score_params(self) -> List[param_extractor.ParamInfo]:
-        """Get parameters from score method with custom defaults applied."""
-        params = param_extractor.extract_params(
-            self._metric_class.score, self._score_param_descriptions
-        )
-        return self._apply_custom_defaults(params, self._score_defaults)
+        """Get parameters from score method."""
+        return param_extractor.extract_params(self._metric_class.score)
 
     def _apply_custom_defaults(
         self,
@@ -83,14 +77,12 @@ class MetricDescriptor:
         result = []
         for param in params:
             if param.name in custom_defaults:
-                # Override the default with custom value
                 result.append(
                     param_extractor.ParamInfo(
                         name=param.name,
-                        required=False,  # If we have a custom default, it's not required
+                        required=False,
                         type=param.type,
                         default=custom_defaults[param.name],
-                        description=param.description,
                     )
                 )
             else:
@@ -101,7 +93,8 @@ class MetricDescriptor:
         """Convert to MetricInfo dataclass."""
         return MetricInfo(
             name=self._metric_class.__name__,
-            description=self._description,
+            description=self._get_description(),
+            score_description=self._get_score_description(),
             init_params=self._get_init_params(),
             score_params=self._get_score_params(),
         )
