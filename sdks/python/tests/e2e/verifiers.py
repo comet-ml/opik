@@ -5,7 +5,7 @@ from unittest import mock
 
 import pytest
 import opik
-from opik import Attachment, Prompt, synchronization
+from opik import Attachment, Prompt, ChatPrompt, synchronization
 from opik.api_objects.dataset import dataset_item
 from opik.rest_api import ExperimentPublic, FeedbackScore, FeedbackScorePublic
 from opik.rest_api.types import (
@@ -227,6 +227,7 @@ def verify_experiment(
     feedback_scores_amount: int,
     traces_amount: int,
     prompts: Optional[List[Prompt]] = None,
+    experiment_scores: Optional[Dict[str, float]] = None,
 ):
     rest_client = (
         opik_client._rest_client
@@ -265,6 +266,8 @@ def verify_experiment(
     ), f"{actual_trace_count} != {traces_amount}"
 
     _verify_experiment_prompts(experiment_content, prompts)
+
+    _verify_experiment_scores(experiment_content, experiment_scores)
 
 
 def verify_attachments(
@@ -416,6 +419,44 @@ def _verify_experiment_prompts(
         ), f"{experiment_prompts[prompt.name]} != {prompt.prompt}"
 
 
+def _verify_experiment_scores(
+    experiment_content: ExperimentPublic,
+    experiment_scores: Optional[Dict[str, float]],
+):
+    """Verify experiment-level scores match expected values."""
+    if experiment_scores is None:
+        return
+
+    actual_experiment_scores = experiment_content.experiment_scores
+
+    assert actual_experiment_scores is not None, (
+        f"Expected experiment_scores to be set, but got None. "
+        f"Experiment ID: {experiment_content.id}, "
+        f"Expected scores: {experiment_scores}"
+    )
+
+    # Create a dict of actual scores for easy comparison
+    actual_scores_dict = {score.name: score.value for score in actual_experiment_scores}
+
+    assert len(actual_scores_dict) == len(experiment_scores), (
+        f"Expected {len(experiment_scores)} experiment scores, "
+        f"but got {len(actual_scores_dict)}. "
+        f"Expected: {experiment_scores}, "
+        f"Actual: {actual_scores_dict}"
+    )
+
+    for expected_name, expected_value in experiment_scores.items():
+        assert expected_name in actual_scores_dict, (
+            f"Expected experiment score '{expected_name}' not found. "
+            f"Available scores: {list(actual_scores_dict.keys())}"
+        )
+
+        assert actual_scores_dict[expected_name] == expected_value, (
+            f"Expected experiment score '{expected_name}' to have value {expected_value}, "
+            f"but got {actual_scores_dict[expected_name]}"
+        )
+
+
 def verify_optimization(
     opik_client: opik.Opik,
     optimization_id: str,
@@ -561,3 +602,34 @@ def verify_prompt_version(
         prompt_id == prompt.__internal_api__prompt_id__
     ), f"{prompt.__internal_api__prompt_id__} != {prompt_id}"
     assert commit == prompt.commit, f"{prompt.commit} != {commit}"
+
+
+def verify_chat_prompt_version(
+    chat_prompt: ChatPrompt,
+    *,
+    name: Any = mock.ANY,  # type: ignore
+    messages: Any = mock.ANY,  # type: ignore
+    type: Any = mock.ANY,  # type: ignore
+    metadata: Any = mock.ANY,  # type: ignore
+    version_id: Any = mock.ANY,  # type: ignore
+    prompt_id: Any = mock.ANY,  # type: ignore
+    commit: Any = mock.ANY,  # type: ignore
+) -> None:
+    """
+    Verifies that a ChatPrompt has the expected properties.
+
+    This verifier checks all the same fields as verify_prompt_version but adapted for ChatPrompt:
+    - messages instead of template
+    - template_structure field is always verified to be "chat"
+    """
+    testlib.assert_equal(name, chat_prompt.name)
+    testlib.assert_equal(messages, chat_prompt.template)
+    testlib.assert_equal(type, chat_prompt.type)
+    testlib.assert_equal(metadata, chat_prompt.metadata)
+    assert (
+        version_id == chat_prompt.__internal_api__version_id__
+    ), f"{chat_prompt.__internal_api__version_id__} != {version_id}"
+    assert (
+        prompt_id == chat_prompt.__internal_api__prompt_id__
+    ), f"{chat_prompt.__internal_api__prompt_id__} != {prompt_id}"
+    assert commit == chat_prompt.commit, f"{chat_prompt.commit} != {commit}"

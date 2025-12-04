@@ -10,14 +10,14 @@ import { cn } from "@/lib/utils";
 
 type FeedbackScoreHoverCardProps = {
   title?: string;
-  isAverageScores?: boolean;
+  areAggregatedScores?: boolean;
   scores: TraceFeedbackScore[];
   children: React.ReactNode;
   hidden?: boolean;
 };
 const FeedbackScoreHoverCard: React.FC<FeedbackScoreHoverCardProps> = ({
   title,
-  isAverageScores,
+  areAggregatedScores,
   scores,
   children,
   hidden,
@@ -45,9 +45,9 @@ const FeedbackScoreHoverCard: React.FC<FeedbackScoreHoverCardProps> = ({
               <div className="comet-body-xs-accented truncate leading-none text-foreground">
                 {title}
               </div>
-              {isAverageScores && (
+              {areAggregatedScores && (
                 <div className="comet-body-xs leading-none text-slate-400">
-                  Average scores
+                  Aggregated scores
                 </div>
               )}
             </div>

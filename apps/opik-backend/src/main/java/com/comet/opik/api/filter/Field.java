@@ -44,6 +44,7 @@ public interface Field {
     String TYPE_QUERY_PARAM = "type";
     String LLM_SPAN_COUNT_QUERY_PARAM = "llm_span_count";
     String VERSION_COUNT_QUERY_PARAM = "version_count";
+    String TEMPLATE_STRUCTURE_QUERY_PARAM = "template_structure";
     String CUSTOM_QUERY_PARAM = "custom";
     String DATA_QUERY_PARAM = "data";
     String SOURCE_QUERY_PARAM = "source";

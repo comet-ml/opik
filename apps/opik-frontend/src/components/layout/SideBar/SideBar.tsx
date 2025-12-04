@@ -15,6 +15,8 @@ import {
   ChevronRight,
   SparklesIcon,
   UserPen,
+  BarChart3,
+  Zap,
 } from "lucide-react";
 import { keepPreviousData } from "@tanstack/react-query";
 
@@ -43,8 +45,11 @@ import SidebarMenuItem, {
   MenuItemGroup,
 } from "@/components/layout/SideBar/MenuItem/SidebarMenuItem";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
+import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
+import { ACTIVE_OPTIMIZATION_FILTER } from "@/lib/optimizations";
 
 const HOME_PATH = "/$workspaceName/home";
+const RUNNING_OPTIMIZATION_REFETCH_INTERVAL = 5000;
 
 const CONFIGURATION_ITEM: MenuItem = {
   id: "configuration",
@@ -64,6 +69,14 @@ const MENU_ITEMS: MenuItemGroup[] = [
         type: MENU_ITEM_TYPE.router,
         icon: LucideHome,
         label: "Home",
+      },
+      {
+        id: "dashboards",
+        path: "/$workspaceName/dashboards",
+        type: MENU_ITEM_TYPE.router,
+        icon: BarChart3,
+        label: "Dashboards",
+        featureFlag: FeatureToggleKeys.DASHBOARDS_ENABLED,
       },
     ],
   },
@@ -92,14 +105,6 @@ const MENU_ITEMS: MenuItemGroup[] = [
         icon: FlaskConical,
         label: "Experiments",
         count: "experiments",
-      },
-      {
-        id: "optimizations",
-        path: "/$workspaceName/optimizations",
-        type: MENU_ITEM_TYPE.router,
-        icon: SparklesIcon,
-        label: "Optimization runs",
-        count: "optimizations",
       },
       {
         id: "datasets",
@@ -141,6 +146,29 @@ const MENU_ITEMS: MenuItemGroup[] = [
     ],
   },
   {
+    id: "optimization",
+    label: "Optimization",
+    items: [
+      {
+        id: "optimization_studio",
+        path: "/$workspaceName/optimization-studio",
+        type: MENU_ITEM_TYPE.router,
+        icon: Zap,
+        label: "Optimization studio",
+        showIndicator: "running_optimizations",
+        featureFlag: FeatureToggleKeys.OPTIMIZATION_STUDIO_ENABLED,
+      },
+      {
+        id: "optimizations",
+        path: "/$workspaceName/optimizations",
+        type: MENU_ITEM_TYPE.router,
+        icon: SparklesIcon,
+        label: "Optimization runs",
+        count: "optimizations",
+      },
+    ],
+  },
+  {
     id: "production",
     label: "Production",
     items: [
@@ -178,6 +206,9 @@ const SideBar: React.FunctionComponent<SideBarProps> = ({
   const { open: openQuickstart } = useOpenQuickStartDialog();
 
   const { activeWorkspaceName: workspaceName } = useAppStore();
+  const isOptimizationStudioEnabled = useIsFeatureEnabled(
+    FeatureToggleKeys.OPTIMIZATION_STUDIO_ENABLED,
+  );
   const LogoComponent = usePluginsStore((state) => state.Logo);
   const SidebarInviteDevButton = usePluginsStore(
     (state) => state.SidebarInviteDevButton,
@@ -255,6 +286,26 @@ const SideBar: React.FunctionComponent<SideBarProps> = ({
     },
   );
 
+  const { data: runningOptimizationsData } = useOptimizationsList(
+    {
+      workspaceName,
+      page: 1,
+      size: 1,
+      filters: ACTIVE_OPTIMIZATION_FILTER,
+    },
+    {
+      placeholderData: keepPreviousData,
+      enabled: !!workspaceName && isOptimizationStudioEnabled,
+      refetchInterval: (query) => {
+        // refetch every 5 seconds if there are running optimizations
+        const data = query.state.data;
+        return data?.total && data.total > 0
+          ? RUNNING_OPTIMIZATION_REFETCH_INTERVAL
+          : false;
+      },
+    },
+  );
+
   const { data: annotationQueuesData } = useAnnotationQueuesList(
     {
       workspaceName,
@@ -290,6 +341,11 @@ const SideBar: React.FunctionComponent<SideBarProps> = ({
     alerts: alertsData?.total,
   };
 
+  const indicatorDataMap: Record<string, boolean> = {
+    running_optimizations:
+      !!runningOptimizationsData?.total && runningOptimizationsData.total > 0,
+  };
+
   const logo = LogoComponent ? (
     <LogoComponent expanded={expanded} />
   ) : (
@@ -303,6 +359,7 @@ const SideBar: React.FunctionComponent<SideBarProps> = ({
         item={item}
         expanded={expanded}
         count={countDataMap[item.count!]}
+        hasIndicator={indicatorDataMap[item.showIndicator!]}
       />
     ));
   };

@@ -166,8 +166,7 @@ export class AutomationRuleEvaluators {
      *
      * @example
      *     await client.automationRuleEvaluators.createAutomationRuleEvaluator({
-     *         type: "llm_as_judge",
-     *         filters: [{}]
+     *         type: "llm_as_judge"
      *     })
      */
     public createAutomationRuleEvaluator(

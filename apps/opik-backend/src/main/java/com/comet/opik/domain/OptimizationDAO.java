@@ -30,7 +30,6 @@ import reactor.core.publisher.Mono;
 import reactor.core.publisher.SignalType;
 
 import java.time.Instant;
-import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -110,7 +109,7 @@ class OptimizationDAOImpl implements OptimizationDAO {
             WITH optimization_final AS (
                 SELECT
                     *
-                FROM optimizations
+                FROM optimizations FINAL
                 WHERE workspace_id = :workspace_id
                 <if(id)>AND id = :id <endif>
                 <if(name)>AND ilike(name, CONCAT('%%', :name ,'%%'))<endif>
@@ -118,8 +117,6 @@ class OptimizationDAOImpl implements OptimizationDAO {
                 <if(dataset_deleted)>AND dataset_deleted = :dataset_deleted<endif>
                 <if(studio_only)>AND studio_config != ''<endif>
                 <if(filters)>AND <filters><endif>
-                ORDER BY id DESC, last_updated_at DESC
-                LIMIT 1 BY id
             ), experiments_final AS (
                 SELECT
                     id,
@@ -246,7 +243,7 @@ class OptimizationDAOImpl implements OptimizationDAO {
             FROM (
                 SELECT
                     id
-                FROM optimizations
+                FROM optimizations FINAL
                 WHERE workspace_id = :workspace_id
                 <if(id)>AND id = :id <endif>
                 <if(name)>AND ilike(name, CONCAT('%%', :name ,'%%'))<endif>
@@ -254,8 +251,6 @@ class OptimizationDAOImpl implements OptimizationDAO {
                 <if(dataset_deleted)>AND dataset_deleted = :dataset_deleted<endif>
                 <if(studio_only)>AND studio_config != ''<endif>
                 <if(filters)>AND <filters><endif>
-                ORDER BY id DESC, last_updated_at DESC
-                LIMIT 1 BY id
             )
             ;
             """;
@@ -409,7 +404,7 @@ class OptimizationDAOImpl implements OptimizationDAO {
     @Override
     public Mono<Long> delete(Set<UUID> ids) {
         Preconditions.checkArgument(CollectionUtils.isNotEmpty(ids), "Argument 'ids' must not be empty");
-        log.info("Deleting optimizations by ids [{}]", Arrays.toString(ids.toArray()));
+        log.info("Deleting optimizations by ids, size '{}'", ids.size());
 
         return Mono.from(connectionFactory.create())
                 .flatMapMany(connection -> delete(ids, connection))
@@ -417,7 +412,7 @@ class OptimizationDAOImpl implements OptimizationDAO {
                 .reduce(Long::sum)
                 .doFinally(signalType -> {
                     if (signalType == SignalType.ON_COMPLETE) {
-                        log.info("Deleted optimizations by ids [{}]", Arrays.toString(ids.toArray()));
+                        log.info("Deleted optimizations by ids, size '{}'", ids.size());
                     }
                 });
     }
@@ -651,7 +646,7 @@ class OptimizationDAOImpl implements OptimizationDAO {
                     .lastUpdatedAt(row.get("last_updated_at", Instant.class))
                     .createdBy(row.get("created_by", String.class))
                     .lastUpdatedBy(row.get("last_updated_by", String.class))
-                    .feedbackScores(getFeedbackScores(row))
+                    .feedbackScores(getFeedbackScores(row, "feedback_scores"))
                     .numTrials(row.get("num_trials", Long.class))
                     .build();
         });

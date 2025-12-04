@@ -48,8 +48,19 @@ public final class AutomationRuleEvaluatorUserDefinedMetricPython
             @NotNull UserDefinedMetricPythonCode code,
             Instant createdAt,
             String createdBy, Instant lastUpdatedAt, String lastUpdatedBy) {
-        super(id, projectId, projectName, name, samplingRate, enabled, code, createdAt, createdBy,
-                lastUpdatedAt, lastUpdatedBy, filters);
+        super(id, projectId, projectName, name, samplingRate, enabled, filters, code, createdAt, createdBy,
+                lastUpdatedAt, lastUpdatedBy);
+    }
+
+    /**
+     * Two purposes:
+     * - Makes the polymorphic T code available for serialization.
+     * - Provides the specific type T for Open API and Fern.
+     */
+    @JsonView({View.Public.class, View.Write.class})
+    @Override
+    public List<TraceFilter> getFilters() {
+        return super.getFilters();
     }
 
     /**
@@ -61,12 +72,6 @@ public final class AutomationRuleEvaluatorUserDefinedMetricPython
     @Override
     public UserDefinedMetricPythonCode getCode() {
         return super.getCode();
-    }
-
-    @JsonView({View.Public.class, View.Write.class})
-    @Override
-    public List<TraceFilter> getFilters() {
-        return super.filters;
     }
 
     @Override

@@ -227,6 +227,9 @@ from .experiment_page_public import ExperimentPagePublic
 from .experiment_public import ExperimentPublic
 from .experiment_public_status import ExperimentPublicStatus
 from .experiment_public_type import ExperimentPublicType
+from .experiment_score import ExperimentScore
+from .experiment_score_public import ExperimentScorePublic
+from .experiment_score_write import ExperimentScoreWrite
 from .experiment_status import ExperimentStatus
 from .experiment_type import ExperimentType
 from .export_trace_service_request import ExportTraceServiceRequest
@@ -273,10 +276,6 @@ from .feedback_update import (
     FeedbackUpdate_Categorical,
     FeedbackUpdate_Numerical,
 )
-from .filter_public import FilterPublic
-from .filter_public_operator import FilterPublicOperator
-from .filter_write import FilterWrite
-from .filter_write_operator import FilterWriteOperator
 from .function import Function
 from .function_call import FunctionCall
 from .group_content import GroupContent
@@ -348,6 +347,10 @@ from .optimization_page_public import OptimizationPagePublic
 from .optimization_public import OptimizationPublic
 from .optimization_public_status import OptimizationPublicStatus
 from .optimization_status import OptimizationStatus
+from .optimization_studio_config import OptimizationStudioConfig
+from .optimization_studio_config_public import OptimizationStudioConfigPublic
+from .optimization_studio_config_write import OptimizationStudioConfigWrite
+from .optimization_studio_log import OptimizationStudioLog
 from .optimization_write import OptimizationWrite
 from .optimization_write_status import OptimizationWriteStatus
 from .page_columns import PageColumns
@@ -376,19 +379,25 @@ from .project_stats_summary_item import ProjectStatsSummaryItem
 from .project_visibility import ProjectVisibility
 from .prompt import Prompt
 from .prompt_detail import PromptDetail
+from .prompt_detail_template_structure import PromptDetailTemplateStructure
 from .prompt_page_public import PromptPagePublic
 from .prompt_public import PromptPublic
+from .prompt_public_template_structure import PromptPublicTemplateStructure
+from .prompt_template_structure import PromptTemplateStructure
 from .prompt_tokens_details import PromptTokensDetails
 from .prompt_type import PromptType
 from .prompt_version import PromptVersion
 from .prompt_version_detail import PromptVersionDetail
+from .prompt_version_detail_template_structure import PromptVersionDetailTemplateStructure
 from .prompt_version_detail_type import PromptVersionDetailType
 from .prompt_version_link import PromptVersionLink
 from .prompt_version_link_public import PromptVersionLinkPublic
 from .prompt_version_link_write import PromptVersionLinkWrite
 from .prompt_version_page_public import PromptVersionPagePublic
 from .prompt_version_public import PromptVersionPublic
+from .prompt_version_public_template_structure import PromptVersionPublicTemplateStructure
 from .prompt_version_public_type import PromptVersionPublicType
+from .prompt_version_template_structure import PromptVersionTemplateStructure
 from .prompt_version_type import PromptVersionType
 from .provider_api_key import ProviderApiKey
 from .provider_api_key_page_public import ProviderApiKeyPagePublic
@@ -426,6 +435,24 @@ from .span_write_type import SpanWriteType
 from .spans_count_response import SpansCountResponse
 from .start_multipart_upload_response import StartMultipartUploadResponse
 from .stream_options import StreamOptions
+from .studio_evaluation import StudioEvaluation
+from .studio_evaluation_public import StudioEvaluationPublic
+from .studio_evaluation_write import StudioEvaluationWrite
+from .studio_llm_model import StudioLlmModel
+from .studio_llm_model_public import StudioLlmModelPublic
+from .studio_llm_model_write import StudioLlmModelWrite
+from .studio_message import StudioMessage
+from .studio_message_public import StudioMessagePublic
+from .studio_message_write import StudioMessageWrite
+from .studio_metric import StudioMetric
+from .studio_metric_public import StudioMetricPublic
+from .studio_metric_write import StudioMetricWrite
+from .studio_optimizer import StudioOptimizer
+from .studio_optimizer_public import StudioOptimizerPublic
+from .studio_optimizer_write import StudioOptimizerWrite
+from .studio_prompt import StudioPrompt
+from .studio_prompt_public import StudioPromptPublic
+from .studio_prompt_write import StudioPromptWrite
 from .tool import Tool
 from .tool_call import ToolCall
 from .trace import Trace
@@ -689,6 +716,9 @@ __all__ = [
     "ExperimentPublic",
     "ExperimentPublicStatus",
     "ExperimentPublicType",
+    "ExperimentScore",
+    "ExperimentScorePublic",
+    "ExperimentScoreWrite",
     "ExperimentStatus",
     "ExperimentType",
     "ExportTraceServiceRequest",
@@ -730,10 +760,6 @@ __all__ = [
     "Feedback_Boolean",
     "Feedback_Categorical",
     "Feedback_Numerical",
-    "FilterPublic",
-    "FilterPublicOperator",
-    "FilterWrite",
-    "FilterWriteOperator",
     "Function",
     "FunctionCall",
     "GroupContent",
@@ -805,6 +831,10 @@ __all__ = [
     "OptimizationPublic",
     "OptimizationPublicStatus",
     "OptimizationStatus",
+    "OptimizationStudioConfig",
+    "OptimizationStudioConfigPublic",
+    "OptimizationStudioConfigWrite",
+    "OptimizationStudioLog",
     "OptimizationWrite",
     "OptimizationWriteStatus",
     "PageColumns",
@@ -831,19 +861,25 @@ __all__ = [
     "ProjectVisibility",
     "Prompt",
     "PromptDetail",
+    "PromptDetailTemplateStructure",
     "PromptPagePublic",
     "PromptPublic",
+    "PromptPublicTemplateStructure",
+    "PromptTemplateStructure",
     "PromptTokensDetails",
     "PromptType",
     "PromptVersion",
     "PromptVersionDetail",
+    "PromptVersionDetailTemplateStructure",
     "PromptVersionDetailType",
     "PromptVersionLink",
     "PromptVersionLinkPublic",
     "PromptVersionLinkWrite",
     "PromptVersionPagePublic",
     "PromptVersionPublic",
+    "PromptVersionPublicTemplateStructure",
     "PromptVersionPublicType",
+    "PromptVersionTemplateStructure",
     "PromptVersionType",
     "ProviderApiKey",
     "ProviderApiKeyPagePublic",
@@ -881,6 +917,24 @@ __all__ = [
     "SpansCountResponse",
     "StartMultipartUploadResponse",
     "StreamOptions",
+    "StudioEvaluation",
+    "StudioEvaluationPublic",
+    "StudioEvaluationWrite",
+    "StudioLlmModel",
+    "StudioLlmModelPublic",
+    "StudioLlmModelWrite",
+    "StudioMessage",
+    "StudioMessagePublic",
+    "StudioMessageWrite",
+    "StudioMetric",
+    "StudioMetricPublic",
+    "StudioMetricWrite",
+    "StudioOptimizer",
+    "StudioOptimizerPublic",
+    "StudioOptimizerWrite",
+    "StudioPrompt",
+    "StudioPromptPublic",
+    "StudioPromptWrite",
     "Tool",
     "ToolCall",
     "Trace",

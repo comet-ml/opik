@@ -62,8 +62,8 @@ public class TraceFilterEvaluationService extends FilterEvaluationServiceBase<Tr
             case END_TIME -> trace.endTime();
             case INPUT -> extractStringFromJson(trace.input());
             case OUTPUT -> extractStringFromJson(trace.output());
-            case INPUT_JSON -> trace.input();
-            case OUTPUT_JSON -> trace.output();
+            case INPUT_JSON -> key != null ? extractNestedValue(trace.input(), key) : trace.input();
+            case OUTPUT_JSON -> key != null ? extractNestedValue(trace.output(), key) : trace.output();
             case METADATA -> key != null ? extractNestedValue(trace.metadata(), key) : trace.metadata();
             case TAGS -> trace.tags();
             case TOTAL_ESTIMATED_COST -> trace.totalEstimatedCost();
@@ -74,8 +74,39 @@ public class TraceFilterEvaluationService extends FilterEvaluationServiceBase<Tr
                 key != null ? extractFeedbackScore(trace.feedbackScores(), key) : trace.feedbackScores();
             case DURATION -> calculateDuration(trace.startTime(), trace.endTime());
             case THREAD_ID -> trace.threadId();
+            case CUSTOM -> extractCustomFieldValue(key, trace);
             default -> {
                 log.warn("Unsupported trace field for filter evaluation: {}", traceField);
+                yield null;
+            }
+        };
+    }
+
+    /**
+     * Extracts value from a custom field filter.
+     * Custom filters have a key in format "input.path" or "output.path" where path is the JSON path.
+     * For example: key="input.message" extracts trace.input().message
+     */
+    private Object extractCustomFieldValue(String key, Trace trace) {
+        if (key == null || key.isEmpty()) {
+            return null;
+        }
+
+        // Parse key format: "input.path" or "output.path"
+        int dotIndex = key.indexOf('.');
+        if (dotIndex <= 0) {
+            log.warn("Invalid custom filter key format: '{}'. Expected format: 'input.path' or 'output.path'", key);
+            return null;
+        }
+
+        String baseField = key.substring(0, dotIndex);
+        String nestedKey = key.substring(dotIndex + 1);
+
+        return switch (baseField) {
+            case "input" -> extractNestedValue(trace.input(), nestedKey);
+            case "output" -> extractNestedValue(trace.output(), nestedKey);
+            default -> {
+                log.warn("Unsupported base field in custom filter key: '{}'. Supported: 'input', 'output'", baseField);
                 yield null;
             }
         };
