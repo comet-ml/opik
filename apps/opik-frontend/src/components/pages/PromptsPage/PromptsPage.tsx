@@ -29,7 +29,7 @@ import {
 import ColumnsButton from "@/components/shared/ColumnsButton/ColumnsButton";
 import FiltersButton from "@/components/shared/FiltersButton/FiltersButton";
 import usePromptsList from "@/api/prompts/usePromptsList";
-import { Prompt } from "@/types/prompts";
+import { Prompt, PROMPT_TEMPLATE_STRUCTURE } from "@/types/prompts";
 import { PromptRowActionsCell } from "@/components/pages/PromptsPage/PromptRowActionsCell";
 import AddEditPromptDialog from "@/components/pages/PromptsPage/AddEditPromptDialog";
 import PromptsActionsPanel from "@/components/pages/PromptsPage/PromptsActionsPanel";
@@ -62,6 +62,19 @@ export const DEFAULT_COLUMNS: ColumnData<Prompt>[] = [
     label: "ID",
     type: COLUMN_TYPE.string,
     cell: IdCell as never,
+  },
+  {
+    id: "template_structure",
+    label: "Type",
+    type: COLUMN_TYPE.string,
+    size: 80,
+    accessorFn: (row) => {
+      const structure =
+        row.template_structure || PROMPT_TEMPLATE_STRUCTURE.TEXT;
+      return structure === PROMPT_TEMPLATE_STRUCTURE.CHAT
+        ? PROMPT_TEMPLATE_STRUCTURE.CHAT
+        : PROMPT_TEMPLATE_STRUCTURE.TEXT;
+    },
   },
   {
     id: "description",
@@ -116,6 +129,11 @@ export const FILTER_COLUMNS: ColumnData<Prompt>[] = [
     type: COLUMN_TYPE.string,
   },
   {
+    id: "template_structure",
+    label: "Type",
+    type: COLUMN_TYPE.string,
+  },
+  {
     id: "version_count",
     label: "Versions",
     type: COLUMN_TYPE.number,
@@ -149,9 +167,10 @@ export const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
 };
 
 export const DEFAULT_SELECTED_COLUMNS: string[] = [
+  "template_structure",
+  "description",
   "version_count",
   "last_updated_at",
-  "description",
 ];
 
 const PromptsPage: React.FunctionComponent = () => {

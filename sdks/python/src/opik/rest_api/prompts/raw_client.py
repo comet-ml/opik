@@ -19,6 +19,8 @@ from ..types.prompt_detail import PromptDetail
 from ..types.prompt_page_public import PromptPagePublic
 from ..types.prompt_version_detail import PromptVersionDetail
 from ..types.prompt_version_page_public import PromptVersionPagePublic
+from .types.create_prompt_version_detail_template_structure import CreatePromptVersionDetailTemplateStructure
+from .types.prompt_write_template_structure import PromptWriteTemplateStructure
 from .types.prompt_write_type import PromptWriteType
 
 # this is used as the default value for optional parameters
@@ -99,6 +101,7 @@ class RawPromptsClient:
         metadata: typing.Optional[JsonNodeWrite] = OMIT,
         change_description: typing.Optional[str] = OMIT,
         type: typing.Optional[PromptWriteType] = OMIT,
+        template_structure: typing.Optional[PromptWriteTemplateStructure] = OMIT,
         tags: typing.Optional[typing.Sequence[str]] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> HttpResponse[None]:
@@ -121,6 +124,9 @@ class RawPromptsClient:
 
         type : typing.Optional[PromptWriteType]
 
+        template_structure : typing.Optional[PromptWriteTemplateStructure]
+            Template structure type: 'text' or 'chat'. Immutable after creation.
+
         tags : typing.Optional[typing.Sequence[str]]
 
         request_options : typing.Optional[RequestOptions]
@@ -141,6 +147,7 @@ class RawPromptsClient:
                 "metadata": metadata,
                 "change_description": change_description,
                 "type": type,
+                "template_structure": template_structure,
                 "tags": tags,
             },
             headers={
@@ -191,7 +198,12 @@ class RawPromptsClient:
         raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
 
     def create_prompt_version(
-        self, *, name: str, version: PromptVersionDetail, request_options: typing.Optional[RequestOptions] = None
+        self,
+        *,
+        name: str,
+        version: PromptVersionDetail,
+        template_structure: typing.Optional[CreatePromptVersionDetailTemplateStructure] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
     ) -> HttpResponse[PromptVersionDetail]:
         """
         Create prompt version
@@ -201,6 +213,9 @@ class RawPromptsClient:
         name : str
 
         version : PromptVersionDetail
+
+        template_structure : typing.Optional[CreatePromptVersionDetailTemplateStructure]
+            Template structure for the prompt: 'text' or 'chat'. Note: This field is only used when creating a new prompt. If a prompt with the given name already exists, this field is ignored and the existing prompt's template structure is used. Template structure is immutable after prompt creation.
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -218,6 +233,7 @@ class RawPromptsClient:
                 "version": convert_and_respect_annotation_metadata(
                     object_=version, annotation=PromptVersionDetail, direction="write"
                 ),
+                "template_structure": template_structure,
             },
             headers={
                 "content-type": "application/json",
@@ -800,6 +816,7 @@ class AsyncRawPromptsClient:
         metadata: typing.Optional[JsonNodeWrite] = OMIT,
         change_description: typing.Optional[str] = OMIT,
         type: typing.Optional[PromptWriteType] = OMIT,
+        template_structure: typing.Optional[PromptWriteTemplateStructure] = OMIT,
         tags: typing.Optional[typing.Sequence[str]] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> AsyncHttpResponse[None]:
@@ -822,6 +839,9 @@ class AsyncRawPromptsClient:
 
         type : typing.Optional[PromptWriteType]
 
+        template_structure : typing.Optional[PromptWriteTemplateStructure]
+            Template structure type: 'text' or 'chat'. Immutable after creation.
+
         tags : typing.Optional[typing.Sequence[str]]
 
         request_options : typing.Optional[RequestOptions]
@@ -842,6 +862,7 @@ class AsyncRawPromptsClient:
                 "metadata": metadata,
                 "change_description": change_description,
                 "type": type,
+                "template_structure": template_structure,
                 "tags": tags,
             },
             headers={
@@ -892,7 +913,12 @@ class AsyncRawPromptsClient:
         raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
 
     async def create_prompt_version(
-        self, *, name: str, version: PromptVersionDetail, request_options: typing.Optional[RequestOptions] = None
+        self,
+        *,
+        name: str,
+        version: PromptVersionDetail,
+        template_structure: typing.Optional[CreatePromptVersionDetailTemplateStructure] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
     ) -> AsyncHttpResponse[PromptVersionDetail]:
         """
         Create prompt version
@@ -902,6 +928,9 @@ class AsyncRawPromptsClient:
         name : str
 
         version : PromptVersionDetail
+
+        template_structure : typing.Optional[CreatePromptVersionDetailTemplateStructure]
+            Template structure for the prompt: 'text' or 'chat'. Note: This field is only used when creating a new prompt. If a prompt with the given name already exists, this field is ignored and the existing prompt's template structure is used. Template structure is immutable after prompt creation.
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -919,6 +948,7 @@ class AsyncRawPromptsClient:
                 "version": convert_and_respect_annotation_metadata(
                     object_=version, annotation=PromptVersionDetail, direction="write"
                 ),
+                "template_structure": template_structure,
             },
             headers={
                 "content-type": "application/json",

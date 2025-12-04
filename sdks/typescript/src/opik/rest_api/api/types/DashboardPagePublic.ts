@@ -9,4 +9,5 @@ export interface DashboardPagePublic {
     page?: number;
     size?: number;
     total?: number;
+    sortableBy?: string[];
 }

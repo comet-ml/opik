@@ -15,6 +15,10 @@ export const DashboardPagePublic: core.serialization.ObjectSchema<
     page: core.serialization.number().optional(),
     size: core.serialization.number().optional(),
     total: core.serialization.number().optional(),
+    sortableBy: core.serialization.property(
+        "sortable_by",
+        core.serialization.list(core.serialization.string()).optional(),
+    ),
 });
 
 export declare namespace DashboardPagePublic {
@@ -23,5 +27,6 @@ export declare namespace DashboardPagePublic {
         page?: number | null;
         size?: number | null;
         total?: number | null;
+        sortable_by?: string[] | null;
     }
 }

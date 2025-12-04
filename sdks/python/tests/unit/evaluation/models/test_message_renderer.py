@@ -4,9 +4,9 @@ from typing import Any, Dict, Optional
 
 import pytest
 
-import opik.api_objects.prompt.chat_prompt_template as chat_prompt_template
-from opik.api_objects.prompt.chat_prompt_template import ChatPromptTemplate
-from opik.api_objects.prompt.chat_content_renderer_registry import (
+from opik.api_objects.prompt.chat import chat_prompt_template
+from opik.api_objects.prompt.chat.chat_prompt_template import ChatPromptTemplate
+from opik.api_objects.prompt.chat.content_renderer_registry import (
     ChatContentRendererRegistry,
 )
 

@@ -7,6 +7,7 @@ import * as OpikApi from "../../api/index";
 import * as core from "../../core";
 import { JsonNodePublic } from "./JsonNodePublic";
 import { PromptVersionPublicType } from "./PromptVersionPublicType";
+import { PromptVersionPublicTemplateStructure } from "./PromptVersionPublicTemplateStructure";
 
 export const PromptVersionPublic: core.serialization.ObjectSchema<
     serializers.PromptVersionPublic.Raw,
@@ -19,6 +20,10 @@ export const PromptVersionPublic: core.serialization.ObjectSchema<
     metadata: JsonNodePublic.optional(),
     type: PromptVersionPublicType.optional(),
     changeDescription: core.serialization.property("change_description", core.serialization.string().optional()),
+    templateStructure: core.serialization.property(
+        "template_structure",
+        PromptVersionPublicTemplateStructure.optional(),
+    ),
     createdAt: core.serialization.property("created_at", core.serialization.date().optional()),
     createdBy: core.serialization.property("created_by", core.serialization.string().optional()),
 });
@@ -32,6 +37,7 @@ export declare namespace PromptVersionPublic {
         metadata?: JsonNodePublic.Raw | null;
         type?: PromptVersionPublicType.Raw | null;
         change_description?: string | null;
+        template_structure?: PromptVersionPublicTemplateStructure.Raw | null;
         created_at?: string | null;
         created_by?: string | null;
     }

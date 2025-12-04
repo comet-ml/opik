@@ -29,6 +29,7 @@ COLUMNS = {
     "type": "string",
     "model": "string",
     "provider": "string",
+    "template_structure": "string",
 }
 
 SUPPORTED_OPERATORS = {
@@ -120,6 +121,14 @@ SUPPORTED_OPERATORS = {
         "!=",
         ">",
         "<",
+    ],
+    "template_structure": [
+        "=",
+        "contains",
+        "not_contains",
+        "starts_with",
+        "ends_with",
+        "!=",
     ],
 }
 

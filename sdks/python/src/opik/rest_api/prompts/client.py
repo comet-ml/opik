@@ -10,6 +10,8 @@ from ..types.prompt_page_public import PromptPagePublic
 from ..types.prompt_version_detail import PromptVersionDetail
 from ..types.prompt_version_page_public import PromptVersionPagePublic
 from .raw_client import AsyncRawPromptsClient, RawPromptsClient
+from .types.create_prompt_version_detail_template_structure import CreatePromptVersionDetailTemplateStructure
+from .types.prompt_write_template_structure import PromptWriteTemplateStructure
 from .types.prompt_write_type import PromptWriteType
 
 # this is used as the default value for optional parameters
@@ -85,6 +87,7 @@ class PromptsClient:
         metadata: typing.Optional[JsonNodeWrite] = OMIT,
         change_description: typing.Optional[str] = OMIT,
         type: typing.Optional[PromptWriteType] = OMIT,
+        template_structure: typing.Optional[PromptWriteTemplateStructure] = OMIT,
         tags: typing.Optional[typing.Sequence[str]] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
@@ -106,6 +109,9 @@ class PromptsClient:
         change_description : typing.Optional[str]
 
         type : typing.Optional[PromptWriteType]
+
+        template_structure : typing.Optional[PromptWriteTemplateStructure]
+            Template structure type: 'text' or 'chat'. Immutable after creation.
 
         tags : typing.Optional[typing.Sequence[str]]
 
@@ -130,13 +136,19 @@ class PromptsClient:
             metadata=metadata,
             change_description=change_description,
             type=type,
+            template_structure=template_structure,
             tags=tags,
             request_options=request_options,
         )
         return _response.data
 
     def create_prompt_version(
-        self, *, name: str, version: PromptVersionDetail, request_options: typing.Optional[RequestOptions] = None
+        self,
+        *,
+        name: str,
+        version: PromptVersionDetail,
+        template_structure: typing.Optional[CreatePromptVersionDetailTemplateStructure] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
     ) -> PromptVersionDetail:
         """
         Create prompt version
@@ -146,6 +158,9 @@ class PromptsClient:
         name : str
 
         version : PromptVersionDetail
+
+        template_structure : typing.Optional[CreatePromptVersionDetailTemplateStructure]
+            Template structure for the prompt: 'text' or 'chat'. Note: This field is only used when creating a new prompt. If a prompt with the given name already exists, this field is ignored and the existing prompt's template structure is used. Template structure is immutable after prompt creation.
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -162,7 +177,9 @@ class PromptsClient:
         client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
         client.prompts.create_prompt_version(name='name', version=PromptVersionDetail(template='template', ), )
         """
-        _response = self._raw_client.create_prompt_version(name=name, version=version, request_options=request_options)
+        _response = self._raw_client.create_prompt_version(
+            name=name, version=version, template_structure=template_structure, request_options=request_options
+        )
         return _response.data
 
     def get_prompt_by_id(self, id: str, *, request_options: typing.Optional[RequestOptions] = None) -> PromptDetail:
@@ -474,6 +491,7 @@ class AsyncPromptsClient:
         metadata: typing.Optional[JsonNodeWrite] = OMIT,
         change_description: typing.Optional[str] = OMIT,
         type: typing.Optional[PromptWriteType] = OMIT,
+        template_structure: typing.Optional[PromptWriteTemplateStructure] = OMIT,
         tags: typing.Optional[typing.Sequence[str]] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
@@ -495,6 +513,9 @@ class AsyncPromptsClient:
         change_description : typing.Optional[str]
 
         type : typing.Optional[PromptWriteType]
+
+        template_structure : typing.Optional[PromptWriteTemplateStructure]
+            Template structure type: 'text' or 'chat'. Immutable after creation.
 
         tags : typing.Optional[typing.Sequence[str]]
 
@@ -522,13 +543,19 @@ class AsyncPromptsClient:
             metadata=metadata,
             change_description=change_description,
             type=type,
+            template_structure=template_structure,
             tags=tags,
             request_options=request_options,
         )
         return _response.data
 
     async def create_prompt_version(
-        self, *, name: str, version: PromptVersionDetail, request_options: typing.Optional[RequestOptions] = None
+        self,
+        *,
+        name: str,
+        version: PromptVersionDetail,
+        template_structure: typing.Optional[CreatePromptVersionDetailTemplateStructure] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
     ) -> PromptVersionDetail:
         """
         Create prompt version
@@ -538,6 +565,9 @@ class AsyncPromptsClient:
         name : str
 
         version : PromptVersionDetail
+
+        template_structure : typing.Optional[CreatePromptVersionDetailTemplateStructure]
+            Template structure for the prompt: 'text' or 'chat'. Note: This field is only used when creating a new prompt. If a prompt with the given name already exists, this field is ignored and the existing prompt's template structure is used. Template structure is immutable after prompt creation.
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -558,7 +588,7 @@ class AsyncPromptsClient:
         asyncio.run(main())
         """
         _response = await self._raw_client.create_prompt_version(
-            name=name, version=version, request_options=request_options
+            name=name, version=version, template_structure=template_structure, request_options=request_options
         )
         return _response.data
 

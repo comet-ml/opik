@@ -23,6 +23,7 @@ import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 
 interface BaseLoadableSelectBoxProps {
   placeholder?: ReactElement | string;
+  searchPlaceholder?: string;
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
   options: DropdownOption<string>[];
@@ -61,6 +62,7 @@ export type LoadableSelectBoxProps = SingleSelectProps | MultiSelectProps;
 export const LoadableSelectBox = ({
   value = "",
   placeholder = "Select value",
+  searchPlaceholder = "Search",
   onChange,
   open: controlledOpen,
   onOpenChange,
@@ -277,7 +279,7 @@ export const LoadableSelectBox = ({
           <SearchInput
             searchText={search}
             setSearchText={setSearch}
-            placeholder="Search"
+            placeholder={searchPlaceholder}
             variant="ghost"
           ></SearchInput>
           <Separator className="mt-1" />

@@ -25,17 +25,33 @@ interface PromptVersionDAO {
             "VALUES (:bean.id, :bean.promptId, :bean.commit, :bean.template, :bean.metadata, :bean.changeDescription, :bean.type, :bean.createdBy, :workspace_id)")
     void save(@Bind("workspace_id") String workspaceId, @BindMethods("bean") PromptVersion prompt);
 
-    @SqlQuery("SELECT * FROM prompt_versions WHERE id IN (<ids>) AND workspace_id = :workspace_id")
+    @SqlQuery("""
+            SELECT pv.*, p.template_structure
+            FROM prompt_versions pv
+            INNER JOIN prompts p ON pv.prompt_id = p.id
+            WHERE pv.id IN (<ids>) AND pv.workspace_id = :workspace_id
+            """)
     List<PromptVersion> findByIds(@BindList("ids") Collection<UUID> ids, @Bind("workspace_id") String workspaceId);
 
     @SqlQuery("SELECT count(id) FROM prompt_versions WHERE prompt_id = :prompt_id AND workspace_id = :workspace_id")
     long countByPromptId(@Bind("prompt_id") UUID promptId, @Bind("workspace_id") String workspaceId);
 
-    @SqlQuery("SELECT * FROM prompt_versions WHERE prompt_id = :prompt_id AND workspace_id = :workspace_id ORDER BY id DESC LIMIT :limit OFFSET :offset")
+    @SqlQuery("""
+            SELECT pv.*, p.template_structure
+            FROM prompt_versions pv
+            INNER JOIN prompts p ON pv.prompt_id = p.id
+            WHERE pv.prompt_id = :prompt_id AND pv.workspace_id = :workspace_id
+            ORDER BY pv.id DESC LIMIT :limit OFFSET :offset
+            """)
     List<PromptVersion> findByPromptId(@Bind("prompt_id") UUID promptId, @Bind("workspace_id") String workspaceId,
             @Bind("limit") int limit, @Bind("offset") int offset);
 
-    @SqlQuery("SELECT * FROM prompt_versions WHERE prompt_id = :prompt_id AND commit = :commit AND workspace_id = :workspace_id")
+    @SqlQuery("""
+            SELECT pv.*, p.template_structure
+            FROM prompt_versions pv
+            INNER JOIN prompts p ON pv.prompt_id = p.id
+            WHERE pv.prompt_id = :prompt_id AND pv.commit = :commit AND pv.workspace_id = :workspace_id
+            """)
     PromptVersion findByCommit(@Bind("prompt_id") UUID promptId, @Bind("commit") String commit,
             @Bind("workspace_id") String workspaceId);
 

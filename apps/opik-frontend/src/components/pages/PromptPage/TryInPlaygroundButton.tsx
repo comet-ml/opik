@@ -1,7 +1,7 @@
 import React, { useCallback, useRef, useState } from "react";
 import { Play } from "lucide-react";
 
-import { PromptWithLatestVersion } from "@/types/prompts";
+import { PromptWithLatestVersion, PromptVersion } from "@/types/prompts";
 import { Button } from "@/components/ui/button";
 import ConfirmDialog from "@/components/shared/ConfirmDialog/ConfirmDialog";
 import useLoadPlayground from "@/hooks/useLoadPlayground";
@@ -9,6 +9,7 @@ import { parsePromptVersionContent } from "@/lib/llm";
 
 type TryInPlaygroundButtonProps = {
   prompt?: PromptWithLatestVersion;
+  activeVersion?: PromptVersion;
   ButtonComponent?: React.ComponentType<{
     variant?: string;
     size?: string;
@@ -21,6 +22,7 @@ type TryInPlaygroundButtonProps = {
 
 const TryInPlaygroundButton: React.FC<TryInPlaygroundButtonProps> = ({
   prompt,
+  activeVersion,
   ButtonComponent = Button,
 }) => {
   const resetKeyRef = useRef(0);
@@ -31,11 +33,14 @@ const TryInPlaygroundButton: React.FC<TryInPlaygroundButtonProps> = ({
 
   const handleLoadPlayground = useCallback(() => {
     loadPlayground({
-      promptContent: parsePromptVersionContent(prompt?.latest_version),
+      promptContent: parsePromptVersionContent(
+        activeVersion ?? prompt?.latest_version,
+      ),
       promptId: prompt?.id,
-      promptVersionId: prompt?.latest_version?.id,
+      promptVersionId: activeVersion?.id ?? prompt?.latest_version?.id,
+      templateStructure: prompt?.template_structure,
     });
-  }, [loadPlayground, prompt]);
+  }, [loadPlayground, prompt, activeVersion]);
 
   return (
     <>

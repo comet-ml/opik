@@ -11,3 +11,4 @@ export { DatasetIdentifierPublic } from "./DatasetIdentifierPublic";
 export { DatasetItemStreamRequest } from "./DatasetItemStreamRequest";
 export { DatasetVersionTag } from "./DatasetVersionTag";
 export { DatasetVersionCreatePublic } from "./DatasetVersionCreatePublic";
+export { DatasetVersionRestorePublic } from "./DatasetVersionRestorePublic";

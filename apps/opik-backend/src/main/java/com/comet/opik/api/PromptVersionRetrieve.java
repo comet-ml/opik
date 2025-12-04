@@ -9,5 +9,7 @@ import lombok.Builder;
 @Builder(toBuilder = true)
 @JsonIgnoreProperties(ignoreUnknown = true)
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
-public record PromptVersionRetrieve(@NotBlank String name, String commit) {
+public record PromptVersionRetrieve(
+        @NotBlank String name,
+        String commit) {
 }

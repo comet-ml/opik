@@ -30,6 +30,7 @@ class RawDashboardsClient:
         page: typing.Optional[int] = None,
         size: typing.Optional[int] = None,
         name: typing.Optional[str] = None,
+        sorting: typing.Optional[str] = None,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> HttpResponse[DashboardPagePublic]:
         """
@@ -42,6 +43,8 @@ class RawDashboardsClient:
         size : typing.Optional[int]
 
         name : typing.Optional[str]
+
+        sorting : typing.Optional[str]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -58,6 +61,7 @@ class RawDashboardsClient:
                 "page": page,
                 "size": size,
                 "name": name,
+                "sorting": sorting,
             },
             request_options=request_options,
         )
@@ -292,6 +296,43 @@ class RawDashboardsClient:
             raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
         raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
 
+    def delete_dashboards_batch(
+        self, *, ids: typing.Sequence[str], request_options: typing.Optional[RequestOptions] = None
+    ) -> HttpResponse[None]:
+        """
+        Delete dashboards batch
+
+        Parameters
+        ----------
+        ids : typing.Sequence[str]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        HttpResponse[None]
+        """
+        _response = self._client_wrapper.httpx_client.request(
+            "v1/private/dashboards/delete-batch",
+            method="POST",
+            json={
+                "ids": ids,
+            },
+            headers={
+                "content-type": "application/json",
+            },
+            request_options=request_options,
+            omit=OMIT,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                return HttpResponse(response=_response, data=None)
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
+        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+
 
 class AsyncRawDashboardsClient:
     def __init__(self, *, client_wrapper: AsyncClientWrapper):
@@ -303,6 +344,7 @@ class AsyncRawDashboardsClient:
         page: typing.Optional[int] = None,
         size: typing.Optional[int] = None,
         name: typing.Optional[str] = None,
+        sorting: typing.Optional[str] = None,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> AsyncHttpResponse[DashboardPagePublic]:
         """
@@ -315,6 +357,8 @@ class AsyncRawDashboardsClient:
         size : typing.Optional[int]
 
         name : typing.Optional[str]
+
+        sorting : typing.Optional[str]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -331,6 +375,7 @@ class AsyncRawDashboardsClient:
                 "page": page,
                 "size": size,
                 "name": name,
+                "sorting": sorting,
             },
             request_options=request_options,
         )
@@ -560,6 +605,43 @@ class AsyncRawDashboardsClient:
                         ),
                     ),
                 )
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
+        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+
+    async def delete_dashboards_batch(
+        self, *, ids: typing.Sequence[str], request_options: typing.Optional[RequestOptions] = None
+    ) -> AsyncHttpResponse[None]:
+        """
+        Delete dashboards batch
+
+        Parameters
+        ----------
+        ids : typing.Sequence[str]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        AsyncHttpResponse[None]
+        """
+        _response = await self._client_wrapper.httpx_client.request(
+            "v1/private/dashboards/delete-batch",
+            method="POST",
+            json={
+                "ids": ids,
+            },
+            headers={
+                "content-type": "application/json",
+            },
+            request_options=request_options,
+            omit=OMIT,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                return AsyncHttpResponse(response=_response, data=None)
             _response_json = _response.json()
         except JSONDecodeError:
             raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)

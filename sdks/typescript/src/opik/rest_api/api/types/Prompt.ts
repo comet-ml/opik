@@ -12,6 +12,8 @@ export interface Prompt {
     metadata?: OpikApi.JsonNode;
     changeDescription?: string;
     type?: OpikApi.PromptType;
+    /** Template structure type: 'text' or 'chat'. Immutable after creation. */
+    templateStructure?: OpikApi.PromptTemplateStructure;
     tags?: string[];
     createdAt?: Date;
     createdBy?: string;

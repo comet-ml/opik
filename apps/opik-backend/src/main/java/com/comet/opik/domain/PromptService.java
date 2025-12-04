@@ -5,6 +5,7 @@ import com.comet.opik.api.Prompt;
 import com.comet.opik.api.PromptType;
 import com.comet.opik.api.PromptVersion;
 import com.comet.opik.api.PromptVersion.PromptVersionPage;
+import com.comet.opik.api.TemplateStructure;
 import com.comet.opik.api.error.EntityAlreadyExistsException;
 import com.comet.opik.api.events.webhooks.AlertEvent;
 import com.comet.opik.api.filter.Filter;
@@ -157,7 +158,8 @@ class PromptServiceImpl implements PromptService {
 
             promptVersionDAO.save(workspaceId, promptVersion);
 
-            return promptVersionDAO.findByIds(List.of(versionId), workspaceId).getFirst();
+            PromptVersion savedVersion = promptVersionDAO.findByIds(List.of(versionId), workspaceId).getFirst();
+            return savedVersion;
         });
 
         log.info("Created Prompt version for prompt id '{}'", createdPrompt.id());
@@ -215,17 +217,24 @@ class PromptServiceImpl implements PromptService {
         });
     }
 
-    private Prompt getOrCreatePrompt(String workspaceId, String name, String userName) {
+    private Prompt getOrCreatePrompt(String workspaceId, String name, String userName,
+            TemplateStructure templateStructure) {
 
         Prompt prompt = findByName(workspaceId, name);
 
         if (prompt != null) {
+            // For existing prompts, ignore the templateStructure parameter and use the existing prompt's structure.
+            // Template structure is immutable after prompt creation.
+            log.debug(
+                    "Prompt '{}' already exists with template_structure '{}'. Ignoring requested template_structure '{}'.",
+                    name, prompt.templateStructure().getValue(), templateStructure.getValue());
             return prompt;
         }
 
         var newPrompt = Prompt.builder()
                 .id(idGenerator.generateId())
                 .name(name)
+                .templateStructure(templateStructure)
                 .createdBy(userName)
                 .lastUpdatedBy(userName)
                 .build();
@@ -259,7 +268,9 @@ class PromptServiceImpl implements PromptService {
 
         IdGenerator.validateVersion(id, "prompt version");
 
-        Prompt prompt = getOrCreatePrompt(workspaceId, createPromptVersion.name(), userName);
+        TemplateStructure templateStructure = createPromptVersion.templateStructure();
+
+        Prompt prompt = getOrCreatePrompt(workspaceId, createPromptVersion.name(), userName, templateStructure);
 
         EntityConstraintHandler<PromptVersion> handler = EntityConstraintHandler.handle(() -> {
             PromptVersion promptVersion = createPromptVersion.version().toBuilder()
@@ -400,7 +411,8 @@ class PromptServiceImpl implements PromptService {
 
         log.info("Created Prompt version for prompt id '{}'", promptVersion.promptId());
 
-        return getById(workspaceId, promptVersion.id());
+        PromptVersion savedVersion = getById(workspaceId, promptVersion.id());
+        return savedVersion;
     }
 
     private PromptVersion getById(String workspaceId, UUID id) {
@@ -555,14 +567,20 @@ class PromptServiceImpl implements PromptService {
                 throw new NotFoundException(PROMPT_NOT_FOUND);
             }
 
+            PromptVersion promptVersion;
             if (commit == null) {
-                return getById(prompt.id()).latestVersion();
-            }
+                // Fetch latest version directly from prompt_versions table
+                List<PromptVersion> versions = promptVersionDAO.findByPromptId(prompt.id(), workspaceId, 1, 0);
+                if (versions.isEmpty()) {
+                    throw new NotFoundException(PROMPT_VERSION_NOT_FOUND);
+                }
+                promptVersion = versions.getFirst();
+            } else {
+                promptVersion = promptVersionDAO.findByCommit(prompt.id(), commit, workspaceId);
 
-            PromptVersion promptVersion = promptVersionDAO.findByCommit(prompt.id(), commit, workspaceId);
-
-            if (promptVersion == null) {
-                throw new NotFoundException(PROMPT_VERSION_NOT_FOUND);
+                if (promptVersion == null) {
+                    throw new NotFoundException(PROMPT_VERSION_NOT_FOUND);
+                }
             }
 
             return promptVersion.toBuilder()

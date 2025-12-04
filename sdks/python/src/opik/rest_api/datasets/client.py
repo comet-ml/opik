@@ -16,6 +16,7 @@ from ..types.dataset_page_public import DatasetPagePublic
 from ..types.dataset_public import DatasetPublic
 from ..types.dataset_version_diff import DatasetVersionDiff
 from ..types.dataset_version_page_public import DatasetVersionPagePublic
+from ..types.dataset_version_public import DatasetVersionPublic
 from ..types.json_node import JsonNode
 from ..types.page_columns import PageColumns
 from ..types.project_stats_public import ProjectStatsPublic
@@ -1072,6 +1073,38 @@ class DatasetsClient:
         client.datasets.delete_version_tag(version_hash='versionHash', tag='tag', id='id', )
         """
         _response = self._raw_client.delete_version_tag(version_hash, tag, id, request_options=request_options)
+        return _response.data
+
+    def restore_dataset_version(
+        self, id: str, *, version_ref: str, request_options: typing.Optional[RequestOptions] = None
+    ) -> DatasetVersionPublic:
+        """
+        Restores the dataset to a previous version state. All draft items are replaced with items from the specified version. If the version is not the latest, a new version snapshot is created. If the version is the latest, only draft items are replaced (revert functionality).
+
+        Parameters
+        ----------
+        id : str
+
+        version_ref : str
+            Version hash or tag to restore from
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        DatasetVersionPublic
+            Version restored successfully
+
+        Examples
+        --------
+        from Opik import OpikApi
+        client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        client.datasets.restore_dataset_version(id='id', version_ref='version_ref', )
+        """
+        _response = self._raw_client.restore_dataset_version(
+            id, version_ref=version_ref, request_options=request_options
+        )
         return _response.data
 
 
@@ -2205,4 +2238,39 @@ class AsyncDatasetsClient:
         asyncio.run(main())
         """
         _response = await self._raw_client.delete_version_tag(version_hash, tag, id, request_options=request_options)
+        return _response.data
+
+    async def restore_dataset_version(
+        self, id: str, *, version_ref: str, request_options: typing.Optional[RequestOptions] = None
+    ) -> DatasetVersionPublic:
+        """
+        Restores the dataset to a previous version state. All draft items are replaced with items from the specified version. If the version is not the latest, a new version snapshot is created. If the version is the latest, only draft items are replaced (revert functionality).
+
+        Parameters
+        ----------
+        id : str
+
+        version_ref : str
+            Version hash or tag to restore from
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        DatasetVersionPublic
+            Version restored successfully
+
+        Examples
+        --------
+        from Opik import AsyncOpikApi
+        import asyncio
+        client = AsyncOpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        async def main() -> None:
+            await client.datasets.restore_dataset_version(id='id', version_ref='version_ref', )
+        asyncio.run(main())
+        """
+        _response = await self._raw_client.restore_dataset_version(
+            id, version_ref=version_ref, request_options=request_options
+        )
         return _response.data

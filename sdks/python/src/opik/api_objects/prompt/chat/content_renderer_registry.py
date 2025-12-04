@@ -1,15 +1,6 @@
-from __future__ import annotations
-
 from typing import Any, Dict, List, Mapping, MutableMapping, Optional, Tuple, Union
 
-from .types import (
-    ContentPart,
-    MessageContent,
-    ModalityName,
-    RendererFn,
-    SupportedModalities,
-    PromptType,
-)
+from .. import types as prompt_types
 
 
 class ChatContentRendererRegistry:
@@ -18,9 +9,13 @@ class ChatContentRendererRegistry:
     """
 
     def __init__(self) -> None:
-        self._part_renderers: MutableMapping[str, RendererFn] = {}
-        self._part_modalities: MutableMapping[str, Optional[ModalityName]] = {}
-        self._modality_placeholders: MutableMapping[ModalityName, Tuple[str, str]] = {
+        self._part_renderers: MutableMapping[str, prompt_types.RendererFn] = {}
+        self._part_modalities: MutableMapping[
+            str, Optional[prompt_types.ModalityName]
+        ] = {}
+        self._modality_placeholders: MutableMapping[
+            prompt_types.ModalityName, Tuple[str, str]
+        ] = {
             "vision": ("<<<image>>>", "<<</image>>>"),
             "video": ("<<<video>>>", "<<</video>>>"),
         }
@@ -30,9 +25,9 @@ class ChatContentRendererRegistry:
     def register_part_renderer(
         self,
         part_type: str,
-        renderer: RendererFn,
+        renderer: prompt_types.RendererFn,
         *,
-        modality: Optional[ModalityName] = None,
+        modality: Optional[prompt_types.ModalityName] = None,
         placeholder: Optional[Tuple[str, str]] = None,
     ) -> None:
         """
@@ -47,12 +42,12 @@ class ChatContentRendererRegistry:
 
     def render_content(
         self,
-        content: MessageContent,
+        content: prompt_types.MessageContent,
         variables: Dict[str, Any],
-        template_type: PromptType,
+        template_type: prompt_types.PromptType,
         *,
-        supported_modalities: Optional[SupportedModalities] = None,
-    ) -> MessageContent:
+        supported_modalities: Optional[prompt_types.SupportedModalities] = None,
+    ) -> prompt_types.MessageContent:
         if supported_modalities is None:
             modality_flags: Dict[str, bool] = {}
         else:
@@ -84,19 +79,21 @@ class ChatContentRendererRegistry:
         return rendered_parts
 
     def normalize_template_type(
-        self, template_type: Union[str, PromptType]
-    ) -> PromptType:
-        if isinstance(template_type, PromptType):
+        self, template_type: Union[str, prompt_types.PromptType]
+    ) -> prompt_types.PromptType:
+        if isinstance(template_type, prompt_types.PromptType):
             return template_type
         try:
-            return PromptType(template_type)
+            return prompt_types.PromptType(template_type)
         except ValueError:
-            return PromptType.MUSTACHE
+            return prompt_types.PromptType.MUSTACHE
 
-    def infer_modalities(self, content: MessageContent) -> set[ModalityName]:
+    def infer_modalities(
+        self, content: prompt_types.MessageContent
+    ) -> set[prompt_types.ModalityName]:
         if not isinstance(content, list):
             return set()
-        modalities: set[ModalityName] = set()
+        modalities: set[prompt_types.ModalityName] = set()
         for part in content:
             if not isinstance(part, dict):
                 continue
@@ -110,9 +107,9 @@ class ChatContentRendererRegistry:
         self,
         content: List[Any],
         variables: Dict[str, Any],
-        template_type: PromptType,
-    ) -> List[ContentPart]:
-        rendered_parts: List[ContentPart] = []
+        template_type: prompt_types.PromptType,
+    ) -> List[prompt_types.ContentPart]:
+        rendered_parts: List[prompt_types.ContentPart] = []
         for part in content:
             if not isinstance(part, dict):
                 continue
@@ -127,7 +124,7 @@ class ChatContentRendererRegistry:
         return rendered_parts
 
     def _should_flatten(
-        self, parts: List[ContentPart], modality_flags: Mapping[str, bool]
+        self, parts: List[prompt_types.ContentPart], modality_flags: Mapping[str, bool]
     ) -> bool:
         for part in parts:
             modality = self._part_modalities.get(part.get("type", "").lower())
@@ -136,7 +133,7 @@ class ChatContentRendererRegistry:
         return False
 
     def _flatten_parts_to_text(
-        self, parts: List[ContentPart], modality_flags: Mapping[str, bool]
+        self, parts: List[prompt_types.ContentPart], modality_flags: Mapping[str, bool]
     ) -> str:
         segments: List[str] = []
         for part in parts:
@@ -161,7 +158,7 @@ class ChatContentRendererRegistry:
         return "\n\n".join(segment for segment in segments if segment)
 
     @staticmethod
-    def _extract_placeholder_value(part: ContentPart) -> str:
+    def _extract_placeholder_value(part: prompt_types.ContentPart) -> str:
         part_type = part.get("type", "").lower()
         if part_type == "image_url":
             image_dict = part.get("image_url", {})
@@ -186,9 +183,9 @@ DEFAULT_CHAT_RENDERER_REGISTRY = ChatContentRendererRegistry()
 
 def register_default_chat_part_renderer(
     part_type: str,
-    renderer: RendererFn,
+    renderer: prompt_types.RendererFn,
     *,
-    modality: Optional[ModalityName] = None,
+    modality: Optional[prompt_types.ModalityName] = None,
     placeholder: Optional[Tuple[str, str]] = None,
 ) -> None:
     DEFAULT_CHAT_RENDERER_REGISTRY.register_part_renderer(
