@@ -142,19 +142,19 @@ public class FilterQueryBuilder {
                     .put(Operator.STARTS_WITH, new EnumMap<>(Map.of(
                             FieldType.STRING, "startsWith(lower(%1$s), lower(:filter%2$d))",
                             FieldType.STRING_STATE_DB, "%1$s LIKE CONCAT(:filter%2$d ,'%%')",
-                            // MAP values are stored as JSON strings (e.g., "hello" with quotes)
-                            // Use trimBoth(string, char) to strip surrounding quotes before comparison
+                            // MAP values are stored as JSON strings with possible escaped quotes (e.g., "\"hello\"")
+                            // First remove escaped quotes with replaceAll, then trim remaining quotes with trimBoth
                             FieldType.MAP,
-                            "startsWith(lower(trimBoth(arrayElement(mapValues(%1$s),indexOf(mapKeys(%1$s), :filterKey%2$d)), '\"')), lower(:filter%2$d))",
+                            "startsWith(lower(trimBoth(replaceAll(arrayElement(mapValues(%1$s),indexOf(mapKeys(%1$s), :filterKey%2$d)), '\\\\\"', ''), '\"')), lower(:filter%2$d))",
                             FieldType.DICTIONARY,
                             "startsWith(lower(JSON_VALUE(%1$s, :filterKey%2$d)), lower(:filter%2$d))")))
                     .put(Operator.ENDS_WITH, new EnumMap<>(Map.of(
                             FieldType.STRING, "endsWith(lower(%1$s), lower(:filter%2$d))",
                             FieldType.STRING_STATE_DB, "%1$s LIKE CONCAT('%%', :filter%2$d)",
-                            // MAP values are stored as JSON strings (e.g., "hello" with quotes)
-                            // Use trimBoth(string, char) to strip surrounding quotes before comparison
+                            // MAP values are stored as JSON strings with possible escaped quotes (e.g., "\"hello\"")
+                            // First remove escaped quotes with replaceAll, then trim remaining quotes with trimBoth
                             FieldType.MAP,
-                            "endsWith(lower(trimBoth(arrayElement(mapValues(%1$s),indexOf(mapKeys(%1$s), :filterKey%2$d)), '\"')), lower(:filter%2$d))",
+                            "endsWith(lower(trimBoth(replaceAll(arrayElement(mapValues(%1$s),indexOf(mapKeys(%1$s), :filterKey%2$d)), '\\\\\"', ''), '\"')), lower(:filter%2$d))",
                             FieldType.DICTIONARY,
                             "endsWith(lower(JSON_VALUE(%1$s, :filterKey%2$d)), lower(:filter%2$d))")))
                     .put(Operator.EQUAL, new EnumMap<>(Map.ofEntries(
@@ -168,10 +168,10 @@ public class FilterQueryBuilder {
                                     "has(groupArray(tuple(lower(name), %1$s)), tuple(lower(:filterKey%2$d), toDecimal64(:filter%2$d, 9))) = 1"),
                             Map.entry(FieldType.DICTIONARY,
                                     "lower(JSON_VALUE(%1$s, :filterKey%2$d)) = lower(:filter%2$d)"),
-                            // MAP values are stored as JSON strings (e.g., "hello" with quotes)
-                            // Use trimBoth(string, char) to strip surrounding quotes before comparison
+                            // MAP values are stored as JSON strings with possible escaped quotes (e.g., "\"hello\"")
+                            // First remove escaped quotes with replaceAll, then trim remaining quotes with trimBoth
                             Map.entry(FieldType.MAP,
-                                    "lower(trimBoth(arrayElement(mapValues(%1$s),indexOf(mapKeys(%1$s), :filterKey%2$d)), '\"')) = lower(:filter%2$d)"),
+                                    "lower(trimBoth(replaceAll(arrayElement(mapValues(%1$s),indexOf(mapKeys(%1$s), :filterKey%2$d)), '\\\\\"', ''), '\"')) = lower(:filter%2$d)"),
                             Map.entry(FieldType.ENUM, "%1$s = :filter%2$d"))))
                     .put(Operator.NOT_EQUAL, new EnumMap<>(Map.ofEntries(
                             Map.entry(FieldType.STRING, "lower(%1$s) != lower(:filter%2$d)"),
@@ -184,10 +184,10 @@ public class FilterQueryBuilder {
                                     "has(groupArray(tuple(lower(name), %1$s)), tuple(lower(:filterKey%2$d), toDecimal64(:filter%2$d, 9))) = 0"),
                             Map.entry(FieldType.DICTIONARY,
                                     "lower(JSON_VALUE(%1$s, :filterKey%2$d)) != lower(:filter%2$d)"),
-                            // MAP values are stored as JSON strings (e.g., "hello" with quotes)
-                            // Use trimBoth(string, char) to strip surrounding quotes before comparison
+                            // MAP values are stored as JSON strings with possible escaped quotes (e.g., "\"hello\"")
+                            // First remove escaped quotes with replaceAll, then trim remaining quotes with trimBoth
                             Map.entry(FieldType.MAP,
-                                    "lower(trimBoth(arrayElement(mapValues(%1$s),indexOf(mapKeys(%1$s), :filterKey%2$d)), '\"')) != lower(:filter%2$d)"),
+                                    "lower(trimBoth(replaceAll(arrayElement(mapValues(%1$s),indexOf(mapKeys(%1$s), :filterKey%2$d)), '\\\\\"', ''), '\"')) != lower(:filter%2$d)"),
                             Map.entry(FieldType.ENUM, "%1$s != :filter%2$d"))))
                     .put(Operator.GREATER_THAN, new EnumMap<>(Map.ofEntries(
                             Map.entry(FieldType.STRING, "lower(%1$s) > lower(:filter%2$d)"),
