@@ -1142,7 +1142,7 @@ class ExperimentDAO {
 
         Preconditions.checkArgument(CollectionUtils.isNotEmpty(ids), "Argument 'ids' must not be empty");
 
-        log.info("Deleting experiments by ids [{}]", Arrays.toString(ids.toArray()));
+        log.info("Deleting experiments by ids, size '{}'", ids.size());
 
         return Mono.from(connectionFactory.create())
                 .flatMapMany(connection -> delete(ids, connection))
@@ -1150,7 +1150,7 @@ class ExperimentDAO {
                 .reduce(Long::sum)
                 .doFinally(signalType -> {
                     if (signalType == SignalType.ON_COMPLETE) {
-                        log.info("Deleted experiments by ids [{}]", Arrays.toString(ids.toArray()));
+                        log.info("Deleted experiments by ids, size '{}'", ids.size());
                     }
                 });
     }
