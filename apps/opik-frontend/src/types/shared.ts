@@ -39,6 +39,7 @@ export const COLUMN_DURATION_ID = "duration";
 export const COLUMN_CUSTOM_ID = "custom";
 
 export const COLUMN_GUARDRAIL_STATISTIC_ID = "guardrails_failed_count";
+export const COLUMN_DATA_ID = "data";
 
 export enum COLUMN_TYPE {
   string = "string",

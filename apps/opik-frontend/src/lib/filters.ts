@@ -1,7 +1,7 @@
 import uniqid from "uniqid";
 import flatten from "lodash/flatten";
 import { Filter } from "@/types/filters";
-import { COLUMN_TYPE, DYNAMIC_COLUMN_TYPE } from "@/types/shared";
+import { COLUMN_DATA_ID, COLUMN_TYPE, DYNAMIC_COLUMN_TYPE } from "@/types/shared";
 import { TRACE_VISIBILITY_MODE } from "@/types/traces";
 import {
   makeEndOfMinute,
@@ -180,8 +180,16 @@ export const processFilters = (
 
   if (processedFilters.length > 0) {
     // Only send fields that the backend expects: field, type, operator, value, and key (for dictionary types)
+    const dataFieldPrefix = `${COLUMN_DATA_ID}.`;
+
     const backendFilters = processedFilters.map(
       ({ field, operator, value, key, type }) => {
+        // Handle data column filters: "data.columnName" -> field="data", key="columnName"
+        if (field.startsWith(dataFieldPrefix)) {
+          const columnKey = field.slice(dataFieldPrefix.length);
+          return { field: COLUMN_DATA_ID, type, operator, value, key: columnKey };
+        }
+
         // Include key only for dictionary types
         const isDictionary =
           type === COLUMN_TYPE.dictionary ||
