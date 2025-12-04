@@ -15,6 +15,7 @@ public enum FieldType {
     DURATION("duration"), // Duration is treated as a NUMBER internally
     FEEDBACK_SCORES_NUMBER("feedback_scores_number"),
     DICTIONARY("dictionary"),
+    MAP("map"),
     LIST("list"),
     ENUM("enum"),
     ERROR_CONTAINER("error_container"),

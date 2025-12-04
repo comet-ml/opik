@@ -4722,30 +4722,91 @@ class DatasetsResourceTest {
             assertDatasetItemPage(actualEntity, expectedDatasetItems, columns, 1);
         }
 
-        @Test
-        @DisplayName("when searching with valid search term, then return matching items")
-        void getDatasetItemsByDatasetId__whenSearchingWithValidSearchTerm__thenReturnMatchingItems() {
+        Stream<Arguments> dataFieldFilterOperators() {
+            return Stream.of(
+                    // CONTAINS - matches when value contains the search term
+                    Arguments.of(
+                            Named.of("CONTAINS operator", Operator.CONTAINS),
+                            (Function<String, Map<String, JsonNode>>) searchKey -> Map.of(
+                                    "query", new TextNode("search for " + searchKey + " model"),
+                                    "type", new TextNode("question")),
+                            (Function<String, Map<String, JsonNode>>) searchKey -> Map.of(
+                                    "query", new TextNode("completely different content"),
+                                    "type", new TextNode("recipe"))),
+
+                    // NOT_CONTAINS - matches when value does NOT contain the search term
+                    Arguments.of(
+                            Named.of("NOT_CONTAINS operator", Operator.NOT_CONTAINS),
+                            (Function<String, Map<String, JsonNode>>) searchKey -> Map.of(
+                                    "query", new TextNode("completely different content"),
+                                    "type", new TextNode("recipe")),
+                            (Function<String, Map<String, JsonNode>>) searchKey -> Map.of(
+                                    "query", new TextNode("search for " + searchKey + " model"),
+                                    "type", new TextNode("question"))),
+
+                    // STARTS_WITH - matches when value starts with the search term
+                    Arguments.of(
+                            Named.of("STARTS_WITH operator", Operator.STARTS_WITH),
+                            (Function<String, Map<String, JsonNode>>) searchKey -> Map.of(
+                                    "query", new TextNode(searchKey + " is the beginning"),
+                                    "type", new TextNode("question")),
+                            (Function<String, Map<String, JsonNode>>) searchKey -> Map.of(
+                                    "query", new TextNode("this does not start with " + searchKey),
+                                    "type", new TextNode("recipe"))),
+
+                    // ENDS_WITH - matches when value ends with the search term
+                    Arguments.of(
+                            Named.of("ENDS_WITH operator", Operator.ENDS_WITH),
+                            (Function<String, Map<String, JsonNode>>) searchKey -> Map.of(
+                                    "query", new TextNode("this ends with " + searchKey),
+                                    "type", new TextNode("question")),
+                            (Function<String, Map<String, JsonNode>>) searchKey -> Map.of(
+                                    "query", new TextNode(searchKey + " is at the start not end"),
+                                    "type", new TextNode("recipe"))),
+
+                    // EQUAL - matches when value equals the search term (case insensitive)
+                    Arguments.of(
+                            Named.of("EQUAL operator", Operator.EQUAL),
+                            (Function<String, Map<String, JsonNode>>) searchKey -> Map.of(
+                                    "query", new TextNode(searchKey),
+                                    "type", new TextNode("question")),
+                            (Function<String, Map<String, JsonNode>>) searchKey -> Map.of(
+                                    "query", new TextNode(searchKey + " extra text"),
+                                    "type", new TextNode("recipe"))),
+
+                    // NOT_EQUAL - matches when value does NOT equal the search term
+                    Arguments.of(
+                            Named.of("NOT_EQUAL operator", Operator.NOT_EQUAL),
+                            (Function<String, Map<String, JsonNode>>) searchKey -> Map.of(
+                                    "query", new TextNode(searchKey + " extra text"),
+                                    "type", new TextNode("question")),
+                            (Function<String, Map<String, JsonNode>>) searchKey -> Map.of(
+                                    "query", new TextNode(searchKey),
+                                    "type", new TextNode("recipe"))));
+        }
+
+        @ParameterizedTest
+        @MethodSource("dataFieldFilterOperators")
+        @DisplayName("when filtering data field with operator, then return matching items")
+        void getDatasetItemsByDatasetId__whenFilteringDataFieldWithOperator__thenReturnMatchingItems(
+                Operator operator,
+                Function<String, Map<String, JsonNode>> matchingDataSupplier,
+                Function<String, Map<String, JsonNode>> nonMatchingDataSupplier) {
 
             UUID datasetId = createAndAssert(factory.manufacturePojo(Dataset.class).toBuilder()
                     .id(null)
                     .build());
 
             var searchKey = RandomStringUtils.secure().nextAlphabetic(8);
-            var searchableItem = factory.manufacturePojo(DatasetItem.class).toBuilder()
-                    .data(Map.of(
-                            "query", new TextNode("search for " + searchKey + " model"),
-                            "type", new TextNode("question"),
-                            "category", new TextNode(searchKey + " intelligence")))
+            var matchingItem = factory.manufacturePojo(DatasetItem.class).toBuilder()
+                    .data(matchingDataSupplier.apply(searchKey))
                     .build();
 
-            var nonSearchableItem = factory.manufacturePojo(DatasetItem.class).toBuilder()
-                    .data(Map.of(
-                            "query", new TextNode("how to cook " + RandomStringUtils.secure().nextAlphabetic(8)),
-                            "type", new TextNode("recipe"),
-                            "category", new TextNode(RandomStringUtils.secure().nextAlphabetic(8))))
+            var nonMatchingItem = factory.manufacturePojo(DatasetItem.class).toBuilder()
+                    .data(nonMatchingDataSupplier.apply(searchKey))
                     .build();
 
-            var items = List.of(searchableItem, nonSearchableItem);
+            var items = List.of(matchingItem, nonMatchingItem);
             var batch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
                     .items(items)
                     .datasetId(datasetId)
@@ -4760,15 +4821,12 @@ class DatasetsResourceTest {
 
             putAndAssert(batch, TEST_WORKSPACE, API_KEY);
 
-            // Create filter for the new filter API
-            var filter = new DatasetItemFilter(DatasetItemField.DATA, Operator.CONTAINS, null, searchKey);
+            var filter = new DatasetItemFilter(DatasetItemField.DATA, operator, "query", searchKey);
 
             var actualEntity = datasetResourceClient.getDatasetItems(datasetId,
                     Map.of("filters", toURLEncodedQueryParam(List.of(filter))), API_KEY, TEST_WORKSPACE);
 
-            List<DatasetItem> expectedContent = List.of(searchableItem);
-
-            assertDatasetItemPage(actualEntity, expectedContent, columns, 1);
+            assertDatasetItemPage(actualEntity, List.of(matchingItem), columns, 1);
         }
 
         // Parameterized test scenarios for search functionality

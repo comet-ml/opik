@@ -25,6 +25,7 @@ import useDatasetById from "@/api/datasets/useDatasetById";
 import { DatasetItem } from "@/types/datasets";
 import { Filters } from "@/types/filters";
 import {
+  COLUMN_DATA_ID,
   COLUMN_ID_ID,
   COLUMN_SELECT_ID,
   COLUMN_TYPE,
@@ -279,7 +280,16 @@ const DatasetItemsPage = () => {
   }, [dynamicDatasetColumns]);
 
   const filtersColumnData = useMemo(() => {
+    // Add each data column as a separate filter option with field prefix "data."
+    // This will be transformed to field="data" and key=columnName when processing
+    const dataFilterColumns = datasetColumns.map((c) => ({
+      id: `${COLUMN_DATA_ID}.${c.name}`,
+      label: c.name,
+      type: COLUMN_TYPE.string,
+    }));
+
     return [
+      ...dataFilterColumns,
       {
         id: "tags",
         label: "Tags",
@@ -287,7 +297,7 @@ const DatasetItemsPage = () => {
         iconType: "tags" as const,
       },
     ];
-  }, []);
+  }, [datasetColumns]);
 
   const handleRowClick = useCallback(
     (row: DatasetItem) => {
