@@ -1652,24 +1652,35 @@ class AlertResourceTest {
         }
 
         @Test
-        @DisplayName("when alert has empty trigger configs, then job handles gracefully without webhook")
-        void whenAlertHasEmptyTriggerConfigs_thenJobHandlesGracefullyWithoutWebhook() {
+        @DisplayName("when alert has empty trigger configs, then job handles gracefully and continues processing valid alerts")
+        void whenAlertHasEmptyTriggerConfigs_thenJobHandlesGracefullyAndContinuesProcessingValidAlerts() {
             var mock = prepareMockWorkspace();
 
             // Create a project
             var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
-            projectResourceClient.createProject(projectName, mock.getLeft(), mock.getRight());
+            var projectId = projectResourceClient.createProject(projectName, mock.getLeft(), mock.getRight());
 
-            // Create an alert with empty trigger configs
-            var alertTrigger = AlertTrigger.builder()
+            // Create first alert with empty trigger configs (should be skipped)
+            var emptyAlertTrigger = AlertTrigger.builder()
                     .eventType(AlertEventType.TRACE_COST)
                     .triggerConfigs(List.of()) // Empty configs
                     .build();
-            var alert = createAlertForEvent(alertTrigger);
-            var alertId = alertResourceClient.createAlert(
-                    alert, mock.getLeft(), mock.getRight(), HttpStatus.SC_CREATED);
+            var emptyAlert = createAlertForEvent(emptyAlertTrigger);
+            var emptyAlertId = alertResourceClient.createAlert(
+                    emptyAlert, mock.getLeft(), mock.getRight(), HttpStatus.SC_CREATED);
 
-            // Create a trace with cost to ensure there's data to process
+            // Create second alert with valid trigger configs (should trigger webhook)
+            var validAlertTrigger = triggerWithThreshold(
+                    AlertEventType.TRACE_COST,
+                    AlertTriggerConfigType.THRESHOLD_COST,
+                    projectId,
+                    "50.00",
+                    "60");
+            var validAlert = createAlertForEvent(validAlertTrigger);
+            var validAlertId = alertResourceClient.createAlert(
+                    validAlert, mock.getLeft(), mock.getRight(), HttpStatus.SC_CREATED);
+
+            // Create a trace first
             var trace = factory.manufacturePojo(Trace.class).toBuilder()
                     .projectName(projectName)
                     .usage(null)
@@ -1677,26 +1688,36 @@ class AlertResourceTest {
                     .build();
             traceResourceClient.createTrace(trace, mock.getLeft(), mock.getRight());
 
-            // Create span with cost
-            var span = factory.manufacturePojo(Span.class).toBuilder()
-                    .projectName(projectName)
-                    .traceId(trace.id())
-                    .totalEstimatedCost(new BigDecimal("100.00"))
-                    .build();
-            spanResourceClient.createSpan(span, mock.getLeft(), mock.getRight());
+            // Create multiple spans with costs that exceed the valid alert's threshold
+            // Total cost: $30 + $30 = $60 (exceeds $50 threshold)
+            IntStream.range(0, 2)
+                    .forEach(i -> {
+                        var span = factory.manufacturePojo(Span.class).toBuilder()
+                                .projectName(projectName)
+                                .traceId(trace.id())
+                                .totalEstimatedCost(new BigDecimal("30.00"))
+                                .build();
+                        spanResourceClient.createSpan(span, mock.getLeft(), mock.getRight());
+                    });
 
-            // Wait a reasonable time for the job to process
-            // We just need to ensure it doesn't crash immediately when processing this alert
-            // The job runs every 2 seconds in the test configuration
-            Awaitility.await().pollDelay(java.time.Duration.ofSeconds(4))
-                    .until(() -> true);
+            // Wait for MetricsAlertJob to run and verify webhook was called
+            // Note: verifyWebhookCalledAndGetPayload already asserts exactly 1 webhook was sent,
+            // proving both alerts were processed (empty config skipped, valid alert triggered)
+            var payload = verifyWebhookCalledAndGetPayload(validAlert);
 
-            // Verify no webhook was sent (job should skip the alert gracefully)
-            var requests = externalWebhookServer.findAll(postRequestedFor(urlEqualTo(WEBHOOK_PATH)));
-            assertThat(requests).isEmpty();
+            // Verify payload is from the valid alert, not the empty config alert
+            var costPayload = JsonUtils.readValue(payload, MetricsAlertPayload.class);
+            verifyMetricsPayload(
+                    costPayload,
+                    "TRACE_COST",
+                    "60",
+                    "50",
+                    "60",
+                    projectId,
+                    projectName);
 
             var batchDelete = BatchDelete.builder()
-                    .ids(Set.of(alertId))
+                    .ids(Set.of(emptyAlertId, validAlertId))
                     .build();
             alertResourceClient.deleteAlertBatch(
                     batchDelete, mock.getLeft(), mock.getRight(), HttpStatus.SC_NO_CONTENT);
