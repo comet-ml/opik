@@ -67,6 +67,7 @@ public interface AutomationRuleEvaluatorDAO extends AutomationRuleDAO {
             """)
     @UseStringTemplateEngine
     @AllowUnusedBindings
+    @RegisterRowMapper(AutomationRuleEvaluatorWithProjectRowMapper.class)
     List<AutomationRuleEvaluatorModel<?>> find(@Bind("workspaceId") String workspaceId,
             @Define("projectIds") @BindList(onEmpty = BindList.EmptyHandling.NULL_VALUE, value = "projectIds") List<UUID> projectIds,
             @Bind("action") AutomationRule.AutomationRuleAction action,
