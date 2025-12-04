@@ -6,8 +6,8 @@ metadata:
     {{- include "opik.labels" $  | nindent 4 }}
 data:
   {{- with .Values.component.frontend.logFormats }}
-  log-formats.conf.template: |
-     # nginx log formats template
+  10-log-formats.conf.template: |
+    # nginx log formats template
     {{- range $name,$format := . }}
     log_format {{ $name }} {{ $format }};
     {{- end }}
@@ -60,8 +60,6 @@ data:
     limit_req_zone {{ $limit.variable }} zone={{ $limit.zone | default $name }}:{{ $limit.size | default "1m" }} rate={{ $limit.rate | default "10r/m" }};
     {{- end }}
     
-    access_log /dev/stdout {{ .Values.component.frontend.logFormat | default "main" }};
-
     server {
         listen {{ (.Values.component.frontend.service.ports | first).targetPort }} default_server;
         server_name _;
@@ -125,7 +123,7 @@ data:
           try_files /dev/null @swagger;
         }
         location = {{ $rootPath }}/swagger {
-            rewrite 308 ^(.*)$ $1/ permanent;
+            rewrite ^(.*)$ $1/ permanent;
         }
 
         {{- if not .Values.standalone }}
