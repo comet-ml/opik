@@ -23,5 +23,5 @@ log_format logger-json escape=json '{'
                 ', "x_sdk_version": "$http_x_opik_debug_sdk_version"'
                 ', "otel_trace_id": "$otel_trace_id"'
                 ', "upstream_connect_time": "$upstream_connect_time", "upstream_header_time": "$upstream_header_time", "upstream_response_time": "$upstream_response_time"'
-                ', "upstream_addr": "$upstream_addr", "upstream_status": "$upstream_status", "host": "$host"'
+                ', "upstream_addr": "$upstream_addr", "upstream_status": "$upstream_status"'
             '}';
