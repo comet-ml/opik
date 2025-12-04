@@ -78,12 +78,12 @@ Call opik api on http://localhost:5173/api
 
 | Repository | Name | Version |
 |------------|------|---------|
-| https://charts.bitnami.com/bitnami | minio | 15.0.7 |
-| https://charts.bitnami.com/bitnami | mysql | 11.1.9 |
-| https://charts.bitnami.com/bitnami | redis | 18.19.2 |
-| https://charts.bitnami.com/bitnami | zookeeper | 13.8.3 |
 | https://docs.altinity.com/clickhouse-operator/ | altinity-clickhouse-operator | 0.25.4 |
+| https://helm.dev.comet.com/ | mysql | 0.1.7 |
 | oci://registry-1.docker.io/bitnamicharts | common | 2.x.x |
+| oci://registry-1.docker.io/cloudpirates | minio | 0.5.6 |
+| oci://registry-1.docker.io/cloudpirates | redis | 0.16.0 |
+| oci://registry-1.docker.io/cloudpirates | zookeeper | 0.3.2 |
 
 ## Values
 
@@ -278,8 +278,8 @@ Call opik api on http://localhost:5173/api
 | component.frontend.ingress.tls.hosts | list | `[]` |  |
 | component.frontend.ingress.tls.secretName | string | `""` |  |
 | component.frontend.logFormat | string | `"logger-json"` |  |
-| component.frontend.logFormats.logger-json | string | `"escape=json '{ \"body_bytes_sent\": $body_bytes_sent, \"http_referer\": \"$http_referer\", \"http_user_agent\": \"$http_user_agent\", \"remote_addr\": \"$remote_addr\", \"remote_user\": \"$remote_user\", \"request\": \"$request\", \"status\": $status, \"time_local\": \"$time_local\", \"x_forwarded_for\": \"$http_x_forwarded_for\" }'"` |  |
 | component.frontend.logFormats.logger-json | string | `"escape=json '{'\n        '  \"body_bytes_sent\": $body_bytes_sent'\n        ', \"comet_workspace\": \"$http_comet_workspace\"'\n        ', \"host\": \"$host\"'\n        ', \"http_referer\": \"$http_referer\"'\n        ', \"http_user_agent\": \"$http_user_agent\"'\n        ', \"limit_req_status\": \"$limit_req_status\"'\n        ', \"method\": \"$request_method\"'\n        ', \"remote_addr\": \"$remote_addr\"'\n        ', \"remote_user\": \"$remote_user\"'\n        ', \"request_length\": $request_length'\n        ', \"request_time\": $request_time'\n        ', \"request\": \"$request\"'\n        ', \"response\": $status'\n        ', \"resp_body_size\": $body_bytes_sent'\n        ', \"source\": \"nginx\"'\n        ', \"status\": $status'\n        ', \"time_local\": \"$time_local\"'\n        ', \"time\": $msec'\n        ', \"uri\": \"$request_uri\"'\n        ', \"user_agent\": \"$http_user_agent\"'\n        ', \"x_forwarded_for\": \"$http_x_forwarded_for\"'\n        ', \"x_sdk_version\": \"$http_x_opik_debug_sdk_version\"'\n        ', \"upstream_connect_time\": \"$upstream_connect_time\", \"upstream_header_time\": \"$upstream_header_time\", \"upstream_response_time\": \"$upstream_response_time\"'\n        ', \"upstream_addr\": \"$upstream_addr\", \"upstream_status\": \"$upstream_status\", \"host\": \"$host\"'\n    '}'"` |  |
+| component.frontend.logFormats.logger-json | string | `"escape=json '{ \"body_bytes_sent\": $body_bytes_sent, \"http_referer\": \"$http_referer\", \"http_user_agent\": \"$http_user_agent\", \"remote_addr\": \"$remote_addr\", \"remote_user\": \"$remote_user\", \"request\": \"$request\", \"status\": $status, \"time_local\": \"$time_local\", \"x_forwarded_for\": \"$http_x_forwarded_for\" }'"` |  |
 | component.frontend.maps | list | `[]` |  |
 | component.frontend.metrics.enabled | bool | `false` |  |
 | component.frontend.replicaCount | int | `1` |  |
@@ -354,48 +354,42 @@ Call opik api on http://localhost:5173/api
 | localFEAddress | string | `"host.minikube.internal:5174"` |  |
 | minio.auth.rootPassword | string | `"LESlrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"` |  |
 | minio.auth.rootUser | string | `"THAAIOSFODNN7EXAMPLE"` |  |
-| minio.disableWebUI | bool | `true` |  |
+| minio.config.browserEnabled | bool | `false` |  |
+| minio.defaultBuckets | string | `"public:download"` |  |
 | minio.enabled | bool | `true` |  |
 | minio.fullnameOverride | string | `"opik-minio"` |  |
-| minio.image.repository | string | `"bitnamilegacy/minio"` |  |
-| minio.mode | string | `"standalone"` |  |
+| minio.image.imagePullPolicy | string | `"IfNotPresent"` |  |
+| minio.image.registry | string | `"docker.io"` |  |
+| minio.image.repository | string | `"minio/minio"` |  |
+| minio.image.tag | string | `"RELEASE.2025-03-12T18-04-18Z"` |  |
 | minio.persistence.enabled | bool | `true` |  |
 | minio.persistence.size | string | `"50Gi"` |  |
-| minio.provisioning.enabled | bool | `true` |  |
-| minio.provisioning.extraCommands[0] | string | `"mc alias set s3 http://opik-minio:9000 THAAIOSFODNN7EXAMPLE LESlrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY --api S3v4"` |  |
-| minio.provisioning.extraCommands[1] | string | `"mc mb --ignore-existing s3/public"` |  |
-| minio.provisioning.extraCommands[2] | string | `"mc anonymous set download s3/public/"` |  |
-| minio.volumePermissions.image.repository | string | `"bitnamilegacy/os-shell"` |  |
+| minio.replicaCount | int | `1` |  |
 | mysql.auth.rootPassword | string | `"opik"` |  |
 | mysql.enabled | bool | `true` |  |
 | mysql.fullnameOverride | string | `"opik-mysql"` |  |
-| mysql.image.repository | string | `"bitnamilegacy/mysql"` |  |
 | mysql.initdbScripts."createdb.sql" | string | `"CREATE DATABASE IF NOT EXISTS opik DEFAULT CHARACTER SET utf8 DEFAULT COLLATE utf8_general_ci;\nCREATE USER IF NOT EXISTS 'opik'@'%' IDENTIFIED BY 'opik';\nGRANT ALL ON `opik`.* TO 'opik'@'%';\nFLUSH PRIVILEGES;"` |  |
+| mysql.primary.dataDir | string | `"/bitnami/mysql/data"` |  |
+| mysql.primary.persistence.enabled | bool | `true` |  |
+| mysql.primary.persistence.size | string | `"20Gi"` |  |
 | nameOverride | string | `"opik"` |  |
 | nodeSelector | object | `{}` |  |
 | redis.architecture | string | `"standalone"` |  |
+| redis.auth.enabled | bool | `true` |  |
 | redis.auth.password | string | `"wFSuJX9nDBdCa25sKZG7bh"` |  |
+| redis.config.content | string | `"# Redis Stack configuration\ndir /data\nmaxmemory 105M\nmaxmemory-policy allkeys-lru\n# Redis Stack modules are automatically loaded by the redis-stack-server image\n"` |  |
 | redis.enabled | bool | `true` |  |
-| redis.extraDeploy[0].apiVersion | string | `"v1"` |  |
-| redis.extraDeploy[0].data."start-master.sh" | string | `"#!/usr/bin/dumb-init /bin/bash\n### docker entrypoint script, for starting redis stack\nBASEDIR=/opt/redis-stack\ncd ${BASEDIR}\nCMD=${BASEDIR}/bin/redis-server\nif [ -z \"${REDISEARCH_ARGS}\" ]; then\nREDISEARCH_ARGS=\"MAXSEARCHRESULTS 10000 MAXAGGREGATERESULTS 10000\"\nfi\n[[ -f $REDIS_PASSWORD_FILE ]] && export REDIS_PASSWORD=\"$(< \"${REDIS_PASSWORD_FILE}\")\"\nif [[ -f /opt/bitnami/redis/mounted-etc/master.conf ]];then\n    cp /opt/bitnami/redis/mounted-etc/master.conf /opt/bitnami/redis/etc/master.conf\nfi\nif [[ -f /opt/bitnami/redis/mounted-etc/redis.conf ]];then\n    cp /opt/bitnami/redis/mounted-etc/redis.conf /opt/bitnami/redis/etc/redis.conf\nfi\n${CMD} \\\n--port \"${REDIS_PORT}\" \\\n--requirepass \"${REDIS_PASSWORD}\" \\\n--masterauth \"${REDIS_PASSWORD}\" \\\n--include \"/opt/bitnami/redis/etc/redis.conf\" \\\n--include \"/opt/bitnami/redis/etc/master.conf\" \\\n--loadmodule ${BASEDIR}/lib/redisearch.so ${REDISEARCH_ARGS} \\\n--loadmodule ${BASEDIR}/lib/redistimeseries.so ${REDISTIMESERIES_ARGS} \\\n--loadmodule ${BASEDIR}/lib/rejson.so ${REDISJSON_ARGS} \\\n--loadmodule ${BASEDIR}/lib/redisbloom.so ${REDISBLOOM_ARGS}\n"` |  |
-| redis.extraDeploy[0].kind | string | `"ConfigMap"` |  |
-| redis.extraDeploy[0].metadata.name | string | `"bitnami-redis-stack-server-merged"` |  |
-| redis.fullnameOverride | string | `"opik-redis"` |  |
+| redis.fullnameOverride | string | `"opik-redis-master"` |  |
+| redis.image.pullPolicy | string | `"IfNotPresent"` |  |
+| redis.image.registry | string | `"docker.io"` |  |
 | redis.image.repository | string | `"redis/redis-stack-server"` |  |
 | redis.image.tag | string | `"7.2.0-v10"` |  |
-| redis.master.args[0] | string | `"-c"` |  |
-| redis.master.args[1] | string | `"/opt/bitnami/scripts/merged-start-scripts/start-master.sh"` |  |
-| redis.master.configuration | string | `"maxmemory 105M"` |  |
-| redis.master.extraVolumeMounts[0].mountPath | string | `"/opt/bitnami/scripts/merged-start-scripts"` |  |
-| redis.master.extraVolumeMounts[0].name | string | `"merged-start-scripts"` |  |
-| redis.master.extraVolumes[0].configMap.defaultMode | int | `493` |  |
-| redis.master.extraVolumes[0].configMap.name | string | `"bitnami-redis-stack-server-merged"` |  |
-| redis.master.extraVolumes[0].name | string | `"merged-start-scripts"` |  |
-| redis.master.resources.limits.memory | string | `"1Gi"` |  |
-| redis.master.resources.requests.cpu | string | `"15m"` |  |
-| redis.master.resources.requests.memory | string | `"105M"` |  |
 | redis.metrics.enabled | bool | `false` |  |
-| redis.ssl | bool | `false` |  |
+| redis.persistence.enabled | bool | `true` |  |
+| redis.persistence.size | string | `"8Gi"` |  |
+| redis.resources.limits.memory | string | `"1Gi"` |  |
+| redis.resources.requests.cpu | string | `"15m"` |  |
+| redis.resources.requests.memory | string | `"105M"` |  |
 | registry | string | `"ghcr.io/comet-ml/opik"` |  |
 | serviceAccount.annotations | object | `{}` |  |
 | serviceAccount.create | bool | `false` |  |
@@ -403,12 +397,16 @@ Call opik api on http://localhost:5173/api
 | standalone | bool | `true` |  |
 | tolerations | list | `[]` |  |
 | zookeeper.enabled | bool | `true` |  |
-| zookeeper.env.ZK_HEAP_SIZE | string | `"512M"` |  |
+| zookeeper.extraEnvVars[0].name | string | `"ZK_HEAP_SIZE"` |  |
+| zookeeper.extraEnvVars[0].value | string | `"512M"` |  |
 | zookeeper.fullnameOverride | string | `"opik-zookeeper"` |  |
 | zookeeper.headless.publishNotReadyAddresses | bool | `true` |  |
-| zookeeper.image.repository | string | `"bitnamilegacy/zookeeper"` |  |
-| zookeeper.image.tag | string | `"3.9.3-debian-12-r16"` |  |
+| zookeeper.image.imagePullPolicy | string | `"IfNotPresent"` |  |
+| zookeeper.image.registry | string | `"docker.io"` |  |
+| zookeeper.image.repository | string | `"zookeeper"` |  |
+| zookeeper.image.tag | string | `"3.9.4"` |  |
 | zookeeper.persistence.enabled | bool | `true` |  |
+| zookeeper.persistence.mountPath | string | `"/bitnami/zookeeper/data"` |  |
 | zookeeper.persistence.size | string | `"50Gi"` |  |
 | zookeeper.podDisruptionBudget.enabled | bool | `true` |  |
 | zookeeper.replicaCount | int | `1` |  |
