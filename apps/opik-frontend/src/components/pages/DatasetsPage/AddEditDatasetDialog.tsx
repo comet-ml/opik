@@ -130,6 +130,10 @@ const AddEditDatasetDialog: React.FunctionComponent<
 
   const onCreateSuccessHandler = useCallback(
     (newDataset: Dataset) => {
+      if (hasValidCsvFile) {
+        setIsOverlayShown(true);
+      }
+
       if (hasValidCsvFile && newDataset.id) {
         if (isCsvUploadEnabled && csvFile) {
           // CSV mode: Upload CSV file directly to backend
@@ -262,12 +266,8 @@ const AddEditDatasetDialog: React.FunctionComponent<
         },
       );
     }
-    if (hasValidCsvFile) {
-      setIsOverlayShown(true);
-    }
   }, [
     isEdit,
-    hasValidCsvFile,
     updateMutate,
     dataset,
     name,
