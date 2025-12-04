@@ -3,17 +3,22 @@ import get from "lodash/get";
 import { useToast } from "@/components/ui/use-toast";
 import api, { DASHBOARDS_KEY, DASHBOARDS_REST_ENDPOINT } from "@/api/api";
 
-type UseDashboardDeleteMutationParams = {
-  dashboardId: string;
+type UseDashboardBatchDeleteMutationParams = {
+  ids: string[];
 };
 
-const useDashboardDeleteMutation = () => {
+const useDashboardBatchDeleteMutation = () => {
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
   return useMutation({
-    mutationFn: async ({ dashboardId }: UseDashboardDeleteMutationParams) => {
-      const { data } = await api.delete(DASHBOARDS_REST_ENDPOINT + dashboardId);
+    mutationFn: async ({ ids }: UseDashboardBatchDeleteMutationParams) => {
+      const { data } = await api.post(
+        `${DASHBOARDS_REST_ENDPOINT}delete-batch`,
+        {
+          ids,
+        },
+      );
       return data;
     },
     onError: (error) => {
@@ -30,11 +35,11 @@ const useDashboardDeleteMutation = () => {
       });
     },
     onSettled: () => {
-      queryClient.invalidateQueries({
+      return queryClient.invalidateQueries({
         queryKey: [DASHBOARDS_KEY],
       });
     },
   });
 };
 
-export default useDashboardDeleteMutation;
+export default useDashboardBatchDeleteMutation;

@@ -10,6 +10,7 @@ import org.jdbi.v3.sqlobject.config.RegisterColumnMapper;
 import org.jdbi.v3.sqlobject.config.RegisterConstructorMapper;
 import org.jdbi.v3.sqlobject.customizer.AllowUnusedBindings;
 import org.jdbi.v3.sqlobject.customizer.Bind;
+import org.jdbi.v3.sqlobject.customizer.BindList;
 import org.jdbi.v3.sqlobject.customizer.BindMethods;
 import org.jdbi.v3.sqlobject.customizer.Define;
 import org.jdbi.v3.sqlobject.statement.SqlQuery;
@@ -18,6 +19,7 @@ import org.jdbi.v3.stringtemplate4.UseStringTemplateEngine;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 @RegisterArgumentFactory(UUIDArgumentFactory.class)
@@ -70,15 +72,19 @@ public interface DashboardDAO {
     @SqlQuery("SELECT * FROM dashboards " +
             "WHERE workspace_id = :workspaceId " +
             "<if(search)> AND name like concat('%', :search, '%') <endif> " +
-            "ORDER BY id DESC " +
+            "ORDER BY <if(sort_fields)> <sort_fields>, <endif> id DESC " +
             "LIMIT :limit OFFSET :offset")
     @UseStringTemplateEngine
     @AllowUnusedBindings
     List<Dashboard> find(@Bind("workspaceId") String workspaceId,
             @Define("search") @Bind("search") String search,
+            @Define("sort_fields") String sortingFields,
             @Bind("limit") int limit,
             @Bind("offset") int offset);
 
     @SqlQuery("SELECT COUNT(*) FROM dashboards WHERE workspace_id = :workspaceId AND slug LIKE concat(:slugPrefix, '%')")
     long countBySlugPrefix(@Bind("workspaceId") String workspaceId, @Bind("slugPrefix") String slugPrefix);
+
+    @SqlUpdate("DELETE FROM dashboards WHERE id IN (<ids>) AND workspace_id = :workspaceId")
+    void delete(@BindList("ids") Set<UUID> ids, @Bind("workspaceId") String workspaceId);
 }

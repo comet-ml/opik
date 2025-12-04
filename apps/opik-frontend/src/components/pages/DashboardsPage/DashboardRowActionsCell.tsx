@@ -11,7 +11,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import ConfirmDialog from "@/components/shared/ConfirmDialog/ConfirmDialog";
 import { Dashboard } from "@/types/dashboard";
-import useDashboardDeleteMutation from "@/api/dashboards/useDashboardDeleteMutation";
+import useDashboardBatchDeleteMutation from "@/api/dashboards/useDashboardBatchDeleteMutation";
 import DashboardCreateDialog from "@/components/pages/DashboardsPage/DashboardCreateDialog";
 import DashboardCloneDialog from "@/components/pages/DashboardsPage/DashboardCloneDialog";
 
@@ -21,7 +21,7 @@ export const DashboardRowActionsCell: React.FunctionComponent<
   const resetKeyRef = useRef(0);
   const dashboard = context.row.original;
 
-  const { mutate: deleteDashboardMutate } = useDashboardDeleteMutation();
+  const { mutate: deleteDashboardMutate } = useDashboardBatchDeleteMutation();
 
   const [open, setOpen] = useState<boolean>(false);
   const [openEdit, setOpenEdit] = useState<boolean>(false);
@@ -30,7 +30,7 @@ export const DashboardRowActionsCell: React.FunctionComponent<
 
   const deleteDashboard = useCallback(() => {
     deleteDashboardMutate({
-      dashboardId: dashboard.id,
+      ids: [dashboard.id],
     });
   }, [dashboard, deleteDashboardMutate]);
 

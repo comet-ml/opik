@@ -13,6 +13,9 @@ import lombok.RequiredArgsConstructor;
 import org.apache.http.HttpStatus;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
+import java.util.Set;
 import java.util.UUID;
 
 import static com.comet.opik.infrastructure.auth.RequestContext.WORKSPACE_HEADER;
@@ -77,16 +80,11 @@ public class DashboardResourceClient {
 
     public DashboardPage find(String apiKey, String workspaceName, int page, int size, String name,
             int expectedStatus) {
-        try (var response = callFind(apiKey, workspaceName, page, size, name)) {
-            assertThat(response.getStatus()).isEqualTo(expectedStatus);
-            if (expectedStatus == HttpStatus.SC_OK) {
-                return response.readEntity(DashboardPage.class);
-            }
-            return null;
-        }
+        return find(apiKey, workspaceName, page, size, name, null, expectedStatus);
     }
 
-    public Response callFind(String apiKey, String workspaceName, int page, int size, String name) {
+    public DashboardPage find(String apiKey, String workspaceName, int page, int size, String name,
+            String sorting, int expectedStatus) {
         var target = client.target(RESOURCE_PATH.formatted(baseURI))
                 .queryParam("page", page)
                 .queryParam("size", size);
@@ -95,10 +93,20 @@ public class DashboardResourceClient {
             target = target.queryParam("name", name);
         }
 
-        return target.request()
+        if (sorting != null) {
+            target = target.queryParam("sorting", URLEncoder.encode(sorting, StandardCharsets.UTF_8));
+        }
+
+        try (var response = target.request()
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .header(WORKSPACE_HEADER, workspaceName)
-                .get();
+                .get()) {
+            assertThat(response.getStatus()).isEqualTo(expectedStatus);
+            if (expectedStatus == HttpStatus.SC_OK) {
+                return response.readEntity(DashboardPage.class);
+            }
+            return null;
+        }
     }
 
     public void update(UUID id, DashboardUpdate update, String apiKey, String workspaceName, int expectedStatus) {
@@ -140,6 +148,24 @@ public class DashboardResourceClient {
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .header(WORKSPACE_HEADER, workspaceName)
                 .delete();
+    }
+
+    public void batchDelete(Set<UUID> ids, String apiKey, String workspaceName) {
+        batchDelete(ids, apiKey, workspaceName, HttpStatus.SC_NO_CONTENT);
+    }
+
+    public void batchDelete(Set<UUID> ids, String apiKey, String workspaceName, int expectedStatus) {
+        var batchDelete = com.comet.opik.api.BatchDelete.builder()
+                .ids(ids)
+                .build();
+        try (var response = client.target(RESOURCE_PATH.formatted(baseURI))
+                .path("delete-batch")
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .post(Entity.json(batchDelete))) {
+            assertThat(response.getStatus()).isEqualTo(expectedStatus);
+        }
     }
 
     public Dashboard.DashboardBuilder createPartialDashboard() {
