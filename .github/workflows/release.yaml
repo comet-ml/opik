@@ -72,6 +72,16 @@ jobs:
       version: ${{needs.set-version.outputs.version}}
       is_release: true
 
+  release-typescript-sdk-integrations:
+    needs:
+      - set-version
+      - create-git-tag
+    uses: ./.github/workflows/typescript_sdk_integration_publish.yml
+    secrets: inherit
+    with:
+      version: ${{needs.set-version.outputs.version}}
+      is_release: true
+
   # release-typescript-langchain-sdk:
   #   needs:
   #     - set-version
@@ -98,6 +108,7 @@ jobs:
       - release-apps
       - release-sdk
       - release-typescript-sdk
+      - release-typescript-sdk-integrations
       # - release-typescript-langchain-sdk
       - publish-helm-chart
     runs-on: ubuntu-latest
