@@ -1,6 +1,12 @@
 import React, { useMemo, useState } from "react";
 import { Link } from "@tanstack/react-router";
-import { ArrowRight, Split } from "lucide-react";
+import {
+  ArrowRight,
+  Split,
+  TrendingUp,
+  TrendingDown,
+  MoveRight,
+} from "lucide-react";
 import isUndefined from "lodash/isUndefined";
 import isObject from "lodash/isObject";
 import isArray from "lodash/isArray";
@@ -21,6 +27,7 @@ import { Button } from "@/components/ui/button";
 import { formatNumericData, toString } from "@/lib/utils";
 import ColoredTagNew from "@/components/shared/ColoredTag/ColoredTagNew";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
+import { Tag } from "@/components/ui/tag";
 import { LLM_MESSAGE_ROLE_NAME_MAP } from "@/constants/llm";
 import MarkdownPreview from "@/components/shared/MarkdownPreview/MarkdownPreview";
 import { cn } from "@/lib/utils";
@@ -81,13 +88,15 @@ const BestPrompt: React.FC<BestPromptProps> = ({
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const [diffOpen, setDiffOpen] = useState(false);
 
-  const { score, percentage } = useMemo(() => {
+  const { score, percentage, absoluteDiff } = useMemo(() => {
     const retVal: {
       score?: number;
       percentage?: number;
+      absoluteDiff?: number;
     } = {
       score: undefined,
       percentage: undefined,
+      absoluteDiff: undefined,
     };
 
     const scoreObject = scoreMap[experiment.id];
@@ -96,8 +105,15 @@ const BestPrompt: React.FC<BestPromptProps> = ({
     retVal.score = scoreObject.score;
     retVal.percentage = scoreObject.percentage;
 
+    if (isUndefined(retVal.percentage) && baselineExperiment) {
+      const baselineScore = scoreMap[baselineExperiment.id]?.score;
+      if (!isUndefined(baselineScore)) {
+        retVal.absoluteDiff = retVal.score - baselineScore;
+      }
+    }
+
     return retVal;
-  }, [experiment.id, scoreMap]);
+  }, [experiment.id, scoreMap, baselineExperiment]);
 
   const promptData = useMemo(() => {
     return get(experiment.metadata ?? {}, OPTIMIZATION_PROMPT_KEY, "-");
@@ -175,6 +191,37 @@ const BestPrompt: React.FC<BestPromptProps> = ({
                 {formatNumericData(percentage)}%
               </div>
             )}
+            {isUndefined(percentage) &&
+              !isUndefined(absoluteDiff) &&
+              (() => {
+                const Icon =
+                  absoluteDiff > 0
+                    ? TrendingUp
+                    : absoluteDiff < 0
+                      ? TrendingDown
+                      : MoveRight;
+                const variant =
+                  absoluteDiff > 0
+                    ? "green"
+                    : absoluteDiff < 0
+                      ? "red"
+                      : "gray";
+
+                return (
+                  <Tag
+                    size="md"
+                    variant={variant}
+                    className="flex-row flex-nowrap gap-1"
+                  >
+                    <div className="flex max-w-full items-center justify-between gap-0.5">
+                      <Icon className="size-3 shrink-0" />
+                      <div className="min-w-8 text-right">
+                        {formatNumericData(Math.abs(absoluteDiff))}
+                      </div>
+                    </div>
+                  </Tag>
+                );
+              })()}
           </div>
         </div>
       </CardHeader>
