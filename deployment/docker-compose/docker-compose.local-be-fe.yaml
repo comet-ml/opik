@@ -8,5 +8,5 @@ services:
   # This is mostly for consistent operations like docker compose up/down and to avoid hanging containers
   # Demo data creation is triggered from opik.sh and dev-runner.sh
   demo-data-generator:
-    depends_on: !override
+    depends_on:
       [ ]
