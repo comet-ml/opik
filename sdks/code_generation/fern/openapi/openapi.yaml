@@ -2027,6 +2027,41 @@ paths:
       responses:
         "204":
           description: Tag deleted successfully
+  /v1/private/datasets/{id}/versions/restore:
+    post:
+      tags:
+      - Datasets
+      summary: Restore dataset to a previous version
+      description: "Restores the dataset to a previous version state. All draft items\
+        \ are replaced with items from the specified version. If the version is not\
+        \ the latest, a new version snapshot is created. If the version is the latest,\
+        \ only draft items are replaced (revert functionality)."
+      operationId: restoreDatasetVersion
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DatasetVersionRestore_Public"
+      responses:
+        "200":
+          description: Version restored successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DatasetVersion_Public"
+        "404":
+          description: Version not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage_Public"
   /v1/private/experiments:
     get:
       tags:
@@ -8925,6 +8960,8 @@ components:
           type: array
           items:
             type: string
+        hasDraft:
+          type: boolean
     DatasetItem_Compare:
       required:
       - data
@@ -9433,6 +9470,8 @@ components:
           type: array
           items:
             type: string
+        hasDraft:
+          type: boolean
     Column:
       type: object
       properties:
@@ -9643,6 +9682,15 @@ components:
         last_updated_by:
           type: string
           readOnly: true
+    DatasetVersionRestore_Public:
+      required:
+      - version_ref
+      type: object
+      properties:
+        version_ref:
+          minLength: 1
+          type: string
+          description: Version hash or tag to restore from
     Experiment:
       required:
       - dataset_name
@@ -12916,6 +12964,7 @@ components:
       - alertsEnabled
       - csvUploadEnabled
       - dashboardsEnabled
+      - datasetVersioningEnabled
       - exportEnabled
       - guardrailsEnabled
       - opikAIEnabled
@@ -12944,6 +12993,8 @@ components:
         exportEnabled:
           type: boolean
         dashboardsEnabled:
+          type: boolean
+        datasetVersioningEnabled:
           type: boolean
     SpanBatchUpdate:
       required:
