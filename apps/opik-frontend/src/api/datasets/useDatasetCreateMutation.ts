@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { AxiosError } from "axios";
+import { AxiosError, HttpStatusCode } from "axios";
 import get from "lodash/get";
 import api, { DATASETS_REST_ENDPOINT } from "@/api/api";
 import { Dataset } from "@/types/datasets";
@@ -36,13 +36,16 @@ const useDatasetCreateMutation = () => {
       };
     },
     onError: (error: AxiosError) => {
-      // Backend returns {errors: ["error message"]} for 409 conflicts
-      const errors = get(error, ["response", "data", "errors"], []);
-      const message =
-        Array.isArray(errors) && errors.length > 0
-          ? errors.join("; ")
-          : get(error, ["response", "data", "message"], error.message) ||
-            "An unknown error occurred while creating a dataset. Please try again.";
+      const statusCode = get(error, ["response", "status"]);
+      if (statusCode === HttpStatusCode.Conflict) {
+        return;
+      }
+
+      const message = get(
+        error,
+        ["response", "data", "message"],
+        error.message,
+      );
 
       toast({
         title: "Error",

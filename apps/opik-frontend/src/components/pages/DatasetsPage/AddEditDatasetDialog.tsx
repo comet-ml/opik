@@ -1,5 +1,7 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { SquareArrowOutUpRight } from "lucide-react";
+import { AxiosError, HttpStatusCode } from "axios";
+import get from "lodash/get";
 
 import useAppStore from "@/store/AppStore";
 import useDatasetCreateMutation from "@/api/datasets/useDatasetCreateMutation";
@@ -81,6 +83,7 @@ const AddEditDatasetDialog: React.FunctionComponent<
   const [csvError, setCsvError] = useState<string | undefined>(undefined);
 
   const [name, setName] = useState<string>(dataset ? dataset.name : "");
+  const [nameError, setNameError] = useState<string | undefined>(undefined);
   const [description, setDescription] = useState<string>(
     dataset ? dataset.description || "" : "",
   );
@@ -94,6 +97,7 @@ const AddEditDatasetDialog: React.FunctionComponent<
       setCsvError(undefined);
       setCsvData(undefined);
       setConfirmOpen(false);
+      setNameError(undefined);
       if (!dataset) {
         setName("");
         setDescription("");
@@ -102,6 +106,7 @@ const AddEditDatasetDialog: React.FunctionComponent<
       // Reset state when dialog opens (in case of stale state)
       setIsOverlayShown(false);
       setConfirmOpen(false);
+      setNameError(undefined);
       if (dataset) {
         setName(dataset.name);
         setDescription(dataset.description || "");
@@ -125,6 +130,10 @@ const AddEditDatasetDialog: React.FunctionComponent<
 
   const onCreateSuccessHandler = useCallback(
     (newDataset: Dataset) => {
+      if (hasValidCsvFile) {
+        setIsOverlayShown(true);
+      }
+
       if (hasValidCsvFile && newDataset.id) {
         if (isCsvUploadEnabled && csvFile) {
           // CSV mode: Upload CSV file directly to backend
@@ -204,15 +213,45 @@ const AddEditDatasetDialog: React.FunctionComponent<
     ],
   );
 
+  const handleMutationError = useCallback(
+    (error: AxiosError, action: "create" | "update") => {
+      const statusCode = get(error, ["response", "status"]);
+      const errorMessage =
+        get(error, ["response", "data", "message"]) ||
+        get(error, ["response", "data", "errors", 0]) ||
+        get(error, ["message"]);
+
+      if (statusCode === HttpStatusCode.Conflict) {
+        setNameError("This name already exists");
+      } else {
+        toast({
+          title: `Error saving dataset`,
+          description: errorMessage || `Failed to ${action} dataset`,
+          variant: "destructive",
+        });
+        setOpen(false);
+      }
+    },
+    [toast, setOpen],
+  );
+
   const submitHandler = useCallback(() => {
     if (isEdit) {
-      updateMutate({
-        dataset: {
-          id: dataset!.id,
-          name,
-          ...(description && { description }),
+      updateMutate(
+        {
+          dataset: {
+            id: dataset!.id,
+            name,
+            ...(description && { description }),
+          },
         },
-      });
+        {
+          onSuccess: () => {
+            setOpen(false);
+          },
+          onError: (error: AxiosError) => handleMutationError(error, "update"),
+        },
+      );
     } else {
       createMutate(
         {
@@ -223,18 +262,12 @@ const AddEditDatasetDialog: React.FunctionComponent<
         },
         {
           onSuccess: onCreateSuccessHandler,
-          onError: () => setOpen(false),
+          onError: (error: AxiosError) => handleMutationError(error, "create"),
         },
       );
     }
-    if (hasValidCsvFile) {
-      setIsOverlayShown(true);
-    } else {
-      setOpen(false);
-    }
   }, [
     isEdit,
-    hasValidCsvFile,
     updateMutate,
     dataset,
     name,
@@ -242,6 +275,7 @@ const AddEditDatasetDialog: React.FunctionComponent<
     createMutate,
     onCreateSuccessHandler,
     setOpen,
+    handleMutationError,
   ]);
 
   const handleFileSelect = useCallback(
@@ -345,10 +379,29 @@ const AddEditDatasetDialog: React.FunctionComponent<
             <Input
               id="datasetName"
               placeholder="Dataset name"
-              disabled={isEdit}
               value={name}
-              onChange={(event) => setName(event.target.value)}
+              className={
+                nameError &&
+                "!border-destructive focus-visible:!border-destructive"
+              }
+              onChange={(event) => {
+                setName(event.target.value);
+                setNameError(undefined);
+              }}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" && isValid) {
+                  event.preventDefault();
+                  csvError ? setConfirmOpen(true) : submitHandler();
+                }
+              }}
             />
+            <span
+              className={`comet-body-xs min-h-4 ${
+                nameError ? "text-destructive" : "invisible"
+              }`}
+            >
+              {nameError || " "}
+            </span>
           </div>
           <div className="flex flex-col gap-2 pb-4">
             <Label htmlFor="datasetDescription">Description</Label>
