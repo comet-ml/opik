@@ -19,6 +19,7 @@ public class AutomationRuleEvaluatorRowMapper implements RowMapper<AutomationRul
             case TRACE_THREAD_USER_DEFINED_METRIC_PYTHON ->
                 TraceThreadUserDefinedMetricPythonAutomationRuleEvaluatorModel.class;
             case SPAN_LLM_AS_JUDGE -> SpanLlmAsJudgeAutomationRuleEvaluatorModel.class;
+            case SPAN_USER_DEFINED_METRIC_PYTHON -> SpanUserDefinedMetricPythonAutomationRuleEvaluatorModel.class;
         };
         return ctx.findMapperFor(mapperClass)
                 .orElseThrow(() -> new IllegalStateException(

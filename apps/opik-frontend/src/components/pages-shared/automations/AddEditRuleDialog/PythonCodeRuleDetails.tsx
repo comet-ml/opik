@@ -33,7 +33,8 @@ const PythonCodeRuleDetails: React.FC<PythonCodeRuleDetailsProps> = ({
     editable: true,
   });
 
-  const isThreadScope = form.watch("scope") === EVALUATORS_RULE_SCOPE.thread;
+  const scope = form.watch("scope");
+  const isThreadScope = scope === EVALUATORS_RULE_SCOPE.thread;
 
   return (
     <>
@@ -52,31 +53,33 @@ const PythonCodeRuleDetails: React.FC<PythonCodeRuleDetailsProps> = ({
                     onChange={(value) => {
                       field.onChange(value);
 
-                      // recalculate arguments
-                      const currentArguments = form.getValues(
-                        "pythonCodeDetails.arguments",
-                      );
-                      const localArguments: Record<string, string> = {};
-                      let parsingArgumentsError: boolean = false;
-                      try {
-                        parsePythonMethodParameters(value, "score")
-                          .map((v) => v.name)
-                          .forEach(
-                            (v: string) =>
-                              (localArguments[v] = currentArguments[v] ?? ""),
-                          );
-                      } catch (e) {
-                        parsingArgumentsError = true;
-                      }
+                      // recalculate arguments (only for trace and span scope, not thread)
+                      if (!isThreadScope) {
+                        const currentArguments = form.getValues(
+                          "pythonCodeDetails.arguments",
+                        );
+                        const localArguments: Record<string, string> = {};
+                        let parsingArgumentsError: boolean = false;
+                        try {
+                          parsePythonMethodParameters(value, "score")
+                            .map((v) => v.name)
+                            .forEach(
+                              (v: string) =>
+                                (localArguments[v] = currentArguments[v] ?? ""),
+                            );
+                        } catch (e) {
+                          parsingArgumentsError = true;
+                        }
 
-                      form.setValue(
-                        "pythonCodeDetails.arguments",
-                        localArguments,
-                      );
-                      form.setValue(
-                        "pythonCodeDetails.parsingArgumentsError",
-                        parsingArgumentsError,
-                      );
+                        form.setValue(
+                          "pythonCodeDetails.arguments",
+                          localArguments,
+                        );
+                        form.setValue(
+                          "pythonCodeDetails.parsingArgumentsError",
+                          parsingArgumentsError,
+                        );
+                      }
                     }}
                     extensions={[pythonLanguage, EditorView.lineWrapping]}
                   />

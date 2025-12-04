@@ -14,6 +14,8 @@ public class ServiceTogglesConfig {
     @JsonProperty
     @NotNull boolean spanLlmAsJudgeEnabled;
     @JsonProperty
+    @NotNull boolean spanUserDefinedMetricPythonEnabled;
+    @JsonProperty
     @NotNull boolean guardrailsEnabled;
     @JsonProperty
     @NotNull boolean opikAIEnabled;

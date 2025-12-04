@@ -15,7 +15,8 @@ import java.util.Arrays;
 @RequiredArgsConstructor
 public enum ManualEvaluationEntityType {
     TRACE("trace"),
-    THREAD("thread");
+    THREAD("thread"),
+    SPAN("span");
 
     @JsonValue
     private final String value;
@@ -26,6 +27,6 @@ public enum ManualEvaluationEntityType {
                 .filter(type -> type.value.equalsIgnoreCase(value))
                 .findFirst()
                 .orElseThrow(() -> new IllegalArgumentException(
-                        "Unknown entity type '%s'. Valid values are: trace, thread".formatted(value)));
+                        "Unknown entity type '%s'. Valid values are: trace, thread, span".formatted(value)));
     }
 }
