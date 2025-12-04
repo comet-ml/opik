@@ -44,6 +44,7 @@ public class OpenTelemetryMappingRule {
         MODEL, // Attribute sets the model field
         PROVIDER, // Attribute sets the provider field
         USAGE, // Attribute contributes to usage map
+        TAGS, // Attribute contributes to tag set
         DROP // Attribute should be ignored
     }
 }
