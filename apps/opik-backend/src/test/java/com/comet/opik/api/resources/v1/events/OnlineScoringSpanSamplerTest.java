@@ -496,8 +496,7 @@ class OnlineScoringSpanSamplerTest {
 
         return AutomationRuleEvaluatorSpanLlmAsJudge.builder()
                 .id(UUID.randomUUID())
-                .projectId(projectId)
-                .projectName("test-project")
+                .projectIds(Set.of(projectId))
                 .name("test-evaluator")
                 .samplingRate(samplingRate)
                 .enabled(enabled)

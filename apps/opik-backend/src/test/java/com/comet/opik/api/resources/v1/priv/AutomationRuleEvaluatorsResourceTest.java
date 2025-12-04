@@ -483,8 +483,8 @@ class AutomationRuleEvaluatorsResourceTest {
             var evaluator = factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class);
             var id = evaluatorsResourceClient.createEvaluator(evaluator, WORKSPACE_NAME, API_KEY);
 
-            try (var actualResponse = evaluatorsResourceClient.getEvaluatorWithSessionToken(
-                    id, evaluator.getProjectIds(), sessionToken, workspaceName)) {
+            try (var actualResponse = evaluatorsResourceClient.getEvaluatorWithSessionToken(id, null, sessionToken,
+                    workspaceName)) {
                 if (isAuthorized) {
                     assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
                     assertThat(actualResponse.hasEntity()).isTrue();
@@ -530,8 +530,8 @@ class AutomationRuleEvaluatorsResourceTest {
             var id = evaluatorsResourceClient.createEvaluator(evaluator, WORKSPACE_NAME, API_KEY);
 
             var deleteMethod = BatchDelete.builder().ids(Collections.singleton(id)).build();
-            try (var actualResponse = evaluatorsResourceClient.deleteWithSessionToken(
-                    evaluator.getProjectIds(), deleteMethod, sessionToken, workspaceName)) {
+            try (var actualResponse = evaluatorsResourceClient.deleteWithSessionToken(null, deleteMethod, sessionToken,
+                    workspaceName)) {
 
                 if (isAuthorized) {
                     assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_NO_CONTENT);
@@ -665,7 +665,9 @@ class AutomationRuleEvaluatorsResourceTest {
 
             try (var actualResponse = evaluatorsResourceClient.getEvaluator(
                     id,
-                    withProjectId ? expectedAutomationRuleEvaluator.getProjectIds() : null,
+                    withProjectId
+                            ? expectedAutomationRuleEvaluator.getProjectIds().stream().findFirst().orElse(null)
+                            : null,
                     WORKSPACE_NAME,
                     API_KEY,
                     HttpStatus.SC_OK)) {
@@ -2420,9 +2422,9 @@ class AutomationRuleEvaluatorsResourceTest {
         @BeforeAll
         void setUp() {
             // Create test projects
-            projectsResourceClient.createProject(projectId1, WORKSPACE_NAME, API_KEY);
-            projectsResourceClient.createProject(projectId2, WORKSPACE_NAME, API_KEY);
-            projectsResourceClient.createProject(projectId3, WORKSPACE_NAME, API_KEY);
+            projectResourceClient.createProject(projectId1, WORKSPACE_NAME, API_KEY);
+            projectResourceClient.createProject(projectId2, WORKSPACE_NAME, API_KEY);
+            projectResourceClient.createProject(projectId3, WORKSPACE_NAME, API_KEY);
         }
 
         @Test
@@ -2456,9 +2458,12 @@ class AutomationRuleEvaluatorsResourceTest {
 
         @Test
         @DisplayName("should update automation rule to different set of projects")
-        void shouldUpdateAutomationRuleToDifferentSetOfProjects() {
+        void shouldUpdateAutomationRuleToDifferentSetOfProjects(LlmProviderFactory llmProviderFactory) {
             // Given - Create rule with 2 projects
-            mockLlmProvider();
+            var chatResponse = ChatResponse.builder().aiMessage(AiMessage.from(VALID_AI_MSG_TXT)).build();
+            when(llmProviderFactory.getLanguageModel(anyString(), any())
+                    .chat(any(ChatRequest.class)))
+                    .thenAnswer(invocationOnMock -> chatResponse);
 
             AutomationRuleEvaluatorLlmAsJudge evaluator = factory
                     .manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class)
@@ -2478,7 +2483,7 @@ class AutomationRuleEvaluatorsResourceTest {
                     .code(evaluator.getCode())
                     .build();
 
-            evaluatorsResourceClient.updateEvaluator(ruleId, update, WORKSPACE_NAME, API_KEY);
+            evaluatorsResourceClient.updateEvaluator(ruleId, WORKSPACE_NAME, update, API_KEY, HttpStatus.SC_NO_CONTENT);
 
             // Then
             try (var actualResponse = evaluatorsResourceClient.getEvaluator(
@@ -2539,9 +2544,12 @@ class AutomationRuleEvaluatorsResourceTest {
 
         @Test
         @DisplayName("should delete rule and remove all project associations")
-        void shouldDeleteRuleAndRemoveAllProjectAssociations() {
+        void shouldDeleteRuleAndRemoveAllProjectAssociations(LlmProviderFactory llmProviderFactory) {
             // Given - Create rule with multiple projects
-            mockLlmProvider();
+            var chatResponse = ChatResponse.builder().aiMessage(AiMessage.from(VALID_AI_MSG_TXT)).build();
+            when(llmProviderFactory.getLanguageModel(anyString(), any())
+                    .chat(any(ChatRequest.class)))
+                    .thenAnswer(invocationOnMock -> chatResponse);
 
             AutomationRuleEvaluatorLlmAsJudge evaluator = factory
                     .manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class)
@@ -2555,7 +2563,8 @@ class AutomationRuleEvaluatorsResourceTest {
             UUID ruleId = evaluatorsResourceClient.createEvaluator(evaluator, WORKSPACE_NAME, API_KEY);
 
             // When - Delete the rule
-            evaluatorsResourceClient.deleteEvaluators(Set.of(ruleId), null, WORKSPACE_NAME, API_KEY);
+            evaluatorsResourceClient.delete(null, WORKSPACE_NAME, API_KEY,
+                    BatchDelete.builder().ids(Set.of(ruleId)).build(), HttpStatus.SC_NO_CONTENT);
 
             // Then - Rule should be deleted
             evaluatorsResourceClient.getEvaluator(ruleId, null, WORKSPACE_NAME, API_KEY, HttpStatus.SC_NOT_FOUND);
