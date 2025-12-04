@@ -5,16 +5,19 @@ echo "🚀 Starting Opik Frontend..."
 
 # Set default values for environment variables
 export NGINX_PID="${NGINX_PID:-/run/nginx.pid}"
-export OTEL_COLLECTOR_HOST="${OTEL_COLLECTOR_HOST:-jaeger}"
-# Nginx OpenTelemetry module uses gRPC (HTTP/2), so use port 4317, not 4318 (HTTP)
+export OTEL_COLLECTOR_HOST="${OTEL_COLLECTOR_HOST:-otel-collector}"
 export OTEL_COLLECTOR_PORT="${OTEL_COLLECTOR_PORT:-4317}"
+export OTEL_TRACES_EXPORTER="${OTEL_TRACES_EXPORTER:-otlp}"
+export OTEL_EXPORTER_OTLP_TRACES_ENDPOINT="${OTEL_EXPORTER_OTLP_TRACES_ENDPOINT:-http://${OTEL_COLLECTOR_HOST}:${OTEL_COLLECTOR_PORT}}"
 export NGINX_PORT="${NGINX_PORT:-8080}"
 export OTEL_TRACE="${OTEL_TRACE:-off}"
+export NGINX_EXTRA_ACCESS_LOG="${NGINX_EXTRA_ACCESS_LOG:-}"
+export NGINX_EXTRA_ERROR_LOG="${NGINX_EXTRA_ERROR_LOG:-}"
 
-
-VARS='$NGINX_PID $NGINX_PORT $OTEL_TRACE $OTEL_COLLECTOR_HOST $OTEL_COLLECTOR_PORT'
+VARS='$NGINX_PID $NGINX_PORT $OTEL_TRACE $OTEL_COLLECTOR_HOST $OTEL_COLLECTOR_PORT $OTEL_TRACES_EXPORTER $OTEL_EXPORTER_OTLP_TRACES_ENDPOINT $NGINX_EXTRA_ACCESS_LOG $NGINX_EXTRA_ERROR_LOG'
     
 echo "patch configs already updated on 20-envsubst-on-templates.sh..."
+# Note: .template files in conf.d/ are handled by /docker-entrypoint.d/20-envsubst-on-templates.sh
 for template in /etc/nginx/conf.d/*.conf; do
     [ -f "$template" ] || continue
     
@@ -33,12 +36,9 @@ done
 
 
 # Process nginx.conf (not a template, so needs manual processing)
-# Note: .template files in conf.d/ are handled by /docker-entrypoint.d/20-envsubst-on-templates.sh
 echo "Processing nginx.conf..."
 if [ -f /etc/nginx/nginx.conf ]; then
     TMP_FILE=$(mktemp)
     envsubst "$VARS" < /etc/nginx/nginx.conf > "$TMP_FILE" && cat "$TMP_FILE" > /etc/nginx/nginx.conf
     rm "$TMP_FILE"
 fi
-
-# Start nginx
