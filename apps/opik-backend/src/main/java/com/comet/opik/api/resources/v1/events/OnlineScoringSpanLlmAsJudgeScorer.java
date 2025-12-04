@@ -8,6 +8,7 @@ import com.comet.opik.domain.llm.ChatCompletionService;
 import com.comet.opik.domain.llm.LlmProviderFactory;
 import com.comet.opik.domain.llm.structuredoutput.StructuredOutputStrategy;
 import com.comet.opik.infrastructure.OnlineScoringConfig;
+import com.comet.opik.infrastructure.ServiceTogglesConfig;
 import com.comet.opik.infrastructure.log.UserFacingLoggingFactory;
 import dev.langchain4j.model.chat.request.ChatRequest;
 import dev.langchain4j.model.chat.response.ChatResponse;
@@ -36,21 +37,33 @@ import static com.comet.opik.infrastructure.log.LogContextAware.wrapWithMdc;
 @Slf4j
 public class OnlineScoringSpanLlmAsJudgeScorer extends OnlineScoringBaseScorer<SpanToScoreLlmAsJudge> {
 
+    private final ServiceTogglesConfig serviceTogglesConfig;
     private final ChatCompletionService aiProxyService;
     private final Logger userFacingLogger;
     private final LlmProviderFactory llmProviderFactory;
 
     @Inject
     public OnlineScoringSpanLlmAsJudgeScorer(@NonNull @Config("onlineScoring") OnlineScoringConfig config,
+            @NonNull @Config("serviceToggles") ServiceTogglesConfig serviceTogglesConfig,
             @NonNull RedissonReactiveClient redisson,
             @NonNull FeedbackScoreService feedbackScoreService,
             @NonNull ChatCompletionService aiProxyService,
             @NonNull TraceService traceService,
             @NonNull LlmProviderFactory llmProviderFactory) {
         super(config, redisson, feedbackScoreService, traceService, SPAN_LLM_AS_JUDGE, Constants.SPAN_LLM_AS_JUDGE);
+        this.serviceTogglesConfig = serviceTogglesConfig;
         this.aiProxyService = aiProxyService;
         this.userFacingLogger = UserFacingLoggingFactory.getLogger(OnlineScoringSpanLlmAsJudgeScorer.class);
         this.llmProviderFactory = llmProviderFactory;
+    }
+
+    @Override
+    public void start() {
+        if (serviceTogglesConfig.isSpanLlmAsJudgeEnabled()) {
+            super.start();
+        } else {
+            log.info("Online Scoring Span LLM as Judge consumer won't start as it is disabled");
+        }
     }
 
     /**
