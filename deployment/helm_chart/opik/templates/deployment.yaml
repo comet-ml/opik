@@ -249,6 +249,13 @@ spec:
       - name: {{ include "opik.name" $ }}-frontend-nginx
         configMap:
           name: {{ include "opik.name" $ }}-frontend-nginx
+          items:
+          - key: default.conf.template
+            path: default.conf.template
+          {{- if $.Values.component.frontend.logFormats }}
+          - key: log-formats.conf.template
+            path: log-formats.conf.template
+          {{- end }}
       {{- end }}
       {{- with $value.volumes }}
         {{- toYaml . | nindent 8 }}
