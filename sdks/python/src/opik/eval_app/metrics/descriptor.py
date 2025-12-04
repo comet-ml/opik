@@ -2,7 +2,6 @@
 
 import dataclasses
 import logging
-import re
 from typing import Any, Dict, List, Optional, Type
 
 from opik.evaluation.metrics import base_metric
@@ -52,44 +51,11 @@ class MetricDescriptor:
         return self._metric_class
 
     def _extract_full_docstring(self) -> str:
-        """Extract the full docstring description (before Args/Returns sections)."""
+        """Extract the full docstring."""
         doc = self._raw_docstring
         if not doc:
             return ""
-
-        # Remove leading/trailing whitespace
-        doc = doc.strip()
-
-        # Find the first section marker (Args:, Returns:, Raises:, Examples:, etc.)
-        section_match = re.search(
-            r"^\s*(Args|Returns|Raises|Examples|Attributes|Note|See Also|Yields|Warning):",
-            doc,
-            re.MULTILINE,
-        )
-
-        if section_match:
-            # Return everything before the first section
-            description = doc[: section_match.start()].strip()
-        else:
-            description = doc
-
-        # Normalize whitespace - join lines into paragraphs
-        lines = description.split("\n")
-        paragraphs = []
-        current_para: List[str] = []
-
-        for line in lines:
-            stripped = line.strip()
-            if stripped:
-                current_para.append(stripped)
-            elif current_para:
-                paragraphs.append(" ".join(current_para))
-                current_para = []
-
-        if current_para:
-            paragraphs.append(" ".join(current_para))
-
-        return "\n\n".join(paragraphs)
+        return doc.strip()
 
     def _get_init_params(self) -> List[param_extractor.ParamInfo]:
         """Get parameters from __init__ method with custom defaults applied."""
