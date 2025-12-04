@@ -2,8 +2,11 @@ import logging
 import opik.jsonable_encoder as jsonable_encoder
 from typing import Any, Dict, List, Mapping, Optional, Tuple
 import copy
+
 from .. import prompt
 from ... import id_helpers
+from ..prompt import base_prompt
+
 
 LOGGER = logging.getLogger(__name__)
 
@@ -12,7 +15,7 @@ PromptVersion = Dict[str, str]
 
 def build_metadata_and_prompt_versions(
     experiment_config: Optional[Dict[str, Any]],
-    prompts: Optional[List[prompt.Prompt]],
+    prompts: Optional[List[base_prompt.BasePrompt]],
 ) -> Tuple[Optional[Dict[str, Any]], Optional[List[PromptVersion]]]:
     prompt_versions: Optional[List[PromptVersion]] = None
 
@@ -38,9 +41,20 @@ def build_metadata_and_prompt_versions(
         prompt_versions = []
         experiment_config["prompts"] = {}
 
-        for prompt in prompts:
-            prompt_versions.append({"id": prompt.__internal_api__version_id__})
-            experiment_config["prompts"][prompt.name] = prompt.prompt
+        for prompt_obj in prompts:
+            prompt_versions.append({"id": prompt_obj.__internal_api__version_id__})
+            # Use __internal_api__to_info_dict__() to get the prompt content in a consistent way
+            prompt_info = prompt_obj.__internal_api__to_info_dict__()
+            # Extract the template/messages from the version dict
+            if "version" in prompt_info:
+                if "template" in prompt_info["version"]:
+                    experiment_config["prompts"][prompt_obj.name] = prompt_info[
+                        "version"
+                    ]["template"]
+                elif "messages" in prompt_info["version"]:
+                    experiment_config["prompts"][prompt_obj.name] = prompt_info[
+                        "version"
+                    ]["messages"]
 
     if experiment_config == {}:
         return None, None
@@ -51,9 +65,9 @@ def build_metadata_and_prompt_versions(
 
 
 def handle_prompt_args(
-    prompt: Optional[prompt.Prompt] = None,
-    prompts: Optional[List[prompt.Prompt]] = None,
-) -> Optional[List[prompt.Prompt]]:
+    prompt: Optional[base_prompt.BasePrompt] = None,
+    prompts: Optional[List[base_prompt.BasePrompt]] = None,
+) -> Optional[List[base_prompt.BasePrompt]]:
     if prompts is not None and len(prompts) > 0 and prompt is not None:
         LOGGER.warning(
             "Arguments `prompt` and `prompts` are mutually exclusive, `prompts` will be used`."

@@ -64,8 +64,15 @@ interface LLMPromptMessageProps {
   errorText?: string;
   possibleTypes?: DropdownOption<LLM_MESSAGE_ROLE>[];
   onChangeMessage: (changes: Partial<LLMMessage>) => void;
+  onReplaceWithChatPrompt?: (
+    messages: LLMMessage[],
+    promptId: string,
+    promptVersionId: string,
+  ) => void;
+  onClearOtherPromptLinks?: () => void;
   disableMedia?: boolean;
   improvePromptConfig?: ImprovePromptConfig;
+  disabled?: boolean;
 }
 
 const LLMPromptMessage = ({
@@ -77,10 +84,13 @@ const LLMPromptMessage = ({
   errorText,
   possibleTypes = MESSAGE_TYPE_OPTIONS,
   onChangeMessage,
+  onReplaceWithChatPrompt,
+  onClearOtherPromptLinks,
   onDuplicateMessage,
   onRemoveMessage,
   disableMedia = true,
   improvePromptConfig,
+  disabled = false,
 }: LLMPromptMessageProps) => {
   const [isHoldActionsVisible, setIsHoldActionsVisible] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -138,7 +148,12 @@ const LLMPromptMessage = ({
           <div className="sticky top-0 z-10 flex items-center justify-between gap-2 bg-background shadow-[0_6px_6px_-1px_hsl(var(--background))] dark:bg-accent-background dark:shadow-none">
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="minimal" size="sm" className="min-w-4 p-0">
+                <Button
+                  variant="minimal"
+                  size="sm"
+                  className="min-w-4 p-0"
+                  disabled={disabled}
+                >
                   {LLM_MESSAGE_ROLE_NAME_MAP[role] || role}
                   <ChevronDown className="ml-1 w-4" />
                 </Button>
@@ -169,9 +184,12 @@ const LLMPromptMessage = ({
                 <LLMPromptMessageActions
                   message={message}
                   onChangeMessage={onChangeMessage}
+                  onReplaceWithChatPrompt={onReplaceWithChatPrompt}
+                  onClearOtherPromptLinks={onClearOtherPromptLinks}
                   setIsLoading={setIsLoading}
                   setIsHoldActionsVisible={setIsHoldActionsVisible}
                   improvePromptConfig={improvePromptConfig}
+                  disabled={disabled}
                 />
               )}
               {!hideRemoveButton && (
@@ -181,6 +199,7 @@ const LLMPromptMessage = ({
                     size="icon-sm"
                     onClick={onRemoveMessage}
                     type="button"
+                    disabled={disabled}
                   >
                     <Trash />
                   </Button>
@@ -192,6 +211,7 @@ const LLMPromptMessage = ({
                   size="icon-sm"
                   onClick={onDuplicateMessage}
                   type="button"
+                  disabled={disabled}
                 >
                   <CopyPlus />
                 </Button>
@@ -202,6 +222,7 @@ const LLMPromptMessage = ({
                   className="cursor-move"
                   size="icon-sm"
                   type="button"
+                  disabled={disabled}
                   {...listeners}
                 >
                   <GripHorizontal />
@@ -222,6 +243,7 @@ const LLMPromptMessage = ({
                 value={localText}
                 onChange={handleContentChange}
                 placeholder="Type your message"
+                editable={!disabled}
                 basicSetup={{
                   foldGutter: false,
                   allowMultipleSelections: false,
