@@ -1,11 +1,7 @@
 import uniqid from "uniqid";
 import flatten from "lodash/flatten";
 import { Filter } from "@/types/filters";
-import {
-  COLUMN_DATA_ID,
-  COLUMN_TYPE,
-  DYNAMIC_COLUMN_TYPE,
-} from "@/types/shared";
+import { COLUMN_TYPE, DYNAMIC_COLUMN_TYPE } from "@/types/shared";
 import { TRACE_VISIBILITY_MODE } from "@/types/traces";
 import {
   makeEndOfMinute,
@@ -183,28 +179,15 @@ export const processFilters = (
   }
 
   if (processedFilters.length > 0) {
-    // Only send fields that the backend expects: field, type, operator, value, and key (for dictionary types)
-    const dataFieldPrefix = `${COLUMN_DATA_ID}.`;
-
+    // Only send fields that the backend expects: field, type, operator, value, and key (when present)
     const backendFilters = processedFilters.map(
       ({ field, operator, value, key, type }) => {
-        // Handle data column filters: "data.columnName" -> field="data", key="columnName"
-        if (field.startsWith(dataFieldPrefix)) {
-          const columnKey = field.slice(dataFieldPrefix.length);
-          return {
-            field: COLUMN_DATA_ID,
-            type,
-            operator,
-            value,
-            key: columnKey,
-          };
-        }
-
-        // Include key only for dictionary types
+        // Include key for dictionary types or when explicitly set (e.g., for MAP field filtering)
         const isDictionary =
           type === COLUMN_TYPE.dictionary ||
           type === COLUMN_TYPE.numberDictionary;
-        return isDictionary
+        const hasKey = key !== undefined && key !== "";
+        return isDictionary || hasKey
           ? { field, type, operator, value, key }
           : { field, type, operator, value };
       },
