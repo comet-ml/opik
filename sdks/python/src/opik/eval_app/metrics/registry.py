@@ -64,13 +64,14 @@ def create_default_registry() -> MetricsRegistry:
     registry.register(metrics.IsJson)
     registry.register(metrics.LevenshteinRatio)
 
-    # LLM Judge metrics
-    registry.register(metrics.AnswerRelevance)
-    registry.register(metrics.ContextPrecision)
-    registry.register(metrics.ContextRecall)
-    registry.register(metrics.Hallucination)
-    registry.register(metrics.Moderation)
-    registry.register(metrics.GEval)
+    # LLM Judge metrics (default to gpt-4o-mini)
+    llm_defaults = {"model": "gpt-4o-mini"}
+    registry.register(metrics.AnswerRelevance, init_defaults=llm_defaults)
+    registry.register(metrics.ContextPrecision, init_defaults=llm_defaults)
+    registry.register(metrics.ContextRecall, init_defaults=llm_defaults)
+    registry.register(metrics.Hallucination, init_defaults=llm_defaults)
+    registry.register(metrics.Moderation, init_defaults=llm_defaults)
+    registry.register(metrics.GEval, init_defaults=llm_defaults)
 
     return registry
 
