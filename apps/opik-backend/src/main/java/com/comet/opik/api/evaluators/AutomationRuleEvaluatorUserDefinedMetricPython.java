@@ -28,7 +28,7 @@ import static com.comet.opik.api.evaluators.AutomationRuleEvaluatorUserDefinedMe
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
 public final class AutomationRuleEvaluatorUserDefinedMetricPython
         extends
-            AutomationRuleEvaluator<UserDefinedMetricPythonCode> {
+            AutomationRuleEvaluator<UserDefinedMetricPythonCode, TraceFilter> {
 
     @Builder(toBuilder = true)
     @JsonIgnoreProperties(ignoreUnknown = true)
@@ -49,8 +49,18 @@ public final class AutomationRuleEvaluatorUserDefinedMetricPython
             Instant createdAt,
             String createdBy, Instant lastUpdatedAt, String lastUpdatedBy) {
         super(id, projectId, projectName, name, samplingRate, enabled, filters, code, createdAt, createdBy,
-                lastUpdatedAt,
-                lastUpdatedBy);
+                lastUpdatedAt, lastUpdatedBy);
+    }
+
+    /**
+     * Two purposes:
+     * - Makes the polymorphic T code available for serialization.
+     * - Provides the specific type T for Open API and Fern.
+     */
+    @JsonView({View.Public.class, View.Write.class})
+    @Override
+    public List<TraceFilter> getFilters() {
+        return super.getFilters();
     }
 
     /**

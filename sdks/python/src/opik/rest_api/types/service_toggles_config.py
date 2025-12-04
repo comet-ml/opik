@@ -13,11 +13,14 @@ class ServiceTogglesConfig(UniversalBaseModel):
     trace_thread_python_evaluator_enabled: typing_extensions.Annotated[
         bool, FieldMetadata(alias="traceThreadPythonEvaluatorEnabled")
     ]
+    span_llm_as_judge_enabled: typing_extensions.Annotated[bool, FieldMetadata(alias="spanLlmAsJudgeEnabled")]
     guardrails_enabled: typing_extensions.Annotated[bool, FieldMetadata(alias="guardrailsEnabled")]
     opik_ai_enabled: typing_extensions.Annotated[bool, FieldMetadata(alias="opikAIEnabled")]
     alerts_enabled: typing_extensions.Annotated[bool, FieldMetadata(alias="alertsEnabled")]
     welcome_wizard_enabled: typing_extensions.Annotated[bool, FieldMetadata(alias="welcomeWizardEnabled")]
     csv_upload_enabled: typing_extensions.Annotated[bool, FieldMetadata(alias="csvUploadEnabled")]
+    export_enabled: typing_extensions.Annotated[bool, FieldMetadata(alias="exportEnabled")]
+    dashboards_enabled: typing_extensions.Annotated[bool, FieldMetadata(alias="dashboardsEnabled")]
 
     if IS_PYDANTIC_V2:
         model_config: typing.ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(extra="allow", frozen=True)  # type: ignore # Pydantic v2

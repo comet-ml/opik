@@ -22,6 +22,7 @@ import {
   INTERVAL_DESCRIPTIONS,
   renderDurationTooltipValue,
   durationYTickFormatter,
+  tokenYTickFormatter,
 } from "./utils";
 
 const THREAD_FILTER_COLUMNS: ColumnData<Thread>[] = [
@@ -69,6 +70,7 @@ const THREAD_FILTER_COLUMNS: ColumnData<Thread>[] = [
     id: "tags",
     label: "Tags",
     type: COLUMN_TYPE.list,
+    iconType: "tags",
   },
   {
     id: "start_time",
@@ -183,6 +185,7 @@ const ThreadMetricsSection: React.FC<ThreadMetricsSectionProps> = ({
             intervalStart={intervalStart}
             intervalEnd={intervalEnd}
             projectId={projectId}
+            customYTickFormatter={tokenYTickFormatter}
             chartType="line"
             threadFilters={threadFilters}
           />

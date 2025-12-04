@@ -10,6 +10,7 @@ PUPA_SPEC = DatasetSpec(
     hf_path="Columbia-NLP/PUPA",
     hf_name="pupa_new",
     default_source_split="train",
+    prefer_presets=True,
     presets={
         "train": DatasetSplitPreset(
             source_split="train",

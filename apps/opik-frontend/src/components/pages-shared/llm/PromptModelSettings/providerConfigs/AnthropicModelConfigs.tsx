@@ -23,6 +23,7 @@ const AnthropicModelConfigs = ({
 }: AnthropicModelConfigsProps) => {
   const isExclusiveParamModel = useMemo(() => {
     return (
+      model === PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_5 ||
       model === PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_1 ||
       model === PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4_5 ||
       model === PROVIDER_MODEL_TYPE.CLAUDE_HAIKU_4_5
@@ -197,6 +198,37 @@ const AnthropicModelConfigs = ({
           </div>
         )}
       </div>
+
+      <SliderInputControl
+        value={configs.throttling ?? DEFAULT_ANTHROPIC_CONFIGS.THROTTLING}
+        onChange={(v) => onChange({ throttling: v })}
+        id="throttling"
+        min={0}
+        max={10}
+        step={0.1}
+        defaultValue={DEFAULT_ANTHROPIC_CONFIGS.THROTTLING}
+        label="Throttling (seconds)"
+        tooltip={
+          <PromptModelConfigsTooltipContent text="Minimum time in seconds between consecutive requests to avoid rate limiting" />
+        }
+      />
+
+      <SliderInputControl
+        value={
+          configs.maxConcurrentRequests ??
+          DEFAULT_ANTHROPIC_CONFIGS.MAX_CONCURRENT_REQUESTS
+        }
+        onChange={(v) => onChange({ maxConcurrentRequests: v })}
+        id="maxConcurrentRequests"
+        min={1}
+        max={20}
+        step={1}
+        defaultValue={DEFAULT_ANTHROPIC_CONFIGS.MAX_CONCURRENT_REQUESTS}
+        label="Max concurrent requests"
+        tooltip={
+          <PromptModelConfigsTooltipContent text="Maximum number of requests that can run simultaneously. Set to 1 for sequential execution, higher values for parallel processing" />
+        }
+      />
     </div>
   );
 };

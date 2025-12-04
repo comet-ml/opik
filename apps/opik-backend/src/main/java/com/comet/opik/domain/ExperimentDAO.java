@@ -3,9 +3,12 @@ package com.comet.opik.domain;
 import com.comet.opik.api.BiInformationResponse;
 import com.comet.opik.api.DatasetLastExperimentCreated;
 import com.comet.opik.api.Experiment;
+import com.comet.opik.api.Experiment.ExperimentPage;
+import com.comet.opik.api.Experiment.PromptVersionLink;
 import com.comet.opik.api.ExperimentGroupAggregationItem;
 import com.comet.opik.api.ExperimentGroupCriteria;
 import com.comet.opik.api.ExperimentGroupItem;
+import com.comet.opik.api.ExperimentScore;
 import com.comet.opik.api.ExperimentSearchCriteria;
 import com.comet.opik.api.ExperimentStatus;
 import com.comet.opik.api.ExperimentStreamRequest;
@@ -17,6 +20,7 @@ import com.comet.opik.api.sorting.ExperimentSortingFactory;
 import com.comet.opik.domain.filter.FilterQueryBuilder;
 import com.comet.opik.domain.filter.FilterStrategy;
 import com.comet.opik.domain.sorting.SortingQueryBuilder;
+import com.comet.opik.utils.JsonUtils;
 import com.comet.opik.utils.template.TemplateUtils;
 import com.google.common.base.Function;
 import com.google.common.base.Preconditions;
@@ -52,8 +56,6 @@ import java.util.UUID;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
-import static com.comet.opik.api.Experiment.ExperimentPage;
-import static com.comet.opik.api.Experiment.PromptVersionLink;
 import static com.comet.opik.domain.AsyncContextUtils.bindUserNameAndWorkspaceContextToStream;
 import static com.comet.opik.domain.AsyncContextUtils.bindWorkspaceIdToFlux;
 import static com.comet.opik.domain.CommentResultMapper.getComments;
@@ -88,7 +90,8 @@ class ExperimentDAO {
                 prompt_versions,
                 type,
                 optimization_id,
-                status
+                status,
+                experiment_scores
             )
             SELECT
                 if(
@@ -107,7 +110,8 @@ class ExperimentDAO {
                 new.prompt_versions,
                 new.type,
                 new.optimization_id,
-                new.status
+                new.status,
+                new.experiment_scores
             FROM (
                 SELECT
                 :id AS id,
@@ -122,7 +126,8 @@ class ExperimentDAO {
                 mapFromArrays(:prompt_ids, :prompt_version_ids) AS prompt_versions,
                 :type AS type,
                 :optimization_id AS optimization_id,
-                :status AS status
+                :status AS status,
+                :experiment_scores AS experiment_scores
             ) AS new
             LEFT JOIN (
                 SELECT
@@ -313,6 +318,25 @@ class ExperimentDAO {
                 ) as fs_avg
                 GROUP BY experiment_id
             ),
+            experiment_scores_agg AS (
+                SELECT
+                    experiment_id,
+                    mapFromArrays(
+                        groupArray(name),
+                        groupArray(value)
+                    ) AS experiment_scores
+                FROM (
+                    SELECT
+                        e.id AS experiment_id,
+                        JSON_VALUE(score, '$.name') AS name,
+                        CAST(JSON_VALUE(score, '$.value') AS Float64) AS value
+                    FROM experiments_final AS e
+                    ARRAY JOIN JSONExtractArrayRaw(e.experiment_scores) AS score
+                    WHERE length(e.experiment_scores) > 2
+                      AND length(JSON_VALUE(score, '$.name')) > 0
+                ) AS es
+                GROUP BY experiment_id
+            ),
             comments_agg AS (
                 SELECT
                     ei.experiment_id,
@@ -358,7 +382,9 @@ class ExperimentDAO {
                 e.optimization_id as optimization_id,
                 e.type as type,
                 e.status as status,
+                e.experiment_scores as experiment_scores,
                 fs.feedback_scores as feedback_scores,
+                es.experiment_scores as experiment_scores_agg,
                 ed.trace_count as trace_count,
                 ed.duration_values AS duration,
                 ed.usage as usage,
@@ -368,6 +394,7 @@ class ExperimentDAO {
             FROM experiments_final AS e
             LEFT JOIN experiment_durations AS ed ON e.id = ed.experiment_id
             LEFT JOIN feedback_scores_agg AS fs ON e.id = fs.experiment_id
+            LEFT JOIN experiment_scores_agg AS es ON e.id = es.experiment_id
             LEFT JOIN comments_agg AS ca ON e.id = ca.experiment_id
             ORDER BY <if(sort_fields)><sort_fields>,<endif> e.id DESC
             <if(limit)> LIMIT :limit <endif> <if(offset)> OFFSET :offset <endif>
@@ -565,12 +592,32 @@ class ExperimentDAO {
                 ) as fs_avg
                 GROUP BY experiment_id
             ),
+            experiment_scores_agg AS (
+                SELECT
+                    experiment_id,
+                    mapFromArrays(
+                        groupArray(name),
+                        groupArray(value)
+                    ) AS experiment_scores
+                FROM (
+                    SELECT
+                        e.id AS experiment_id,
+                        JSON_VALUE(score, '$.name') AS name,
+                        CAST(JSON_VALUE(score, '$.value') AS Float64) AS value
+                    FROM experiments_final AS e
+                    ARRAY JOIN JSONExtractArrayRaw(e.experiment_scores) AS score
+                    WHERE length(e.experiment_scores) > 2
+                      AND length(JSON_VALUE(score, '$.name')) > 0
+                ) AS es
+                GROUP BY experiment_id
+            ),
             experiments_full AS (
                 SELECT
                     e.id as id,
                     e.dataset_id AS dataset_id,
                     e.metadata AS metadata,
                     fs.feedback_scores as feedback_scores,
+                    es.experiment_scores as experiment_scores,
                     ed.trace_count as trace_count,
                     ed.duration_values AS duration,
                     ed.total_estimated_cost_sum as total_estimated_cost,
@@ -578,6 +625,7 @@ class ExperimentDAO {
                 FROM experiments_final AS e
                 LEFT JOIN experiment_durations AS ed ON e.id = ed.experiment_id
                 LEFT JOIN feedback_scores_agg AS fs ON e.id = fs.experiment_id
+                LEFT JOIN experiment_scores_agg AS es ON e.id = es.experiment_id
             )
             SELECT
                 count(DISTINCT id) as experiment_count,
@@ -585,6 +633,7 @@ class ExperimentDAO {
                 sum(total_estimated_cost) as total_estimated_cost,
                 avg(total_estimated_cost_avg) as total_estimated_cost_avg,
                 avgMap(feedback_scores) as feedback_scores,
+                avgMap(experiment_scores) as experiment_scores,
                 avgMap(duration) as duration,
                 <groupSelects>
             FROM experiments_full
@@ -685,6 +734,7 @@ class ExperimentDAO {
                 type,
                 optimization_id,
                 status,
+                experiment_scores,
                 created_at,
                 last_updated_at
             )
@@ -702,11 +752,14 @@ class ExperimentDAO {
                 <if(type)> :type <else> type <endif> as type,
                 optimization_id,
                 <if(status)> :status <else> status <endif> as status,
+                <if(experiment_scores)> :experiment_scores <else> experiment_scores <endif> as experiment_scores,
                 created_at,
                 now64(9) as last_updated_at
             FROM experiments
             WHERE id = :id
             AND workspace_id = :workspace_id
+            ORDER BY (workspace_id, dataset_id, id) DESC, last_updated_at DESC
+            LIMIT 1
             """;
 
     private final @NonNull ConnectionFactory connectionFactory;
@@ -729,8 +782,14 @@ class ExperimentDAO {
                 .bind("name", experiment.name())
                 .bind("metadata", getStringOrDefault(experiment.metadata()))
                 .bind("type", Optional.ofNullable(experiment.type()).orElse(ExperimentType.REGULAR).getValue())
-                .bind("optimization_id", experiment.optimizationId() != null ? experiment.optimizationId() : "")
-                .bind("status", Optional.ofNullable(experiment.status()).orElse(ExperimentStatus.COMPLETED).getValue());
+                .bind("optimization_id", Optional.ofNullable(experiment.optimizationId())
+                        .map(UUID::toString)
+                        .orElse(""))
+                .bind("status", Optional.ofNullable(experiment.status()).orElse(ExperimentStatus.COMPLETED).getValue())
+                .bind("experiment_scores", Optional.ofNullable(experiment.experimentScores())
+                        .filter(scores -> !scores.isEmpty())
+                        .map(JsonUtils::writeValueAsString)
+                        .orElse(""));
 
         if (experiment.promptVersion() != null) {
             statement.bind("prompt_version_id", experiment.promptVersion().id());
@@ -835,7 +894,7 @@ class ExperimentDAO {
                     .lastUpdatedAt(row.get("last_updated_at", Instant.class))
                     .createdBy(row.get("created_by", String.class))
                     .lastUpdatedBy(row.get("last_updated_by", String.class))
-                    .feedbackScores(getFeedbackScores(row))
+                    .feedbackScores(getFeedbackScores(row, "feedback_scores"))
                     .comments(getComments(row.get("comments_array_agg", List[].class)))
                     .traceCount(row.get("trace_count", Long.class))
                     .duration(getDuration(row))
@@ -850,6 +909,7 @@ class ExperimentDAO {
                             .orElse(null))
                     .type(ExperimentType.fromString(row.get("type", String.class)))
                     .status(ExperimentStatus.fromString(row.get("status", String.class)))
+                    .experimentScores(getExperimentScores(row))
                     .build();
         });
     }
@@ -907,9 +967,13 @@ class ExperimentDAO {
                 .toList();
     }
 
-    public static List<FeedbackScoreAverage> getFeedbackScores(Row row) {
-        List<FeedbackScoreAverage> feedbackScoresAvg = Optional
-                .ofNullable(row.get("feedback_scores", Map.class))
+    public static List<FeedbackScoreAverage> getFeedbackScores(Row row, String columnName) {
+        return getScoresAggregation(row, columnName);
+    }
+
+    private static List<FeedbackScoreAverage> getScoresAggregation(Row row, String columnName) {
+        List<FeedbackScoreAverage> scoresAvg = Optional
+                .ofNullable(row.get(columnName, Map.class))
                 .map(map -> (Map<String, ? extends Number>) map)
                 .orElse(Map.of())
                 .entrySet()
@@ -921,7 +985,22 @@ class ExperimentDAO {
                 })
                 .toList();
 
-        return feedbackScoresAvg.isEmpty() ? null : feedbackScoresAvg;
+        return scoresAvg.isEmpty() ? null : scoresAvg;
+    }
+
+    public static List<ExperimentScore> getExperimentScores(Row row) {
+        String experimentScoresJson = row.get("experiment_scores", String.class);
+        if (StringUtils.isBlank(experimentScoresJson)) {
+            return null;
+        }
+        try {
+            List<ExperimentScore> scores = JsonUtils.readValue(experimentScoresJson,
+                    ExperimentScore.LIST_TYPE_REFERENCE);
+            return CollectionUtils.isEmpty(scores) ? null : scores;
+        } catch (Exception e) {
+            log.warn("Failed to deserialize experiment_scores from JSON: {}", experimentScoresJson, e);
+            return null;
+        }
     }
 
     @WithSpan
@@ -1063,7 +1142,7 @@ class ExperimentDAO {
 
         Preconditions.checkArgument(CollectionUtils.isNotEmpty(ids), "Argument 'ids' must not be empty");
 
-        log.info("Deleting experiments by ids [{}]", Arrays.toString(ids.toArray()));
+        log.info("Deleting experiments by ids, size '{}'", ids.size());
 
         return Mono.from(connectionFactory.create())
                 .flatMapMany(connection -> delete(ids, connection))
@@ -1071,7 +1150,7 @@ class ExperimentDAO {
                 .reduce(Long::sum)
                 .doFinally(signalType -> {
                     if (signalType == SignalType.ON_COMPLETE) {
-                        log.info("Deleted experiments by ids [{}]", Arrays.toString(ids.toArray()));
+                        log.info("Deleted experiments by ids, size '{}'", ids.size());
                     }
                 });
     }
@@ -1265,7 +1344,8 @@ class ExperimentDAO {
                     .totalEstimatedCost(getCostValue(row, "total_estimated_cost"))
                     .totalEstimatedCostAvg(getCostValue(row, "total_estimated_cost_avg"))
                     .duration(getDuration(row))
-                    .feedbackScores(getFeedbackScores(row))
+                    .feedbackScores(getFeedbackScores(row, "feedback_scores"))
+                    .experimentScores(getFeedbackScores(row, "experiment_scores"))
                     .build();
         });
     }
@@ -1310,6 +1390,10 @@ class ExperimentDAO {
             template.add("status", experimentUpdate.status().getValue());
         }
 
+        if (experimentUpdate.experimentScores() != null) {
+            template.add("experiment_scores", true);
+        }
+
         return template;
     }
 
@@ -1328,6 +1412,13 @@ class ExperimentDAO {
 
         if (experimentUpdate.status() != null) {
             statement.bind("status", experimentUpdate.status().getValue());
+        }
+
+        if (experimentUpdate.experimentScores() != null) {
+            String scoresJson = experimentUpdate.experimentScores().isEmpty()
+                    ? ""
+                    : JsonUtils.writeValueAsString(experimentUpdate.experimentScores());
+            statement.bind("experiment_scores", scoresJson);
         }
     }
 

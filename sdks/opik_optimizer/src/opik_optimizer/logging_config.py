@@ -46,7 +46,7 @@ def setup_logging(
         date_format: The format string for the date/time in log messages.
         force: If True, reconfigure logging even if already configured.
     """
-    env_level = os.getenv("OPIK_LOG_LEVEL")
+    env_level = os.getenv("OPIK_LOG_LEVEL") or os.getenv("OPIK_OPTIMIZER_LOG_LEVEL")
     target_level = _coerce_level(env_level if env_level is not None else level)
 
     global _logging_configured, _configured_level

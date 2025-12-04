@@ -139,7 +139,7 @@ Scores:
             formatted_batch=formatted_batch,
         )
 
-        # TODO: Check if we need to pass optimizer model parameters here
+        # TODO: Check which project this data gets logged to
         root_cause_response = await _llm_calls.call_model_async(
             model=self.reasoning_model,
             messages=[{"role": "user", "content": batch_analysis_prompt}],
@@ -150,7 +150,6 @@ Scores:
         )
 
         root_cause_response = cast(RootCauseAnalysis, root_cause_response)
-
         return BatchAnalysis(
             batch_number=batch_number,
             start_index=batch_start,

@@ -8,6 +8,7 @@ from ..core.pydantic_utilities import IS_PYDANTIC_V2, UniversalBaseModel
 from .feedback_score_average import FeedbackScoreAverage
 from .json_list_string import JsonListString
 from .optimization_status import OptimizationStatus
+from .optimization_studio_config import OptimizationStudioConfig
 
 
 class Optimization(UniversalBaseModel):
@@ -17,6 +18,7 @@ class Optimization(UniversalBaseModel):
     objective_name: str
     status: OptimizationStatus
     metadata: typing.Optional[JsonListString] = None
+    studio_config: typing.Optional[OptimizationStudioConfig] = None
     dataset_id: typing.Optional[str] = None
     num_trials: typing.Optional[int] = None
     feedback_scores: typing.Optional[typing.List[FeedbackScoreAverage]] = None

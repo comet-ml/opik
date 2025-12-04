@@ -9,6 +9,7 @@ import { Separator } from "@/components/ui/separator";
 import LoadableSelectBox from "@/components/shared/LoadableSelectBox/LoadableSelectBox";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import usePromptsList from "@/api/prompts/usePromptsList";
+import useDeepMemo from "@/hooks/useDeepMemo";
 
 const DEFAULT_LOADED_PROMPTS = 1000;
 const MAX_LOADED_PROMPTS = 10000;
@@ -47,7 +48,7 @@ const PromptsSelectBox: React.FC<PromptsSelectBoxProps> = ({
     },
   );
 
-  const prompts = useMemo(
+  const prompts = useDeepMemo(
     () => promptsData?.content ?? [],
     [promptsData?.content],
   );
@@ -137,6 +138,7 @@ const PromptsSelectBox: React.FC<PromptsSelectBoxProps> = ({
         }}
         actionPanel={actionPanel}
         minWidth={540}
+        showTooltip
       />
 
       {isClearable && (

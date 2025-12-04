@@ -1,11 +1,20 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect } from "react";
 import PlaygroundOutputTable from "@/components/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundOutputTable/PlaygroundOutputTable";
 import PlaygroundOutputActions from "@/components/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundOutputActions/PlaygroundOutputActions";
 import PlaygroundOutput from "@/components/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundOutput";
-import { usePromptIds, useSetDatasetVariables } from "@/store/PlaygroundStore";
+import {
+  usePromptIds,
+  useSetDatasetVariables,
+  useDatasetFilters,
+  useSetDatasetFilters,
+  useDatasetPage,
+  useSetDatasetPage,
+  useDatasetSize,
+  useSetDatasetSize,
+  useResetDatasetFilters,
+} from "@/store/PlaygroundStore";
 import useDatasetItemsList from "@/api/datasets/useDatasetItemsList";
 import { DatasetItem, DatasetItemColumn } from "@/types/datasets";
-import { Filters } from "@/types/filters";
 import { keepPreviousData } from "@tanstack/react-query";
 
 interface PlaygroundOutputsProps {
@@ -24,24 +33,32 @@ const PlaygroundOutputs = ({
 }: PlaygroundOutputsProps) => {
   const promptIds = usePromptIds();
   const setDatasetVariables = useSetDatasetVariables();
-  const [filters, setFilters] = useState<Filters>([]);
-  const [page, setPage] = useState(1);
-  const [size, setSize] = useState(100);
+  const filters = useDatasetFilters();
+  const setFilters = useSetDatasetFilters();
+  const page = useDatasetPage();
+  const setPage = useSetDatasetPage();
+  const size = useDatasetSize();
+  const setSize = useSetDatasetSize();
+  const resetDatasetFilters = useResetDatasetFilters();
 
-  const { data: datasetItemsData, isLoading: isLoadingDatasetItems } =
-    useDatasetItemsList(
-      {
-        datasetId: datasetId!,
-        page,
-        size,
-        truncate: true,
-        filters,
-      },
-      {
-        enabled: !!datasetId,
-        placeholderData: keepPreviousData,
-      },
-    );
+  const {
+    data: datasetItemsData,
+    isLoading: isLoadingDatasetItems,
+    isPlaceholderData: isPlaceholderDatasetItems,
+    isFetching: isFetchingDatasetItems,
+  } = useDatasetItemsList(
+    {
+      datasetId: datasetId!,
+      page,
+      size,
+      truncate: true,
+      filters,
+    },
+    {
+      enabled: !!datasetId,
+      placeholderData: keepPreviousData,
+    },
+  );
 
   const datasetItems = datasetItemsData?.content || EMPTY_ITEMS;
   const datasetColumns = datasetItemsData?.columns || EMPTY_COLUMNS;
@@ -49,11 +66,13 @@ const PlaygroundOutputs = ({
 
   const handleChangeDatasetId = useCallback(
     (id: string | null) => {
-      setFilters([]);
-      setPage(1);
+      resetDatasetFilters();
+      if (!id) {
+        setDatasetVariables([]);
+      }
       onChangeDatasetId(id);
     },
-    [onChangeDatasetId],
+    [onChangeDatasetId, resetDatasetFilters, setDatasetVariables],
   );
 
   const renderResult = () => {
@@ -65,6 +84,7 @@ const PlaygroundOutputs = ({
             datasetItems={datasetItems}
             datasetColumns={datasetColumns}
             isLoadingDatasetItems={isLoadingDatasetItems}
+            isFetchingData={isFetchingDatasetItems && isPlaceholderDatasetItems}
           />
         </div>
       );

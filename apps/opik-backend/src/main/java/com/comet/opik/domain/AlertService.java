@@ -20,6 +20,7 @@ import com.comet.opik.domain.sorting.SortingQueryBuilder;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.cache.Cacheable;
 import com.comet.opik.utils.RetryUtils;
+import com.fasterxml.uuid.Generators;
 import com.google.inject.ImplementedBy;
 import io.dropwizard.jersey.errors.ErrorMessage;
 import jakarta.inject.Inject;
@@ -109,31 +110,27 @@ class AlertServiceImpl implements AlertService {
                     """,
             AlertEventType.TRACE_FEEDBACK_SCORE,
             """
-                    [
-                        {
-                          "id": "0198ec7e-e844-7537-aaaa-fc5db24face7",
-                          "name": "User frustration",
-                          "value": 0.3,
-                          "reason": "The score is 0.3 because the User initially expressed mild frustration when the LLM couldn't provide the competitor's revenue",
-                          "category_name": "frustration",
-                          "source": "sdk",
-                          "author": "test-user"
-                        }
-                    ]
+                    {
+                      "event_type": "TRACE_FEEDBACK_SCORE",
+                      "metric_name": "trace:feedback_score",
+                      "metric_value": "0.7500",
+                      "threshold": "0.5",
+                      "window_seconds": "3600",
+                      "project_ids": "0198ec68-6e06-7253-a20b-d35c9252b9ba,0198ec68-6e06-7253-a20b-d35c9252b9bb",
+                      "project_names": "Demo Project,Default Project"
+                    }
                     """,
             AlertEventType.TRACE_THREAD_FEEDBACK_SCORE,
             """
-                    [
-                        {
-                          "thread_id": "3b7c81e6-3e59-40b5-a465-67ea428d07e2",
-                          "name": "User frustration",
-                          "value": 0.0,
-                          "reason": "The score is 0.0 because the User's query was directly and accurately answered by the LLM, indicating a smooth and satisfactory interaction",
-                          "category_name": "frustration",
-                          "source": "sdk",
-                          "author": "test-user"
-                        }
-                    ]
+                    {
+                      "event_type": "TRACE_THREAD_FEEDBACK_SCORE",
+                      "metric_name": "trace_thread:feedback_score",
+                      "metric_value": "0.7500",
+                      "threshold": "0.5",
+                      "window_seconds": "3600",
+                      "project_ids": "0198ec68-6e06-7253-a20b-d35c9252b9ba,0198ec68-6e06-7253-a20b-d35c9252b9bb",
+                      "project_names": "Demo Project,Default Project"
+                    }
                     """,
             AlertEventType.PROMPT_CREATED,
             """
@@ -420,7 +417,7 @@ class AlertServiceImpl implements AlertService {
     }
 
     private static WebhookEvent<Map<String, Object>> mapAlertToWebhookEvent(Alert alert, String workspaceId) {
-        String eventId = "0198ec7e-e844-7537-aaaa-fc5db24dcce7";
+        String eventId = Generators.timeBasedEpochGenerator().generate().toString();
         var eventType = CollectionUtils.isEmpty(alert.triggers())
                 ? AlertEventType.TRACE_ERRORS
                 : alert.triggers().getFirst().eventType();

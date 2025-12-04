@@ -109,7 +109,7 @@ def creation_few_shot_prompt_template(verbose: int = 1) -> Any:
                 )
 
                 # Print the final result
-                console.print(prefixed)
+                console.print(Text(prefixed))
                 console.print()
 
 

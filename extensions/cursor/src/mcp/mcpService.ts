@@ -20,6 +20,7 @@ export class MCPService {
             const mcpEnabled = config.get<boolean>('opik.mcp.enabled', true);
             const apiUrl = config.get<string>('opik.apiUrl', 'https://www.comet.com/opik/api');
             const workspace = config.get<string>('opik.workspace', 'default');
+            const projectName = config.get<string>('opik.projectName', 'cursor');
 
             const apiKey = getOpikApiKey();
             if (!mcpEnabled) {
@@ -41,7 +42,9 @@ export class MCPService {
                         '--apiUrl',
                         apiUrl,
                         '--workspace',
-                        workspace
+                        workspace,
+                        '--projectName',
+                        projectName
                     ],
                     env: {}
                 }

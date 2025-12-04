@@ -10,4 +10,6 @@ export interface ValueEntryPublic {
     categoryName?: string;
     source?: OpikApi.ValueEntryPublicSource;
     lastUpdatedAt?: Date;
+    spanType?: string;
+    spanId?: string;
 }

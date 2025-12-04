@@ -6,16 +6,27 @@ repos:
         files: ^sdks/opik_optimizer
       - id: end-of-file-fixer
         files: ^sdks/opik_optimizer
+      - id: check-yaml
+        files: ^sdks/opik_optimizer
+      - id: check-json
+        files: ^sdks/opik_optimizer
+      - id: check-toml
+        files: ^sdks/opik_optimizer
+      - id: check-added-large-files
+        args: ['--maxkb=1000']
+      - id: detect-private-key
+      - id: check-merge-conflict
+      - id: check-case-conflict
 
   - repo: https://github.com/asottile/pyupgrade
-    rev: v3.21.1
+    rev: v3.21.2
     hooks:
       - id: pyupgrade
         args: [--py310-plus]
         files: ^sdks/opik_optimizer
 
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.14.5
+    rev: v0.14.6
     hooks:
       - id: ruff
         args: [ --fix, --show-fixes]
@@ -28,6 +39,34 @@ repos:
     hooks:
       - id: mypy
         files: ^sdks/opik_optimizer
-        exclude: '(sdks/opik_optimizer/scripts/)'
+        exclude: '(sdks/opik_optimizer/scripts/)|(sdks/opik_optimizer/benchmarks/benchmark_results/)'
         args: [--config-file, sdks/opik_optimizer/pyproject.toml, --install-types, --non-interactive]
         additional_dependencies: [types-requests, pytest, pyrate_limiter, modal]
+
+  - repo: https://github.com/kynan/nbstripout
+    rev: 0.8.2
+    hooks:
+      - id: nbstripout
+        files: ^sdks/opik_optimizer/.*\.ipynb$
+
+  - repo: https://github.com/igorshubovych/markdownlint-cli
+    rev: v0.38.0
+    hooks:
+      - id: markdownlint
+        files: ^sdks/opik_optimizer/.*\.md$
+        args: ['--disable=MD013', '--disable=MD033', '--disable=MD060']
+
+  - repo: https://github.com/codespell-project/codespell
+    rev: v2.4.1
+    hooks:
+      - id: codespell
+        files: ^sdks/opik_optimizer
+        exclude: '(\.ipynb$)|(\.json$)|(\.jsonl$)|(benchmark_results/)'
+        args: ['--skip=*.ipynb,*.json,*.jsonl','--write-changes']
+
+  - repo: https://github.com/jendrikseipp/vulture
+    rev: v2.14
+    hooks:
+      - id: vulture
+        files: ^sdks/opik_optimizer
+        args: ['sdks/opik_optimizer/src', 'sdks/opik_optimizer/tests', 'sdks/opik_optimizer/scripts', 'sdks/opik_optimizer/benchmarks', '--min-confidence=80']

@@ -3,6 +3,7 @@ import { persist } from "zustand/middleware";
 import pick from "lodash/pick";
 
 import { LogExperiment, PlaygroundPromptType } from "@/types/playground";
+import { Filters } from "@/types/filters";
 import isUndefined from "lodash/isUndefined";
 import get from "lodash/get";
 import lodashSet from "lodash/set";
@@ -93,6 +94,11 @@ export type PlaygroundStore = {
   selectedRuleIds: string[] | null;
   createdExperiments: LogExperiment[];
   isRunning: boolean;
+  datasetFilters: Filters;
+  datasetPage: number;
+  datasetSize: number;
+  progressTotal: number;
+  progressCompleted: number;
 
   setPromptMap: (
     promptIds: string[],
@@ -121,6 +127,12 @@ export type PlaygroundStore = {
   setCreatedExperiments: (experiments: LogExperiment[]) => void;
   clearCreatedExperiments: () => void;
   setIsRunning: (isRunning: boolean) => void;
+  setDatasetFilters: (filters: Filters) => void;
+  setDatasetPage: (page: number) => void;
+  setDatasetSize: (size: number) => void;
+  resetDatasetFilters: () => void;
+  setProgress: (completed: number, total: number) => void;
+  resetProgress: () => void;
 };
 
 const usePlaygroundStore = create<PlaygroundStore>()(
@@ -134,6 +146,11 @@ const usePlaygroundStore = create<PlaygroundStore>()(
       selectedRuleIds: null,
       createdExperiments: [],
       isRunning: false,
+      datasetFilters: [],
+      datasetPage: 1,
+      datasetSize: 100,
+      progressTotal: 0,
+      progressCompleted: 0,
 
       updatePrompt: (promptId, changes) => {
         set((state) => {
@@ -296,6 +313,58 @@ const usePlaygroundStore = create<PlaygroundStore>()(
           };
         });
       },
+      setDatasetFilters: (filters) => {
+        set((state) => {
+          return {
+            ...state,
+            datasetFilters: filters,
+          };
+        });
+      },
+      setDatasetPage: (page) => {
+        set((state) => {
+          return {
+            ...state,
+            datasetPage: page,
+          };
+        });
+      },
+      setDatasetSize: (size) => {
+        set((state) => {
+          return {
+            ...state,
+            datasetSize: size,
+          };
+        });
+      },
+      resetDatasetFilters: () => {
+        set((state) => {
+          return {
+            ...state,
+            datasetFilters: [],
+            datasetPage: 1,
+            datasetSize: 100,
+          };
+        });
+      },
+      setProgress: (completed, total) => {
+        set((state) => {
+          return {
+            ...state,
+            progressCompleted: completed,
+            progressTotal: total,
+          };
+        });
+      },
+      resetProgress: () => {
+        set((state) => {
+          return {
+            ...state,
+            progressCompleted: 0,
+            progressTotal: 0,
+          };
+        });
+      },
     }),
     {
       name: "PLAYGROUND_STATE",
@@ -424,5 +493,38 @@ export const useIsRunning = () =>
 
 export const useSetIsRunning = () =>
   usePlaygroundStore((state) => state.setIsRunning);
+
+export const useDatasetFilters = () =>
+  usePlaygroundStore((state) => state.datasetFilters);
+
+export const useSetDatasetFilters = () =>
+  usePlaygroundStore((state) => state.setDatasetFilters);
+
+export const useDatasetPage = () =>
+  usePlaygroundStore((state) => state.datasetPage);
+
+export const useSetDatasetPage = () =>
+  usePlaygroundStore((state) => state.setDatasetPage);
+
+export const useDatasetSize = () =>
+  usePlaygroundStore((state) => state.datasetSize);
+
+export const useSetDatasetSize = () =>
+  usePlaygroundStore((state) => state.setDatasetSize);
+
+export const useResetDatasetFilters = () =>
+  usePlaygroundStore((state) => state.resetDatasetFilters);
+
+export const useProgressTotal = () =>
+  usePlaygroundStore((state) => state.progressTotal);
+
+export const useProgressCompleted = () =>
+  usePlaygroundStore((state) => state.progressCompleted);
+
+export const useSetProgress = () =>
+  usePlaygroundStore((state) => state.setProgress);
+
+export const useResetProgress = () =>
+  usePlaygroundStore((state) => state.resetProgress);
 
 export default usePlaygroundStore;

@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef } from "react";
+import React, { useCallback, useRef } from "react";
 import { UseFormReturn } from "react-hook-form";
 import { Info } from "lucide-react";
 import find from "lodash/find";
@@ -39,7 +39,8 @@ import useLLMProviderModelsData from "@/hooks/useLLMProviderModelsData";
 import ExplainerIcon from "@/components/shared/ExplainerIcon/ExplainerIcon";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 import { EVALUATORS_RULE_SCOPE } from "@/types/automations";
-import { isReasoningModel } from "@/lib/modelUtils";
+import { updateProviderConfig } from "@/lib/modelUtils";
+import { TRACE_DATA_TYPE } from "@/hooks/useTracesOrSpansList";
 
 const MESSAGE_TYPE_OPTIONS = [
   {
@@ -79,8 +80,14 @@ const LLMJudgeRuleDetails: React.FC<LLMJudgeRuleDetailsProps> = ({
 
   const scope = form.watch("scope");
   const isThreadScope = scope === EVALUATORS_RULE_SCOPE.thread;
+  const isSpanScope = scope === EVALUATORS_RULE_SCOPE.span;
 
   const templates = LLM_PROMPT_TEMPLATES[scope];
+
+  // Determine the type for autocomplete based on scope
+  const autocompleteType = isSpanScope
+    ? TRACE_DATA_TYPE.spans
+    : TRACE_DATA_TYPE.traces;
 
   const handleAddProvider = useCallback(
     (provider: COMPOSED_PROVIDER_TYPE) => {
@@ -108,25 +115,6 @@ const LLMJudgeRuleDetails: React.FC<LLMJudgeRuleDetailsProps> = ({
     },
     [calculateModelProvider, form],
   );
-
-  // Auto-adjust temperature for reasoning models
-  const model = form.watch("llmJudgeDetails.model") as PROVIDER_MODEL_TYPE | "";
-  const config = form.watch("llmJudgeDetails.config");
-
-  useEffect(() => {
-    // When a reasoning model is selected, ensure temperature is at least 1.0
-    if (
-      isReasoningModel(model) &&
-      config &&
-      typeof config.temperature === "number" &&
-      config.temperature < 1
-    ) {
-      form.setValue("llmJudgeDetails.config", {
-        ...config,
-        temperature: 1.0,
-      });
-    }
-  }, [model, config, form]);
 
   // Memoized callback to handle messages change
   const handleMessagesChange = useCallback(
@@ -191,6 +179,24 @@ const LLMJudgeRuleDetails: React.FC<LLMJudgeRuleDetailsProps> = ({
                     onChange={(m) => {
                       if (m) {
                         field.onChange(m);
+                        // Update config to ensure reasoning models have temperature >= 1.0
+                        const newProvider = calculateModelProvider(m);
+                        const currentConfig = form.getValues(
+                          "llmJudgeDetails.config",
+                        );
+                        const adjustedConfig = updateProviderConfig(
+                          currentConfig,
+                          { model: m, provider: newProvider },
+                        );
+                        if (
+                          adjustedConfig &&
+                          adjustedConfig !== currentConfig
+                        ) {
+                          form.setValue(
+                            "llmJudgeDetails.config",
+                            adjustedConfig,
+                          );
+                        }
                       }
                     }}
                     provider={provider}
@@ -334,6 +340,7 @@ const LLMJudgeRuleDetails: React.FC<LLMJudgeRuleDetailsProps> = ({
                     onChange={field.onChange}
                     projectName={projectName}
                     datasetColumnNames={datasetColumnNames}
+                    type={autocompleteType}
                   />
                 </>
               );

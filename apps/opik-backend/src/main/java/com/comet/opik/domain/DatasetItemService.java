@@ -24,6 +24,7 @@ import jakarta.ws.rs.core.Response;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.StringUtils;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
@@ -75,7 +76,9 @@ public interface DatasetItemService {
 class DatasetItemServiceImpl implements DatasetItemService {
 
     private final @NonNull DatasetItemDAO dao;
+    private final @NonNull DatasetItemVersionDAO versionDao;
     private final @NonNull DatasetService datasetService;
+    private final @NonNull DatasetVersionService versionService;
     private final @NonNull TraceService traceService;
     private final @NonNull SpanService spanService;
     private final @NonNull TraceEnrichmentService traceEnrichmentService;
@@ -371,14 +374,80 @@ class DatasetItemServiceImpl implements DatasetItemService {
     @WithSpan
     public Mono<DatasetItemPage> getItems(
             int page, int size, @NonNull DatasetItemSearchCriteria datasetItemSearchCriteria) {
-        log.info("Finding dataset items with experiment items by '{}', page '{}', size '{}'",
-                datasetItemSearchCriteria, page, size);
 
         // Verify dataset visibility
         datasetService.findById(datasetItemSearchCriteria.datasetId());
 
-        return dao.getItems(datasetItemSearchCriteria, page, size)
-                .defaultIfEmpty(DatasetItemPage.empty(page, sortingFactory.getSortableFields()));
+        if (StringUtils.isNotBlank(datasetItemSearchCriteria.versionHashOrTag())) {
+            // Fetch versioned (immutable) items from dataset_item_versions table
+            log.info("Finding versioned dataset items by '{}', page '{}', size '{}'", datasetItemSearchCriteria, page,
+                    size);
+
+            return Mono.deferContextual(ctx -> {
+                String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
+
+                // Resolve version hash/tag to version ID
+                UUID versionId = versionService.resolveVersionId(workspaceId,
+                        datasetItemSearchCriteria.datasetId(),
+                        datasetItemSearchCriteria.versionHashOrTag());
+                log.info("Resolved version '{}' to version ID '{}' for dataset '{}'",
+                        datasetItemSearchCriteria.versionHashOrTag(), versionId, datasetItemSearchCriteria.datasetId());
+
+                // For versioned items, hasDraft is always false (concept doesn't apply to immutable versions)
+                return versionDao.getItems(datasetItemSearchCriteria, page, size, versionId)
+                        .defaultIfEmpty(DatasetItemPage.empty(page, sortingFactory.getSortableFields()));
+            });
+        } else {
+            // Fetch draft (current) items from dataset_items table
+            log.info("Finding draft dataset items by '{}', page '{}', size '{}'",
+                    datasetItemSearchCriteria, page, size);
+
+            return dao.getItems(datasetItemSearchCriteria, page, size)
+                    .flatMap(itemPage -> computeHasDraft(datasetItemSearchCriteria.datasetId(), itemPage))
+                    .defaultIfEmpty(DatasetItemPage.empty(page, sortingFactory.getSortableFields()));
+        }
+    }
+
+    private Mono<DatasetItemPage> computeHasDraft(UUID datasetId, DatasetItemPage itemPage) {
+        // Get the latest version to compare with draft
+        return Mono.deferContextual(ctx -> {
+            String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
+
+            // Call DAO directly with workspaceId to avoid RequestContext issues in reactive context
+            return Mono.fromCallable(() -> template.inTransaction(READ_ONLY, handle -> {
+                var dao = handle.attach(DatasetVersionDAO.class);
+                return dao.findByTag(datasetId, DatasetVersionService.LATEST_TAG, workspaceId);
+            })).subscribeOn(Schedulers.boundedElastic())
+                    .flatMap(latestVersionOpt -> {
+                        if (latestVersionOpt.isEmpty()) {
+                            // No version exists yet, has draft if any items exist
+                            boolean hasDraft = itemPage.total() > 0;
+                            return Mono.just(itemPage.toBuilder().hasDraft(hasDraft).build());
+                        }
+
+                        UUID latestVersionId = latestVersionOpt.get().id();
+
+                        // Compare hashes of draft items vs latest version items
+                        // We compare both ID hash and data hash to detect any differences
+                        Mono<ItemsHash> draftHash = dao.getDraftItemsHashAgg(datasetId);
+                        Mono<ItemsHash> versionHash = versionDao.getVersionItemsHashAgg(datasetId, latestVersionId);
+
+                        return Mono.zip(draftHash, versionHash)
+                                .map(tuple -> {
+                                    ItemsHash draft = tuple.getT1();
+                                    ItemsHash version = tuple.getT2();
+                                    // Has draft if either ID hash or data hash differs
+                                    boolean hasDraft = draft.idHash() != version.idHash()
+                                            || draft.dataHash() != version.dataHash();
+                                    log.debug(
+                                            "Dataset '{}' hasDraft='{}' (draftIdHash='{}', versionIdHash='{}', draftDataHash='{}', versionDataHash='{}')",
+                                            datasetId, hasDraft, draft.idHash(), version.idHash(), draft.dataHash(),
+                                            version.dataHash());
+                                    return itemPage.toBuilder().hasDraft(hasDraft).build();
+                                });
+                    })
+                    .defaultIfEmpty(itemPage.toBuilder().hasDraft(false).build());
+        });
     }
 
     public Mono<ProjectStats> getExperimentItemsStats(@NonNull UUID datasetId,

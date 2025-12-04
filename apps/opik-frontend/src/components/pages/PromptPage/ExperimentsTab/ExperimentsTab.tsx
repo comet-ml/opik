@@ -28,6 +28,7 @@ import CommentsCell from "@/components/shared/DataTableCells/CommentsCell";
 import FeedbackScoreListCell from "@/components/shared/DataTableCells/FeedbackScoreListCell";
 import TextCell from "@/components/shared/DataTableCells/TextCell";
 import useAppStore from "@/store/AppStore";
+import { transformExperimentScores } from "@/lib/experimentScoreUtils";
 import useGroupedExperimentsList, {
   GroupedExperiment,
 } from "@/hooks/useGroupedExperimentsList";
@@ -41,7 +42,6 @@ import {
   COLUMN_COMMENTS_ID,
 } from "@/types/shared";
 import { formatDate } from "@/lib/date";
-import { formatNumericData } from "@/lib/utils";
 import { RESOURCE_TYPE } from "@/components/shared/ResourceLink/ResourceLink";
 import { Separator } from "@/components/ui/separator";
 import MultiResourceCell from "@/components/shared/DataTableCells/MultiResourceCell";
@@ -177,18 +177,14 @@ export const DEFAULT_COLUMNS: ColumnData<GroupedExperiment>[] = [
   },
   {
     id: COLUMN_FEEDBACK_SCORES_ID,
-    label: "Feedback scores (avg.)",
+    label: "Feedback Scores",
     type: COLUMN_TYPE.numberDictionary,
-    accessorFn: (row) =>
-      get(row, "feedback_scores", []).map((score) => ({
-        ...score,
-        value: formatNumericData(score.value),
-      })),
+    accessorFn: transformExperimentScores,
     cell: FeedbackScoreListCell as never,
     aggregatedCell: FeedbackScoreListCell.Aggregation as never,
     customMeta: {
       getHoverCardName: (row: GroupedExperiment) => row.name,
-      isAverageScores: true,
+      areAggregatedScores: true,
       aggregationKey: "feedback_scores",
     },
     explainer: EXPLAINERS_MAP[EXPLAINER_ID.what_are_feedback_scores],

@@ -16,8 +16,6 @@ import {
   INTERVAL_TYPE,
 } from "@/api/projects/useProjectMetric";
 import { CUSTOM_FILTER_VALIDATION_REGEXP } from "@/constants/filters";
-import { ChartTooltipRenderValueArguments } from "@/components/shared/ChartTooltipContent/ChartTooltipContent";
-import { formatCost } from "@/lib/money";
 import { generateVisibilityFilters } from "@/lib/filters";
 import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
@@ -28,10 +26,12 @@ import FiltersButton from "@/components/shared/FiltersButton/FiltersButton";
 import TracesOrSpansPathsAutocomplete from "@/components/pages-shared/traces/TracesOrSpansPathsAutocomplete/TracesOrSpansPathsAutocomplete";
 import TracesOrSpansFeedbackScoresSelect from "@/components/pages-shared/traces/TracesOrSpansFeedbackScoresSelect/TracesOrSpansFeedbackScoresSelect";
 import MetricContainerChart from "./MetricChart/MetricChartContainer";
-import { INTERVAL_DESCRIPTIONS } from "./utils";
-
-const renderCostTooltipValue = ({ value }: ChartTooltipRenderValueArguments) =>
-  formatCost(value as number);
+import {
+  INTERVAL_DESCRIPTIONS,
+  renderCostTooltipValue,
+  costYTickFormatter,
+  tokenYTickFormatter,
+} from "./utils";
 
 const PROJECT_METRICS_FILTER_COLUMNS: ColumnData<BaseTraceData>[] = [
   {
@@ -78,6 +78,7 @@ const PROJECT_METRICS_FILTER_COLUMNS: ColumnData<BaseTraceData>[] = [
     id: "tags",
     label: "Tags",
     type: COLUMN_TYPE.list,
+    iconType: "tags",
   },
   {
     id: "thread_id",
@@ -243,6 +244,7 @@ const ProjectMetricsSection: React.FC<ProjectMetricsSectionProps> = ({
             intervalStart={intervalStart}
             intervalEnd={intervalEnd}
             projectId={projectId}
+            customYTickFormatter={tokenYTickFormatter}
             chartType="line"
             traceFilters={processedProjectMetricsFilters}
           />
@@ -259,6 +261,7 @@ const ProjectMetricsSection: React.FC<ProjectMetricsSectionProps> = ({
             intervalEnd={intervalEnd}
             projectId={projectId}
             renderValue={renderCostTooltipValue}
+            customYTickFormatter={costYTickFormatter}
             chartType="line"
             traceFilters={processedProjectMetricsFilters}
           />

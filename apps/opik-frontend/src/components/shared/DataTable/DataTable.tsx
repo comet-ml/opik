@@ -67,6 +67,8 @@ declare module "@tanstack/react-table" {
     onCommentsReply?: (row: TData, idx?: number) => void;
     aggregationMap?: Record<string, unknown>;
     enableUserFeedbackEditing?: boolean;
+    projectId?: string;
+    projectName?: string;
   }
 
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -133,6 +135,7 @@ interface DataTableProps<TData, TValue> {
   getRowHeightStyle?: (height: ROW_HEIGHT) => React.CSSProperties;
   rowHeight?: ROW_HEIGHT;
   columnPinning?: ColumnPinningState;
+  columnPinningState?: ColumnPinningState;
   noData?: ReactNode;
   autoWidth?: boolean;
   stickyHeader?: boolean;
@@ -142,6 +145,7 @@ interface DataTableProps<TData, TValue> {
     TableMeta<TData>,
     "columnsStatistic" | "rowHeight" | "rowHeightStyle"
   >;
+  showLoadingOverlay?: boolean;
 }
 
 const DataTable = <TData, TValue>({
@@ -162,6 +166,7 @@ const DataTable = <TData, TValue>({
   getRowHeightStyle = calculateHeightStyle,
   rowHeight = ROW_HEIGHT.small,
   columnPinning,
+  columnPinningState,
   noData,
   autoWidth = false,
   TableWrapper = DataTableWrapper,
@@ -169,6 +174,7 @@ const DataTable = <TData, TValue>({
   stickyHeader = false,
   meta,
   getSubRows,
+  showLoadingOverlay = false,
 }: DataTableProps<TData, TValue>) => {
   const isResizable = resizeConfig && resizeConfig.enabled;
   const isRowClickable = isFunction(onRowClick);
@@ -211,6 +217,7 @@ const DataTable = <TData, TValue>({
       ...(resizeConfig?.columnSizing && {
         columnSizing: resizeConfig.columnSizing,
       }),
+      ...(columnPinningState && { columnPinning: columnPinningState }),
     },
     initialState: {
       ...(columnPinning && { columnPinning }),
@@ -388,7 +395,7 @@ const DataTable = <TData, TValue>({
   };
 
   return (
-    <TableWrapper>
+    <TableWrapper showLoadingOverlay={showLoadingOverlay}>
       <DataTableTooltipContext>
         <Table
           ref={tableRef}

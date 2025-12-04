@@ -1,6 +1,6 @@
 package com.comet.opik.api.evaluators;
 
-import com.comet.opik.api.filter.TraceFilter;
+import com.comet.opik.api.filter.Filter;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonSubTypes;
@@ -27,20 +27,23 @@ import java.util.UUID;
         @JsonSubTypes.Type(value = AutomationRuleEvaluatorUpdateLlmAsJudge.class, name = AutomationRuleEvaluatorType.Constants.LLM_AS_JUDGE),
         @JsonSubTypes.Type(value = AutomationRuleEvaluatorUpdateUserDefinedMetricPython.class, name = AutomationRuleEvaluatorType.Constants.USER_DEFINED_METRIC_PYTHON),
         @JsonSubTypes.Type(value = AutomationRuleEvaluatorUpdateTraceThreadLlmAsJudge.class, name = AutomationRuleEvaluatorType.Constants.TRACE_THREAD_LLM_AS_JUDGE),
-        @JsonSubTypes.Type(value = AutomationRuleEvaluatorUpdateTraceThreadUserDefinedMetricPython.class, name = AutomationRuleEvaluatorType.Constants.TRACE_THREAD_USER_DEFINED_METRIC_PYTHON)
+        @JsonSubTypes.Type(value = AutomationRuleEvaluatorUpdateTraceThreadUserDefinedMetricPython.class, name = AutomationRuleEvaluatorType.Constants.TRACE_THREAD_USER_DEFINED_METRIC_PYTHON),
+        @JsonSubTypes.Type(value = AutomationRuleEvaluatorUpdateSpanLlmAsJudge.class, name = AutomationRuleEvaluatorType.Constants.SPAN_LLM_AS_JUDGE)
 })
 @Schema(name = "AutomationRuleEvaluatorUpdate", discriminatorProperty = "type", discriminatorMapping = {
         @DiscriminatorMapping(value = AutomationRuleEvaluatorType.Constants.LLM_AS_JUDGE, schema = AutomationRuleEvaluatorUpdateLlmAsJudge.class),
         @DiscriminatorMapping(value = AutomationRuleEvaluatorType.Constants.USER_DEFINED_METRIC_PYTHON, schema = AutomationRuleEvaluatorUpdateUserDefinedMetricPython.class),
         @DiscriminatorMapping(value = AutomationRuleEvaluatorType.Constants.TRACE_THREAD_LLM_AS_JUDGE, schema = AutomationRuleEvaluatorUpdateTraceThreadLlmAsJudge.class),
-        @DiscriminatorMapping(value = AutomationRuleEvaluatorType.Constants.TRACE_THREAD_USER_DEFINED_METRIC_PYTHON, schema = AutomationRuleEvaluatorUpdateTraceThreadUserDefinedMetricPython.class)
+        @DiscriminatorMapping(value = AutomationRuleEvaluatorType.Constants.TRACE_THREAD_USER_DEFINED_METRIC_PYTHON, schema = AutomationRuleEvaluatorUpdateTraceThreadUserDefinedMetricPython.class),
+        @DiscriminatorMapping(value = AutomationRuleEvaluatorType.Constants.SPAN_LLM_AS_JUDGE, schema = AutomationRuleEvaluatorUpdateSpanLlmAsJudge.class)
 })
 @JsonIgnoreProperties(ignoreUnknown = true)
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
-public abstract sealed class AutomationRuleEvaluatorUpdate<T> implements AutomationRuleUpdate
+public abstract sealed class AutomationRuleEvaluatorUpdate<T, E extends Filter> implements AutomationRuleUpdate
         permits AutomationRuleEvaluatorUpdateLlmAsJudge, AutomationRuleEvaluatorUpdateTraceThreadLlmAsJudge,
         AutomationRuleEvaluatorUpdateTraceThreadUserDefinedMetricPython,
-        AutomationRuleEvaluatorUpdateUserDefinedMetricPython {
+        AutomationRuleEvaluatorUpdateUserDefinedMetricPython,
+        AutomationRuleEvaluatorUpdateSpanLlmAsJudge {
 
     @NotBlank private final String name;
 
@@ -49,8 +52,9 @@ public abstract sealed class AutomationRuleEvaluatorUpdate<T> implements Automat
     @Builder.Default
     private final boolean enabled = true;
 
+    @JsonIgnore
     @Builder.Default
-    private final List<TraceFilter> filters = List.of();
+    private final List<E> filters = List.of();
 
     @JsonIgnore
     @NotNull private final T code;
@@ -59,10 +63,11 @@ public abstract sealed class AutomationRuleEvaluatorUpdate<T> implements Automat
 
     public abstract AutomationRuleEvaluatorType getType();
 
-    public abstract <C extends AutomationRuleEvaluatorUpdate<T>, B extends AutomationRuleEvaluatorUpdate.AutomationRuleEvaluatorUpdateBuilder<T, C, B>> AutomationRuleEvaluatorUpdate.AutomationRuleEvaluatorUpdateBuilder<T, C, B> toBuilder();
+    public abstract <C extends AutomationRuleEvaluatorUpdate<T, E>, B extends AutomationRuleEvaluatorUpdate.AutomationRuleEvaluatorUpdateBuilder<T, E, C, B>> AutomationRuleEvaluatorUpdate.AutomationRuleEvaluatorUpdateBuilder<T, E, C, B> toBuilder();
 
     @Override
     @NotNull public AutomationRule.AutomationRuleAction getAction() {
         return AutomationRule.AutomationRuleAction.EVALUATOR;
     }
+
 }

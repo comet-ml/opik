@@ -8,10 +8,11 @@ from types import FrameType
 
 import litellm
 from litellm.exceptions import BadRequestError
-from opik.evaluation.models.litellm import opik_monitor as opik_litellm_monitor
 
 from . import _throttle
 from . import utils as _utils
+
+from opik.integrations import litellm as litellm_integration
 
 logger = logging.getLogger(__name__)
 
@@ -288,10 +289,7 @@ def _prepare_model_params(
     """
 
     # Merge optimizer's model_parameters with call-time overrides
-    merged_params = {**model_parameters, **call_time_params}
-
-    # Add Opik monitoring wrapper
-    final_params = opik_litellm_monitor.try_add_opik_monitoring_to_params(merged_params)
+    final_params = {**model_parameters, **call_time_params}
 
     # Add reasoning metadata if applicable
     if is_reasoning and "metadata" in final_params:
@@ -486,10 +484,10 @@ def call_model(
         optimization_id,
     )
 
-    # Merge structured output params (these take precedence)
     final_params_for_litellm.update(structured_output_params)
 
-    response = litellm.completion(
+    litellm_decorator = litellm_integration.track_completion()
+    response = litellm_decorator(litellm.completion)(
         model=model,
         messages=messages_to_send,
         seed=seed,
