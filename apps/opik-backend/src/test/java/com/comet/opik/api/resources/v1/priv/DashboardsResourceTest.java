@@ -398,7 +398,7 @@ class DashboardsResourceTest {
                     .containsExactlyElementsOf(expectedDashboards.stream().map(Dashboard::id).toList());
         }
 
-        private Stream<Arguments> findDashboards__whenSortingByValidFields__thenReturnDashboardsSorted() {
+        static Stream<Arguments> findDashboards__whenSortingByValidFields__thenReturnDashboardsSorted() {
             Comparator<Dashboard> idComparator = Comparator.comparing(Dashboard::id);
             Comparator<Dashboard> nameComparator = Comparator.comparing(Dashboard::name, String.CASE_INSENSITIVE_ORDER);
             Comparator<Dashboard> createdAtComparator = Comparator.comparing(Dashboard::createdAt);
