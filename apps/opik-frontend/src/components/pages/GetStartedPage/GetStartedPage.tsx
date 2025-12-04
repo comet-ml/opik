@@ -1,5 +1,5 @@
 import usePluginsStore from "@/store/PluginsStore";
-import GetStarted from "@/components/pages/GetStartedPage/GetStarted";
+import NewQuickstart from "@/components/pages/GetStartedPage/NewQuickstart";
 
 const GetStartedPage = () => {
   const GetStartedPage = usePluginsStore((state) => state.GetStartedPage);
@@ -8,6 +8,6 @@ const GetStartedPage = () => {
     return <GetStartedPage />;
   }
 
-  return <GetStarted />;
+  return <NewQuickstart />;
 };
 export default GetStartedPage;
