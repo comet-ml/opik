@@ -65,4 +65,3 @@ class EvaluationError(EvalAppError):
 
     def _get_error_message(self) -> str:
         return f"Evaluation failed for metric '{self.metric_name}': {self.error}"
-

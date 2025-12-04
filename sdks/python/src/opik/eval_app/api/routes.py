@@ -13,9 +13,7 @@ from ..services import eval_service as eval_service_module
 
 LOGGER = logging.getLogger(__name__)
 
-evaluation_router = fastapi.APIRouter(
-    prefix="/api/v1/evaluation", tags=["evaluation"]
-)
+evaluation_router = fastapi.APIRouter(prefix="/api/v1/evaluation", tags=["evaluation"])
 healthcheck_router = fastapi.APIRouter(tags=["healthcheck"])
 
 _service_instance: Optional[eval_service_module.EvalService] = None
@@ -148,4 +146,3 @@ def register_exception_handlers(app: fastapi.FastAPI) -> None:
             status_code=fastapi.status.HTTP_422_UNPROCESSABLE_ENTITY,
             content={"detail": exc.errors()},
         )
-

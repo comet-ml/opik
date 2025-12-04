@@ -31,4 +31,3 @@ def create_app():
     routes.register_exception_handlers(app)
 
     return app
-
