@@ -257,13 +257,16 @@ const AddEditDatasetDialog: React.FunctionComponent<
           },
         },
         {
-          onSuccess: onCreateSuccessHandler,
+          onSuccess: (newDataset: Dataset) => {
+            // Only show overlay after successful dataset creation
+            if (hasValidCsvFile) {
+              setIsOverlayShown(true);
+            }
+            onCreateSuccessHandler(newDataset);
+          },
           onError: (error: AxiosError) => handleMutationError(error, "create"),
         },
       );
-    }
-    if (hasValidCsvFile) {
-      setIsOverlayShown(true);
     }
   }, [
     isEdit,
