@@ -1,8 +1,4 @@
 import React from "react";
-import { Button } from "@/components/ui/button";
-import { ChevronsRight } from "lucide-react";
-import { Link } from "@tanstack/react-router";
-import useAppStore from "@/store/AppStore";
 import { IntegrationExplorer } from "@/components/pages-shared/onboarding/IntegrationExplorer";
 import OnboardingOverlay from "@/components/shared/OnboardingOverlay/OnboardingOverlay";
 import {
@@ -11,11 +7,19 @@ import {
 } from "@/components/shared/OnboardingOverlay/OnboardingOverlayContext";
 import useLocalStorageState from "use-local-storage-state";
 
-const NewQuickstartPage: React.FunctionComponent = () => {
-  const workspaceName = useAppStore((state) => state.activeWorkspaceName);
+export interface NewQuickstartProps {
+  shouldSkipQuestions?: boolean;
+}
+
+const NewQuickstart: React.FunctionComponent<NewQuickstartProps> = ({
+  shouldSkipQuestions = false,
+}) => {
   const [currentOnboardingStep] = useLocalStorageState(ONBOARDING_STEP_KEY);
 
-  if (currentOnboardingStep !== ONBOARDING_STEP_FINISHED) {
+  if (
+    currentOnboardingStep !== ONBOARDING_STEP_FINISHED &&
+    !shouldSkipQuestions
+  ) {
     return <OnboardingOverlay />;
   }
 
@@ -41,18 +45,7 @@ const NewQuickstartPage: React.FunctionComponent = () => {
             <div className="flex flex-wrap items-center gap-6 md:gap-3">
               <IntegrationExplorer.CopyApiKey />
               <IntegrationExplorer.GetHelp />
-              <Button
-                variant="ghost"
-                size="sm"
-                asChild
-                id="quickstart-skip-explore-platform"
-                data-fs-element="QuickstartSkipExplorePlatform"
-              >
-                <Link to="/$workspaceName/home" params={{ workspaceName }}>
-                  Skip & explore platform
-                  <ChevronsRight className="ml-1.5 size-3.5" />
-                </Link>
-              </Button>
+              <IntegrationExplorer.Skip />
             </div>
           </div>
 
@@ -70,4 +63,4 @@ const NewQuickstartPage: React.FunctionComponent = () => {
   );
 };
 
-export default NewQuickstartPage;
+export default NewQuickstart;
