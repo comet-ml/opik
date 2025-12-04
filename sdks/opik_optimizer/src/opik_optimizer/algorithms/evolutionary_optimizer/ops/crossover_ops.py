@@ -1,8 +1,8 @@
 from typing import Any
 
 import logging
-import random
 import json
+import random
 
 from deap import creator as _creator
 
@@ -50,14 +50,14 @@ def _extract_json_arrays(text: str) -> list[str]:
 
 
 def _deap_crossover_chunking_strategy(
-    messages_1_str: str, messages_2_str: str
+    messages_1_str: str, messages_2_str: str, rng: random.Random
 ) -> tuple[str, str]:
     chunks1 = [chunk.strip() for chunk in messages_1_str.split(".") if chunk.strip()]
     chunks2 = [chunk.strip() for chunk in messages_2_str.split(".") if chunk.strip()]
 
     if len(chunks1) >= 2 and len(chunks2) >= 2:
         min_num_chunks = min(len(chunks1), len(chunks2))
-        point = random.randint(1, min_num_chunks - 1)
+        point = rng.randint(1, min_num_chunks - 1)
         child1_chunks = chunks1[:point] + chunks2[point:]
         child2_chunks = chunks2[:point] + chunks1[point:]
         child1_str = ". ".join(child1_chunks) + ("." if child1_chunks else "")
@@ -68,7 +68,7 @@ def _deap_crossover_chunking_strategy(
 
 
 def _deap_crossover_word_level(
-    messages_1_str: str, messages_2_str: str
+    messages_1_str: str, messages_2_str: str, rng: random.Random
 ) -> tuple[str, str]:
     words1 = messages_1_str.split()
     words2 = messages_2_str.split()
@@ -77,13 +77,15 @@ def _deap_crossover_word_level(
     min_word_len = min(len(words1), len(words2))
     if min_word_len < 2:
         return messages_1_str, messages_2_str
-    point = random.randint(1, min_word_len - 1)
+    point = rng.randint(1, min_word_len - 1)
     child1_words = words1[:point] + words2[point:]
     child2_words = words2[:point] + words1[point:]
     return " ".join(child1_words), " ".join(child2_words)
 
 
-def deap_crossover(ind1: Any, ind2: Any, verbose: int = 1) -> tuple[Any, Any]:
+def deap_crossover(
+    ind1: Any, ind2: Any, verbose: int = 1, rng: random.Random | None = None
+) -> tuple[Any, Any]:
     """Crossover operation that preserves semantic meaning.
     Attempts chunk-level crossover first, then falls back to word-level.
     """
@@ -102,11 +104,11 @@ def deap_crossover(ind1: Any, ind2: Any, verbose: int = 1) -> tuple[Any, Any]:
             message_2_str: str = message_2["content"]
             try:
                 child1_str, child2_str = _deap_crossover_chunking_strategy(
-                    message_1_str, message_2_str
+                    message_1_str, message_2_str, rng or random.Random()
                 )
             except ValueError:
                 child1_str, child2_str = _deap_crossover_word_level(
-                    message_1_str, message_2_str
+                    message_1_str, message_2_str, rng or random.Random()
                 )
             messages_1_orig[i]["content"] = child1_str
             messages_2_orig[i]["content"] = child2_str

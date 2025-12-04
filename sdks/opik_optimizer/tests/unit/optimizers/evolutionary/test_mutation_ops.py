@@ -2,6 +2,7 @@ import pytest
 from typing import Any
 from opik_optimizer.algorithms.evolutionary_optimizer.ops import mutation_ops
 import opik_optimizer
+import random
 
 
 def test_semantic_mutation_invalid_json_response(
@@ -60,6 +61,7 @@ def test_semantic_mutation_invalid_json_response(
         model="openai/gpt-5-mini",
         model_parameters={},
         verbose=1,
+        rng=random.Random(123),
     )
 
     assert result is not original_prompt
