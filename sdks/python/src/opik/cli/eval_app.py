@@ -3,6 +3,57 @@
 import click
 
 
+def _print_startup_message(host: str, port: int, metrics_count: int) -> None:
+    """Print a nicely formatted server startup message."""
+    try:
+        from rich.console import Console
+        from rich.panel import Panel
+        from rich.text import Text
+        from rich import box
+        from rich.align import Align
+
+        console = Console()
+        local_url = f"http://{host if host != '0.0.0.0' else '127.0.0.1'}:{port}"
+
+        content = Text()
+        content.append("\n")
+        content.append("🚀 Server running:\n")
+        content.append(f"   - URL: {local_url}\n")
+        content.append(f"   - Metrics available: {metrics_count}\n")
+        content.append("\n")
+        content.append("📡 API Endpoints:\n")
+        content.append(f"   - GET  {local_url}/api/v1/evaluation/metrics\n")
+        content.append(f"   - POST {local_url}/api/v1/evaluation/traces/{{trace_id}}\n")
+        content.append(f"   - GET  {local_url}/healthcheck\n")
+        content.append("\n")
+        content.append("📚 Documentation:\n")
+        content.append("   - https://www.comet.com/docs/opik/evaluation/metrics/overview\n")
+        content.append("\n")
+        content.append("Note:", style="bold yellow")
+        content.append(
+            "\n   This server is meant for local development. Configure it in the\n"
+            "   Opik Playground to run Python metrics on your traces.\n"
+        )
+
+        main_panel = Panel(
+            Align.left(content),
+            box=box.ROUNDED,
+            border_style="cyan",
+            padding=(0, 2),
+            title="Opik Eval App",
+            title_align="center",
+        )
+
+        console.print()
+        console.print(main_panel)
+        console.print()
+    except ImportError:
+        # Fallback if rich is not installed
+        click.echo(f"\nOpik Eval App running at http://{host}:{port}")
+        click.echo(f"Metrics available: {metrics_count}")
+        click.echo("")
+
+
 @click.command(
     context_settings={"ignore_unknown_options": True},
     help="""
@@ -57,20 +108,21 @@ def eval_app(host: str, port: int, reload: bool) -> None:
 
     # Import and create the app
     from opik import eval_app as eval_app_module
+    from opik.eval_app.metrics import get_default_registry
 
     app = eval_app_module.create_app()
 
-    click.echo(f"Starting Opik Eval App server at http://{host}:{port}")
-    click.echo("Available endpoints:")
-    click.echo(f"  GET  http://{host}:{port}/api/v1/evaluation/metrics")
-    click.echo(f"  POST http://{host}:{port}/api/v1/evaluation/traces/{{trace_id}}")
-    click.echo(f"  GET  http://{host}:{port}/healthcheck")
-    click.echo("")
+    # Get metrics count for display
+    registry = get_default_registry()
+    metrics_count = len(registry.list_all())
+
+    _print_startup_message(host, port, metrics_count)
 
     uvicorn.run(
         app,
         host=host,
         port=port,
         reload=reload,
+        log_level="error",  # Reduce uvicorn logging to keep output clean
     )
 

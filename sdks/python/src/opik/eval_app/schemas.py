@@ -51,14 +51,10 @@ class MetricEvaluationConfig(pydantic.BaseModel):
     )
 
 
-# Keep alias for backward compatibility
-LocalEvaluationRuleConfig = MetricEvaluationConfig
-
-
 class EvaluationRequest(pydantic.BaseModel):
     """Request to evaluate a trace with specified metrics."""
 
-    rules: List[MetricEvaluationConfig] = pydantic.Field(
+    metrics: List[MetricEvaluationConfig] = pydantic.Field(
         min_length=1,
         description="List of metric evaluation configurations",
     )
@@ -68,7 +64,7 @@ class EvaluationAcceptedResponse(pydantic.BaseModel):
     """Response indicating evaluation request was accepted."""
 
     trace_id: str
-    rules_count: int
+    metrics_count: int
     message: str = (
         "Evaluation request accepted. Feedback scores will be logged to the trace."
     )

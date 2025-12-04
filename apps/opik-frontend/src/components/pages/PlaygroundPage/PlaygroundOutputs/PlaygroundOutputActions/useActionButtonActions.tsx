@@ -197,7 +197,7 @@ const useActionButtonActions = ({
             axios
               .post(
                 `${localEvaluatorUrl}/api/v1/evaluation/traces/${trace.id}`,
-                { rules: metricConfigs },
+                { metrics: metricConfigs },
                 { timeout: 30000 },
               )
               .catch((error) => {
