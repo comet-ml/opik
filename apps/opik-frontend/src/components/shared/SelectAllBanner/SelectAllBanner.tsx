@@ -1,7 +1,6 @@
 import React from "react";
 import { CheckCircle2, Info } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
 
 export interface SelectAllBannerProps {
   selectedCount: number;
@@ -18,25 +17,13 @@ const SelectAllBanner: React.FC<SelectAllBannerProps> = ({
 }) => {
   const isAllSelected = selectedCount === totalCount;
 
-  const bannerClasses = cn(
-    "mb-4 flex items-center justify-between rounded-md border p-4",
-    isAllSelected
-      ? "border-green-200 bg-green-50"
-      : "border-blue-200 bg-blue-50",
-  );
-
-  const iconClasses = cn(
-    "size-4",
-    isAllSelected ? "text-green-600" : "text-blue-600",
-  );
-
   return (
-    <div className={bannerClasses}>
+    <div className="mb-4 flex items-center justify-between rounded-md border border-blue-200 bg-blue-50 p-4">
       <div className="flex items-center gap-2">
         {isAllSelected ? (
-          <CheckCircle2 className={iconClasses} />
+          <CheckCircle2 className="size-4 text-[var(--color-blue)]" />
         ) : (
-          <Info className={iconClasses} />
+          <Info className="size-4 text-[var(--color-blue)]" />
         )}
         <span className="comet-body-s text-foreground">
           {isAllSelected ? (
@@ -59,10 +46,10 @@ const SelectAllBanner: React.FC<SelectAllBannerProps> = ({
         </span>
       </div>
       <Button
-        variant="link"
+        variant="ghost"
         size="sm"
         onClick={onClearSelection}
-        className="h-auto p-0 text-primary"
+        className="h-auto p-0"
       >
         Clear selection
       </Button>

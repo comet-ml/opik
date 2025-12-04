@@ -216,7 +216,7 @@ batchOperations:
     maxExperimentInClauseSize: ${BATCH_OPERATIONS_MAX_EXPERIMENT_IN_CLAUSE_SIZE:-5000}
     # Default: 1000
     # Description: The batch size for processing CSV files. Dataset items are saved to the database in batches of this size.
-    csvBatchSize: 1 # TODO: REMOVE - Debug value for testing UI processing status (original: ${BATCH_OPERATIONS_CSV_BATCH_SIZE:-1000})
+    csvBatchSize: ${BATCH_OPERATIONS_CSV_BATCH_SIZE:-1000}
 
 # Configuration for rate limit. This is not enabled by default for open source installations.
 # If enabled, rate limit is applied to creation and update of various entities including traces, spans, projects,
@@ -553,7 +553,7 @@ serviceToggles:
   welcomeWizardEnabled: ${TOGGLE_WELCOME_WIZARD_ENABLED:-"false"}
   # Default: false
   # Description: Whether or not CSV upload feature is enabled for dataset items
-  csvUploadEnabled: "true" # TODO: REMOVE - Hardcoded for dev testing (original: ${TOGGLE_CSV_UPLOAD_ENABLED:-"false"})
+  csvUploadEnabled: ${TOGGLE_CSV_UPLOAD_ENABLED:-"false"}
   # Default: true
   # Description: Whether or not export/download functionality is enabled
   exportEnabled: ${TOGGLE_EXPORT_ENABLED:-"true"}

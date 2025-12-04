@@ -85,16 +85,17 @@ const VersionRowActionsCell: React.FC<CellContext<DatasetVersion, unknown>> = (
             <Pencil className="mr-2 size-4" />
             Edit
           </DropdownMenuItem>
-          <DropdownMenuItem
-            disabled={isLatestVersion}
-            onClick={() => {
-              setOpen(RESTORE_KEY);
-              resetKeyRef.current = resetKeyRef.current + 1;
-            }}
-          >
-            <RotateCcw className="mr-2 size-4" />
-            Restore
-          </DropdownMenuItem>
+          {!isLatestVersion && (
+            <DropdownMenuItem
+              onClick={() => {
+                setOpen(RESTORE_KEY);
+                resetKeyRef.current = resetKeyRef.current + 1;
+              }}
+            >
+              <RotateCcw className="mr-2 size-4" />
+              Restore
+            </DropdownMenuItem>
+          )}
         </DropdownMenuContent>
       </DropdownMenu>
     </CellWrapper>

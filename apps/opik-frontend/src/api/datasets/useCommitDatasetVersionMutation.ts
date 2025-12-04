@@ -27,7 +27,7 @@ const useCommitDatasetVersionMutation = () => {
         `${DATASETS_REST_ENDPOINT}${datasetId}/versions`,
         {
           change_description: changeDescription,
-          tags: tags?.join(","),
+          tags,
           metadata,
         },
       );

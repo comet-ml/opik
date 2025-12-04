@@ -588,6 +588,7 @@ const DatasetItemsPageLegacy = () => {
           total={data?.total ?? 0}
           supportsTruncation
           truncationEnabled={truncationEnabled}
+          hideTruncationWarning
           isLoadingTotal={isProcessing}
         />
       </div>

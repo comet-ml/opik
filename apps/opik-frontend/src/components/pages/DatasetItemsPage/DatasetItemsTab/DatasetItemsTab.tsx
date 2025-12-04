@@ -545,6 +545,7 @@ const DatasetItemsTab: React.FC<DatasetItemsTabProps> = ({
           total={data?.total ?? 0}
           supportsTruncation
           truncationEnabled={truncationEnabled}
+          hideTruncationWarning
           isLoadingTotal={isProcessing}
         />
       </div>

@@ -26,6 +26,7 @@ type DataTableProps = {
   sizeChange?: (number: number) => void;
   supportsTruncation?: boolean;
   truncationEnabled?: boolean;
+  hideTruncationWarning?: boolean;
   variant?: "default" | "minimal";
   itemsPerPage?: number[];
   disabled?: boolean;
@@ -42,6 +43,7 @@ const DataTablePagination = ({
   sizeChange,
   supportsTruncation = false,
   truncationEnabled = true,
+  hideTruncationWarning = false,
   variant = "default",
   itemsPerPage = DEFAULT_ITEMS_PER_PAGE,
   disabled = false,
@@ -52,7 +54,8 @@ const DataTablePagination = ({
       ? TRUNCATION_DISABLED_MAX_PAGE_SIZE
       : undefined;
 
-  const showWarning = supportsTruncation && !truncationEnabled;
+  const showWarning =
+    supportsTruncation && !truncationEnabled && !hideTruncationWarning;
   const isMinimal = variant === "minimal";
 
   const from = Math.max(size * (page - 1) + 1, 0);
@@ -63,7 +66,7 @@ const DataTablePagination = ({
   const disabledSizeChange = !isFunction(sizeChange) || disabled;
 
   const totalDisplay = isLoadingTotal ? (
-    <span className="inline-flex items-center gap-1">
+    <span className="inline-flex items-center gap-1 pl-1">
       <Loader2 className="size-3 animate-spin" />
       {total.toLocaleString()}
     </span>

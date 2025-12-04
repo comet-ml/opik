@@ -98,6 +98,11 @@ const AddTagDialog: React.FunctionComponent<AddTagDialogProps> = ({
               placeholder="New tag"
               value={newTag}
               onChange={(event) => setNewTag(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" && newTag && !isOverLimit) {
+                  handleAddTag();
+                }
+              }}
               className="col-span-3"
               disabled={isOverLimit}
             />
