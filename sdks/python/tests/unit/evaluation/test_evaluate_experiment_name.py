@@ -59,7 +59,7 @@ def test_evaluate__with_experiment_name_prefix__generates_name_with_prefix(
             url_helpers, "get_experiment_url_by_id", mock_get_experiment_url_by_id
         ):
             with mock.patch(
-                "opik.api_objects.experiment.helpers.id_helpers.generate_id"
+                "opik.api_objects.experiment.helpers.id_helpers.generate_random_alphanumeric_string"
             ) as mock_generate_id:
                 mock_generate_id.return_value = mock_generated_id
 
@@ -163,7 +163,7 @@ def test_evaluate__with_experiment_name_prefix_only__generates_unique_name(
             url_helpers, "get_experiment_url_by_id", mock_get_experiment_url_by_id
         ):
             with mock.patch(
-                "opik.api_objects.experiment.helpers.id_helpers.generate_id"
+                "opik.api_objects.experiment.helpers.id_helpers.generate_random_alphanumeric_string"
             ) as mock_generate_id:
                 mock_generate_id.return_value = mock_generated_id
 
@@ -264,7 +264,7 @@ def test_evaluate__with_experiment_name_prefix__multiple_calls_generate_unique_n
     mock_generated_ids = ["id1-abc123", "id2-xyz789"]
     mock_generate_id_call_count = 0
 
-    def mock_generate_id_side_effect():
+    def mock_generate_random_alphanumeric_string_side_effect(length: int):
         nonlocal mock_generate_id_call_count
         result = mock_generated_ids[mock_generate_id_call_count]
         mock_generate_id_call_count += 1
@@ -277,9 +277,11 @@ def test_evaluate__with_experiment_name_prefix__multiple_calls_generate_unique_n
             url_helpers, "get_experiment_url_by_id", mock_get_experiment_url_by_id
         ):
             with mock.patch(
-                "opik.api_objects.experiment.helpers.id_helpers.generate_id"
+                "opik.api_objects.experiment.helpers.id_helpers.generate_random_alphanumeric_string"
             ) as mock_generate_id:
-                mock_generate_id.side_effect = mock_generate_id_side_effect
+                mock_generate_id.side_effect = (
+                    mock_generate_random_alphanumeric_string_side_effect
+                )
 
                 # First call
                 mock_create_experiment.return_value = mock_experiment1
@@ -365,7 +367,7 @@ def test_evaluate_prompt__with_experiment_name_prefix__generates_name_with_prefi
         ):
             with mock.patch.object(models_factory, "get", mock_models_factory_get):
                 with mock.patch(
-                    "opik.api_objects.experiment.helpers.id_helpers.generate_id"
+                    "opik.api_objects.experiment.helpers.id_helpers.generate_random_alphanumeric_string"
                 ) as mock_generate_id:
                     mock_generate_id.return_value = mock_generated_id
 
@@ -490,7 +492,7 @@ def test_evaluate_prompt__with_experiment_name_prefix_only__generates_unique_nam
         ):
             with mock.patch.object(models_factory, "get", mock_models_factory_get):
                 with mock.patch(
-                    "opik.api_objects.experiment.helpers.id_helpers.generate_id"
+                    "opik.api_objects.experiment.helpers.id_helpers.generate_random_alphanumeric_string"
                 ) as mock_generate_id:
                     mock_generate_id.return_value = mock_generated_id
 
@@ -607,7 +609,7 @@ def test_evaluate_prompt__with_experiment_name_prefix__multiple_calls_generate_u
     mock_generated_ids = ["prompt-id1-abc123", "prompt-id2-xyz789"]
     mock_generate_id_call_count = 0
 
-    def mock_generate_id_side_effect():
+    def mock_generate_random_alphanumeric_string_side_effect(length: int):
         nonlocal mock_generate_id_call_count
         result = mock_generated_ids[mock_generate_id_call_count]
         mock_generate_id_call_count += 1
@@ -621,9 +623,11 @@ def test_evaluate_prompt__with_experiment_name_prefix__multiple_calls_generate_u
         ):
             with mock.patch.object(models_factory, "get", mock_models_factory_get):
                 with mock.patch(
-                    "opik.api_objects.experiment.helpers.id_helpers.generate_id"
+                    "opik.api_objects.experiment.helpers.id_helpers.generate_random_alphanumeric_string"
                 ) as mock_generate_id:
-                    mock_generate_id.side_effect = mock_generate_id_side_effect
+                    mock_generate_id.side_effect = (
+                        mock_generate_random_alphanumeric_string_side_effect
+                    )
 
                     # First call
                     mock_create_experiment.return_value = mock.Mock()
