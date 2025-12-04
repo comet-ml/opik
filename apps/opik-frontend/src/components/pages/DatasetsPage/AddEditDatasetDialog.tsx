@@ -221,7 +221,7 @@ const AddEditDatasetDialog: React.FunctionComponent<
         setNameError("This name already exists");
       } else {
         toast({
-          title: `Error ${`${action.slice(0, -1)}ing`} dataset`,
+          title: `Error saving dataset`,
           description: errorMessage || `Failed to ${action} dataset`,
           variant: "destructive",
         });
@@ -381,9 +381,8 @@ const AddEditDatasetDialog: React.FunctionComponent<
               placeholder="Dataset name"
               value={name}
               className={
-                nameError
-                  ? "!border-destructive focus-visible:!border-destructive"
-                  : ""
+                nameError &&
+                "!border-destructive focus-visible:!border-destructive"
               }
               onChange={(event) => {
                 setName(event.target.value);
