@@ -72,10 +72,19 @@ def initialize_population(
     optimization_id: str | None,
     population_size: int,
     verbose: int,
+    use_strategy_templates: bool = True,
+    strategy_sampling_rate: float = 0.3,
 ) -> list[chat_prompt.ChatPrompt]:
-    """Initialize the population with diverse variations of the initial prompt,
-    including some 'fresh start' prompts based purely on task description.
-    All generated prompts should aim to elicit answers matching self.output_style_guidance.
+    """
+    Initialize the population with diverse variations of the initial prompt.
+
+    Enhanced to include strategy-based prompts for macro-level diversity:
+    - Original prompt
+    - Strategy-based prompts (30% if enabled)
+    - Fresh start prompts
+    - Variations on initial prompt
+
+    All generated prompts should aim to elicit answers matching output_style_guidance.
     """
     if mcp_context is not None:
         return initialize_population_mcp(
@@ -95,11 +104,95 @@ def initialize_population(
             return population
 
         num_to_generate_total = population_size - 1
-        num_fresh_starts = max(1, int(num_to_generate_total * 0.2))
-        num_variations_on_initial = num_to_generate_total - num_fresh_starts
+
+        # Calculate how many prompts should use strategy templates
+        num_strategy_based = 0
+        if use_strategy_templates:
+            num_strategy_based = max(
+                1, int(num_to_generate_total * strategy_sampling_rate)
+            )
+            logger.info(f"Generating {num_strategy_based} strategy-based prompts")
+
+        # Remaining prompts split between fresh starts and variations
+        num_remaining = num_to_generate_total - num_strategy_based
+        num_fresh_starts = max(1, int(num_remaining * 0.3))  # 30% of remaining
+        num_variations_on_initial = num_remaining - num_fresh_starts
 
         task_desc_for_llm = helpers.get_task_description_for_llm(prompt)
         current_output_style_guidance = output_style_guidance
+
+        # Generate strategy-based prompts
+        if num_strategy_based > 0:
+            from ..prompt_strategies import sample_strategy
+
+            init_pop_report.start_fresh_prompts(num_strategy_based)
+            logger.info(
+                f"Generating {num_strategy_based} strategy-based prompts for macro-level diversity"
+            )
+
+            recent_strategies = []
+            for i in range(num_strategy_based):
+                try:
+                    # Sample a strategy, avoiding recent ones
+                    strategy, var_values = sample_strategy(
+                        exclude_recent=recent_strategies[-3:]
+                    )
+                    recent_strategies.append(strategy.name)
+
+                    # Create adaptation prompt
+                    adaptation_prompt = f"""You are creating a new prompt based on a strategy template.
+
+Strategy: {strategy.name} - {strategy.description}
+
+Template structure:
+{strategy.template}
+
+Original task: {task_desc_for_llm}
+Output style: {current_output_style_guidance}
+
+Task: Create a complete prompt that:
+1. Follows the structure and approach of the strategy template
+2. Addresses the original task requirements
+3. Maintains the desired output style
+4. Is fully self-contained and coherent
+
+Return as a JSON array of messages:
+[{{"role": "system", "content": "..."}}, {{"role": "user", "content": "..."}}]
+"""
+
+                    response = _llm_calls.call_model(
+                        messages=[
+                            {
+                                "role": "system",
+                                "content": "You are a prompt engineering expert.",
+                            },
+                            {"role": "user", "content": adaptation_prompt},
+                        ],
+                        model=model,
+                        model_parameters=model_parameters,
+                        is_reasoning=True,
+                    )
+
+                    strategy_messages = utils.json_to_dict(response)
+                    if isinstance(strategy_messages, list):
+                        strategy_prompt = chat_prompt.ChatPrompt(
+                            messages=strategy_messages,
+                            tools=prompt.tools,
+                            function_map=prompt.function_map,
+                        )
+                        population.append(strategy_prompt)
+                        logger.debug(f"Added strategy-based prompt: {strategy.name}")
+                        init_pop_report.success_fresh_prompts(1)
+                    else:
+                        logger.warning(
+                            f"Invalid strategy response format for {strategy.name}"
+                        )
+
+                except Exception as e:
+                    logger.warning(f"Error generating strategy-based prompt: {e}")
+                    init_pop_report.failed_fresh_prompts(
+                        1, f"Strategy generation error: {e}"
+                    )
 
         # Fresh starts
         if num_fresh_starts > 0:
