@@ -29,7 +29,6 @@ import { useDashboardSave } from "./useDashboardSave";
 import DashboardSaveActions from "./DashboardSaveActions";
 import ShareDashboardButton from "./ShareDashboardButton";
 import {
-  ProjectDashboardConfig,
   DashboardWidget,
   WIDGET_TYPE,
   AddWidgetConfig,
@@ -67,8 +66,7 @@ const DashboardPage: React.FunctionComponent = () => {
   );
   const setWidgetResolver = useDashboardStore(selectSetWidgetResolver);
 
-  const dateRangeValue =
-    (config as ProjectDashboardConfig)?.dateRange || DEFAULT_DATE_PRESET;
+  const dateRangeValue = config?.dateRange || DEFAULT_DATE_PRESET;
 
   useEffect(() => {
     if (dashboard?.config) {
@@ -98,10 +96,8 @@ const DashboardPage: React.FunctionComponent = () => {
 
   const handleDateRangeValueChange = useCallback(
     (value: DateRangeSerializedValue) => {
-      setConfig({
-        ...(config as ProjectDashboardConfig),
-        dateRange: value,
-      });
+      if (!config) return;
+      setConfig({ ...config, dateRange: value });
     },
     [config, setConfig],
   );
