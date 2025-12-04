@@ -19,6 +19,7 @@ import {
 import {
   generateEmptyDashboard,
   generateEmptySection,
+  generateEmptyConfig,
   getSectionById,
 } from "@/lib/dashboard/utils";
 import {
@@ -26,8 +27,6 @@ import {
   removeWidgetFromLayout,
 } from "@/lib/dashboard/layout";
 import { migrateDashboardConfig } from "@/lib/dashboard/migrations";
-
-const EMPTY_CONFIG: BaseDashboardConfig = {};
 
 /**
  * Dashboard Store State
@@ -139,7 +138,7 @@ export const useDashboardStore = create<DashboardStore<BaseDashboardConfig>>()(
         sections: initialDashboard.sections,
         version: initialDashboard.version,
         lastModified: initialDashboard.lastModified,
-        config: EMPTY_CONFIG,
+        config: initialDashboard.config,
         onAddEditWidgetCallback: null,
         widgetResolver: null,
         previewWidget: null,
@@ -549,7 +548,7 @@ export const useDashboardStore = create<DashboardStore<BaseDashboardConfig>>()(
             sections: state.sections,
             version: state.version,
             lastModified: state.lastModified,
-            config: state.config ?? EMPTY_CONFIG,
+            config: state.config ?? generateEmptyConfig(),
           };
         },
 
