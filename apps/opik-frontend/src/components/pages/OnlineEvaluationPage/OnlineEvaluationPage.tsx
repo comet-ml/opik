@@ -41,6 +41,8 @@ import DataTablePagination from "@/components/shared/DataTablePagination/DataTab
 import IdCell from "@/components/shared/DataTableCells/IdCell";
 import StatusCell from "@/components/shared/DataTableCells/StatusCell";
 import useRulesList from "@/api/automations/useRulesList";
+import useProjectsList from "@/api/projects/useProjectsList";
+import useAppStore from "@/store/AppStore";
 import { formatDate } from "@/lib/date";
 import NoDataPage from "@/components/shared/NoDataPage/NoDataPage";
 import NoRulesPage from "@/components/pages-shared/automations/NoRulesPage";
@@ -135,6 +137,7 @@ const COLUMNS_SORT_KEY = "workspace-rules-columns-sort";
 const PAGINATION_SIZE_KEY = "workspace-rules-pagination-size";
 
 export const OnlineEvaluationPage: React.FC = () => {
+  const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const resetDialogKeyRef = useRef(0);
   const [openDialogForCreate, setOpenDialogForCreate] =
     useState<boolean>(false);
@@ -188,6 +191,22 @@ export const OnlineEvaluationPage: React.FC = () => {
     },
   );
 
+  // Fetch all projects to map project_ids to project_names
+  const { data: projectsData } = useProjectsList({
+    workspaceName,
+    page: 1,
+    size: 1000, // Fetch enough projects to cover all rules
+  });
+
+  // Create project ID to name mapping
+  const projectIdToNameMap = useMemo(() => {
+    const map = new Map<string, string>();
+    projectsData?.content?.forEach((project) => {
+      map.set(project.id, project.name);
+    });
+    return map;
+  }, [projectsData]);
+
   const sortableBy: string[] = useMemo(
     () => data?.sortable_by ?? [],
     [data?.sortable_by],
@@ -195,7 +214,15 @@ export const OnlineEvaluationPage: React.FC = () => {
   const noData = !search && filters.length === 0;
   const noDataText = noData ? `There are no rules yet` : "No search results";
 
-  const rows: EvaluatorsRule[] = useMemo(() => data?.content ?? [], [data]);
+  // Enrich rules with project names from project_ids
+  const rows: EvaluatorsRule[] = useMemo(() => {
+    return (data?.content ?? []).map((rule) => ({
+      ...rule,
+      project_names: rule.project_ids
+        .map((id) => projectIdToNameMap.get(id))
+        .filter(Boolean) as string[],
+    }));
+  }, [data, projectIdToNameMap]);
 
   const editingRule = rows.find((r) => r.id === editRuleId);
   const isDialogOpen = Boolean(editingRule) || openDialogForCreate;
