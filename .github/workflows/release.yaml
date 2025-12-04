@@ -82,16 +82,6 @@ jobs:
       version: ${{needs.set-version.outputs.version}}
       is_release: true
 
-  # release-typescript-langchain-sdk:
-  #   needs:
-  #     - set-version
-  #     - create-git-tag
-  #   uses: ./.github/workflows/typescript_langchain_sdk_publish.yml
-  #   secrets: inherit
-  #   with:
-  #     version: ${{needs.set-version.outputs.version}}
-  #     is_release: true
-
   publish-helm-chart:
     needs:
       - set-version
