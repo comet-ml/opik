@@ -1169,6 +1169,10 @@ paths:
         schema:
           type: string
           description: "Filter dashboards by name (partial match, case insensitive)"
+      - name: sorting
+        in: query
+        schema:
+          type: string
       responses:
         "200":
           description: Dashboard page
@@ -1270,6 +1274,21 @@ paths:
           description: Dashboard not found
         "409":
           description: Conflict - dashboard with this name already exists
+  /v1/private/dashboards/delete-batch:
+    post:
+      tags:
+      - Dashboards
+      summary: Delete dashboards
+      description: Delete dashboards batch
+      operationId: deleteDashboardsBatch
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BatchDelete"
+      responses:
+        "204":
+          description: No content
   /v1/private/datasets/items/batch:
     patch:
       tags:
@@ -8225,6 +8244,10 @@ components:
         total:
           type: integer
           format: int64
+        sortable_by:
+          type: array
+          items:
+            type: string
     DashboardUpdate_Public:
       type: object
       properties:
@@ -13029,6 +13052,7 @@ components:
       - exportEnabled
       - guardrailsEnabled
       - opikAIEnabled
+      - optimizationStudioEnabled
       - pythonEvaluatorEnabled
       - spanLlmAsJudgeEnabled
       - traceThreadPythonEvaluatorEnabled
@@ -13052,6 +13076,8 @@ components:
         csvUploadEnabled:
           type: boolean
         exportEnabled:
+          type: boolean
+        optimizationStudioEnabled:
           type: boolean
         dashboardsEnabled:
           type: boolean

@@ -20,6 +20,7 @@ class ServiceTogglesConfig(UniversalBaseModel):
     welcome_wizard_enabled: typing_extensions.Annotated[bool, FieldMetadata(alias="welcomeWizardEnabled")]
     csv_upload_enabled: typing_extensions.Annotated[bool, FieldMetadata(alias="csvUploadEnabled")]
     export_enabled: typing_extensions.Annotated[bool, FieldMetadata(alias="exportEnabled")]
+    optimization_studio_enabled: typing_extensions.Annotated[bool, FieldMetadata(alias="optimizationStudioEnabled")]
     dashboards_enabled: typing_extensions.Annotated[bool, FieldMetadata(alias="dashboardsEnabled")]
     dataset_versioning_enabled: typing_extensions.Annotated[bool, FieldMetadata(alias="datasetVersioningEnabled")]
 

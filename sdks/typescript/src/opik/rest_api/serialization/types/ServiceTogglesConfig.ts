@@ -19,6 +19,7 @@ export const ServiceTogglesConfig: core.serialization.ObjectSchema<
     welcomeWizardEnabled: core.serialization.boolean(),
     csvUploadEnabled: core.serialization.boolean(),
     exportEnabled: core.serialization.boolean(),
+    optimizationStudioEnabled: core.serialization.boolean(),
     dashboardsEnabled: core.serialization.boolean(),
     datasetVersioningEnabled: core.serialization.boolean(),
 });
@@ -34,6 +35,7 @@ export declare namespace ServiceTogglesConfig {
         welcomeWizardEnabled: boolean;
         csvUploadEnabled: boolean;
         exportEnabled: boolean;
+        optimizationStudioEnabled: boolean;
         dashboardsEnabled: boolean;
         datasetVersioningEnabled: boolean;
     }
