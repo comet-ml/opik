@@ -79,7 +79,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix: ${{ fromJson(needs.generate-matrix.outputs.build_matrix) }}
-    runs-on: ${{ matrix.platform == 'amd64' && 'ubuntu-latest-m' || 'ubuntu-24.04-arm' }}
+    runs-on: ${{ inputs.image == 'opik-guardrails-backend' && matrix.platform == 'amd64' && 'ubuntu-latest-m' || (matrix.platform == 'amd64' && 'ubuntu-latest' || 'ubuntu-24.04-arm') }}
     name: ${{ matrix.platform }} ${{ inputs.image }}${{ matrix.image_type == 'comet' && '-comet' || '' }}
     permissions:
       contents: read
