@@ -56,6 +56,7 @@ const VersionRowActionsCell: React.FC<CellContext<DatasetVersion, unknown>> = (
         open={open === EDIT_KEY}
         setOpen={setOpen}
         version={version}
+        datasetId={datasetId}
       />
 
       <ConfirmDialog

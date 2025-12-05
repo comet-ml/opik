@@ -95,7 +95,7 @@ const DatasetItemsPageVersioned = () => {
                 Draft
               </Tag>
             )}
-            <h1 className="comet-title-l truncate break-words leading-none">
+            <h1 className="comet-title-l truncate break-words">
               {dataset?.name}
             </h1>
           </div>
@@ -164,7 +164,7 @@ const DatasetItemsPageVersioned = () => {
             tags={dataset?.tags ?? []}
             dataset={dataset}
             datasetId={datasetId}
-            className="w-auto"
+            className="min-h-0 w-auto"
           />
         </div>
       </div>

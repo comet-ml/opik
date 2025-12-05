@@ -9,11 +9,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { DatasetVersion } from "@/types/datasets";
-import {
-  LATEST_VERSION_TAG,
-  isLatestVersionTag,
-  filterOutLatestTag,
-} from "@/constants/datasets";
+import useEditDatasetVersionMutation from "@/api/datasets/useEditDatasetVersionMutation";
 import VersionForm, { VersionFormData } from "./VersionForm";
 
 const EDIT_VERSION_FORM_ID = "edit-version-form";
@@ -22,30 +18,42 @@ type EditVersionDialogProps = {
   open: boolean;
   setOpen: (open: boolean) => void;
   version: DatasetVersion;
+  datasetId: string;
 };
 
 const EditVersionDialog: React.FC<EditVersionDialogProps> = ({
   open,
   setOpen,
   version,
+  datasetId,
 }) => {
-  const isLatestVersion = version.tags?.some(isLatestVersionTag) ?? false;
+  const editMutation = useEditDatasetVersionMutation();
+
+  // All existing tags are immutable - user can only add new tags
+  const existingTags = useMemo(() => version.tags || [], [version.tags]);
 
   const initialValues = useMemo(
     () => ({
       versionNote: version.change_description || "",
-      tags: filterOutLatestTag(version.tags || []),
+      tags: [], // Empty - only tracks newly added tags
     }),
-    [version.change_description, version.tags],
+    [version.change_description],
   );
 
   const handleSubmit = (data: VersionFormData) => {
-    console.log("Edit version form data:", {
-      versionId: version.id,
-      versionHash: version.version_hash,
-      ...data,
-    });
-    setOpen(false);
+    editMutation.mutate(
+      {
+        datasetId,
+        versionHash: version.version_hash,
+        changeDescription: data.versionNote,
+        tagsToAdd: data.tags.length > 0 ? data.tags : undefined,
+      },
+      {
+        onSuccess: () => {
+          setOpen(false);
+        },
+      },
+    );
   };
 
   const handleCancel = () => {
@@ -72,14 +80,23 @@ const EditVersionDialog: React.FC<EditVersionDialogProps> = ({
           id={EDIT_VERSION_FORM_ID}
           initialValues={initialValues}
           onSubmit={handleSubmit}
-          immutableTags={isLatestVersion ? [LATEST_VERSION_TAG] : []}
+          immutableTags={existingTags}
         />
 
         <DialogFooter className="gap-3 border-t pt-6 md:gap-0">
-          <Button type="button" variant="outline" onClick={handleCancel}>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={handleCancel}
+            disabled={editMutation.isPending}
+          >
             Cancel
           </Button>
-          <Button type="submit" form={EDIT_VERSION_FORM_ID}>
+          <Button
+            type="submit"
+            form={EDIT_VERSION_FORM_ID}
+            disabled={editMutation.isPending}
+          >
             Update version
           </Button>
         </DialogFooter>
