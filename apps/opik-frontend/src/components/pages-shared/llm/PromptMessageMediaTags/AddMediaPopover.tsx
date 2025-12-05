@@ -61,6 +61,16 @@ const AddMediaPopover: React.FC<AddMediaPopoverProps> = ({
 
   const resolvedMaxItems = maxItems ?? DEFAULT_MAX_ITEMS[type];
 
+  const title = useMemo(() => {
+    if (type === "image") {
+      return "Add image";
+    }
+    if (type === "video") {
+      return "Add video";
+    }
+    return "Add audio";
+  }, [type]);
+
   const placeholder = useMemo(() => {
     if (type === "image") {
       return "Enter image URL or template variable";
@@ -136,6 +146,7 @@ const AddMediaPopover: React.FC<AddMediaPopoverProps> = ({
       </PopoverTrigger>
       <PopoverContent className="w-[460px] p-6" align={align}>
         <div className="space-y-3">
+          <h3 className="comet-body-s-accented">{title}</h3>
           <div className="flex gap-2">
             <div className="relative flex-1">
               <Input
