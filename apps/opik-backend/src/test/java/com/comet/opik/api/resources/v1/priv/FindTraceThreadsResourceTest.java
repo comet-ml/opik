@@ -208,7 +208,7 @@ class FindTraceThreadsResourceTest {
 
     private String getValidValue(Field field) {
         return switch (field.getType()) {
-            case STRING, LIST, DICTIONARY, CUSTOM, ENUM, STRING_STATE_DB ->
+            case STRING, LIST, DICTIONARY, MAP, CUSTOM, ENUM, STRING_STATE_DB ->
                 RandomStringUtils.secure().nextAlphanumeric(10);
             case NUMBER, DURATION, FEEDBACK_SCORES_NUMBER -> String.valueOf(randomNumber(1, 10));
             case DATE_TIME, DATE_TIME_STATE_DB -> Instant.now().toString();
@@ -218,7 +218,8 @@ class FindTraceThreadsResourceTest {
 
     private String getKey(Field field) {
         return switch (field.getType()) {
-            case STRING, NUMBER, DURATION, DATE_TIME, LIST, ENUM, ERROR_CONTAINER, STRING_STATE_DB, DATE_TIME_STATE_DB,
+            case STRING, NUMBER, DURATION, MAP, DATE_TIME, LIST, ENUM, ERROR_CONTAINER, STRING_STATE_DB,
+                    DATE_TIME_STATE_DB,
                     DICTIONARY ->
                 null;
             case FEEDBACK_SCORES_NUMBER, CUSTOM -> RandomStringUtils.secure().nextAlphanumeric(10);
@@ -227,7 +228,8 @@ class FindTraceThreadsResourceTest {
 
     private String getInvalidValue(Field field) {
         return switch (field.getType()) {
-            case STRING, DICTIONARY, CUSTOM, LIST, ENUM, ERROR_CONTAINER, STRING_STATE_DB, DATE_TIME_STATE_DB -> " ";
+            case STRING, DICTIONARY, MAP, CUSTOM, LIST, ENUM, ERROR_CONTAINER, STRING_STATE_DB, DATE_TIME_STATE_DB ->
+                " ";
             case NUMBER, DURATION, DATE_TIME, FEEDBACK_SCORES_NUMBER -> RandomStringUtils.secure().nextAlphanumeric(10);
         };
     }
