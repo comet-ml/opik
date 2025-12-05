@@ -6,6 +6,7 @@ import com.comet.opik.api.DatasetVersionCreate;
 import com.comet.opik.api.DatasetVersionDiff;
 import com.comet.opik.api.DatasetVersionRestore;
 import com.comet.opik.api.DatasetVersionTag;
+import com.comet.opik.api.DatasetVersionUpdate;
 import com.comet.opik.domain.DatasetVersionService;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.auth.RequestContext;
@@ -27,6 +28,7 @@ import jakarta.ws.rs.DELETE;
 import jakarta.ws.rs.DefaultValue;
 import jakarta.ws.rs.ForbiddenException;
 import jakarta.ws.rs.GET;
+import jakarta.ws.rs.PATCH;
 import jakarta.ws.rs.POST;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.PathParam;
@@ -96,6 +98,29 @@ public class DatasetVersionsResource {
                 workspaceId);
 
         return Response.ok(versionPage).build();
+    }
+
+    @PATCH
+    @Path("/hash/{versionHash}")
+    @Operation(operationId = "updateDatasetVersion", summary = "Update dataset version", description = "Update a dataset version's change_description and/or add new tags", responses = {
+            @ApiResponse(responseCode = "200", description = "Version updated successfully", content = @Content(schema = @Schema(implementation = DatasetVersion.class))),
+            @ApiResponse(responseCode = "400", description = "Bad Request", content = @Content(schema = @Schema(implementation = io.dropwizard.jersey.errors.ErrorMessage.class))),
+            @ApiResponse(responseCode = "404", description = "Not Found - Version not found", content = @Content(schema = @Schema(implementation = io.dropwizard.jersey.errors.ErrorMessage.class))),
+            @ApiResponse(responseCode = "409", description = "Conflict - Tag already exists", content = @Content(schema = @Schema(implementation = io.dropwizard.jersey.errors.ErrorMessage.class)))
+    })
+    @RateLimited
+    @JsonView(DatasetVersion.View.Public.class)
+    public Response updateVersion(
+            @PathParam("versionHash") String versionHash,
+            @RequestBody(content = @Content(schema = @Schema(implementation = DatasetVersionUpdate.class))) @Valid @NotNull DatasetVersionUpdate request) {
+
+        String workspaceId = requestContext.get().getWorkspaceId();
+
+        log.info("Updating version '{}' for dataset '{}' on workspace '{}'", versionHash, datasetId, workspaceId);
+        DatasetVersion version = versionService.updateVersion(datasetId, versionHash, request);
+        log.info("Updated version '{}' for dataset '{}' on workspace '{}'", versionHash, datasetId, workspaceId);
+
+        return Response.ok(version).build();
     }
 
     @POST
