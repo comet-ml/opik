@@ -64,7 +64,7 @@ describe("migrateDashboardConfig", () => {
         },
       ],
       lastModified: Date.now(),
-      config: { projectId: "project-1", dateRange: "7d" },
+      config: { dateRange: "7d", projectIds: ["project-1"], experimentIds: [] },
     };
 
     it("should return dashboard unchanged when already at current version", () => {
@@ -93,7 +93,11 @@ describe("migrateDashboardConfig", () => {
         },
       ],
       lastModified: Date.now(),
-      config: { projectId: "legacy-project", dateRange: "30d" },
+      config: {
+        dateRange: "30d",
+        projectIds: ["legacy-project"],
+        experimentIds: [],
+      },
     } as DashboardState;
 
     it("should treat dashboard without version as version 0", () => {
@@ -121,7 +125,7 @@ describe("migrateDashboardConfig", () => {
           },
         ],
         lastModified: Date.now(),
-        config: {},
+        config: { dateRange: "7d", projectIds: [], experimentIds: [] },
       };
 
       const result = migrateDashboardConfig(oldDashboard);
@@ -143,7 +147,7 @@ describe("migrateDashboardConfig", () => {
           },
         ],
         lastModified: Date.now(),
-        config: {},
+        config: { dateRange: "7d", projectIds: [], experimentIds: [] },
       };
 
       const result = migrateDashboardConfig(futureDashboard);
@@ -158,14 +162,14 @@ describe("migrateDashboardConfig", () => {
         version: DASHBOARD_VERSION,
         sections: [],
         lastModified: Date.now(),
-        config: {},
+        config: { dateRange: "7d", projectIds: [], experimentIds: [] },
       };
 
       const result = migrateDashboardConfig(dashboard);
       expect(result.sections).toEqual([]);
     });
 
-    it("should handle dashboard with empty config", () => {
+    it("should handle dashboard with default config", () => {
       const dashboard: DashboardState = {
         version: DASHBOARD_VERSION,
         sections: [
@@ -177,11 +181,11 @@ describe("migrateDashboardConfig", () => {
           },
         ],
         lastModified: Date.now(),
-        config: {},
+        config: { dateRange: "7d", projectIds: [], experimentIds: [] },
       };
 
       const result = migrateDashboardConfig(dashboard);
-      expect(result.config).toEqual({});
+      expect(result.config).toEqual(dashboard.config);
     });
 
     it("should handle dashboard with complex widget configs", () => {
@@ -215,7 +219,11 @@ describe("migrateDashboardConfig", () => {
           },
         ],
         lastModified: Date.now(),
-        config: { projectId: "project-1", dateRange: "7d" },
+        config: {
+          dateRange: "7d",
+          projectIds: ["project-1"],
+          experimentIds: [],
+        },
       };
 
       const result = migrateDashboardConfig(dashboard);
@@ -236,7 +244,7 @@ describe("migrateDashboardConfig", () => {
           },
         ],
         lastModified: Date.now(),
-        config: { projectId: "test" },
+        config: { dateRange: "7d", projectIds: ["test"], experimentIds: [] },
       };
 
       const originalCopy = JSON.parse(JSON.stringify(dashboard));
@@ -269,7 +277,7 @@ describe("migrateDashboardConfig", () => {
           },
         ],
         lastModified: Date.now(),
-        config: {},
+        config: { dateRange: "7d", projectIds: [], experimentIds: [] },
       };
 
       const result = migrateDashboardConfig(dashboard);

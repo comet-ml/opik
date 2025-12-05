@@ -4,7 +4,7 @@ import { OnChangeFn } from "@/types/shared";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import { cn } from "@/lib/utils";
 
-type ChartHorizontalLegendContentProps = React.ComponentProps<
+type ChartHorizontalLegendProps = React.ComponentProps<
   typeof RechartsPrimitive.Legend
 > &
   React.ComponentProps<"div"> & {
@@ -13,9 +13,9 @@ type ChartHorizontalLegendContentProps = React.ComponentProps<
     containerClassName?: string;
   };
 
-const ChartHorizontalLegendContent = React.forwardRef<
+const ChartHorizontalLegend = React.forwardRef<
   HTMLDivElement,
-  ChartHorizontalLegendContentProps
+  ChartHorizontalLegendProps
 >(({ payload, color, setActiveLine, containerClassName }, ref) => {
   const handleMouseEnter = (id: string) => {
     setActiveLine(id);
@@ -74,6 +74,6 @@ const ChartHorizontalLegendContent = React.forwardRef<
     </div>
   );
 });
-ChartHorizontalLegendContent.displayName = "ChartHorizontalLegendContent";
+ChartHorizontalLegend.displayName = "ChartHorizontalLegend";
 
-export default ChartHorizontalLegendContent;
+export default ChartHorizontalLegend;
