@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect } from "react";
+import React, { useCallback, useEffect, useMemo } from "react";
 import PlaygroundOutputTable from "@/components/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundOutputTable/PlaygroundOutputTable";
 import PlaygroundOutputActions from "@/components/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundOutputActions/PlaygroundOutputActions";
 import PlaygroundOutput from "@/components/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundOutput";
@@ -15,6 +15,8 @@ import {
 } from "@/store/PlaygroundStore";
 import useDatasetItemsList from "@/api/datasets/useDatasetItemsList";
 import { DatasetItem, DatasetItemColumn } from "@/types/datasets";
+import { Filter, Filters } from "@/types/filters";
+import { COLUMN_DATA_ID } from "@/types/shared";
 import { keepPreviousData } from "@tanstack/react-query";
 
 interface PlaygroundOutputsProps {
@@ -25,6 +27,27 @@ interface PlaygroundOutputsProps {
 
 const EMPTY_ITEMS: DatasetItem[] = [];
 const EMPTY_COLUMNS: DatasetItemColumn[] = [];
+
+/**
+ * Transform data column filters from "data.columnName" format to backend format.
+ * This converts field="data.columnName" to field="data" with key="columnName".
+ * This transformation is specific to dataset item filtering and should not be in generic filter processing.
+ */
+const transformDataColumnFilters = (filters: Filters): Filters => {
+  const dataFieldPrefix = `${COLUMN_DATA_ID}.`;
+
+  return filters.map((filter: Filter) => {
+    if (filter.field.startsWith(dataFieldPrefix)) {
+      const columnKey = filter.field.slice(dataFieldPrefix.length);
+      return {
+        ...filter,
+        field: COLUMN_DATA_ID,
+        key: columnKey,
+      };
+    }
+    return filter;
+  });
+};
 
 const PlaygroundOutputs = ({
   workspaceName,
@@ -41,6 +64,12 @@ const PlaygroundOutputs = ({
   const setSize = useSetDatasetSize();
   const resetDatasetFilters = useResetDatasetFilters();
 
+  // Transform data column filters before passing to API
+  const transformedFilters = useMemo(
+    () => (filters ? transformDataColumnFilters(filters) : filters),
+    [filters],
+  );
+
   const {
     data: datasetItemsData,
     isLoading: isLoadingDatasetItems,
@@ -52,7 +81,7 @@ const PlaygroundOutputs = ({
       page,
       size,
       truncate: true,
-      filters,
+      filters: transformedFilters,
     },
     {
       enabled: !!datasetId,
