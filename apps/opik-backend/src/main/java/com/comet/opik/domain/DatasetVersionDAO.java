@@ -144,7 +144,7 @@ public interface DatasetVersionDAO {
             SELECT
                 dv.*,
                 COALESCE(t.tags, JSON_ARRAY()) AS tags,
-                COALESCE(JSON_CONTAINS(t.tags, '"latest"'), false) AS is_latest
+                true AS is_latest
             FROM dataset_versions AS dv
             INNER JOIN (
                 SELECT version_id, JSON_ARRAYAGG(tag) AS tags
