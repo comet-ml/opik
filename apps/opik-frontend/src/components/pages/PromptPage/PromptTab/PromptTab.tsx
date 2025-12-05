@@ -90,7 +90,11 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
 
   const displayText = activeVersion?.template || "";
 
-  const { images: extractedImages, videos: extractedVideos } = useMemo(() => {
+  const {
+    images: extractedImages,
+    videos: extractedVideos,
+    audios: extractedAudios,
+  } = useMemo(() => {
     const content = parsePromptVersionContent(activeVersion);
     return parseLLMMessageContent(content);
   }, [activeVersion]);
@@ -175,6 +179,19 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
                   <MediaTagsList
                     type="video"
                     items={extractedVideos}
+                    editable={false}
+                    preview={true}
+                  />
+                </>
+              )}
+              {extractedAudios.length > 0 && (
+                <>
+                  <p className="comet-body-s-accented mt-4 text-foreground">
+                    Audios
+                  </p>
+                  <MediaTagsList
+                    type="audio"
+                    items={extractedAudios}
                     editable={false}
                     preview={true}
                   />

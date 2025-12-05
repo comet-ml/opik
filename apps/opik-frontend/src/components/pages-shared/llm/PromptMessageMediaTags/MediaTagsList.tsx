@@ -19,15 +19,6 @@ export interface MediaTagsListProps {
   preview?: boolean;
 }
 
-const MAX_DISPLAY_LENGTH = 40;
-
-const truncateMediaString = (value: string) => {
-  if (value.length <= MAX_DISPLAY_LENGTH) {
-    return value;
-  }
-  return `${value.substring(0, MAX_DISPLAY_LENGTH)}...`;
-};
-
 const isHttpUrl = (value: string): boolean => {
   try {
     const url = new URL(value);
@@ -158,14 +149,12 @@ const MediaTagsList: React.FC<MediaTagsListProps> = ({
           <Tag
             size="md"
             variant="gray"
-            className="group/media-tag max-w-full shrink-0 pr-2 transition-all"
+            className="group/media-tag max-w-[240px] shrink-0 pr-2 transition-all"
             onClick={(event) => event.stopPropagation()}
           >
             <div className="flex max-w-full items-center">
               {icon}
-              <span className="mx-1 truncate">
-                {truncateMediaString(value)}
-              </span>
+              <span className="mx-1 min-w-0 truncate">{value}</span>
               {editable && setItems && (
                 <Button
                   size="icon-2xs"
