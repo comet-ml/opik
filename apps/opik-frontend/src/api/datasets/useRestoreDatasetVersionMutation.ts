@@ -55,6 +55,10 @@ const useRestoreDatasetVersionMutation = () => {
       });
 
       queryClient.invalidateQueries({
+        queryKey: ["dataset", { datasetId }],
+      });
+
+      queryClient.invalidateQueries({
         queryKey: ["dataset-items", { datasetId }],
         exact: false,
       });

@@ -54,6 +54,10 @@ const useEditDatasetVersionMutation = () => {
       });
 
       queryClient.invalidateQueries({
+        queryKey: ["dataset", { datasetId }],
+      });
+
+      queryClient.invalidateQueries({
         queryKey: ["dataset-versions", { datasetId }],
         exact: false,
       });
