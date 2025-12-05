@@ -43,7 +43,9 @@ const PromptMessageMediaSection: React.FC<PromptMessageMediaSectionProps> = ({
         <div
           className={cn(
             "flex overflow-hidden transition-all duration-300 ease-out",
-            isAnyPopoverOpen ? "opacity-100" : "opacity-0 group-hover:opacity-100",
+            isAnyPopoverOpen
+              ? "opacity-100"
+              : "opacity-0 group-hover:opacity-100",
           )}
         >
           <AddMediaPopover
@@ -57,7 +59,10 @@ const PromptMessageMediaSection: React.FC<PromptMessageMediaSectionProps> = ({
                 type="button"
                 variant="minimal"
                 disabled={disabled}
-                className={cn("p-1", openPopover === "image" && "text-foreground")}
+                className={cn(
+                  "p-1",
+                  openPopover === "image" && "text-foreground",
+                )}
               >
                 <Image className="size-4" />
               </Button>
@@ -74,7 +79,10 @@ const PromptMessageMediaSection: React.FC<PromptMessageMediaSectionProps> = ({
                 type="button"
                 variant="minimal"
                 disabled={disabled}
-                className={cn("p-1", openPopover === "video" && "text-foreground")}
+                className={cn(
+                  "p-1",
+                  openPopover === "video" && "text-foreground",
+                )}
               >
                 <Video className="size-4" />
               </Button>
@@ -90,7 +98,10 @@ const PromptMessageMediaSection: React.FC<PromptMessageMediaSectionProps> = ({
               <Button
                 type="button"
                 variant="minimal"
-                className={cn("p-1", openPopover === "audio" && "text-foreground")}
+                className={cn(
+                  "p-1",
+                  openPopover === "audio" && "text-foreground",
+                )}
                 disabled={disabled}
               >
                 <Music className="size-4" />

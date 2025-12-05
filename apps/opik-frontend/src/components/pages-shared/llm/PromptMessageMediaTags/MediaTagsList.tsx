@@ -163,7 +163,9 @@ const MediaTagsList: React.FC<MediaTagsListProps> = ({
           >
             <div className="flex max-w-full items-center">
               {icon}
-              <span className="mx-1 truncate">{truncateMediaString(value)}</span>
+              <span className="mx-1 truncate">
+                {truncateMediaString(value)}
+              </span>
               {editable && setItems && (
                 <Button
                   size="icon-2xs"
@@ -194,4 +196,3 @@ const MediaTagsList: React.FC<MediaTagsListProps> = ({
 };
 
 export default MediaTagsList;
-

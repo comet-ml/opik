@@ -37,7 +37,7 @@ const isHttpUrl = (value: string): boolean => {
 
 const validateMediaUrl = (url: string): { valid: boolean; error?: string } => {
   if (!isHttpUrl(url)) {
-    // Allow template variables like {{image}} or {{video}}, {{audio}} 
+    // Allow template variables like {{image}} or {{video}}, {{audio}}
     if (url.match(/^\{\{.+\}\}$/)) {
       return { valid: true };
     }
@@ -164,4 +164,3 @@ const AddMediaPopover: React.FC<AddMediaPopoverProps> = ({
 };
 
 export default AddMediaPopover;
-
