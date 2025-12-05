@@ -21,8 +21,9 @@ import FiltersButton from "@/components/shared/FiltersButton/FiltersButton";
 import useDatasetItemsList from "@/api/datasets/useDatasetItemsList";
 import StatusMessage from "@/components/shared/StatusMessage/StatusMessage";
 import { DatasetItem, DATASET_STATUS } from "@/types/datasets";
-import { Filters } from "@/types/filters";
+import { Filter, Filters } from "@/types/filters";
 import {
+  COLUMN_DATA_ID,
   COLUMN_ID_ID,
   COLUMN_SELECT_ID,
   COLUMN_TYPE,
@@ -53,6 +54,27 @@ import {
   generateSelectColumDef,
 } from "@/components/shared/DataTable/utils";
 import { DATASET_ITEM_DATA_PREFIX } from "@/constants/datasets";
+
+/**
+ * Transform data column filters from "data.columnName" format to backend format.
+ * This converts field="data.columnName" to field="data" with key="columnName".
+ * This transformation is specific to DatasetItemsPage and should not be in generic filter processing.
+ */
+const transformDataColumnFilters = (filters: Filters): Filters => {
+  const dataFieldPrefix = `${COLUMN_DATA_ID}.`;
+
+  return filters.map((filter: Filter) => {
+    if (filter.field.startsWith(dataFieldPrefix)) {
+      const columnKey = filter.field.slice(dataFieldPrefix.length);
+      return {
+        ...filter,
+        field: COLUMN_DATA_ID,
+        key: columnKey,
+      };
+    }
+    return filter;
+  });
+};
 
 const getRowId = (d: DatasetItem) => d.id;
 
@@ -135,11 +157,17 @@ const DatasetItemsTab: React.FC<DatasetItemsTabProps> = ({
   const [openDialog, setOpenDialog] = useState<boolean>(false);
   const [openAddSidebar, setOpenAddSidebar] = useState<boolean>(false);
 
+  // Transform data column filters before passing to API
+  const transformedFilters = useMemo(
+    () => (filters ? transformDataColumnFilters(filters) : filters),
+    [filters],
+  );
+
   const { data, isPending, isPlaceholderData, isFetching } =
     useDatasetItemsList(
       {
         datasetId,
-        filters,
+        filters: transformedFilters,
         page: page as number,
         size: size as number,
         search: search!,
@@ -161,7 +189,7 @@ const DatasetItemsTab: React.FC<DatasetItemsTabProps> = ({
   const { refetch: refetchExportData } = useDatasetItemsList(
     {
       datasetId,
-      filters,
+      filters: transformedFilters,
       page: page as number,
       size: size as number,
       search: search!,
@@ -175,7 +203,7 @@ const DatasetItemsTab: React.FC<DatasetItemsTabProps> = ({
   const { refetch: refetchAllItemsForExport } = useDatasetItemsList(
     {
       datasetId,
-      filters,
+      filters: transformedFilters,
       page: 1,
       size: totalCount || 1,
       search: search!,
@@ -344,7 +372,16 @@ const DatasetItemsTab: React.FC<DatasetItemsTabProps> = ({
   }, [dynamicDatasetColumns]);
 
   const filtersColumnData = useMemo(() => {
+    // Add each data column as a separate filter option with field prefix "data."
+    // This will be transformed to field="data" and key=columnName when processing
+    const dataFilterColumns = datasetColumns.map((c) => ({
+      id: `${COLUMN_DATA_ID}.${c.name}`,
+      label: c.name,
+      type: COLUMN_TYPE.string,
+    }));
+
     return [
+      ...dataFilterColumns,
       {
         id: "tags",
         label: "Tags",
@@ -352,7 +389,7 @@ const DatasetItemsTab: React.FC<DatasetItemsTabProps> = ({
         iconType: "tags" as const,
       },
     ];
-  }, []);
+  }, [datasetColumns]);
 
   const handleRowClick = useCallback(
     (row: DatasetItem) => {

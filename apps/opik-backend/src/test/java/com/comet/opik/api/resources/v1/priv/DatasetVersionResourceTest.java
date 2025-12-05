@@ -448,6 +448,14 @@ class DatasetVersionResourceTest {
             // Verify second version has 'latest' tag and isLatest is true
             assertThat(version2Retrieved.tags()).contains("v2", DatasetVersionService.LATEST_TAG);
             assertThat(version2Retrieved.isLatest()).isTrue();
+
+            // Verify dataset's latestVersion field contains the latest version summary
+            var dataset = datasetResourceClient.getDatasetById(datasetId, API_KEY, TEST_WORKSPACE);
+            assertThat(dataset.latestVersion()).isNotNull();
+            assertThat(dataset.latestVersion().id()).isEqualTo(version2Retrieved.id());
+            assertThat(dataset.latestVersion().versionHash()).isEqualTo(version2Hash);
+            assertThat(dataset.latestVersion().changeDescription()).isEqualTo("Second version");
+            assertThat(dataset.latestVersion().tags()).contains("v2", DatasetVersionService.LATEST_TAG);
         }
     }
 
