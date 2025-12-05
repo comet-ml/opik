@@ -1,6 +1,8 @@
 import mimetypes
 from typing import Optional
 
+from opik import id_helpers
+
 
 def get_file_extension(mime_type: str) -> str:
     """Convert MIME type to file extension.
@@ -98,3 +100,8 @@ def detect_mime_type(data: bytes) -> Optional[str]:
 
     # Default to octet-stream for unknown types
     return "application/octet-stream"
+
+
+def create_attachment_filename(context: str, extension: str) -> str:
+    unique_id = id_helpers.generate_random_alphanumeric_string(8)
+    return f"{context}-attachment-{unique_id}.{extension}"

@@ -2,6 +2,8 @@ import base64
 
 from opik.api_objects.attachment import decoder_helpers
 
+from . import constants
+
 
 class TestDetectMimeType:
     """Test suite for detect_mime_type() function."""
@@ -31,29 +33,24 @@ class TestDetectMimeType:
 
     def test_detect_gif89a(self):
         """Test GIF89a format detection."""
-        gif_data = b"GIF89a" + b"\x00" * 100
-        assert decoder_helpers.detect_mime_type(gif_data) == "image/gif"
+        assert decoder_helpers.detect_mime_type(constants.GIF89_BYTES) == "image/gif"
 
     def test_detect_pdf(self):
         """Test PDF document detection."""
-        pdf_data = b"%PDF-1.4" + b"\x00" * 100
-        assert decoder_helpers.detect_mime_type(pdf_data) == "application/pdf"
+        assert (
+            decoder_helpers.detect_mime_type(constants.PDF_BYTES) == "application/pdf"
+        )
 
     def test_detect_webp(self):
         """Test WebP image detection."""
-        # WebP: RIFF at start, WEBP at offset 8
-        webp_data = b"RIFF\x00\x00\x00\x00WEBP" + b"\x00" * 100
-        assert decoder_helpers.detect_mime_type(webp_data) == "image/webp"
+        assert decoder_helpers.detect_mime_type(constants.WEBP_BYTES) == "image/webp"
 
     def test_detect_svg(self):
         """Test SVG image detection."""
-        svg_data = (
-            b'<?xml version="1.0"?><svg xmlns="http://www.w3.org/2000/svg"></svg>'
-        )
-        assert decoder_helpers.detect_mime_type(svg_data) == "image/svg+xml"
+        assert decoder_helpers.detect_mime_type(constants.SVG_BYTES) == "image/svg+xml"
 
     def test_detect_svg_with_uppercase(self):
-        """Test SVG detection with uppercase tag."""
+        """Test SVG detection with an uppercase tag."""
         svg_data = b"<SVG>content</SVG>"
         assert decoder_helpers.detect_mime_type(svg_data) == "image/svg+xml"
 
@@ -107,28 +104,28 @@ class TestDetectMimeType:
 
     def test_detect_unknown_binary(self):
         """Test that unknown binary data returns octet-stream."""
-        random_data = b"\x01\x02\x03\x04\x05\x06\x07\x08"
         assert (
-            decoder_helpers.detect_mime_type(random_data) == "application/octet-stream"
+            decoder_helpers.detect_mime_type(constants.RANDOM_BINARY_BYTES)
+            == "application/octet-stream"
         )
 
     def test_detect_plain_text_not_json(self):
         """Test that plain text (non-JSON) returns octet-stream."""
-        text_data = b"This is just plain text without special markers"
-        assert decoder_helpers.detect_mime_type(text_data) == "application/octet-stream"
+        assert (
+            decoder_helpers.detect_mime_type(constants.PLAIN_TEXT_BYTES)
+            == "application/octet-stream"
+        )
 
     def test_real_png_base64(self):
         """Test with a real minimal PNG image (1x1 transparent pixel)."""
         # 1x1 transparent PNG
-        png_base64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="
-        png_data = base64.b64decode(png_base64)
+        png_data = base64.b64decode(constants.PNG_BASE64)
         assert decoder_helpers.detect_mime_type(png_data) == "image/png"
 
     def test_real_jpeg_base64(self):
         """Test with a real minimal JPEG image."""
         # Minimal valid JPEG (1x1 red pixel)
-        jpeg_base64 = "/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQH/2wBDAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQH/wAARCAABAAEDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAv/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/8QAFQEBAQAAAAAAAAAAAAAAAAAAAAX/xAAUEQEAAAAAAAAAAAAAAAAAAAAA/9oADAMBAAIRAxEAPwCRAP/Z"
-        jpeg_data = base64.b64decode(jpeg_base64)
+        jpeg_data = base64.b64decode(constants.JPEG_BASE64)
         assert decoder_helpers.detect_mime_type(jpeg_data) == "image/jpeg"
 
     def test_detect_svg_with_long_content(self):
@@ -196,21 +193,21 @@ class TestGetFileExtension:
         assert decoder_helpers.get_file_extension("image/jpeg; charset=utf-8") == "jpeg"
 
     def test_get_extension_empty_string(self):
-        """Test that empty MIME type returns 'bin'."""
+        """Test that an empty MIME type returns 'bin'."""
         assert decoder_helpers.get_file_extension("") == "bin"
 
     def test_get_extension_none(self):
-        """Test that None MIME type returns 'bin'."""
+        """Test that a None MIME type returns 'bin'."""
         # This will fail the "if not mime_type:" check
         result = decoder_helpers.get_file_extension("")
         assert result == "bin"
 
     def test_get_extension_invalid_format(self):
-        """Test that invalid MIME type format returns 'bin'."""
+        """Test that an invalid MIME type format returns 'bin'."""
         assert decoder_helpers.get_file_extension("invalidmimetype") == "bin"
 
     def test_get_extension_unknown_type(self):
-        """Test that unknown MIME type extracts subtype."""
+        """Test that an unknown MIME type extracts subtype."""
         assert (
             decoder_helpers.get_file_extension("application/x-custom-type")
             == "x-custom-type"

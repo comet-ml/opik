@@ -1,5 +1,5 @@
 import abc
-from typing import Union, Dict, Any, Optional
+from typing import Any, Optional
 
 from . import attachment
 
@@ -14,7 +14,5 @@ class AttachmentDecoder(abc.ABC):
     """
 
     @abc.abstractmethod
-    def decode(
-        self, raw_data: Union[str, Dict[str, Any]], **kwargs: Any
-    ) -> Optional[attachment.Attachment]:
+    def decode(self, raw_data: str, **kwargs: Any) -> Optional[attachment.Attachment]:
         pass

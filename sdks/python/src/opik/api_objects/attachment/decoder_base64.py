@@ -2,12 +2,9 @@ import base64
 import binascii
 import logging
 import tempfile
-from typing import Optional, Any, Union, Dict
-
-from opik import id_helpers
+from typing import Any, Optional, Literal
 
 from . import attachment, decoder, decoder_helpers
-
 
 LOGGER = logging.getLogger(__name__)
 
@@ -20,16 +17,15 @@ class Base44AttachmentDecoder(decoder.AttachmentDecoder):
 
     def decode(
         self,
-        raw_data: Union[str, Dict[str, Any]],
-        context: str = "undefined",
+        raw_data: str,
+        context: Literal["input", "output", "metadata"] = "input",
         **kwargs: Any,
     ) -> Optional[attachment.Attachment]:
         """Decode base64 encoded data into an Attachment object.
 
         Args:
             raw_data: Base64 encoded string data
-            context: Context string for filename generation (e.g., "input", "output", "metadata").
-                Defaults to "attachment".
+            context: Context string for filename generation.
 
         Returns:
             Attachment object with decoded data, or None if decoding fails or type is not recognizable
@@ -54,12 +50,13 @@ class Base44AttachmentDecoder(decoder.AttachmentDecoder):
             extension = decoder_helpers.get_file_extension(mime_type)
 
             # Generate filename
-            unique_id = id_helpers.generate_id()
-            file_name = f"{context}-attachment-{unique_id}.{extension}"
+            file_name = decoder_helpers.create_attachment_filename(
+                context, extension=extension
+            )
 
             # Save decoded bytes to a temporary file
             temp_file = tempfile.NamedTemporaryFile(
-                mode="wb", delete=False, suffix=f".{extension}"
+                mode="wb", delete=False, suffix=extension
             )
             temp_file.write(decoded_bytes)
             temp_file.flush()
