@@ -22,7 +22,7 @@ import ImproveInPlaygroundButton from "@/components/pages/PromptPage/ImproveInPl
 import ExplainerIcon from "@/components/shared/ExplainerIcon/ExplainerIcon";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 import RestoreVersionDialog from "./RestoreVersionDialog";
-import PromptMessageMediaTags from "@/components/pages-shared/llm/PromptMessageMediaTags/PromptMessageMediaTags";
+import MediaTagsList from "@/components/pages-shared/llm/PromptMessageMediaTags/MediaTagsList";
 import { parseLLMMessageContent, parsePromptVersionContent } from "@/lib/llm";
 import CopyButton from "@/components/shared/CopyButton/CopyButton";
 import ChatPromptView from "./ChatPromptView";
@@ -159,12 +159,11 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
                   <p className="comet-body-s-accented mt-4 text-foreground">
                     Images
                   </p>
-                  <PromptMessageMediaTags
+                  <MediaTagsList
                     type="image"
                     items={extractedImages}
                     editable={false}
                     preview={true}
-                    align="start"
                   />
                 </>
               )}
@@ -173,12 +172,11 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
                   <p className="comet-body-s-accented mt-4 text-foreground">
                     Videos
                   </p>
-                  <PromptMessageMediaTags
+                  <MediaTagsList
                     type="video"
                     items={extractedVideos}
                     editable={false}
                     preview={true}
-                    align="start"
                   />
                 </>
               )}
