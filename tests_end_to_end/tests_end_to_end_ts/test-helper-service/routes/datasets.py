@@ -1,5 +1,6 @@
 from flask import Blueprint, request, jsonify
-import opik
+import os
+from opik import Opik
 from opik.rest_api.core.api_error import ApiError
 import time
 import logging
@@ -9,7 +10,12 @@ logger = logging.getLogger(__name__)
 
 
 def get_opik_client():
-    return opik.Opik()
+    """Get configured Opik SDK client"""
+    return Opik(
+        api_key=os.getenv("OPIK_API_KEY", None),
+        workspace=os.getenv("OPIK_WORKSPACE", None),
+        host=os.getenv("OPIK_URL_OVERRIDE", None),
+    )
 
 
 @datasets_bp.route("/create", methods=["POST"])
@@ -52,10 +58,8 @@ def update_dataset():
     dataset = client.get_dataset(dataset_name)
     dataset_id = dataset.id
 
-    from opik.rest_api.client import OpikApi
-
-    api_client = OpikApi()
-    api_client.datasets.update_dataset(id=dataset_id, name=new_name)
+    # Use the rest_client from the Opik client which is already properly configured
+    client.rest_client.datasets.update_dataset(id=dataset_id, name=new_name)
 
     return jsonify({"id": dataset_id, "name": new_name})
 

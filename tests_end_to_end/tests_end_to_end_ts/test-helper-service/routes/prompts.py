@@ -3,10 +3,8 @@
 from flask import Blueprint, request, abort
 from werkzeug.exceptions import HTTPException
 import time
-from opik import Prompt
 from .utils import (
     get_opik_client,
-    get_opik_api_client,
     build_error_response,
     success_response,
     validate_required_fields,
@@ -38,7 +36,8 @@ def create_prompt():
     name = data["name"]
     prompt_text = data["prompt"]
 
-    prompt = Prompt(name=name, prompt=prompt_text)
+    client = get_opik_client()
+    prompt = client.create_prompt(name=name, prompt=prompt_text)
 
     return success_response(
         {
@@ -90,7 +89,8 @@ def update_prompt():
     name = data["name"]
     prompt_text = data["prompt"]
 
-    prompt = Prompt(name=name, prompt=prompt_text)
+    client = get_opik_client()
+    prompt = client.create_prompt(name=name, prompt=prompt_text)
 
     return success_response(
         {
@@ -107,14 +107,15 @@ def delete_prompt():
     validate_required_fields(data, ["name"])
 
     name = data["name"]
-    api_client = get_opik_api_client()
+    client = get_opik_client()
 
-    prompts_response = api_client.prompts.get_prompts(name=name)
+    # Use the rest_client from the Opik client which is already properly configured
+    prompts_response = client.rest_client.prompts.get_prompts(name=name)
 
     if not prompts_response.content or len(prompts_response.content) == 0:
         abort(404, f"Prompt not found: {name}")
 
     prompt = prompts_response.content[0]
-    api_client.prompts.delete_prompt(id=prompt.id)
+    client.rest_client.prompts.delete_prompt(id=prompt.id)
 
     return success_response({"name": name})
