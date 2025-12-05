@@ -19,7 +19,7 @@ const useDatasetItemDeleteMutation = () => {
       datasetItemId,
     }: UseDatasetItemDeleteMutationParams) => {
       const { data } = await api.post(`${DATASETS_REST_ENDPOINT}items/delete`, {
-        item_ids: [datasetItemId],
+        ids: [datasetItemId],
       });
       return data;
     },
