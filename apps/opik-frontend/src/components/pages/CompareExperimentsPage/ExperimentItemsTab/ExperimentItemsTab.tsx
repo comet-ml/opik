@@ -467,6 +467,7 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
         label: "Total tokens",
         type: COLUMN_TYPE.number,
         cell: CostCell.Compare as never,
+        statisticKey: `${COLUMN_USAGE_ID}.total_tokens`,
         customMeta: {
           experimentsIds,
           accessor: `${COLUMN_USAGE_ID}.total_tokens`,
@@ -478,6 +479,7 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
         label: "Estimated cost",
         type: COLUMN_TYPE.cost,
         cell: CostCell.Compare as never,
+        statisticKey: "total_estimated_cost",
         customMeta: {
           experimentsIds,
           accessor: "total_estimated_cost",

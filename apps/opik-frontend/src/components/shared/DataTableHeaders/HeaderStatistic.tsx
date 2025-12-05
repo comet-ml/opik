@@ -14,10 +14,11 @@ import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
   DropdownMenuContent,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 
-const OPTIONS: DropdownOption<string>[] = [
+const PERCENTILE_OPTIONS: DropdownOption<string>[] = [
   {
     label: "Percentile 50",
     value: "p50",
@@ -40,8 +41,19 @@ const COLUMNS_WITH_SUM = [
   "usage.completion_tokens",
 ];
 
+// Columns that should display percentiles alongside avg
+const COLUMNS_WITH_PERCENTILES = [
+  "total_estimated_cost",
+  "usage.total_tokens",
+];
+
+// Check if statisticKey is a feedback score (starts with "feedback_scores.")
+const isFeedbackScore = (key?: string) =>
+  key?.startsWith("feedback_scores.") ?? false;
+
 type HeaderStatisticProps = {
   statistic?: ColumnStatistic;
+  percentileStatistic?: ColumnStatistic;
   columnsStatistic?: ColumnsStatistic;
   statisticKey?: string;
   dataFormater?: (value: number) => string;
@@ -49,12 +61,16 @@ type HeaderStatisticProps = {
 
 const HeaderStatistic: React.FC<HeaderStatisticProps> = ({
   statistic,
+  percentileStatistic,
   columnsStatistic,
   statisticKey,
   dataFormater = formatNumericData,
 }) => {
-  const [percentileValue, setPercentileValue] = React.useState<string>("p50");
-  const [avgSumValue, setAvgSumValue] = React.useState<string>("avg");
+  // Default to "avg" for AVG type, "p50" for PERCENTAGE type
+  const defaultValue =
+    statistic?.type === STATISTIC_AGGREGATION_TYPE.PERCENTAGE ? "p50" : "avg";
+  const [selectedValue, setSelectedValue] =
+    React.useState<string>(defaultValue);
 
   // Check if this column should display sum
   const shouldDisplaySum =
@@ -62,16 +78,23 @@ const HeaderStatistic: React.FC<HeaderStatisticProps> = ({
     statisticKey &&
     COLUMNS_WITH_SUM.includes(statisticKey);
 
+  // Check if this column should display percentiles alongside avg
+  const shouldDisplayPercentiles =
+    percentileStatistic?.type === STATISTIC_AGGREGATION_TYPE.PERCENTAGE &&
+    statisticKey &&
+    (COLUMNS_WITH_PERCENTILES.includes(statisticKey) ||
+      isFeedbackScore(statisticKey));
+
   // Calculate sum if needed: sum = count * avg
   let sumValue: number | null = null;
-  if (shouldDisplaySum && columnsStatistic) {
+  if (shouldDisplaySum && columnsStatistic && statistic?.value) {
     const countStat = find(
       columnsStatistic,
       (s) =>
         s.type === STATISTIC_AGGREGATION_TYPE.COUNT &&
         (s.name === "trace_count" || s.name === "span_count"),
     );
-    if (countStat && statistic?.value) {
+    if (countStat) {
       sumValue = Number(countStat.value) * statistic.value;
 
       // Round token counts to whole numbers (tokens are discrete units)
@@ -81,16 +104,59 @@ const HeaderStatistic: React.FC<HeaderStatisticProps> = ({
     }
   }
 
+  // Get the display value based on selected option
+  const getDisplayValue = (): number => {
+    if (selectedValue === "avg" && statistic?.value !== undefined) {
+      return statistic.value as number;
+    }
+    if (selectedValue === "sum" && sumValue !== null) {
+      return sumValue;
+    }
+    if (
+      ["p50", "p90", "p99"].includes(selectedValue) &&
+      percentileStatistic?.type === STATISTIC_AGGREGATION_TYPE.PERCENTAGE
+    ) {
+      return get(percentileStatistic.value, selectedValue, 0);
+    }
+    return 0;
+  };
+
+  // Build dropdown options based on what's available
+  const buildDropdownOptions = (): DropdownOption<string>[] => {
+    const options: DropdownOption<string>[] = [];
+
+    if (statistic?.type === STATISTIC_AGGREGATION_TYPE.AVG) {
+      options.push({ label: "Average", value: "avg" });
+    }
+
+    if (shouldDisplaySum && sumValue !== null) {
+      options.push({ label: "Sum", value: "sum" });
+    }
+
+    if (shouldDisplayPercentiles) {
+      options.push(...PERCENTILE_OPTIONS);
+    }
+
+    return options;
+  };
+
   switch (statistic?.type) {
-    case STATISTIC_AGGREGATION_TYPE.AVG:
-      if (shouldDisplaySum && sumValue !== null) {
-        const displayValue = avgSumValue === "avg" ? statistic.value : sumValue;
+    case STATISTIC_AGGREGATION_TYPE.AVG: {
+      const dropdownOptions = buildDropdownOptions();
+
+      // If we have more than just avg (i.e., sum and/or percentiles), show dropdown
+      if (dropdownOptions.length > 1) {
+        const displayValue = getDisplayValue();
+        const showSeparator =
+          shouldDisplayPercentiles &&
+          (shouldDisplaySum || statistic?.type === STATISTIC_AGGREGATION_TYPE.AVG);
+
         return (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <div className="flex max-w-full">
                 <span className="comet-body-s truncate text-foreground">
-                  <span>{avgSumValue}</span>
+                  <span>{selectedValue}</span>
                   <span className="ml-1 font-semibold">
                     {dataFormater(displayValue)}
                   </span>
@@ -99,22 +165,28 @@ const HeaderStatistic: React.FC<HeaderStatisticProps> = ({
               </div>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-              <DropdownMenuCheckboxItem
-                onSelect={() => setAvgSumValue("avg")}
-                checked={avgSumValue === "avg"}
-              >
-                Average
-              </DropdownMenuCheckboxItem>
-              <DropdownMenuCheckboxItem
-                onSelect={() => setAvgSumValue("sum")}
-                checked={avgSumValue === "sum"}
-              >
-                Sum
-              </DropdownMenuCheckboxItem>
+              {dropdownOptions.map((option, index) => {
+                // Add separator before percentile options if we have avg/sum
+                const isFirstPercentile =
+                  showSeparator && option.value === "p50";
+                return (
+                  <React.Fragment key={option.value}>
+                    {isFirstPercentile && <DropdownMenuSeparator />}
+                    <DropdownMenuCheckboxItem
+                      onSelect={() => setSelectedValue(option.value)}
+                      checked={selectedValue === option.value}
+                    >
+                      {option.label}
+                    </DropdownMenuCheckboxItem>
+                  </React.Fragment>
+                );
+              })}
             </DropdownMenuContent>
           </DropdownMenu>
         );
       }
+
+      // Just avg, no dropdown needed
       return (
         <span className="comet-body-s truncate text-foreground">
           <span>avg</span>
@@ -123,6 +195,7 @@ const HeaderStatistic: React.FC<HeaderStatisticProps> = ({
           </span>
         </span>
       );
+    }
     case STATISTIC_AGGREGATION_TYPE.COUNT:
       return (
         <span className="comet-body-s truncate text-foreground">
@@ -138,21 +211,21 @@ const HeaderStatistic: React.FC<HeaderStatisticProps> = ({
           <DropdownMenuTrigger asChild>
             <div className="flex max-w-full">
               <span className="comet-body-s truncate text-foreground">
-                <span>{percentileValue}</span>
+                <span>{selectedValue}</span>
                 <span className="ml-1 font-semibold">
-                  {dataFormater(get(statistic.value, percentileValue, 0))}
+                  {dataFormater(get(statistic.value, selectedValue, 0))}
                 </span>
               </span>
               <ChevronDown className="ml-0.5 size-3.5 shrink-0"></ChevronDown>
             </div>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
-            {OPTIONS.map((option) => {
+            {PERCENTILE_OPTIONS.map((option) => {
               return (
                 <DropdownMenuCheckboxItem
                   key={option.value}
-                  onSelect={() => setPercentileValue(option.value)}
-                  checked={percentileValue === option.value}
+                  onSelect={() => setSelectedValue(option.value)}
+                  checked={selectedValue === option.value}
                 >
                   {option.label}
                 </DropdownMenuCheckboxItem>
