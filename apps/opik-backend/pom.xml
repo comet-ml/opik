@@ -565,11 +565,11 @@
               <configuration>
                   <!-- Enable parallel test execution at class level -->
                   <parallel>classes</parallel>
-                  <!-- Use 2 forks to increase parallelism -->
-                  <forkCount>2</forkCount>
+                  <!-- Use 4 forks to increase parallelism -->
+                  <forkCount>4</forkCount>
                   <!-- Don't reuse forks to prevent Quartz Scheduler conflicts -->
                   <reuseForks>false</reuseForks>
-                  <!-- Allocate 4GB per fork (2 forks * 4GB = 8GB heap total) -->
+                  <!-- Allocate 4GB per fork (4 forks * 4GB = 16GB heap total) -->
                   <argLine>-Xmx4g -XX:+UseG1GC</argLine>
               </configuration>
           </plugin>
