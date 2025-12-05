@@ -21,6 +21,7 @@ public record DatasetVersion(
         @JsonView(DatasetVersion.View.Public.class) @Schema(accessMode = Schema.AccessMode.READ_ONLY) UUID datasetId,
         @JsonView(DatasetVersion.View.Public.class) @Schema(accessMode = Schema.AccessMode.READ_ONLY) String versionHash,
         @JsonView(DatasetVersion.View.Public.class) @Schema(accessMode = Schema.AccessMode.READ_ONLY) SequencedSet<String> tags,
+        @JsonView(DatasetVersion.View.Public.class) @Schema(accessMode = Schema.AccessMode.READ_ONLY, description = "Indicates whether this is the latest version of the dataset") boolean isLatest,
         @JsonView(DatasetVersion.View.Public.class) @Schema(accessMode = Schema.AccessMode.READ_ONLY, description = "Total number of items in this version") Integer itemsTotal,
         @JsonView(DatasetVersion.View.Public.class) @Schema(accessMode = Schema.AccessMode.READ_ONLY, description = "Number of items added since last version") Integer itemsAdded,
         @JsonView(DatasetVersion.View.Public.class) @Schema(accessMode = Schema.AccessMode.READ_ONLY, description = "Number of items modified since last version") Integer itemsModified,

@@ -11,6 +11,7 @@ import com.comet.opik.api.DatasetVersion;
 import com.comet.opik.api.DatasetVersionCreate;
 import com.comet.opik.api.DatasetVersionDiff;
 import com.comet.opik.api.DatasetVersionTag;
+import com.comet.opik.api.DatasetVersionUpdate;
 import com.comet.opik.api.PromptVersion;
 import com.comet.opik.utils.JsonUtils;
 import com.google.common.net.HttpHeaders;
@@ -503,6 +504,27 @@ public class DatasetResourceClient {
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .header(WORKSPACE_HEADER, workspaceName)
                 .delete();
+    }
+
+    public DatasetVersion updateVersion(UUID datasetId, String versionHash, DatasetVersionUpdate update, String apiKey,
+            String workspaceName) {
+        try (var response = callUpdateVersion(datasetId, versionHash, update, apiKey, workspaceName)) {
+            assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
+            return response.readEntity(DatasetVersion.class);
+        }
+    }
+
+    public Response callUpdateVersion(UUID datasetId, String versionHash, DatasetVersionUpdate update, String apiKey,
+            String workspaceName) {
+        return client.target(RESOURCE_PATH.formatted(baseURI))
+                .path(datasetId.toString())
+                .path("versions")
+                .path("hash")
+                .path(versionHash)
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .method("PATCH", Entity.json(update));
     }
 
     public DatasetVersionDiff compareVersions(UUID datasetId, String fromHashOrTag,

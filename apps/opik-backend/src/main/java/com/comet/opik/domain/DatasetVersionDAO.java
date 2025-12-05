@@ -9,6 +9,7 @@ import org.jdbi.v3.sqlobject.config.RegisterColumnMapper;
 import org.jdbi.v3.sqlobject.config.RegisterConstructorMapper;
 import org.jdbi.v3.sqlobject.customizer.Bind;
 import org.jdbi.v3.sqlobject.customizer.BindMethods;
+import org.jdbi.v3.sqlobject.statement.SqlBatch;
 import org.jdbi.v3.sqlobject.statement.SqlQuery;
 import org.jdbi.v3.sqlobject.statement.SqlUpdate;
 
@@ -38,7 +39,8 @@ public interface DatasetVersionDAO {
     @SqlQuery("""
             SELECT
                 dv.*,
-                COALESCE(t.tags, JSON_ARRAY()) AS tags
+                COALESCE(t.tags, JSON_ARRAY()) AS tags,
+                COALESCE(JSON_CONTAINS(t.tags, '"latest"'), false) AS is_latest
             FROM dataset_versions AS dv
             LEFT JOIN (
                 SELECT version_id, JSON_ARRAYAGG(tag) AS tags
@@ -52,7 +54,8 @@ public interface DatasetVersionDAO {
     @SqlQuery("""
             SELECT
                 dv.*,
-                COALESCE(t.tags, JSON_ARRAY()) AS tags
+                COALESCE(t.tags, JSON_ARRAY()) AS tags,
+                COALESCE(JSON_CONTAINS(t.tags, '"latest"'), false) AS is_latest
             FROM dataset_versions AS dv
             LEFT JOIN (
                 SELECT version_id, JSON_ARRAYAGG(tag) AS tags
@@ -69,7 +72,8 @@ public interface DatasetVersionDAO {
     @SqlQuery("""
             SELECT
                 dv.*,
-                COALESCE(t.tags, JSON_ARRAY()) AS tags
+                COALESCE(t.tags, JSON_ARRAY()) AS tags,
+                COALESCE(JSON_CONTAINS(t.tags, '"latest"'), false) AS is_latest
             FROM dataset_versions AS dv
             LEFT JOIN (
                 SELECT version_id, JSON_ARRAYAGG(tag) AS tags
@@ -94,6 +98,14 @@ public interface DatasetVersionDAO {
     void insertTag(@Bind("dataset_id") UUID datasetId, @Bind("tag") String tag, @Bind("version_id") UUID versionId,
             @Bind("created_by") String createdBy, @Bind("workspace_id") String workspaceId);
 
+    @SqlBatch("""
+            INSERT INTO dataset_version_tags (dataset_id, tag, version_id, created_by, last_updated_by, workspace_id)
+            VALUES (:dataset_id, :tag, :version_id, :created_by, :created_by, :workspace_id)
+            """)
+    void insertTags(@Bind("dataset_id") UUID datasetId, @Bind("tag") List<String> tags,
+            @Bind("version_id") UUID versionId, @Bind("created_by") String createdBy,
+            @Bind("workspace_id") String workspaceId);
+
     @SqlUpdate("DELETE FROM dataset_version_tags WHERE dataset_id = :dataset_id AND tag = :tag AND workspace_id = :workspace_id")
     int deleteTag(@Bind("dataset_id") UUID datasetId, @Bind("tag") String tag,
             @Bind("workspace_id") String workspaceId);
@@ -101,7 +113,8 @@ public interface DatasetVersionDAO {
     @SqlQuery("""
             SELECT
                 dv.*,
-                COALESCE(t.tags, JSON_ARRAY()) AS tags
+                COALESCE(t.tags, JSON_ARRAY()) AS tags,
+                COALESCE(JSON_CONTAINS(t.tags, '"latest"'), false) AS is_latest
             FROM dataset_versions AS dv
             INNER JOIN dataset_version_tags dvt ON dv.id = dvt.version_id
             LEFT JOIN (
@@ -115,4 +128,13 @@ public interface DatasetVersionDAO {
             """)
     Optional<DatasetVersion> findByTag(@Bind("dataset_id") UUID datasetId, @Bind("tag") String tag,
             @Bind("workspace_id") String workspaceId);
+
+    @SqlUpdate("""
+            UPDATE dataset_versions
+            SET change_description = :change_description,
+                last_updated_by = :last_updated_by
+            WHERE id = :id AND workspace_id = :workspace_id
+            """)
+    int updateChangeDescription(@Bind("id") UUID id, @Bind("change_description") String changeDescription,
+            @Bind("last_updated_by") String lastUpdatedBy, @Bind("workspace_id") String workspaceId);
 }
