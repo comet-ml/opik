@@ -142,6 +142,11 @@ const getSpanFromRun = (run: LogQueueParams, traceId: string): LogSpan => {
       ? { choices: run.choices }
       : { output: run.result };
 
+  // Use the actual model and provider from the response headers if available
+  // This is important for the default provider which uses a virtual model name and provider which is transformed at inference time
+  const spanModel = run.actualModel || run.model;
+  const spanProvider = run.actualProvider || run.provider;
+
   return {
     id: v7(),
     traceId,
@@ -155,20 +160,23 @@ const getSpanFromRun = (run: LogQueueParams, traceId: string): LogSpan => {
     },
     output: spanOutput,
     usage: !run.usage ? undefined : pick(run.usage, USAGE_FIELDS_TO_SEND),
-    model: run.model,
-    provider: run.provider,
+    model: spanModel,
+    provider: spanProvider,
     metadata: {
-      created_from: run.provider,
+      created_from: spanProvider,
       usage: run.usage,
-      model: run.model,
+      model: spanModel,
       parameters: run.configs,
     },
   };
 };
 
 const getExperimentFromRun = (run: LogQueueParams): LogExperiment => {
+  // Use the actual model from the response headers if available
+  const experimentModel = run.actualModel || run.model;
+
   const experimentMetadata: Record<string, unknown> = {
-    model: run.model,
+    model: experimentModel,
     messages: JSON.stringify(run.providerMessages),
     model_config: run.configs,
   };

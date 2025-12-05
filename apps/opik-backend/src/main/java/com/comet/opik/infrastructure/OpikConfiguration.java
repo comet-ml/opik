@@ -100,4 +100,7 @@ public class OpikConfiguration extends JobConfiguration {
 
     @Valid @NotNull @JsonProperty
     private AttachmentsConfig attachmentsConfig = new AttachmentsConfig();
+
+    @Valid @NotNull @JsonProperty
+    private BuiltinLlmProviderConfig builtinLlmProvider = new BuiltinLlmProviderConfig();
 }

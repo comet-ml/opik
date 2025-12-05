@@ -18,6 +18,10 @@ public class CorsFactory {
     public static final String COMET_USERNAME_HEADER = "comet-username";
     public static final String COMET_REACT_VER_HEADER = "comet-react-ver";
 
+    // Custom headers for resolved model info (used by built-in provider)
+    public static final String OPIK_ACTUAL_MODEL_HEADER = "X-Opik-Actual-Model";
+    public static final String OPIK_PROVIDER_HEADER = "X-Opik-Provider";
+
     private static final Set<String> ALLOWED_HEADERS = Set.of(
             HttpHeaders.AUTHORIZATION,
             HttpHeaders.CONTENT_TYPE,
@@ -53,7 +57,10 @@ public class CorsFactory {
         corsHandler.setAllowedOriginPatterns(Set.of("*"));
         // Only allow explicitly listed request headers defined in ALLOWED_HEADERS
         corsHandler.setAllowedHeaders(ALLOWED_HEADERS);
-        corsHandler.setExposedHeaders(Set.of(HttpHeaders.LOCATION));
+        corsHandler.setExposedHeaders(Set.of(
+                HttpHeaders.LOCATION,
+                OPIK_ACTUAL_MODEL_HEADER,
+                OPIK_PROVIDER_HEADER));
         corsHandler.setAllowedMethods(ALLOWED_METHODS);
         // Reflects exact Origin (pattern "*"); safe to allow credentials for browser requests
         corsHandler.setAllowCredentials(true);

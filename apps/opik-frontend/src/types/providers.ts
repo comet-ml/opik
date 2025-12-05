@@ -7,11 +7,15 @@ export enum PROVIDER_TYPE {
   GEMINI = "gemini",
   VERTEX_AI = "vertex-ai",
   CUSTOM = "custom-llm",
+  OPIK_BUILTIN = "opik-builtin",
 }
 
 export type COMPOSED_PROVIDER_TYPE = PROVIDER_TYPE | string;
 
 export enum PROVIDER_MODEL_TYPE {
+  // <------ opik built-in
+  OPIK_BUILTIN_MODEL = "opik-builtin-model",
+
   // <------ openai
   GPT_4O = "gpt-4o",
   GPT_4O_MINI = "gpt-4o-mini",
@@ -448,6 +452,7 @@ export interface BaseProviderKey {
   ui_composed_provider: COMPOSED_PROVIDER_TYPE;
   configuration: ProviderKeyConfiguration;
   headers?: Record<string, string>;
+  read_only: boolean;
 }
 
 export interface StandardProviderObject extends BaseProviderKey {

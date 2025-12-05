@@ -3,7 +3,9 @@ package com.comet.opik.infrastructure.llm;
 import com.comet.opik.api.LlmProvider;
 import com.comet.opik.api.ProviderApiKey;
 import com.comet.opik.domain.LlmProviderApiKeyService;
+import com.comet.opik.domain.llm.LlmProviderFactory;
 import com.comet.opik.domain.llm.LlmProviderService;
+import com.comet.opik.infrastructure.BuiltinLlmProviderConfig;
 import com.comet.opik.infrastructure.EncryptionUtils;
 import com.comet.opik.infrastructure.LlmProviderClientConfig;
 import com.comet.opik.infrastructure.OpikConfiguration;
@@ -55,6 +57,7 @@ import static org.mockito.Mockito.when;
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class LlmProviderFactoryTest {
     private LlmProviderClientConfig llmProviderClientConfig;
+    private OpikConfiguration opikConfiguration;
 
     private static final ObjectMapper objectMapper = Jackson.newObjectMapper();
     private static final Validator validator = Validators.newValidator();
@@ -67,6 +70,19 @@ class LlmProviderFactoryTest {
                 "src/test/resources/config-test.yml");
         EncryptionUtils.setConfig(config);
         llmProviderClientConfig = config.getLlmProviderClient();
+        opikConfiguration = config;
+    }
+
+    private OpikConfiguration createMockConfigWithBuiltinProvider(boolean enabled, String actualModel,
+            String spanProvider) {
+        OpikConfiguration mockConfig = mock(OpikConfiguration.class);
+        BuiltinLlmProviderConfig builtinConfig = new BuiltinLlmProviderConfig();
+        builtinConfig.setEnabled(enabled);
+        builtinConfig.setActualModel(actualModel);
+        builtinConfig.setSpanProvider(spanProvider);
+        builtinConfig.setApiKey("test-api-key");
+        when(mockConfig.getBuiltinLlmProvider()).thenReturn(builtinConfig);
+        return mockConfig;
     }
 
     @SneakyThrows
@@ -88,8 +104,9 @@ class LlmProviderFactoryTest {
                 .size(1)
                 .build());
 
-        // SUT
-        var llmProviderFactory = new LlmProviderFactoryImpl(llmProviderApiKeyService);
+        // SUT - use config with disabled built-in provider to not interfere with other tests
+        var mockConfig = createMockConfigWithBuiltinProvider(false, "gpt-4o-mini", "openai");
+        var llmProviderFactory = new LlmProviderFactoryImpl(llmProviderApiKeyService, mockConfig);
 
         AnthropicModule anthropicModule = new AnthropicModule();
         GeminiModule geminiModule = new GeminiModule();
@@ -165,8 +182,9 @@ class LlmProviderFactoryTest {
                 .size(1)
                 .build());
 
-        // SUT
-        var llmProviderFactory = new LlmProviderFactoryImpl(llmProviderApiKeyService);
+        // SUT - use config with disabled built-in provider
+        var mockConfig = createMockConfigWithBuiltinProvider(false, "gpt-4o-mini", "openai");
+        var llmProviderFactory = new LlmProviderFactoryImpl(llmProviderApiKeyService, mockConfig);
 
         // Register custom LLM service (required for getService to work)
         CustomLlmModule customLlmModule = new CustomLlmModule();
@@ -205,8 +223,9 @@ class LlmProviderFactoryTest {
                 .size(1)
                 .build());
 
-        // SUT
-        var llmProviderFactory = new LlmProviderFactoryImpl(llmProviderApiKeyService);
+        // SUT - use config with disabled built-in provider
+        var mockConfig = createMockConfigWithBuiltinProvider(false, "gpt-4o-mini", "openai");
+        var llmProviderFactory = new LlmProviderFactoryImpl(llmProviderApiKeyService, mockConfig);
 
         // Register custom LLM service (required for getService to work)
         CustomLlmModule customLlmModule = new CustomLlmModule();
@@ -308,5 +327,84 @@ class LlmProviderFactoryTest {
                         "custom-llm/ollama/llama-3.2",
                         "ollama",
                         ""));
+    }
+
+    // ========== OPIK_DEFAULT Provider Tests ==========
+
+    @SneakyThrows
+    @org.junit.jupiter.api.Test
+    @org.junit.jupiter.api.DisplayName("getLlmProvider returns OPIK_BUILTIN when model matches and provider is enabled")
+    void testGetLlmProvider_returnsOpikBuiltin_whenModelMatchesAndEnabled() {
+        // setup
+        LlmProviderApiKeyService llmProviderApiKeyService = mock(LlmProviderApiKeyService.class);
+
+        // SUT - config with enabled built-in provider
+        var mockConfig = createMockConfigWithBuiltinProvider(true, "gpt-4o-mini", "openai");
+        var llmProviderFactory = new LlmProviderFactoryImpl(llmProviderApiKeyService, mockConfig);
+
+        // When - use the hardcoded model constant
+        LlmProvider result = llmProviderFactory.getLlmProvider(BuiltinLlmProviderConfig.BUILTIN_MODEL);
+
+        // Then
+        assertThat(result).isEqualTo(LlmProvider.OPIK_BUILTIN);
+    }
+
+    @SneakyThrows
+    @org.junit.jupiter.api.Test
+    @org.junit.jupiter.api.DisplayName("getLlmProvider throws exception when model matches but provider is disabled")
+    void testGetLlmProvider_throwsException_whenModelMatchesButDisabled() {
+        // setup
+        LlmProviderApiKeyService llmProviderApiKeyService = mock(LlmProviderApiKeyService.class);
+
+        // SUT - config with disabled built-in provider
+        var mockConfig = createMockConfigWithBuiltinProvider(false, "gpt-4o-mini", "openai");
+        var llmProviderFactory = new LlmProviderFactoryImpl(llmProviderApiKeyService, mockConfig);
+
+        // When & Then - Should throw because model is not recognized when disabled
+        assertThatThrownBy(() -> llmProviderFactory.getLlmProvider(BuiltinLlmProviderConfig.BUILTIN_MODEL))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessageContaining("not supported");
+    }
+
+    @SneakyThrows
+    @org.junit.jupiter.api.Test
+    @org.junit.jupiter.api.DisplayName("getResolvedModelInfo returns actual model and provider for OPIK_BUILTIN")
+    void testGetResolvedModelInfo_returnsActualModelAndProvider_forOpikBuiltin() {
+        // setup
+        LlmProviderApiKeyService llmProviderApiKeyService = mock(LlmProviderApiKeyService.class);
+        String actualModel = "gpt-4o-mini";
+        String spanProvider = "openai";
+
+        // SUT - config with enabled built-in provider
+        var mockConfig = createMockConfigWithBuiltinProvider(true, actualModel, spanProvider);
+        var llmProviderFactory = new LlmProviderFactoryImpl(llmProviderApiKeyService, mockConfig);
+
+        // When - use the hardcoded model constant
+        LlmProviderFactory.ResolvedModelInfo result = llmProviderFactory
+                .getResolvedModelInfo(BuiltinLlmProviderConfig.BUILTIN_MODEL);
+
+        // Then
+        assertThat(result.actualModel()).isEqualTo(actualModel);
+        assertThat(result.provider()).isEqualTo(spanProvider);
+    }
+
+    @SneakyThrows
+    @org.junit.jupiter.api.Test
+    @org.junit.jupiter.api.DisplayName("getResolvedModelInfo returns original model and provider for non-OPIK_BUILTIN")
+    void testGetResolvedModelInfo_returnsOriginalModelAndProvider_forOtherProviders() {
+        // setup
+        LlmProviderApiKeyService llmProviderApiKeyService = mock(LlmProviderApiKeyService.class);
+        String openaiModel = "gpt-4o";
+
+        // SUT - config with enabled built-in provider (should not interfere with OpenAI models)
+        var mockConfig = createMockConfigWithBuiltinProvider(true, "gpt-4o-mini", "openai");
+        var llmProviderFactory = new LlmProviderFactoryImpl(llmProviderApiKeyService, mockConfig);
+
+        // When
+        LlmProviderFactory.ResolvedModelInfo result = llmProviderFactory.getResolvedModelInfo(openaiModel);
+
+        // Then - should return original model and provider type
+        assertThat(result.actualModel()).isEqualTo(openaiModel);
+        assertThat(result.provider()).isEqualTo(LlmProvider.OPEN_AI.getValue());
     }
 }
