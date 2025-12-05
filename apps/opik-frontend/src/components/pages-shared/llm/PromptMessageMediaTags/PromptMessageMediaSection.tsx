@@ -54,6 +54,7 @@ const PromptMessageMediaSection: React.FC<PromptMessageMediaSectionProps> = ({
           >
             <TooltipWrapper content="Image">
               <Button
+                type="button"
                 variant="minimal"
                 disabled={disabled}
                 className={cn("p-1", openPopover === "image" && "text-foreground")}
@@ -70,6 +71,7 @@ const PromptMessageMediaSection: React.FC<PromptMessageMediaSectionProps> = ({
           >
             <TooltipWrapper content="Video">
               <Button
+                type="button"
                 variant="minimal"
                 disabled={disabled}
                 className={cn("p-1", openPopover === "video" && "text-foreground")}
@@ -86,6 +88,7 @@ const PromptMessageMediaSection: React.FC<PromptMessageMediaSectionProps> = ({
           >
             <TooltipWrapper content="Audio">
               <Button
+                type="button"
                 variant="minimal"
                 className={cn("p-1", openPopover === "audio" && "text-foreground")}
                 disabled={disabled}

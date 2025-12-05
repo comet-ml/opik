@@ -149,7 +149,7 @@ const AddMediaPopover: React.FC<AddMediaPopoverProps> = ({
                 }}
               />
             </div>
-            <Button variant="default" onClick={handleAddItem}>
+            <Button type="button" variant="default" onClick={handleAddItem}>
               Add
             </Button>
           </div>
