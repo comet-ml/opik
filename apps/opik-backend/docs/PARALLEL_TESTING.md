@@ -11,10 +11,9 @@ This document describes the parallel test execution strategy implemented for the
 The `pom.xml` configures the Maven Surefire plugin for parallel test execution:
 
 - **`parallel=classes`**: Test classes run in parallel, but tests within a class run sequentially
-- **`threadCount=2`**: Uses 2 threads per CPU core
-- **`perCoreThreadCount=true`**: Thread count is multiplied by available CPU cores
-- **`forkCount=1`** and **`reuseForks=true`**: Reuse a single JVM fork for efficiency
-- **`argLine=-Xmx2g`**: Each test class has 2GB of memory
+- **`forkCount=2`**: Uses 2 JVM forks for increased parallelism
+- **`reuseForks=false`**: Each test class gets a fresh fork to prevent Quartz Scheduler conflicts
+- **`argLine=-Xmx4g`**: Each fork has 4GB heap (2 forks * 4GB = 8GB total heap)
 
 ### JUnit Platform Properties
 
@@ -117,24 +116,23 @@ mvn test -DargLine="-Xmx4g"
 
 ## Performance Impact
 
-**Before parallel execution** (sequential):
-- ~1-2 minutes per test class
-- Total time for 100+ test classes: ~2-3 hours
-
-**After parallel execution** (2 threads per core on 4-core machine = 8 threads):
-- Same per-class time, but 8 classes run concurrently
-- Total time: ~20-30 minutes (8x speedup)
+**Expected Performance**:
+- **Configuration**: `forkCount=2`, `parallel=classes`
+- **Parallelism**: 2 JVM forks running test classes concurrently, with internal class-level parallelization via JUnit
+- **Expected speedup**: Significant improvement over single fork due to true multi-fork parallelism
 
 **Memory requirements**:
-- Sequential: ~4-6GB total
-- Parallel (8 threads): ~16-20GB total (2GB per thread)
+- **Current configuration** (`forkCount=2`, `-Xmx4g`): ~8-12GB total (8GB heap + ~4GB overhead)
+- **Memory-intensive tests**: 4GB per fork should handle most test suites including large payloads
+- **OOM handling**: If tests crash with Exit Code 137, consider increasing heap size or reducing fork count
 
 ## Limitations
 
 1. **Docker-in-Docker**: Running in Docker-in-Docker may limit parallelism due to resource constraints
-2. **Memory**: Each parallel thread needs ~2GB, so ensure sufficient memory
+2. **Memory**: With limited RAM, system requires at least 12-16GB to safely run 2 forks with 4GB each
 3. **Container limits**: Docker has limits on concurrent containers (default ~100)
 4. **Testcontainers reuse**: Containers with `withReuse(true)` persist between runs (use `docker ps -a | grep testcontainers` to clean up)
+5. **OOM risk**: If tests still fail with Exit Code 137, consider reducing to `forkCount=1` with `-Xmx6g`
 
 ## Troubleshooting
 
