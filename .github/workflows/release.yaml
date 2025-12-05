@@ -202,7 +202,7 @@ jobs:
             echo "No changes to commit"
           else
             git commit -m "Update versions to ${{ needs.set-version.outputs.version }} and bump base version to ${{ steps.update_version.outputs.new_version }}"
-            git push origin ${{ github.ref }}
+            git push origin main
           fi
           
-          echo "Version updated to ${{ steps.update_version.outputs.new_version }} on ${{ github.ref }}" >> $GITHUB_STEP_SUMMARY
+          echo "Version updated to ${{ steps.update_version.outputs.new_version }} on main" >> $GITHUB_STEP_SUMMARY
