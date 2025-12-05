@@ -25,8 +25,8 @@ def harbor(ctx: click.Context) -> None:
             "Harbor is not installed. Install with: pip install harbor"
         )
 
-    from opik.integrations.harbor import enable_tracking
-    enable_tracking()
+    from opik.integrations.harbor import track_harbor
+    track_harbor()
 
     from harbor.cli.main import app
     sys.argv = ["harbor"] + ctx.args

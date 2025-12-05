@@ -199,21 +199,23 @@ The Harbor integration automatically extracts token usage and cost from ATIF tra
 
 ```python
 def track_harbor(
-    job: Job,
+    job: Optional[Job] = None,
     project_name: Optional[str] = None,
-    experiment_name: Optional[str] = None,
-) -> Job:
+) -> Optional[Job]:
 ```
 
 **Parameters:**
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `job` | `Job` | Required | A Harbor Job instance to track |
+| `job` | `Job` | `None` | Optional Harbor Job instance. If provided, returns the same job. |
 | `project_name` | `str` | `None` | Opik project name. Uses `OPIK_PROJECT_NAME` env var if not set |
-| `experiment_name` | `str` | `None` | Optional experiment name (experiments are auto-generated based on job_id) |
 
-**Returns:** The same Job instance with Opik tracking hooks attached.
+**Returns:** The job instance if provided, `None` otherwise.
+
+**Usage modes:**
+- `track_harbor(job)` - Wraps a job and enables tracking (for SDK usage)
+- `track_harbor()` - Enables global tracking without a job (for CLI usage)
 
 ## Example: SWE-bench Evaluation
 

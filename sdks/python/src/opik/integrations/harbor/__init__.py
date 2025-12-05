@@ -7,11 +7,11 @@ Example:
     >>> tracked_job = track_harbor(job)
     >>> result = await tracked_job.run()
 
-Or enable tracking globally:
-    >>> from opik.integrations.harbor import enable_tracking
-    >>> enable_tracking(project_name="my-project")
+Or enable tracking globally (for CLI usage):
+    >>> from opik.integrations.harbor import track_harbor
+    >>> track_harbor()
 """
 
-from .opik_tracker import track_harbor, enable_tracking, reset_harbor_tracking
+from .opik_tracker import track_harbor, reset_harbor_tracking
 
-__all__ = ["track_harbor", "enable_tracking", "reset_harbor_tracking"]
+__all__ = ["track_harbor", "reset_harbor_tracking"]

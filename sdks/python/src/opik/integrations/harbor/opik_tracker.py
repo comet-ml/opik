@@ -12,8 +12,13 @@ Example:
     >>> os.environ["OPIK_PROJECT_NAME"] = "swebench-evaluation"
     >>>
     >>> job = Job(config)
-    >>> tracked_job = track_harbor(job, experiment_name="my-eval")
+    >>> tracked_job = track_harbor(job)
     >>> result = await tracked_job.run()
+
+Or enable tracking globally (for CLI usage):
+    >>> from opik.integrations.harbor import track_harbor
+    >>> track_harbor()
+    >>> # Now run Harbor code - it will be traced
 """
 
 import functools
@@ -177,23 +182,13 @@ def _patch_step_class() -> None:
     setattr(_patch_step_class, "_patched", True)
 
 
-def enable_tracking(
-    project_name: Optional[str] = None,
-    experiment_name: Optional[str] = None,
-) -> None:
-    """Enable Opik tracking for Harbor.
+def _enable_harbor_tracking(project_name: Optional[str] = None) -> None:
+    """Internal: Enable Opik tracking for Harbor by patching classes.
 
     This patches Harbor's Trial and Verifier classes to add tracing.
-    Call this before running any Harbor code.
 
     Args:
         project_name: Opik project name. If None, uses OPIK_PROJECT_NAME env var.
-        experiment_name: Optional experiment name for experiment tracking.
-
-    Example:
-        >>> from opik.integrations.harbor import enable_tracking
-        >>> enable_tracking(project_name="my-project")
-        >>> # Now run Harbor code - it will be traced
     """
     try:
         from harbor.trial.trial import Trial
@@ -230,31 +225,36 @@ def enable_tracking(
 
 
 def track_harbor(
-    job: "Job",
+    job: Optional["Job"] = None,
     project_name: Optional[str] = None,
-    experiment_name: Optional[str] = None,
-) -> "Job":
-    """Add Opik tracking to a Harbor Job.
+) -> Optional["Job"]:
+    """Enable Opik tracking for Harbor.
+
+    Can be called two ways:
+    - track_harbor() - enables global tracking (for CLI usage)
+    - track_harbor(job) - wraps a job and enables tracking (for SDK usage)
 
     Args:
-        job: A Harbor Job instance.
+        job: Optional Harbor Job instance. If provided, returns the same job.
         project_name: Opik project name. If None, uses OPIK_PROJECT_NAME env var.
-        experiment_name: Optional experiment name (not used, kept for API compatibility).
 
     Returns:
-        The same Job instance with Opik tracking enabled.
-    """
-    # Enable tracking (patches classes)
-    # Experiment service is set up lazily when the first trial runs
-    enable_tracking(project_name=project_name, experiment_name=experiment_name)
+        The job instance if provided, None otherwise.
 
+    Example:
+        >>> from opik.integrations.harbor import track_harbor
+        >>> job = Job(config)
+        >>> tracked_job = track_harbor(job)
+        >>> result = await tracked_job.run()
+    """
+    _enable_harbor_tracking(project_name=project_name)
     return job
 
 
 def _wrap_trial_run(original: Callable, project_name: Optional[str]) -> Callable:
     """Wrap Trial.run with tracing, feedback scores, and experiment linking."""
 
-    @track(name="trial_run", tags=["harbor"], project_name=project_name)
+    @track(name="trial_run", tags=["harbor"], project_name=project_name, capture_output=False)
     @functools.wraps(original)
     async def wrapped(self: "Trial") -> "TrialResult":
         # Set nice trace name
