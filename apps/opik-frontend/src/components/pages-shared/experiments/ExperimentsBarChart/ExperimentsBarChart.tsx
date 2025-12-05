@@ -1,6 +1,6 @@
 import ChartTooltipContent, {
   ChartTooltipRenderHeaderArguments,
-} from "@/components/shared/ChartTooltipContent/ChartTooltipContent";
+} from "@/components/shared/Charts/ChartTooltipContent/ChartTooltipContent";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   DEFAULT_CHART_GRID_PROPS,
@@ -22,7 +22,7 @@ import { useObserveResizeNode } from "@/hooks/useObserveResizeNode";
 import { uniq } from "lodash";
 import NoData from "@/components/shared/NoData/NoData";
 import { BarDataPoint } from "@/types/chart";
-import ChartHorizontalLegendContent from "@/components/shared/ChartHorizontalLegendContent/ChartHorizontalLegendContent";
+import ChartHorizontalLegend from "@/components/shared/Charts/ChartHorizontalLegend/ChartHorizontalLegend";
 
 interface ExperimentsBarChartProps {
   name: string;
@@ -145,7 +145,7 @@ const ExperimentsBarChart: React.FC<ExperimentsBarChartProps> = ({
               />
               <ChartLegend
                 content={
-                  <ChartHorizontalLegendContent
+                  <ChartHorizontalLegend
                     setActiveLine={setActiveBar}
                     chartId={chartId}
                   />

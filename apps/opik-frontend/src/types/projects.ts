@@ -33,11 +33,9 @@ export interface ProjectStatistic {
 
 export type ProjectWithStatistic = Project & ProjectStatistic;
 
-export type ProjectMetricValue = number | null;
-
 export interface ProjectMetricDataPoint {
   time: string;
-  value: ProjectMetricValue;
+  value: number | null;
 }
 
 export interface ProjectMetricTrace {

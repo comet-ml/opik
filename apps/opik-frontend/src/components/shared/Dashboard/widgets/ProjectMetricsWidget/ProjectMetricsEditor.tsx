@@ -32,7 +32,6 @@ import {
   AddWidgetConfig,
   ProjectMetricsWidget,
   WidgetEditorHandle,
-  ProjectDashboardConfig,
 } from "@/types/dashboard";
 import {
   ProjectMetricsWidgetSchema,
@@ -115,10 +114,10 @@ const ProjectMetricsEditor = forwardRef<
     [widgetConfig?.threadFilters],
   );
 
-  const projectConfig = useDashboardStore(
-    (state) => state.config as ProjectDashboardConfig | null,
+  const globalProjectId = useDashboardStore(
+    (state) => state.config?.projectIds?.[0],
   );
-  const projectId = localProjectId || projectConfig?.projectId || "";
+  const projectId = localProjectId || globalProjectId || "";
 
   const selectedMetric = METRIC_OPTIONS.find((m) => m.value === metricType);
   const isTraceMetric = !metricType || selectedMetric?.filterType === "trace";

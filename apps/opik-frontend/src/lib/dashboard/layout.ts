@@ -24,6 +24,8 @@ export const getWidgetSizeConfig = (type: string): WidgetSizeConfig => {
       return { w: 1, h: 2, minW: 1, minH: 2 };
     case WIDGET_TYPE.TEXT_MARKDOWN:
       return { w: 2, h: 4, minW: 1, minH: 4 };
+    case WIDGET_TYPE.EXPERIMENTS_FEEDBACK_SCORES:
+      return { w: 2, h: 4, minW: 2, minH: 4 };
     default:
       return { w: 2, h: 2, minW: MIN_WIDGET_WIDTH, minH: MIN_WIDGET_HEIGHT };
   }

@@ -63,7 +63,9 @@ describe("generateEmptyDashboard", () => {
   it("should create dashboard with default config", () => {
     const dashboard = generateEmptyDashboard();
     expect(dashboard.config).toBeDefined();
-    expect(dashboard.config.projectId).toBe("");
+    expect(dashboard.config.projectIds).toEqual([]);
+    expect(dashboard.config.experimentIds).toEqual([]);
+    expect(dashboard.config.dateRange).toBeDefined();
   });
 });
 
@@ -308,7 +310,7 @@ describe("isDashboardChanged", () => {
       },
     ],
     lastModified: Date.now(),
-    config: { projectId: "project-1", dateRange: "7d" },
+    config: { dateRange: "7d", projectIds: ["project-1"], experimentIds: [] },
   };
 
   it("should return true when previous is null", () => {
@@ -339,7 +341,7 @@ describe("isDashboardChanged", () => {
   it("should return true for different configs", () => {
     const current = {
       ...baseDashboard,
-      config: { projectId: "project-2", dateRange: "7d" },
+      config: { dateRange: "7d", projectIds: ["project-2"], experimentIds: [] },
     };
     const previous = { ...baseDashboard };
     expect(isDashboardChanged(current, previous)).toBe(true);

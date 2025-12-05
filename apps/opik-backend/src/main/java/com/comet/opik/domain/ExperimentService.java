@@ -5,6 +5,7 @@ import com.comet.opik.api.BiInformationResponse;
 import com.comet.opik.api.Dataset;
 import com.comet.opik.api.DatasetLastExperimentCreated;
 import com.comet.opik.api.Experiment;
+import com.comet.opik.api.ExperimentGroupAggregationItem;
 import com.comet.opik.api.ExperimentGroupAggregationsResponse;
 import com.comet.opik.api.ExperimentGroupCriteria;
 import com.comet.opik.api.ExperimentGroupEnrichInfoHolder;
@@ -240,9 +241,10 @@ public class ExperimentService {
             return experimentDAO.findGroups(criteria)
                     .collectList()
                     .flatMap(groupItems -> {
-
-                        // fetch datasets using the IDs
-                        return getEnrichInfoHolder(groupItems, criteria.groups(), workspaceId)
+                        var allGroupValues = groupItems.stream()
+                                .map(ExperimentGroupItem::groupValues)
+                                .toList();
+                        return getEnrichInfoHolder(allGroupValues, criteria.groups(), workspaceId)
                                 .map(enrichInfoHolder -> responseBuilder.buildGroupResponse(groupItems,
                                         enrichInfoHolder,
                                         criteria.groups()));
@@ -256,22 +258,28 @@ public class ExperimentService {
 
         return experimentDAO.findGroupsAggregations(criteria)
                 .collectList()
-                .map(responseBuilder::buildGroupAggregationsResponse);
+                .flatMap(groupItems -> Mono.deferContextual(ctx -> {
+                    String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
+                    var allGroupValues = groupItems.stream()
+                            .map(ExperimentGroupAggregationItem::groupValues)
+                            .toList();
+                    return getEnrichInfoHolder(allGroupValues, criteria.groups(), workspaceId)
+                            .map(enrichInfoHolder -> responseBuilder.buildGroupAggregationsResponse(
+                                    groupItems, enrichInfoHolder, criteria.groups()));
+                }));
     }
 
-    private Mono<ExperimentGroupEnrichInfoHolder> getEnrichInfoHolder(List<ExperimentGroupItem> groupItems,
+    private Mono<ExperimentGroupEnrichInfoHolder> getEnrichInfoHolder(List<List<String>> allGroupValues,
             List<GroupBy> groups, String workspaceId) {
-        // Check if we group by dataset, and if yes, get nesting level
         int nestingIdx = groups.stream().filter(g -> DATASET_ID.equals(g.field()))
                 .findFirst()
                 .map(groups::indexOf)
                 .orElse(-1);
 
-        // extract IDs from groupItems
         Set<UUID> datasetIds = nestingIdx == -1
                 ? Set.of()
-                : groupItems.stream()
-                        .map(experimentGroupItem -> experimentGroupItem.groupValues().get(nestingIdx))
+                : allGroupValues.stream()
+                        .map(groupValues -> groupValues.get(nestingIdx))
                         .filter(Objects::nonNull)
                         .map(UUID::fromString)
                         .collect(Collectors.toSet());

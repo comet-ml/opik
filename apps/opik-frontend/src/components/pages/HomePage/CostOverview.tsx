@@ -19,7 +19,7 @@ import {
   getChartData,
   RE_FETCH_INTERVAL,
 } from "@/components/pages/HomePage/helpers";
-import { ChartTooltipRenderValueArguments } from "@/components/shared/ChartTooltipContent/ChartTooltipContent";
+import { ChartTooltipRenderValueArguments } from "@/components/shared/Charts/ChartTooltipContent/ChartTooltipContent";
 
 type CostOverviewProps = {
   projects: Project[];

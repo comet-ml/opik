@@ -11,6 +11,7 @@ import java.util.Map;
 @JsonIgnoreProperties(ignoreUnknown = true)
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
 public record GroupContentWithAggregations(
+        String label,
         AggregationData aggregations,
         Map<String, GroupContentWithAggregations> groups) {
 }

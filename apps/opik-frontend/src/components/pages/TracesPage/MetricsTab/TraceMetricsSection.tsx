@@ -27,6 +27,7 @@ import FiltersButton from "@/components/shared/FiltersButton/FiltersButton";
 import TracesOrSpansPathsAutocomplete from "@/components/pages-shared/traces/TracesOrSpansPathsAutocomplete/TracesOrSpansPathsAutocomplete";
 import TracesOrSpansFeedbackScoresSelect from "@/components/pages-shared/traces/TracesOrSpansFeedbackScoresSelect/TracesOrSpansFeedbackScoresSelect";
 import MetricContainerChart from "./MetricChart/MetricChartContainer";
+import { CHART_TYPE } from "@/constants/chart";
 import {
   DURATION_LABELS_MAP,
   INTERVAL_DESCRIPTIONS,
@@ -264,7 +265,7 @@ const TraceMetricsSection: React.FC<TraceMetricsSectionProps> = ({
             intervalStart={intervalStart}
             intervalEnd={intervalEnd}
             projectId={projectId}
-            chartType="line"
+            chartType={CHART_TYPE.line}
             traceFilters={processedTracesFilters}
           />
         </div>
@@ -280,7 +281,7 @@ const TraceMetricsSection: React.FC<TraceMetricsSectionProps> = ({
             intervalEnd={intervalEnd}
             projectId={projectId}
             customYTickFormatter={tokenYTickFormatter}
-            chartType="line"
+            chartType={CHART_TYPE.line}
             traceFilters={processedTracesFilters}
           />
         </div>
@@ -298,7 +299,7 @@ const TraceMetricsSection: React.FC<TraceMetricsSectionProps> = ({
             renderValue={renderDurationTooltipValue}
             labelsMap={DURATION_LABELS_MAP}
             customYTickFormatter={durationYTickFormatter}
-            chartType="line"
+            chartType={CHART_TYPE.line}
             traceFilters={processedTracesFilters}
           />
         </div>
@@ -314,7 +315,7 @@ const TraceMetricsSection: React.FC<TraceMetricsSectionProps> = ({
               intervalStart={intervalStart}
               intervalEnd={intervalEnd}
               projectId={projectId}
-              chartType="bar"
+              chartType={CHART_TYPE.bar}
               traceFilters={processedTracesFilters}
             />
           </div>

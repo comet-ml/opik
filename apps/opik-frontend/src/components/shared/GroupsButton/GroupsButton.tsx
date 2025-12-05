@@ -28,7 +28,7 @@ import { ColumnData } from "@/types/shared";
 import useDeepMemo from "@/hooks/useDeepMemo";
 import { cn } from "@/lib/utils";
 import { createEmptyGroup, isGroupValid } from "@/lib/groups";
-import GroupRow from "@/components/shared/GroupsButton/GroupRow";
+import GroupRow from "@/components/shared/GroupsContent/GroupRow";
 import { MAX_GROUP_LEVELS } from "@/constants/groups";
 
 const hasDuplication = (groups: Groups, group: Group, index: number) => {

@@ -1,9 +1,12 @@
 import React, { useState } from "react";
+import { TriangleAlert } from "lucide-react";
 import { cn } from "@/lib/utils";
+import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 
 type DashboardWidgetHeaderProps = {
   title: string;
   subtitle?: string;
+  warningMessage?: string;
   actions?: React.ReactElement<{ onOpenChange?: (open: boolean) => void }>;
   dragHandle?: React.ReactNode;
   className?: string;
@@ -12,7 +15,15 @@ type DashboardWidgetHeaderProps = {
 
 const DashboardWidgetHeader: React.FunctionComponent<
   DashboardWidgetHeaderProps
-> = ({ title, subtitle, actions, dragHandle, className, preview = false }) => {
+> = ({
+  title,
+  subtitle,
+  warningMessage,
+  actions,
+  dragHandle,
+  className,
+  preview = false,
+}) => {
   const [menuOpen, setMenuOpen] = useState(false);
 
   const actionsWithHandler =
@@ -41,6 +52,11 @@ const DashboardWidgetHeader: React.FunctionComponent<
         </div>
       )}
       <div className="flex items-start gap-2">
+        {warningMessage && (
+          <TooltipWrapper content={warningMessage}>
+            <TriangleAlert className="mt-0.5 size-3 shrink-0 text-amber-500" />
+          </TooltipWrapper>
+        )}
         <div className="flex min-w-0 flex-1 flex-col gap-0.5">
           <div className="truncate text-xs font-medium text-foreground">
             {title}

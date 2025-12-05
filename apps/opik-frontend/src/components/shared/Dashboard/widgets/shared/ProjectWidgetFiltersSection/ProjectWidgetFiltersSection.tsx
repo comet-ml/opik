@@ -4,26 +4,13 @@ import {
   FieldPath,
   FieldValues,
   useController,
+  useFormState,
 } from "react-hook-form";
-import { Plus } from "lucide-react";
 import isArray from "lodash/isArray";
 
-import { Button } from "@/components/ui/button";
-import { Label } from "@/components/ui/label";
-import { Description } from "@/components/ui/description";
-import { FormErrorSkeleton, FormField, FormItem } from "@/components/ui/form";
-import { cn } from "@/lib/utils";
-import {
-  Accordion,
-  AccordionContent,
-  AccordionItem,
-  AccordionTrigger,
-} from "@/components/ui/accordion";
 import { Filter } from "@/types/filters";
 import { ColumnData } from "@/types/shared";
-import { createFilter } from "@/lib/filters";
-import { generateRandomString } from "@/lib/utils";
-import FiltersContent from "@/components/shared/FiltersContent/FiltersContent";
+import FiltersAccordionSection from "@/components/shared/FiltersAccordionSection/FiltersAccordionSection";
 import TracesOrSpansPathsAutocomplete from "@/components/pages-shared/traces/TracesOrSpansPathsAutocomplete/TracesOrSpansPathsAutocomplete";
 import TracesOrSpansFeedbackScoresSelect from "@/components/pages-shared/traces/TracesOrSpansFeedbackScoresSelect/TracesOrSpansFeedbackScoresSelect";
 import { TRACE_DATA_TYPE } from "@/hooks/useTracesOrSpansList";
@@ -173,101 +160,33 @@ const ProjectWidgetFiltersSection = <T extends FieldValues>({
     [controllerField, onFiltersChange],
   );
 
-  const handleAddFilter = useCallback(() => {
-    const newFilter = {
-      ...createFilter(),
-      id: generateRandomString(),
-    };
-    setFilters((prev) => [...prev, newFilter]);
-  }, [setFilters]);
+  const { errors: formErrors } = useFormState({ control, name: fieldName });
+  const fieldErrors = formErrors[fieldName];
+  const errors =
+    fieldErrors && isArray(fieldErrors)
+      ? (fieldErrors as unknown[]).map((e) =>
+          e
+            ? (e as {
+                field?: { message?: string };
+                operator?: { message?: string };
+                value?: { message?: string };
+                key?: { message?: string };
+              })
+            : undefined,
+        )
+      : undefined;
 
   return (
-    <Accordion type="single" collapsible className={cn("w-full", className)}>
-      <AccordionItem value="filters" className="border-t">
-        <AccordionTrigger className="py-3 hover:no-underline">
-          <Label className="text-sm font-medium">
-            {label} {filters.length > 0 && `(${filters.length})`}
-          </Label>
-        </AccordionTrigger>
-        <AccordionContent className="flex flex-col gap-4 px-3 pb-3">
-          <Description>
-            Add filters to focus the widget on specific properties.
-          </Description>
-          <FormField
-            control={control}
-            name={fieldName}
-            render={({ field, formState }) => {
-              const filterErrors = formState.errors[fieldName];
-              const hasErrors = filterErrors && isArray(filterErrors);
-
-              return (
-                <FormItem>
-                  <div className="space-y-3">
-                    {field.value && (field.value as Filter[]).length > 0 && (
-                      <FiltersContent
-                        filters={field.value as Filter[]}
-                        setFilters={setFilters}
-                        columns={filterColumns as ColumnData<unknown>[]}
-                        config={filtersConfig}
-                        className="py-0"
-                      />
-                    )}
-
-                    {hasErrors && (filterErrors as unknown[]).length > 0 && (
-                      <div className="space-y-1">
-                        {(filterErrors as unknown[]).map(
-                          (filterError, index) => {
-                            if (!filterError) return null;
-
-                            const errors: string[] = [];
-                            const error = filterError as Record<
-                              string,
-                              { message?: string }
-                            >;
-
-                            if (error.field?.message) {
-                              errors.push(error.field.message);
-                            }
-                            if (error.operator?.message) {
-                              errors.push(error.operator.message);
-                            }
-                            if (error.value?.message) {
-                              errors.push(error.value.message);
-                            }
-                            if (error.key?.message) {
-                              errors.push(error.key.message);
-                            }
-
-                            if (errors.length === 0) return null;
-
-                            return (
-                              <FormErrorSkeleton key={index}>
-                                Filter {index + 1}: {errors.join(", ")}
-                              </FormErrorSkeleton>
-                            );
-                          },
-                        )}
-                      </div>
-                    )}
-
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={handleAddFilter}
-                      className="w-fit"
-                    >
-                      <Plus className="mr-1 size-3.5" />
-                      Add filter
-                    </Button>
-                  </div>
-                </FormItem>
-              );
-            }}
-          />
-        </AccordionContent>
-      </AccordionItem>
-    </Accordion>
+    <FiltersAccordionSection
+      columns={filterColumns as ColumnData<unknown>[]}
+      config={filtersConfig}
+      filters={filters}
+      onChange={setFilters}
+      label={label}
+      description="Add filters to focus the widget on specific properties."
+      className={className}
+      errors={errors}
+    />
   );
 };
 

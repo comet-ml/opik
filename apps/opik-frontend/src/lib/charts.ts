@@ -1,3 +1,5 @@
+import isNumber from "lodash/isNumber";
+
 import { ChartConfig } from "@/components/ui/chart";
 import { TAG_VARIANTS_COLOR_MAP } from "@/components/ui/tag";
 import { generateTagVariant } from "@/lib/traces";
@@ -42,4 +44,16 @@ export const calculateChartTruncateLength = ({
 
 export const truncateChartLabel = (value: string, maxLength: number = 14) => {
   return value.length > maxLength ? `${value.slice(0, maxLength)}...` : value;
+};
+
+type ChartDataPoint = Record<string, number | string | null>;
+
+export const extractChartValues = (
+  data: ChartDataPoint[],
+  config: ChartConfig,
+): number[] => {
+  const keys = Object.keys(config);
+  return data.flatMap((point) =>
+    keys.map((key) => point[key]).filter((v): v is number => isNumber(v)),
+  );
 };

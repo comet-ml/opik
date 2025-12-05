@@ -12,6 +12,8 @@ import com.comet.opik.api.FeedbackScoreAverage;
 import com.comet.opik.api.GroupContentWithAggregations;
 import com.comet.opik.api.PercentageValues;
 import com.comet.opik.api.grouping.GroupBy;
+import lombok.NonNull;
+import org.apache.commons.collections4.CollectionUtils;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -46,11 +48,19 @@ public class ExperimentResponseBuilder {
     }
 
     public ExperimentGroupAggregationsResponse buildGroupAggregationsResponse(
-            List<ExperimentGroupAggregationItem> groupItems) {
+            @NonNull List<ExperimentGroupAggregationItem> groupItems,
+            @NonNull ExperimentGroupEnrichInfoHolder enrichInfoHolder,
+            @NonNull List<GroupBy> groups) {
         var contentMap = new HashMap<String, GroupContentWithAggregations>();
 
+        if (CollectionUtils.isEmpty(groupItems) || CollectionUtils.isEmpty(groups)) {
+            return ExperimentGroupAggregationsResponse.builder()
+                    .content(contentMap)
+                    .build();
+        }
+
         for (ExperimentGroupAggregationItem item : groupItems) {
-            buildNestedGroupsWithAggregations(contentMap, item, 0);
+            buildNestedGroupsWithAggregations(contentMap, item, 0, enrichInfoHolder, groups);
         }
 
         // Calculate recursive aggregations for parent levels
@@ -65,7 +75,8 @@ public class ExperimentResponseBuilder {
     }
 
     private void buildNestedGroupsWithAggregations(Map<String, GroupContentWithAggregations> parentLevel,
-            ExperimentGroupAggregationItem item, int depth) {
+            ExperimentGroupAggregationItem item, int depth,
+            ExperimentGroupEnrichInfoHolder enrichInfoHolder, List<GroupBy> groups) {
         if (depth >= item.groupValues().size()) {
             return;
         }
@@ -75,18 +86,23 @@ public class ExperimentResponseBuilder {
             return;
         }
 
+        GroupBy currentGroup = groups.get(depth);
+        String label = resolveLabel(groupingValue, currentGroup, enrichInfoHolder);
+
         GroupContentWithAggregations currentLevel = parentLevel.computeIfAbsent(
                 groupingValue,
                 key -> {
                     // For leaf nodes (last level), include actual aggregation data
                     if (depth == item.groupValues().size() - 1) {
                         return GroupContentWithAggregations.builder()
+                                .label(label)
                                 .aggregations(buildAggregationData(item))
                                 .groups(Map.of())
                                 .build();
                     } else {
                         // For intermediate nodes, initialize with empty aggregations
                         return GroupContentWithAggregations.builder()
+                                .label(label)
                                 .aggregations(AggregationData.builder()
                                         .experimentCount(0L)
                                         .traceCount(0L)
@@ -102,10 +118,26 @@ public class ExperimentResponseBuilder {
                 });
 
         // Recursively build nested groups
-        buildNestedGroupsWithAggregations(currentLevel.groups(), item, depth + 1);
+        buildNestedGroupsWithAggregations(currentLevel.groups(), item, depth + 1, enrichInfoHolder, groups);
     }
 
-    public GroupContentWithAggregations calculateRecursiveAggregations(GroupContentWithAggregations content) {
+    private String resolveLabel(String groupingValue, GroupBy group,
+            ExperimentGroupEnrichInfoHolder enrichInfoHolder) {
+        return switch (group.field()) {
+            case DATASET_ID -> {
+                Map<UUID, Dataset> datasetMap = enrichInfoHolder.datasetMap();
+                if (datasetMap == null) {
+                    yield DELETED_DATASET;
+                }
+                yield Optional.ofNullable(datasetMap.get(UUID.fromString(groupingValue)))
+                        .map(Dataset::name)
+                        .orElse(DELETED_DATASET);
+            }
+            default -> groupingValue;
+        };
+    }
+
+    public GroupContentWithAggregations calculateRecursiveAggregations(@NonNull GroupContentWithAggregations content) {
         if (content.groups().isEmpty()) {
             // Leaf node - return as-is
             return content;
@@ -119,6 +151,7 @@ public class ExperimentResponseBuilder {
 
         // Return new GroupContentWithAggregations with calculated aggregations
         return GroupContentWithAggregations.builder()
+                .label(content.label())
                 .aggregations(calculateAggregatedChildrenValues(updatedChildGroups))
                 .groups(updatedChildGroups)
                 .build();

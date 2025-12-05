@@ -4,13 +4,17 @@ import { cn } from "@/lib/utils";
 import { OnChangeFn } from "@/types/shared";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 
-const ChartVerticalLegendContent = React.forwardRef<
+type ChartVerticalLegendProps = React.ComponentProps<
+  typeof RechartsPrimitive.Legend
+> &
+  React.ComponentProps<"div"> & {
+    setActiveLine: OnChangeFn<string | null>;
+    chartId: string;
+  };
+
+const ChartVerticalLegend = React.forwardRef<
   HTMLDivElement,
-  React.ComponentProps<typeof RechartsPrimitive.Legend> &
-    React.ComponentProps<"div"> & {
-      setActiveLine: OnChangeFn<string | null>;
-      chartId: string;
-    }
+  ChartVerticalLegendProps
 >(({ payload, color, setActiveLine }, ref) => {
   const handleMouseEnter = (id: string) => {
     setActiveLine(id);
@@ -62,6 +66,6 @@ const ChartVerticalLegendContent = React.forwardRef<
     </div>
   );
 });
-ChartVerticalLegendContent.displayName = "ChartVerticalLegendContent";
+ChartVerticalLegend.displayName = "ChartVerticalLegend";
 
-export default ChartVerticalLegendContent;
+export default ChartVerticalLegend;

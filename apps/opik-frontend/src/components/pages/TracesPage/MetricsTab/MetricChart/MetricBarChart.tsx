@@ -1,66 +1,36 @@
-import React, { useCallback, useState } from "react";
-import { Bar, BarChart, CartesianGrid, XAxis, YAxis } from "recharts";
-import {
-  ChartConfig,
-  ChartContainer,
-  ChartLegend,
-  ChartTooltip,
-} from "@/components/ui/chart";
+import React, { useCallback } from "react";
+import { ValueType } from "recharts/types/component/DefaultTooltipContent";
 import dayjs from "dayjs";
-import {
-  DEFAULT_CHART_GRID_PROPS,
-  DEFAULT_CHART_TICK,
-} from "@/constants/chart";
+
+import { ChartConfig } from "@/components/ui/chart";
 import { Spinner } from "@/components/ui/spinner";
 import { INTERVAL_TYPE } from "@/api/projects/useProjectMetric";
-import ChartTooltipContent, {
-  ChartTooltipRenderHeaderArguments,
-  ChartTooltipRenderValueArguments,
-} from "@/components/shared/ChartTooltipContent/ChartTooltipContent";
+import { ChartTooltipRenderHeaderArguments } from "@/components/shared/Charts/ChartTooltipContent/ChartTooltipContent";
 import { formatDate } from "@/lib/date";
-import { ValueType } from "recharts/types/component/DefaultTooltipContent";
-import useChartTickDefaultConfig from "@/hooks/charts/useChartTickDefaultConfig";
-import ChartHorizontalLegendContent from "@/components/shared/ChartHorizontalLegendContent/ChartHorizontalLegendContent";
-import { ProjectMetricValue, TransformedData } from "@/types/projects";
+import { TransformedData } from "@/types/projects";
+import BarChart from "@/components/shared/Charts/BarChart/BarChart";
 
-const renderTooltipValue = ({ value }: ChartTooltipRenderValueArguments) =>
-  value;
+const renderTooltipValue = ({ value }: { value: ValueType }) => value;
 
 interface MetricBarChartProps {
   config: ChartConfig;
   interval: INTERVAL_TYPE;
-  renderValue?: (data: ChartTooltipRenderValueArguments) => ValueType;
+  renderValue?: (data: { value: ValueType }) => ValueType;
   customYTickFormatter?: (value: number, maxDecimalLength?: number) => string;
   chartId: string;
   data: TransformedData[];
-  lines: string[];
-  values: ProjectMetricValue[];
   isPending: boolean;
 }
 
-const MetricBarChart = ({
+const MetricBarChart: React.FunctionComponent<MetricBarChartProps> = ({
   config,
   interval,
   renderValue = renderTooltipValue,
   customYTickFormatter,
   chartId,
   isPending,
-  values,
   data,
-  lines,
-}: MetricBarChartProps) => {
-  const [activeLine, setActiveLine] = useState<string | null>(null);
-
-  const {
-    width: yTickWidth,
-    ticks,
-    domain,
-    interval: yTickInterval,
-    yTickFormatter,
-  } = useChartTickDefaultConfig(values, {
-    tickFormatter: customYTickFormatter,
-  });
-
+}) => {
   const renderChartTooltipHeader = useCallback(
     ({ payload }: ChartTooltipRenderHeaderArguments) => {
       return (
@@ -85,82 +55,24 @@ const MetricBarChart = ({
 
   if (isPending) {
     return (
-      <div className="flex h-[var(--chart-height)] w-full  items-center justify-center">
+      <div className="flex h-[var(--chart-height)] w-full items-center justify-center">
         <Spinner />
       </div>
     );
   }
 
   return (
-    <ChartContainer config={config} className="h-[var(--chart-height)] w-full">
-      <BarChart
-        data={data}
-        margin={{
-          top: 5,
-          right: 10,
-          left: 5,
-          bottom: 5,
-        }}
-      >
-        <CartesianGrid vertical={false} {...DEFAULT_CHART_GRID_PROPS} />
-
-        <XAxis
-          dataKey="time"
-          axisLine={false}
-          tickLine={false}
-          dy={10}
-          tick={DEFAULT_CHART_TICK}
-          tickFormatter={xTickFormatter}
-        />
-        <YAxis
-          width={yTickWidth}
-          axisLine={false}
-          tickLine={false}
-          tick={DEFAULT_CHART_TICK}
-          interval={yTickInterval}
-          ticks={ticks}
-          tickFormatter={yTickFormatter}
-          domain={domain}
-        />
-        <ChartLegend
-          content={
-            <ChartHorizontalLegendContent
-              setActiveLine={setActiveLine}
-              chartId={chartId}
-            />
-          }
-        />
-        <ChartTooltip
-          isAnimationActive={false}
-          cursor={{ fillOpacity: 0.6 }}
-          content={
-            <ChartTooltipContent
-              renderHeader={renderChartTooltipHeader}
-              renderValue={renderValue}
-            />
-          }
-        />
-        {lines.map((line) => {
-          const isActive = line === activeLine;
-          let fillOpacity = 1;
-
-          if (activeLine) {
-            fillOpacity = isActive ? 1 : 0.4;
-          }
-
-          return (
-            <Bar
-              key={line}
-              name={line}
-              dataKey={line}
-              fill={config[line].color || ""}
-              fillOpacity={fillOpacity}
-              maxBarSize={52}
-            />
-          );
-        })}
-      </BarChart>
-    </ChartContainer>
+    <BarChart
+      chartId={chartId}
+      config={config}
+      data={data}
+      xAxisKey="time"
+      xTickFormatter={xTickFormatter}
+      customYTickFormatter={customYTickFormatter}
+      renderTooltipValue={renderValue}
+      renderTooltipHeader={renderChartTooltipHeader}
+      showLegend
+    />
   );
 };
 

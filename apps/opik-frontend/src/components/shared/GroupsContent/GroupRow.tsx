@@ -9,8 +9,8 @@ import { Group, GroupRowConfig } from "@/types/groups";
 import { COLUMN_TYPE, ColumnData } from "@/types/shared";
 import ColumnSelector from "@/components/shared/ColumnSelector/ColumnSelector";
 import { Button } from "@/components/ui/button";
-import DictionaryRow from "@/components/shared/GroupsButton/rows/DictionaryRow";
-import DefaultRow from "@/components/shared/GroupsButton/rows/DefaultRow";
+import DictionaryRow from "@/components/shared/GroupsContent/rows/DictionaryRow";
+import DefaultRow from "@/components/shared/GroupsContent/rows/DefaultRow";
 import { createEmptyGroup } from "@/lib/groups";
 
 type GroupRowProps<TColumnData> = {
@@ -22,6 +22,7 @@ type GroupRowProps<TColumnData> = {
   onRemove: (id: string) => void;
   onChange: (group: Group) => void;
   disabledSorting?: boolean;
+  hideSorting?: boolean;
   error?: string;
 };
 
@@ -34,6 +35,7 @@ export const GroupRow = <TColumnData,>({
   onRemove,
   onChange: onGroupChange,
   disabledSorting = false,
+  hideSorting = false,
   error,
 }: GroupRowProps<TColumnData>) => {
   const { active, attributes, listeners, setNodeRef, transform, transition } =
@@ -69,10 +71,22 @@ export const GroupRow = <TColumnData,>({
       case COLUMN_TYPE.dictionary:
       case COLUMN_TYPE.numberDictionary:
         return (
-          <DictionaryRow group={group} onChange={onChange} config={config} />
+          <DictionaryRow
+            group={group}
+            onChange={onChange}
+            config={config}
+            hideSorting={hideSorting}
+          />
         );
       default:
-        return <DefaultRow group={group} onChange={onChange} config={config} />;
+        return (
+          <DefaultRow
+            group={group}
+            onChange={onChange}
+            config={config}
+            hideSorting={hideSorting}
+          />
+        );
     }
   };
 
