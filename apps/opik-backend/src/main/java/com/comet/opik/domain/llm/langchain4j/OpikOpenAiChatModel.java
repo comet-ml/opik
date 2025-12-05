@@ -3,6 +3,7 @@ package com.comet.opik.domain.llm.langchain4j;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import dev.langchain4j.data.message.AudioContent;
 import dev.langchain4j.data.message.ChatMessage;
 import dev.langchain4j.data.message.Content;
 import dev.langchain4j.data.message.ImageContent;
@@ -144,8 +145,8 @@ public class OpikOpenAiChatModel extends OpenAiChatModel {
     }
 
     /**
-     * Convert public API messages to OpenAI internal messages, handling VideoContent.
-     * This is our adaptation of OpenAiUtils.toOpenAiMessages() with video support.
+     * Convert public API messages to OpenAI internal messages, handling VideoContent and AudioContent.
+     * This is our adaptation of OpenAiUtils.toOpenAiMessages() with video and audio URL support.
      */
     private List<Message> toOpikMessages(List<ChatMessage> messages) {
         return messages.stream()
@@ -154,8 +155,8 @@ public class OpikOpenAiChatModel extends OpenAiChatModel {
     }
 
     /**
-     * Convert a single message, handling VideoContent in UserMessages.
-     * This is our adaptation of OpenAiUtils.toOpenAiMessage() with video support.
+     * Convert a single message, handling VideoContent and AudioContent in UserMessages.
+     * This is our adaptation of OpenAiUtils.toOpenAiMessage() with video and audio URL support.
      */
     private Message toOpikMessage(ChatMessage message) {
         // For non-UserMessage, use the standard conversion
@@ -173,16 +174,16 @@ public class OpikOpenAiChatModel extends OpenAiChatModel {
                     .build();
         }
 
-        // Multi-content message - check if it has video
-        boolean hasVideo = userMessage.contents().stream()
-                .anyMatch(content -> content instanceof VideoContent);
+        // Multi-content message - check if it has video or audio (URL-based)
+        boolean hasVideoOrAudio = userMessage.contents().stream()
+                .anyMatch(content -> content instanceof VideoContent || content instanceof AudioContent);
 
-        if (!hasVideo) {
-            // No video, use standard conversion
+        if (!hasVideoOrAudio) {
+            // No video or audio, use standard conversion
             return toOpenAiMessage(message);
         }
 
-        // Has video - convert to OpikUserMessage
+        // Has video or audio - convert to OpikUserMessage
         OpikUserMessage.Builder builder = OpikUserMessage.builder();
 
         for (Content content : userMessage.contents()) {
@@ -192,8 +193,11 @@ public class OpikOpenAiChatModel extends OpenAiChatModel {
                 builder.addImageUrl(imageContent.image().url().toString());
             } else if (content instanceof VideoContent videoContent) {
                 builder.addVideoUrl(videoContent.video().url().toString());
+            } else if (content instanceof AudioContent audioContent) {
+                // AudioContent uses URL-based audio (audio_url format for custom providers like Qwen3)
+                builder.addAudioUrl(audioContent.audio().url().toString());
             }
-            // Other content types (audio, pdf) are not supported yet in OpikUserMessage
+            // Other content types (pdf) are not supported yet in OpikUserMessage
         }
 
         if (userMessage.name() != null) {

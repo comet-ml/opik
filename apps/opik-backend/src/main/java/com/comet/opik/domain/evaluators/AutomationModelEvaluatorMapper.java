@@ -220,6 +220,9 @@ interface AutomationModelEvaluatorMapper {
                     .videoUrl(map.get("video_url") != null
                             ? convertToVideoUrl(map.get("video_url"))
                             : null)
+                    .audioUrl(map.get("audio_url") != null
+                            ? convertToAudioUrl(map.get("audio_url"))
+                            : null)
                     .build();
         }
 
@@ -253,6 +256,20 @@ interface AutomationModelEvaluatorMapper {
         }
 
         throw new IllegalStateException("Unexpected video_url type: " + obj.getClass());
+    }
+
+    private LlmAsJudgeMessageContent.AudioUrl convertToAudioUrl(Object obj) {
+        if (obj instanceof LlmAsJudgeMessageContent.AudioUrl audioUrl) {
+            return audioUrl;
+        }
+
+        if (obj instanceof java.util.Map<?, ?> map) {
+            return LlmAsJudgeMessageContent.AudioUrl.builder()
+                    .url((String) map.get("url"))
+                    .build();
+        }
+
+        throw new IllegalStateException("Unexpected audio_url type: " + obj.getClass());
     }
 
     /**

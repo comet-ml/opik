@@ -18,6 +18,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.api.gax.rpc.InvalidArgumentException;
 import com.jayway.jsonpath.JsonPath;
+import dev.langchain4j.data.message.AudioContent;
 import dev.langchain4j.data.message.ChatMessage;
 import dev.langchain4j.data.message.ImageContent;
 import dev.langchain4j.data.message.SystemMessage;
@@ -389,6 +390,13 @@ public class OnlineScoringEngine {
                         var url = TemplateParseUtils.render(part.videoUrl().url(), replacements, PromptType.MUSTACHE);
                         var unescapedUrl = StringEscapeUtils.unescapeHtml4(url);
                         builder.addContent(VideoContent.from(unescapedUrl));
+                    }
+                }
+                case "audio_url" -> {
+                    if (part.audioUrl() != null && part.audioUrl().url() != null) {
+                        var url = TemplateParseUtils.render(part.audioUrl().url(), replacements, PromptType.MUSTACHE);
+                        var unescapedUrl = StringEscapeUtils.unescapeHtml4(url);
+                        builder.addContent(AudioContent.from(unescapedUrl));
                     }
                 }
                 default -> log.warn("Unknown content type: {}", part.type());
