@@ -20,14 +20,14 @@ def get_file_extension(mime_type: str) -> str:
     extension = mimetypes.guess_extension(mime_type, strict=False)
 
     if extension:
-        # Remove leading dot
+        # Remove the leading dot
         extension = extension.lstrip(".")
         # Handle special cases where mimetypes returns less common extensions
         if mime_type == "image/jpeg" and extension == "jpe":
             return "jpg"
         return extension
 
-    # Fallback: extract from MIME type (e.g., "image/png" -> "png")
+    # Fallback: extract from the MIME type (e.g., "image/png" -> "png")
     if "/" in mime_type:
         subtype = mime_type.split("/")[1]
         # Handle special cases like "svg+xml" -> "svg"
