@@ -562,6 +562,18 @@
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-surefire-plugin</artifactId>
+                <configuration>
+                    <!-- Enable parallel test execution at class level -->
+                    <parallel>classes</parallel>
+                    <!-- Use 2 threads per CPU core for optimal throughput -->
+                    <threadCount>2</threadCount>
+                    <perCoreThreadCount>true</perCoreThreadCount>
+                    <!-- Use isolated classloaders per test class to prevent cross-contamination -->
+                    <forkCount>1</forkCount>
+                    <reuseForks>true</reuseForks>
+                    <!-- Increase memory for parallel execution -->
+                    <argLine>-Xmx2g -XX:+UseG1GC</argLine>
+                </configuration>
             </plugin>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
