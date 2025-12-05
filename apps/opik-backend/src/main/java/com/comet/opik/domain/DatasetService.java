@@ -7,6 +7,8 @@ import com.comet.opik.api.DatasetLastExperimentCreated;
 import com.comet.opik.api.DatasetLastOptimizationCreated;
 import com.comet.opik.api.DatasetStatus;
 import com.comet.opik.api.DatasetUpdate;
+import com.comet.opik.api.DatasetVersion;
+import com.comet.opik.api.DatasetVersionSummary;
 import com.comet.opik.api.ExperimentType;
 import com.comet.opik.api.Visibility;
 import com.comet.opik.api.error.EntityAlreadyExistsException;
@@ -580,6 +582,8 @@ class DatasetServiceImpl implements DatasetService {
                 .toStream()
                 .collect(toMap(OptimizationDAO.OptimizationSummary::datasetId, Function.identity()));
 
+        Map<UUID, DatasetVersionSummary> latestVersionsByDatasetId = fetchLatestVersionsByDatasetIds(ids);
+
         return datasets.stream()
                 .map(dataset -> {
                     var resume = experimentSummary.computeIfAbsent(dataset.id(), ExperimentSummary::empty);
@@ -587,6 +591,7 @@ class DatasetServiceImpl implements DatasetService {
                             DatasetItemSummary::empty);
                     var optimizationSummary = optimizationSummaryMap.computeIfAbsent(dataset.id(),
                             OptimizationDAO.OptimizationSummary::empty);
+                    var latestVersion = latestVersionsByDatasetId.get(dataset.id());
 
                     return dataset.toBuilder()
                             .experimentCount(resume.experimentCount())
@@ -594,9 +599,25 @@ class DatasetServiceImpl implements DatasetService {
                             .optimizationCount(optimizationSummary.optimizationCount())
                             .mostRecentExperimentAt(resume.mostRecentExperimentAt())
                             .mostRecentOptimizationAt(optimizationSummary.mostRecentOptimizationAt())
+                            .latestVersion(latestVersion)
                             .build();
                 })
                 .toList();
+    }
+
+    private Map<UUID, DatasetVersionSummary> fetchLatestVersionsByDatasetIds(Set<UUID> datasetIds) {
+        if (datasetIds.isEmpty()) {
+            return Map.of();
+        }
+
+        String workspaceId = requestContext.get().getWorkspaceId();
+
+        return template.inTransaction(READ_ONLY, handle -> {
+            var dao = handle.attach(DatasetVersionDAO.class);
+            List<DatasetVersion> latestVersions = dao.findLatestVersionsByDatasetIds(datasetIds, workspaceId);
+            return latestVersions.stream()
+                    .collect(toMap(DatasetVersion::datasetId, DatasetVersionSummary::from));
+        });
     }
 
     @Override
