@@ -1,15 +1,18 @@
-import { NotebookText, ChartLine, Hash } from "lucide-react";
+import { NotebookText, ChartLine, Hash, FlaskConical } from "lucide-react";
 import {
   WidgetResolver,
   WidgetComponents,
   WIDGET_CATEGORY,
 } from "@/types/dashboard";
+import { CHART_TYPE } from "@/constants/chart";
 import ProjectMetricsWidget from "./ProjectMetricsWidget/ProjectMetricsWidget";
 import ProjectMetricsEditor from "./ProjectMetricsWidget/ProjectMetricsEditor";
 import TextMarkdownWidget from "./TextMarkdownWidget/TextMarkdownWidget";
 import TextMarkdownEditor from "./TextMarkdownWidget/TextMarkdownEditor";
 import ProjectStatsCardWidget from "./ProjectStatsCardWidget/ProjectStatsCardWidget";
 import ProjectStatsCardEditor from "./ProjectStatsCardWidget/ProjectStatsCardEditor";
+import ExperimentsFeedbackScoresWidget from "./ExperimentsFeedbackScoresWidget/ExperimentsFeedbackScoresWidget";
+import ExperimentsFeedbackScoresWidgetEditor from "./ExperimentsFeedbackScoresWidget/ExperimentsFeedbackScoresWidgetEditor";
 import { WIDGET_TYPES } from "@/lib/dashboard/utils";
 
 export const createWidgetResolver = (): WidgetResolver => {
@@ -20,7 +23,7 @@ export const createWidgetResolver = (): WidgetResolver => {
           Widget: ProjectMetricsWidget,
           Editor: ProjectMetricsEditor,
           getDefaultConfig: () => ({
-            chartType: "line" as const,
+            chartType: CHART_TYPE.line,
           }),
           calculateTitle: () => "",
           metadata: {
@@ -67,6 +70,26 @@ export const createWidgetResolver = (): WidgetResolver => {
             disabled: false,
           },
         };
+      case WIDGET_TYPES.EXPERIMENTS_FEEDBACK_SCORES:
+        return {
+          Widget: ExperimentsFeedbackScoresWidget,
+          Editor: ExperimentsFeedbackScoresWidgetEditor,
+          getDefaultConfig: () => ({
+            filters: [],
+            groups: [],
+            chartType: CHART_TYPE.line,
+          }),
+          calculateTitle: () => "",
+          metadata: {
+            title: "Experiments feedback scores",
+            description:
+              "Visualize experiment feedback scores with filtering and grouping options.",
+            icon: <FlaskConical className="size-4" />,
+            category: WIDGET_CATEGORY.EVALUATION,
+            iconColor: "text-[#9B59B6]",
+            disabled: false,
+          },
+        };
       default:
         return {
           Widget: TextMarkdownWidget,
@@ -91,6 +114,7 @@ export const getAllWidgetTypes = (): string[] => {
   return [
     WIDGET_TYPES.PROJECT_METRICS,
     WIDGET_TYPES.PROJECT_STATS_CARD,
+    WIDGET_TYPES.EXPERIMENTS_FEEDBACK_SCORES,
     WIDGET_TYPES.TEXT_MARKDOWN,
   ];
 };
