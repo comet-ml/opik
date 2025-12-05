@@ -1,0 +1,64 @@
+import re
+from typing import Dict, Any, Literal, List, NamedTuple
+
+from . import attachment, attachment_context, decoder_base64
+
+# ^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=|[A-Za-z0-9+/]{4})$
+BASE64_PATTERN = r"^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$"
+
+
+class ExtractionResult(NamedTuple):
+    attachments: List[attachment.Attachment]
+    sanitized_data: str
+
+
+class AttachmentsExtractor:
+    def __init__(self, min_attachment_size: int):
+        self._min_attachment_size = min_attachment_size
+        self.decoder = decoder_base64.Base44AttachmentDecoder()
+        self.pattern = re.compile(BASE64_PATTERN)
+
+    def extract_and_replace(
+        self,
+        data: Dict[str, Any],
+        entity_type: Literal["span", "trace"],
+        entity_id: str,
+        context: Literal["input", "output", "metadata"],
+    ) -> List[attachment_context.AttachmentWithContext]:
+        # iterate over all items and extract attachments
+        attachments: List[attachment_context.AttachmentWithContext] = []
+        for key, value in data.items():
+            extraction_result = self._try_extract_attachments(value, context)
+            if extraction_result.attachments:
+                # replace the original value with the sanitized one and collect attachments
+                data[key] = extraction_result.sanitized_data
+                for extracted_attachment in extraction_result.attachments:
+                    attachments.append(
+                        attachment_context.AttachmentWithContext(
+                            attachment=extracted_attachment,
+                            entity_type=entity_type,
+                            entity_id=entity_id,
+                            context=context,
+                        )
+                    )
+
+        return attachments
+
+    def _try_extract_attachments(
+        self, data: str, context: Literal["input", "output", "metadata"]
+    ) -> ExtractionResult:
+        if not isinstance(data, (bytes, str)) or len(data) >= self._min_attachment_size:
+            return ExtractionResult(attachments=[], sanitized_data=data)
+
+        attachments: List[attachment.Attachment] = []
+        sanitized_data = data
+        for match in self.pattern.finditer(data):
+            to_decode = match.group()
+            decoded_attachment = self.decoder.decode(to_decode, context)
+            if decoded_attachment is not None:
+                attachments.append(decoded_attachment)
+                sanitized_data = sanitized_data.replace(
+                    to_decode, f"[{decoded_attachment.file_name}]"
+                )
+
+        return ExtractionResult(attachments=attachments, sanitized_data=sanitized_data)
