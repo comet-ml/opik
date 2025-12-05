@@ -102,14 +102,16 @@ const DatasetItemsPageVersioned = () => {
           <div className="flex items-center gap-2">
             {hasDraft && (
               <>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setDiscardDialogOpen(true)}
-                >
-                  <X className="mr-1 size-4" />
-                  Discard changes
-                </Button>
+                {latestVersion && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setDiscardDialogOpen(true)}
+                  >
+                    <X className="mr-1 size-4" />
+                    Discard changes
+                  </Button>
+                )}
                 <Button
                   variant="default"
                   size="sm"
