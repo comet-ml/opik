@@ -41,7 +41,6 @@ public class ProviderApiKeyRowMapper implements RowMapper<ProviderApiKey> {
                 .createdBy(rs.getString("created_by"))
                 .lastUpdatedAt(rs.getTimestamp("last_updated_at").toInstant())
                 .lastUpdatedBy(rs.getString("last_updated_by"))
-                .readOnly(false) // Database-stored providers are editable
                 .build();
     }
 }
