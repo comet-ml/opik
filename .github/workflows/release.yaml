@@ -128,7 +128,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4.1.1
         with:
-          ref: ${{ github.ref }}
+          ref: main
           fetch-depth: 0
           token: ${{ secrets.GH_PAT_TO_ACCESS_GITHUB_API }}
 
