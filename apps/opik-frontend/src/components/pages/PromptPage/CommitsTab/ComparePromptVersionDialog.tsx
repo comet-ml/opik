@@ -15,7 +15,7 @@ import { cn } from "@/lib/utils";
 import { formatDate } from "@/lib/date";
 import SelectBox from "@/components/shared/SelectBox/SelectBox";
 import { parseLLMMessageContent, parsePromptVersionContent } from "@/lib/llm";
-import PromptMessageMediaTags from "@/components/pages-shared/llm/PromptMessageMediaTags/PromptMessageMediaTags";
+import MediaTagsList from "@/components/pages-shared/llm/PromptMessageMediaTags/MediaTagsList";
 
 type ComparePromptVersionDialogProps = {
   open: boolean;
@@ -158,21 +158,17 @@ const ComparePromptVersionDialog: React.FunctionComponent<
               {imagesHaveChanges && (
                 <div className="grid grid-cols-2 gap-4">
                   <div className="flex items-center gap-2 rounded-md border p-4">
-                    <PromptMessageMediaTags
+                    <MediaTagsList
                       type="image"
                       items={baseImages}
-                      setItems={() => {}}
-                      align="start"
                       editable={false}
                       preview={true}
                     />
                   </div>
                   <div className="flex items-center gap-2 rounded-md border p-4">
-                    <PromptMessageMediaTags
+                    <MediaTagsList
                       type="image"
                       items={diffImages}
-                      setItems={() => {}}
-                      align="start"
                       editable={false}
                       preview={true}
                     />
@@ -182,21 +178,17 @@ const ComparePromptVersionDialog: React.FunctionComponent<
               {videosHaveChanges && (
                 <div className="grid grid-cols-2 gap-4">
                   <div className="flex items-center gap-2 rounded-md border p-4">
-                    <PromptMessageMediaTags
+                    <MediaTagsList
                       type="video"
                       items={baseVideos}
-                      setItems={() => {}}
-                      align="start"
                       editable={false}
                       preview={true}
                     />
                   </div>
                   <div className="flex items-center gap-2 rounded-md border p-4">
-                    <PromptMessageMediaTags
+                    <MediaTagsList
                       type="video"
                       items={diffVideos}
-                      setItems={() => {}}
-                      align="start"
                       editable={false}
                       preview={true}
                     />
