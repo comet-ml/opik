@@ -196,7 +196,7 @@ const PromptMessageMediaTags: React.FunctionComponent<
     }
 
     return (
-      <div className="flex max-w-[260px] flex-col gap-2">
+      <div className="flex w-[320px] flex-col gap-2">
         <audio
           src={value}
           controls
@@ -207,14 +207,12 @@ const PromptMessageMediaTags: React.FunctionComponent<
             if (parent) {
               parent.innerHTML = `
                 <p class="comet-body-s text-muted-foreground">Audio preview failed</p>
-                <p class="comet-body-xs break-all text-muted-foreground">${value}</p>
               `;
             }
           }}
         >
           Your browser does not support audio playback.
         </audio>
-        <p className="comet-body-xs break-all text-muted-foreground">{value}</p>
       </div>
     );
   };
