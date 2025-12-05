@@ -7,6 +7,7 @@ import org.jdbi.v3.json.Json;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 import static com.comet.opik.domain.evaluators.LlmAsJudgeAutomationRuleEvaluatorModel.LlmAsJudgeCode;
@@ -14,8 +15,7 @@ import static com.comet.opik.domain.evaluators.LlmAsJudgeAutomationRuleEvaluator
 @Builder(toBuilder = true)
 public record LlmAsJudgeAutomationRuleEvaluatorModel(
         UUID id,
-        UUID projectId,
-        String projectName,
+        Set<UUID> projectIds,
         String name,
         Float samplingRate,
         boolean enabled,

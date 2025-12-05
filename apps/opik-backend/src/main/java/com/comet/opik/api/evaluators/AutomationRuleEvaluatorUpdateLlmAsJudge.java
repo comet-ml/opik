@@ -13,6 +13,7 @@ import lombok.experimental.SuperBuilder;
 
 import java.beans.ConstructorProperties;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 import static com.comet.opik.api.evaluators.AutomationRuleEvaluatorLlmAsJudge.LlmAsJudgeCode;
@@ -26,12 +27,12 @@ public final class AutomationRuleEvaluatorUpdateLlmAsJudge
         extends
             AutomationRuleEvaluatorUpdate<LlmAsJudgeCode, TraceFilter> {
 
-    @ConstructorProperties({"name", "samplingRate", "enabled", "filters", "code", "projectId"})
+    @ConstructorProperties({"name", "samplingRate", "enabled", "filters", "code", "projectIds"})
     public AutomationRuleEvaluatorUpdateLlmAsJudge(
             @NotBlank String name, float samplingRate, boolean enabled, List<TraceFilter> filters,
             @NotNull LlmAsJudgeCode code,
-            @NotNull UUID projectId) {
-        super(name, samplingRate, enabled, filters, code, projectId);
+            @NotNull Set<UUID> projectIds) {
+        super(name, samplingRate, enabled, filters, code, projectIds);
     }
 
     /**

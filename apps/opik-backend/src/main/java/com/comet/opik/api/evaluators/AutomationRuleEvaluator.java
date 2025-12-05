@@ -21,6 +21,7 @@ import lombok.experimental.UtilityClass;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 @Data
@@ -53,11 +54,7 @@ public abstract sealed class AutomationRuleEvaluator<T, E extends Filter> implem
     private final UUID id;
 
     @JsonView({View.Public.class, View.Write.class})
-    @NotNull private final UUID projectId;
-
-    @JsonView({View.Public.class})
-    @Schema(accessMode = Schema.AccessMode.READ_ONLY)
-    private final String projectName;
+    @NotNull private final Set<UUID> projectIds;
 
     @JsonView({View.Public.class, View.Write.class})
     @NotBlank private final String name;
