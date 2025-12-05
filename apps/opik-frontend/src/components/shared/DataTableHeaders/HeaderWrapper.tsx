@@ -1,9 +1,10 @@
 import React from "react";
-import find from "lodash/find";
+import filter from "lodash/filter";
 import { ColumnMeta, TableMeta } from "@tanstack/react-table";
 import HeaderStatistic from "@/components/shared/DataTableHeaders/HeaderStatistic";
 import { cn } from "@/lib/utils";
 import { CELL_HORIZONTAL_ALIGNMENT_MAP } from "@/constants/shared";
+import { STATISTIC_AGGREGATION_TYPE } from "@/types/shared";
 
 type HeaderWrapperProps<TData> = {
   children?: React.ReactNode;
@@ -31,10 +32,22 @@ const HeaderWrapper = <TData,>({
   const heightClass = columnsStatistic ? "h-14" : "h-11";
 
   if (supportStatistic && columnsStatistic) {
-    const columnStatistic = find(
+    // Find all statistics matching the key (could have both AVG and PERCENTAGE)
+    const matchingStatistics = filter(
       columnsStatistic,
       (s) => s.name === statisticKey,
     );
+
+    // Find AVG and PERCENTAGE statistics separately
+    const avgStatistic = matchingStatistics.find(
+      (s) => s.type === STATISTIC_AGGREGATION_TYPE.AVG,
+    );
+    const percentileStatistic = matchingStatistics.find(
+      (s) => s.type === STATISTIC_AGGREGATION_TYPE.PERCENTAGE,
+    );
+
+    // Use AVG if available, otherwise use the first matching statistic
+    const columnStatistic = avgStatistic ?? matchingStatistics[0];
 
     return (
       <div
@@ -59,6 +72,7 @@ const HeaderWrapper = <TData,>({
         >
           <HeaderStatistic
             statistic={columnStatistic}
+            percentileStatistic={percentileStatistic}
             columnsStatistic={columnsStatistic}
             statisticKey={statisticKey}
             dataFormater={statisticDataFormater}

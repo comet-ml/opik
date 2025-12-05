@@ -25,6 +25,9 @@ public class StatsMapper {
     public static final String TOTAL_ESTIMATED_COST = "total_estimated_cost";
     public static final String TOTAL_ESTIMATED_COST_AVG = "total_estimated_cost_avg";
     public static final String TOTAL_ESTIMATED_COST_SUM = "total_estimated_cost_sum";
+    public static final String TOTAL_ESTIMATED_COST_PERCENTILES = "total_estimated_cost_percentiles";
+    public static final String FEEDBACK_SCORES_PERCENTILES = "feedback_scores_percentiles";
+    public static final String USAGE_TOTAL_TOKENS_PERCENTILES = "usage_total_tokens_percentiles";
     public static final String DURATION = "duration";
     public static final String INPUT = "input";
     public static final String OUTPUT = "output";
@@ -225,6 +228,9 @@ public class StatsMapper {
                     totalEstimatedCostAvg.doubleValue()));
         }
 
+        // Add total_estimated_cost percentiles
+        addPercentilesFromMap(row, TOTAL_ESTIMATED_COST_PERCENTILES, TOTAL_ESTIMATED_COST, stats);
+
         @SuppressWarnings("unchecked")
         Map<String, BigDecimal> durationMap = row.get(DURATION, Map.class);
         if (durationMap != null) {
@@ -238,7 +244,82 @@ public class StatsMapper {
         addMapStats(row, FEEDBACK_SCORE, stats);
         addMapStats(row, USAGE, stats);
 
+        // Add feedback_scores percentiles (map of score_name -> {p50, p90, p99})
+        addFeedbackScoresPercentiles(row, stats);
+
+        // Add usage.total_tokens percentiles
+        addPercentilesFromMap(row, USAGE_TOTAL_TOKENS_PERCENTILES, "usage.total_tokens", stats);
+
         return new ProjectStats(stats.build().toList());
+    }
+
+    /**
+     * Adds percentile stats from a map field containing {p50, p90, p99} values.
+     */
+    @SuppressWarnings("unchecked")
+    private static void addPercentilesFromMap(
+            Row row,
+            String fieldName,
+            String statName,
+            Stream.Builder<ProjectStats.ProjectStatItem<?>> statsBuilder) {
+        Map<String, ?> percentilesMap = row.get(fieldName, Map.class);
+        if (percentilesMap != null && !percentilesMap.isEmpty()) {
+            BigDecimal p50 = toBigDecimal(percentilesMap.get("p50"));
+            BigDecimal p90 = toBigDecimal(percentilesMap.get("p90"));
+            BigDecimal p99 = toBigDecimal(percentilesMap.get("p99"));
+
+            if (p50 != null || p90 != null || p99 != null) {
+                var percentiles = new PercentageValues(p50, p90, p99);
+                statsBuilder.add(new PercentageValueStat(statName, percentiles));
+            }
+        }
+    }
+
+    /**
+     * Adds feedback scores percentiles from the feedback_scores_percentiles field.
+     * The field contains a map of score_name -> {p50, p90, p99}.
+     */
+    @SuppressWarnings("unchecked")
+    private static void addFeedbackScoresPercentiles(
+            Row row,
+            Stream.Builder<ProjectStats.ProjectStatItem<?>> statsBuilder) {
+        Map<String, Map<String, ?>> feedbackScoresPercentilesMap = row.get(FEEDBACK_SCORES_PERCENTILES, Map.class);
+        if (feedbackScoresPercentilesMap != null && !feedbackScoresPercentilesMap.isEmpty()) {
+            feedbackScoresPercentilesMap.entrySet().stream()
+                    .sorted(Map.Entry.comparingByKey())
+                    .forEach(entry -> {
+                        String scoreName = entry.getKey();
+                        Map<String, ?> percentilesMap = entry.getValue();
+                        if (percentilesMap != null && !percentilesMap.isEmpty()) {
+                            BigDecimal p50 = toBigDecimal(percentilesMap.get("p50"));
+                            BigDecimal p90 = toBigDecimal(percentilesMap.get("p90"));
+                            BigDecimal p99 = toBigDecimal(percentilesMap.get("p99"));
+
+                            if (p50 != null || p90 != null || p99 != null) {
+                                var percentiles = new PercentageValues(p50, p90, p99);
+                                statsBuilder.add(new PercentageValueStat(
+                                        "%s.%s".formatted(FEEDBACK_SCORE, scoreName),
+                                        percentiles));
+                            }
+                        }
+                    });
+        }
+    }
+
+    /**
+     * Converts a value to BigDecimal, handling various numeric types.
+     */
+    private static BigDecimal toBigDecimal(Object value) {
+        if (value == null) {
+            return null;
+        }
+        if (value instanceof BigDecimal bd) {
+            return bd;
+        }
+        if (value instanceof Number number) {
+            return BigDecimal.valueOf(number.doubleValue());
+        }
+        return null;
     }
 
     /**

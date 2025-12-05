@@ -1099,6 +1099,18 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                         FROM feedback_scores_final
                         WHERE entity_id IN (SELECT trace_id FROM experiment_items_filtered)
                         GROUP BY workspace_id, project_id, entity_id
+                    ), feedback_scores_percentiles AS (
+                        SELECT
+                            name,
+                            quantiles(0.5, 0.9, 0.99)(toFloat64(value)) AS percentiles
+                        FROM feedback_scores_final
+                        WHERE entity_id IN (SELECT trace_id FROM experiment_items_filtered)
+                        GROUP BY name
+                    ), usage_total_tokens_data AS (
+                        SELECT
+                            toFloat64(tc.usage['total_tokens']) AS total_tokens
+                        FROM traces_with_cost_and_duration tc
+                        WHERE tc.usage['total_tokens'] IS NOT NULL AND tc.usage['total_tokens'] > 0
                     )
                     SELECT
                         count(DISTINCT ei.id) as experiment_items_count,
@@ -1117,16 +1129,45 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                             )
                         ) AS duration,
                         avgMap(f.feedback_scores) AS feedback_scores,
+                        (SELECT mapFromArrays(
+                            groupArray(name),
+                            groupArray(mapFromArrays(
+                                ['p50', 'p90', 'p99'],
+                                arrayMap(v -> toDecimal64(if(isFinite(v), v, 0), 9), percentiles)
+                            ))
+                        ) FROM feedback_scores_percentiles) AS feedback_scores_percentiles,
                         avgIf(tc.total_estimated_cost, tc.total_estimated_cost > 0) AS total_estimated_cost_,
                         toDecimal128(if(isNaN(total_estimated_cost_), 0, total_estimated_cost_), 12) AS total_estimated_cost_avg,
                         sumIf(tc.total_estimated_cost, tc.total_estimated_cost > 0) AS total_estimated_cost_sum_,
                         toDecimal128(total_estimated_cost_sum_, 12) AS total_estimated_cost_sum,
-                        avgMap(tc.usage) AS usage
+                        mapFromArrays(
+                            ['p50', 'p90', 'p99'],
+                            arrayMap(
+                              v -> toDecimal128(
+                                     greatest(
+                                       least(if(isFinite(toFloat64(v)), toFloat64(v), 0),  %s),
+                                       %s
+                                     ),
+                                     12
+                                   ),
+                              quantilesIf(0.5, 0.9, 0.99)(tc.total_estimated_cost, tc.total_estimated_cost > 0)
+                            )
+                        ) AS total_estimated_cost_percentiles,
+                        avgMap(tc.usage) AS usage,
+                        mapFromArrays(
+                            ['p50', 'p90', 'p99'],
+                            arrayMap(
+                              v -> toInt64(greatest(least(if(isFinite(v), v, 0), %s), %s)),
+                              (SELECT quantiles(0.5, 0.9, 0.99)(total_tokens) FROM usage_total_tokens_data)
+                            )
+                        ) AS usage_total_tokens_percentiles
                     FROM experiment_items_filtered ei
                     LEFT JOIN traces_with_cost_and_duration AS tc ON ei.trace_id = tc.trace_id
                     LEFT JOIN feedback_scores_agg AS f ON ei.trace_id = f.entity_id
                     ;
                     """,
+            MAX_DECIMAL_BOUND, MIN_DECIMAL_BOUND,
+            MAX_DECIMAL_BOUND, MIN_DECIMAL_BOUND,
             MAX_DECIMAL_BOUND, MIN_DECIMAL_BOUND);
 
     private final @NonNull TransactionTemplateAsync asyncTemplate;
