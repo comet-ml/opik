@@ -1,0 +1,444 @@
+"""
+Opik tracking integration for Harbor benchmark evaluation framework.
+
+This module provides the `track_harbor` function to add Opik tracing to Harbor Jobs,
+enabling real-time streaming of trial results to Opik for visualization and analysis.
+
+Example:
+    >>> from opik.integrations.harbor import track_harbor
+    >>> from harbor.job import Job
+    >>> import os
+    >>>
+    >>> os.environ["OPIK_PROJECT_NAME"] = "swebench-evaluation"
+    >>>
+    >>> job = Job(config)
+    >>> tracked_job = track_harbor(job, experiment_name="my-eval")
+    >>> result = await tracked_job.run()
+"""
+
+import functools
+import logging
+from datetime import datetime
+from typing import Any, Callable, Dict, List, Optional, TYPE_CHECKING
+
+from opik import context_storage, id_helpers, opik_context, track
+from opik.api_objects import opik_client
+from opik.types import FeedbackScoreDict, SpanType
+
+from . import experiment_service
+
+if TYPE_CHECKING:
+    from harbor.job import Job
+    from harbor.trial.trial import Trial
+    from harbor.models.trial.result import TrialResult
+    from harbor.models.trajectories.step import Step
+
+LOGGER = logging.getLogger(__name__)
+
+
+def _rewards_to_feedback_scores(
+    rewards: Optional[Dict[str, Any]],
+    error: Optional[str] = None,
+) -> List[FeedbackScoreDict]:
+    """Convert Harbor verifier rewards to Opik feedback scores."""
+    if rewards is None:
+        return []
+
+    feedback_scores: List[FeedbackScoreDict] = []
+    for name, value in rewards.items():
+        try:
+            float_value = float(value)
+            
+            score = FeedbackScoreDict(
+                name=name,
+                value=float_value,
+                reason=error
+            )
+            
+            feedback_scores.append(score)
+        except (ValueError, TypeError):
+            LOGGER.warning(
+                "Could not convert reward value to float: %s=%s", name, value
+            )
+
+    return feedback_scores
+
+
+def _parse_iso_timestamp(timestamp_str: Optional[str]) -> Optional[datetime]:
+    """Parse an ISO 8601 timestamp string to datetime."""
+    if timestamp_str is None:
+        return None
+    try:
+        timestamp_str = timestamp_str.replace("Z", "+00:00")
+        return datetime.fromisoformat(timestamp_str)
+    except (ValueError, TypeError):
+        return None
+
+
+def _source_to_span_type(source: str) -> SpanType:
+    """Convert ATIF step source to Opik span type."""
+    if source == "agent":
+        return "llm"
+    return "general"
+
+
+def _patch_step_class() -> None:
+    """Patch the Harbor Step class to create Opik spans on instantiation."""
+    try:
+        from harbor.models.trajectories.step import Step
+    except ImportError:
+        LOGGER.debug("Could not import Step class, skipping step patching")
+        return
+
+    # Check if already patched
+    if hasattr(_patch_step_class, "_patched"):
+        return
+
+    original_init = Step.__init__
+
+    @functools.wraps(original_init)
+    def patched_init(self: "Step", *args: Any, **kwargs: Any) -> None:
+        original_init(self, *args, **kwargs)
+
+        trace_data = context_storage.get_trace_data()
+        if trace_data is None:
+            return
+
+        parent_span = context_storage.top_span_data()
+        parent_span_id = parent_span.id if parent_span else None
+
+        try:
+            client = opik_client.get_client_cached()
+
+            input_dict: Dict[str, Any] = {}
+            if self.message:
+                input_dict["message"] = self.message
+            if self.tool_calls:
+                input_dict["tool_calls"] = [
+                    {
+                        "tool_call_id": tc.tool_call_id,
+                        "function_name": tc.function_name,
+                        "arguments": tc.arguments,
+                    }
+                    for tc in self.tool_calls
+                ]
+
+            output_dict: Optional[Dict[str, Any]] = None
+            if self.observation and self.observation.results:
+                output_dict = {
+                    "results": [
+                        {"content": r.content} for r in self.observation.results
+                    ]
+                }
+
+            metadata: Dict[str, Any] = {
+                "source": self.source,
+                "created_from": "harbor",
+            }
+            if self.reasoning_content:
+                metadata["reasoning"] = self.reasoning_content
+
+            usage: Optional[Dict[str, Any]] = None
+            total_cost: Optional[float] = None
+            if self.metrics:
+                usage = {}
+                if self.metrics.prompt_tokens is not None:
+                    usage["prompt_tokens"] = self.metrics.prompt_tokens
+                if self.metrics.completion_tokens is not None:
+                    usage["completion_tokens"] = self.metrics.completion_tokens
+                if self.metrics.prompt_tokens and self.metrics.completion_tokens:
+                    usage["total_tokens"] = (
+                        self.metrics.prompt_tokens + self.metrics.completion_tokens
+                    )
+                if not usage:
+                    usage = None
+                total_cost = getattr(self.metrics, "cost_usd", None)
+
+            client.span(
+                id=id_helpers.generate_id(),
+                trace_id=trace_data.id,
+                parent_span_id=parent_span_id,
+                name=f"step_{self.step_id}",
+                type=_source_to_span_type(self.source),
+                start_time=_parse_iso_timestamp(self.timestamp),
+                input=input_dict if input_dict else None,
+                output=output_dict,
+                metadata=metadata,
+                usage=usage,
+                total_cost=total_cost,
+                model=self.model_name if self.source == "agent" else None,
+                tags=["harbor", self.source],
+            )
+
+        except Exception as e:
+            LOGGER.debug("Failed to create span for step: %s", e)
+
+    Step.__init__ = patched_init  # type: ignore
+    setattr(_patch_step_class, "_patched", True)
+
+
+def enable_tracking(
+    project_name: Optional[str] = None,
+    experiment_name: Optional[str] = None,
+) -> None:
+    """Enable Opik tracking for Harbor.
+
+    This patches Harbor's Trial and Verifier classes to add tracing.
+    Call this before running any Harbor code.
+
+    Args:
+        project_name: Opik project name. If None, uses OPIK_PROJECT_NAME env var.
+        experiment_name: Optional experiment name for experiment tracking.
+
+    Example:
+        >>> from opik.integrations.harbor import enable_tracking
+        >>> enable_tracking(project_name="my-project")
+        >>> # Now run Harbor code - it will be traced
+    """
+    try:
+        from harbor.trial.trial import Trial
+        from harbor.verifier.verifier import Verifier
+    except ImportError as e:
+        raise ImportError(
+            "Harbor is not installed. Please install it with: pip install harbor"
+        ) from e
+
+    # Patch Trial methods (only if not already patched)
+    if not hasattr(Trial.run, "opik_tracked"):
+        Trial.run = _wrap_trial_run(Trial.run, project_name)
+
+    if not hasattr(Trial._setup_environment, "opik_tracked"):
+        Trial._setup_environment = _wrap_setup_environment(Trial._setup_environment, project_name)
+
+    if not hasattr(Trial._setup_agent, "opik_tracked"):
+        Trial._setup_agent = _wrap_setup_agent(Trial._setup_agent, project_name)
+
+    if not hasattr(Trial._execute_agent, "opik_tracked"):
+        Trial._execute_agent = _wrap_execute_agent(Trial._execute_agent, project_name)
+
+    if not hasattr(Trial._run_verification, "opik_tracked"):
+        Trial._run_verification = _wrap_run_verification(Trial._run_verification, project_name)
+
+    # Patch Verifier (only if not already patched)
+    if not hasattr(Verifier.verify, "opik_tracked"):
+        Verifier.verify = _wrap_verify(Verifier.verify, project_name)
+
+    # Patch Step class for real-time step tracking
+    _patch_step_class()
+
+    LOGGER.info("Opik tracking enabled for Harbor")
+
+
+def track_harbor(
+    job: "Job",
+    project_name: Optional[str] = None,
+    experiment_name: Optional[str] = None,
+) -> "Job":
+    """Add Opik tracking to a Harbor Job.
+
+    Args:
+        job: A Harbor Job instance.
+        project_name: Opik project name. If None, uses OPIK_PROJECT_NAME env var.
+        experiment_name: Optional experiment name (not used, kept for API compatibility).
+
+    Returns:
+        The same Job instance with Opik tracking enabled.
+    """
+    # Enable tracking (patches classes)
+    # Experiment service is set up lazily when the first trial runs
+    enable_tracking(project_name=project_name, experiment_name=experiment_name)
+
+    return job
+
+
+def _wrap_trial_run(original: Callable, project_name: Optional[str]) -> Callable:
+    """Wrap Trial.run with tracing, feedback scores, and experiment linking."""
+
+    @track(name="trial_run", tags=["harbor"], project_name=project_name)
+    @functools.wraps(original)
+    async def wrapped(self: "Trial") -> "TrialResult":
+        # Set nice trace name
+        config = self.config
+        trace_name = f"{config.agent.name}/{config.trial_name}"
+        opik_context.update_current_trace(
+            name=trace_name,
+            input={
+                "trial_name": config.trial_name,
+                "task": {
+                    "name": config.task.name if hasattr(config.task, "name") else str(config.task.path),
+                    "source": getattr(config.task, "source", None),
+                },
+                "agent": {
+                    "name": config.agent.name,
+                    "model": getattr(config.agent, "model_name", None),
+                },
+            },
+            metadata={"created_from": "harbor"},
+            tags=["harbor", config.agent.name],
+        )
+
+        # Lazily setup experiment service if not already done
+        # This ensures experiment tracking works for both SDK and CLI modes
+        if experiment_service.get_service() is None:
+            try:
+                # Use job_id for consistent experiment naming
+                experiment_name = f"harbor-job-{str(config.job_id)[:8]}" if config.job_id else None
+                source = getattr(config.task, "source", None)
+                LOGGER.debug(
+                    "Lazily setting up experiment service: experiment_name=%s, source=%s",
+                    experiment_name,
+                    source,
+                )
+                experiment_service.setup_lazy(
+                    experiment_name=experiment_name,
+                    source=source,
+                )
+            except Exception as e:
+                LOGGER.debug("Failed to lazily setup experiment service: %s", e)
+
+        result = await original(self)
+
+        # Update trace with output and feedback scores
+        output_dict: Dict[str, Any] = {
+            "trial_name": result.trial_name,
+            "task_name": result.task_name,
+        }
+        if result.verifier_result and result.verifier_result.rewards:
+            output_dict["rewards"] = result.verifier_result.rewards
+
+        feedback_scores = None
+        if result.verifier_result and result.verifier_result.rewards:
+            # Get error message if available
+            error_msg = getattr(result.verifier_result, "error", None) or getattr(result, "error", None)
+            feedback_scores = _rewards_to_feedback_scores(result.verifier_result.rewards, error=error_msg)
+
+        opik_context.update_current_trace(
+            output=output_dict,
+            feedback_scores=feedback_scores,
+        )
+
+        # Link to experiment
+        trace_data = context_storage.get_trace_data()
+        if trace_data is not None:
+            service = experiment_service.get_service()
+            LOGGER.debug(
+                "Linking trial to experiment: trial=%s, trace_id=%s, service=%s",
+                config.trial_name,
+                trace_data.id,
+                service,
+            )
+            if service is not None:
+                source = getattr(config.task, "source", None)
+                task_name = config.task.name if hasattr(config.task, "name") else str(config.task.path)
+                service.link_trial(
+                    trial_name=config.trial_name,
+                    trace_id=trace_data.id,
+                    source=source,
+                    task_name=task_name,
+                    agent_name=config.agent.name,
+                    model_name=getattr(config.agent, "model_name", None),
+                )
+            else:
+                LOGGER.debug("No experiment service available, skipping experiment linking")
+
+        return result
+
+    return wrapped
+
+
+def _wrap_setup_environment(original: Callable, project_name: Optional[str]) -> Callable:
+    """Wrap Trial._setup_environment with tracing."""
+
+    @track(name="setup_environment", tags=["harbor"], project_name=project_name)
+    @functools.wraps(original)
+    async def wrapped(self: "Trial") -> None:
+        opik_context.update_current_span(
+            input={"phase": "environment_setup"},
+            metadata={"created_from": "harbor"},
+        )
+        await original(self)
+        opik_context.update_current_span(output={"status": "completed"})
+
+    return wrapped
+
+
+def _wrap_setup_agent(original: Callable, project_name: Optional[str]) -> Callable:
+    """Wrap Trial._setup_agent with tracing."""
+
+    @track(name="setup_agent", tags=["harbor"], project_name=project_name)
+    @functools.wraps(original)
+    async def wrapped(self: "Trial") -> None:
+        opik_context.update_current_span(
+            input={"phase": "agent_setup"},
+            metadata={"created_from": "harbor"},
+        )
+        await original(self)
+        opik_context.update_current_span(output={"status": "completed"})
+
+    return wrapped
+
+
+def _wrap_execute_agent(original: Callable, project_name: Optional[str]) -> Callable:
+    """Wrap Trial._execute_agent with tracing."""
+
+    @track(name="execute_agent", tags=["harbor"], project_name=project_name)
+    @functools.wraps(original)
+    async def wrapped(self: "Trial") -> None:
+        input_dict = {}
+        if hasattr(self, "_task") and self._task:
+            input_dict["instruction"] = self._task.instruction
+        opik_context.update_current_span(
+            input=input_dict,
+            metadata={"created_from": "harbor"},
+        )
+        await original(self)
+        opik_context.update_current_span(output={"status": "completed"})
+
+    return wrapped
+
+
+def _wrap_run_verification(original: Callable, project_name: Optional[str]) -> Callable:
+    """Wrap Trial._run_verification with tracing."""
+
+    @track(name="run_verification", tags=["harbor"], project_name=project_name)
+    @functools.wraps(original)
+    async def wrapped(self: "Trial") -> None:
+        opik_context.update_current_span(
+            input={"phase": "verification"},
+            metadata={"created_from": "harbor"},
+        )
+        await original(self)
+        opik_context.update_current_span(output={"status": "completed"})
+
+    return wrapped
+
+
+def _wrap_verify(original: Callable, project_name: Optional[str]) -> Callable:
+    """Wrap Verifier.verify with tracing."""
+
+    @track(name="verify", tags=["harbor"], project_name=project_name)
+    @functools.wraps(original)
+    async def wrapped(self: Any) -> Any:
+        opik_context.update_current_span(
+            input={"phase": "verify"},
+            metadata={"created_from": "harbor"},
+        )
+        result = await original(self)
+
+        output_dict: Dict[str, Any] = {}
+        if hasattr(result, "rewards") and result.rewards:
+            output_dict["rewards"] = result.rewards
+        opik_context.update_current_span(output=output_dict if output_dict else {"status": "completed"})
+
+        return result
+
+    return wrapped
+
+
+def reset_harbor_tracking() -> None:
+    """Reset Harbor tracking state for testing purposes.
+    
+    Resets the experiment service. Method patches remain active
+    (they use `opik_tracked` to prevent double-patching).
+    """
+    experiment_service.reset()

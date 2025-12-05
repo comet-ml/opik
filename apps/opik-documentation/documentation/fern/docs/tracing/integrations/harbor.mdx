@@ -1,0 +1,298 @@
+---
+title: Observability for Harbor with Opik
+description: Start here to integrate Opik into your Harbor benchmark evaluation runs for end-to-end agent observability and analysis.
+---
+
+[Harbor](https://github.com/laude-institute/harbor) is a benchmark evaluation framework for autonomous LLM agents. It provides standardized infrastructure for running agents against benchmarks like SWE-bench, LiveCodeBench, Terminal-Bench, and others.
+
+> Harbor enables you to evaluate LLM agents on complex coding tasks, tracking their trajectories using the ATIF (Agent Trajectory Interchange Format) specification.
+
+<Frame>
+  <img src="/img/tracing/harbor_integration.png" alt="Harbor integration with Opik" />
+</Frame>
+
+Opik integrates with Harbor to log traces for all trial executions, including:
+
+- **Trial results** as Opik traces with timing, metadata, and feedback scores from verifier rewards
+- **Trajectory steps** as nested spans showing the complete agent-environment interaction
+- **Tool calls and observations** as detailed execution records
+- **Token usage and costs** aggregated from ATIF metrics
+
+## Account Setup
+
+[Comet](https://www.comet.com/site?from=llm&utm_source=opik&utm_medium=colab&utm_content=harbor&utm_campaign=opik) provides a hosted version of the Opik platform, [simply create an account](https://www.comet.com/signup?from=llm&utm_source=opik&utm_medium=colab&utm_content=harbor&utm_campaign=opik) and grab your API Key.
+
+> You can also run the Opik platform locally, see the [installation guide](https://www.comet.com/docs/opik/self-host/overview/?from=llm&utm_source=opik&utm_medium=colab&utm_content=harbor&utm_campaign=opik) for more information.
+
+## Getting Started
+
+### Installation
+
+First, ensure you have both `opik` and `harbor` installed:
+
+```bash
+pip install opik harbor
+```
+
+### Configuring Opik
+
+Configure the Opik Python SDK for your deployment type. See the [Python SDK Configuration guide](/tracing/sdk_configuration) for detailed instructions on:
+
+- **CLI configuration**: `opik configure`
+- **Code configuration**: `opik.configure()`
+- **Self-hosted vs Cloud vs Enterprise** setup
+- **Configuration files** and environment variables
+
+### Configuring Harbor
+
+Harbor requires configuration for the agent and benchmark you want to evaluate. Refer to the [Harbor documentation](https://github.com/laude-institute/harbor) for details on setting up your job configuration.
+
+## Using the CLI
+
+The easiest way to use Harbor with Opik is through the `opik harbor` CLI command. This automatically enables Opik tracking for all trial executions without modifying your code.
+
+### Basic Usage
+
+```bash
+# Run a benchmark with Opik tracking
+opik harbor run -d terminal-bench@head -a terminus_2 -m gpt-4.1
+
+# Use a configuration file
+opik harbor run -c config.yaml
+```
+
+### Specifying Project Name
+
+```bash
+# Set project name via environment variable
+export OPIK_PROJECT_NAME=my-benchmark
+opik harbor run -d swebench@lite
+```
+
+### Available CLI Commands
+
+All Harbor CLI commands are available as subcommands:
+
+```bash
+# Run a job (alias for jobs start)
+opik harbor run [HARBOR_OPTIONS]
+
+# Job management
+opik harbor jobs start [HARBOR_OPTIONS]
+opik harbor jobs resume -p ./jobs/my-job
+
+# Single trial
+opik harbor trials start -p ./my-task -a terminus_2
+```
+
+### CLI Help
+
+```bash
+# View available options
+opik harbor --help
+opik harbor run --help
+```
+
+## Using the Python API
+
+For programmatic control, use the `track_harbor` function to add Opik tracking to a Harbor Job instance.
+
+### Basic Usage
+
+```python
+import asyncio
+import os
+from harbor.job import Job
+from harbor.models.job.config import JobConfig
+from opik.integrations.harbor import track_harbor
+
+# Set Opik project name
+os.environ["OPIK_PROJECT_NAME"] = "harbor-benchmark-demo"
+
+async def main():
+    # Load your Harbor job configuration
+    config = JobConfig.model_validate_yaml(open("job.yaml").read())
+
+    # Create the Harbor job
+    job = Job(config)
+
+    # Wrap with Opik tracking
+    tracked_job = track_harbor(job)
+
+    # Run the benchmark - traces stream to Opik as trials complete
+    result = await tracked_job.run()
+    
+    print(f"Completed {len(result.stats.evals)} evaluation groups")
+
+asyncio.run(main())
+```
+
+Each trial completion creates an Opik trace with:
+
+- Trial name and task information as the trace name and input
+- Agent execution timing as start/end times
+- Verifier rewards (e.g., pass/fail, tests passed) as feedback scores
+- Agent and model metadata
+- Exception information if the trial failed
+
+### Trajectory and Step Spans
+
+The integration automatically creates spans for each step in the agent's trajectory, giving you detailed visibility into the agent-environment interaction. Each trajectory step becomes a span showing:
+
+- The step source (user, agent, or system)
+- The message content
+- Tool calls and their arguments
+- Observation results from the environment
+- Token usage and cost per step
+- Model name for agent steps
+
+### Experiment Tracking
+
+The integration automatically creates experiments to group trial results together for evaluation analysis. For each job, Opik creates:
+
+- A dataset for each Harbor dataset source (e.g., "terminal-bench", "swebench")
+- An experiment named `harbor-job-{job_id[:8]}` to group all trial results
+- Links between traces and dataset items with feedback scores from verifier rewards
+
+## Data Mapping
+
+### Trial Result → Trace
+
+| Harbor Field | Opik Trace Field |
+|-------------|------------------|
+| `trial_name` | `name` (with agent prefix) |
+| `task_name` | `input.task_name` |
+| `started_at` / `finished_at` | `start_time` / `end_time` |
+| `verifier_result.rewards` | `feedback_scores` |
+| `agent_info` | `metadata.agent` |
+| `exception_info` | `error_info` |
+| Dataset source | `tags` |
+
+### Trajectory Step → Span
+
+| ATIF Step Field | Opik Span Field |
+|----------------|-----------------|
+| `step_id` | `name` (e.g., "step_1") |
+| `source` | `type` ("llm" for agent, "general" otherwise) |
+| `message` | `input.message` |
+| `tool_calls` | `input.tool_calls` |
+| `observation` | `output` |
+| `metrics` | `usage`, `total_cost` |
+| `model_name` | `model` |
+| `reasoning_content` | `metadata.reasoning` |
+
+### Verifier Rewards → Feedback Scores
+
+Harbor's verifier produces rewards like `{"pass": 1, "tests_passed": 5}`. These are automatically converted to Opik feedback scores, allowing you to:
+
+- Filter traces by pass/fail status
+- Aggregate metrics across experiments
+- Compare agent performance across benchmarks
+
+## Cost Tracking
+
+The Harbor integration automatically extracts token usage and cost from ATIF trajectory metrics. If your agent records `prompt_tokens`, `completion_tokens`, and `cost_usd` in step metrics, these are captured in Opik spans.
+
+## Function Reference
+
+### track_harbor
+
+```python
+def track_harbor(
+    job: Job,
+    project_name: Optional[str] = None,
+    experiment_name: Optional[str] = None,
+) -> Job:
+```
+
+**Parameters:**
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `job` | `Job` | Required | A Harbor Job instance to track |
+| `project_name` | `str` | `None` | Opik project name. Uses `OPIK_PROJECT_NAME` env var if not set |
+| `experiment_name` | `str` | `None` | Optional experiment name (experiments are auto-generated based on job_id) |
+
+**Returns:** The same Job instance with Opik tracking hooks attached.
+
+## Example: SWE-bench Evaluation
+
+Here's a complete example running a SWE-bench evaluation with Opik tracking:
+
+<Tabs>
+    <Tab value="CLI" title="CLI">
+        ```bash
+        # Configure Opik
+        opik configure
+
+        # Set project name
+        export OPIK_PROJECT_NAME=swebench-claude-sonnet
+
+        # Run SWE-bench evaluation with tracking
+        opik harbor run \
+            -d swebench-lite@head \
+            -a claude-code \
+            -m claude-3-5-sonnet-20241022
+        ```
+    </Tab>
+    <Tab value="Python" title="Python">
+        ```python
+        import asyncio
+        import os
+        from harbor.job import Job
+        from harbor.models.job.config import JobConfig, RegistryDatasetConfig
+        from harbor.models.trial.config import AgentConfig
+        from harbor.models.registry import RemoteRegistryInfo
+        from opik.integrations.harbor import track_harbor
+
+        os.environ["OPIK_PROJECT_NAME"] = "swebench-claude-sonnet"
+
+        async def main():
+            # Define job configuration
+            config = JobConfig(
+                job_name="claude-sonnet-swebench-lite",
+                agents=[
+                    AgentConfig(
+                        name="claude-code",
+                        model_name="claude-3-5-sonnet-20241022",
+                    )
+                ],
+                datasets=[
+                    RegistryDatasetConfig(
+                        registry=RemoteRegistryInfo(),
+                        name="swebench-lite",
+                        version="head",
+                    )
+                ],
+            )
+            
+            job = Job(config)
+            
+            # Enable Opik tracking
+            tracked_job = track_harbor(job)
+            
+            # Run the evaluation
+            result = await tracked_job.run()
+            
+            print(f"Completed evaluation")
+            print(f"View results in Opik: https://www.comet.com/opik")
+
+        if __name__ == "__main__":
+            asyncio.run(main())
+        ```
+    </Tab>
+</Tabs>
+
+## Environment Variables
+
+| Variable | Description |
+|----------|-------------|
+| `OPIK_PROJECT_NAME` | Default project name for traces |
+| `OPIK_API_KEY` | API key for Opik Cloud |
+| `OPIK_WORKSPACE` | Workspace name (for Opik Cloud) |
+
+### Getting Help
+
+- Check the [Harbor documentation](https://github.com/laude-institute/harbor) for agent and benchmark setup
+- Review the [ATIF specification](https://github.com/laude-institute/harbor/blob/main/docs/rfcs/0001-trajectory-format.md) for trajectory format details
+- Open an issue on [GitHub](https://github.com/comet-ml/opik/issues) for Opik integration questions
