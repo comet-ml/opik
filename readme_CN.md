@@ -13,7 +13,7 @@
         Opik
     </div>
 </h1>
-<h2 align="center" style="border-bottom: none">开源平台：AI 的可观测性、评估与优化</h2>
+<h2 align="center" style="border-bottom: none">开源 AI 可观测性、评估与优化平台</h2>
 <p align="center">
 Opik 帮助您构建、测试并优化生成式 AI 应用，使其从原型到生产环境运行得更好。从 RAG 聊天机器人到代码助手再到复杂的智能体系统，Opik 提供全面的跟踪、评估，以及自动化的提示与工具优化，消除 AI 开发中的猜测。
 </p>
