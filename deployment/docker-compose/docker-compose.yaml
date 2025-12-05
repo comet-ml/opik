@@ -73,14 +73,17 @@ services:
         condition: service_completed_successfully
 
   zookeeper:
-    image: docker.io/bitnamilegacy/zookeeper:3.9.3-debian-12-r16
+    image: zookeeper:3.9.4
+    pull_policy: always
     hostname: zookeeper
     environment:
       ZOO_MY_ID: 1
-      ZOO_SERVERS: zookeeper=zookeeper:2888:3888
-      ALLOW_ANONYMOUS_LOGIN: "yes"
+      ZOO_SERVERS: zookeeper=zookeeper:2888:3888;2181
+      ZOO_DATA_DIR: /bitnami/zookeeper/data
+      ZOO_DATA_LOG_DIR: /bitnami/zookeeper/dataLog
+      ZK_HEAP_SIZE: 512M
     healthcheck:
-      test: [ "CMD", "/bin/bash", "-ec", "ZOO_HC_TIMEOUT=2", "/opt/bitnami/scripts/zookeeper/healthcheck.sh" ]
+      test: [ "CMD", "nc", "-z", "localhost", "2181" ]
       interval: 1s
       timeout: 1s
       retries: 300

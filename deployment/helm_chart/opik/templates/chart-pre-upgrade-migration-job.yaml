@@ -6,9 +6,15 @@ metadata:
   name: {{ include "opik.fullname" . }}-chart-migration-sa
   namespace: {{ .Release.Namespace }}
   annotations:
+    {{- if .Values.global.argocd }}
+    argocd.argoproj.io/hook: PreSync
+    argocd.argoproj.io/hook-delete-policy: HookSucceeded
+    argocd.argoproj.io/sync-wave: "-10"
+    {{- else }}
     "helm.sh/hook": pre-upgrade
     "helm.sh/hook-weight": "-10"
     "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+    {{- end }}
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
@@ -16,9 +22,15 @@ metadata:
   name: {{ include "opik.fullname" . }}-chart-migration-role
   namespace: {{ .Release.Namespace }}
   annotations:
+   {{- if .Values.global.argocd }}
+    argocd.argoproj.io/hook: PreSync
+    argocd.argoproj.io/hook-delete-policy: HookSucceeded
+    argocd.argoproj.io/sync-wave: "-10"
+    {{- else }}
     "helm.sh/hook": pre-upgrade
     "helm.sh/hook-weight": "-10"
     "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+    {{- end }}
 rules:
   - apiGroups: ["apps"]
     resources: ["statefulsets", "deployments"]
@@ -33,9 +45,15 @@ metadata:
   name: {{ include "opik.fullname" . }}-chart-migration-rb
   namespace: {{ .Release.Namespace }}
   annotations:
+    {{- if .Values.global.argocd }}
+    argocd.argoproj.io/hook: PreSync
+    argocd.argoproj.io/hook-delete-policy: HookSucceeded
+    argocd.argoproj.io/sync-wave: "-10"
+    {{- else }}
     "helm.sh/hook": pre-upgrade
     "helm.sh/hook-weight": "-10"
     "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+    {{- end }}
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: Role
@@ -57,9 +75,15 @@ metadata:
     {{- toYaml . | nindent 4 }}
     {{- end }}  
   annotations:
+    {{- if .Values.global.argocd }}
+    argocd.argoproj.io/hook: PreSync
+    argocd.argoproj.io/hook-delete-policy: HookSucceeded
+    argocd.argoproj.io/sync-wave: "-10"
+    {{- else }}
     "helm.sh/hook": pre-upgrade
-    "helm.sh/hook-weight": "-5"
-    "helm.sh/hook-delete-policy": before-hook-creation
+    "helm.sh/hook-weight": "-10"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+    {{- end }}
 spec:
   ttlSecondsAfterFinished: 14400  # Keep for 4 hours
   backoffLimit: 2
@@ -89,6 +113,42 @@ spec:
               
               echo "=== Pre-Upgrade Chart Migration ==="
               NAMESPACE="{{ .Release.Namespace }}"
+              BACKEND_DEPLOYMENT="{{ include "opik.name" . }}-backend"
+              
+              # Check current deployed backend image tag
+              # Skip migration if tag version is >= 1.9.39
+              if [ {{ .Release.Revision }} -eq 1 ]; then
+                echo "First install (revision 1), skipping migration"
+                exit 0
+              fi
+              
+              echo "Checking current backend deployment image tag"
+              if ! kubectl get deployment "$BACKEND_DEPLOYMENT" -n "$NAMESPACE" &>/dev/null; then
+                echo "Backend deployment not found, skipping migration"
+                exit 0
+              fi
+              
+              CURRENT_TAG=$(kubectl get deployment "$BACKEND_DEPLOYMENT" -n "$NAMESPACE" -o jsonpath='{.spec.template.spec.containers[0].image}' | sed 's/.*://' || echo "")
+              
+              if [ -z "$CURRENT_TAG" ]; then
+                echo "Could not extract image tag, running migration to be safe"
+              else
+                echo "Current backend image tag: $CURRENT_TAG"
+                # Compare tag versions - if >= 1.9.39, skip migration
+                # Extract version from tag (handle tags like "1.9.38" or "v1.9.38" or "1.9.38-suffix")
+                CURRENT_VERSION=$(echo "$CURRENT_TAG" | sed 's/^v//' | sed 's/-.*//')
+                TARGET_VERSION="1.9.39"
+                
+                # Use sort -V for version comparison
+                if printf '%s\n%s\n' "$CURRENT_VERSION" "$TARGET_VERSION" | sort -V | head -1 | grep -q "^${TARGET_VERSION}$"; then
+                  echo "Current version ($CURRENT_VERSION) is >= $TARGET_VERSION, skipping migration"
+                  exit 0
+                else
+                  echo "Current version ($CURRENT_VERSION) is < $TARGET_VERSION, proceeding with migration"
+                fi
+              fi
+              
+              echo ""
               
               {{- if .Values.mysql.enabled }}
               # Delete MySQL StatefulSet (if exists)
@@ -133,7 +193,6 @@ spec:
               {{- end }}
               
               # Delete opik-backend deployment
-              BACKEND_DEPLOYMENT="{{ include "opik.name" . }}-backend"
               echo "Checking backend deployment: $BACKEND_DEPLOYMENT"
               if kubectl get deployment $BACKEND_DEPLOYMENT -n $NAMESPACE 2>/dev/null; then
                 echo "Deleting backend deployment: $BACKEND_DEPLOYMENT"
