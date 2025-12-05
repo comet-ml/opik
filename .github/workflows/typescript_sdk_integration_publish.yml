@@ -20,6 +20,12 @@ on:
       is_release:
         type: boolean
         required: false
+        description: Whether this is a release (publishes to NPM)
+        default: false
+      skip_commit_push:
+        type: boolean
+        required: false
+        description: Skip commit and push
         default: false
   workflow_call:
     inputs:
@@ -29,6 +35,10 @@ on:
         description: Version
         default: ""
       is_release:
+        type: boolean
+        required: false
+        default: false
+      skip_commit_push:
         type: boolean
         required: false
         default: false
@@ -82,6 +92,7 @@ jobs:
           test_package_installation: "true"
           npm_token: ${{ secrets.NPM_TOKEN }}
           github_token: ${{ secrets.GH_PAT_TO_ACCESS_GITHUB_API }}
+          skip_commit_push: ${{ inputs.skip_commit_push }}
 
       - name: Summary
         run: |

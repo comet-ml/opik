@@ -37,6 +37,10 @@ inputs:
   github_token:
     required: false
     description: GitHub token for pushing changes
+  skip_commit_push:
+    required: false
+    description: Skip commit and push (for parallel builds in release)
+    default: "false"
 outputs:
   version:
     description: Generated or provided version
@@ -113,22 +117,6 @@ runs:
         npm pack --dry-run
         echo "Package can be installed successfully"
 
-    - name: Commit version changes
-      if: ${{ inputs.is_release == 'true' }}
-      shell: bash
-      working-directory: ${{ inputs.working_directory }}
-      run: |
-        git config --local user.email "github-actions@comet.com"
-        git config --local user.name "github-actions"
-        git add package.json package-lock.json
-        
-        PACKAGE_NAME="${{ inputs.package_name }}"
-        if [ -z "$PACKAGE_NAME" ]; then
-          PACKAGE_NAME=$(node -p "require('./package.json').name")
-        fi
-        
-        git commit -m "Update $PACKAGE_NAME version to ${{ steps.version.outputs.VERSION }}"
-
     - name: Publish to NPM (with retry)
       id: npm_publish
       if: ${{ inputs.is_release == 'true' }}
@@ -185,8 +173,24 @@ runs:
       env:
         NODE_AUTH_TOKEN: ${{ inputs.npm_token }}
 
+    - name: Commit version changes
+      if: ${{ inputs.is_release == 'true' && inputs.skip_commit_push != 'true' }}
+      shell: bash
+      working-directory: ${{ inputs.working_directory }}
+      run: |
+        git config --local user.email "github-actions@comet.com"
+        git config --local user.name "github-actions"
+        git add package.json package-lock.json
+        
+        PACKAGE_NAME="${{ inputs.package_name }}"
+        if [ -z "$PACKAGE_NAME" ]; then
+          PACKAGE_NAME=$(node -p "require('./package.json').name")
+        fi
+        
+        git commit -m "Update $PACKAGE_NAME version to ${{ steps.version.outputs.VERSION }}"
+
     - name: Push changes
-      if: ${{ inputs.is_release == 'true' }}
+      if: ${{ inputs.is_release == 'true' && inputs.skip_commit_push != 'true' }}
       uses: ad-m/github-push-action@v0.8.0
       with:
         github_token: ${{ inputs.github_token }}
