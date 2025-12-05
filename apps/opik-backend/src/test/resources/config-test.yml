@@ -421,6 +421,12 @@ serviceToggles:
   # Default: false
   # Description: Whether or not Dashboards feature is enabled
   dashboardsEnabled: "false"
+  # Default: true for testing
+  # Description: Whether or not dataset versioning feature is enabled
+  datasetVersioningEnabled: "true"
+  # Default: false
+  # Description: Whether or not Optimization Studio feature is enabled
+  optimizationStudioEnabled: "false"
 
 # Trace Thread configuration
 traceThreadConfig:

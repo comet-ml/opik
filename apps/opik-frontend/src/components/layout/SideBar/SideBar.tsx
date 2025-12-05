@@ -16,6 +16,7 @@ import {
   SparklesIcon,
   UserPen,
   BarChart3,
+  Zap,
 } from "lucide-react";
 import { keepPreviousData } from "@tanstack/react-query";
 
@@ -27,7 +28,6 @@ import useRulesList from "@/api/automations/useRulesList";
 import useOptimizationsList from "@/api/optimizations/useOptimizationsList";
 import useAlertsList from "@/api/alerts/useAlertsList";
 import { OnChangeFn } from "@/types/shared";
-import { FeatureToggleKeys } from "@/types/feature-toggles";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
@@ -44,8 +44,12 @@ import SidebarMenuItem, {
   MenuItem,
   MenuItemGroup,
 } from "@/components/layout/SideBar/MenuItem/SidebarMenuItem";
+import { FeatureToggleKeys } from "@/types/feature-toggles";
+import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
+import { ACTIVE_OPTIMIZATION_FILTER } from "@/lib/optimizations";
 
 const HOME_PATH = "/$workspaceName/home";
+const RUNNING_OPTIMIZATION_REFETCH_INTERVAL = 5000;
 
 const CONFIGURATION_ITEM: MenuItem = {
   id: "configuration",
@@ -103,14 +107,6 @@ const MENU_ITEMS: MenuItemGroup[] = [
         count: "experiments",
       },
       {
-        id: "optimizations",
-        path: "/$workspaceName/optimizations",
-        type: MENU_ITEM_TYPE.router,
-        icon: SparklesIcon,
-        label: "Optimization runs",
-        count: "optimizations",
-      },
-      {
         id: "datasets",
         path: "/$workspaceName/datasets",
         type: MENU_ITEM_TYPE.router,
@@ -146,6 +142,29 @@ const MENU_ITEMS: MenuItemGroup[] = [
         type: MENU_ITEM_TYPE.router,
         icon: Blocks,
         label: "Playground",
+      },
+    ],
+  },
+  {
+    id: "optimization",
+    label: "Optimization",
+    items: [
+      {
+        id: "optimization_studio",
+        path: "/$workspaceName/optimization-studio",
+        type: MENU_ITEM_TYPE.router,
+        icon: Zap,
+        label: "Optimization studio",
+        showIndicator: "running_optimizations",
+        featureFlag: FeatureToggleKeys.OPTIMIZATION_STUDIO_ENABLED,
+      },
+      {
+        id: "optimizations",
+        path: "/$workspaceName/optimizations",
+        type: MENU_ITEM_TYPE.router,
+        icon: SparklesIcon,
+        label: "Optimization runs",
+        count: "optimizations",
       },
     ],
   },
@@ -187,6 +206,9 @@ const SideBar: React.FunctionComponent<SideBarProps> = ({
   const { open: openQuickstart } = useOpenQuickStartDialog();
 
   const { activeWorkspaceName: workspaceName } = useAppStore();
+  const isOptimizationStudioEnabled = useIsFeatureEnabled(
+    FeatureToggleKeys.OPTIMIZATION_STUDIO_ENABLED,
+  );
   const LogoComponent = usePluginsStore((state) => state.Logo);
   const SidebarInviteDevButton = usePluginsStore(
     (state) => state.SidebarInviteDevButton,
@@ -264,6 +286,26 @@ const SideBar: React.FunctionComponent<SideBarProps> = ({
     },
   );
 
+  const { data: runningOptimizationsData } = useOptimizationsList(
+    {
+      workspaceName,
+      page: 1,
+      size: 1,
+      filters: ACTIVE_OPTIMIZATION_FILTER,
+    },
+    {
+      placeholderData: keepPreviousData,
+      enabled: !!workspaceName && isOptimizationStudioEnabled,
+      refetchInterval: (query) => {
+        // refetch every 5 seconds if there are running optimizations
+        const data = query.state.data;
+        return data?.total && data.total > 0
+          ? RUNNING_OPTIMIZATION_REFETCH_INTERVAL
+          : false;
+      },
+    },
+  );
+
   const { data: annotationQueuesData } = useAnnotationQueuesList(
     {
       workspaceName,
@@ -299,6 +341,11 @@ const SideBar: React.FunctionComponent<SideBarProps> = ({
     alerts: alertsData?.total,
   };
 
+  const indicatorDataMap: Record<string, boolean> = {
+    running_optimizations:
+      !!runningOptimizationsData?.total && runningOptimizationsData.total > 0,
+  };
+
   const logo = LogoComponent ? (
     <LogoComponent expanded={expanded} />
   ) : (
@@ -312,6 +359,7 @@ const SideBar: React.FunctionComponent<SideBarProps> = ({
         item={item}
         expanded={expanded}
         count={countDataMap[item.count!]}
+        hasIndicator={indicatorDataMap[item.showIndicator!]}
       />
     ));
   };

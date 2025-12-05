@@ -1222,5 +1222,92 @@ class OptimizationsResourceTest {
             assertThat(completedPage.content().get(0).status()).isEqualTo(OptimizationStatus.COMPLETED);
             assertThat(completedPage.content().get(0).metadata().get("env").asText()).isEqualTo("prod");
         }
+
+        @Test
+        @DisplayName("Filter by status returns correct results after status updates (eventual consistency test)")
+        void filterByStatusAfterUpdates__eventualConsistency() {
+            // This test verifies that filtering by status works correctly even after
+            // multiple status updates, which could be affected by ClickHouse eventual consistency
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+            String workspaceId = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            // Create an optimization with INITIALIZED status
+            var optimization = optimizationResourceClient.createPartialOptimization()
+                    .status(OptimizationStatus.INITIALIZED)
+                    .build();
+            var optId = optimizationResourceClient.create(optimization, apiKey, workspaceName);
+
+            // Verify initial state: filter by INITIALIZED should return 1
+            var initializedFilter = OptimizationFilter.builder()
+                    .field(OptimizationField.STATUS)
+                    .operator(Operator.EQUAL)
+                    .value("initialized")
+                    .build();
+
+            var runningFilter = OptimizationFilter.builder()
+                    .field(OptimizationField.STATUS)
+                    .operator(Operator.EQUAL)
+                    .value("running")
+                    .build();
+
+            var completedFilter = OptimizationFilter.builder()
+                    .field(OptimizationField.STATUS)
+                    .operator(Operator.EQUAL)
+                    .value("completed")
+                    .build();
+
+            var initialPage = optimizationResourceClient.find(apiKey, workspaceName, 1, 10,
+                    null, null, null, List.of(initializedFilter), 200);
+            assertThat(initialPage.content()).hasSize(1);
+            assertThat(initialPage.content().get(0).id()).isEqualTo(optId);
+            assertThat(initialPage.content().get(0).status()).isEqualTo(OptimizationStatus.INITIALIZED);
+
+            // Update status to RUNNING
+            var updateToRunning = OptimizationUpdate.builder().status(OptimizationStatus.RUNNING).build();
+            optimizationResourceClient.update(optId, updateToRunning, apiKey, workspaceName, 204);
+
+            // After update to RUNNING:
+            // - Filter by INITIALIZED should return 0
+            // - Filter by RUNNING should return 1
+            // - Filter by COMPLETED should return 0
+            var afterRunningInitPage = optimizationResourceClient.find(apiKey, workspaceName, 1, 10,
+                    null, null, null, List.of(initializedFilter), 200);
+            assertThat(afterRunningInitPage.content()).isEmpty();
+
+            var afterRunningRunPage = optimizationResourceClient.find(apiKey, workspaceName, 1, 10,
+                    null, null, null, List.of(runningFilter), 200);
+            assertThat(afterRunningRunPage.content()).hasSize(1);
+            assertThat(afterRunningRunPage.content().get(0).id()).isEqualTo(optId);
+            assertThat(afterRunningRunPage.content().get(0).status()).isEqualTo(OptimizationStatus.RUNNING);
+
+            var afterRunningCompletedPage = optimizationResourceClient.find(apiKey, workspaceName, 1, 10,
+                    null, null, null, List.of(completedFilter), 200);
+            assertThat(afterRunningCompletedPage.content()).isEmpty();
+
+            // Update status to COMPLETED
+            var updateToCompleted = OptimizationUpdate.builder().status(OptimizationStatus.COMPLETED).build();
+            optimizationResourceClient.update(optId, updateToCompleted, apiKey, workspaceName, 204);
+
+            // After update to COMPLETED:
+            // - Filter by INITIALIZED should return 0
+            // - Filter by RUNNING should return 0
+            // - Filter by COMPLETED should return 1
+            var afterCompletedInitPage = optimizationResourceClient.find(apiKey, workspaceName, 1, 10,
+                    null, null, null, List.of(initializedFilter), 200);
+            assertThat(afterCompletedInitPage.content()).isEmpty();
+
+            var afterCompletedRunPage = optimizationResourceClient.find(apiKey, workspaceName, 1, 10,
+                    null, null, null, List.of(runningFilter), 200);
+            assertThat(afterCompletedRunPage.content()).isEmpty();
+
+            var afterCompletedCompletedPage = optimizationResourceClient.find(apiKey, workspaceName, 1, 10,
+                    null, null, null, List.of(completedFilter), 200);
+            assertThat(afterCompletedCompletedPage.content()).hasSize(1);
+            assertThat(afterCompletedCompletedPage.content().get(0).id()).isEqualTo(optId);
+            assertThat(afterCompletedCompletedPage.content().get(0).status()).isEqualTo(OptimizationStatus.COMPLETED);
+        }
     }
 }

@@ -71,16 +71,18 @@ jobs:
     with:
       version: ${{needs.set-version.outputs.version}}
       is_release: true
+      skip_commit_push: true
 
-  # release-typescript-langchain-sdk:
-  #   needs:
-  #     - set-version
-  #     - create-git-tag
-  #   uses: ./.github/workflows/typescript_langchain_sdk_publish.yml
-  #   secrets: inherit
-  #   with:
-  #     version: ${{needs.set-version.outputs.version}}
-  #     is_release: true
+  release-typescript-sdk-integrations:
+    needs:
+      - set-version
+      - create-git-tag
+    uses: ./.github/workflows/typescript_sdk_integration_publish.yml
+    secrets: inherit
+    with:
+      version: ${{needs.set-version.outputs.version}}
+      is_release: true
+      skip_commit_push: true
 
   publish-helm-chart:
     needs:
@@ -98,7 +100,7 @@ jobs:
       - release-apps
       - release-sdk
       - release-typescript-sdk
-      # - release-typescript-langchain-sdk
+      - release-typescript-sdk-integrations
       - publish-helm-chart
     runs-on: ubuntu-latest
     steps:
@@ -112,13 +114,16 @@ jobs:
         uses: hugo19941994/delete-draft-releases@v1.0.0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          
-  update_version_txt:
+
+  commit-all-version-changes:
     needs:
+      - set-version
+      - release-typescript-sdk
+      - release-typescript-sdk-integrations
+      - publish-helm-chart
       - create-github-release
     runs-on: ubuntu-latest
     timeout-minutes: 5
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4.1.1
@@ -127,7 +132,42 @@ jobs:
           fetch-depth: 0
           token: ${{ secrets.GH_PAT_TO_ACCESS_GITHUB_API }}
 
-      - name: Bump version on main branch
+      - name: Setup Node.js for TypeScript version update
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          registry-url: "https://registry.npmjs.org"
+
+      - name: Update TypeScript SDK version
+        shell: bash
+        working-directory: sdks/typescript
+        run: |
+          npm version ${{ needs.set-version.outputs.version }} --no-git-tag-version
+
+      - name: Update TypeScript SDK Integrations versions
+        shell: bash
+        run: |
+          for integration in opik-openai opik-gemini opik-langchain opik-vercel; do
+            if [ -d "sdks/typescript/src/opik/integrations/$integration" ]; then
+              echo "Updating version for $integration"
+              cd "sdks/typescript/src/opik/integrations/$integration"
+              npm version ${{ needs.set-version.outputs.version }} --no-git-tag-version
+              cd - > /dev/null
+            fi
+          done
+
+      - name: Update Chart.yaml with release version
+        shell: bash
+        run: |
+          set -x
+          cd deployment/helm_chart/opik
+          sed -i "s/^version:.*/version: ${{ needs.set-version.outputs.version }}/" Chart.yaml
+          sed -i "s/^appVersion:.*/appVersion: ${{ needs.set-version.outputs.version }}/" Chart.yaml
+          echo "Updated Chart.yaml version and appVersion to: ${{ needs.set-version.outputs.version }}"
+          cat Chart.yaml | grep -E "^version:|^appVersion:"
+          cd -
+
+      - name: Bump version.txt for next release
         id: update_version
         shell: bash
         run: |
@@ -146,20 +186,23 @@ jobs:
           echo "$new_version" > version.txt
           echo "new_version=${new_version}" >> $GITHUB_OUTPUT
 
-      - name: Commit updated version file
-        shell: bash
+      - name: Commit all version changes
         run: |
-
           git config --local user.email "github-actions@comet.com"
           git config --local user.name "github-actions"
-          git commit -a -m "Update base version to ${{steps.update_version.outputs.new_version}}"
-          echo "Version updated to ${{steps.update_version.outputs.new_version}} on main" >> $GITHUB_STEP_SUMMARY
-
-      - name: Push changes
-        uses: ad-m/github-push-action@master
-        with:
-          github_token: ${{ secrets.GH_PAT_TO_ACCESS_GITHUB_API }}
-          branch: ${{ github.ref }}
-          force_with_lease: true
-
-  
+          
+          # Add all modified version files
+          git add sdks/typescript/package.json sdks/typescript/package-lock.json
+          git add sdks/typescript/src/opik/integrations/*/package.json sdks/typescript/src/opik/integrations/*/package-lock.json
+          git add deployment/helm_chart/opik/Chart.yaml
+          git add version.txt
+          
+          # Check if there are any changes to commit
+          if git diff --staged --quiet; then
+            echo "No changes to commit"
+          else
+            git commit -m "Update versions to ${{ needs.set-version.outputs.version }} and bump base version to ${{ steps.update_version.outputs.new_version }}"
+            git push origin main
+          fi
+          
+          echo "Version updated to ${{ steps.update_version.outputs.new_version }} on main" >> $GITHUB_STEP_SUMMARY
