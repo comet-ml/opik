@@ -10,7 +10,13 @@ type UseDashboardCreateMutationParams = {
   dashboard: Partial<Dashboard>;
 };
 
-const useDashboardCreateMutation = () => {
+type UseDashboardCreateMutationOptions = {
+  skipDefaultError?: boolean;
+};
+
+const useDashboardCreateMutation = (
+  options?: UseDashboardCreateMutationOptions,
+) => {
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
@@ -22,19 +28,21 @@ const useDashboardCreateMutation = () => {
 
       return { id };
     },
-    onError: (error: AxiosError) => {
-      const message = get(
-        error,
-        ["response", "data", "message"],
-        error.message,
-      );
+    onError: options?.skipDefaultError
+      ? undefined
+      : (error: AxiosError) => {
+          const message = get(
+            error,
+            ["response", "data", "message"],
+            error.message,
+          );
 
-      toast({
-        title: "Error",
-        description: message,
-        variant: "destructive",
-      });
-    },
+          toast({
+            title: "Error",
+            description: message,
+            variant: "destructive",
+          });
+        },
     onSettled: () => {
       queryClient.invalidateQueries({
         queryKey: [DASHBOARDS_KEY],
