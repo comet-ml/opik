@@ -7,6 +7,7 @@ import click
 
 from .configure import configure
 from .export import export
+from .harbor import harbor
 from .healthcheck import healthcheck
 from .import_command import import_data
 from .proxy import proxy
@@ -45,3 +46,4 @@ cli.add_command(healthcheck)
 cli.add_command(export)
 cli.add_command(import_data)
 cli.add_command(usage_report)
+cli.add_command(harbor)
