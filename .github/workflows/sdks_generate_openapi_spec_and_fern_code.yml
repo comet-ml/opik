@@ -4,6 +4,12 @@ on:
   schedule:
     - cron: '0 0 * * 1-5' # Runs at midnight UTC, Monday to Friday
   workflow_dispatch: # Allows manual trigger
+  pull_request:
+    paths:
+      - 'apps/opik-backend/src/**'
+      - 'apps/opik-backend/pom.xml'
+      - 'sdks/code_generation/**'
+      - 'scripts/generate_openapi.sh'
 
 jobs:
   update-open-api-spec-and-fern-code:
@@ -21,6 +27,12 @@ jobs:
           distribution: 'corretto'
           cache: maven
 
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+
       - name: Install Fern
         run: npm install -g fern-api
 
@@ -36,10 +48,12 @@ jobs:
           pip install -e sdks/opik_optimizer
 
       - name: Set branch name
+        if: github.event_name != 'pull_request'
         run: |
           echo "BRANCH_NAME=github-actions/NA-automatically-update-openapi-spec-and-fern-code-$(date +%Y-%m-%d-%H-%M-%S)" >> $GITHUB_ENV
 
       - name: Create branch
+        if: github.event_name != 'pull_request'
         uses: JosiahSiegel/remote-branch-action@v1.2.0
         with:
           branch: ${{ env.BRANCH_NAME }}
@@ -58,7 +72,20 @@ jobs:
         run: |
           python sdks/opik_optimizer/scripts/generate_fern_docs.py --write
 
+      - name: Install TypeScript SDK dependencies
+        if: github.event_name == 'pull_request'
+        run: |
+          cd sdks/typescript
+          npm install
+
+      - name: Run TypeScript SDK type checking
+        if: github.event_name == 'pull_request'
+        run: |
+          cd sdks/typescript
+          npm run typecheck
+
       - name: Commit files
+        if: github.event_name != 'pull_request'
         run: |
           set -ex
           git config --local user.email "github-actions@comet.com"
@@ -71,6 +98,7 @@ jobs:
           git commit --allow-empty -m "[NA] [SDK] [DOCS] Update automatically OpenAPI spec and Fern code"
 
       - name: Create Pull Request
+        if: github.event_name != 'pull_request'
         uses: peter-evans/create-pull-request@v6
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
