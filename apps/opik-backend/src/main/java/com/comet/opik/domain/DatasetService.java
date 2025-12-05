@@ -582,7 +582,7 @@ class DatasetServiceImpl implements DatasetService {
                 .toStream()
                 .collect(toMap(OptimizationDAO.OptimizationSummary::datasetId, Function.identity()));
 
-        Map<UUID, DatasetVersionSummary> latestVersionMap = fetchLatestVersionsByDatasetIds(ids);
+        Map<UUID, DatasetVersionSummary> latestVersionsByDatasetId = fetchLatestVersionsByDatasetIds(ids);
 
         return datasets.stream()
                 .map(dataset -> {
@@ -591,7 +591,7 @@ class DatasetServiceImpl implements DatasetService {
                             DatasetItemSummary::empty);
                     var optimizationSummary = optimizationSummaryMap.computeIfAbsent(dataset.id(),
                             OptimizationDAO.OptimizationSummary::empty);
-                    var latestVersion = latestVersionMap.get(dataset.id());
+                    var latestVersion = latestVersionsByDatasetId.get(dataset.id());
 
                     return dataset.toBuilder()
                             .experimentCount(resume.experimentCount())

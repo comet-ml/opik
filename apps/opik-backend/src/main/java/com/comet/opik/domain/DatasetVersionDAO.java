@@ -146,14 +146,13 @@ public interface DatasetVersionDAO {
                 COALESCE(t.tags, JSON_ARRAY()) AS tags,
                 COALESCE(JSON_CONTAINS(t.tags, '"latest"'), false) AS is_latest
             FROM dataset_versions AS dv
-            LEFT JOIN (
+            INNER JOIN (
                 SELECT version_id, JSON_ARRAYAGG(tag) AS tags
                 FROM dataset_version_tags
                 GROUP BY version_id
-            ) AS t ON t.version_id = dv.id
+            ) AS t ON t.version_id = dv.id AND JSON_CONTAINS(t.tags, '"latest"')
             WHERE dv.dataset_id IN (<dataset_ids>)
                 AND dv.workspace_id = :workspace_id
-                AND JSON_CONTAINS(t.tags, '"latest"')
             """)
     List<DatasetVersion> findLatestVersionsByDatasetIds(@BindList("dataset_ids") Collection<UUID> datasetIds,
             @Bind("workspace_id") String workspaceId);
