@@ -1,5 +1,7 @@
 from datetime import datetime
 from typing import Optional
+import random
+import string
 import uuid
 import uuid6
 
@@ -10,6 +12,22 @@ def generate_id(timestamp: Optional[datetime] = None) -> str:
         return str(uuid4_to_uuid7(timestamp, uuid4))
 
     return str(uuid6.uuid7())
+
+
+def generate_random_alphanumeric_string(length: int) -> str:
+    """Generate a random alphanumeric string of the specified length.
+
+    Args:
+        length: The length of the string to generate.
+
+    Returns:
+        A random string containing only alphanumeric characters (a-z, A-Z, 0-9).
+    """
+    if length < 0:
+        raise ValueError("Length must be non-negative")
+
+    characters = string.ascii_letters + string.digits
+    return "".join(random.choice(characters) for _ in range(length))
 
 
 def uuid4_to_uuid7(user_datetime: datetime, user_uuid: str) -> uuid.UUID:
