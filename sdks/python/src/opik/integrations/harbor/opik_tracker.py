@@ -343,6 +343,7 @@ def _wrap_trial_run(original: Callable, project_name: Optional[str]) -> Callable
 
         return result
 
+    wrapped.opik_tracked = True  # type: ignore[attr-defined]
     return wrapped
 
 
@@ -359,6 +360,7 @@ def _wrap_setup_environment(original: Callable, project_name: Optional[str]) -> 
         await original(self)
         opik_context.update_current_span(output={"status": "completed"})
 
+    wrapped.opik_tracked = True  # type: ignore[attr-defined]
     return wrapped
 
 
@@ -375,6 +377,7 @@ def _wrap_setup_agent(original: Callable, project_name: Optional[str]) -> Callab
         await original(self)
         opik_context.update_current_span(output={"status": "completed"})
 
+    wrapped.opik_tracked = True  # type: ignore[attr-defined]
     return wrapped
 
 
@@ -394,6 +397,7 @@ def _wrap_execute_agent(original: Callable, project_name: Optional[str]) -> Call
         await original(self)
         opik_context.update_current_span(output={"status": "completed"})
 
+    wrapped.opik_tracked = True  # type: ignore[attr-defined]
     return wrapped
 
 
@@ -410,6 +414,7 @@ def _wrap_run_verification(original: Callable, project_name: Optional[str]) -> C
         await original(self)
         opik_context.update_current_span(output={"status": "completed"})
 
+    wrapped.opik_tracked = True  # type: ignore[attr-defined]
     return wrapped
 
 
@@ -432,6 +437,7 @@ def _wrap_verify(original: Callable, project_name: Optional[str]) -> Callable:
 
         return result
 
+    wrapped.opik_tracked = True  # type: ignore[attr-defined]
     return wrapped
 
 

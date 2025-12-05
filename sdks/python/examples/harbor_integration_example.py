@@ -17,11 +17,11 @@ Features:
 - Real-time streaming of trajectory steps during agent execution
 - Verifier rewards captured as feedback scores
 - Token usage and cost tracking from trajectory metrics
-- Optional dataset and experiment creation for evaluation tracking
+- Automatic dataset and experiment creation for evaluation tracking
 
-When experiment_name is provided:
+The integration automatically:
 - Creates an Opik dataset for each Harbor dataset source (e.g., "terminal-bench")
-- Creates an experiment to group all trial traces together
+- Creates an experiment named `harbor-job-{job_id[:8]}` to group all trial traces
 - Links each trial's trace to the experiment as an experiment item
 
 Prerequisites:
@@ -86,9 +86,6 @@ async def main():
     tracked_job = track_harbor(
         job,
         project_name="terminal-bench-demo",
-        experiment_name=f"terminal-bench-{timestamp}",  # Creates dataset + experiment
-        include_trajectory_spans=True,  # Stream trajectory steps as spans
-        include_tool_spans=False,  # Set True to create child spans for tool calls
     )
 
     # Run benchmark - traces are created automatically
