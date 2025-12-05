@@ -184,7 +184,7 @@ export const hasVideoExtension = (url: string): boolean => {
   return (VIDEO_URL_EXTENSIONS as readonly string[]).includes(ext);
 };
 
-rt const hasAudioExtension = (url: string): boolean => {
+export const hasAudioExtension = (url: string): boolean => {
   const ext = getUrlExtension(url);
   if (!ext) return false;
   return (AUDIO_URL_EXTENSIONS as readonly string[]).includes(ext);
