@@ -12,6 +12,8 @@ import com.comet.opik.api.FeedbackScoreAverage;
 import com.comet.opik.api.GroupContentWithAggregations;
 import com.comet.opik.api.PercentageValues;
 import com.comet.opik.api.grouping.GroupBy;
+import lombok.NonNull;
+import org.apache.commons.collections4.CollectionUtils;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -46,10 +48,16 @@ public class ExperimentResponseBuilder {
     }
 
     public ExperimentGroupAggregationsResponse buildGroupAggregationsResponse(
-            List<ExperimentGroupAggregationItem> groupItems,
-            ExperimentGroupEnrichInfoHolder enrichInfoHolder,
-            List<GroupBy> groups) {
+            @NonNull List<ExperimentGroupAggregationItem> groupItems,
+            @NonNull ExperimentGroupEnrichInfoHolder enrichInfoHolder,
+            @NonNull List<GroupBy> groups) {
         var contentMap = new HashMap<String, GroupContentWithAggregations>();
+
+        if (CollectionUtils.isEmpty(groupItems) || CollectionUtils.isEmpty(groups)) {
+            return ExperimentGroupAggregationsResponse.builder()
+                    .content(contentMap)
+                    .build();
+        }
 
         for (ExperimentGroupAggregationItem item : groupItems) {
             buildNestedGroupsWithAggregations(contentMap, item, 0, enrichInfoHolder, groups);
@@ -116,15 +124,20 @@ public class ExperimentResponseBuilder {
     private String resolveLabel(String groupingValue, GroupBy group,
             ExperimentGroupEnrichInfoHolder enrichInfoHolder) {
         return switch (group.field()) {
-            case DATASET_ID ->
-                Optional.ofNullable(enrichInfoHolder.datasetMap().get(UUID.fromString(groupingValue)))
+            case DATASET_ID -> {
+                Map<UUID, Dataset> datasetMap = enrichInfoHolder.datasetMap();
+                if (datasetMap == null) {
+                    yield DELETED_DATASET;
+                }
+                yield Optional.ofNullable(datasetMap.get(UUID.fromString(groupingValue)))
                         .map(Dataset::name)
                         .orElse(DELETED_DATASET);
+            }
             default -> groupingValue;
         };
     }
 
-    public GroupContentWithAggregations calculateRecursiveAggregations(GroupContentWithAggregations content) {
+    public GroupContentWithAggregations calculateRecursiveAggregations(@NonNull GroupContentWithAggregations content) {
         if (content.groups().isEmpty()) {
             // Leaf node - return as-is
             return content;
