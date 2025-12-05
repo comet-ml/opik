@@ -42,10 +42,7 @@ const COLUMNS_WITH_SUM = [
 ];
 
 // Columns that should display percentiles alongside avg
-const COLUMNS_WITH_PERCENTILES = [
-  "total_estimated_cost",
-  "usage.total_tokens",
-];
+const COLUMNS_WITH_PERCENTILES = ["total_estimated_cost", "usage.total_tokens"];
 
 // Check if statisticKey is a feedback score (starts with "feedback_scores.")
 const isFeedbackScore = (key?: string) =>
@@ -149,7 +146,8 @@ const HeaderStatistic: React.FC<HeaderStatisticProps> = ({
         const displayValue = getDisplayValue();
         const showSeparator =
           shouldDisplayPercentiles &&
-          (shouldDisplaySum || statistic?.type === STATISTIC_AGGREGATION_TYPE.AVG);
+          (shouldDisplaySum ||
+            statistic?.type === STATISTIC_AGGREGATION_TYPE.AVG);
 
         return (
           <DropdownMenu>
@@ -165,7 +163,7 @@ const HeaderStatistic: React.FC<HeaderStatisticProps> = ({
               </div>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-              {dropdownOptions.map((option, index) => {
+              {dropdownOptions.map((option) => {
                 // Add separator before percentile options if we have avg/sum
                 const isFirstPercentile =
                   showSeparator && option.value === "p50";
