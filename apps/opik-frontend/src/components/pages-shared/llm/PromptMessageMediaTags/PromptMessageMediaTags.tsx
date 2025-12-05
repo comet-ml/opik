@@ -11,6 +11,7 @@ import { useToast } from "@/components/ui/use-toast";
 import { Tag } from "@/components/ui/tag";
 import { CircleX } from "lucide-react";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
+import AudioPreviewPopover from "./AudioPreviewPopover";
 import {
   isAudioBase64String,
   isImageBase64String,
@@ -195,27 +196,25 @@ const PromptMessageMediaTags: React.FunctionComponent<
     }
 
     return (
-      <div className="flex max-w-[240px] flex-col gap-2">
+      <div className="flex max-w-[260px] flex-col gap-2">
         <audio
           src={value}
           controls
           preload="metadata"
-          className="max-w-full"
+          className="h-10 w-full"
           onError={(event) => {
             const parent = event.currentTarget.parentElement;
             if (parent) {
               parent.innerHTML = `
                 <p class="comet-body-s text-muted-foreground">Audio preview failed</p>
-                <p class="comet-body-xs truncate text-muted-foreground">${value.substring(
-                  0,
-                  50,
-                )}...</p>
+                <p class="comet-body-xs break-all text-muted-foreground">${value}</p>
               `;
             }
           }}
         >
           Your browser does not support audio playback.
         </audio>
+        <p className="comet-body-xs break-all text-muted-foreground">{value}</p>
       </div>
     );
   };
@@ -337,12 +336,22 @@ const PromptMessageMediaTags: React.FunctionComponent<
           </Tag>
         );
 
-        return preview ? (
+        if (!preview) {
+          return <React.Fragment key={index}>{tagContent}</React.Fragment>;
+        }
+
+        if (type === "audio") {
+          return (
+            <AudioPreviewPopover key={index} preview={renderPreview(value)}>
+              {tagContent}
+            </AudioPreviewPopover>
+          );
+        }
+
+        return (
           <TooltipWrapper key={index} content={renderPreview(value)}>
             {tagContent}
           </TooltipWrapper>
-        ) : (
-          <React.Fragment key={index}>{tagContent}</React.Fragment>
         );
       })}
       {editable && canAddMore && (
