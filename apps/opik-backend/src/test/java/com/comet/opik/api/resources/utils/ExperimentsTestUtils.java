@@ -87,7 +87,7 @@ public class ExperimentsTestUtils {
     /**
      * Build expected ExperimentGroupAggregationsResponse for testing.
      * This function groups experiments and calculates aggregations based on the provided criteria.
-     * Uses the production ExperimentResponseBuilder to ensure consistency.
+     * Uses the actual production ExperimentResponseBuilder class to ensure consistency between test and production code.
      */
     public static ExperimentGroupAggregationsResponse buildExpectedGroupAggregationsResponse(
             List<GroupBy> groups,

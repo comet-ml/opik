@@ -21,7 +21,10 @@ import { formatDate } from "@/lib/date";
 import { CHART_TYPE } from "@/constants/chart";
 import { ChartTooltipRenderHeaderArguments } from "@/components/shared/Charts/ChartTooltipContent/ChartTooltipContent";
 import { Spinner } from "@/components/ui/spinner";
-import { ExperimentsGroupNodeWithAggregations } from "@/types/datasets";
+import {
+  ExperimentsGroupNodeWithAggregations,
+  Experiment,
+} from "@/types/datasets";
 import LineChart from "@/components/shared/Charts/LineChart/LineChart";
 import BarChart from "@/components/shared/Charts/BarChart/BarChart";
 import RadarChart from "@/components/shared/Charts/RadarChart/RadarChart";
@@ -39,6 +42,108 @@ type ChartData = {
   data: DataRecord[];
   lines: string[];
 };
+
+function transformGroupedExperimentsToChartData(
+  groupsAggregationsData:
+    | { content: Record<string, ExperimentsGroupNodeWithAggregations> }
+    | undefined,
+  validGroups: Groups,
+): ChartData {
+  if (!groupsAggregationsData?.content) {
+    return { data: [], lines: [] };
+  }
+
+  const data: DataRecord[] = [];
+  const allLines: string[] = [];
+  const isMultiLevel = validGroups.length > 1;
+
+  const processGroup = (
+    groupContent: Record<string, ExperimentsGroupNodeWithAggregations>,
+    depth = 0,
+    parentValues: string[] = [],
+  ) => {
+    const currentGroup = validGroups[depth];
+    const fieldLabel = calculateGroupLabel(currentGroup);
+
+    Object.entries(groupContent).forEach(([key, value]) => {
+      const valueLabel = value.label || key || "Undefined";
+      const currentValues = [...parentValues, valueLabel];
+      const groupName = isMultiLevel
+        ? currentValues.join(" / ")
+        : `${fieldLabel}: ${valueLabel}`;
+      const hasNestedGroups =
+        value.groups && Object.keys(value.groups).length > 0;
+
+      if (hasNestedGroups) {
+        processGroup(value.groups!, depth + 1, currentValues);
+      } else if (value.aggregations) {
+        const scores: Record<string, number> = {};
+        const feedbackScores = value.aggregations.feedback_scores || [];
+        const experimentScores = value.aggregations.experiment_scores || [];
+
+        feedbackScores.forEach((score) => {
+          const scoreName = `${score.name} (avg)`;
+          scores[scoreName] = score.value;
+          allLines.push(scoreName);
+        });
+
+        experimentScores.forEach((score) => {
+          scores[score.name] = score.value;
+          allLines.push(score.name);
+        });
+
+        if (Object.keys(scores).length > 0) {
+          data.push({
+            entityId: groupName,
+            entityName: groupName,
+            createdDate: "",
+            scores,
+          });
+        }
+      }
+    });
+  };
+
+  processGroup(groupsAggregationsData.content);
+
+  return {
+    data,
+    lines: uniq(allLines),
+  };
+}
+
+function transformUngroupedExperimentsToChartData(
+  experiments: Experiment[],
+): ChartData {
+  const allLines: string[] = [];
+
+  const data: DataRecord[] = experiments.map((experiment) => {
+    const scores: Record<string, number> = {};
+
+    (experiment.feedback_scores || []).forEach((score) => {
+      const scoreName = `${score.name} (avg)`;
+      scores[scoreName] = score.value;
+      allLines.push(scoreName);
+    });
+
+    (experiment.experiment_scores || []).forEach((score) => {
+      scores[score.name] = score.value;
+      allLines.push(score.name);
+    });
+
+    return {
+      entityId: experiment.id,
+      entityName: experiment.name,
+      createdDate: formatDate(experiment.created_at),
+      scores,
+    };
+  });
+
+  return {
+    data,
+    lines: uniq(allLines),
+  };
+}
 
 const ExperimentsFeedbackScoresWidget: React.FunctionComponent<
   DashboardWidgetComponentProps
@@ -108,98 +213,15 @@ const ExperimentsFeedbackScoresWidget: React.FunctionComponent<
   );
 
   const chartData = useMemo<ChartData>(() => {
-    if (hasGroups && groupsAggregationsData) {
-      const data: DataRecord[] = [];
-      const allLines: string[] = [];
-      const isMultiLevel = validGroups.length > 1;
-
-      const processGroup = (
-        groupContent: Record<string, ExperimentsGroupNodeWithAggregations>,
-        depth = 0,
-        parentValues: string[] = [],
-      ) => {
-        const currentGroup = validGroups[depth];
-        const fieldLabel = calculateGroupLabel(currentGroup);
-
-        Object.entries(groupContent).forEach(([key, value]) => {
-          const valueLabel = value.label || key || "Undefined";
-          const currentValues = [...parentValues, valueLabel];
-          const groupName = isMultiLevel
-            ? currentValues.join(" / ")
-            : `${fieldLabel}: ${valueLabel}`;
-          const hasNestedGroups =
-            value.groups && Object.keys(value.groups).length > 0;
-
-          if (hasNestedGroups) {
-            processGroup(value.groups!, depth + 1, currentValues);
-          } else if (value.aggregations) {
-            const scores: Record<string, number> = {};
-            const feedbackScores = value.aggregations.feedback_scores || [];
-            const experimentScores = value.aggregations.experiment_scores || [];
-
-            feedbackScores.forEach((score) => {
-              const scoreName = `${score.name} (avg)`;
-              scores[scoreName] = score.value;
-              allLines.push(scoreName);
-            });
-
-            experimentScores.forEach((score) => {
-              scores[score.name] = score.value;
-              allLines.push(score.name);
-            });
-
-            if (Object.keys(scores).length > 0) {
-              data.push({
-                entityId: groupName,
-                entityName: groupName,
-                createdDate: "",
-                scores,
-              });
-            }
-          }
-        });
-      };
-
-      if (groupsAggregationsData.content) {
-        processGroup(groupsAggregationsData.content);
-      }
-
-      return {
-        data,
-        lines: uniq(allLines),
-      };
+    if (hasGroups) {
+      return transformGroupedExperimentsToChartData(
+        groupsAggregationsData,
+        validGroups,
+      );
     }
 
-    if (!hasGroups && experimentsData) {
-      const experiments = experimentsData.content || [];
-      const allLines: string[] = [];
-
-      const data: DataRecord[] = experiments.map((experiment) => {
-        const scores: Record<string, number> = {};
-
-        (experiment.feedback_scores || []).forEach((score) => {
-          const scoreName = `${score.name} (avg)`;
-          scores[scoreName] = score.value;
-          allLines.push(scoreName);
-        });
-
-        (experiment.experiment_scores || []).forEach((score) => {
-          scores[score.name] = score.value;
-          allLines.push(score.name);
-        });
-
-        return {
-          entityId: experiment.id,
-          entityName: experiment.name,
-          createdDate: formatDate(experiment.created_at),
-          scores,
-        };
-      });
-
-      return {
-        data,
-        lines: uniq(allLines),
-      };
+    if (experimentsData?.content) {
+      return transformUngroupedExperimentsToChartData(experimentsData.content);
     }
 
     return { data: [], lines: [] };

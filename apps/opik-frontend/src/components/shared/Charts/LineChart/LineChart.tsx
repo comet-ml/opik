@@ -4,7 +4,6 @@ import {
   CartesianGrid,
   ComposedChart,
   Line,
-  Tooltip,
   XAxis,
   YAxis,
 } from "recharts";
@@ -141,7 +140,6 @@ const LineChart: React.FunctionComponent<LineChartProps> = ({
             />
           }
         />
-        <Tooltip />
 
         {showLegend && (
           <ChartLegend
