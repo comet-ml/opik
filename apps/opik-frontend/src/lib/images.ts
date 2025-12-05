@@ -115,10 +115,26 @@ export const VIDEO_URL_EXTENSIONS = [
   "ogv",
 ] as const;
 
+export const AUDIO_URL_EXTENSIONS = [
+  "mp3",
+  "wav",
+  "ogg",
+  "flac",
+  "aac",
+  "m4a",
+  "wma",
+  "aiff",
+  "opus",
+  "webm",
+] as const;
+
 export const SUPPORTED_VIDEO_FORMATS = VIDEO_URL_EXTENSIONS.map(
   (ext) => `.${ext}`,
 ).join(",");
 export const SUPPORTED_IMAGE_FORMATS = IMAGE_URL_EXTENSIONS.map(
+  (ext) => `.${ext}`,
+).join(",");
+export const SUPPORTED_AUDIO_FORMATS = AUDIO_URL_EXTENSIONS.map(
   (ext) => `.${ext}`,
 ).join(",");
 
@@ -166,6 +182,12 @@ export const hasVideoExtension = (url: string): boolean => {
   const ext = getUrlExtension(url);
   if (!ext) return false;
   return (VIDEO_URL_EXTENSIONS as readonly string[]).includes(ext);
+};
+
+rt const hasAudioExtension = (url: string): boolean => {
+  const ext = getUrlExtension(url);
+  if (!ext) return false;
+  return (AUDIO_URL_EXTENSIONS as readonly string[]).includes(ext);
 };
 
 const IMAGE_CHARS_REGEX = "[A-Za-z0-9+/]+={0,2}";
@@ -281,6 +303,18 @@ export const isVideoBase64String = (value?: unknown): boolean => {
   }
 
   if (value.startsWith("data:video/") && value.includes(";base64,")) {
+    return true;
+  }
+
+  return false;
+};
+
+export const isAudioBase64String = (value?: unknown): boolean => {
+  if (!isString(value)) {
+    return false;
+  }
+
+  if (value.startsWith("data:audio/") && value.includes(";base64,")) {
     return true;
   }
 

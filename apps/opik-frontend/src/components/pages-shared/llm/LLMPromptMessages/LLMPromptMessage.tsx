@@ -33,6 +33,7 @@ import PromptMessageMediaTags from "@/components/pages-shared/llm/PromptMessageM
 import { useMessageContent } from "@/hooks/useMessageContent";
 import {
   getTextFromMessageContent,
+  hasAudiosInContent,
   hasImagesInContent,
   hasVideosInContent,
   isMediaAllowedForRole,
@@ -109,8 +110,10 @@ const LLMPromptMessage = ({
     localText,
     images,
     videos,
+    audios,
     setImages,
     setVideos,
+    setAudios,
     handleContentChange,
   } = useMessageContent({
     content,
@@ -120,7 +123,9 @@ const LLMPromptMessage = ({
   const handleRoleChange = (newRole: LLM_MESSAGE_ROLE) => {
     if (
       !isMediaAllowedForRole(newRole) &&
-      (hasImagesInContent(content) || hasVideosInContent(content))
+      (hasImagesInContent(content) ||
+        hasVideosInContent(content) ||
+        hasAudiosInContent(content))
     ) {
       const textOnlyContent = getTextFromMessageContent(content);
       onChangeMessage({ role: newRole, content: textOnlyContent });
@@ -269,6 +274,16 @@ const LLMPromptMessage = ({
                     type="video"
                     items={videos}
                     setItems={setVideos}
+                  />
+                </div>
+              )}
+              {!disableMedia && role === LLM_MESSAGE_ROLE.user && (
+                <div className="mt-3 flex gap-2">
+                  <div className="comet-body-s-accented pt-1">Audios</div>
+                  <PromptMessageMediaTags
+                    type="audio"
+                    items={audios}
+                    setItems={setAudios}
                   />
                 </div>
               )}

@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from "react";
-import { Image, Plus, Video } from "lucide-react";
+import { AudioLines, Image, Plus, Video } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Popover,
@@ -11,12 +11,16 @@ import { useToast } from "@/components/ui/use-toast";
 import { Tag } from "@/components/ui/tag";
 import { CircleX } from "lucide-react";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
-import { isImageBase64String, isVideoBase64String } from "@/lib/images";
+import {
+  isAudioBase64String,
+  isImageBase64String,
+  isVideoBase64String,
+} from "@/lib/images";
 /* TODO: Temporarily disabled - restore when base64 support is re-enabled */
 // import { useMediaFileUpload } from "@/hooks/useMediaFileUpload";
 // import { useBase64InputHandler } from "@/hooks/useBase64InputHandler";
 
-type MediaType = "image" | "video";
+type MediaType = "image" | "video" | "audio";
 
 export type PromptMessageMediaTagsProps = {
   items: string[];
@@ -31,6 +35,7 @@ export type PromptMessageMediaTagsProps = {
 const DEFAULT_MAX_ITEMS: Record<MediaType, number> = {
   image: Infinity,
   video: Infinity,
+  audio: Infinity,
 };
 const MAX_DISPLAY_LENGTH = 40;
 
@@ -123,7 +128,10 @@ const PromptMessageMediaTags: React.FunctionComponent<
     if (type === "image") {
       return isImageBase64String(value);
     }
-    return isVideoBase64String(value);
+    if (type === "video") {
+      return isVideoBase64String(value);
+    }
+    return isAudioBase64String(value);
   };
 
   const renderPreview = (value: string) => {
@@ -159,18 +167,45 @@ const PromptMessageMediaTags: React.FunctionComponent<
       );
     }
 
+    if (type === "video") {
+      return (
+        <div className="flex max-w-[240px] flex-col gap-2">
+          <video
+            src={value}
+            controls
+            preload="metadata"
+            className="max-h-24 rounded border object-contain"
+            onError={(event) => {
+              const parent = event.currentTarget.parentElement;
+              if (parent) {
+                parent.innerHTML = `
+                  <p class="comet-body-s text-muted-foreground">Video preview failed</p>
+                  <p class="comet-body-xs truncate text-muted-foreground">${value.substring(
+                    0,
+                    50,
+                  )}...</p>
+                `;
+              }
+            }}
+          >
+            Your browser does not support video playback.
+          </video>
+        </div>
+      );
+    }
+
     return (
       <div className="flex max-w-[240px] flex-col gap-2">
-        <video
+        <audio
           src={value}
           controls
           preload="metadata"
-          className="max-h-24 rounded border object-contain"
+          className="max-w-full"
           onError={(event) => {
             const parent = event.currentTarget.parentElement;
             if (parent) {
               parent.innerHTML = `
-                <p class="comet-body-s text-muted-foreground">Video preview failed</p>
+                <p class="comet-body-s text-muted-foreground">Audio preview failed</p>
                 <p class="comet-body-xs truncate text-muted-foreground">${value.substring(
                   0,
                   50,
@@ -179,8 +214,8 @@ const PromptMessageMediaTags: React.FunctionComponent<
             }
           }}
         >
-          Your browser does not support video playback.
-        </video>
+          Your browser does not support audio playback.
+        </audio>
       </div>
     );
   };
@@ -190,11 +225,11 @@ const PromptMessageMediaTags: React.FunctionComponent<
     if (!trimmed) return;
 
     if (items.length >= resolvedMaxItems) {
+      const typeLabel =
+        type === "image" ? "images" : type === "video" ? "videos" : "audios";
       toast({
         title: "Maximum limit reached",
-        description: `You can only add up to ${resolvedMaxItems} ${
-          type === "image" ? "images" : "videos"
-        }`,
+        description: `You can only add up to ${resolvedMaxItems} ${typeLabel}`,
         variant: "destructive",
       });
       return;
@@ -236,23 +271,39 @@ const PromptMessageMediaTags: React.FunctionComponent<
 
   const canAddMore = items.length < resolvedMaxItems;
 
-  const icon = useMemo(
-    () =>
-      type === "image" ? (
-        <Image className="size-3.5 shrink-0" />
-      ) : (
-        <Video className="size-3.5 shrink-0" />
-      ),
-    [type],
-  );
-  const placeholder =
-    type === "image"
-      ? "Enter image URL or template variable"
-      : "Enter video URL or template variable";
-  const helperText =
-    type === "image"
-      ? "You can add an image URL or template variable. "
-      : "You can add a video URL or template variable. ";
+  const icon = useMemo(() => {
+    if (type === "image") {
+      return <Image className="size-3.5 shrink-0" />;
+    }
+    
+    if (type === "video") {
+      return <Video className="size-3.5 shrink-0" />;
+    }
+
+    return <AudioLines className="size-3.5 shrink-0" />;
+  }, [type]);
+
+  const placeholder = useMemo(() => {
+    if (type === "image") {
+      return "Enter image URL or template variable";
+    }
+
+    if (type === "video") {
+      return "Enter video URL or template variable";
+    }
+
+    return "Enter audio URL or template variable";
+  }, [type]);
+
+  const helperText = useMemo(() => {
+    if (type === "image") {
+      return "You can add an image URL or template variable. ";
+    }
+    if (type === "video") {
+      return "You can add a video URL or template variable. ";
+    }
+    return "You can add an audio URL or template variable. ";
+  }, [type]);
 
   return (
     <div
