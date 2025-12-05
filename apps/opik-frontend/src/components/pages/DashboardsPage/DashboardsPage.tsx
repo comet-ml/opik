@@ -19,7 +19,7 @@ import useDashboardsList from "@/api/dashboards/useDashboardsList";
 import useQueryParamAndLocalStorageState from "@/hooks/useQueryParamAndLocalStorageState";
 import { Dashboard } from "@/types/dashboard";
 import Loader from "@/components/shared/Loader/Loader";
-import DashboardCreateDialog from "@/components/pages/DashboardsPage/DashboardCreateDialog";
+import AddEditCloneDashboardDialog from "@/components/pages/DashboardsPage/AddEditCloneDashboardDialog";
 import { DashboardRowActionsCell } from "@/components/pages/DashboardsPage/DashboardRowActionsCell";
 import DashboardsActionsPanel from "@/components/pages/DashboardsPage/DashboardsActionsPanel";
 import { Button } from "@/components/ui/button";
@@ -315,7 +315,8 @@ const DashboardsPage: React.FunctionComponent = () => {
           total={total}
         ></DataTablePagination>
       </div>
-      <DashboardCreateDialog
+      <AddEditCloneDashboardDialog
+        mode="create"
         key={resetDialogKeyRef.current}
         open={openDialog}
         setOpen={setOpenDialog}
