@@ -587,7 +587,7 @@ public class DatasetResourceClient {
     }
 
     public Response callDeleteDatasetItems(List<UUID> itemIds, String apiKey, String workspaceName) {
-        var deleteRequest = new com.comet.opik.api.DatasetItemsDelete(itemIds);
+        var deleteRequest = new com.comet.opik.api.DatasetItemsDelete(new java.util.HashSet<>(itemIds), null);
         return client.target(RESOURCE_PATH.formatted(baseURI))
                 .path("items")
                 .path("delete")
