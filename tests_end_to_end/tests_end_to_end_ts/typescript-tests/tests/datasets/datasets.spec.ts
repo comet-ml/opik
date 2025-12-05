@@ -32,6 +32,56 @@ This test ensures proper synchronization between UI and backend after SDK-based 
       });
     });
 
+    test('SDK-created datasets can be renamed via SDK with changes reflected in UI @fullregression @datasets', async ({ page, helperClient, createDatasetSdk }) => {
+      test.info().annotations.push({
+        type: 'description',
+        description: `Tests that datasets created via SDK can be renamed through the SDK, and the name change is properly reflected in the UI.
+
+Steps:
+1. Create a dataset via SDK (handled by fixture)
+2. Generate a new unique name for the dataset
+3. Update the dataset name via SDK
+4. Verify the dataset can be found by the new name via SDK
+5. Navigate to the UI and verify the new name appears
+6. Verify the old name no longer appears in the UI
+
+This test ensures name updates propagate correctly from SDK to UI.`
+      });
+
+      const newName = generateDatasetName();
+      let nameUpdated = false;
+      let datasetId: string | undefined;
+
+      try {
+        await test.step('Update dataset name via SDK', async () => {
+          const updatedDataset = await helperClient.updateDataset(createDatasetSdk, newName);
+          nameUpdated = true;
+          datasetId = updatedDataset.id;
+          expect(datasetId).toBeDefined();
+        });
+
+        await test.step('Verify updated name is reflected in SDK', async () => {
+          await helperClient.waitForDatasetVisible(newName, 10);
+          const dataset = await helperClient.findDataset(newName);
+          const datasetIdUpdatedName = dataset?.id;
+          expect(datasetIdUpdatedName).toBe(datasetId);
+        });
+
+        await test.step('Verify updated name is reflected in UI', async () => {
+          const datasetsPage = new DatasetsPage(page);
+          await datasetsPage.goto();
+          await datasetsPage.checkDatasetExists(newName);
+          await datasetsPage.checkDatasetNotExists(createDatasetSdk);
+        });
+      } finally {
+        if (nameUpdated) {
+          await helperClient.deleteDataset(newName);
+        } else {
+          await helperClient.deleteDataset(createDatasetSdk);
+        }
+      }
+    });
+
     test('SDK-created datasets can be deleted via SDK with changes reflected in UI @happypaths @fullregression @datasets', async ({ page, helperClient, createDatasetSdk }) => {
       test.info().annotations.push({
         type: 'description',
@@ -114,6 +164,56 @@ This test ensures proper synchronization between UI and backend after UI-based d
         expect(dataset).not.toBeNull();
         expect(dataset?.name).toBe(createDatasetUi);
       });
+    });
+
+    test('UI-created datasets can be renamed via SDK with changes reflected in UI @fullregression @datasets', async ({ page, helperClient, createDatasetUi }) => {
+      test.info().annotations.push({
+        type: 'description',
+        description: `Tests that datasets created via UI can be renamed through the SDK, and the name change is properly reflected back in the UI.
+
+Steps:
+1. Create a dataset via UI (handled by fixture)
+2. Generate a new unique name for the dataset
+3. Update the dataset name via SDK
+4. Verify the dataset can be found by the new name via SDK
+5. Navigate to the UI and verify the new name appears
+6. Verify the old name no longer appears in the UI
+
+This test ensures name updates from SDK are reflected in UI for UI-created datasets.`
+      });
+
+      const newName = generateDatasetName();
+      let nameUpdated = false;
+      let datasetId: string | undefined;
+
+      try {
+        await test.step('Update dataset name via SDK', async () => {
+          const updatedDataset = await helperClient.updateDataset(createDatasetUi, newName);
+          nameUpdated = true;
+          datasetId = updatedDataset.id;
+          expect(datasetId).toBeDefined();
+        });
+
+        await test.step('Verify updated name is reflected in SDK', async () => {
+          await helperClient.waitForDatasetVisible(newName, 10);
+          const dataset = await helperClient.findDataset(newName);
+          const datasetIdUpdatedName = dataset?.id;
+          expect(datasetIdUpdatedName).toBe(datasetId);
+        });
+
+        await test.step('Verify updated name is reflected in UI', async () => {
+          const datasetsPage = new DatasetsPage(page);
+          await datasetsPage.goto();
+          await datasetsPage.checkDatasetExists(newName);
+          await datasetsPage.checkDatasetNotExists(createDatasetUi);
+        });
+      } finally {
+        if (nameUpdated) {
+          await helperClient.deleteDataset(newName);
+        } else {
+          await helperClient.deleteDataset(createDatasetUi);
+        }
+      }
     });
 
     test('UI-created datasets can be deleted via SDK with changes reflected in UI @happypaths @fullregression @datasets', async ({ page, helperClient, createDatasetUi }) => {
