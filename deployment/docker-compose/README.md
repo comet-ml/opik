@@ -15,6 +15,7 @@ Opik supports Docker Compose profiles to start different combinations of service
 2. **Backend Services** (`backend`): Infrastructure (automatic) + Backend, Python Backend services etc. 
 3. **Opik Services** (`opik`): The full Opik suite including all infrastructure and services, except for Guardrails services
 4. **Guardrails** (`guardrails`): Guardrails services, meant to be combined with other profiles. Guardrails are always optional by default, even for the full Opik suite, unless explicitly enabled
+5. **Opik with OpenTelemetry** (`opik-otel`): The full Opik suite plus Jaeger and OpenTelemetry Collector for observability
 
 ### Profile Usage Examples
 
@@ -41,6 +42,11 @@ docker compose --profile backend --profile guardrails up -d
 **Start full Opik suite + guardrails:**
 ```bash
 docker compose --profile opik --profile guardrails up -d
+```
+
+**Start full Opik suite + OpenTelemetry:**
+```bash
+docker compose --profile opik-otel up -d
 ```
 
 **Note**: Infrastructure services (databases, caches, storage etc.) always start by default, as that's the expected behaviour for services with no profile, see [Using profiles with Compose](https://docs.docker.com/compose/how-tos/profiles/). Any profile such as Backend, full Opik suite etc. always automatically include the infrastructure.
@@ -151,59 +157,45 @@ docker compose -f docker-compose.yaml -f docker-compose.override.yaml --profile 
 
 Stop the backend container, because you don't need it.
 
-## Log Shipping to OpenTelemetry
+## Opik with OpenTelemetry observability
 
-Opik frontend can ship NGINX access logs and Fluent Bit metrics to an OpenTelemetry Collector.
+You can run Opik with OpenTelemetry Collector and Jaeger to collect and visualize traces and logs.
 
-### Configuration
-
-Set the following environment variables to enable log shipping:
+### Run with OpenTelemetry
 
 ```bash
-# Enable log shipping
-export ENABLE_OTEL_LOG_EXPORT=true
-
-# Configure collector endpoint
-export OTEL_COLLECTOR_HOST=your-otel-collector-host
-export OTEL_COLLECTOR_PORT=4317
-
-# Run with log shipping enabled
-docker compose --profile opik up -d
+docker compose --profile opik-otel up -d
 ```
 
-### What Gets Shipped
+This will start:
+- Opik Stack (Frontend, Backend, etc.)
+- OpenTelemetry Collector (ports 4317, 4318, 5140/udp, etc.)
+- Jaeger (UI at http://localhost:16686)
 
-When enabled, the frontend will export:
+### Enable Nginx Tracing and Log Shipping
 
-- **NGINX Access Logs**: All HTTP requests to the frontend
-- **Fluent Bit Metrics**: Internal metrics about log processing performance
-
-### Monitoring Endpoints
-
-When log shipping is enabled, additional monitoring endpoints are available:
-
-- **Frontend**: `http://localhost:5173/` (main application)
-- **Fluent Bit**: `http://localhost:2020/` (metrics and health checks)
-
-### Configuration Files
-
-- `fluent-bit.conf`: Fluent Bit configuration for log tailing and metrics collection
-- `nginx_default_local.conf`: NGINX configuration with standard access logging
-
-### Disabling Log Shipping
-
-To disable log shipping (default):
+To enable Nginx OpenTelemetry tracing and ship access/error logs to the collector:
 
 ```bash
-export ENABLE_OTEL_LOG_EXPORT=false
-# or simply omit the variable
-docker compose --profile opik up -d
+# Enable OpenTelemetry Tracing in Nginx
+export OTEL_TRACE=on
+
+# Configure Nginx to ship logs to OpenTelemetry Collector via Syslog
+export NGINX_EXTRA_ACCESS_LOG="access_log syslog:server=otel-collector:5140 logger-json;"
+export NGINX_EXTRA_ERROR_LOG="error_log syslog:server=otel-collector:5140 error;"
+
+# Run with the profile
+docker compose --profile opik-otel up -d
 ```
 
-When disabled, NGINX logs normally to files and Fluent Bit does not run.
+When enabled:
+- **Nginx Traces**: Will be sent to the OTel Collector and visible in Jaeger.
+- **Nginx Logs**: Will be sent via syslog to the OTel Collector.
 
-## Stop Opik
+### Stop Opik
 
 ```bash
 docker compose --profile opik down
+# or if running with otel profile
+docker compose --profile opik-otel down
 ```

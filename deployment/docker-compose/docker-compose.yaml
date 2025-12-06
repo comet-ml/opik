@@ -3,7 +3,7 @@ name: opik
 services:
   mysql:
     image: mysql:8.4.2
-    pull_policy: always
+    pull_policy: if_not_present
     hostname: mysql
     environment:
       MYSQL_ROOT_PASSWORD: opik
@@ -20,7 +20,7 @@ services:
 
   redis:
     image: redis:7.2.4-alpine3.19
-    pull_policy: always
+    pull_policy: if_not_present
     hostname: redis
     command: redis-server --requirepass opik
     healthcheck:
@@ -44,7 +44,7 @@ services:
       "
   clickhouse:
     image: clickhouse/clickhouse-server:25.3.6.56-alpine
-    pull_policy: always
+    pull_policy: if_not_present
     hostname: clickhouse
     environment:
       CLICKHOUSE_DB: opik
@@ -74,6 +74,7 @@ services:
 
   zookeeper:
     image: docker.io/bitnamilegacy/zookeeper:3.9.3-debian-12-r16
+    pull_policy: if_not_present
     hostname: zookeeper
     environment:
       ZOO_MY_ID: 1
@@ -89,6 +90,7 @@ services:
 
   minio:
     image: minio/minio:RELEASE.2025-03-12T18-04-18Z
+    pull_policy: if_not_present
     environment:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:-THAAIOSFODNN7EXAMPLE}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-LESlrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY}
@@ -104,6 +106,7 @@ services:
 
   mc:
     image: minio/mc:RELEASE.2025-03-12T17-29-24Z
+    pull_policy: if_not_present
     depends_on:
       - minio
     entrypoint: >
@@ -116,10 +119,11 @@ services:
 
   backend:
     image: ghcr.io/comet-ml/opik/opik-backend:${OPIK_VERSION:-latest}
-    pull_policy: always
+    pull_policy: if_not_present
     profiles:
       - backend
       - opik
+      - opik-otel
     build:
       context: ../../apps/opik-backend
       dockerfile: Dockerfile
@@ -155,6 +159,7 @@ services:
       OTEL_EXPORTER_OTLP_METRICS_DEFAULT_HISTOGRAM_AGGREGATION: BASE2_EXPONENTIAL_BUCKET_HISTOGRAM
       OTEL_EXPERIMENTAL_RESOURCE_DISABLED_KEYS: process.command_args
       OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE: delta
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
       OPIK_USAGE_REPORT_ENABLED: ${OPIK_USAGE_REPORT_ENABLED:-true}
       AWS_ACCESS_KEY_ID: ${MINIO_ROOT_USER:-THAAIOSFODNN7EXAMPLE}
       AWS_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD:-LESlrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY}
@@ -201,6 +206,9 @@ services:
     hostname: python-backend
     privileged: true # Required for Docker-in-Docker, so it can launch containers
     environment:
+      OPIK_OTEL_SDK_ENABLED: false
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+      OTEL_VERSION: 2.16.0
       PYTHON_CODE_EXECUTOR_IMAGE_TAG: ${OPIK_VERSION:-latest}
       PYTHON_CODE_EXECUTOR_STRATEGY: ${PYTHON_CODE_EXECUTOR_STRATEGY:-process}
       PYTHON_CODE_EXECUTOR_CONTAINERS_NUM: 5
@@ -229,7 +237,7 @@ services:
 
   guardrails-backend:
     image: ghcr.io/comet-ml/opik/opik-guardrails-backend:${OPIK_VERSION:-latest}
-    pull_policy: always
+    pull_policy: if_not_present
     profiles:
       - guardrails
     build:
@@ -247,7 +255,7 @@ services:
 
   demo-data-generator:
     image: ghcr.io/comet-ml/opik/opik-python-backend:${OPIK_VERSION:-latest}
-    pull_policy: always
+    pull_policy: if_not_present
     profiles:
       - opik
       - local-be-fe
@@ -270,35 +278,89 @@ services:
 
   frontend:
     image: ghcr.io/comet-ml/opik/opik-frontend:${OPIK_VERSION:-latest}
-    pull_policy: always
+    pull_policy: if_not_present
     profiles:
       - opik
       - local-be
+      - opik-otel
     build:
       context: ../../apps/opik-frontend
       dockerfile: Dockerfile
+    #   cache_from:
+    #     - alpine:latest
+    #     - nginx:1.29.3-alpine-otel
+    #     - node:20.19.5-alpine3.22
+    #     - type=local,src=./.cache
+      # cache_to:
+      #   - type=local,dest=./.cache
     hostname: frontend
     ports:
-      - "5173:5173" # Frontend server port
-      - "2020:2020" # Fluent Bit HTTP server (when enabled)
+      - "${NGINX_PORT:-8080}:${NGINX_PORT:-8080}" # Frontend server port (configurable via NGINX_PORT env var)
     volumes:
-      - ./nginx_${OPIK_FRONTEND_FLAVOR:-default}_local.conf:/etc/nginx/conf.d/default.conf
-      - ./fluent-bit.conf:/etc/fluent-bit/fluent-bit.conf:ro
+      - ./nginx_${OPIK_FRONTEND_FLAVOR:-default}_local.conf:/etc/nginx/templates/default.conf.template:ro
     depends_on:
       backend:
         condition: service_healthy
+      # otel-collector:
+      #   condition: service_healthy
     healthcheck:
-      test: [ "CMD", "curl", "-f", "http://localhost:5173" ]
+      test: [ "CMD-SHELL", "curl --fail --fail-early http://localhost:${NGINX_PORT:-8080}/health" ]
       interval: 1s
       timeout: 30s
       retries: 10
       start_period: 1s
     environment:
       OPIK_VERSION: ${OPIK_VERSION:-latest}
-      # OTEL log shipping configuration (Fluent Bit integrated in frontend container)
-      ENABLE_OTEL_LOG_EXPORT: ${ENABLE_OTEL_LOG_EXPORT:-false}
+      NGINX_PORT: ${NGINX_PORT:-8080}
+      NGINX_CONF_SUFFIX: ${NGINX_CONF_SUFFIX:-local}
+      OTEL_TRACE: ${OTEL_TRACE:-off}
       OTEL_COLLECTOR_HOST: ${OTEL_COLLECTOR_HOST:-otel-collector}
       OTEL_COLLECTOR_PORT: ${OTEL_COLLECTOR_PORT:-4317}
+      # NGINX_EXTRA_ACCESS_LOG: access_log syslog:server=otel-collector:5140 logger-json;
+      # NGINX_EXTRA_ERROR_LOG: error_log syslog:server=otel-collector:5140 error;
+      
+  # Jaeger - receives traces via OTLP
+  jaeger:
+    image: jaegertracing/all-in-one:latest
+    profiles:
+      - opik-otel
+    hostname: jaeger
+    ports:
+      - "16686:16686" # UI
+      - "14317:4317"   # OTLP gRPC
+      - "14318:4318"   # OTLP HTTP
+    environment:
+      - COLLECTOR_OTLP_ENABLED=true
+    healthcheck:
+      test: [ "CMD", "wget", "--spider", "-q", "http://localhost:14269/" ]
+      interval: 5s
+      timeout: 5s
+      retries: 3
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.139.0
+    profiles:
+      - opik-otel
+    hostname: otel-collector
+    command: ["--config=/etc/otelcol-contrib/config.yaml"]
+    volumes:
+      - ./otel-collector-config.yaml:/etc/otelcol-contrib/config.yaml
+      - ./otel_data:/otel_data
+    healthcheck:
+      test: [ "CMD", "/otelcol-contrib", "validate", "--config=/etc/otelcol-contrib/config.yaml" ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    ports:
+      - "4317:4317" # OTLP gRPC
+      - "4318:4318" # OTLP HTTP
+      - "8888:8888" # Prometheus metrics
+      - "13133:13133" # health_check
+      - "55679:55679" # zpages
+      - "5140:5140/udp" # syslog
+    depends_on:
+      jaeger:
+        condition: service_healthy
 
 networks:
   default:
