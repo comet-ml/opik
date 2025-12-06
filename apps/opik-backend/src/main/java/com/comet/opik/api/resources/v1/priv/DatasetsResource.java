@@ -547,11 +547,15 @@ public class DatasetsResource {
 
         String workspaceId = requestContext.get().getWorkspaceId();
 
-        log.info("Deleting dataset items by size'{}' on workspaceId '{}'", request, workspaceId);
-        itemService.delete(request.itemIds())
+        log.info("Deleting dataset items. workspaceId='{}', itemIdsSize='{}', filters='{}'", workspaceId,
+                emptyIfNull(request.itemIds()).size(), emptyIfNull(request.filters()).size());
+
+        itemService.delete(request.itemIds(), request.filters())
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
-        log.info("Deleted dataset items by size'{}' on workspaceId '{}'", request, workspaceId);
+
+        log.info("Deleted dataset items. workspaceId='{}', itemIdsSize='{}', filters='{}'", workspaceId,
+                emptyIfNull(request.itemIds()).size(), emptyIfNull(request.filters()).size());
 
         return Response.noContent().build();
     }

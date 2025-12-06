@@ -19,8 +19,8 @@ public class DatasetItemBatchUpdateValidator
 
         // Check if `ids` is provided
         boolean hasIds = CollectionUtils.isNotEmpty(batchUpdate.ids());
-        // Check if filters are provided
-        boolean hasFilters = CollectionUtils.isNotEmpty(batchUpdate.filters());
+        // Check if filters are provided (empty array means "select all items", null means not provided)
+        boolean hasFilters = batchUpdate.filters() != null;
 
         // Validate that at least one of ids or filters is provided
         if (!hasIds && !hasFilters) {

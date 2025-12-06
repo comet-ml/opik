@@ -6,20 +6,19 @@ import slugify from "slugify";
 import { Button } from "@/components/ui/button";
 import { DatasetItem } from "@/types/datasets";
 import useDatasetItemBatchDeleteMutation from "@/api/datasets/useDatasetItemBatchDeleteMutation";
+import ConfirmDialog from "@/components/shared/ConfirmDialog/ConfirmDialog";
 import ExportToButton from "@/components/shared/ExportToButton/ExportToButton";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import DatasetExpansionDialog from "./DatasetExpansionDialog";
 import GeneratedSamplesDialog from "./GeneratedSamplesDialog";
 import AddTagDialog from "./AddTagDialog";
-import RemoveDatasetItemsDialog from "./RemoveDatasetItemsDialog";
 import { DATASET_ITEM_DATA_PREFIX } from "@/constants/datasets";
 import { stripColumnPrefix } from "@/lib/utils";
 import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
-import { useDatasetItemDeletePreference } from "./hooks/useDatasetItemDeletePreference";
 import { Filters } from "@/types/filters";
 
-type DatasetItemsActionsPanelProps = {
+type DatasetItemsActionsPanelLegacyProps = {
   getDataForExport: () => Promise<DatasetItem[]>;
   selectedDatasetItems: DatasetItem[];
   datasetId: string;
@@ -32,8 +31,8 @@ type DatasetItemsActionsPanelProps = {
   totalCount?: number;
 };
 
-const DatasetItemsActionsPanel: React.FunctionComponent<
-  DatasetItemsActionsPanelProps
+const DatasetItemsActionsPanelLegacy: React.FunctionComponent<
+  DatasetItemsActionsPanelLegacyProps
 > = ({
   getDataForExport,
   selectedDatasetItems,
@@ -58,7 +57,6 @@ const DatasetItemsActionsPanel: React.FunctionComponent<
 
   const { mutate } = useDatasetItemBatchDeleteMutation();
   const isExportEnabled = useIsFeatureEnabled(FeatureToggleKeys.EXPORT_ENABLED);
-  const [dontAskAgain] = useDatasetItemDeletePreference();
 
   const deleteDatasetItemsHandler = useCallback(() => {
     mutate({
@@ -68,15 +66,6 @@ const DatasetItemsActionsPanel: React.FunctionComponent<
       search,
     });
   }, [selectedDatasetItems, mutate, isAllItemsSelected, filters, search]);
-
-  const handleDeleteClick = useCallback(() => {
-    if (dontAskAgain) {
-      deleteDatasetItemsHandler();
-    } else {
-      setDeleteDialogOpen(true);
-      resetKeyRef.current = resetKeyRef.current + 1;
-    }
-  }, [dontAskAgain, deleteDatasetItemsHandler]);
 
   const handleSamplesGenerated = useCallback((samples: DatasetItem[]) => {
     setGeneratedSamples(samples);
@@ -115,11 +104,15 @@ const DatasetItemsActionsPanel: React.FunctionComponent<
 
   return (
     <div className="flex items-center gap-2">
-      <RemoveDatasetItemsDialog
+      <ConfirmDialog
         key={`delete-${resetKeyRef.current}`}
         open={deleteDialogOpen}
         setOpen={setDeleteDialogOpen}
         onConfirm={deleteDatasetItemsHandler}
+        title="Delete dataset items"
+        description="Deleting dataset items will also remove the related sample data from any linked experiments. This action can't be undone. Are you sure you want to continue?"
+        confirmText="Delete dataset items"
+        confirmButtonVariant="destructive"
       />
 
       <DatasetExpansionDialog
@@ -193,7 +186,10 @@ const DatasetItemsActionsPanel: React.FunctionComponent<
         <Button
           variant="outline"
           size="icon-sm"
-          onClick={handleDeleteClick}
+          onClick={() => {
+            setDeleteDialogOpen(true);
+            resetKeyRef.current = resetKeyRef.current + 1;
+          }}
           disabled={disabled}
         >
           <Trash />
@@ -203,4 +199,4 @@ const DatasetItemsActionsPanel: React.FunctionComponent<
   );
 };
 
-export default DatasetItemsActionsPanel;
+export default DatasetItemsActionsPanelLegacy;
