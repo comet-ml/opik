@@ -15,7 +15,7 @@ import { cn } from "@/lib/utils";
 import { formatDate } from "@/lib/date";
 import SelectBox from "@/components/shared/SelectBox/SelectBox";
 import { parseLLMMessageContent, parsePromptVersionContent } from "@/lib/llm";
-import PromptMessageMediaTags from "@/components/pages-shared/llm/PromptMessageMediaTags/PromptMessageMediaTags";
+import MediaTagsList from "@/components/pages-shared/llm/PromptMessageMediaTags/MediaTagsList";
 
 type ComparePromptVersionDialogProps = {
   open: boolean;
@@ -38,7 +38,11 @@ const ComparePromptVersionDialog: React.FunctionComponent<
     [baseVersion?.template],
   );
 
-  const { images: baseImages, videos: baseVideos } = useMemo(() => {
+  const {
+    images: baseImages,
+    videos: baseVideos,
+    audios: baseAudios,
+  } = useMemo(() => {
     const content = parsePromptVersionContent(baseVersion);
     return parseLLMMessageContent(content);
   }, [baseVersion]);
@@ -48,7 +52,11 @@ const ComparePromptVersionDialog: React.FunctionComponent<
     [diffVersion?.template],
   );
 
-  const { images: diffImages, videos: diffVideos } = useMemo(() => {
+  const {
+    images: diffImages,
+    videos: diffVideos,
+    audios: diffAudios,
+  } = useMemo(() => {
     const content = parsePromptVersionContent(diffVersion);
     return parseLLMMessageContent(content);
   }, [diffVersion]);
@@ -60,6 +68,10 @@ const ComparePromptVersionDialog: React.FunctionComponent<
   const videosHaveChanges = useMemo(
     () => !isEqual(baseVideos, diffVideos),
     [baseVideos, diffVideos],
+  );
+  const audiosHaveChanges = useMemo(
+    () => !isEqual(baseAudios, diffAudios),
+    [baseAudios, diffAudios],
   );
 
   const hasMoreThenTwoVersions = versions?.length > 2;
@@ -153,26 +165,22 @@ const ComparePromptVersionDialog: React.FunctionComponent<
             {generateDiffView(baseText, baseText)}
             {generateDiffView(baseText, diffText)}
           </div>
-          {(imagesHaveChanges || videosHaveChanges) && (
+          {(imagesHaveChanges || videosHaveChanges || audiosHaveChanges) && (
             <>
               {imagesHaveChanges && (
                 <div className="grid grid-cols-2 gap-4">
-                  <div className="flex items-center gap-2 rounded-md border p-4">
-                    <PromptMessageMediaTags
+                  <div className="flex min-w-0 flex-wrap items-center gap-2 overflow-hidden rounded-md border p-4">
+                    <MediaTagsList
                       type="image"
                       items={baseImages}
-                      setItems={() => {}}
-                      align="start"
                       editable={false}
                       preview={true}
                     />
                   </div>
-                  <div className="flex items-center gap-2 rounded-md border p-4">
-                    <PromptMessageMediaTags
+                  <div className="flex min-w-0 flex-wrap items-center gap-2 overflow-hidden rounded-md border p-4">
+                    <MediaTagsList
                       type="image"
                       items={diffImages}
-                      setItems={() => {}}
-                      align="start"
                       editable={false}
                       preview={true}
                     />
@@ -181,22 +189,38 @@ const ComparePromptVersionDialog: React.FunctionComponent<
               )}
               {videosHaveChanges && (
                 <div className="grid grid-cols-2 gap-4">
-                  <div className="flex items-center gap-2 rounded-md border p-4">
-                    <PromptMessageMediaTags
+                  <div className="flex min-w-0 flex-wrap items-center gap-2 overflow-hidden rounded-md border p-4">
+                    <MediaTagsList
                       type="video"
                       items={baseVideos}
-                      setItems={() => {}}
-                      align="start"
                       editable={false}
                       preview={true}
                     />
                   </div>
-                  <div className="flex items-center gap-2 rounded-md border p-4">
-                    <PromptMessageMediaTags
+                  <div className="flex min-w-0 flex-wrap items-center gap-2 overflow-hidden rounded-md border p-4">
+                    <MediaTagsList
                       type="video"
                       items={diffVideos}
-                      setItems={() => {}}
-                      align="start"
+                      editable={false}
+                      preview={true}
+                    />
+                  </div>
+                </div>
+              )}
+              {audiosHaveChanges && (
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="flex min-w-0 flex-wrap items-center gap-2 overflow-hidden rounded-md border p-4">
+                    <MediaTagsList
+                      type="audio"
+                      items={baseAudios}
+                      editable={false}
+                      preview={true}
+                    />
+                  </div>
+                  <div className="flex min-w-0 flex-wrap items-center gap-2 overflow-hidden rounded-md border p-4">
+                    <MediaTagsList
+                      type="audio"
+                      items={diffAudios}
                       editable={false}
                       preview={true}
                     />

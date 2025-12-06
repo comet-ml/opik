@@ -33,7 +33,7 @@ import { isValidJsonObject, safelyParseJSON } from "@/lib/utils";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 import { Description } from "@/components/ui/description";
 import ExplainerDescription from "@/components/shared/ExplainerDescription/ExplainerDescription";
-import PromptMessageMediaTags from "@/components/pages-shared/llm/PromptMessageMediaTags/PromptMessageMediaTags";
+import MediaTagsList from "@/components/pages-shared/llm/PromptMessageMediaTags/MediaTagsList";
 import { useMessageContent } from "@/hooks/useMessageContent";
 import {
   generateDefaultLLMPromptMessage,
@@ -337,11 +337,9 @@ const EditPromptVersionDialog: React.FC<EditPromptVersionDialogProps> = ({
                               <div className="comet-body-xs text-muted-foreground">
                                 Images before:
                               </div>
-                              <PromptMessageMediaTags
+                              <MediaTagsList
                                 type="image"
                                 items={originalImages}
-                                setItems={() => {}}
-                                align="start"
                                 editable={false}
                               />
                             </div>
@@ -349,11 +347,9 @@ const EditPromptVersionDialog: React.FC<EditPromptVersionDialogProps> = ({
                               <div className="comet-body-xs text-muted-foreground">
                                 Images after:
                               </div>
-                              <PromptMessageMediaTags
+                              <MediaTagsList
                                 type="image"
                                 items={currentImages}
-                                setItems={() => {}}
-                                align="start"
                                 editable={false}
                               />
                             </div>
@@ -365,11 +361,9 @@ const EditPromptVersionDialog: React.FC<EditPromptVersionDialogProps> = ({
                               <div className="comet-body-xs text-muted-foreground">
                                 Videos before:
                               </div>
-                              <PromptMessageMediaTags
+                              <MediaTagsList
                                 type="video"
                                 items={originalVideos}
-                                setItems={() => {}}
-                                align="start"
                                 editable={false}
                               />
                             </div>
@@ -377,11 +371,9 @@ const EditPromptVersionDialog: React.FC<EditPromptVersionDialogProps> = ({
                               <div className="comet-body-xs text-muted-foreground">
                                 Videos after:
                               </div>
-                              <PromptMessageMediaTags
+                              <MediaTagsList
                                 type="video"
                                 items={currentVideos}
-                                setItems={() => {}}
-                                align="start"
                                 editable={false}
                               />
                             </div>
@@ -397,20 +389,16 @@ const EditPromptVersionDialog: React.FC<EditPromptVersionDialogProps> = ({
           {!isChatPrompt && previewMode === PROMPT_PREVIEW_MODE.write && (
             <div className="flex flex-col gap-2 pb-4">
               <Label>Images</Label>
-              <PromptMessageMediaTags
+              <MediaTagsList
                 type="image"
                 items={currentImages}
-                setItems={() => {}}
-                align="start"
                 editable={false}
                 preview={true}
               />
               <Label>Videos</Label>
-              <PromptMessageMediaTags
+              <MediaTagsList
                 type="video"
                 items={currentVideos}
-                setItems={() => {}}
-                align="start"
                 editable={false}
                 preview={true}
               />
