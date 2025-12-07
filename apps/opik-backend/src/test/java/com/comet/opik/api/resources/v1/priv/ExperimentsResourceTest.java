@@ -5807,7 +5807,7 @@ class ExperimentsResourceTest {
         // Commit dataset version with tag
         String tag = "v1.0.0";
         var versionCreate = com.comet.opik.api.DatasetVersionCreate.builder()
-                .tag(tag)
+                .tags(List.of(tag))
                 .changeDescription("Test version with tag")
                 .build();
 
