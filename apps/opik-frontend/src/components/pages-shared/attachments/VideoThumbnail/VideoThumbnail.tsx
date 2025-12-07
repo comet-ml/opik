@@ -158,22 +158,23 @@ const isCrossOrigin = (url: string): boolean => {
  * ```
  */
 const VideoThumbnail: React.FC<VideoThumbnailProps> = ({ videoUrl, name }) => {
-  // For cross-origin URLs, skip thumbnail generation and use ReactPlayer directly
-  // This avoids CORS errors from canvas-based thumbnail generation
-  if (isCrossOrigin(videoUrl)) {
-    return <FallbackVideoPlayer url={videoUrl} />;
-  }
+  const isVideoUrlCrossOrigin = isCrossOrigin(videoUrl);
 
   // Only generate thumbnail when component is visible in viewport
   const { ref: containerRef, inView: isVisible } =
     useInView(INTERSECTION_OPTIONS);
 
-  // Generate thumbnail from video (same-origin only)
+  // Generate thumbnail from video (will be skipped for cross-origin URLs in render)
   const { thumbnailUrl, isLoading, hasError } = useVideoThumbnail(
     videoUrl,
     {},
-    isVisible,
+    isVisible && !isVideoUrlCrossOrigin,
   );
+
+  // For cross-origin URLs, use ReactPlayer directly to avoid CORS errors
+  if (isVideoUrlCrossOrigin) {
+    return <FallbackVideoPlayer url={videoUrl} />;
+  }
 
   // Render error state for same-origin videos that failed
   if (hasThumbnailFailed(hasError, isLoading, thumbnailUrl)) {
