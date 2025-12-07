@@ -100,7 +100,7 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
     private final @NonNull SortingQueryBuilder sortingQueryBuilder;
 
     @Override
-    @CacheEvict(name = "automation_rule_evaluators_find_all", key = "$projectIds + '-' + $workspaceId")
+    @CacheEvict(name = "automation_rule_evaluators_find_all", key = "'*-' + $workspaceId", keyUsesPatternMatching = true)
     public <E, F extends Filter, T extends AutomationRuleEvaluator<E, F>> T save(@NonNull T inputRuleEvaluator,
             @NonNull Set<UUID> projectIds, @NonNull String workspaceId, @NonNull String userName) {
 
@@ -197,7 +197,7 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
     }
 
     @Override
-    @CacheEvict(name = "automation_rule_evaluators_find_all", key = "$projectIds + '-' + $workspaceId")
+    @CacheEvict(name = "automation_rule_evaluators_find_all", key = "'*-' + $workspaceId", keyUsesPatternMatching = true)
     public void update(@NonNull UUID id, @NonNull Set<UUID> projectIds, @NonNull String workspaceId,
             @NonNull String userName, @NonNull AutomationRuleEvaluatorUpdate<?, ?> evaluatorUpdate) {
 
@@ -343,7 +343,7 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
     }
 
     @Override
-    @CacheEvict(name = "automation_rule_evaluators_find_all", key = "$projectIds + '-' + $workspaceId")
+    @CacheEvict(name = "automation_rule_evaluators_find_all", key = "'*-' + $workspaceId", keyUsesPatternMatching = true)
     public void delete(@NonNull Set<UUID> ids, Set<UUID> projectIds, @NonNull String workspaceId) {
         if (ids.isEmpty()) {
             log.info("Delete AutomationRuleEvaluator: ids list is empty, returning");

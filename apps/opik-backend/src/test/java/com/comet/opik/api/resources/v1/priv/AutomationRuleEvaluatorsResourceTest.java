@@ -616,6 +616,7 @@ class AutomationRuleEvaluatorsResourceTest {
             var id = evaluatorsResourceClient.createEvaluator(evaluator, WORKSPACE_NAME, API_KEY);
 
             var trace = factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectId(projectId)
                     .input(OBJECT_MAPPER.readTree(INPUT))
                     .output(OBJECT_MAPPER.readTree(OUTPUT))
                     .build();
@@ -968,6 +969,7 @@ class AutomationRuleEvaluatorsResourceTest {
             var id = evaluatorsResourceClient.createEvaluator(evaluator, WORKSPACE_NAME, API_KEY);
 
             var trace = factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectId(projectId)
                     .input(OBJECT_MAPPER.readTree(INPUT))
                     .output(OBJECT_MAPPER.readTree(OUTPUT))
                     .build();
@@ -999,6 +1001,7 @@ class AutomationRuleEvaluatorsResourceTest {
             var id = evaluatorsResourceClient.createEvaluator(evaluator, WORKSPACE_NAME, API_KEY);
 
             var trace = factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectId(projectId)
                     .threadId("thread-" + RandomStringUtils.secure().nextAlphanumeric(36))
                     .input(OBJECT_MAPPER.readTree(INPUT))
                     .output(OBJECT_MAPPER.readTree(OUTPUT))
@@ -1054,6 +1057,7 @@ class AutomationRuleEvaluatorsResourceTest {
             var id = evaluatorsResourceClient.createEvaluator(evaluator, WORKSPACE_NAME, API_KEY);
 
             var trace = factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectId(projectId)
                     .output(OBJECT_MAPPER.readTree("""
                             {
                                 "response": "abc"
@@ -1106,6 +1110,7 @@ class AutomationRuleEvaluatorsResourceTest {
             var id = evaluatorsResourceClient.createEvaluator(evaluator, WORKSPACE_NAME, API_KEY);
 
             var trace = factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectId(projectId)
                     .output(OBJECT_MAPPER.readTree("""
                             {
                                 "response": "abc"
@@ -1161,6 +1166,7 @@ class AutomationRuleEvaluatorsResourceTest {
 
             // Sending a trace, that shouldn't be sampled as the rate is 0 for both rules
             var trace = factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectId(projectId)
                     .threadId(null)
                     .build();
             traceResourceClient.createTrace(trace, API_KEY, WORKSPACE_NAME);
@@ -1208,6 +1214,7 @@ class AutomationRuleEvaluatorsResourceTest {
 
             // Sending a trace, that shouldn't be sampled as the rate is 0 for both rules
             var trace = factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectId(projectId)
                     .build();
 
             Instant createdAt = trace.createdAt();
@@ -1296,6 +1303,7 @@ class AutomationRuleEvaluatorsResourceTest {
 
             // Send a trace that should be skipped due to disabled rules (not sampling rate)
             var trace = factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectId(projectId)
                     .threadId(null)
                     .build();
             traceResourceClient.createTrace(trace, API_KEY, WORKSPACE_NAME);
@@ -1343,6 +1351,7 @@ class AutomationRuleEvaluatorsResourceTest {
 
             // Send a trace that should create a thread but be skipped due to disabled rules
             var trace = factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectId(projectId)
                     .build();
 
             Instant createdAt = trace.createdAt();
@@ -1398,6 +1407,7 @@ class AutomationRuleEvaluatorsResourceTest {
 
             // Send a trace
             var trace = factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectId(projectId)
                     .threadId(null)
                     .build();
             traceResourceClient.createTrace(trace, API_KEY, WORKSPACE_NAME);
@@ -1431,6 +1441,7 @@ class AutomationRuleEvaluatorsResourceTest {
             // Send multiple traces
             for (int i = 0; i < 5; i++) {
                 var trace = factory.manufacturePojo(Trace.class).toBuilder()
+                        .projectId(projectId)
                         .threadId(null)
                         .build();
                 traceResourceClient.createTrace(trace, API_KEY, WORKSPACE_NAME);

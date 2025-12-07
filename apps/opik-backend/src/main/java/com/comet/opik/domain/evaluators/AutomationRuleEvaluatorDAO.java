@@ -175,7 +175,8 @@ public interface AutomationRuleEvaluatorDAO extends AutomationRuleDAO {
     default long findCount(String workspaceId,
             List<UUID> projectIds,
             AutomationRuleEvaluatorCriteria criteria) {
-        return findCount(workspaceId, projectIds, criteria.action(), criteria.type(), criteria.ids(), criteria.id(),
+        return findCount(workspaceId, projectIds, criteria.action(), criteria.type(), criteria.ids(),
+                criteria.id(),
                 criteria.name());
     }
 
