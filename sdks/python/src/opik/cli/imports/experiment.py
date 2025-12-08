@@ -1,18 +1,23 @@
-"""Experiment import functionality."""
+"""Experiment import functionality.
+
+Note: Experiment import copies traces but not their full span trees (LLM task and
+metrics calculation spans). This is sufficient for experiment representation but
+not a "full & honest" migration. Spans are imported as part of trace import,
+not experiment recreation.
+"""
 
 import json
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 import opik
-from opik.api_objects.dataset import dataset_item as ds_item
-import opik.id_helpers as id_helpers  # type: ignore
+from opik.api_objects.dataset import dataset_item as dataset_item_module
+import opik.id_helpers as id_helpers_module  # type: ignore
 from rich.console import Console
 
 from .utils import (
-    find_dataset_item_by_content,
-    create_dataset_item,
     handle_trace_reference,
     translate_trace_id,
     matches_name_pattern,
@@ -22,34 +27,64 @@ from .utils import (
 console = Console()
 
 
+@dataclass
+class ExperimentData:
+    """Structure for imported experiment data.
+
+    Matches the export format from create_experiment_data_structure.
+    """
+
+    experiment: Dict[str, Any]
+    items: List[Dict[str, Any]]
+    downloaded_at: Optional[str] = None
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "ExperimentData":
+        """Create ExperimentData from a dictionary (e.g., loaded from JSON)."""
+        return cls(
+            experiment=data.get("experiment", {}),
+            items=data.get("items", []),
+            downloaded_at=data.get("downloaded_at"),
+        )
+
+
 def find_experiment_files(data_dir: Path) -> list[Path]:
     """Find all experiment JSON files in the directory."""
     return list(data_dir.glob("experiment_*.json"))
 
 
-def load_experiment_data(experiment_file: Path) -> Dict[str, Any]:
+def load_experiment_data(experiment_file: Path) -> ExperimentData:
     """Load experiment data from JSON file."""
     with open(experiment_file, "r", encoding="utf-8") as f:
-        return json.load(f)
+        data = json.load(f)
+        return ExperimentData.from_dict(data)
 
 
 def recreate_experiment(
     client: opik.Opik,
-    experiment_data: Dict[str, Any],
+    experiment_data: ExperimentData,
     project_name: str,
-    trace_id_map: Optional[Dict[str, str]] = None,
+    trace_id_map: Dict[str, str],
     dry_run: bool = False,
     debug: bool = False,
 ) -> bool:
     """Recreate a single experiment from exported data.
 
+    Args:
+        client: Opik client instance
+        experiment_data: Experiment data structure from export
+        project_name: Name of the project to create the experiment in
+        trace_id_map: Mapping from original trace IDs to new trace IDs (required, can be empty dict)
+        dry_run: If True, only simulate the import without making changes
+        debug: If True, print debug messages
+
     Note: This function expects that traces have already been imported into the target workspace.
-    When traces are imported, they receive new IDs. The trace IDs from the exported experiment
-    data may not match the imported traces unless they were imported in the same session and
-    the trace IDs were preserved during import. Items referencing non-existent traces will be skipped.
+    When traces are imported, they receive new IDs. The trace_id_map maps original trace IDs
+    to the newly created trace IDs. Items referencing traces not in trace_id_map will be skipped.
+    An empty trace_id_map is valid and will result in all items being skipped.
     """
-    experiment_info = experiment_data["experiment"]
-    items_data = experiment_data["items"]
+    experiment_info = experiment_data.experiment
+    items_data = experiment_data.items
 
     experiment_name = (
         experiment_info.get("name") or f"recreated-{experiment_info['id']}"
@@ -79,8 +114,9 @@ def recreate_experiment(
             type=experiment_info.get("type", "regular"),
         )
 
-        # Process experiment items
-        experiment_items = []
+        # Process experiment items and accumulate dataset items for batch insertion
+        # Track pending items: (dataset_item_obj, new_trace_id)
+        pending_items: List[tuple[Any, str]] = []
         successful_items = 0
         skipped_items = 0
 
@@ -133,65 +169,44 @@ def recreate_experiment(
                 continue
 
             try:
-                # Find or create dataset item (prefer deterministic id to avoid extra reads)
-                dataset_item_id = find_dataset_item_by_content(
-                    dataset, dataset_item_data
+                # Use provided dataset_item_id if available, otherwise create new item
+                provided_id = item_data.get("dataset_item_id") or dataset_item_data.get(
+                    "id"
                 )
-                if not dataset_item_id:
-                    # Prefer using provided id if present, otherwise generate one
-                    provided_id = item_data.get(
-                        "dataset_item_id"
-                    ) or dataset_item_data.get("id")
 
-                    if ds_item is not None:
-                        chosen_id = provided_id
-                        if chosen_id is None and id_helpers is not None:
-                            try:
-                                chosen_id = id_helpers.generate_id()  # type: ignore
-                            except Exception:
-                                chosen_id = None
+                # Build DatasetItem with all fields from dataset_item_data
+                # Exclude 'id' as it's handled separately
+                content = {
+                    k: v
+                    for k, v in dataset_item_data.items()
+                    if k != "id" and v is not None
+                }
 
-                        # Build DatasetItem with all fields from dataset_item_data
-                        # Exclude 'id' as it's handled separately
-                        content = {
-                            k: v
-                            for k, v in dataset_item_data.items()
-                            if k != "id" and v is not None
-                        }
-
-                        # Ensure content is not empty (backend requires non-empty data)
-                        if not content:
-                            console.print(
-                                "[yellow]Warning: Dataset item data is empty, skipping item[/yellow]"
-                            )
-                            skipped_items += 1
-                            continue
-
-                        if chosen_id is not None:
-                            ds_obj = ds_item.DatasetItem(id=chosen_id, **content)  # type: ignore
-                        else:
-                            ds_obj = ds_item.DatasetItem(**content)  # type: ignore
-
-                        # Use internal API to avoid redundant downloads
-                        dataset.__internal_api__insert_items_as_dataclasses__(
-                            items=[ds_obj]
-                        )
-                        dataset_item_id = ds_obj.id
-                    else:
-                        # Fallback to public insert + search
-                        dataset_item_id = create_dataset_item(
-                            dataset, dataset_item_data
-                        )
-
-                # Create experiment item reference
-                if dataset_item_id is not None:
-                    experiment_items.append(
-                        opik.ExperimentItemReferences(
-                            dataset_item_id=dataset_item_id,
-                            trace_id=new_trace_id,
-                        )
+                # Ensure content is not empty (backend requires non-empty data)
+                if not content:
+                    console.print(
+                        "[yellow]Warning: Dataset item data is empty, skipping item[/yellow]"
                     )
-                successful_items += 1
+                    skipped_items += 1
+                    continue
+
+                # Generate ID if not provided
+                chosen_id = provided_id
+                if chosen_id is None:
+                    try:
+                        chosen_id = id_helpers_module.generate_id()  # type: ignore
+                    except Exception:
+                        # Fallback: create without ID and let backend generate it
+                        chosen_id = None
+
+                # Create DatasetItem object
+                if chosen_id is not None:
+                    ds_obj = dataset_item_module.DatasetItem(id=chosen_id, **content)  # type: ignore
+                else:
+                    ds_obj = dataset_item_module.DatasetItem(**content)  # type: ignore
+
+                # Store for batch insertion
+                pending_items.append((ds_obj, new_trace_id))
 
             except Exception as e:
                 console.print(
@@ -199,6 +214,56 @@ def recreate_experiment(
                 )
                 skipped_items += 1
                 continue
+
+        # Batch insert all dataset items
+        experiment_items = []
+        if pending_items:
+            try:
+                # Extract dataset items for batch insertion
+                dataset_items_to_insert = [ds_obj for ds_obj, _ in pending_items]
+
+                # Batch insert
+                dataset.__internal_api__insert_items_as_dataclasses__(
+                    items=dataset_items_to_insert
+                )
+
+                # Create experiment item references with actual IDs
+                for ds_obj, new_trace_id in pending_items:
+                    if ds_obj.id:
+                        experiment_items.append(
+                            opik.ExperimentItemReferences(
+                                dataset_item_id=ds_obj.id,
+                                trace_id=new_trace_id,
+                            )
+                        )
+                        successful_items += 1
+                    else:
+                        console.print(
+                            "[yellow]Warning: Dataset item inserted but has no ID, skipping experiment item[/yellow]"
+                        )
+                        skipped_items += 1
+
+            except Exception as e:
+                console.print(
+                    f"[yellow]Warning: Failed to batch insert dataset items: {e}[/yellow]"
+                )
+                # Fallback: try individual inserts
+                for ds_obj, new_trace_id in pending_items:
+                    try:
+                        dataset.__internal_api__insert_items_as_dataclasses__(
+                            items=[ds_obj]
+                        )
+                        if ds_obj.id:
+                            experiment_items.append(
+                                opik.ExperimentItemReferences(
+                                    dataset_item_id=ds_obj.id,
+                                    trace_id=new_trace_id,
+                                )
+                            )
+                            successful_items += 1
+                    except Exception:
+                        skipped_items += 1
+                        continue
 
         # Insert experiment items
         if experiment_items:
@@ -235,7 +300,12 @@ def recreate_experiments(
     trace_id_map: Optional[Dict[str, str]] = None,
     debug: bool = False,
 ) -> int:
-    """Recreate experiments from JSON files."""
+    """Recreate experiments from JSON files.
+
+    Args:
+        trace_id_map: Mapping from original trace IDs to new trace IDs.
+                     If None, will be treated as empty dict (all items will be skipped).
+    """
     experiment_files = find_experiment_files(project_dir)
 
     if not experiment_files:
@@ -250,7 +320,7 @@ def recreate_experiments(
         for exp_file in experiment_files:
             try:
                 exp_data = load_experiment_data(exp_file)
-                exp_name = exp_data.get("experiment", {}).get("name", "")
+                exp_name = exp_data.experiment.get("name", "")
                 if exp_name and matches_name_pattern(exp_name, name_pattern):
                     filtered_files.append(exp_file)
             except Exception:
@@ -275,7 +345,12 @@ def recreate_experiments(
             experiment_data = load_experiment_data(experiment_file)
 
             if recreate_experiment(
-                client, experiment_data, project_name, trace_id_map, dry_run, debug
+                client,
+                experiment_data,
+                project_name,
+                trace_id_map or {},
+                dry_run,
+                debug,
             ):
                 successful += 1
             else:
@@ -389,14 +464,36 @@ def _import_traces_from_projects_directory(
                 # Map original trace ID to new trace ID
                 trace_id_map[original_trace_id] = trace.id
 
-                # Create spans with full data
-                for span_info in spans_info:
+                # Create spans with full data, preserving parent-child relationships
+                # Build span_id_map to translate parent_span_id references
+                span_id_map: Dict[str, str] = {}  # Maps original span ID to new span ID
+
+                # First pass: create all spans and build span_id_map
+                # We need to create spans in order so parent spans exist before children
+                # Sort spans to process root spans (no parent) first, then children
+                root_spans = [s for s in spans_info if not s.get("parent_span_id")]
+                child_spans = [s for s in spans_info if s.get("parent_span_id")]
+                sorted_spans = root_spans + child_spans
+
+                for span_info in sorted_spans:
                     # Clean feedback scores to remove read-only fields
                     span_feedback_scores = clean_feedback_scores(
                         span_info.get("feedback_scores")
                     )
 
-                    client.span(
+                    original_span_id = span_info.get("id")
+                    original_parent_span_id = span_info.get("parent_span_id")
+
+                    # Translate parent_span_id if it exists
+                    new_parent_span_id = None
+                    if (
+                        original_parent_span_id
+                        and original_parent_span_id in span_id_map
+                    ):
+                        new_parent_span_id = span_id_map[original_parent_span_id]
+
+                    # Create span with parent_span_id if available
+                    span = client.span(
                         name=span_info.get("name", "imported_span"),
                         start_time=(
                             datetime.fromisoformat(
@@ -423,8 +520,13 @@ def _import_traces_from_projects_directory(
                         error_info=span_info.get("error_info"),
                         total_cost=span_info.get("total_cost"),
                         trace_id=trace.id,
+                        parent_span_id=new_parent_span_id,
                         project_name=project_name,
                     )
+
+                    # Map original span ID to new span ID for parent relationship mapping
+                    if original_span_id and span.id:
+                        span_id_map[original_span_id] = span.id
 
             except Exception as e:
                 console.print(
@@ -478,10 +580,9 @@ def import_experiments_from_directory(
         imported_count = 0
         for experiment_file in experiment_files:
             try:
-                with open(experiment_file, "r", encoding="utf-8") as f:
-                    experiment_data = json.load(f)
+                experiment_data = load_experiment_data(experiment_file)
 
-                experiment_info = experiment_data.get("experiment", {})
+                experiment_info = experiment_data.experiment
                 experiment_name = experiment_info.get("name", "")
 
                 # Filter by name pattern if specified
@@ -511,12 +612,12 @@ def import_experiments_from_directory(
                     "project_name"
                 ) or "default"
 
-                # Use trace_id_map to translate trace IDs
+                # Use trace_id_map to translate trace IDs (empty dict if None)
                 success = recreate_experiment(
                     client,
                     experiment_data,
                     project_for_logs,
-                    trace_id_map if trace_id_map else None,
+                    trace_id_map or {},
                     dry_run,
                     debug,
                 )

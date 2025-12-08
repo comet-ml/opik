@@ -104,14 +104,40 @@ def import_projects_from_directory(
                         if original_trace_id:
                             trace_id_map[original_trace_id] = trace.id
 
-                        # Create spans with full data
-                        for span_info in spans_info:
+                        # Create spans with full data, preserving parent-child relationships
+                        # Build span_id_map to translate parent_span_id references
+                        span_id_map: Dict[
+                            str, str
+                        ] = {}  # Maps original span ID to new span ID
+
+                        # Sort spans to process root spans (no parent) first, then children
+                        root_spans = [
+                            s for s in spans_info if not s.get("parent_span_id")
+                        ]
+                        child_spans = [s for s in spans_info if s.get("parent_span_id")]
+                        sorted_spans = root_spans + child_spans
+
+                        for span_info in sorted_spans:
                             # Clean feedback scores to remove read-only fields
                             span_feedback_scores = clean_feedback_scores(
                                 span_info.get("feedback_scores")
                             )
 
-                            client.span(
+                            original_span_id = span_info.get("id")
+                            original_parent_span_id = span_info.get("parent_span_id")
+
+                            # Translate parent_span_id if it exists
+                            new_parent_span_id = None
+                            if (
+                                original_parent_span_id
+                                and original_parent_span_id in span_id_map
+                            ):
+                                new_parent_span_id = span_id_map[
+                                    original_parent_span_id
+                                ]
+
+                            # Create span with parent_span_id if available
+                            span = client.span(
                                 name=span_info.get("name", "imported_span"),
                                 start_time=(
                                     datetime.fromisoformat(
@@ -138,8 +164,13 @@ def import_projects_from_directory(
                                 error_info=span_info.get("error_info"),
                                 total_cost=span_info.get("total_cost"),
                                 trace_id=trace.id,
+                                parent_span_id=new_parent_span_id,
                                 project_name=project_name,
                             )
+
+                            # Map original span ID to new span ID for parent relationship mapping
+                            if original_span_id and span.id:
+                                span_id_map[original_span_id] = span.id
 
                         traces_imported += 1
 

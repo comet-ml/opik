@@ -18,14 +18,17 @@ def matches_name_pattern(name: str, pattern: Optional[str]) -> bool:
 
 
 def translate_trace_id(
-    original_trace_id: str, trace_id_map: Optional[Dict[str, str]]
+    original_trace_id: str, trace_id_map: Dict[str, str]
 ) -> Optional[str]:
     """Translate an original trace id from export to the newly created id.
 
-    Returns None if mapping is unavailable for this trace id.
+    Args:
+        original_trace_id: The original trace ID from the export
+        trace_id_map: Mapping from original trace IDs to new trace IDs (required, can be empty)
+
+    Returns:
+        The new trace ID if found in the map, None otherwise.
     """
-    if trace_id_map is None:
-        return None
     return trace_id_map.get(original_trace_id)
 
 

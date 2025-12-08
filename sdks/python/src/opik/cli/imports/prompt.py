@@ -6,6 +6,7 @@ from typing import Optional
 
 import opik
 from opik.api_objects.prompt.prompt import Prompt
+from opik.api_objects.prompt.chat.chat_prompt import ChatPrompt
 from opik.api_objects.prompt.types import PromptType
 from rich.console import Console
 
@@ -74,41 +75,72 @@ def import_prompts_from_directory(
 
                 # Get current version data
                 current_version = prompt_data.get("current_version", {})
-                prompt_text = current_version.get("prompt", "")
+                prompt_content = current_version.get("prompt")
                 metadata = current_version.get("metadata")
                 prompt_type = current_version.get("type")
+                template_structure = current_version.get("template_structure", "text")
 
-                if not prompt_text:
+                # Validate prompt content exists
+                if prompt_content is None:
                     console.print(
-                        f"[yellow]Skipping {prompt_name} (no prompt text found)[/yellow]"
+                        f"[yellow]Skipping {prompt_name} (no prompt content found)[/yellow]"
                     )
                     continue
 
-                # Create the prompt
-                try:
-                    # Convert string type to PromptType enum if needed
-                    if prompt_type and isinstance(prompt_type, str):
-                        try:
-                            prompt_type_enum = PromptType(prompt_type)
-                        except ValueError:
-                            console.print(
-                                f"[yellow]Unknown prompt type '{prompt_type}', using MUSTACHE[/yellow]"
-                            )
-                            prompt_type_enum = PromptType.MUSTACHE
-                    else:
+                # Convert string type to PromptType enum if needed
+                if prompt_type and isinstance(prompt_type, str):
+                    try:
+                        prompt_type_enum = PromptType(prompt_type)
+                    except ValueError:
+                        console.print(
+                            f"[yellow]Unknown prompt type '{prompt_type}', using MUSTACHE[/yellow]"
+                        )
                         prompt_type_enum = PromptType.MUSTACHE
+                else:
+                    prompt_type_enum = PromptType.MUSTACHE
 
-                    # Create the prompt
-                    Prompt(
-                        name=prompt_name,
-                        prompt=prompt_text,
-                        metadata=metadata,
-                        type=prompt_type_enum,
-                    )
+                # Create the prompt based on template_structure
+                try:
+                    if template_structure == "chat":
+                        # ChatPrompt expects a list of message dictionaries
+                        if not isinstance(prompt_content, list):
+                            console.print(
+                                f"[yellow]Skipping {prompt_name} (chat prompt content must be a list of messages)[/yellow]"
+                            )
+                            continue
+
+                        # Create ChatPrompt
+                        ChatPrompt(
+                            name=prompt_name,
+                            messages=prompt_content,
+                            metadata=metadata,
+                            type=prompt_type_enum,
+                        )
+                        if debug:
+                            console.print(
+                                f"[green]Imported chat prompt: {prompt_name}[/green]"
+                            )
+                    else:
+                        # Text Prompt expects a string
+                        if not isinstance(prompt_content, str):
+                            console.print(
+                                f"[yellow]Skipping {prompt_name} (text prompt content must be a string)[/yellow]"
+                            )
+                            continue
+
+                        # Create Prompt
+                        Prompt(
+                            name=prompt_name,
+                            prompt=prompt_content,
+                            metadata=metadata,
+                            type=prompt_type_enum,
+                        )
+                        if debug:
+                            console.print(
+                                f"[green]Imported text prompt: {prompt_name}[/green]"
+                            )
 
                     imported_count += 1
-                    if debug:
-                        console.print(f"[green]Imported prompt: {prompt_name}[/green]")
 
                 except Exception as e:
                     console.print(

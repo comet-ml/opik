@@ -10,6 +10,7 @@ from rich.console import Console
 
 import opik
 from opik.api_objects.prompt.prompt import Prompt
+from opik.api_objects.prompt.chat.chat_prompt import ChatPrompt
 from .utils import (
     debug_print,
     prompt_to_csv_rows,
@@ -20,6 +21,40 @@ from .utils import (
 )
 
 console = Console()
+
+
+def _get_prompt_content(prompt: Any) -> Any:
+    """Extract prompt content based on prompt type.
+
+    Args:
+        prompt: A Prompt or ChatPrompt instance
+
+    Returns:
+        For Prompt: the prompt string
+        For ChatPrompt: the template (list of message dicts)
+        Otherwise: None
+    """
+    if isinstance(prompt, Prompt):
+        return prompt.prompt
+    elif isinstance(prompt, ChatPrompt):
+        return prompt.template
+    return None
+
+
+def _get_template_structure(prompt: Any) -> str:
+    """Get template_structure based on prompt type.
+
+    Args:
+        prompt: A Prompt or ChatPrompt instance
+
+    Returns:
+        "text" for Prompt, "chat" for ChatPrompt, "text" as default
+    """
+    if isinstance(prompt, ChatPrompt):
+        return "chat"
+    elif isinstance(prompt, Prompt):
+        return "text"
+    return "text"
 
 
 def export_single_prompt(
@@ -51,17 +86,19 @@ def export_single_prompt(
         prompt_data = {
             "name": prompt.name,
             "current_version": {
-                "prompt": getattr(prompt, "prompt", None),
+                "prompt": _get_prompt_content(prompt),
                 "metadata": getattr(prompt, "metadata", None),
                 "type": getattr(prompt, "type", None) or None,
                 "commit": getattr(prompt, "commit", None),
+                "template_structure": _get_template_structure(prompt),
             },
             "history": [
                 {
-                    "prompt": getattr(version, "prompt", None),
+                    "prompt": _get_prompt_content(version),
                     "metadata": getattr(version, "metadata", None),
                     "type": getattr(version, "type", None) or None,
                     "commit": getattr(version, "commit", None),
+                    "template_structure": _get_template_structure(version),
                 }
                 for version in prompt_history
             ],
@@ -207,17 +244,19 @@ def export_experiment_prompts(
                         ),
                     },
                     "current_version": {
-                        "prompt": getattr(prompt, "prompt", None),
+                        "prompt": _get_prompt_content(prompt),
                         "metadata": getattr(prompt, "metadata", None),
                         "type": getattr(prompt, "type", None) or None,
                         "commit": getattr(prompt, "commit", None),
+                        "template_structure": _get_template_structure(prompt),
                     },
                     "history": [
                         {
-                            "prompt": getattr(version, "prompt", None),
+                            "prompt": _get_prompt_content(version),
                             "metadata": getattr(version, "metadata", None),
                             "type": getattr(version, "type", None) or None,
                             "commit": getattr(version, "commit", None),
+                            "template_structure": _get_template_structure(version),
                         }
                         for version in prompt_history
                     ],
@@ -344,17 +383,19 @@ def export_related_prompts_by_name(
                         "last_updated_at": getattr(prompt, "last_updated_at", None),
                     },
                     "current_version": {
-                        "prompt": getattr(prompt, "prompt", None),
+                        "prompt": _get_prompt_content(prompt),
                         "metadata": getattr(prompt, "metadata", None),
                         "type": getattr(prompt, "type", None) or None,
                         "commit": getattr(prompt, "commit", None),
+                        "template_structure": _get_template_structure(prompt),
                     },
                     "history": [
                         {
-                            "prompt": getattr(version, "prompt", None),
+                            "prompt": _get_prompt_content(version),
                             "metadata": getattr(version, "metadata", None),
                             "type": getattr(version, "type", None) or None,
                             "commit": getattr(version, "commit", None),
+                            "template_structure": _get_template_structure(version),
                         }
                         for version in prompt_history
                     ],
