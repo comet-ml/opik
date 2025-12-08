@@ -1,13 +1,9 @@
-import React, { useMemo } from "react";
-import useAppStore from "@/store/AppStore";
+import { useMemo } from "react";
+import usePluginsStore from "@/store/PluginsStore";
 import DataTable from "@/components/shared/DataTable/DataTable";
-import Loader from "@/components/shared/Loader/Loader";
 import { COLUMN_TYPE, ColumnData } from "@/types/shared";
 import { convertColumnDataToColumn } from "@/lib/table";
 import { formatDate } from "@/lib/date";
-import useUser from "@/plugins/comet/useUser";
-import useAllWorkspaces from "@/plugins/comet/useAllWorkspaces";
-import useAllWorkspaceMembers from "@/plugins/comet/useWorkspaceMembers";
 
 interface WorkspaceMember {
   id: string;
@@ -45,22 +41,8 @@ const DEFAULT_COLUMNS: ColumnData<WorkspaceMember>[] = [
 ];
 
 const CollaboratorsTab = () => {
-  const { data: user } = useUser();
-  const { data: allWorkspaces } = useAllWorkspaces({
-    enabled: !!user?.loggedIn,
-  });
-
-  const workspaceName = useAppStore((state) => state.activeWorkspaceName);
-
-  const workspace = allWorkspaces?.find(
-    (w) => w.workspaceName === workspaceName,
-  );
-
-  const { data: workspaceMembers, isPending } = useAllWorkspaceMembers(
-    { workspaceId: workspace?.workspaceId || "" },
-    {
-      enabled: Boolean(workspace?.workspaceId),
-    },
+  const WorkspaceMembersTable = usePluginsStore(
+    (state) => state.WorkspaceMembersTable,
   );
 
   const columns = useMemo(() => {
@@ -70,22 +52,11 @@ const CollaboratorsTab = () => {
     );
   }, []);
 
-  const tableData = useMemo(() => {
-    if (!workspaceMembers) return [];
-
-    return workspaceMembers.map(
-      (member): WorkspaceMember => ({
-        id: member.userName,
-        ...member,
-      }),
-    );
-  }, [workspaceMembers]);
-
-  if (isPending) {
-    return <Loader />;
+  if (WorkspaceMembersTable) {
+    return <WorkspaceMembersTable columns={columns} />;
   }
 
-  return <DataTable columns={columns} data={tableData} />;
+  return <DataTable columns={columns} data={[]} />;
 };
 
 export default CollaboratorsTab;
