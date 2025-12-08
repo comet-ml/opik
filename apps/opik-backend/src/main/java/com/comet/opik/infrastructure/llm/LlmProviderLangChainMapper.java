@@ -163,21 +163,11 @@ public interface LlmProviderLangChainMapper {
      */
     private boolean hasVideoFileExtension(String url) {
         try {
-            var uri = URI.create(url);
-            String path = uri.getPath();
+            String path = URI.create(url).getPath();
             if (path == null || path.isBlank()) {
                 return false;
             }
-
-            int lastSlash = path.lastIndexOf('/');
-            String filename = lastSlash >= 0 ? path.substring(lastSlash + 1) : path;
-
-            int lastDot = filename.lastIndexOf('.');
-            if (lastDot < 0 || lastDot == filename.length() - 1) {
-                return false;
-            }
-
-            String extension = filename.substring(lastDot + 1).toLowerCase();
+            String extension = com.google.common.io.Files.getFileExtension(path).toLowerCase();
             return VIDEO_EXTENSIONS.contains(extension);
         } catch (Exception e) {
             return false;
