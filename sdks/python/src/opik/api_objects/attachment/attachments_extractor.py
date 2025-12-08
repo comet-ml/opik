@@ -10,7 +10,25 @@ class ExtractionResult(NamedTuple):
 
 
 class AttachmentsExtractor:
+    """
+    Extracts and processes attachments embedded as Base64 strings within data structures.
+
+    This class is designed to identify and decode Base64-encoded attachments located
+    within the provided data. It uses a regular expression pattern to search for
+    Base64 strings that meet a specified minimum length. Extracted attachments are
+    decoded and replaced with sanitized placeholders in the original data.
+    """
+
     def __init__(self, min_attachment_size: int):
+        """
+        Initializes the class with a minimum attachment size and configures the base64
+        pattern for decoding attachments based on its length.
+
+        Args:
+            min_attachment_size: The minimum size of the attachment in characters
+                for it to be considered valid. This ensures that only large enough
+                base64 strings are matched to minimize false positives.
+        """
         self._min_attachment_size = min_attachment_size
         self.decoder = decoder_base64.Base44AttachmentDecoder()
 

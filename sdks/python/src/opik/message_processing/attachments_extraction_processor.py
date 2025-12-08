@@ -52,6 +52,17 @@ class AttachmentsExtractionProcessor(message_processors.BaseMessageProcessor):
         url_override: str,
         is_active: bool = True,
     ):
+        """
+        Initializes an object with essential components for managing message streaming
+        and attachment extraction.
+
+        Args:
+            min_attachment_size: Minimum size for an attachment to be extracted.
+            messages_streamer: The streamer that is responsible for managing
+                messages broadcasts.
+            url_override: A custom URL to override default configurations if set.
+            is_active: Indicator of whether this instance is active. Default is True.
+        """
         self._is_active = is_active
         self.extractor = attachments_extractor.AttachmentsExtractor(min_attachment_size)
         self.messages_streamer = messages_streamer

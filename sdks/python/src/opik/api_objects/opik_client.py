@@ -200,7 +200,7 @@ class Opik:
         attachment_extraction = (
             attachments_extraction_processor.AttachmentsExtractionProcessor(
                 messages_streamer=self._streamer,
-                min_attachment_size=self._config.min_attachment_size,
+                min_attachment_size=self._config.min_base64_embedded_attachment_size,
                 url_override=self._config.url_override,
                 is_active=self._config.is_attachment_extraction_active,
             )

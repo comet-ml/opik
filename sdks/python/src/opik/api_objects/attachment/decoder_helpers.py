@@ -110,6 +110,24 @@ def detect_mime_type(data: bytes) -> Optional[str]:
 
 
 def create_attachment_filename(context: str, extension: str) -> str:
+    """
+    Generates a unique attachment filename based on the provided context and file extension.
+
+    This function creates a filename by combining the given context, a randomly generated
+    prefix to ensure uniqueness, the current timestamp in milliseconds, and the provided
+    file extension. The generated filename aligns with the backend convention for naming
+    attachments, which includes specific formatting and structure.
+
+    Args:
+        context: The context to use as the base for the filename (e.g., "input",
+            "output", or "metadata").
+        extension: The file extension to use for the filename (e.g., "png",
+            "jpg", "txt").
+
+    Returns:
+        A generated filename string in the format
+            "{context}-attachment-{random_prefix}-{timestamp}.{extension}".
+    """
     # The backend has the following naming convention: r"\\[((?:input|output|metadata)-attachment-\\d+-\\d+\\.\\w+)\\]"
     # Example: [input-attachment-1-1704067200000.png]
 
