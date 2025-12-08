@@ -56,8 +56,11 @@ class EvalService:
         request: schemas.EvaluationRequest,
     ) -> schemas.EvaluationAcceptedResponse:
         """Evaluate a trace with the specified metrics."""
-        LOGGER.info("Starting evaluation for trace %s with %d metrics",
-                    trace_id, len(request.metrics))
+        LOGGER.info(
+            "Starting evaluation for trace %s with %d metrics",
+            trace_id,
+            len(request.metrics),
+        )
 
         opik_client = opik.api_objects.opik_client.get_client_cached()
         trace = self._fetch_trace(opik_client, trace_id)
@@ -113,7 +116,7 @@ class EvalService:
         self,
         config: schemas.MetricEvaluationConfig,
         trace_dict: Dict[str, Any],
-    ) -> List[Dict[str, Any]]:
+    ) -> List[opik_types.FeedbackScoreDict]:
         """Run a single metric and return score results."""
         metric = self._instantiate_metric(config)
         metric_inputs = trace_data_extractor.build_metric_inputs(
@@ -132,7 +135,7 @@ class EvalService:
         # Handle both single result and list of results
         results = result if isinstance(result, list) else [result]
 
-        scores = []
+        scores: List[opik_types.FeedbackScoreDict] = []
         for score_result in results:
             score_name = config.name if config.name else score_result.name
             scores.append(

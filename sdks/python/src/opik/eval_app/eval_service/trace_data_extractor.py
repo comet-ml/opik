@@ -133,4 +133,3 @@ def extract_metric_inputs_from_trace(
     """
     trace_dict = trace_to_dict(trace)
     return build_metric_inputs(trace_dict, arguments_mapping)
-

@@ -15,9 +15,7 @@ from .api import routes
 def _configure_logging() -> None:
     """Configure logging with worker ID prefix for this process."""
     worker_id = os.getpid()
-    formatter = logging.Formatter(
-        f"[worker-{worker_id}] %(levelname)s - %(message)s"
-    )
+    formatter = logging.Formatter(f"[worker-{worker_id}] %(levelname)s - %(message)s")
 
     handler = logging.StreamHandler()
     handler.setFormatter(formatter)
@@ -52,4 +50,3 @@ def create_app() -> fastapi.FastAPI:
     routes.register_exception_handlers(app)
 
     return app
-

@@ -6,6 +6,7 @@ import click
 
 import os
 
+
 def _is_port_in_use(host: str, port: int) -> bool:
     """Check if a port is already in use."""
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
