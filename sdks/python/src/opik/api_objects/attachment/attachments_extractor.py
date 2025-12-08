@@ -3,9 +3,6 @@ from typing import Dict, Any, Literal, List, NamedTuple
 
 from . import attachment, attachment_context, decoder_base64
 
-# ^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=|[A-Za-z0-9+/]{4})$
-BASE64_PATTERN = r"^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$"
-
 
 class ExtractionResult(NamedTuple):
     attachments: List[attachment.Attachment]
@@ -16,6 +13,15 @@ class AttachmentsExtractor:
     def __init__(self, min_attachment_size: int):
         self._min_attachment_size = min_attachment_size
         self.decoder = decoder_base64.Base44AttachmentDecoder()
+
+        # Pattern to match base64 strings (can be embedded in text)
+        # Requires at least min_attachment_size characters to reduce false positives
+        min_base64_groups = int(min_attachment_size / 4)
+        BASE64_PATTERN = (
+            r"(?:[A-Za-z0-9+/]{4}){"
+            + str(min_base64_groups)
+            + ",}(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?"
+        )
         self.pattern = re.compile(BASE64_PATTERN)
 
     def extract_and_replace(
@@ -47,7 +53,8 @@ class AttachmentsExtractor:
     def _try_extract_attachments(
         self, data: str, context: Literal["input", "output", "metadata"]
     ) -> ExtractionResult:
-        if not isinstance(data, (bytes, str)) or len(data) >= self._min_attachment_size:
+        if not isinstance(data, str) or len(data) < self._min_attachment_size:
+            # skip short strings
             return ExtractionResult(attachments=[], sanitized_data=data)
 
         attachments: List[attachment.Attachment] = []
