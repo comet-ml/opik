@@ -826,10 +826,14 @@ class AutomationRuleEvaluatorsResourceTest {
         @MethodSource
         void update(AutomationRuleEvaluator<Object, ?> automationRuleEvaluator,
                 AutomationRuleEvaluatorUpdate<?, ?> automationRuleEvaluatorUpdate) {
-            var id = evaluatorsResourceClient.createEvaluator(automationRuleEvaluator, WORKSPACE_NAME, API_KEY);
+            var projectId = projectResourceClient.createProject(UUID.randomUUID().toString(), API_KEY, WORKSPACE_NAME);
+            var evaluatorWithProject = automationRuleEvaluator.toBuilder()
+                    .projectIds(Set.of(projectId))
+                    .build();
+            var id = evaluatorsResourceClient.createEvaluator(evaluatorWithProject, WORKSPACE_NAME, API_KEY);
 
             var updatedEvaluator = automationRuleEvaluatorUpdate.toBuilder()
-                    .projectIds(automationRuleEvaluator.getProjectIds())
+                    .projectIds(evaluatorWithProject.getProjectIds())
                     .build();
             try (var actualResponse = evaluatorsResourceClient.updateEvaluator(
                     id, WORKSPACE_NAME, updatedEvaluator, API_KEY, HttpStatus.SC_NO_CONTENT)) {
@@ -862,8 +866,10 @@ class AutomationRuleEvaluatorsResourceTest {
         @DisplayName("Should update enabled status correctly")
         void updateEnabledStatus(boolean initialEnabled, boolean targetEnabled, String scenarioDescription) {
             // Create a rule with initial enabled state
+            var projectId = projectResourceClient.createProject(UUID.randomUUID().toString(), API_KEY, WORKSPACE_NAME);
             var automationRuleEvaluator = factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class)
                     .toBuilder()
+                    .projectIds(Set.of(projectId))
                     .enabled(initialEnabled)
                     .build();
             var id = evaluatorsResourceClient.createEvaluator(automationRuleEvaluator, WORKSPACE_NAME, API_KEY);
