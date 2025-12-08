@@ -1,4 +1,4 @@
-from typing import Any, Dict, Optional, Union
+from typing import Any, Dict, Optional, Tuple, Union
 import logging
 
 import dspy
@@ -7,6 +7,7 @@ from dspy.utils import callback as dspy_callback
 from opik import context_storage, opik_context, tracing_runtime_config, types
 from opik.api_objects import helpers, span, trace, opik_client
 from opik.decorator import error_info_collector
+from opik import llm_usage
 
 from .graph import build_mermaid_graph_from_module
 
@@ -32,6 +33,8 @@ class OpikCallback(dspy_callback.BaseCallback):
     ):
         self._map_call_id_to_span_data: Dict[str, span.SpanData] = {}
         self._map_call_id_to_trace_data: Dict[str, trace.TraceData] = {}
+        # Store (lm_instance, expected_messages) for extracting usage and verifying correct history entry
+        self._map_call_id_to_lm_info: Dict[str, tuple] = {}
 
         self._origins_metadata: Dict[str, Any] = {"created_from": "dspy"}
 
@@ -198,13 +201,19 @@ class OpikCallback(dspy_callback.BaseCallback):
         call_id: str,
         outputs: Optional[Any],
         exception: Optional[Exception] = None,
+        usage: Optional[llm_usage.OpikUsage] = None,
+        extra_metadata: Optional[Dict[str, Any]] = None,
     ) -> None:
         if span_data := self._map_call_id_to_span_data.pop(call_id, None):
             if exception:
                 error_info = error_info_collector.collect(exception)
                 span_data.update(error_info=error_info)
 
-            span_data.update(output={"output": outputs}).init_end_time()
+            span_data.update(
+                output={"output": outputs},
+                usage=usage,
+                metadata=extra_metadata,
+            ).init_end_time()
             if tracing_runtime_config.is_tracing_active():
                 self._opik_client.span(**span_data.as_parameters)
 
@@ -263,6 +272,13 @@ class OpikCallback(dspy_callback.BaseCallback):
             name=f"{span_data.name}: {provider} - {model}",
         )
         self._map_call_id_to_span_data[call_id] = span_data
+
+        # Store LM instance and expected messages for extracting usage
+        self._map_call_id_to_lm_info[call_id] = (
+            instance,
+            inputs.get("messages"),
+        )
+
         self._set_current_context_data(span_data)
 
     def on_lm_end(
@@ -271,10 +287,17 @@ class OpikCallback(dspy_callback.BaseCallback):
         outputs: Optional[Dict[str, Any]],
         exception: Optional[Exception] = None,
     ) -> None:
+        usage, cache_hit = self._extract_lm_info_from_history(call_id)
+
+        # Add cache_hit to span metadata
+        extra_metadata = {"cache_hit": cache_hit}
+
         self._end_span(
             call_id=call_id,
             exception=exception,
             outputs=outputs,
+            usage=usage,
+            extra_metadata=extra_metadata,
         )
 
     def on_tool_start(
@@ -324,6 +347,62 @@ class OpikCallback(dspy_callback.BaseCallback):
         elif isinstance(instance, dspy.Tool):
             return "tool"
         return "general"
+
+    def _extract_lm_info_from_history(
+        self, call_id: str
+    ) -> Tuple[Optional[llm_usage.OpikUsage], Optional[bool]]:
+        """
+        Extract token usage and cache status from the LM's history.
+
+        DSPy stores usage information in the LM's history after each call.
+        We verify the history entry matches our expected messages to handle
+        potential race conditions with concurrent LM calls.
+
+        Returns:
+            Tuple of (usage, cache_hit) where:
+            - usage: OpikUsage object if available, None otherwise
+            - cache_hit: True if response was from cache, False if not, None if unknown
+        """
+        lm_info = self._map_call_id_to_lm_info.pop(call_id, None)
+        if lm_info is None:
+            return None, None
+
+        lm_instance, expected_messages = lm_info
+
+        if not hasattr(lm_instance, "history") or not lm_instance.history:
+            return None, None
+
+        try:
+            last_entry = lm_instance.history[-1]
+
+            # Verify we have the correct history entry by checking messages match
+            if last_entry.get("messages") != expected_messages:
+                LOGGER.debug(
+                    "History entry messages don't match expected messages, "
+                    "skipping usage extraction (possibly due to concurrent LM calls)"
+                )
+                return None, None
+
+            # Check if response was from cache
+            # DSPy only sets cache_hit=True on cached responses, attribute doesn't exist otherwise
+            response = last_entry.get("response")
+            cache_hit = getattr(response, "cache_hit", False) if response else False
+
+            usage_dict = last_entry.get("usage")
+
+            if not usage_dict:
+                # Empty usage dict typically means cached response
+                return None, cache_hit
+
+            # DSPy uses LiteLLM which returns OpenAI-compatible format
+            usage = llm_usage.build_opik_usage_from_unknown_provider(usage_dict)
+            return usage, cache_hit
+        except Exception:
+            LOGGER.debug(
+                "Failed to extract info from DSPy LM history",
+                exc_info=True,
+            )
+            return None, None
 
     def _get_opik_metadata(self, instance: Any) -> Dict[str, Any]:
         graph = None
