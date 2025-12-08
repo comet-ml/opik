@@ -15,6 +15,7 @@ import com.comet.opik.api.DatasetItemsDelete;
 import com.comet.opik.api.DatasetLastExperimentCreated;
 import com.comet.opik.api.DatasetLastOptimizationCreated;
 import com.comet.opik.api.DatasetUpdate;
+import com.comet.opik.api.DatasetVersionCreate;
 import com.comet.opik.api.Experiment;
 import com.comet.opik.api.ExperimentItem;
 import com.comet.opik.api.ExperimentItemsBatch;
@@ -8381,6 +8382,173 @@ class DatasetsResourceTest {
 
                 assertThat(tokens).containsExactly(50L, 100L, 150L);
             }
+        }
+    }
+
+    @Nested
+    @DisplayName("Get Dataset Items Version Selection:")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class GetDatasetItemsVersionSelection {
+
+        @Test
+        @DisplayName("Should return draft items when no version exists and version param not specified")
+        void getDatasetItems__whenNoVersionExistsAndVersionNotSpecified__thenReturnDraftItems() {
+            // Given - Create dataset with draft items
+            var dataset = factory.manufacturePojo(Dataset.class).toBuilder()
+                    .id(null)
+                    .build();
+            var datasetId = createAndAssert(dataset, API_KEY, TEST_WORKSPACE);
+
+            // Add 2 draft items
+            var items = PodamFactoryUtils.manufacturePojoList(factory, DatasetItem.class).stream()
+                    .limit(2)
+                    .map(item -> item.toBuilder().id(null).build())
+                    .toList();
+            var batch = DatasetItemBatch.builder()
+                    .datasetId(datasetId)
+                    .items(items)
+                    .build();
+            datasetResourceClient.createDatasetItems(batch, TEST_WORKSPACE, API_KEY);
+
+            // When - Get items without specifying version
+            var itemsPage = datasetResourceClient.getDatasetItems(datasetId, 1, 10, null, API_KEY, TEST_WORKSPACE);
+
+            // Then - Should return draft items
+            assertThat(itemsPage.content()).hasSize(2);
+        }
+
+        @Test
+        @DisplayName("Should return latest version items when version exists and version param not specified")
+        void getDatasetItems__whenVersionExistsAndVersionNotSpecified__thenReturnLatestVersionItems() {
+            // Given - Create dataset with items
+            var dataset = factory.manufacturePojo(Dataset.class).toBuilder()
+                    .id(null)
+                    .build();
+            var datasetId = createAndAssert(dataset, API_KEY, TEST_WORKSPACE);
+
+            // Add 2 items to draft
+            var initialItems = PodamFactoryUtils.manufacturePojoList(factory, DatasetItem.class).stream()
+                    .limit(2)
+                    .map(item -> item.toBuilder().id(null).build())
+                    .toList();
+            var batch1 = DatasetItemBatch.builder()
+                    .datasetId(datasetId)
+                    .items(initialItems)
+                    .build();
+            datasetResourceClient.createDatasetItems(batch1, TEST_WORKSPACE, API_KEY);
+
+            // Get the draft item IDs for verification later
+            var draftItemsBeforeVersion = datasetResourceClient.getDatasetItems(datasetId, 1, 10, null, API_KEY,
+                    TEST_WORKSPACE);
+            var draftItemIdsBeforeVersion = draftItemsBeforeVersion.content().stream()
+                    .map(DatasetItem::id)
+                    .toList();
+
+            // Commit version 1
+            datasetResourceClient.commitVersion(
+                    datasetId,
+                    DatasetVersionCreate.builder().tags(List.of("v1")).build(),
+                    API_KEY,
+                    TEST_WORKSPACE);
+
+            // Add a new item to draft (not in version)
+            var newDraftItem = PodamFactoryUtils.manufacturePojoList(factory, DatasetItem.class).stream()
+                    .limit(1)
+                    .map(item -> item.toBuilder().id(null).build())
+                    .toList();
+            var batch2 = DatasetItemBatch.builder()
+                    .datasetId(datasetId)
+                    .items(newDraftItem)
+                    .build();
+            datasetResourceClient.createDatasetItems(batch2, TEST_WORKSPACE, API_KEY);
+
+            // When - Get items without specifying version
+            var itemsPage = datasetResourceClient.getDatasetItems(datasetId, 1, 10, null, API_KEY, TEST_WORKSPACE);
+
+            // Then - Should return ONLY the 2 items from the latest version, NOT the 3rd draft item
+            assertThat(itemsPage.content()).hasSize(2);
+            var returnedItemDraftIds = itemsPage.content().stream()
+                    .map(DatasetItem::draftItemId)
+                    .toList();
+            // Items from version should reference the original draft items
+            assertThat(returnedItemDraftIds).containsExactlyInAnyOrder(draftItemIdsBeforeVersion.toArray(new UUID[0]));
+        }
+
+        @Test
+        @DisplayName("Should return specified version items when version param is provided")
+        void getDatasetItems__whenVersionSpecified__thenReturnSpecifiedVersionItems() {
+            // Given - Create dataset with items
+            var dataset = factory.manufacturePojo(Dataset.class).toBuilder()
+                    .id(null)
+                    .build();
+            var datasetId = createAndAssert(dataset, API_KEY, TEST_WORKSPACE);
+
+            // Add 2 items and commit as v1
+            var v1Items = PodamFactoryUtils.manufacturePojoList(factory, DatasetItem.class).stream()
+                    .limit(2)
+                    .map(item -> item.toBuilder().id(null).build())
+                    .toList();
+            var batch1 = DatasetItemBatch.builder()
+                    .datasetId(datasetId)
+                    .items(v1Items)
+                    .build();
+            datasetResourceClient.createDatasetItems(batch1, TEST_WORKSPACE, API_KEY);
+
+            var draftItemsV1 = datasetResourceClient.getDatasetItems(datasetId, 1, 10, null, API_KEY, TEST_WORKSPACE);
+            var v1DraftItemIds = draftItemsV1.content().stream()
+                    .map(DatasetItem::id)
+                    .toList();
+
+            datasetResourceClient.commitVersion(
+                    datasetId,
+                    DatasetVersionCreate.builder().tags(List.of("v1")).build(),
+                    API_KEY,
+                    TEST_WORKSPACE);
+
+            // Add another item to draft
+            var v2Item = PodamFactoryUtils.manufacturePojoList(factory, DatasetItem.class).stream()
+                    .limit(1)
+                    .map(item -> item.toBuilder().id(null).build())
+                    .toList();
+            var batch2 = DatasetItemBatch.builder()
+                    .datasetId(datasetId)
+                    .items(v2Item)
+                    .build();
+            datasetResourceClient.createDatasetItems(batch2, TEST_WORKSPACE, API_KEY);
+
+            // Commit v2 (which will contain all 3 items)
+            datasetResourceClient.commitVersion(
+                    datasetId,
+                    DatasetVersionCreate.builder().tags(List.of("v2")).build(),
+                    API_KEY,
+                    TEST_WORKSPACE);
+
+            // Get v2 items to get their draft IDs
+            var draftItemsV2 = datasetResourceClient.getDatasetItems(datasetId, 1, 10, "v2", API_KEY, TEST_WORKSPACE);
+            var allDraftItemIds = draftItemsV2.content().stream()
+                    .map(DatasetItem::draftItemId)
+                    .toList();
+
+            // When - Get items specifying v1
+            var v1ItemsPage = datasetResourceClient.getDatasetItems(datasetId, 1, 10, "v1", API_KEY, TEST_WORKSPACE);
+
+            // Then - Should return only v1 items
+            assertThat(v1ItemsPage.content()).hasSize(2);
+            var v1ReturnedDraftIds = v1ItemsPage.content().stream()
+                    .map(DatasetItem::draftItemId)
+                    .toList();
+            assertThat(v1ReturnedDraftIds).containsExactlyInAnyOrder(v1DraftItemIds.toArray(new UUID[0]));
+
+            // When - Get items without specifying version (should default to latest = v2)
+            var latestItemsPage = datasetResourceClient.getDatasetItems(datasetId, 1, 10, null, API_KEY,
+                    TEST_WORKSPACE);
+
+            // Then - Should return all 3 items from v2
+            assertThat(latestItemsPage.content()).hasSize(3);
+            var latestReturnedDraftIds = latestItemsPage.content().stream()
+                    .map(DatasetItem::draftItemId)
+                    .toList();
+            assertThat(latestReturnedDraftIds).containsExactlyInAnyOrder(allDraftItemIds.toArray(new UUID[0]));
         }
     }
 }

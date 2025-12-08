@@ -742,7 +742,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                     tfs.metadata
                 )) AS experiment_items_array
             FROM experiment_items_final AS ei
-            LEFT JOIN dataset_items_final AS di ON di.id = ei.dataset_item_id
+            INNER JOIN dataset_items_final AS di ON di.id = ei.dataset_item_id
             LEFT JOIN (
                 SELECT
                     t.id,

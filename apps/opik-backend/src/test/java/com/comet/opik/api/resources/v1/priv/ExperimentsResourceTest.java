@@ -5876,4 +5876,106 @@ class ExperimentsResourceTest {
             assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NOT_FOUND);
         }
     }
+
+    @Test
+    @DisplayName("Experiment linked to version should only show dataset items from that version, not draft items added later")
+    void experimentLinkedToVersionShouldOnlyShowVersionItems() {
+        // Step 1: Create dataset
+        var dataset = podamFactory.manufacturePojo(Dataset.class);
+        UUID datasetId = datasetResourceClient.createDataset(dataset, API_KEY, TEST_WORKSPACE);
+
+        // Step 2: Create 1 dataset item (will be part of the version)
+        var versionItem = podamFactory.manufacturePojo(DatasetItem.class).toBuilder()
+                .id(null)
+                .build();
+        var batch1 = DatasetItemBatch.builder()
+                .datasetId(datasetId)
+                .items(List.of(versionItem))
+                .build();
+        datasetResourceClient.createDatasetItems(batch1, TEST_WORKSPACE, API_KEY);
+
+        // Get the created item to know its ID
+        var itemsBeforeVersion = datasetResourceClient.getDatasetItems(datasetId, 1, 10, null, API_KEY, TEST_WORKSPACE);
+        assertThat(itemsBeforeVersion.content()).hasSize(1);
+        var versionItemId = itemsBeforeVersion.content().getFirst().id();
+
+        // Step 3: Commit a version (snapshot of the 1 item)
+        var versionCreate = com.comet.opik.api.DatasetVersionCreate.builder()
+                .changeDescription("Version with 1 item")
+                .build();
+        var version = datasetResourceClient.commitVersion(datasetId, versionCreate, API_KEY, TEST_WORKSPACE);
+        String versionHash = version.versionHash();
+
+        // Step 4: Add 1 more item to the draft (after version was created)
+        var draftItem = podamFactory.manufacturePojo(DatasetItem.class).toBuilder()
+                .id(null)
+                .build();
+        var batch2 = DatasetItemBatch.builder()
+                .datasetId(datasetId)
+                .items(List.of(draftItem))
+                .build();
+        datasetResourceClient.createDatasetItems(batch2, TEST_WORKSPACE, API_KEY);
+
+        // Verify draft now has 2 items
+        var itemsAfterDraftAdd = datasetResourceClient.getDatasetItems(datasetId, 1, 10, null, API_KEY, TEST_WORKSPACE);
+        assertThat(itemsAfterDraftAdd.content()).hasSize(2);
+        var draftItemId = itemsAfterDraftAdd.content().stream()
+                .filter(item -> !item.id().equals(versionItemId))
+                .findFirst()
+                .orElseThrow()
+                .id();
+
+        // Step 5: Create experiment linked to the version
+        var experiment = experimentResourceClient.createPartialExperiment()
+                .datasetName(dataset.name())
+                .datasetVersionHash(versionHash)
+                .build();
+        var experimentId = createAndAssert(experiment, API_KEY, TEST_WORKSPACE);
+
+        // Verify experiment is linked to the version
+        var createdExperiment = getExperiment(experimentId, TEST_WORKSPACE, API_KEY);
+        assertThat(createdExperiment.datasetVersionId()).isEqualTo(version.id());
+
+        // Step 6: Create experiment items for BOTH dataset items (simulating SDK behavior)
+        // The SDK doesn't know about versions, it just creates experiment items for all items it processes
+        String projectName = RandomStringUtils.randomAlphanumeric(10);
+        var trace1 = podamFactory.manufacturePojo(Trace.class).toBuilder()
+                .projectName(projectName)
+                .build();
+        var trace2 = podamFactory.manufacturePojo(Trace.class).toBuilder()
+                .projectName(projectName)
+                .build();
+        traceResourceClient.createTrace(trace1, API_KEY, TEST_WORKSPACE);
+        traceResourceClient.createTrace(trace2, API_KEY, TEST_WORKSPACE);
+
+        var experimentItemForVersionItem = podamFactory.manufacturePojo(ExperimentItem.class).toBuilder()
+                .experimentId(experimentId)
+                .datasetItemId(versionItemId)
+                .traceId(trace1.id())
+                .build();
+        var experimentItemForDraftItem = podamFactory.manufacturePojo(ExperimentItem.class).toBuilder()
+                .experimentId(experimentId)
+                .datasetItemId(draftItemId)
+                .traceId(trace2.id())
+                .build();
+
+        experimentResourceClient.createExperimentItem(
+                Set.of(experimentItemForVersionItem, experimentItemForDraftItem),
+                API_KEY, TEST_WORKSPACE);
+
+        // Step 7: Query dataset items with experiment items
+        // Should only return the item from the version, NOT the draft item
+        var datasetItemsWithExperimentItems = datasetResourceClient.getDatasetItemsWithExperimentItems(
+                datasetId, List.of(experimentId), API_KEY, TEST_WORKSPACE);
+
+        // ASSERTION: Should only return 1 item (the one from the version)
+        // The draft item should be filtered out because it's not part of the version
+        assertThat(datasetItemsWithExperimentItems.content()).hasSize(1);
+        assertThat(datasetItemsWithExperimentItems.content().getFirst().id()).isEqualTo(versionItemId);
+
+        // Verify the experiment item is properly associated
+        assertThat(datasetItemsWithExperimentItems.content().getFirst().experimentItems()).hasSize(1);
+        assertThat(datasetItemsWithExperimentItems.content().getFirst().experimentItems().getFirst().datasetItemId())
+                .isEqualTo(versionItemId);
+    }
 }

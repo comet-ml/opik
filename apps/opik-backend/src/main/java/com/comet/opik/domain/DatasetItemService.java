@@ -378,13 +378,14 @@ class DatasetItemServiceImpl implements DatasetItemService {
         // Verify dataset visibility
         datasetService.findById(datasetItemSearchCriteria.datasetId());
 
-        if (StringUtils.isNotBlank(datasetItemSearchCriteria.versionHashOrTag())) {
-            // Fetch versioned (immutable) items from dataset_item_versions table
-            log.info("Finding versioned dataset items by '{}', page '{}', size '{}'", datasetItemSearchCriteria, page,
-                    size);
+        return Mono.deferContextual(ctx -> {
+            String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
 
-            return Mono.deferContextual(ctx -> {
-                String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
+            if (StringUtils.isNotBlank(datasetItemSearchCriteria.versionHashOrTag())) {
+                // Case 1: Version param is explicitly specified
+                log.info("Finding dataset items by version '{}' for dataset '{}', page '{}', size '{}'",
+                        datasetItemSearchCriteria.versionHashOrTag(), datasetItemSearchCriteria.datasetId(), page,
+                        size);
 
                 // Resolve version hash/tag to version ID
                 UUID versionId = versionService.resolveVersionId(workspaceId,
@@ -396,16 +397,39 @@ class DatasetItemServiceImpl implements DatasetItemService {
                 // For versioned items, hasDraft is always false (concept doesn't apply to immutable versions)
                 return versionDao.getItems(datasetItemSearchCriteria, page, size, versionId)
                         .defaultIfEmpty(DatasetItemPage.empty(page, sortingFactory.getSortableFields()));
-            });
-        } else {
-            // Fetch draft (current) items from dataset_items table
-            log.info("Finding draft dataset items by '{}', page '{}', size '{}'",
-                    datasetItemSearchCriteria, page, size);
+            } else {
+                // Case 2 & 3: Version param not specified - check if latest version exists
+                return Mono.fromCallable(() -> template.inTransaction(READ_ONLY, handle -> {
+                    var dao = handle.attach(DatasetVersionDAO.class);
+                    return dao.findByTag(datasetItemSearchCriteria.datasetId(), DatasetVersionService.LATEST_TAG,
+                            workspaceId);
+                })).subscribeOn(Schedulers.boundedElastic())
+                        .flatMap(latestVersionOpt -> {
+                            if (latestVersionOpt.isEmpty()) {
+                                // Case 3: No version exists - fetch draft items
+                                log.info(
+                                        "No version exists for dataset '{}', fetching draft items, page '{}', size '{}'",
+                                        datasetItemSearchCriteria.datasetId(), page, size);
 
-            return dao.getItems(datasetItemSearchCriteria, page, size)
-                    .flatMap(itemPage -> computeHasDraft(datasetItemSearchCriteria.datasetId(), itemPage))
-                    .defaultIfEmpty(DatasetItemPage.empty(page, sortingFactory.getSortableFields()));
-        }
+                                return dao.getItems(datasetItemSearchCriteria, page, size)
+                                        .flatMap(itemPage -> computeHasDraft(datasetItemSearchCriteria.datasetId(),
+                                                itemPage))
+                                        .defaultIfEmpty(
+                                                DatasetItemPage.empty(page, sortingFactory.getSortableFields()));
+                            } else {
+                                // Case 2: Latest version exists - fetch items from that version
+                                UUID latestVersionId = latestVersionOpt.get().id();
+                                log.info(
+                                        "Latest version '{}' exists for dataset '{}', fetching version items, page '{}', size '{}'",
+                                        latestVersionId, datasetItemSearchCriteria.datasetId(), page, size);
+
+                                return versionDao.getItems(datasetItemSearchCriteria, page, size, latestVersionId)
+                                        .defaultIfEmpty(
+                                                DatasetItemPage.empty(page, sortingFactory.getSortableFields()));
+                            }
+                        });
+            }
+        });
     }
 
     private Mono<DatasetItemPage> computeHasDraft(UUID datasetId, DatasetItemPage itemPage) {
