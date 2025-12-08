@@ -8,6 +8,9 @@ logging:
   #  Description: Individual logger configuration
   loggers:
     com.comet: ${OPIK_LOG_LEVEL:-INFO}
+    # Default: INFO
+    # Description: Set to DEBUG to see actual requests/responses sent to LLM providers (requires logRequests/logResponses=true)
+    dev.langchain4j: ${LLM_PROXY_REQUEST_LOG_LEVEL:-INFO}
 
 # Description: state database configuration
 # https://www.dropwizard.io/en/stable/manual/configuration.html#database
@@ -433,12 +436,12 @@ llmProviderClient:
   # Default: 60s
   # Description: Write timeout for LLM providers
   writeTimeout: ${LLM_PROVIDER_CLIENT_WRITE_TIMEOUT:-60s}
-  # Default: false
+  # Default: true
   # Description: Whether or not to log requests
-  logRequests: ${LLM_PROVIDER_CLIENT_LOG_REQUESTS:-false}
-  # Default: false
+  logRequests: ${LLM_PROVIDER_CLIENT_LOG_REQUESTS:-true}
+  # Default: true
   # Description: Whether or not to log responses
-  logResponses: ${LLM_PROVIDER_CLIENT_LOG_RESPONSES:-false}
+  logResponses: ${LLM_PROVIDER_CLIENT_LOG_RESPONSES:-true}
   # Configuration for OpenAI client
   openAiClient:
     # Default:
