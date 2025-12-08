@@ -55,21 +55,21 @@ public interface AutomationRuleEvaluatorDAO extends AutomationRuleDAO {
             LEFT JOIN automation_rule_projects arp
                 ON rule.id = arp.rule_id AND rule.workspace_id = arp.workspace_id
             WHERE rule.id IN (
-                SELECT DISTINCT r.id
-                FROM automation_rules r
-                JOIN automation_rule_evaluators e ON r.id = e.id
+                SELECT DISTINCT rule.id
+                FROM automation_rules rule
+                JOIN automation_rule_evaluators evaluator ON rule.id = evaluator.id
                 <if(projectIds)>
-                JOIN automation_rule_projects p ON r.id = p.rule_id
-                    AND r.workspace_id = p.workspace_id
+                JOIN automation_rule_projects p ON rule.id = p.rule_id
+                    AND rule.workspace_id = p.workspace_id
                     AND p.project_id IN (<projectIds>)
                 </if>
-                WHERE r.workspace_id = :workspaceId AND r.action = :action
-                <if(type)> AND e.type = :type <endif>
-                <if(ids)> AND r.id IN (<ids>) <endif>
-                <if(id)> AND r.id like concat('%', :id, '%') <endif>
-                <if(name)> AND r.name like concat('%', :name, '%') <endif>
+                WHERE rule.workspace_id = :workspaceId AND rule.action = :action
+                <if(type)> AND evaluator.type = :type <endif>
+                <if(ids)> AND rule.id IN (<ids>) <endif>
+                <if(id)> AND rule.id like concat('%', :id, '%') <endif>
+                <if(name)> AND rule.name like concat('%', :name, '%') <endif>
                 <if(filters)> AND <filters> <endif>
-                <if(sort_fields)> ORDER BY <sort_fields> <else> ORDER BY r.id DESC <endif>
+                <if(sort_fields)> ORDER BY <sort_fields> <else> ORDER BY rule.id DESC <endif>
                 <if(limit)> LIMIT :limit <endif>
                 <if(offset)> OFFSET :offset <endif>
             )
