@@ -62,7 +62,7 @@ public interface AutomationRuleEvaluatorDAO extends AutomationRuleDAO {
                 FROM automation_rule_projects
                 WHERE workspace_id = :workspaceId AND project_id IN (<projectIds>)
             )
-            </if>
+            <endif>
             <if(type)> AND evaluator.type = :type <endif>
             <if(ids)> AND rule.id IN (<ids>) <endif>
             <if(id)> AND rule.id like concat('%', :id, '%') <endif>
