@@ -115,6 +115,7 @@ public interface LlmProviderLangChainMapper {
      * Convert OpikContent to public API Content.
      */
     private Content convertOpikContent(OpikContent opikContent) {
+        Logger log = LoggerFactory.getLogger(LlmProviderLangChainMapper.class);
         return switch (opikContent.type()) {
             case TEXT -> TextContent.from(opikContent.text());
             case IMAGE_URL -> {
@@ -125,15 +126,23 @@ public interface LlmProviderLangChainMapper {
             }
             case VIDEO_URL -> {
                 if (opikContent.videoUrl() != null) {
+                    String videoUrl = opikContent.videoUrl().url();
                     var videoBuilder = Video.builder()
-                            .url(URI.create(opikContent.videoUrl().url()));
-                    // Use explicit mimeType if provided, otherwise auto-detect from URL
+                            .url(URI.create(videoUrl));
+
+                    // Use explicit mimeType if provided
                     String mimeType = opikContent.videoUrl().mimeType();
-                    if (mimeType == null) {
-                        mimeType = detectMimeTypeFromUrl(opikContent.videoUrl().url());
+
+                    // Only detect MIME type if not provided AND URL has no file extension
+                    // (LangChain4j can detect MIME type from extensions automatically)
+                    if (mimeType == null && !hasVideoFileExtension(videoUrl)) {
+                        mimeType = detectMimeTypeFromHttpHead(videoUrl);
                     }
+
                     if (mimeType != null) {
                         videoBuilder.mimeType(mimeType);
+                        log.debug("Set mimeType '{}' for video URL: '{}'", mimeType,
+                                videoUrl.substring(0, Math.min(60, videoUrl.length())));
                     }
                     yield new VideoContent(videoBuilder.build());
                 }
@@ -144,73 +153,40 @@ public interface LlmProviderLangChainMapper {
         };
     }
 
-    // Common video file extensions mapped to MIME types
-    java.util.Map<String, String> VIDEO_MIME_TYPES = java.util.Map.ofEntries(
-            java.util.Map.entry("mp4", "video/mp4"),
-            java.util.Map.entry("webm", "video/webm"),
-            java.util.Map.entry("ogg", "video/ogg"),
-            java.util.Map.entry("ogv", "video/ogg"),
-            java.util.Map.entry("avi", "video/x-msvideo"),
-            java.util.Map.entry("mov", "video/quicktime"),
-            java.util.Map.entry("wmv", "video/x-ms-wmv"),
-            java.util.Map.entry("flv", "video/x-flv"),
-            java.util.Map.entry("mkv", "video/x-matroska"),
-            java.util.Map.entry("m4v", "video/x-m4v"),
-            java.util.Map.entry("3gp", "video/3gpp"),
-            java.util.Map.entry("3g2", "video/3gpp2"));
+    // Common video file extensions that LangChain4j can detect automatically
+    java.util.Set<String> VIDEO_EXTENSIONS = java.util.Set.of(
+            "mp4", "webm", "ogg", "ogv", "avi", "mov", "wmv", "flv", "mkv", "m4v", "3gp", "3g2");
 
     /**
-     * Detect MIME type from URL. First tries to detect from file extension,
-     * and only makes an HTTP HEAD request if the extension is not recognized.
-     *
-     * @param url the URL to check
-     * @return the MIME type, or null if detection fails
+     * Check if the URL has a recognizable video file extension.
+     * If it does, LangChain4j will detect the MIME type automatically.
      */
-    private String detectMimeTypeFromUrl(String url) {
-        Logger log = LoggerFactory.getLogger(LlmProviderLangChainMapper.class);
-
-        // First, try to detect from file extension (fast, no network call)
-        String mimeFromExtension = detectMimeTypeFromExtension(url);
-        if (mimeFromExtension != null) {
-            log.debug("Detected MIME type '{}' from file extension: '{}'", mimeFromExtension,
-                    url.substring(0, Math.min(50, url.length())));
-            return mimeFromExtension;
-        }
-
-        // No recognizable extension, fall back to HTTP HEAD request
-        return detectMimeTypeFromHttpHead(url);
-    }
-
-    /**
-     * Try to detect MIME type from the file extension in the URL path.
-     */
-    private String detectMimeTypeFromExtension(String url) {
+    private boolean hasVideoFileExtension(String url) {
         try {
             var uri = URI.create(url);
             String path = uri.getPath();
             if (path == null || path.isBlank()) {
-                return null;
+                return false;
             }
 
-            // Get the last part of the path (filename)
             int lastSlash = path.lastIndexOf('/');
             String filename = lastSlash >= 0 ? path.substring(lastSlash + 1) : path;
 
-            // Extract extension
             int lastDot = filename.lastIndexOf('.');
             if (lastDot < 0 || lastDot == filename.length() - 1) {
-                return null;
+                return false;
             }
 
             String extension = filename.substring(lastDot + 1).toLowerCase();
-            return VIDEO_MIME_TYPES.get(extension);
+            return VIDEO_EXTENSIONS.contains(extension);
         } catch (Exception e) {
-            return null;
+            return false;
         }
     }
 
     /**
      * Detect MIME type by making an HTTP HEAD request to read the Content-Type header.
+     * Only called for URLs without file extensions.
      */
     private String detectMimeTypeFromHttpHead(String url) {
         Logger log = LoggerFactory.getLogger(LlmProviderLangChainMapper.class);
@@ -234,7 +210,6 @@ public interface LlmProviderLangChainMapper {
 
             if (contentType != null && !contentType.isBlank()) {
                 // Content-Type may include charset, e.g., "video/mp4; charset=utf-8"
-                // Extract just the MIME type part
                 int semicolonIndex = contentType.indexOf(';');
                 if (semicolonIndex > 0) {
                     contentType = contentType.substring(0, semicolonIndex).trim();
