@@ -227,10 +227,14 @@ const AddPlaygroundMetricDialog: React.FC<AddPlaygroundMetricDialogProps> = ({
     return metrics.find((m) => m.name === selectedMetricName);
   }, [metrics, selectedMetricName]);
 
-  // Convert metrics to string array for Autocomplete
+  // Convert metrics to string array for Autocomplete, filtered by search
   const metricNames = useMemo(() => {
-    return metrics.map((m) => m.name);
-  }, [metrics]);
+    const allNames = metrics.map((m) => m.name);
+    if (!selectedMetricName) return allNames;
+    return allNames.filter((name) =>
+      name.toLowerCase().includes(selectedMetricName.toLowerCase()),
+    );
+  }, [metrics, selectedMetricName]);
 
   // Create dynamic resolver when metric changes
   const formSchema = useMemo(
