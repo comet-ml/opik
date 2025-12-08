@@ -65,14 +65,30 @@ def list_metrics() -> schemas.MetricsListResponse:
 @evaluation_router.post(
     "/trace",
     response_model=schemas.EvaluationAcceptedResponse,
-    status_code=fastapi.status.HTTP_200_OK,
+    status_code=fastapi.status.HTTP_202_ACCEPTED,
 )
 def evaluate_trace(
     request: schemas.EvaluationRequest,
+    background_tasks: fastapi.BackgroundTasks,
 ) -> schemas.EvaluationAcceptedResponse:
-    """Evaluate a trace and log feedback scores."""
+    """Evaluate a trace and log feedback scores.
+
+    Returns immediately with 202 Accepted. Evaluation runs in the background.
+    """
     service = _get_service()
-    return service.evaluate_trace(request.trace_id, request)
+
+    # Schedule evaluation in background so the endpoint returns immediately
+    # This prevents blocking workers and allows healthcheck to respond
+    background_tasks.add_task(
+        service.evaluate_trace,
+        request.trace_id,
+        request,
+    )
+
+    return schemas.EvaluationAcceptedResponse(
+        trace_id=request.trace_id,
+        metrics_count=len(request.metrics),
+    )
 
 
 @healthcheck_router.get("/healthcheck")

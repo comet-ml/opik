@@ -54,30 +54,32 @@ class EvalService:
         self,
         trace_id: str,
         request: schemas.EvaluationRequest,
-    ) -> schemas.EvaluationAcceptedResponse:
-        """Evaluate a trace with the specified metrics."""
+    ) -> None:
+        """Evaluate a trace with the specified metrics (background task).
+
+        This method is designed to be called from a FastAPI BackgroundTask.
+        It does not return a response - evaluation results are logged to the trace.
+        """
         LOGGER.info(
             "Starting evaluation for trace %s with %d metrics",
             trace_id,
             len(request.metrics),
         )
 
-        opik_client = opik.api_objects.opik_client.get_client_cached()
-        trace = self._fetch_trace(opik_client, trace_id)
+        try:
+            opik_client = opik.api_objects.opik_client.get_client_cached()
+            trace = self._fetch_trace(opik_client, trace_id)
 
-        self._run_metrics_and_log_scores(
-            opik_client=opik_client,
-            trace_id=trace_id,
-            trace=trace,
-            metric_configs=request.metrics,
-        )
+            self._run_metrics_and_log_scores(
+                opik_client=opik_client,
+                trace_id=trace_id,
+                trace=trace,
+                metric_configs=request.metrics,
+            )
 
-        LOGGER.info("Completed evaluation for trace %s", trace_id)
-
-        return schemas.EvaluationAcceptedResponse(
-            trace_id=trace_id,
-            metrics_count=len(request.metrics),
-        )
+            LOGGER.info("Completed evaluation for trace %s", trace_id)
+        except Exception as e:
+            LOGGER.error("Background evaluation failed for trace %s: %s", trace_id, e)
 
     def _fetch_trace(
         self, opik_client: opik.Opik, trace_id: str
