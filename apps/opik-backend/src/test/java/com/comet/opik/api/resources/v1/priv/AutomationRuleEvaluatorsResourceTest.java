@@ -617,6 +617,8 @@ class AutomationRuleEvaluatorsResourceTest {
 
             var trace = factory.manufacturePojo(Trace.class).toBuilder()
                     .projectId(projectId)
+                    .projectName(projectName) // Backend uses projectName, not projectId!
+                    .threadId(null) // Must be null for trace-level evaluation
                     .input(OBJECT_MAPPER.readTree(INPUT))
                     .output(OBJECT_MAPPER.readTree(OUTPUT))
                     .build();
@@ -1846,7 +1848,8 @@ class AutomationRuleEvaluatorsResourceTest {
             // Then
             assertThat(page.sortableBy()).isNotNull();
             assertThat(page.sortableBy()).contains(
-                    "id", "name", "type", "enabled", "sampling_rate", "project_id", "project_name",
+                    "id", "name", "type", "enabled", "sampling_rate",
+                    // Note: project_id and project_name removed - rules can have multiple projects now
                     "created_at", "last_updated_at", "created_by", "last_updated_by");
         }
     }
@@ -1964,6 +1967,7 @@ class AutomationRuleEvaluatorsResourceTest {
                             "Filter by last_updated_at greater than or equal"));
         }
 
+        @org.junit.jupiter.api.Disabled("Project name filtering no longer supported - rules can have multiple projects")
         @ParameterizedTest(name = "Filter by project name with operator: {0}")
         @MethodSource("projectNameFilteringTestCases")
         @DisplayName("Filter automation rules by project name with various operators")
@@ -2100,7 +2104,7 @@ class AutomationRuleEvaluatorsResourceTest {
                     .filter(e -> e.getId().equals(id1))
                     .toList();
             assertThat(matchingEvaluators).hasSize(1);
-            assertThat(matchingEvaluators.get(0).getProjectIds()).isEqualTo(projectId1);
+            assertThat(matchingEvaluators.get(0).getProjectIds()).contains(projectId1); // projectIds is a Set, not a single value
         }
 
         @Test
@@ -2137,6 +2141,7 @@ class AutomationRuleEvaluatorsResourceTest {
     @DisplayName("Combined Sorting and Filtering Functionality")
     class CombinedSortingAndFilteringFunctionality {
 
+        @org.junit.jupiter.api.Disabled("Project name filtering no longer supported - rules can have multiple projects")
         @Test
         @DisplayName("Filter by project name and sort by name ascending")
         void filterAndSort() throws JsonProcessingException {
@@ -2461,16 +2466,16 @@ class AutomationRuleEvaluatorsResourceTest {
     @DisplayName("Multi-Project Automation Rules:")
     class MultiProjectAutomationRules {
 
-        private final String projectId1 = UUID.randomUUID().toString();
-        private final String projectId2 = UUID.randomUUID().toString();
-        private final String projectId3 = UUID.randomUUID().toString();
+        private UUID projectId1;
+        private UUID projectId2;
+        private UUID projectId3;
 
         @BeforeAll
         void setUp() {
-            // Create test projects
-            projectResourceClient.createProject(projectId1, WORKSPACE_NAME, API_KEY);
-            projectResourceClient.createProject(projectId2, WORKSPACE_NAME, API_KEY);
-            projectResourceClient.createProject(projectId3, WORKSPACE_NAME, API_KEY);
+            // Create test projects and capture their IDs
+            projectId1 = projectResourceClient.createProject(UUID.randomUUID().toString(), API_KEY, WORKSPACE_NAME);
+            projectId2 = projectResourceClient.createProject(UUID.randomUUID().toString(), API_KEY, WORKSPACE_NAME);
+            projectId3 = projectResourceClient.createProject(UUID.randomUUID().toString(), API_KEY, WORKSPACE_NAME);
         }
 
         @Test
@@ -2485,7 +2490,7 @@ class AutomationRuleEvaluatorsResourceTest {
             AutomationRuleEvaluatorLlmAsJudge evaluator = factory
                     .manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class)
                     .toBuilder()
-                    .projectIds(Set.of(UUID.fromString(projectId1), UUID.fromString(projectId2)))
+                    .projectIds(Set.of(projectId1, projectId2)) // Already UUIDs, no conversion needed
                     .build();
 
             // When
@@ -2498,7 +2503,7 @@ class AutomationRuleEvaluatorsResourceTest {
                 var actualEvaluator = actualResponse.readEntity(AutomationRuleEvaluator.class);
                 assertThat(actualEvaluator.getProjectIds()).hasSize(2);
                 assertThat(actualEvaluator.getProjectIds())
-                        .containsExactlyInAnyOrder(UUID.fromString(projectId1), UUID.fromString(projectId2));
+                        .containsExactlyInAnyOrder(projectId1, projectId2); // Already UUIDs
             }
         }
 
