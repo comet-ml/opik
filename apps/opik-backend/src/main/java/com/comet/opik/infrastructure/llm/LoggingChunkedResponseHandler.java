@@ -5,12 +5,9 @@ import dev.langchain4j.data.message.AiMessage;
 import dev.langchain4j.model.StreamingResponseHandler;
 import dev.langchain4j.model.chat.response.ChatResponse;
 import dev.langchain4j.model.chat.response.StreamingChatResponseHandler;
-import dev.langchain4j.model.openai.internal.chat.ChatCompletionResponse;
 import dev.langchain4j.model.output.Response;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
-
-import java.util.function.Consumer;
 
 /**
  * A wrapper around ChunkedResponseHandler that logs the complete assembled response
@@ -27,13 +24,10 @@ public class LoggingChunkedResponseHandler
     private final StreamingResponseLogger logger;
 
     public LoggingChunkedResponseHandler(
-            @NonNull Consumer<ChatCompletionResponse> handleMessage,
-            @NonNull Runnable handleClose,
-            @NonNull Consumer<Throwable> handleError,
-            @NonNull String model,
-            @NonNull String requestSummary) {
-        this.delegate = new ChunkedResponseHandler(handleMessage, handleClose, handleError, model);
-        this.logger = new StreamingResponseLogger(requestSummary, model);
+            @NonNull ChunkedResponseHandler delegate,
+            @NonNull StreamingResponseLogger logger) {
+        this.delegate = delegate;
+        this.logger = logger;
     }
 
     @Override

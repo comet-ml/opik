@@ -41,7 +41,7 @@ public class OpenAiStreamingHelper {
                 .onPartialResponse(response -> {
                     // Extract and accumulate content for logging
                     if (response.choices() != null && !response.choices().isEmpty()) {
-                        var delta = response.choices().get(0).delta();
+                        var delta = response.choices().getFirst().delta();
                         if (delta != null && delta.content() != null) {
                             logger.appendContent(delta.content());
                         }
@@ -52,9 +52,7 @@ public class OpenAiStreamingHelper {
                     }
                     handleMessage.accept(response);
                 })
-                .onComplete(() -> {
-                    handleClose.run();
-                })
+                .onComplete(handleClose::run)
                 .onError(throwable -> {
                     logger.logError(throwable);
                     handleError.accept(throwable);
