@@ -617,34 +617,14 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
                               >
                                 LLM-as-judge
                               </ToggleGroupItem>
-                              {(isCodeMetricEnabled && !isSpanScope) ||
-                              (isSpanScope && isSpanPythonCodeEnabled) ? (
+                              {((isCodeMetricEnabled && !isSpanScope) ||
+                                (isSpanScope && isSpanPythonCodeEnabled)) && (
                                 <ToggleGroupItem
                                   value={UI_EVALUATORS_RULE_TYPE.python_code}
                                   aria-label="Code metric"
                                 >
                                   Code metric
                                 </ToggleGroupItem>
-                              ) : (
-                                <TooltipWrapper
-                                  content={
-                                    isSpanScope
-                                      ? "Python code metrics are not enabled for span scope"
-                                      : "This feature is not available for this environment"
-                                  }
-                                >
-                                  <span>
-                                    <ToggleGroupItem
-                                      value={
-                                        UI_EVALUATORS_RULE_TYPE.python_code
-                                      }
-                                      aria-label="Code metric"
-                                      disabled
-                                    >
-                                      Code metric
-                                    </ToggleGroupItem>
-                                  </span>
-                                </TooltipWrapper>
                               )}
                             </ToggleGroup>
                           </div>
