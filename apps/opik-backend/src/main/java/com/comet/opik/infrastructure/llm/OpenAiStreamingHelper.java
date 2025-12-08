@@ -52,7 +52,7 @@ public class OpenAiStreamingHelper {
                     }
                     handleMessage.accept(response);
                 })
-                .onComplete(handleClose::run)
+                .onComplete(handleClose)
                 .onError(throwable -> {
                     logger.logError(throwable);
                     handleError.accept(throwable);
