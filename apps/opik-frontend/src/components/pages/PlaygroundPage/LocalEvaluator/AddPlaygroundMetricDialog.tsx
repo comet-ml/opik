@@ -1,12 +1,14 @@
-import React, { useCallback, useEffect, useMemo } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import get from "lodash/get";
+import toLower from "lodash/toLower";
 import { v4 as uuidv4 } from "uuid";
-import { Info } from "lucide-react";
+import { Check, Info } from "lucide-react";
 
 import { cn } from "@/lib/utils";
+import SearchInput from "@/components/shared/SearchInput/SearchInput";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -26,13 +28,6 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Description } from "@/components/ui/description";
 import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
@@ -140,6 +135,7 @@ const formatDocstring = (docstring: string): string => {
     .trim();
 };
 
+
 const ParamInput: React.FC<{
   param: LocalMetricParam;
   value: unknown;
@@ -231,6 +227,24 @@ const AddPlaygroundMetricDialog: React.FC<AddPlaygroundMetricDialogProps> = ({
   const selectedMetric = useMemo(() => {
     return metrics.find((m) => m.name === selectedMetricName);
   }, [metrics, selectedMetricName]);
+
+  // Search state for metric filtering
+  const [metricSearch, setMetricSearch] = useState("");
+
+  // Filter metrics based on search
+  const filteredMetrics = useMemo(() => {
+    if (!metricSearch) return metrics;
+    return metrics.filter((m) =>
+      toLower(m.name).includes(toLower(metricSearch)),
+    );
+  }, [metrics, metricSearch]);
+
+  // Reset search when dialog opens
+  useEffect(() => {
+    if (open) {
+      setMetricSearch("");
+    }
+  }, [open]);
 
   // Create dynamic resolver when metric changes
   const formSchema = useMemo(
@@ -345,42 +359,55 @@ const AddPlaygroundMetricDialog: React.FC<AddPlaygroundMetricDialogProps> = ({
               className="flex flex-col gap-4"
               onSubmit={form.handleSubmit(handleSubmit)}
             >
-              {/* Metric Selection */}
+              {/* Metric Selection - Inline searchable list */}
               <FormField
                 control={form.control}
                 name="metric_name"
-                render={({ field, formState }) => {
-                  const validationErrors = get(formState.errors, [
-                    "metric_name",
-                  ]);
+                render={({ field }) => {
                   return (
-                    <FormItem>
+                    <FormItem className="flex flex-col">
                       <Label>Metric</Label>
                       <FormControl>
-                        <Select
-                          value={field.value}
-                          onValueChange={field.onChange}
-                          disabled={isEdit}
-                        >
-                          <SelectTrigger
-                            className={cn({
-                              "border-destructive": Boolean(
-                                validationErrors?.message,
-                              ),
-                            })}
-                          >
-                            <SelectValue placeholder="Select a metric" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {metrics.map((m) => (
-                              <SelectItem key={m.name} value={m.name}>
-                                <div className="flex flex-col">
-                                  <span>{m.name}</span>
+                        <div className="flex flex-col rounded-md border">
+                          <SearchInput
+                            searchText={metricSearch}
+                            setSearchText={setMetricSearch}
+                            placeholder="Search metrics..."
+                            variant="ghost"
+                            disabled={isEdit}
+                          />
+                          <Separator />
+                          <div className="max-h-[200px] overflow-y-auto p-1">
+                            {filteredMetrics.length === 0 ? (
+                              <div className="py-4 text-center text-sm text-muted-foreground">
+                                No metrics found
+                              </div>
+                            ) : (
+                              filteredMetrics.map((metric) => (
+                                <div
+                                  key={metric.name}
+                                  className={cn(
+                                    "flex cursor-pointer items-center gap-2 rounded-md px-3 py-2 text-sm hover:bg-primary-foreground",
+                                    field.value === metric.name && "bg-primary-foreground",
+                                    isEdit && "pointer-events-none opacity-50",
+                                  )}
+                                  onClick={() => {
+                                    if (!isEdit) {
+                                      field.onChange(metric.name);
+                                    }
+                                  }}
+                                >
+                                  <div className="w-4">
+                                    {field.value === metric.name && (
+                                      <Check className="size-3.5" strokeWidth="3" />
+                                    )}
+                                  </div>
+                                  <span>{metric.name}</span>
                                 </div>
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
+                              ))
+                            )}
+                          </div>
+                        </div>
                       </FormControl>
                       <FormMessage />
                     </FormItem>

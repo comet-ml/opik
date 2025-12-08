@@ -7,23 +7,23 @@ import fastapi
 import fastapi.responses
 import pydantic
 
+from .. import eval_service
 from .. import exceptions
 from .. import schemas
-from ..services import eval_service as eval_service_module
 
 LOGGER = logging.getLogger(__name__)
 
 evaluation_router = fastapi.APIRouter(prefix="/api/v1/evaluation", tags=["evaluation"])
 healthcheck_router = fastapi.APIRouter(tags=["healthcheck"])
 
-_service_instance: Optional[eval_service_module.EvalService] = None
+_service_instance: Optional[eval_service.EvalService] = None
 
 
-def _get_service() -> eval_service_module.EvalService:
+def _get_service() -> eval_service.EvalService:
     """Get or create the eval service instance."""
     global _service_instance
     if _service_instance is None:
-        _service_instance = eval_service_module.create_service()
+        _service_instance = eval_service.create_service()
     return _service_instance
 
 
@@ -65,7 +65,7 @@ def list_metrics() -> schemas.MetricsListResponse:
 @evaluation_router.post(
     "/trace",
     response_model=schemas.EvaluationAcceptedResponse,
-    status_code=fastapi.status.HTTP_202_ACCEPTED,
+    status_code=fastapi.status.HTTP_200_OK,
 )
 def evaluate_trace(
     request: schemas.EvaluationRequest,
