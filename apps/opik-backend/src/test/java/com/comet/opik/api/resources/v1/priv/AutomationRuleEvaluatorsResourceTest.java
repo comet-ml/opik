@@ -1430,6 +1430,7 @@ class AutomationRuleEvaluatorsResourceTest {
             // Send a trace
             var trace = factory.manufacturePojo(Trace.class).toBuilder()
                     .projectId(projectId)
+                    .projectName(projectName) // Backend uses projectName, not projectId!
                     .threadId(null)
                     .build();
             traceResourceClient.createTrace(trace, API_KEY, WORKSPACE_NAME);
