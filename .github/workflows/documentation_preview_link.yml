@@ -66,6 +66,10 @@ jobs:
                 
                 rm -f linkinator_results.json
 
+                echo "" >> preview_url.txt
+                echo "---" >> preview_url.txt
+                echo "📌 Results for commit ${{ github.sha }}" >> preview_url.txt
+
             - name: Comment URL in PR
               uses: thollander/actions-comment-pull-request@v3
               with:
