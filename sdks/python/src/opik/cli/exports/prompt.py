@@ -9,8 +9,7 @@ import click
 from rich.console import Console
 
 import opik
-from opik.api_objects.prompt.prompt import Prompt
-from opik.api_objects.prompt.chat.chat_prompt import ChatPrompt
+from opik.api_objects.prompt import Prompt, ChatPrompt
 from .utils import (
     debug_print,
     prompt_to_csv_rows,
@@ -187,6 +186,128 @@ def export_prompt_by_name(
     except Exception as e:
         console.print(f"[red]Error exporting prompt: {e}[/red]")
         sys.exit(1)
+
+
+def export_prompts_by_ids(
+    client: opik.Opik,
+    prompt_ids: set[str],
+    prompts_dir: Path,
+    format: str,
+    debug: bool,
+    force: bool,
+) -> tuple[int, int]:
+    """Export prompts by their IDs.
+
+    Args:
+        client: Opik client instance
+        prompt_ids: Set of prompt IDs to export
+        prompts_dir: Directory to save prompts
+        format: Export format ('json' or 'csv')
+        debug: Enable debug output
+        force: Re-download prompts even if they already exist locally
+
+    Returns:
+        Tuple of (exported_count, skipped_count)
+    """
+    exported_count = 0
+    skipped_count = 0
+
+    for prompt_id in prompt_ids:
+        try:
+            # Get the prompt
+            prompt = client.get_prompt(prompt_id)
+            if not prompt:
+                if debug:
+                    console.print(
+                        f"[yellow]Warning: Prompt {prompt_id} not found[/yellow]"
+                    )
+                continue
+
+            # Determine file path
+            if format.lower() == "csv":
+                prompt_file = (
+                    prompts_dir
+                    / f"prompts_{prompt.name or getattr(prompt, 'id', 'unknown')}.csv"
+                )
+            else:
+                prompt_file = (
+                    prompts_dir
+                    / f"prompt_{prompt.name or getattr(prompt, 'id', 'unknown')}.json"
+                )
+
+            # Check if file already exists and should be skipped
+            if should_skip_file(prompt_file, force):
+                if debug:
+                    debug_print(
+                        f"Skipping prompt {prompt.name or prompt_id} (already exists)",
+                        debug,
+                    )
+                else:
+                    console.print(
+                        f"[yellow]Skipping prompt: {prompt.name or prompt_id} (already exists)[/yellow]"
+                    )
+                skipped_count += 1
+                continue
+
+            # Get prompt history
+            prompt_history = client.get_prompt_history(prompt_id)
+
+            # Create prompt data structure
+            prompt_data = {
+                "prompt": {
+                    "id": getattr(prompt, "id", None),
+                    "name": prompt.name,
+                    "description": getattr(prompt, "description", None),
+                    "created_at": (
+                        created_at.isoformat()
+                        if (created_at := getattr(prompt, "created_at", None))
+                        else None
+                    ),
+                    "last_updated_at": (
+                        last_updated_at.isoformat()
+                        if (last_updated_at := getattr(prompt, "last_updated_at", None))
+                        else None
+                    ),
+                },
+                "current_version": {
+                    "prompt": _get_prompt_content(prompt),
+                    "metadata": getattr(prompt, "metadata", None),
+                    "type": getattr(prompt, "type", None) or None,
+                    "commit": getattr(prompt, "commit", None),
+                    "template_structure": _get_template_structure(prompt),
+                },
+                "history": [
+                    {
+                        "prompt": _get_prompt_content(version),
+                        "metadata": getattr(version, "metadata", None),
+                        "type": getattr(version, "type", None) or None,
+                        "commit": getattr(version, "commit", None),
+                        "template_structure": _get_template_structure(version),
+                    }
+                    for version in prompt_history
+                ],
+                "downloaded_at": datetime.now().isoformat(),
+            }
+
+            # Save prompt data using the appropriate format
+            if format.lower() == "csv":
+                write_csv_data(prompt_data, prompt_file, prompt_to_csv_rows)
+            else:
+                write_json_data(prompt_data, prompt_file)
+
+            console.print(f"[green]Exported prompt: {prompt.name or prompt_id}[/green]")
+            exported_count += 1
+
+        except Exception as e:
+            if debug:
+                console.print(
+                    f"[yellow]Warning: Could not export prompt {prompt_id}: {e}[/yellow]"
+                )
+            else:
+                console.print(f"[red]Error exporting prompt {prompt_id}: {e}[/red]")
+            continue
+
+    return exported_count, skipped_count
 
 
 def export_experiment_prompts(
@@ -404,25 +525,28 @@ def export_related_prompts_by_name(
                 }
 
                 # Save prompt data using the appropriate format
+                # Sanitize prompt name for filename (replace / with _)
+                sanitized_name = prompt.name.replace("/", "_")
                 if format.lower() == "csv":
-                    prompt_file = prompts_dir / f"prompts_{prompt.name}.csv"
+                    prompt_file = prompts_dir / f"prompts_{sanitized_name}.csv"
                 else:
-                    prompt_file = prompts_dir / f"prompt_{prompt.name}.json"
-                if not prompt_file.exists() or force:
-                    if format.lower() == "csv":
-                        write_csv_data(prompt_data, prompt_file, prompt_to_csv_rows)
-                    else:
-                        write_json_data(prompt_data, prompt_file)
+                    prompt_file = prompts_dir / f"prompt_{sanitized_name}.json"
 
-                    console.print(
-                        f"[green]Exported related prompt: {prompt.name}[/green]"
-                    )
-                    exported_count += 1
-                else:
+                # Check if file should be skipped using the standard utility
+                if should_skip_file(prompt_file, force):
                     debug_print(
                         f"Skipping prompt {prompt.name} (already exists)", debug
                     )
-                    exported_count += 1  # Count as exported even if skipped
+                    continue
+
+                # File doesn't exist or force is set, so export it
+                if format.lower() == "csv":
+                    write_csv_data(prompt_data, prompt_file, prompt_to_csv_rows)
+                else:
+                    write_json_data(prompt_data, prompt_file)
+
+                console.print(f"[green]Exported related prompt: {prompt.name}[/green]")
+                exported_count += 1
 
             except Exception as e:
                 if debug:

@@ -5,8 +5,7 @@ from pathlib import Path
 from typing import Optional
 
 import opik
-from opik.api_objects.prompt.prompt import Prompt
-from opik.api_objects.prompt.chat.chat_prompt import ChatPrompt
+from opik.api_objects.prompt import Prompt, ChatPrompt
 from opik.api_objects.prompt.types import PromptType
 from rich.console import Console
 

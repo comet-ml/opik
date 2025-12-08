@@ -10,6 +10,7 @@ from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TextColumn
 
 import opik
+from opik.rest_api.core.api_error import ApiError
 from opik.rest_api.types.project_public import ProjectPublic
 from .utils import (
     debug_print,
@@ -341,7 +342,9 @@ def export_project_by_name(
             debug_print(f"Target directory: {output_dir}", debug)
 
         # Get projects and find exact match
-        projects_response = client.rest_client.projects.find_projects()
+        # Use name filter to narrow down results (backend does partial match, case-insensitive)
+        # Then verify exact match on client side
+        projects_response = client.rest_client.projects.find_projects(name=name)
         projects = projects_response.content or []
         matching_project = None
 
@@ -349,6 +352,44 @@ def export_project_by_name(
             if project.name == name:
                 matching_project = project
                 break
+
+        # If not found with name filter, try paginating through all projects as fallback
+        # This handles edge cases where the name filter might not work as expected
+        if not matching_project:
+            if debug:
+                debug_print(
+                    f"Project '{name}' not found in filtered results, searching all projects...",
+                    debug,
+                )
+            # Paginate through all projects
+            page = 1
+            page_size = 100
+            while True:
+                projects_response = client.rest_client.projects.find_projects(
+                    page=page, size=page_size
+                )
+                projects = projects_response.content or []
+                if not projects:
+                    break
+
+                for project in projects:
+                    if project.name == name:
+                        matching_project = project
+                        break
+
+                if matching_project:
+                    break
+
+                # Check if there are more pages
+                if projects_response.total is not None:
+                    total_pages = (projects_response.total + page_size - 1) // page_size
+                    if page >= total_pages:
+                        break
+                elif len(projects) < page_size:
+                    # No more pages if we got fewer results than page size
+                    break
+
+                page += 1
 
         if not matching_project:
             console.print(f"[red]Project '{name}' not found[/red]")
@@ -480,8 +521,114 @@ def export_single_project(
         return (0, 0, 0)
 
 
+def export_project_by_name_or_id(
+    name_or_id: str,
+    workspace: str,
+    output_path: str,
+    filter_string: Optional[str],
+    max_results: Optional[int],
+    force: bool,
+    debug: bool,
+    format: str,
+    api_key: Optional[str] = None,
+) -> None:
+    """Export a project by name or ID.
+
+    First tries to get the project by ID. If not found, tries by name.
+    """
+    try:
+        if debug:
+            debug_print(f"Attempting to export project: {name_or_id}", debug)
+
+        # Initialize client
+        if api_key:
+            client = opik.Opik(api_key=api_key, workspace=workspace)
+        else:
+            client = opik.Opik(workspace=workspace)
+
+        # Create output directory
+        output_dir = Path(output_path) / workspace / "projects"
+        output_dir.mkdir(parents=True, exist_ok=True)
+
+        if debug:
+            debug_print(f"Target directory: {output_dir}", debug)
+
+        # Try to get project by ID first
+        try:
+            if debug:
+                debug_print(f"Trying to get project by ID: {name_or_id}", debug)
+            project = client.get_project(name_or_id)
+
+            # Successfully found by ID, export it
+            if debug:
+                debug_print(
+                    f"Found project by ID: {project.name} (ID: {project.id})", debug
+                )
+
+            # Export the project
+            exported_count, traces_exported, traces_skipped = export_single_project(
+                client,
+                project,
+                output_dir,
+                filter_string,
+                max_results,
+                force,
+                debug,
+                format,
+            )
+
+            # Show export summary
+            stats = {
+                "projects": exported_count,
+                "traces": traces_exported,
+                "traces_skipped": traces_skipped,
+            }
+            print_export_summary(stats, format)
+
+            if exported_count > 0:
+                console.print(
+                    f"[green]Successfully exported project '{project.name}' (ID: {project.id}) to {output_dir}[/green]"
+                )
+            else:
+                console.print(
+                    f"[yellow]Project '{project.name}' (ID: {project.id}) already exists (use --force to re-download)[/yellow]"
+                )
+            return
+
+        except ApiError as e:
+            # Check if it's a 404 (not found) error
+            if e.status_code == 404:
+                # Not found by ID, try by name
+                if debug:
+                    debug_print(
+                        f"Project not found by ID, trying by name: {name_or_id}", debug
+                    )
+                # Fall through to name-based export
+                pass
+            else:
+                # Some other API error, re-raise it
+                raise
+
+        # Try by name (either because ID lookup failed or we're explicitly trying name)
+        export_project_by_name(
+            name_or_id,
+            workspace,
+            output_path,
+            filter_string,
+            max_results,
+            force,
+            debug,
+            format,
+            api_key,
+        )
+
+    except Exception as e:
+        console.print(f"[red]Error exporting project: {e}[/red]")
+        sys.exit(1)
+
+
 @click.command(name="project")
-@click.argument("name", type=str)
+@click.argument("name_or_id", type=str)
 @click.option(
     "--filter",
     type=str,
@@ -518,7 +665,7 @@ def export_single_project(
 @click.pass_context
 def export_project_command(
     ctx: click.Context,
-    name: str,
+    name_or_id: str,
     filter: Optional[str],
     max_results: Optional[int],
     path: str,
@@ -526,10 +673,13 @@ def export_project_command(
     debug: bool,
     format: str,
 ) -> None:
-    """Export a project by exact name to workspace/projects."""
+    """Export a project by name or ID to workspace/projects.
+
+    The command will first try to find the project by ID. If not found, it will try by name.
+    """
     # Get workspace and API key from context
     workspace = ctx.obj["workspace"]
     api_key = ctx.obj.get("api_key") if ctx.obj else None
-    export_project_by_name(
-        name, workspace, path, filter, max_results, force, debug, format, api_key
+    export_project_by_name_or_id(
+        name_or_id, workspace, path, filter, max_results, force, debug, format, api_key
     )

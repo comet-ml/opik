@@ -15,6 +15,7 @@ from typing import Any, Dict, List, Optional
 import opik
 from opik.api_objects.dataset import dataset_item as dataset_item_module
 import opik.id_helpers as id_helpers_module  # type: ignore
+from opik.rest_api.types.experiment_item import ExperimentItem
 from rich.console import Console
 
 from .utils import (
@@ -23,6 +24,7 @@ from .utils import (
     matches_name_pattern,
     clean_feedback_scores,
 )
+from .prompt import import_prompts_from_directory
 
 console = Console()
 
@@ -101,10 +103,16 @@ def recreate_experiment(
 
     try:
         # Get or create the dataset
+        # Ensure dataset is in the same workspace as the client
         dataset = client.get_or_create_dataset(
             name=dataset_name,
             description=f"Recreated dataset for experiment {experiment_name}",
         )
+
+        if debug:
+            console.print(
+                f"[blue]Using dataset '{dataset_name}' for experiment '{experiment_name}'[/blue]"
+            )
 
         # Create the experiment
         experiment = client.create_experiment(
@@ -113,6 +121,11 @@ def recreate_experiment(
             experiment_config=experiment_info.get("metadata"),
             type=experiment_info.get("type", "regular"),
         )
+
+        if debug:
+            console.print(
+                f"[blue]Created experiment '{experiment_name}' with ID: {experiment.id}[/blue]"
+            )
 
         # Process experiment items and accumulate dataset items for batch insertion
         # Track pending items: (dataset_item_obj, new_trace_id)
@@ -124,20 +137,32 @@ def recreate_experiment(
             # Handle trace reference (from deduplicated exports)
             trace_id = handle_trace_reference(item_data)
             if not trace_id:
-                console.print(
-                    "[yellow]Warning: No trace ID found, skipping item[/yellow]"
-                )
+                if debug:
+                    console.print(
+                        f"[yellow]Warning: No trace ID found in item {item_data.get('id', 'unknown')}, skipping item[/yellow]"
+                    )
                 skipped_items += 1
                 continue
 
             # Translate trace id from source (workspace A) to newly created trace id (workspace B)
             new_trace_id = translate_trace_id(trace_id, trace_id_map)
             if not new_trace_id:
-                console.print(
-                    f"[yellow]Warning: No mapping for trace {trace_id}. Skipping item.[/yellow]"
-                )
+                if debug:
+                    console.print(
+                        f"[yellow]Warning: No mapping for trace {trace_id}. "
+                        f"Trace ID map has {len(trace_id_map)} entries. Skipping item.[/yellow]"
+                    )
+                    if trace_id_map and debug:
+                        # Show first few trace IDs in map for debugging
+                        sample_ids = list(trace_id_map.keys())[:3]
+                        console.print(
+                            f"[blue]Sample trace IDs in map: {sample_ids}[/blue]"
+                        )
                 skipped_items += 1
                 continue
+
+            if debug:
+                console.print(f"[blue]Mapped trace {trace_id} -> {new_trace_id}[/blue]")
 
             # Handle dataset item
             dataset_item_data = item_data.get("dataset_item_data")
@@ -169,13 +194,11 @@ def recreate_experiment(
                 continue
 
             try:
-                # Use provided dataset_item_id if available, otherwise create new item
-                provided_id = item_data.get("dataset_item_id") or dataset_item_data.get(
-                    "id"
-                )
+                # Always generate new IDs for dataset items to avoid workspace conflicts
+                # The exported IDs might not be valid in the target workspace
 
                 # Build DatasetItem with all fields from dataset_item_data
-                # Exclude 'id' as it's handled separately
+                # Exclude 'id' as we'll generate a new one
                 content = {
                     k: v
                     for k, v in dataset_item_data.items()
@@ -190,20 +213,19 @@ def recreate_experiment(
                     skipped_items += 1
                     continue
 
-                # Generate ID if not provided
-                chosen_id = provided_id
-                if chosen_id is None:
-                    try:
-                        chosen_id = id_helpers_module.generate_id()  # type: ignore
-                    except Exception:
-                        # Fallback: create without ID and let backend generate it
-                        chosen_id = None
+                # Always generate a new ID for the dataset item
+                # This ensures the ID is valid in the target workspace
+                try:
+                    chosen_id = id_helpers_module.generate_id()  # type: ignore[attr-defined]
+                except Exception:
+                    # Fallback: create without ID and let backend generate it
+                    chosen_id = None
 
-                # Create DatasetItem object
+                # Create DatasetItem object with new ID
                 if chosen_id is not None:
-                    ds_obj = dataset_item_module.DatasetItem(id=chosen_id, **content)  # type: ignore
+                    ds_obj = dataset_item_module.DatasetItem(id=chosen_id, **content)  # type: ignore[attr-defined]
                 else:
-                    ds_obj = dataset_item_module.DatasetItem(**content)  # type: ignore
+                    ds_obj = dataset_item_module.DatasetItem(**content)  # type: ignore[attr-defined]
 
                 # Store for batch insertion
                 pending_items.append((ds_obj, new_trace_id))
@@ -216,27 +238,54 @@ def recreate_experiment(
                 continue
 
         # Batch insert all dataset items
-        experiment_items = []
+        rest_experiment_items = []
         if pending_items:
             try:
                 # Extract dataset items for batch insertion
                 dataset_items_to_insert = [ds_obj for ds_obj, _ in pending_items]
 
-                # Batch insert
+                # Batch insert dataset items
+                # Note: We use the IDs we generated to ensure consistency
                 dataset.__internal_api__insert_items_as_dataclasses__(
                     items=dataset_items_to_insert
                 )
 
-                # Create experiment item references with actual IDs
+                # Flush client to ensure dataset items are persisted before using their IDs
+                # Use a longer timeout to ensure items are fully persisted
+                import time
+
+                flush_success = client.flush(timeout=30)
+                if not flush_success:
+                    console.print(
+                        "[yellow]Warning: Flush may not have completed fully. Dataset items might not be persisted yet.[/yellow]"
+                    )
+                if debug:
+                    console.print(
+                        "[blue]Flushed client after inserting dataset items (timeout=30s)[/blue]"
+                    )
+
+                # Small delay to ensure backend has processed the items
+                time.sleep(1)
+
+                # Create REST API experiment items with actual IDs
+                # Use REST API directly instead of streamer for more reliable insertion
                 for ds_obj, new_trace_id in pending_items:
                     if ds_obj.id:
-                        experiment_items.append(
-                            opik.ExperimentItemReferences(
+                        # Generate ID for experiment item
+                        experiment_item_id = id_helpers_module.generate_id()
+                        rest_experiment_items.append(
+                            ExperimentItem(
+                                id=experiment_item_id,
+                                experiment_id=experiment.id,
                                 dataset_item_id=ds_obj.id,
                                 trace_id=new_trace_id,
                             )
                         )
                         successful_items += 1
+                        if debug:
+                            console.print(
+                                f"[blue]Prepared experiment item: dataset_item_id={ds_obj.id}, trace_id={new_trace_id}[/blue]"
+                            )
                     else:
                         console.print(
                             "[yellow]Warning: Dataset item inserted but has no ID, skipping experiment item[/yellow]"
@@ -253,9 +302,14 @@ def recreate_experiment(
                         dataset.__internal_api__insert_items_as_dataclasses__(
                             items=[ds_obj]
                         )
+                        # Flush after each item to ensure it's persisted
+                        client.flush()
                         if ds_obj.id:
-                            experiment_items.append(
-                                opik.ExperimentItemReferences(
+                            experiment_item_id = id_helpers_module.generate_id()
+                            rest_experiment_items.append(
+                                ExperimentItem(
+                                    id=experiment_item_id,
+                                    experiment_id=experiment.id,
                                     dataset_item_id=ds_obj.id,
                                     trace_id=new_trace_id,
                                 )
@@ -265,22 +319,43 @@ def recreate_experiment(
                         skipped_items += 1
                         continue
 
-        # Insert experiment items
-        if experiment_items:
-            experiment.insert(experiment_items)
-            # Flush client to ensure experiment items are persisted before continuing
-            client.flush()
-            console.print(
-                f"[green]Created experiment '{experiment_name}' with {successful_items} items[/green]"
-            )
-            if skipped_items > 0:
+        # Insert experiment items using REST API directly (more reliable than streamer)
+        if rest_experiment_items:
+            if debug:
                 console.print(
-                    f"[yellow]Skipped {skipped_items} items due to missing data[/yellow]"
+                    f"[blue]Inserting {len(rest_experiment_items)} experiment items via REST API...[/blue]"
                 )
+            try:
+                # Use REST API directly instead of streamer
+                client._rest_client.experiments.create_experiment_items(
+                    experiment_items=rest_experiment_items
+                )
+                console.print(
+                    f"[green]Created experiment '{experiment_name}' with {successful_items} items[/green]"
+                )
+                if skipped_items > 0:
+                    console.print(
+                        f"[yellow]Skipped {skipped_items} items due to missing data[/yellow]"
+                    )
+            except Exception as e:
+                console.print(f"[red]Error inserting experiment items: {e}[/red]")
+                if debug:
+                    import traceback
+
+                    console.print(f"[red]Traceback: {traceback.format_exc()}[/red]")
+                raise
         else:
             console.print(
                 f"[yellow]No valid items found for experiment '{experiment_name}'[/yellow]"
             )
+            if debug and trace_id_map:
+                console.print(
+                    f"[blue]Trace ID map has {len(trace_id_map)} entries but no items were created[/blue]"
+                )
+            elif debug:
+                console.print(
+                    "[yellow]No trace ID map available - traces may not have been imported[/yellow]"
+                )
 
         return True
 
@@ -555,8 +630,8 @@ def import_experiments_from_directory(
 ) -> int:
     """Import experiments from a directory.
 
-    This function will first import traces from the projects directory (if it exists)
-    to build a trace_id_map, then use that map when recreating experiments.
+    This function will first import prompts and traces from their respective directories
+    (if they exist) to build a trace_id_map, then use that map when recreating experiments.
     """
     try:
         experiment_files = list(source_dir.glob("experiment_*.json"))
@@ -565,9 +640,32 @@ def import_experiments_from_directory(
             console.print("[yellow]No experiment files found in the directory[/yellow]")
             return 0
 
-        # Import traces first to build trace_id_map
         # source_dir is typically workspace/experiments, so parent is workspace root
         workspace_root = source_dir.parent
+
+        # Import prompts first (they may be referenced by experiments)
+        prompts_dir = workspace_root / "prompts"
+        if prompts_dir.exists():
+            if debug:
+                console.print(
+                    "[blue]Importing prompts from prompts directory...[/blue]"
+                )
+            prompts_imported = import_prompts_from_directory(
+                client, prompts_dir, dry_run, name_pattern, debug
+            )
+            if prompts_imported > 0 and not dry_run:
+                # Flush client to ensure prompts are persisted
+                client.flush()
+                if debug:
+                    console.print(
+                        f"[green]Imported {prompts_imported} prompt(s)[/green]"
+                    )
+        elif debug:
+            console.print(
+                "[blue]No prompts directory found, skipping prompt import[/blue]"
+            )
+
+        # Import traces first to build trace_id_map
         trace_id_map = _import_traces_from_projects_directory(
             client, workspace_root, dry_run, debug
         )
@@ -576,6 +674,50 @@ def import_experiments_from_directory(
             console.print(
                 "[yellow]Warning: No traces were imported. Experiment items may be skipped if they reference traces.[/yellow]"
             )
+            # Try to diagnose why traces weren't imported
+            if debug:
+                projects_dir = workspace_root / "projects"
+                if projects_dir.exists():
+                    project_dirs = [d for d in projects_dir.iterdir() if d.is_dir()]
+                    console.print(
+                        f"[blue]Found {len(project_dirs)} project directory(ies): {[d.name for d in project_dirs]}[/blue]"
+                    )
+                    for project_dir in project_dirs:
+                        trace_files = list(project_dir.glob("trace_*.json"))
+                        console.print(
+                            f"[blue]Project '{project_dir.name}' has {len(trace_files)} trace file(s)[/blue]"
+                        )
+                else:
+                    console.print(
+                        f"[blue]Projects directory not found at {projects_dir}[/blue]"
+                    )
+        elif trace_id_map and debug:
+            console.print(
+                f"[green]Built trace ID mapping with {len(trace_id_map)} trace(s)[/green]"
+            )
+            # Show sample trace IDs for debugging
+            sample_original_ids = list(trace_id_map.keys())[:3]
+            console.print(
+                f"[blue]Sample original trace IDs in map: {sample_original_ids}[/blue]"
+            )
+
+        # Build a map of trace_id -> project_name from trace files for project inference
+        trace_to_project_map: Dict[str, str] = {}
+        projects_dir = workspace_root / "projects"
+        if projects_dir.exists():
+            for project_dir in projects_dir.iterdir():
+                if not project_dir.is_dir():
+                    continue
+                project_name = project_dir.name
+                for trace_file in project_dir.glob("trace_*.json"):
+                    try:
+                        with open(trace_file, "r", encoding="utf-8") as f:
+                            trace_data = json.load(f)
+                        original_trace_id = trace_data.get("trace", {}).get("id")
+                        if original_trace_id:
+                            trace_to_project_map[original_trace_id] = project_name
+                    except Exception:
+                        continue
 
         imported_count = 0
         for experiment_file in experiment_files:
@@ -584,6 +726,35 @@ def import_experiments_from_directory(
 
                 experiment_info = experiment_data.experiment
                 experiment_name = experiment_info.get("name", "")
+
+                # Debug: Check trace IDs in experiment items vs trace_id_map
+                if debug and trace_id_map:
+                    items_data = experiment_data.items
+                    experiment_trace_ids = []
+                    for item_data in items_data:
+                        trace_id = handle_trace_reference(item_data)
+                        if trace_id:
+                            experiment_trace_ids.append(trace_id)
+
+                    if experiment_trace_ids:
+                        console.print(
+                            f"[blue]Experiment '{experiment_name}' references {len(experiment_trace_ids)} trace(s)[/blue]"
+                        )
+                        matched = sum(
+                            1 for tid in experiment_trace_ids if tid in trace_id_map
+                        )
+                        console.print(
+                            f"[blue]{matched}/{len(experiment_trace_ids)} trace IDs found in trace_id_map[/blue]"
+                        )
+                        if matched < len(experiment_trace_ids):
+                            missing = [
+                                tid
+                                for tid in experiment_trace_ids
+                                if tid not in trace_id_map
+                            ]
+                            console.print(
+                                f"[yellow]Missing trace IDs: {missing[:5]}[/yellow]"
+                            )
 
                 # Filter by name pattern if specified
                 if name_pattern and not matches_name_pattern(
@@ -607,10 +778,32 @@ def import_experiments_from_directory(
                         f"[blue]Importing experiment: {experiment_name}[/blue]"
                     )
 
-                # Get project name from experiment metadata or use default
+                # Determine project name: try metadata first, then infer from trace files
                 project_for_logs = (experiment_info.get("metadata") or {}).get(
                     "project_name"
-                ) or "default"
+                )
+
+                # If no project in metadata, try to infer from trace files
+                if not project_for_logs and trace_to_project_map:
+                    items_data = experiment_data.items
+                    # Find the first trace_id in items and use its project
+                    for item_data in items_data:
+                        trace_id = handle_trace_reference(item_data)
+                        if trace_id and trace_id in trace_to_project_map:
+                            project_for_logs = trace_to_project_map[trace_id]
+                            if debug:
+                                console.print(
+                                    f"[blue]Inferred project name '{project_for_logs}' from trace files[/blue]"
+                                )
+                            break
+
+                # Default to "default" if still not found
+                if not project_for_logs:
+                    project_for_logs = "default"
+                    if debug:
+                        console.print(
+                            "[blue]Using default project name (no project found in metadata or trace files)[/blue]"
+                        )
 
                 # Use trace_id_map to translate trace IDs (empty dict if None)
                 success = recreate_experiment(

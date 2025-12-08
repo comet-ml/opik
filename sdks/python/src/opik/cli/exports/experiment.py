@@ -16,6 +16,7 @@ from rich.progress import (
 )
 
 import opik
+from opik import exceptions
 from .utils import (
     create_experiment_data_structure,
     debug_print,
@@ -27,8 +28,8 @@ from .utils import (
 )
 from .dataset import export_experiment_datasets
 from .prompt import (
-    export_experiment_prompts,
     export_related_prompts_by_name,
+    export_prompts_by_ids,
 )
 
 console = Console()
@@ -188,6 +189,7 @@ def export_experiment_by_id(
     force: bool,
     debug: bool,
     format: str,
+    trace_ids_collector: Optional[set[str]] = None,
 ) -> tuple[Dict[str, int], int]:
     """Export a specific experiment by ID, including related datasets and traces.
 
@@ -242,45 +244,28 @@ def export_experiment_by_id(
                 debug,
             )
 
-        # Export related datasets and prompts
-        stats = {"datasets": 0, "prompts": 0, "traces": 0}
-        if experiment.dataset_name:
-            # Datasets should go in root/workspace/datasets, not root/workspace/experiments/datasets
-            datasets_dir = output_dir.parent / "datasets"
-            datasets_to_export = {experiment.dataset_name}
-            stats["datasets"] = export_experiment_datasets(
-                client, datasets_to_export, datasets_dir, format, debug
-            )
-            stats["prompts"] = export_experiment_prompts(
-                client, experiment, output_dir, force, debug, format
-            )
-            stats["prompts"] += export_related_prompts_by_name(
-                client, experiment, output_dir, force, debug, format
-            )
-
-        # Export traces from experiment items
-        # Get unique trace IDs from experiment items
-        trace_ids = list(
-            set(item.trace_id for item in experiment_items if item.trace_id)
+        # Related prompts and traces are handled at the batch level
+        # Only export related prompts by name (this is experiment-specific and can't be easily deduplicated)
+        stats = {
+            "datasets": 0,
+            "datasets_skipped": 0,
+            "prompts": 0,
+            "prompts_skipped": 0,
+            "traces": 0,
+            "traces_skipped": 0,
+        }
+        stats["prompts"] = export_related_prompts_by_name(
+            client, experiment, output_dir, force, debug, format
         )
 
-        if trace_ids:
-            # Get workspace root (output_dir is workspace/experiments, so parent is workspace root)
-            workspace_root = output_dir.parent
-            traces_exported, traces_skipped = export_traces_by_ids(
-                client,
-                trace_ids,
-                workspace_root,
-                max_traces,
-                format,
-                debug,
-                force,
-            )
-            stats["traces"] = traces_exported
-        else:
-            if debug:
-                debug_print("No trace IDs found in experiment items", debug)
-            stats["traces"] = 0
+        # Collect trace IDs from experiment items (for batch export later)
+        trace_ids = [item.trace_id for item in experiment_items if item.trace_id]
+        if trace_ids_collector is not None:
+            trace_ids_collector.update(trace_ids)
+
+        # Traces are exported at batch level, so we don't export them here
+        stats["traces"] = 0
+        stats["traces_skipped"] = 0
 
         if debug:
             console.print(
@@ -321,6 +306,8 @@ def export_experiment_by_name(
         # Create output directory
         output_dir = Path(output_path) / workspace / "experiments"
         output_dir.mkdir(parents=True, exist_ok=True)
+        datasets_dir = Path(output_path) / workspace / "datasets"
+        datasets_dir.mkdir(parents=True, exist_ok=True)
 
         if debug:
             debug_print(f"Target directory: {output_dir}", debug)
@@ -345,18 +332,56 @@ def export_experiment_by_name(
             console.print(f"[red]Experiment '{name}' not found: {e}[/red]")
             return
 
+        # Collect all unique resources from all experiments first
+        unique_datasets = set()
+        unique_prompt_ids = set()
+
+        # First pass: collect datasets and prompt IDs (these are available without fetching items)
+        for experiment in experiments:
+            if experiment.dataset_name:
+                unique_datasets.add(experiment.dataset_name)
+            if getattr(experiment, "prompt_versions", None):
+                for prompt_version in experiment.prompt_versions:
+                    unique_prompt_ids.add(prompt_version.prompt_id)
+
+        # Export all unique datasets once before processing experiments
+        datasets_exported = 0
+        datasets_skipped = 0
+        if unique_datasets:
+            if len(unique_datasets) > 1:
+                console.print(
+                    f"[blue]Exporting {len(unique_datasets)} unique dataset(s) used by these experiments...[/blue]"
+                )
+            datasets_exported, datasets_skipped = export_experiment_datasets(
+                client, unique_datasets, datasets_dir, format, debug, force
+            )
+
+        # Export all unique prompts once before processing experiments
+        prompts_dir = output_dir.parent / "prompts"
+        prompts_dir.mkdir(parents=True, exist_ok=True)
+        prompts_exported = 0
+        prompts_skipped = 0
+        if unique_prompt_ids:
+            if len(unique_prompt_ids) > 1:
+                console.print(
+                    f"[blue]Exporting {len(unique_prompt_ids)} unique prompt(s) used by these experiments...[/blue]"
+                )
+            prompts_exported, prompts_skipped = export_prompts_by_ids(
+                client, unique_prompt_ids, prompts_dir, format, debug, force
+            )
+
+        # Collect all unique trace IDs from all experiments as we process them
+        # We'll collect them during the first pass, then export once
+        all_trace_ids: set[str] = set()
+
         # Export all matching experiments
         exported_count = 0
         skipped_count = 0
 
-        # Aggregate stats from all experiments
+        # Aggregate stats from all experiments (prompts and traces already exported at batch level)
         aggregated_stats = {
-            "datasets": 0,
-            "datasets_skipped": 0,
             "prompts": 0,
             "prompts_skipped": 0,
-            "traces": 0,
-            "traces_skipped": 0,
         }
 
         for experiment in experiments:
@@ -367,38 +392,54 @@ def export_experiment_by_name(
                 )
 
             result = export_experiment_by_id(
-                client, output_dir, experiment.id, max_traces, force, debug, format
+                client,
+                output_dir,
+                experiment.id,
+                max_traces,
+                force,
+                debug,
+                format,
+                all_trace_ids,
             )
 
-            # result is now a tuple: (stats_dict, file_written_flag)
-            if isinstance(result, tuple):
-                exp_stats, file_written = result
-                # Aggregate stats
-                aggregated_stats["datasets"] += exp_stats.get("datasets", 0)
-                aggregated_stats["prompts"] += exp_stats.get("prompts", 0)
-                aggregated_stats["traces"] += exp_stats.get("traces", 0)
+            # result is a tuple: (stats_dict, file_written_flag)
+            exp_stats, file_written = result
+            # Aggregate stats (only related prompts, traces already handled)
+            aggregated_stats["prompts"] += exp_stats.get("prompts", 0)
+            aggregated_stats["prompts_skipped"] += exp_stats.get("prompts_skipped", 0)
 
-                if file_written > 0:
-                    exported_count += 1
-                else:
-                    skipped_count += 1
+            if file_written > 0:
+                exported_count += 1
             else:
-                # Backward compatibility: if result is just a number
-                if result > 0:
-                    exported_count += 1
-                else:
-                    skipped_count += 1
+                skipped_count += 1
+
+        # Export all unique traces once after collecting them from all experiments
+        workspace_root = output_dir.parent
+        traces_exported = 0
+        traces_skipped = 0
+        if all_trace_ids:
+            trace_ids_list = list(all_trace_ids)
+            if max_traces:
+                trace_ids_list = trace_ids_list[:max_traces]
+            if len(trace_ids_list) > 0:
+                if len(all_trace_ids) > 1:
+                    console.print(
+                        f"[blue]Exporting {len(trace_ids_list)} unique trace(s) from these experiments...[/blue]"
+                    )
+                traces_exported, traces_skipped = export_traces_by_ids(
+                    client, trace_ids_list, workspace_root, None, format, debug, force
+                )
 
         # Collect statistics for summary
         stats = {
             "experiments": exported_count,
             "experiments_skipped": skipped_count,
-            "datasets": aggregated_stats["datasets"],
-            "datasets_skipped": aggregated_stats["datasets_skipped"],
-            "prompts": aggregated_stats["prompts"],
-            "prompts_skipped": aggregated_stats["prompts_skipped"],
-            "traces": aggregated_stats["traces"],
-            "traces_skipped": aggregated_stats["traces_skipped"],
+            "datasets": datasets_exported,
+            "datasets_skipped": datasets_skipped,
+            "prompts": prompts_exported + aggregated_stats["prompts"],
+            "prompts_skipped": prompts_skipped + aggregated_stats["prompts_skipped"],
+            "traces": traces_exported,
+            "traces_skipped": traces_skipped,
         }
 
         # Show export summary
@@ -423,8 +464,152 @@ def export_experiment_by_name(
         sys.exit(1)
 
 
+def export_experiment_by_name_or_id(
+    name_or_id: str,
+    workspace: str,
+    output_path: str,
+    dataset: Optional[str],
+    max_traces: Optional[int],
+    force: bool,
+    debug: bool,
+    format: str,
+    api_key: Optional[str] = None,
+) -> None:
+    """Export an experiment by name or ID.
+
+    First tries to get the experiment by ID. If not found, tries by name.
+    """
+    try:
+        if debug:
+            debug_print(f"Attempting to export experiment: {name_or_id}", debug)
+
+        # Initialize client
+        if api_key:
+            client = opik.Opik(api_key=api_key, workspace=workspace)
+        else:
+            client = opik.Opik(workspace=workspace)
+
+        # Create output directory
+        output_dir = Path(output_path) / workspace / "experiments"
+        output_dir.mkdir(parents=True, exist_ok=True)
+        datasets_dir = Path(output_path) / workspace / "datasets"
+        datasets_dir.mkdir(parents=True, exist_ok=True)
+
+        # Try to get experiment by ID first
+        try:
+            if debug:
+                debug_print(f"Trying to get experiment by ID: {name_or_id}", debug)
+            experiment = client.get_experiment_by_id(name_or_id)
+
+            # Successfully found by ID, export it
+            if debug:
+                debug_print(
+                    f"Found experiment by ID: {experiment.name} (ID: {experiment.id})",
+                    debug,
+                )
+
+            # Collect trace IDs as we export
+            trace_ids_collector: set[str] = set()
+
+            # Use the ID-based export function
+            result = export_experiment_by_id(
+                client,
+                output_dir,
+                name_or_id,
+                max_traces,
+                force,
+                debug,
+                format,
+                trace_ids_collector,
+            )
+
+            exp_stats, file_written = result
+
+            # Export related datasets
+            unique_datasets = set()
+            if experiment.dataset_name:
+                unique_datasets.add(experiment.dataset_name)
+
+            datasets_exported = 0
+            datasets_skipped = 0
+            if unique_datasets:
+                datasets_exported, datasets_skipped = export_experiment_datasets(
+                    client, unique_datasets, datasets_dir, format, debug, force
+                )
+
+            # Export traces collected from experiment items
+            workspace_root = output_dir.parent
+            traces_exported = 0
+            traces_skipped = 0
+            if trace_ids_collector:
+                trace_ids_list = list(trace_ids_collector)
+                if max_traces:
+                    trace_ids_list = trace_ids_list[:max_traces]
+                if len(trace_ids_list) > 0:
+                    traces_exported, traces_skipped = export_traces_by_ids(
+                        client,
+                        trace_ids_list,
+                        workspace_root,
+                        None,
+                        format,
+                        debug,
+                        force,
+                    )
+
+            # Collect statistics for summary
+            stats = {
+                "experiments": 1 if file_written > 0 else 0,
+                "experiments_skipped": 0 if file_written > 0 else 1,
+                "datasets": datasets_exported,
+                "datasets_skipped": datasets_skipped,
+                "prompts": exp_stats.get("prompts", 0),
+                "prompts_skipped": exp_stats.get("prompts_skipped", 0),
+                "traces": traces_exported,
+                "traces_skipped": traces_skipped,
+            }
+
+            # Show export summary
+            print_export_summary(stats, format)
+
+            if file_written > 0:
+                console.print(
+                    f"[green]Successfully exported experiment '{experiment.name}' (ID: {experiment.id}) to {output_dir}[/green]"
+                )
+            else:
+                console.print(
+                    f"[yellow]Experiment '{experiment.name}' (ID: {experiment.id}) already exists (use --force to re-download)[/yellow]"
+                )
+            return
+
+        except exceptions.ExperimentNotFound:
+            # Not found by ID, try by name
+            if debug:
+                debug_print(
+                    f"Experiment not found by ID, trying by name: {name_or_id}", debug
+                )
+            # Fall through to name-based export
+            pass
+
+        # Try by name (either because ID lookup failed or we're explicitly trying name)
+        export_experiment_by_name(
+            name_or_id,
+            workspace,
+            output_path,
+            dataset,
+            max_traces,
+            force,
+            debug,
+            format,
+            api_key,
+        )
+
+    except Exception as e:
+        console.print(f"[red]Error exporting experiment: {e}[/red]")
+        sys.exit(1)
+
+
 @click.command(name="experiment")
-@click.argument("name", type=str)
+@click.argument("name_or_id", type=str)
 @click.option(
     "--dataset",
     type=str,
@@ -461,7 +646,7 @@ def export_experiment_by_name(
 @click.pass_context
 def export_experiment_command(
     ctx: click.Context,
-    name: str,
+    name_or_id: str,
     dataset: Optional[str],
     max_traces: Optional[int],
     path: str,
@@ -469,10 +654,13 @@ def export_experiment_command(
     debug: bool,
     format: str,
 ) -> None:
-    """Export an experiment by exact name to workspace/experiments."""
+    """Export an experiment by name or ID to workspace/experiments.
+
+    The command will first try to find the experiment by ID. If not found, it will try by name.
+    """
     # Get workspace and API key from context
     workspace = ctx.obj["workspace"]
     api_key = ctx.obj.get("api_key") if ctx.obj else None
-    export_experiment_by_name(
-        name, workspace, path, dataset, max_traces, force, debug, format, api_key
+    export_experiment_by_name_or_id(
+        name_or_id, workspace, path, dataset, max_traces, force, debug, format, api_key
     )

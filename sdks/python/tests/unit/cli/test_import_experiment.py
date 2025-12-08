@@ -17,7 +17,9 @@ from opik.cli.imports.experiment import (  # noqa: E402
     recreate_experiment,
     _import_traces_from_projects_directory,
 )
-from opik.cli.imports.utils import translate_trace_id as utils_translate_trace_id  # noqa: E402
+from opik.cli.imports.utils import (  # noqa: E402
+    translate_trace_id as utils_translate_trace_id,
+)
 
 
 class TestExperimentData:
@@ -120,6 +122,22 @@ class TestTranslateTraceId:
 
 class TestRecreateExperiment:
     """Test recreate_experiment function."""
+
+    @staticmethod
+    def _extract_items_arg_from_call_args(call_args):
+        """Helper to extract the items argument from call_args.
+
+        Handles both positional and keyword arguments.
+        """
+        if hasattr(call_args, "args") and call_args.args:
+            return call_args.args[0]
+        if hasattr(call_args, "kwargs"):
+            if "items" in call_args.kwargs:
+                return call_args.kwargs["items"]
+            for value in call_args.kwargs.values():
+                if isinstance(value, list) and len(value) > 0:
+                    return value
+        return None
 
     @pytest.fixture
     def mock_client(self):
@@ -244,18 +262,8 @@ class TestRecreateExperiment:
             )
             assert call_args is not None
 
-            # Check both args and kwargs for the items parameter
-            if call_args.args:
-                items_arg = call_args.args[0]
-            elif "items" in call_args.kwargs:
-                items_arg = call_args.kwargs["items"]
-            else:
-                # Try to find items in the call
-                items_arg = None
-                for key, value in call_args.kwargs.items():
-                    if isinstance(value, list) and len(value) > 0:
-                        items_arg = value
-                        break
+            # Use helper to extract items argument from call_args
+            items_arg = self._extract_items_arg_from_call_args(call_args)
 
             assert (
                 items_arg is not None

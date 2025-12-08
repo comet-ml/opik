@@ -31,7 +31,7 @@ class TestDownloadCommand:
         runner = CliRunner()
         result = runner.invoke(cli, ["export", "default", "project", "--help"])
         assert result.exit_code == 0
-        assert "Export a project by exact name" in result.output
+        assert "Export a project by name or ID" in result.output
         assert "NAME" in result.output
 
     def test_export_experiment_help(self):

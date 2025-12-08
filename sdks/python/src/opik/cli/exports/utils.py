@@ -206,12 +206,18 @@ def dump_to_file(
 
         # Initialize CSV writer if not already done
         if csv_writer is None and csv_rows:
-            csv_file_handle = open(file_path, "w", newline="", encoding="utf-8")
-            csv_fieldnames = list(csv_rows[0].keys())
-            csv_writer = csv.DictWriter(csv_file_handle, fieldnames=csv_fieldnames)
-            csv_writer.writeheader()
+            # Use context manager to ensure file is properly closed
+            with open(file_path, "w", newline="", encoding="utf-8") as csv_file_handle:
+                csv_fieldnames = list(csv_rows[0].keys())
+                csv_writer = csv.DictWriter(csv_file_handle, fieldnames=csv_fieldnames)
+                csv_writer.writeheader()
+                # Write rows while file is open
+                csv_writer.writerows(csv_rows)
 
-        # Write rows
+            # File is closed, return None, None
+            return None, None
+
+        # Write rows to existing writer (caller manages file lifecycle)
         if csv_writer and csv_rows:
             csv_writer.writerows(csv_rows)
 

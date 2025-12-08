@@ -150,11 +150,46 @@ def export_experiment_datasets(
     datasets_dir: Path,
     format: str,
     debug: bool,
-) -> int:
-    """Export datasets related to an experiment."""
+    force: bool,
+) -> tuple[int, int]:
+    """Export datasets related to an experiment.
+
+    Args:
+        client: Opik client instance
+        datasets_to_export: Set of dataset names to export
+        datasets_dir: Directory to save datasets
+        format: Export format ('json' or 'csv')
+        debug: Enable debug output
+        force: Re-download datasets even if they already exist locally
+
+    Returns:
+        Tuple of (exported_count, skipped_count)
+    """
     exported_count = 0
+    skipped_count = 0
+
     for dataset_name in datasets_to_export:
         try:
+            # Use format parameter to determine file extension
+            if format.lower() == "csv":
+                dataset_file = datasets_dir / f"dataset_{dataset_name}.csv"
+            else:
+                dataset_file = datasets_dir / f"dataset_{dataset_name}.json"
+            datasets_dir.mkdir(parents=True, exist_ok=True)
+
+            # Check if file already exists and should be skipped
+            if should_skip_file(dataset_file, force):
+                if debug:
+                    debug_print(
+                        f"Skipping dataset {dataset_name} (already exists)", debug
+                    )
+                else:
+                    console.print(
+                        f"[yellow]Skipping dataset: {dataset_name} (already exists)[/yellow]"
+                    )
+                skipped_count += 1
+                continue
+
             dataset_obj = opik.Dataset(
                 name=dataset_name,
                 description=None,  # Description not available from experiment
@@ -175,13 +210,6 @@ def export_experiment_datasets(
                 "downloaded_at": datetime.now().isoformat(),
             }
 
-            # Use format parameter to determine file extension and save method
-            if format.lower() == "csv":
-                dataset_file = datasets_dir / f"dataset_{dataset_name}.csv"
-            else:
-                dataset_file = datasets_dir / f"dataset_{dataset_name}.json"
-            datasets_dir.mkdir(parents=True, exist_ok=True)
-
             # Save to file using the appropriate format
             if format.lower() == "csv":
                 write_csv_data(dataset_data, dataset_file, dataset_to_csv_rows)
@@ -195,7 +223,10 @@ def export_experiment_datasets(
                 console.print(
                     f"[yellow]Warning: Could not export dataset {dataset_name}: {e}[/yellow]"
                 )
-    return exported_count
+            else:
+                console.print(f"[red]Error exporting dataset {dataset_name}: {e}[/red]")
+
+    return exported_count, skipped_count
 
 
 @click.command(name="dataset")
