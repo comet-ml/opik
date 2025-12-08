@@ -35,6 +35,8 @@ jobs:
               working-directory: apps/opik-documentation/documentation
               run: |
                 echo -e "\n\n" >> preview_url.txt
+                
+                # Use JSON output for reliable parsing (CSV breaks with URLs containing commas/brackets)
                 npx linkinator ${{ steps.generate-docs.outputs.URL }} \
                   --recurse \
                   --skip "search\/v2\/key" \
@@ -45,31 +47,27 @@ jobs:
                   --skip "http://localhost:5173" \
                   --skip "googletagmanager.com" \
                   --skip "insights/script.js" \
-                  --format csv | awk -F',' '
-                    BEGIN { found_broken = 0 }
-                    NR==1 {next}
-                    {
-                      # Remove leading/trailing quotes from each field
-                      gsub(/^"|"$/, "", $1)
-                      gsub(/^"|"$/, "", $2)
-                      gsub(/^"|"$/, "", $4)
-                      if ($3 != "OK" && $2 != "403") {
-                        if (found_broken == 0) {
-                          print "**The following broken links where found:**\n\n" >> "preview_url.txt"
-                          found_broken = 1
-                        }
-                        
-                        printf "Page: %s\n❌ Broken link: %s (%s)\n\n", $4, $1, $2 >> "preview_url.txt"
-                      }
-                    }
-                    END {
-                      if (found_broken == 0) {
-                        print "No broken links found" >> "preview_url.txt"
-                      }
-                    }
-                  '
+                  --format json > linkinator_results.json || true
+                
+                # Parse JSON and filter broken links (excluding 403s)
+                BROKEN_LINKS=$(jq -r '
+                  .links[]
+                  | select(.state != "OK" and .status != 403)
+                  | "Page: \(.parent)\n❌ Broken link: \(.url) (\(.status))\n"
+                ' linkinator_results.json)
+                
+                if [ -n "$BROKEN_LINKS" ]; then
+                  echo "**The following broken links were found:**" >> preview_url.txt
+                  echo "" >> preview_url.txt
+                  echo "$BROKEN_LINKS" >> preview_url.txt
+                else
+                  echo "No broken links found" >> preview_url.txt
+                fi
+                
+                rm -f linkinator_results.json
 
             - name: Comment URL in PR
-              uses: thollander/actions-comment-pull-request@v2.4.3
+              uses: thollander/actions-comment-pull-request@v3
               with:
-                  filePath: apps/opik-documentation/documentation/preview_url.txt
+                  file-path: apps/opik-documentation/documentation/preview_url.txt
+                  comment-tag: docs-preview
