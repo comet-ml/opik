@@ -38,13 +38,14 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.UncheckedIOException;
-import java.net.HttpURLConnection;
 import java.net.URI;
 import java.util.List;
 import java.util.Optional;
 
 @Mapper
 public interface LlmProviderLangChainMapper {
+    Logger log = LoggerFactory.getLogger(LlmProviderLangChainMapper.class);
+
     String ERR_UNEXPECTED_ROLE = "unexpected role '%s'";
     String ERR_ROLE_MSG_TYPE_MISMATCH = "role and message instance are not matching, role: '%s', instance: '%s'";
 
@@ -115,7 +116,6 @@ public interface LlmProviderLangChainMapper {
      * Convert OpikContent to public API Content.
      */
     private Content convertOpikContent(OpikContent opikContent) {
-        Logger log = LoggerFactory.getLogger(LlmProviderLangChainMapper.class);
         return switch (opikContent.type()) {
             case TEXT -> TextContent.from(opikContent.text());
             case IMAGE_URL -> {
@@ -135,8 +135,8 @@ public interface LlmProviderLangChainMapper {
 
                     // Only detect MIME type if not provided AND URL has no file extension
                     // (LangChain4j can detect MIME type from extensions automatically)
-                    if (mimeType == null && !hasVideoFileExtension(videoUrl)) {
-                        mimeType = detectMimeTypeFromHttpHead(videoUrl);
+                    if (mimeType == null && !VideoMimeTypeUtils.hasVideoFileExtension(videoUrl)) {
+                        mimeType = VideoMimeTypeUtils.detectMimeTypeFromHttpHead(videoUrl);
                     }
 
                     if (mimeType != null) {
@@ -151,68 +151,6 @@ public interface LlmProviderLangChainMapper {
             case AUDIO -> throw new BadRequestException("Audio content not yet supported in conversion");
             case FILE -> throw new BadRequestException("File content not yet supported in conversion");
         };
-    }
-
-    // Common video file extensions that LangChain4j can detect automatically
-    java.util.Set<String> VIDEO_EXTENSIONS = java.util.Set.of(
-            "mp4", "webm", "ogg", "ogv", "avi", "mov", "wmv", "flv", "mkv", "m4v", "3gp", "3g2");
-
-    /**
-     * Check if the URL has a recognizable video file extension.
-     * If it does, LangChain4j will detect the MIME type automatically.
-     */
-    private boolean hasVideoFileExtension(String url) {
-        try {
-            String path = URI.create(url).getPath();
-            if (path == null || path.isBlank()) {
-                return false;
-            }
-            String extension = com.google.common.io.Files.getFileExtension(path).toLowerCase();
-            return VIDEO_EXTENSIONS.contains(extension);
-        } catch (Exception e) {
-            return false;
-        }
-    }
-
-    /**
-     * Detect MIME type by making an HTTP HEAD request to read the Content-Type header.
-     * Only called for URLs without file extensions.
-     */
-    private String detectMimeTypeFromHttpHead(String url) {
-        Logger log = LoggerFactory.getLogger(LlmProviderLangChainMapper.class);
-        try {
-            var uri = URI.create(url);
-            if (!"http".equalsIgnoreCase(uri.getScheme()) && !"https".equalsIgnoreCase(uri.getScheme())) {
-                return null;
-            }
-
-            log.debug("Making HEAD request to detect MIME type for URL without extension: '{}'",
-                    url.substring(0, Math.min(50, url.length())));
-
-            HttpURLConnection connection = (HttpURLConnection) uri.toURL().openConnection();
-            connection.setRequestMethod("HEAD");
-            connection.setConnectTimeout(5000);
-            connection.setReadTimeout(5000);
-            connection.connect();
-
-            String contentType = connection.getContentType();
-            connection.disconnect();
-
-            if (contentType != null && !contentType.isBlank()) {
-                // Content-Type may include charset, e.g., "video/mp4; charset=utf-8"
-                int semicolonIndex = contentType.indexOf(';');
-                if (semicolonIndex > 0) {
-                    contentType = contentType.substring(0, semicolonIndex).trim();
-                }
-                log.debug("Detected MIME type '{}' from HTTP HEAD: '{}'", contentType,
-                        url.substring(0, Math.min(50, url.length())));
-                return contentType;
-            }
-        } catch (Exception e) {
-            log.debug("Failed to detect MIME type from HTTP HEAD: '{}', error: '{}'",
-                    url.substring(0, Math.min(50, url.length())), e.getMessage());
-        }
-        return null;
     }
 
     @Mapping(expression = "java(request.model())", target = "model")

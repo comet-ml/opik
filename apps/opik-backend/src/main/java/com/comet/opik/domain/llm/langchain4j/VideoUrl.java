@@ -40,10 +40,6 @@ public final class VideoUrl {
         return mimeType;
     }
 
-    public String getMimeType() {
-        return mimeType;
-    }
-
     public static Builder builder() {
         return new Builder();
     }
