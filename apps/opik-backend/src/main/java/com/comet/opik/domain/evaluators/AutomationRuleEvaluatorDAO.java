@@ -49,19 +49,26 @@ public interface AutomationRuleEvaluatorDAO extends AutomationRuleDAO {
             SELECT rule.id, rule.action, rule.name AS name, rule.sampling_rate, rule.enabled, rule.filters,
                    evaluator.type, evaluator.code,
                    evaluator.created_at, evaluator.created_by, evaluator.last_updated_at, evaluator.last_updated_by,
-                   arp.project_id
+                   GROUP_CONCAT(DISTINCT arp.project_id SEPARATOR ',') as project_ids
             FROM automation_rules rule
             JOIN automation_rule_evaluators evaluator
               ON rule.id = evaluator.id
+            <if(projectIds)>
+            JOIN automation_rule_projects arp
+              ON rule.id = arp.rule_id AND rule.workspace_id = arp.workspace_id AND arp.project_id IN (<projectIds>)
+            <else>
             LEFT JOIN automation_rule_projects arp
               ON rule.id = arp.rule_id AND rule.workspace_id = arp.workspace_id
+            </if>
             WHERE rule.workspace_id = :workspaceId AND rule.action = :action
-            <if(projectIds)> AND arp.project_id IN (<projectIds>) <endif>
             <if(type)> AND evaluator.type = :type <endif>
             <if(ids)> AND rule.id IN (<ids>) <endif>
             <if(id)> AND rule.id like concat('%', :id, '%') <endif>
             <if(name)> AND rule.name like concat('%', :name, '%') <endif>
             <if(filters)> AND <filters> <endif>
+            GROUP BY rule.id, rule.action, rule.name, rule.sampling_rate, rule.enabled, rule.filters,
+                     evaluator.type, evaluator.code, evaluator.created_at, evaluator.created_by,
+                     evaluator.last_updated_at, evaluator.last_updated_by
             <if(sort_fields)> ORDER BY <sort_fields> <else> ORDER BY rule.id DESC <endif>
             <if(limit)> LIMIT :limit <endif>
             <if(offset)> OFFSET :offset <endif>
@@ -85,10 +92,9 @@ public interface AutomationRuleEvaluatorDAO extends AutomationRuleDAO {
     default List<AutomationRuleEvaluatorModel<?>> find(String workspaceId, List<UUID> projectIds,
             AutomationRuleEvaluatorCriteria criteria, String sortingFields, String filters,
             Map<String, Object> filterMapping, Integer offset, Integer limit) {
-        var rawResults = find(workspaceId, projectIds, criteria.action(), criteria.type(), criteria.ids(),
+        return find(workspaceId, projectIds, criteria.action(), criteria.type(), criteria.ids(),
                 criteria.id(),
                 criteria.name(), sortingFields, filters, filterMapping, offset, limit);
-        return aggregateProjectIds(rawResults);
     }
 
     default List<AutomationRuleEvaluatorModel<?>> find(String workspaceId, UUID projectId,

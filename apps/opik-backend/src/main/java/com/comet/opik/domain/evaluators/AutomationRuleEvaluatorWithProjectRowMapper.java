@@ -15,8 +15,8 @@ import java.util.Set;
 import java.util.UUID;
 
 /**
- * Row mapper that handles individual rows from the join query with automation_rule_projects.
- * Each row contains one project_id, so multiple rows with the same rule_id need to be aggregated.
+ * Row mapper that handles rows from the join query with automation_rule_projects.
+ * Uses GROUP_CONCAT to aggregate multiple project_ids into a comma-separated string per rule.
  */
 @RequiredArgsConstructor
 public class AutomationRuleEvaluatorWithProjectRowMapper implements RowMapper<AutomationRuleEvaluatorModel<?>> {
@@ -35,11 +35,14 @@ public class AutomationRuleEvaluatorWithProjectRowMapper implements RowMapper<Au
         Instant lastUpdatedAt = rs.getTimestamp("last_updated_at").toInstant();
         String lastUpdatedBy = rs.getString("last_updated_by");
 
-        // Get project_id from current row
+        // Get project_ids from GROUP_CONCAT result (comma-separated)
         Set<UUID> projectIds = new HashSet<>();
-        String projectIdStr = rs.getString("project_id");
-        if (projectIdStr != null && !rs.wasNull()) {
-            projectIds.add(UUID.fromString(projectIdStr));
+        String projectIdsStr = rs.getString("project_ids");
+        if (projectIdsStr != null && !rs.wasNull() && !projectIdsStr.isEmpty()) {
+            String[] ids = projectIdsStr.split(",");
+            for (String idStr : ids) {
+                projectIds.add(UUID.fromString(idStr.trim()));
+            }
         }
 
         AutomationRuleEvaluatorType type = AutomationRuleEvaluatorType.fromString(rs.getString("type"));
