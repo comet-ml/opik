@@ -45,40 +45,38 @@ public interface AutomationRuleEvaluatorDAO extends AutomationRuleDAO {
             """)
     <T> int updateEvaluator(@Bind("id") UUID id, @BindMethods("rule") AutomationRuleEvaluatorModel<T> rule);
 
+    /**
+     * Query 1: Find rules WITHOUT project associations (clean, no duplication).
+     * Returns one row per rule with all rule metadata.
+     */
     @SqlQuery("""
             SELECT rule.id, rule.action, rule.name AS name, rule.sampling_rate, rule.enabled, rule.filters,
                    evaluator.type, evaluator.code,
-                   evaluator.created_at, evaluator.created_by, evaluator.last_updated_at, evaluator.last_updated_by,
-                   arp.project_id
+                   evaluator.created_at, evaluator.created_by, evaluator.last_updated_at, evaluator.last_updated_by
             FROM automation_rules rule
             JOIN automation_rule_evaluators evaluator ON rule.id = evaluator.id
-            LEFT JOIN automation_rule_projects arp
-                ON rule.id = arp.rule_id AND rule.workspace_id = arp.workspace_id
+            <if(projectIds)>
             WHERE rule.id IN (
-                SELECT DISTINCT rule.id
-                FROM automation_rules rule
-                JOIN automation_rule_evaluators evaluator ON rule.id = evaluator.id
-                <if(projectIds)>
-                JOIN automation_rule_projects p ON rule.id = p.rule_id
-                    AND rule.workspace_id = p.workspace_id
-                    AND p.project_id IN (<projectIds>)
-                </if>
-                WHERE rule.workspace_id = :workspaceId AND rule.action = :action
-                <if(type)> AND evaluator.type = :type <endif>
-                <if(ids)> AND rule.id IN (<ids>) <endif>
-                <if(id)> AND rule.id like concat('%', :id, '%') <endif>
-                <if(name)> AND rule.name like concat('%', :name, '%') <endif>
-                <if(filters)> AND <filters> <endif>
-                <if(sort_fields)> ORDER BY <sort_fields> <else> ORDER BY rule.id DESC <endif>
-                <if(limit)> LIMIT :limit <endif>
-                <if(offset)> OFFSET :offset <endif>
-            )
+                SELECT DISTINCT rule_id
+                FROM automation_rule_projects
+                WHERE workspace_id = :workspaceId AND project_id IN (<projectIds>)
+            ) AND
+            </if>
+            <if(!projectIds)>WHERE</if>
+            rule.workspace_id = :workspaceId AND rule.action = :action
+            <if(type)> AND evaluator.type = :type <endif>
+            <if(ids)> AND rule.id IN (<ids>) <endif>
+            <if(id)> AND rule.id like concat('%', :id, '%') <endif>
+            <if(name)> AND rule.name like concat('%', :name, '%') <endif>
+            <if(filters)> AND <filters> <endif>
             <if(sort_fields)> ORDER BY <sort_fields> <else> ORDER BY rule.id DESC <endif>
+            <if(limit)> LIMIT :limit <endif>
+            <if(offset)> OFFSET :offset <endif>
             """)
     @UseStringTemplateEngine
     @AllowUnusedBindings
-    @RegisterRowMapper(AutomationRuleEvaluatorWithProjectRowMapper.class)
-    List<AutomationRuleEvaluatorModel<?>> find(@Bind("workspaceId") String workspaceId,
+    List<AutomationRuleEvaluatorModel<?>> findRulesWithoutProjects(
+            @Bind("workspaceId") String workspaceId,
             @Define("projectIds") @BindList(onEmpty = BindList.EmptyHandling.NULL_VALUE, value = "projectIds") List<UUID> projectIds,
             @Bind("action") AutomationRule.AutomationRuleAction action,
             @Define("type") @Bind("type") AutomationRuleEvaluatorType type,
@@ -91,13 +89,78 @@ public interface AutomationRuleEvaluatorDAO extends AutomationRuleDAO {
             @Define("offset") @Bind("offset") Integer offset,
             @Define("limit") @Bind("limit") Integer limit);
 
+    /**
+     * Query 2: Bulk fetch project associations for given rules.
+     * Returns minimal data: only rule_id and project_id mappings.
+     */
+    @SqlQuery("""
+            SELECT rule_id, project_id
+            FROM automation_rule_projects
+            WHERE rule_id IN (<ruleIds>) AND workspace_id = :workspaceId
+            """)
+    @UseStringTemplateEngine
+    @RegisterRowMapper(RuleProjectMappingRowMapper.class)
+    List<RuleProjectMapping> findProjectMappingsList(
+            @BindList("ruleIds") List<UUID> ruleIds,
+            @Bind("workspaceId") String workspaceId);
+
+    /**
+     * Helper to convert list of mappings into Map<RuleId, Set<ProjectId>>
+     */
+    default Map<UUID, Set<UUID>> findProjectMappings(List<UUID> ruleIds, String workspaceId) {
+        var mappings = findProjectMappingsList(ruleIds, workspaceId);
+        var result = new java.util.HashMap<UUID, Set<UUID>>();
+
+        for (var mapping : mappings) {
+            result.computeIfAbsent(mapping.ruleId(), k -> new java.util.HashSet<>())
+                    .add(mapping.projectId());
+        }
+
+        return result;
+    }
+
+    /**
+     * Simple record to hold rule-project mapping.
+     */
+    record RuleProjectMapping(UUID ruleId, UUID projectId) {
+    }
+
+    /**
+     * Row mapper for RuleProjectMapping.
+     */
+    class RuleProjectMappingRowMapper implements org.jdbi.v3.core.mapper.RowMapper<RuleProjectMapping> {
+        @Override
+        public RuleProjectMapping map(java.sql.ResultSet rs, org.jdbi.v3.core.statement.StatementContext ctx)
+                throws java.sql.SQLException {
+            return new RuleProjectMapping(
+                    UUID.fromString(rs.getString("rule_id")),
+                    UUID.fromString(rs.getString("project_id")));
+        }
+    }
+
     default List<AutomationRuleEvaluatorModel<?>> find(String workspaceId, List<UUID> projectIds,
             AutomationRuleEvaluatorCriteria criteria, String sortingFields, String filters,
             Map<String, Object> filterMapping, Integer offset, Integer limit) {
-        var rawResults = find(workspaceId, projectIds, criteria.action(), criteria.type(), criteria.ids(),
-                criteria.id(),
-                criteria.name(), sortingFields, filters, filterMapping, offset, limit);
-        return aggregateProjectIds(rawResults);
+
+        // Query 1: Get paginated rules without project data (no duplication)
+        var rules = findRulesWithoutProjects(workspaceId, projectIds, criteria.action(), criteria.type(),
+                criteria.ids(), criteria.id(), criteria.name(), sortingFields, filters, filterMapping, offset, limit);
+
+        if (rules.isEmpty()) {
+            return List.of();
+        }
+
+        // Query 2: Bulk fetch project associations for these rules
+        var ruleIds = rules.stream().map(AutomationRuleEvaluatorModel::id).toList();
+        var projectMappings = findProjectMappings(ruleIds, workspaceId);
+
+        // Merge project IDs into rules
+        return rules.stream()
+                .<AutomationRuleEvaluatorModel<?>>map(rule -> {
+                    var projects = projectMappings.getOrDefault(rule.id(), Set.of());
+                    return rebuildWithProjectIds(rule, projects);
+                })
+                .toList();
     }
 
     default List<AutomationRuleEvaluatorModel<?>> find(String workspaceId, UUID projectId,
@@ -114,33 +177,8 @@ public interface AutomationRuleEvaluatorDAO extends AutomationRuleDAO {
     }
 
     /**
-     * Aggregates multiple rows (one per project) into single rules with multiple project IDs.
-     * The query returns one row per rule-project combination, so we need to merge them.
-     */
-    private static List<AutomationRuleEvaluatorModel<?>> aggregateProjectIds(
-            List<AutomationRuleEvaluatorModel<?>> rawResults) {
-        var aggregated = new java.util.LinkedHashMap<UUID, AutomationRuleEvaluatorModel<?>>();
-
-        for (var result : rawResults) {
-            UUID ruleId = result.id();
-            if (aggregated.containsKey(ruleId)) {
-                // Merge project IDs
-                var existing = aggregated.get(ruleId);
-                var mergedProjectIds = new java.util.HashSet<>(existing.projectIds());
-                mergedProjectIds.addAll(result.projectIds());
-
-                // Rebuild the model with merged project IDs
-                aggregated.put(ruleId, rebuildWithProjectIds(existing, mergedProjectIds));
-            } else {
-                aggregated.put(ruleId, result);
-            }
-        }
-
-        return new java.util.ArrayList<>(aggregated.values());
-    }
-
-    /**
      * Rebuilds an AutomationRuleEvaluatorModel with new project IDs.
+     * Used to merge project associations fetched separately into rule models.
      */
     private static AutomationRuleEvaluatorModel<?> rebuildWithProjectIds(
             AutomationRuleEvaluatorModel<?> model, Set<UUID> projectIds) {
