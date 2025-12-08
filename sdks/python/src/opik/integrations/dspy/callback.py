@@ -384,9 +384,13 @@ class OpikCallback(dspy_callback.BaseCallback):
                 return None, None
 
             # Check if response was from cache
-            # DSPy only sets cache_hit=True on cached responses, attribute doesn't exist otherwise
+            # DSPy sets cache_hit on responses, but it may be None on some versions
             response = last_entry.get("response")
-            cache_hit = getattr(response, "cache_hit", False) if response else False
+            cache_hit_value = (
+                getattr(response, "cache_hit", False) if response else False
+            )
+            # Normalize None to False for consistent behavior across DSPy versions
+            cache_hit = cache_hit_value if cache_hit_value is not None else False
 
             usage_dict = last_entry.get("usage")
 
