@@ -1,5 +1,7 @@
 from typing import Union
 
+import uuid
+
 import dspy
 from dspy import __version__ as dspy_version
 import pytest
@@ -716,8 +718,6 @@ def test_dspy__cache_enabled_and_response_cached__no_usage_and_cache_hit_true(
     - usage should be None (no API call was made)
     - cache_hit=True in metadata
     """
-    import uuid
-
     lm = dspy.LM(
         cache=True,  # Enable caching
         model="openai/gpt-4o-mini",
@@ -764,8 +764,6 @@ def test_dspy__cache_enabled_first_call__has_usage_and_cache_hit_false(
     - usage should be present
     - cache_hit=False in metadata
     """
-    import uuid
-
     lm = dspy.LM(
         cache=True,  # Enable caching
         model="openai/gpt-4o-mini",
