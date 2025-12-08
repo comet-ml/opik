@@ -436,12 +436,12 @@ llmProviderClient:
   # Default: 60s
   # Description: Write timeout for LLM providers
   writeTimeout: ${LLM_PROVIDER_CLIENT_WRITE_TIMEOUT:-60s}
-  # Default: true
-  # Description: Whether or not to log requests
-  logRequests: ${LLM_PROVIDER_CLIENT_LOG_REQUESTS:-true}
-  # Default: true
-  # Description: Whether or not to log responses
-  logResponses: ${LLM_PROVIDER_CLIENT_LOG_RESPONSES:-true}
+  # Default: false
+  # Description: Whether or not to log requests (HTTP-level logging via langchain4j - can be verbose and may contain credentials)
+  logRequests: ${LLM_PROVIDER_CLIENT_LOG_REQUESTS:-false}
+  # Default: false
+  # Description: Whether or not to log responses (HTTP-level logging via langchain4j - can be verbose)
+  logResponses: ${LLM_PROVIDER_CLIENT_LOG_RESPONSES:-false}
   # Configuration for OpenAI client
   openAiClient:
     # Default:
