@@ -55,15 +55,14 @@ public interface AutomationRuleEvaluatorDAO extends AutomationRuleDAO {
                    evaluator.created_at, evaluator.created_by, evaluator.last_updated_at, evaluator.last_updated_by
             FROM automation_rules rule
             JOIN automation_rule_evaluators evaluator ON rule.id = evaluator.id
+            WHERE rule.workspace_id = :workspaceId AND rule.action = :action
             <if(projectIds)>
-            WHERE rule.id IN (
+            AND rule.id IN (
                 SELECT DISTINCT rule_id
                 FROM automation_rule_projects
                 WHERE workspace_id = :workspaceId AND project_id IN (<projectIds>)
-            ) AND
+            )
             </if>
-            <if(!projectIds)>WHERE</if>
-            rule.workspace_id = :workspaceId AND rule.action = :action
             <if(type)> AND evaluator.type = :type <endif>
             <if(ids)> AND rule.id IN (<ids>) <endif>
             <if(id)> AND rule.id like concat('%', :id, '%') <endif>
