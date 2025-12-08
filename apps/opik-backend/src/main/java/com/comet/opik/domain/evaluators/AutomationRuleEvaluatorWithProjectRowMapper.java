@@ -16,7 +16,7 @@ import java.util.UUID;
 
 /**
  * Row mapper that handles rows from the join query with automation_rule_projects.
- * Uses GROUP_CONCAT to aggregate multiple project_ids into a comma-separated string per rule.
+ * Each row contains one project_id, multiple rows with the same rule_id are aggregated in Java.
  */
 @RequiredArgsConstructor
 public class AutomationRuleEvaluatorWithProjectRowMapper implements RowMapper<AutomationRuleEvaluatorModel<?>> {
@@ -35,17 +35,16 @@ public class AutomationRuleEvaluatorWithProjectRowMapper implements RowMapper<Au
         Instant lastUpdatedAt = rs.getTimestamp("last_updated_at").toInstant();
         String lastUpdatedBy = rs.getString("last_updated_by");
 
-        // Get project_ids from GROUP_CONCAT result (comma-separated)
+        // Get single project_id from current row (will be aggregated in DAO)
         Set<UUID> projectIds = new HashSet<>();
-        String projectIdsStr = rs.getString("project_ids");
-        if (projectIdsStr != null && !rs.wasNull() && !projectIdsStr.trim().isEmpty()) {
-            String[] ids = projectIdsStr.split(",");
-            for (String idStr : ids) {
-                String trimmed = idStr.trim();
-                if (!trimmed.isEmpty()) {
-                    projectIds.add(UUID.fromString(trimmed));
-                }
+        try {
+            String projectIdStr = rs.getString("project_id");
+            if (projectIdStr != null && !rs.wasNull()) {
+                projectIds.add(UUID.fromString(projectIdStr));
             }
+        } catch (SQLException e) {
+            // project_id column might not exist if rule has no projects
+            // This is fine - just return empty set
         }
 
         AutomationRuleEvaluatorType type = AutomationRuleEvaluatorType.fromString(rs.getString("type"));

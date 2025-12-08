@@ -46,39 +46,34 @@ public interface AutomationRuleEvaluatorDAO extends AutomationRuleDAO {
     <T> int updateEvaluator(@Bind("id") UUID id, @BindMethods("rule") AutomationRuleEvaluatorModel<T> rule);
 
     @SqlQuery("""
-            SELECT outer_rule.id, outer_rule.action, outer_rule.name AS name,
-                   outer_rule.sampling_rate, outer_rule.enabled, outer_rule.filters,
-                   outer_evaluator.type, outer_evaluator.code,
-                   outer_evaluator.created_at, outer_evaluator.created_by,
-                   outer_evaluator.last_updated_at, outer_evaluator.last_updated_by,
-                   GROUP_CONCAT(DISTINCT outer_arp.project_id SEPARATOR ',') as project_ids
-            FROM (
-                SELECT DISTINCT rule.id
-                FROM automation_rules rule
-                JOIN automation_rule_evaluators evaluator ON rule.id = evaluator.id
+            SELECT rule.id, rule.action, rule.name AS name, rule.sampling_rate, rule.enabled, rule.filters,
+                   evaluator.type, evaluator.code,
+                   evaluator.created_at, evaluator.created_by, evaluator.last_updated_at, evaluator.last_updated_by,
+                   arp.project_id
+            FROM automation_rules rule
+            JOIN automation_rule_evaluators evaluator ON rule.id = evaluator.id
+            LEFT JOIN automation_rule_projects arp
+                ON rule.id = arp.rule_id AND rule.workspace_id = arp.workspace_id
+            WHERE rule.id IN (
+                SELECT DISTINCT r.id
+                FROM automation_rules r
+                JOIN automation_rule_evaluators e ON r.id = e.id
                 <if(projectIds)>
-                JOIN automation_rule_projects arp ON rule.id = arp.rule_id
-                    AND rule.workspace_id = arp.workspace_id
-                    AND arp.project_id IN (<projectIds>)
+                JOIN automation_rule_projects p ON r.id = p.rule_id
+                    AND r.workspace_id = p.workspace_id
+                    AND p.project_id IN (<projectIds>)
                 </if>
-                WHERE rule.workspace_id = :workspaceId AND rule.action = :action
-                <if(type)> AND evaluator.type = :type <endif>
-                <if(ids)> AND rule.id IN (<ids>) <endif>
-                <if(id)> AND rule.id like concat('%', :id, '%') <endif>
-                <if(name)> AND rule.name like concat('%', :name, '%') <endif>
+                WHERE r.workspace_id = :workspaceId AND r.action = :action
+                <if(type)> AND e.type = :type <endif>
+                <if(ids)> AND r.id IN (<ids>) <endif>
+                <if(id)> AND r.id like concat('%', :id, '%') <endif>
+                <if(name)> AND r.name like concat('%', :name, '%') <endif>
                 <if(filters)> AND <filters> <endif>
-                <if(sort_fields)> ORDER BY <sort_fields> <else> ORDER BY rule.id DESC <endif>
+                <if(sort_fields)> ORDER BY <sort_fields> <else> ORDER BY r.id DESC <endif>
                 <if(limit)> LIMIT :limit <endif>
                 <if(offset)> OFFSET :offset <endif>
-            ) AS paginated_rule_ids
-            JOIN automation_rules outer_rule ON paginated_rule_ids.id = outer_rule.id
-            JOIN automation_rule_evaluators outer_evaluator ON outer_rule.id = outer_evaluator.id
-            LEFT JOIN automation_rule_projects outer_arp
-                ON outer_rule.id = outer_arp.rule_id AND outer_rule.workspace_id = outer_arp.workspace_id
-            GROUP BY outer_rule.id, outer_rule.action, outer_rule.name, outer_rule.sampling_rate,
-                     outer_rule.enabled, outer_rule.filters, outer_evaluator.type, outer_evaluator.code,
-                     outer_evaluator.created_at, outer_evaluator.created_by,
-                     outer_evaluator.last_updated_at, outer_evaluator.last_updated_by
+            )
+            <if(sort_fields)> ORDER BY <sort_fields> <else> ORDER BY rule.id DESC <endif>
             """)
     @UseStringTemplateEngine
     @AllowUnusedBindings
@@ -99,9 +94,10 @@ public interface AutomationRuleEvaluatorDAO extends AutomationRuleDAO {
     default List<AutomationRuleEvaluatorModel<?>> find(String workspaceId, List<UUID> projectIds,
             AutomationRuleEvaluatorCriteria criteria, String sortingFields, String filters,
             Map<String, Object> filterMapping, Integer offset, Integer limit) {
-        return find(workspaceId, projectIds, criteria.action(), criteria.type(), criteria.ids(),
+        var rawResults = find(workspaceId, projectIds, criteria.action(), criteria.type(), criteria.ids(),
                 criteria.id(),
                 criteria.name(), sortingFields, filters, filterMapping, offset, limit);
+        return aggregateProjectIds(rawResults);
     }
 
     default List<AutomationRuleEvaluatorModel<?>> find(String workspaceId, UUID projectId,
