@@ -7,4 +7,3 @@ TIMEOUT_SEC = 20
 DATASET_NAME = "terminal-bench"
 DATASET_VERSION = "2.0"
 TASK_NAMES = ["fix-git", "overfull-hbox"]
-

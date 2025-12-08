@@ -190,7 +190,9 @@ def setup_lazy(
     if source:
         _SERVICE._ensure_dataset_and_experiment(source)
 
-    LOGGER.info("Experiment service setup for '%s' (source=%s)", experiment_name, source)
+    LOGGER.info(
+        "Experiment service setup for '%s' (source=%s)", experiment_name, source
+    )
 
 
 def get_service() -> Optional[HarborExperimentService]:
@@ -202,5 +204,3 @@ def reset() -> None:
     """Reset the experiment service."""
     global _SERVICE
     _SERVICE = None
-
-

@@ -20,6 +20,16 @@ from opik import Opik, synchronization
 from opik.integrations.harbor import track_harbor, reset_harbor_tracking
 from . import constants
 
+from harbor.job import Job
+from harbor.models.job.config import (
+    AgentConfig,
+    JobConfig,
+    EnvironmentConfig,
+    OrchestratorConfig,
+    RegistryDatasetConfig,
+)
+from harbor.models.registry import RemoteRegistryInfo
+
 pytest.importorskip("harbor")
 
 
@@ -42,7 +52,9 @@ def get_job_id_from_harbor_job_dir(jobs_dir: Path, job_name: str) -> str:
     return trial_config["job_id"]
 
 
-def assert_harbor_experiment_created(opik_client: Opik, jobs_dir: Path, job_name: str) -> None:
+def assert_harbor_experiment_created(
+    opik_client: Opik, jobs_dir: Path, job_name: str
+) -> None:
     """Verify that a Harbor experiment was created with the correct name and has reward scores.
 
     The experiment name is based on job_id: "harbor-job-{job_id[:8]}"
@@ -56,29 +68,25 @@ def assert_harbor_experiment_created(opik_client: Opik, jobs_dir: Path, job_name
     expected_experiment_name = f"harbor-job-{job_id[:8]}"
 
     experiments = opik_client.get_experiments_by_name(expected_experiment_name)
-    assert len(experiments) >= 1, f"Experiment '{expected_experiment_name}' should be created"
+    assert (
+        len(experiments) >= 1
+    ), f"Experiment '{expected_experiment_name}' should be created"
 
     # Verify the experiment has exactly two items with non-null reward feedback scores
     experiment = experiments[0]
     items = experiment.get_items()
-    assert len(items) == 2, f"Experiment should have exactly two items, got {len(items)}"
+    assert (
+        len(items) == 2
+    ), f"Experiment should have exactly two items, got {len(items)}"
 
     has_reward_score = any(
         score.get("name") == "reward" and score.get("value") is not None
         for item in items
         for score in item.feedback_scores
     )
-    assert has_reward_score, "Experiment should have at least one item with a non-null reward feedback score"
-
-from harbor.job import Job
-from harbor.models.job.config import (
-    AgentConfig,
-    JobConfig,
-    EnvironmentConfig,
-    OrchestratorConfig,
-    RegistryDatasetConfig,
-)
-from harbor.models.registry import RemoteRegistryInfo
+    assert (
+        has_reward_score
+    ), "Experiment should have at least one item with a non-null reward feedback score"
 
 
 @pytest.fixture(autouse=True)
@@ -139,13 +147,18 @@ class TestHarborSDKIntegration:
         asyncio.get_event_loop().run_until_complete(tracked_job.run())
 
         if not synchronization.until(
-            function=lambda: opik_client.search_traces(project_name=configure_e2e_tests_env_unique_project_name)[0].output is not None,
+            function=lambda: opik_client.search_traces(
+                project_name=configure_e2e_tests_env_unique_project_name
+            )[0].output
+            is not None,
             allow_errors=True,
             max_try_seconds=60,
         ):
             raise AssertionError("Failed to get traces")
 
-        traces = opik_client.search_traces(project_name=configure_e2e_tests_env_unique_project_name, truncate=False)
+        traces = opik_client.search_traces(
+            project_name=configure_e2e_tests_env_unique_project_name, truncate=False
+        )
         assert len(traces) == 2, f"Expected 2 traces (one per task), got {len(traces)}"
 
         for trace in traces:
@@ -224,7 +237,8 @@ class TestHarborCLIIntegration:
             [
                 "harbor",
                 "run",
-                "-c", str(config_path),
+                "-c",
+                str(config_path),
             ],
             catch_exceptions=False,
         )
@@ -235,13 +249,18 @@ class TestHarborCLIIntegration:
         assert result.exit_code == 0, f"CLI failed: {result.output}"
 
         if not synchronization.until(
-            function=lambda: opik_client.search_traces(project_name=configure_e2e_tests_env_unique_project_name)[0].output is not None,
+            function=lambda: opik_client.search_traces(
+                project_name=configure_e2e_tests_env_unique_project_name
+            )[0].output
+            is not None,
             allow_errors=True,
             max_try_seconds=60,
         ):
             raise AssertionError("Failed to get traces after CLI run")
 
-        traces = opik_client.search_traces(project_name=configure_e2e_tests_env_unique_project_name, truncate=False)
+        traces = opik_client.search_traces(
+            project_name=configure_e2e_tests_env_unique_project_name, truncate=False
+        )
         assert len(traces) == 2, f"Expected 2 traces (one per task), got {len(traces)}"
         for trace in traces:
             assert "harbor" in (trace.tags or [])

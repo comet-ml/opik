@@ -13,7 +13,11 @@ import click
 
 @click.command(
     name="harbor",
-    context_settings={"ignore_unknown_options": True, "allow_extra_args": True, "allow_interspersed_args": False},
+    context_settings={
+        "ignore_unknown_options": True,
+        "allow_extra_args": True,
+        "allow_interspersed_args": False,
+    },
 )
 @click.pass_context
 def harbor(ctx: click.Context) -> None:
@@ -26,8 +30,10 @@ def harbor(ctx: click.Context) -> None:
         )
 
     from opik.integrations.harbor import track_harbor
+
     track_harbor()
 
     from harbor.cli.main import app
+
     sys.argv = ["harbor"] + ctx.args
     app()

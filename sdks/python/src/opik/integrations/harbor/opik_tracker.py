@@ -53,13 +53,9 @@ def _rewards_to_feedback_scores(
     for name, value in rewards.items():
         try:
             float_value = float(value)
-            
-            score = FeedbackScoreDict(
-                name=name,
-                value=float_value,
-                reason=error
-            )
-            
+
+            score = FeedbackScoreDict(name=name, value=float_value, reason=error)
+
             feedback_scores.append(score)
         except (ValueError, TypeError):
             LOGGER.warning(
@@ -203,7 +199,9 @@ def _enable_harbor_tracking(project_name: Optional[str] = None) -> None:
         Trial.run = _wrap_trial_run(Trial.run, project_name)
 
     if not hasattr(Trial._setup_environment, "opik_tracked"):
-        Trial._setup_environment = _wrap_setup_environment(Trial._setup_environment, project_name)
+        Trial._setup_environment = _wrap_setup_environment(
+            Trial._setup_environment, project_name
+        )
 
     if not hasattr(Trial._setup_agent, "opik_tracked"):
         Trial._setup_agent = _wrap_setup_agent(Trial._setup_agent, project_name)
@@ -212,7 +210,9 @@ def _enable_harbor_tracking(project_name: Optional[str] = None) -> None:
         Trial._execute_agent = _wrap_execute_agent(Trial._execute_agent, project_name)
 
     if not hasattr(Trial._run_verification, "opik_tracked"):
-        Trial._run_verification = _wrap_run_verification(Trial._run_verification, project_name)
+        Trial._run_verification = _wrap_run_verification(
+            Trial._run_verification, project_name
+        )
 
     # Patch Verifier (only if not already patched)
     if not hasattr(Verifier.verify, "opik_tracked"):
@@ -254,7 +254,12 @@ def track_harbor(
 def _wrap_trial_run(original: Callable, project_name: Optional[str]) -> Callable:
     """Wrap Trial.run with tracing, feedback scores, and experiment linking."""
 
-    @track(name="trial_run", tags=["harbor"], project_name=project_name, capture_output=False)
+    @track(
+        name="trial_run",
+        tags=["harbor"],
+        project_name=project_name,
+        capture_output=False,
+    )
     @functools.wraps(original)
     async def wrapped(self: "Trial") -> "TrialResult":
         # Set nice trace name
@@ -265,7 +270,9 @@ def _wrap_trial_run(original: Callable, project_name: Optional[str]) -> Callable
             input={
                 "trial_name": config.trial_name,
                 "task": {
-                    "name": config.task.name if hasattr(config.task, "name") else str(config.task.path),
+                    "name": config.task.name
+                    if hasattr(config.task, "name")
+                    else str(config.task.path),
                     "source": getattr(config.task, "source", None),
                 },
                 "agent": {
@@ -282,7 +289,9 @@ def _wrap_trial_run(original: Callable, project_name: Optional[str]) -> Callable
         if experiment_service.get_service() is None:
             try:
                 # Use job_id for consistent experiment naming
-                experiment_name = f"harbor-job-{str(config.job_id)[:8]}" if config.job_id else None
+                experiment_name = (
+                    f"harbor-job-{str(config.job_id)[:8]}" if config.job_id else None
+                )
                 source = getattr(config.task, "source", None)
                 LOGGER.debug(
                     "Lazily setting up experiment service: experiment_name=%s, source=%s",
@@ -309,8 +318,12 @@ def _wrap_trial_run(original: Callable, project_name: Optional[str]) -> Callable
         feedback_scores = None
         if result.verifier_result and result.verifier_result.rewards:
             # Get error message if available
-            error_msg = getattr(result.verifier_result, "error", None) or getattr(result, "error", None)
-            feedback_scores = _rewards_to_feedback_scores(result.verifier_result.rewards, error=error_msg)
+            error_msg = getattr(result.verifier_result, "error", None) or getattr(
+                result, "error", None
+            )
+            feedback_scores = _rewards_to_feedback_scores(
+                result.verifier_result.rewards, error=error_msg
+            )
 
         opik_context.update_current_trace(
             output=output_dict,
@@ -329,7 +342,11 @@ def _wrap_trial_run(original: Callable, project_name: Optional[str]) -> Callable
             )
             if service is not None:
                 source = getattr(config.task, "source", None)
-                task_name = config.task.name if hasattr(config.task, "name") else str(config.task.path)
+                task_name = (
+                    config.task.name
+                    if hasattr(config.task, "name")
+                    else str(config.task.path)
+                )
                 service.link_trial(
                     trial_name=config.trial_name,
                     trace_id=trace_data.id,
@@ -339,15 +356,19 @@ def _wrap_trial_run(original: Callable, project_name: Optional[str]) -> Callable
                     model_name=getattr(config.agent, "model_name", None),
                 )
             else:
-                LOGGER.debug("No experiment service available, skipping experiment linking")
+                LOGGER.debug(
+                    "No experiment service available, skipping experiment linking"
+                )
 
         return result
 
-    wrapped.opik_tracked = True  # type: ignore[attr-defined]
+    wrapped.opik_tracked = True  # type: ignore[union-attr]
     return wrapped
 
 
-def _wrap_setup_environment(original: Callable, project_name: Optional[str]) -> Callable:
+def _wrap_setup_environment(
+    original: Callable, project_name: Optional[str]
+) -> Callable:
     """Wrap Trial._setup_environment with tracing."""
 
     @track(name="setup_environment", tags=["harbor"], project_name=project_name)
@@ -360,7 +381,7 @@ def _wrap_setup_environment(original: Callable, project_name: Optional[str]) -> 
         await original(self)
         opik_context.update_current_span(output={"status": "completed"})
 
-    wrapped.opik_tracked = True  # type: ignore[attr-defined]
+    wrapped.opik_tracked = True  # type: ignore[union-attr]
     return wrapped
 
 
@@ -377,7 +398,7 @@ def _wrap_setup_agent(original: Callable, project_name: Optional[str]) -> Callab
         await original(self)
         opik_context.update_current_span(output={"status": "completed"})
 
-    wrapped.opik_tracked = True  # type: ignore[attr-defined]
+    wrapped.opik_tracked = True  # type: ignore[union-attr]
     return wrapped
 
 
@@ -397,7 +418,7 @@ def _wrap_execute_agent(original: Callable, project_name: Optional[str]) -> Call
         await original(self)
         opik_context.update_current_span(output={"status": "completed"})
 
-    wrapped.opik_tracked = True  # type: ignore[attr-defined]
+    wrapped.opik_tracked = True  # type: ignore[union-attr]
     return wrapped
 
 
@@ -414,7 +435,7 @@ def _wrap_run_verification(original: Callable, project_name: Optional[str]) -> C
         await original(self)
         opik_context.update_current_span(output={"status": "completed"})
 
-    wrapped.opik_tracked = True  # type: ignore[attr-defined]
+    wrapped.opik_tracked = True  # type: ignore[union-attr]
     return wrapped
 
 
@@ -433,17 +454,19 @@ def _wrap_verify(original: Callable, project_name: Optional[str]) -> Callable:
         output_dict: Dict[str, Any] = {}
         if hasattr(result, "rewards") and result.rewards:
             output_dict["rewards"] = result.rewards
-        opik_context.update_current_span(output=output_dict if output_dict else {"status": "completed"})
+        opik_context.update_current_span(
+            output=output_dict if output_dict else {"status": "completed"}
+        )
 
         return result
 
-    wrapped.opik_tracked = True  # type: ignore[attr-defined]
+    wrapped.opik_tracked = True  # type: ignore[union-attr]
     return wrapped
 
 
 def reset_harbor_tracking() -> None:
     """Reset Harbor tracking state for testing purposes.
-    
+
     Resets the experiment service. Method patches remain active
     (they use `opik_tracked` to prevent double-patching).
     """
