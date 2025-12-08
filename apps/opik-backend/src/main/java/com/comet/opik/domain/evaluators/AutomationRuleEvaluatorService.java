@@ -179,8 +179,11 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
 
                 // Save project associations
                 for (UUID projectId : projectIds) {
+                    log.debug("Saving rule-project association: ruleId='{}', projectId='{}', workspaceId='{}'",
+                            id, projectId, workspaceId);
                     projectsDAO.saveRuleProject(id, projectId, workspaceId);
                 }
+                log.debug("Saved {} project associations for rule '{}'", projectIds.size(), id);
 
                 return evaluator;
             } catch (UnableToExecuteStatementException e) {
@@ -463,7 +466,10 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
         return template.inTransaction(READ_ONLY, handle -> {
             var dao = handle.attach(AutomationRuleEvaluatorDAO.class);
             var criteria = AutomationRuleEvaluatorCriteria.builder().type(type).build();
-            return dao.find(workspaceId, projectId, criteria)
+            var results = dao.find(workspaceId, projectId, criteria);
+            log.debug("Found {} evaluators for projectId '{}', workspaceId '{}', type '{}'",
+                    results.size(), projectId, workspaceId, type);
+            return results
                     .stream()
                     .map(evaluator -> switch (evaluator) {
                         case LlmAsJudgeAutomationRuleEvaluatorModel llmAsJudge ->

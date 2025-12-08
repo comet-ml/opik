@@ -979,6 +979,7 @@ class AutomationRuleEvaluatorsResourceTest {
 
             var trace = factory.manufacturePojo(Trace.class).toBuilder()
                     .projectId(projectId)
+                    .projectName(projectName) // Backend uses projectName, not projectId!
                     .threadId(null) // Must be null for trace-level evaluation
                     .input(OBJECT_MAPPER.readTree(INPUT))
                     .output(OBJECT_MAPPER.readTree(OUTPUT))
@@ -1068,6 +1069,7 @@ class AutomationRuleEvaluatorsResourceTest {
 
             var trace = factory.manufacturePojo(Trace.class).toBuilder()
                     .projectId(projectId)
+                    .projectName(projectName) // Backend uses projectName, not projectId!
                     .threadId(null) // Must be null for trace-level evaluation
                     .output(OBJECT_MAPPER.readTree("""
                             {
