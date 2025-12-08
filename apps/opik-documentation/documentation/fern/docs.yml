@@ -664,6 +664,10 @@ navigation:
             icon: fa-regular fa-lightbulb
             path: docs/agent_optimization/opik_optimizer/concepts.mdx
             slug: concepts
+          - page: Configure LLM Providers
+            icon: fa-regular fa-gear
+            path: docs/agent_optimization/opik_optimizer/configure_models.mdx
+            slug: configure_models
           - page: Define datasets
             icon: fa-regular fa-database
             path: docs/agent_optimization/optimization/define_datasets.mdx
@@ -964,7 +968,7 @@ redirects:
     destination: "/docs/agent_optimization/best_practices/prompt_engineering"
     permanent: true
   - source: "docs/agent_optimization/opik_optimizer/litellm_support"
-    destination: "/docs/agent_optimization/opik_optimizer/models"
+    destination: "/docs/opik/agent_optimization/optimization/configure_models"
     permanent: true
   - source: "/docs/opik/agent_optimization/algorithms/mipro_optimizer"
     destination: "/docs/opik/agent_optimization/overview"
@@ -1247,7 +1251,7 @@ redirects:
     destination: "/docs/opik/agent_optimization/overview"
     permanent: true
   - source: "/docs/opik/agent_optimization/opik_optimizer/models"
-    destination: "/docs/opik/agent_optimization/overview"
+    destination: "/docs/opik/agent_optimization/optimization/configure_models"
     permanent: true
   - source: "/docs/opik/agent_optimization/best_practices/prompt_engineering"
     destination: "/docs/opik/agent_optimization/overview"

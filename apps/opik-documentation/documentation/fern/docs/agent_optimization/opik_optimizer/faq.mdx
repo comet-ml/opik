@@ -68,20 +68,19 @@ description: "Find answers to common questions about Opik Agent Optimizer, inclu
   at least 10 samples. The more samples you have, the more accurate the optimization will be.
   </Accordion>
   <Accordion title="What models are supported for optimization?">
-  It's important to note that there are two models at play when it comes to optimizing prompts:
-  1. The chatPrompt model: This is the model that you use the prompt with, should be the same as
-     your application.
-  2. The optimizer model: This is the model that the optimizer uses to improve your prompt, you will
-     get the best performance by using the most powerful model for the optimization.
+  The Opik Agent Optimizer uses [LiteLLM](https://docs.litellm.ai/) to support 100+ LLM providers including:
+  - **OpenAI** (GPT-4o, GPT-4o-mini, o1, o3-mini)
+  - **Anthropic** (Claude 3.5 Sonnet, Claude 3 Opus)
+  - **Google Gemini** (Gemini 2.0 Flash, Gemini 1.5 Pro)
+  - **Azure OpenAI**
+  - **Ollama** (local models like Llama 3, Mistral)
+  - **OpenRouter** (access to multiple providers)
 
-  The Opik Agent Optimizer uses LiteLLM to support a wide range of models including:
-  - OpenAI (e.g., GPT-5, GPT-4.5, GPT-4)
-  - Anthropic (e.g., Claude 3.7 Sonnet, Claude 3.7 Haiku)
-  - Google (e.g., Gemini 2.0 Flash, Gemini 2.0 Pro)
-  - Cohere (e.g., Command, Command-Pro)
-  - Mistral AI (e.g., Mistral-7B-Instruct, Mistral-7B-Instruct-Pro)
-  - Locally hosted models (e.g., via Ollama, Hugging Face Inference Endpoints)
-  - And many others supported by LiteLLM.
+  Models use the LiteLLM format: `provider/model-name` (e.g., `gemini/gemini-2.0-flash`).
+
+  <Tip>
+    See the [Configure LLM Providers](/agent_optimization/optimization/configure_models) guide for detailed setup instructions and examples for each provider.
+  </Tip>
   </Accordion>
   <Accordion title="The performance is not improving, what should I do?">
   There are a few things you can try to improve the performance of your optimization:
