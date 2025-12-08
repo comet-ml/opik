@@ -1,7 +1,14 @@
 import mimetypes
+import random
+import time
 from typing import Optional
 
-from opik import id_helpers
+
+# The attachment file name regex
+ATTACHMENT_FILE_NAME_REGEX = r"(?:input|output|metadata)-attachment-\d+-\d+\.\w+"
+ATTACHMENT_FILE_NAME_PLACEHOLDER_REGEX = (
+    r"\[((?:input|output|metadata)-attachment-\d+-\d+\.\w+)\]"
+)
 
 
 def get_file_extension(mime_type: str) -> str:
@@ -103,5 +110,10 @@ def detect_mime_type(data: bytes) -> Optional[str]:
 
 
 def create_attachment_filename(context: str, extension: str) -> str:
-    unique_id = id_helpers.generate_random_alphanumeric_string(8)
-    return f"{context}-attachment-{unique_id}.{extension}"
+    # The backend has the following naming convention: r"\\[((?:input|output|metadata)-attachment-\\d+-\\d+\\.\\w+)\\]"
+    # Example: [input-attachment-1-1704067200000.png]
+
+    timestamp = int(round(time.time() * 1000))
+    # we need to generate a large enough random prefix to avoid collisions
+    random_prefix = random.randint(1, 99999999)
+    return f"{context}-attachment-{random_prefix}-{timestamp}.{extension}"

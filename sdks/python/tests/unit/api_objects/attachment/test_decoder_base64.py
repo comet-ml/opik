@@ -1,5 +1,6 @@
 import base64
 import os
+import re
 from typing import Optional
 
 import pytest
@@ -7,6 +8,7 @@ import pytest
 from opik.api_objects.attachment import attachment, decoder_base64
 
 from . import constants
+from opik.api_objects.attachment import decoder_helpers
 
 
 @pytest.fixture
@@ -175,18 +177,14 @@ def test_decode_attachment_properties(decoder):
 
 
 def test_decode_filename_format(decoder):
-    """Test that filename follows the expected format."""
+    """Test that the filename follows the expected format."""
     result = decoder.decode(constants.PNG_BASE64, context="input")
 
     assert result is not None
-    # Format should be: context-attachment-{random_id}.{extension}
-    assert result.file_name.startswith("input-attachment-")
-    parts = result.file_name.split("-")
-    assert len(parts) >= 3
-    assert parts[0] == "input"
-    assert parts[1] == "attachment"
-    # The third part should be the random ID with extension
-    assert "." in parts[2]
+
+    # check that the filename matches a backend pattern
+    pattern = re.compile(decoder_helpers.ATTACHMENT_FILE_NAME_REGEX)
+    assert bool(pattern.fullmatch(result.file_name)) is True
 
     # Cleanup
     _cleanup(result)

@@ -1,4 +1,5 @@
 import os
+import re
 from typing import Optional
 
 import pytest
@@ -7,6 +8,7 @@ from opik.api_objects.attachment import (
     attachment,
     attachment_context,
     attachments_extractor,
+    decoder_helpers,
 )
 
 from . import constants
@@ -75,8 +77,14 @@ def test_extract_and_replace_multiple_attachments_single_key(extractor):
     # Verify data was sanitized - both base64 strings should be replaced
     assert constants.PNG_BASE64 not in data["images"]
     assert constants.JPEG_BASE64 not in data["images"]
-    assert data["images"].count("[") == 2
-    assert data["images"].count("]") == 2
+
+    # check that the attachment placeholder is present and has a correct format
+    pattern = re.compile(decoder_helpers.ATTACHMENT_FILE_NAME_PLACEHOLDER_REGEX)
+    index = 0
+    for m in pattern.finditer(data["images"]):
+        assert m is not None
+        assert m.group(1) == result[index].attachment.file_name
+        index += 1
 
     # Cleanup
     for r in result:
@@ -466,7 +474,16 @@ def test_extract_and_replace_complex_text_with_base64(extractor):
     assert "Here is an image:" in data["message"]
     assert "and some text after" in data["message"]
     assert constants.PNG_BASE64 not in data["message"]
-    assert "[" in data["message"] and "]" in data["message"]
+
+    # Verify data was sanitized - base64 string should be replaced
+    assert constants.PNG_BASE64 not in data["message"]
+
+    # check that the attachment placeholder is present and has a correct format
+    pattern = re.compile(decoder_helpers.ATTACHMENT_FILE_NAME_PLACEHOLDER_REGEX)
+    m = pattern.search(data["message"])
+    assert m is not None
+    assert m.group(1) == result[0].attachment.file_name
+    assert m.start() == 18
 
     # Cleanup
     _cleanup(result[0].attachment)
