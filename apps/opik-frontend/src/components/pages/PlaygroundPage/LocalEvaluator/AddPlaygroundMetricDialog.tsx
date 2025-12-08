@@ -394,6 +394,7 @@ const AddPlaygroundMetricDialog: React.FC<AddPlaygroundMetricDialogProps> = ({
                                   onClick={() => {
                                     if (!isEdit) {
                                       field.onChange(metric.name);
+                                      setMetricSearch(metric.name);
                                     }
                                   }}
                                 >
