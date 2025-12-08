@@ -383,24 +383,23 @@ class OpikCallback(dspy_callback.BaseCallback):
                 )
                 return None, None
 
-            # Check if response was from cache
-            # DSPy sets cache_hit on responses, but it may be None on some versions
             response = last_entry.get("response")
-            cache_hit_value = (
-                getattr(response, "cache_hit", False) if response else False
-            )
-            # Normalize None to False for consistent behavior across DSPy versions
-            cache_hit = cache_hit_value if cache_hit_value is not None else False
-
             usage_dict = last_entry.get("usage")
 
-            if not usage_dict:
-                # Empty usage dict typically means cached response
-                return None, cache_hit
+            # Get explicit cache_hit if set, otherwise infer from usage (empty = cached)
+            if response is None:
+                cache_hit = not usage_dict
+            elif hasattr(response, "cache_hit") and response.cache_hit is not None:
+                cache_hit = response.cache_hit
+            else:
+                # Fallback: infer from usage (empty = cached)
+                cache_hit = not usage_dict
 
-            # DSPy uses LiteLLM which returns OpenAI-compatible format
-            usage = llm_usage.build_opik_usage_from_unknown_provider(usage_dict)
-            return usage, cache_hit
+            if usage_dict:
+                usage = llm_usage.build_opik_usage_from_unknown_provider(usage_dict)
+                return usage, cache_hit
+            else:
+                return None, cache_hit
         except Exception:
             LOGGER.debug(
                 "Failed to extract info from DSPy LM history",
