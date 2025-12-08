@@ -1327,6 +1327,9 @@ redirects:
     destination: "/docs/opik/agent_optimization/overview"
     permanent: true
   # Catch-all for old changelog date URLs (e.g., /changelog/2025/8/2, /changelog/2025/6/7)
-  - source: "/docs/opik/changelog/:slug*"
+  - source: "/docs/opik/changelog/2025/:slug*"
+    destination: "/docs/opik/changelog"
+    permanent: true
+  - source: "/docs/opik/changelog/2024/:slug*"
     destination: "/docs/opik/changelog"
     permanent: true
