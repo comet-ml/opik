@@ -44,13 +44,12 @@ def _get_usage_dict_matcher():
     return UsageDictMatcher()
 
 
-def _get_metadata_with_usage_matcher():
+def _get_metadata_with_created_from_matcher():
     """
-    Returns a matcher for metadata dict that checks for created_from and allows usage.
-    When usage is set on a span, it's also added to metadata['usage'].
+    Returns a matcher for metadata dict that checks for created_from.
     """
 
-    class MetadataWithUsageMatcher:
+    class MetadataWithCreatedFromMatcher:
         def __eq__(self, other):
             if other is None:
                 return False
@@ -59,17 +58,16 @@ def _get_metadata_with_usage_matcher():
             # Check that created_from is present
             if other.get("created_from") != "dspy":
                 return False
-            # usage may or may not be present
             return True
 
         def __repr__(self):
-            return "MetadataWithUsageMatcher(created_from=dspy, usage=optional)"
+            return "MetadataWithCreatedFromMatcher(created_from=dspy)"
 
-    return MetadataWithUsageMatcher()
+    return MetadataWithCreatedFromMatcher()
 
 
 ANY_USAGE_DICT = _get_usage_dict_matcher()
-ANY_METADATA_WITH_USAGE = _get_metadata_with_usage_matcher()
+ANY_METADATA_WITH_CREATED_FROM = _get_metadata_with_created_from_matcher()
 
 
 def sort_spans_by_name(tree: Union[SpanModel, TraceModel]) -> None:
@@ -138,7 +136,7 @@ def test_dspy__happyflow(
                         input=ANY_DICT,
                         output=ANY_DICT,
                         usage=ANY_USAGE_DICT,
-                        metadata=ANY_METADATA_WITH_USAGE,
+                        metadata=ANY_METADATA_WITH_CREATED_FROM,
                         start_time=ANY_BUT_NONE,
                         end_time=ANY_BUT_NONE,
                         project_name=expected_project_name,
@@ -377,7 +375,7 @@ def test_dspy_callback__used_inside_another_track_function__data_attached_to_exi
                                         input=ANY_DICT,
                                         output=ANY_DICT,
                                         usage=ANY_USAGE_DICT,
-                                        metadata=ANY_METADATA_WITH_USAGE,
+                                        metadata=ANY_METADATA_WITH_CREATED_FROM,
                                         start_time=ANY_BUT_NONE,
                                         end_time=ANY_BUT_NONE,
                                         project_name=project_name,
@@ -483,7 +481,7 @@ def test_dspy_callback__used_when_there_was_already_existing_trace_without_span_
                                 input=ANY_DICT,
                                 output=ANY_DICT,
                                 usage=ANY_USAGE_DICT,
-                                metadata=ANY_METADATA_WITH_USAGE,
+                                metadata=ANY_METADATA_WITH_CREATED_FROM,
                                 start_time=ANY_BUT_NONE,
                                 end_time=ANY_BUT_NONE,
                                 spans=[],
@@ -582,7 +580,7 @@ def test_dspy_callback__used_when_there_was_already_existing_span_without_trace_
                                 input=ANY_DICT,
                                 output=ANY_DICT,
                                 usage=ANY_USAGE_DICT,
-                                metadata=ANY_METADATA_WITH_USAGE,
+                                metadata=ANY_METADATA_WITH_CREATED_FROM,
                                 start_time=ANY_BUT_NONE,
                                 end_time=ANY_BUT_NONE,
                                 spans=[],

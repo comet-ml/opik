@@ -34,7 +34,7 @@ class OpikCallback(dspy_callback.BaseCallback):
         self._map_call_id_to_span_data: Dict[str, span.SpanData] = {}
         self._map_call_id_to_trace_data: Dict[str, trace.TraceData] = {}
         # Store (lm_instance, expected_messages) for extracting usage and verifying correct history entry
-        self._map_call_id_to_lm_info: Dict[str, tuple] = {}
+        self._map_call_id_to_lm_info: Dict[str, Tuple[Any, Optional[Any]]] = {}
 
         self._origins_metadata: Dict[str, Any] = {"created_from": "dspy"}
 
@@ -289,8 +289,8 @@ class OpikCallback(dspy_callback.BaseCallback):
     ) -> None:
         usage, cache_hit = self._extract_lm_info_from_history(call_id)
 
-        # Add cache_hit to span metadata
-        extra_metadata = {"cache_hit": cache_hit}
+        # Add cache_hit to span metadata only when we have a definitive value
+        extra_metadata = {"cache_hit": cache_hit} if cache_hit is not None else None
 
         self._end_span(
             call_id=call_id,
