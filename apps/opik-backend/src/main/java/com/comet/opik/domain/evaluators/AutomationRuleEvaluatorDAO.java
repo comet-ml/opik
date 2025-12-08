@@ -200,7 +200,7 @@ public interface AutomationRuleEvaluatorDAO extends AutomationRuleDAO {
             LEFT JOIN automation_rule_projects arp
               ON rule.id = arp.rule_id AND rule.workspace_id = arp.workspace_id
             <endif>
-            WHERE workspace_id = :workspaceId AND rule.action = :action
+            WHERE rule.workspace_id = :workspaceId AND rule.action = :action
             <if(projectIds)> AND arp.project_id IN (<projectIds>) <endif>
             <if(type)> AND evaluator.type = :type <endif>
             <if(ids)> AND rule.id IN (<ids>) <endif>
