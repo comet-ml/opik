@@ -9,8 +9,8 @@ logging:
   loggers:
     com.comet: ${OPIK_LOG_LEVEL:-INFO}
     # Default: INFO
-    # Description: Set to DEBUG to see actual requests/responses sent to LLM providers (requires logRequests/logResponses=true)
-    dev.langchain4j: ${LLM_PROXY_REQUEST_LOG_LEVEL:-INFO}
+    # Description: Set to DEBUG to see complete assembled LLM streaming responses (application-level logging)
+    com.comet.opik.infrastructure.llm: ${LLM_PROXY_REQUEST_LOG_LEVEL:-INFO}
 
 # Description: state database configuration
 # https://www.dropwizard.io/en/stable/manual/configuration.html#database
