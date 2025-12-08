@@ -40,7 +40,7 @@ def test_extract_and_replace_single_attachment(extractor):
     assert result[0].entity_type == "span"
     assert result[0].entity_id == "span-123"
     assert result[0].context == "input"
-    assert result[0].attachment.content_type == "image/png"
+    assert result[0].attachment_data.content_type == "image/png"
 
     # Verify data was sanitized
     assert constants.PNG_BASE64 not in data["image"]
@@ -48,7 +48,7 @@ def test_extract_and_replace_single_attachment(extractor):
     assert data["image"].startswith("[") and data["image"].endswith("]")
 
     # Cleanup
-    _cleanup(result[0].attachment)
+    _cleanup(result[0].attachment_data)
 
 
 def test_extract_and_replace_multiple_attachments_single_key(extractor):
@@ -70,7 +70,7 @@ def test_extract_and_replace_multiple_attachments_single_key(extractor):
     assert all(r.context == "output" for r in result)
 
     # Check content types
-    content_types = [r.attachment.content_type for r in result]
+    content_types = [r.attachment_data.content_type for r in result]
     assert "image/png" in content_types
     assert "image/jpeg" in content_types
 
@@ -83,12 +83,12 @@ def test_extract_and_replace_multiple_attachments_single_key(extractor):
     index = 0
     for m in pattern.finditer(data["images"]):
         assert m is not None
-        assert m.group(1) == result[index].attachment.file_name
+        assert m.group(1) == result[index].attachment_data.file_name
         index += 1
 
     # Cleanup
     for r in result:
-        _cleanup(r.attachment)
+        _cleanup(r.attachment_data)
 
 
 def test_extract_and_replace_multiple_keys_with_attachments(extractor):
@@ -105,7 +105,7 @@ def test_extract_and_replace_multiple_keys_with_attachments(extractor):
 
     # Verify two attachments were extracted (text should be ignored)
     assert len(result) == 2
-    content_types = [r.attachment.content_type for r in result]
+    content_types = [r.attachment_data.content_type for r in result]
     assert "image/png" in content_types
     assert "application/pdf" in content_types
 
@@ -116,7 +116,7 @@ def test_extract_and_replace_multiple_keys_with_attachments(extractor):
 
     # Cleanup
     for r in result:
-        _cleanup(r.attachment)
+        _cleanup(r.attachment_data)
 
 
 def test_extract_and_replace_non_string_values_ignored(extractor):
@@ -215,7 +215,7 @@ def test_extract_and_replace_mixed_valid_invalid(extractor):
 
     # Only valid image attachments should be extracted (plain text excluded by decoder)
     assert len(result) == 2
-    content_types = [r.attachment.content_type for r in result]
+    content_types = [r.attachment_data.content_type for r in result]
     assert "image/png" in content_types
     assert "image/jpeg" in content_types
 
@@ -227,7 +227,7 @@ def test_extract_and_replace_mixed_valid_invalid(extractor):
 
     # Cleanup
     for r in result:
-        _cleanup(r.attachment)
+        _cleanup(r.attachment_data)
 
 
 def test_extract_and_replace_context_preservation(extractor):
@@ -245,7 +245,7 @@ def test_extract_and_replace_context_preservation(extractor):
         assert result[0].context == ctx
 
         # Cleanup
-        _cleanup(result[0].attachment)
+        _cleanup(result[0].attachment_data)
 
 
 def test_extract_and_replace_entity_info_preservation(extractor):
@@ -266,7 +266,7 @@ def test_extract_and_replace_entity_info_preservation(extractor):
             assert result[0].entity_id == entity_id
 
             # Cleanup
-            _cleanup(result[0].attachment)
+            _cleanup(result[0].attachment_data)
 
 
 def test_extract_and_replace_empty_string(extractor):
@@ -315,12 +315,12 @@ def test_extract_and_replace_attachment_filename_format(extractor):
     )
 
     assert len(result) == 1
-    filename = result[0].attachment.file_name
+    filename = result[0].attachment_data.file_name
     assert filename.startswith("output-attachment-")
     assert filename.endswith(".png")
 
     # Cleanup
-    _cleanup(result[0].attachment)
+    _cleanup(result[0].attachment_data)
 
 
 def test_extract_and_replace_sanitized_data_format(extractor):
@@ -332,11 +332,11 @@ def test_extract_and_replace_sanitized_data_format(extractor):
     )
 
     assert len(result) == 1
-    filename = result[0].attachment.file_name
+    filename = result[0].attachment_data.file_name
     assert f"[{filename}]" == data["doc"]
 
     # Cleanup
-    _cleanup(result[0].attachment)
+    _cleanup(result[0].attachment_data)
 
 
 def test_extract_and_replace_multiple_same_attachment(extractor):
@@ -350,7 +350,7 @@ def test_extract_and_replace_multiple_same_attachment(extractor):
 
     # Both instances should be extracted
     assert len(result) == 2
-    assert all(r.attachment.content_type == "image/png" for r in result)
+    assert all(r.attachment_data.content_type == "image/png" for r in result)
 
     # Both instances should be replaced
     assert constants.PNG_BASE64 not in data["images"]
@@ -359,7 +359,7 @@ def test_extract_and_replace_multiple_same_attachment(extractor):
 
     # Cleanup
     for r in result:
-        _cleanup(r.attachment)
+        _cleanup(r.attachment_data)
 
 
 def test_extract_and_replace_gif_attachment(extractor):
@@ -371,11 +371,11 @@ def test_extract_and_replace_gif_attachment(extractor):
     )
 
     assert len(result) == 1
-    assert result[0].attachment.content_type == "image/gif"
-    assert result[0].attachment.file_name.endswith(".gif")
+    assert result[0].attachment_data.content_type == "image/gif"
+    assert result[0].attachment_data.file_name.endswith(".gif")
 
     # Cleanup
-    _cleanup(result[0].attachment)
+    _cleanup(result[0].attachment_data)
 
 
 def test_extract_and_replace_webp_attachment(extractor):
@@ -387,11 +387,11 @@ def test_extract_and_replace_webp_attachment(extractor):
     )
 
     assert len(result) == 1
-    assert result[0].attachment.content_type == "image/webp"
-    assert result[0].attachment.file_name.endswith(".webp")
+    assert result[0].attachment_data.content_type == "image/webp"
+    assert result[0].attachment_data.file_name.endswith(".webp")
 
     # Cleanup
-    _cleanup(result[0].attachment)
+    _cleanup(result[0].attachment_data)
 
 
 def test_extract_and_replace_svg_attachment(extractor):
@@ -403,11 +403,11 @@ def test_extract_and_replace_svg_attachment(extractor):
     )
 
     assert len(result) == 1
-    assert result[0].attachment.content_type == "image/svg+xml"
-    assert result[0].attachment.file_name.endswith(".svg")
+    assert result[0].attachment_data.content_type == "image/svg+xml"
+    assert result[0].attachment_data.file_name.endswith(".svg")
 
     # Cleanup
-    _cleanup(result[0].attachment)
+    _cleanup(result[0].attachment_data)
 
 
 def test_extract_and_replace_json_attachment(extractor):
@@ -419,11 +419,11 @@ def test_extract_and_replace_json_attachment(extractor):
     )
 
     assert len(result) == 1
-    assert result[0].attachment.content_type == "application/json"
-    assert result[0].attachment.file_name.endswith(".json")
+    assert result[0].attachment_data.content_type == "application/json"
+    assert result[0].attachment_data.file_name.endswith(".json")
 
     # Cleanup
-    _cleanup(result[0].attachment)
+    _cleanup(result[0].attachment_data)
 
 
 def test_extract_and_replace_octet_stream_not_extracted(extractor):
@@ -454,7 +454,7 @@ def test_extract_and_replace_data_mutation(extractor):
     assert constants.PNG_BASE64 not in data["image"]
 
     # Cleanup
-    _cleanup(result[0].attachment)
+    _cleanup(result[0].attachment_data)
 
 
 def test_extract_and_replace_complex_text_with_base64(extractor):
@@ -468,7 +468,7 @@ def test_extract_and_replace_complex_text_with_base64(extractor):
     )
 
     assert len(result) == 1
-    assert result[0].attachment.content_type == "image/png"
+    assert result[0].attachment_data.content_type == "image/png"
 
     # Verify surrounding text is preserved
     assert "Here is an image:" in data["message"]
@@ -482,11 +482,11 @@ def test_extract_and_replace_complex_text_with_base64(extractor):
     pattern = re.compile(decoder_helpers.ATTACHMENT_FILE_NAME_PLACEHOLDER_REGEX)
     m = pattern.search(data["message"])
     assert m is not None
-    assert m.group(1) == result[0].attachment.file_name
+    assert m.group(1) == result[0].attachment_data.file_name
     assert m.start() == 18
 
     # Cleanup
-    _cleanup(result[0].attachment)
+    _cleanup(result[0].attachment_data)
 
 
 def _cleanup(attachment_: Optional[attachment.Attachment]):

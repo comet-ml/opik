@@ -3,7 +3,7 @@ import logging
 import time
 from typing import List, Optional
 
-from . import messages, message_queue, queue_consumer
+from . import attachments_preprocessor, messages, message_queue, queue_consumer
 from .. import synchronization
 from .batching import batch_manager
 from ..file_upload import base_upload_manager
@@ -38,6 +38,10 @@ class Streamer:
             if self._drain:
                 return
 
+            # do embedded attachments pre-processing first
+            message = attachments_preprocessor.preprocess_message(message)
+
+            # work with resulting message
             if (
                 self._batch_manager is not None
                 and self._batch_manager.message_supports_batching(message)

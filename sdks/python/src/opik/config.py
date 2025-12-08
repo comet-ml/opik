@@ -227,6 +227,17 @@ class OpikConfig(pydantic_settings.BaseSettings):
     For shorter traces/spans, it is recommended to keep this setting disabled to minimize data logging overhead.
     """
 
+    min_base64_embedded_attachment_size: int = 256_000
+    """
+    Minimum size of the attachment in bytes that will be kept embedded in the base64 string. (250KB)
+    Attachments larger than this size will be extracted input/outputs of spans/traces and uploaded to the Opik backend.
+    """
+
+    is_attachment_extraction_active: bool = True
+    """
+    If set to True, attachments larger than `min_base64_embedded_attachment_size` will be extracted from spans/traces and uploaded to the Opik backend.
+    """
+
     @property
     def config_file_fullpath(self) -> pathlib.Path:
         config_file_path = os.getenv("OPIK_CONFIG_PATH", CONFIG_FILE_PATH_DEFAULT)
@@ -257,7 +268,7 @@ class OpikConfig(pydantic_settings.BaseSettings):
         return url_helpers.get_base_url(self.url_override) + "guardrails/"
 
     @pydantic.model_validator(mode="after")
-    def _set_url_override_from_api_key(self) -> "OpikConfig":
+    def _set_url_override_from_api_key(self) -> OpikConfig:
         url_was_not_provided = (
             "url_override" not in self.model_fields_set or self.url_override is None
         )

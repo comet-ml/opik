@@ -1,0 +1,41 @@
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from opik.message_processing import messages
+
+
+MARKER_ATTRIBUTE_NAME = "_preprocessed_for_attachments"
+
+
+def preprocess_message(message: "messages.BaseMessage") -> "messages.BaseMessage":
+    """
+    Processes a given message and ensures that it is converted into a specialized
+    message type if applicable. If the message is already pre-processed, it
+    returns the original message to avoid infinite recursion.
+
+    Args:
+        message: The message object to be processed.
+
+    Returns:
+        The processed message, either in its original form
+        or converted into a message type supporting embedded attachments.
+    """
+    # Import at runtime to avoid circular import
+    from opik.message_processing import messages
+
+    if hasattr(message, MARKER_ATTRIBUTE_NAME):
+        # already pre-processed - just return the original message to avoid infinite recursion
+        return message
+
+    if isinstance(
+        message,
+        (
+            messages.CreateSpanMessage,
+            messages.UpdateSpanMessage,
+            messages.CreateTraceMessage,
+            messages.UpdateTraceMessage,
+        ),
+    ):
+        return messages.AttachmentSupportingMessage(message)
+    else:
+        return message

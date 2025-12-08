@@ -39,6 +39,7 @@ from .. import (
     url_helpers,
 )
 from ..message_processing import (
+    attachments_extraction_processor,
     messages,
     streamer_constructors,
     message_queue,
@@ -195,6 +196,16 @@ class Opik:
             max_queue_size=max_queue_size,
             message_processor=self._message_processor,
         )
+        # add attachment extraction processor
+        attachment_extraction = (
+            attachments_extraction_processor.AttachmentsExtractionProcessor(
+                messages_streamer=self._streamer,
+                min_attachment_size=self._config.min_attachment_size,
+                url_override=self._config.url_override,
+                is_active=self._config.is_attachment_extraction_active,
+            )
+        )
+        self._message_processor.add_first(attachment_extraction)
 
     def _display_trace_url(self, trace_id: str, project_name: str) -> None:
         project_url = url_helpers.get_project_url_by_trace_id(

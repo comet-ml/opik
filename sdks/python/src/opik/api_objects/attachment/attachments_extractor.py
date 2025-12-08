@@ -29,6 +29,7 @@ class AttachmentsExtractor:
         data: Dict[str, Any],
         entity_type: Literal["span", "trace"],
         entity_id: str,
+        project_name: str,
         context: Literal["input", "output", "metadata"],
     ) -> List[attachment_context.AttachmentWithContext]:
         # iterate over all items and extract attachments
@@ -41,9 +42,10 @@ class AttachmentsExtractor:
                 for extracted_attachment in extraction_result.attachments:
                     attachments.append(
                         attachment_context.AttachmentWithContext(
-                            attachment=extracted_attachment,
+                            attachment_data=extracted_attachment,
                             entity_type=entity_type,
                             entity_id=entity_id,
+                            project_name=project_name,
                             context=context,
                         )
                     )
