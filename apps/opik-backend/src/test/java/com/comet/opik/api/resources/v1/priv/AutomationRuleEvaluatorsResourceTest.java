@@ -1013,6 +1013,7 @@ class AutomationRuleEvaluatorsResourceTest {
 
             var trace = factory.manufacturePojo(Trace.class).toBuilder()
                     .projectId(projectId)
+                    .projectName(projectName) // Backend uses projectName, not projectId!
                     .threadId("thread-" + RandomStringUtils.secure().nextAlphanumeric(36))
                     .input(OBJECT_MAPPER.readTree(INPUT))
                     .output(OBJECT_MAPPER.readTree(OUTPUT))
@@ -1124,6 +1125,8 @@ class AutomationRuleEvaluatorsResourceTest {
 
             var trace = factory.manufacturePojo(Trace.class).toBuilder()
                     .projectId(projectId)
+                    .projectName(projectName) // Backend uses projectName, not projectId!
+                    .threadId("thread-" + RandomStringUtils.secure().nextAlphanumeric(36)) // Must have threadId for thread-level evaluation
                     .output(OBJECT_MAPPER.readTree("""
                             {
                                 "response": "abc"
@@ -1180,6 +1183,7 @@ class AutomationRuleEvaluatorsResourceTest {
             // Sending a trace, that shouldn't be sampled as the rate is 0 for both rules
             var trace = factory.manufacturePojo(Trace.class).toBuilder()
                     .projectId(projectId)
+                    .projectName(projectName) // Backend uses projectName, not projectId!
                     .threadId(null)
                     .build();
             traceResourceClient.createTrace(trace, API_KEY, WORKSPACE_NAME);
@@ -1228,6 +1232,8 @@ class AutomationRuleEvaluatorsResourceTest {
             // Sending a trace, that shouldn't be sampled as the rate is 0 for both rules
             var trace = factory.manufacturePojo(Trace.class).toBuilder()
                     .projectId(projectId)
+                    .projectName(projectName) // Backend uses projectName, not projectId!
+                    .threadId("thread-" + RandomStringUtils.secure().nextAlphanumeric(36)) // Must have threadId for thread-level evaluation
                     .build();
 
             Instant createdAt = trace.createdAt();
