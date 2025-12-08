@@ -15,6 +15,7 @@ import java.util.function.Consumer;
 /**
  * A wrapper around ChunkedResponseHandler that logs the complete assembled response
  * after streaming is finished, instead of logging each individual chunk.
+ * Uses StreamingResponseLogger for the actual logging logic (DRY principle).
  */
 @Slf4j
 public class LoggingChunkedResponseHandler
@@ -23,8 +24,7 @@ public class LoggingChunkedResponseHandler
             StreamingChatResponseHandler {
 
     private final ChunkedResponseHandler delegate;
-    private final StringBuilder accumulatedContent = new StringBuilder();
-    private final String requestSummary;
+    private final StreamingResponseLogger logger;
 
     public LoggingChunkedResponseHandler(
             @NonNull Consumer<ChatCompletionResponse> handleMessage,
@@ -33,66 +33,42 @@ public class LoggingChunkedResponseHandler
             @NonNull String model,
             @NonNull String requestSummary) {
         this.delegate = new ChunkedResponseHandler(handleMessage, handleClose, handleError, model);
-        this.requestSummary = requestSummary;
+        this.logger = new StreamingResponseLogger(requestSummary, model);
     }
 
     @Override
     public void onNext(@NonNull String content) {
-        accumulatedContent.append(content);
+        logger.appendContent(content);
         delegate.onNext(content);
     }
 
     @Override
     public void onComplete(@NonNull Response<AiMessage> response) {
-        // Log the complete assembled response
-        if (log.isDebugEnabled()) {
-            log.debug(
-                    "LLM Streaming Response Complete - Request: {}, Model: {}, Content: {}, InputTokens: {}, OutputTokens: {}, TotalTokens: {}",
-                    requestSummary,
-                    delegate.model(),
-                    accumulatedContent.toString(),
-                    response.tokenUsage().inputTokenCount(),
-                    response.tokenUsage().outputTokenCount(),
-                    response.tokenUsage().totalTokenCount());
-        }
-
+        logger.logComplete(
+                response.tokenUsage().inputTokenCount(),
+                response.tokenUsage().outputTokenCount(),
+                response.tokenUsage().totalTokenCount());
         delegate.onComplete(response);
     }
 
     @Override
     public void onPartialResponse(String s) {
-        accumulatedContent.append(s);
+        logger.appendContent(s);
         delegate.onPartialResponse(s);
     }
 
     @Override
     public void onCompleteResponse(ChatResponse chatResponse) {
-        // Log the complete assembled response
-        if (log.isDebugEnabled()) {
-            log.debug(
-                    "LLM Streaming Response Complete - Request: {}, Model: {}, Content: {}, InputTokens: {}, OutputTokens: {}, TotalTokens: {}",
-                    requestSummary,
-                    delegate.model(),
-                    accumulatedContent.toString(),
-                    chatResponse.tokenUsage().inputTokenCount(),
-                    chatResponse.tokenUsage().outputTokenCount(),
-                    chatResponse.tokenUsage().totalTokenCount());
-        }
-
+        logger.logComplete(
+                chatResponse.tokenUsage().inputTokenCount(),
+                chatResponse.tokenUsage().outputTokenCount(),
+                chatResponse.tokenUsage().totalTokenCount());
         delegate.onCompleteResponse(chatResponse);
     }
 
     @Override
     public void onError(@NonNull Throwable throwable) {
-        // Log error with any accumulated content
-        if (log.isDebugEnabled()) {
-            log.debug("LLM Streaming Response Error - Request: {}, Model: {}, Partial Content: {}, Error: {}",
-                    requestSummary,
-                    delegate.model(),
-                    accumulatedContent.toString(),
-                    throwable.getMessage());
-        }
-
+        logger.logError(throwable);
         delegate.onError(throwable);
     }
 }
