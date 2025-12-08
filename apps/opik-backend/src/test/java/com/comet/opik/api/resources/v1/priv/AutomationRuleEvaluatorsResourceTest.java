@@ -2519,7 +2519,7 @@ class AutomationRuleEvaluatorsResourceTest {
             AutomationRuleEvaluatorLlmAsJudge evaluator = factory
                     .manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class)
                     .toBuilder()
-                    .projectIds(Set.of(UUID.fromString(projectId1), UUID.fromString(projectId2)))
+                    .projectIds(Set.of(projectId1, projectId2))
                     .build();
 
             UUID ruleId = evaluatorsResourceClient.createEvaluator(evaluator, WORKSPACE_NAME, API_KEY);
@@ -2530,7 +2530,7 @@ class AutomationRuleEvaluatorsResourceTest {
                     .samplingRate(0.5f)
                     .enabled(true)
                     .filters(List.of())
-                    .projectIds(Set.of(UUID.fromString(projectId2), UUID.fromString(projectId3)))
+                    .projectIds(Set.of(projectId2, projectId3))
                     .code(evaluator.getCode())
                     .build();
 
@@ -2543,7 +2543,7 @@ class AutomationRuleEvaluatorsResourceTest {
                 var actualEvaluator = actualResponse.readEntity(AutomationRuleEvaluator.class);
                 assertThat(actualEvaluator.getProjectIds()).hasSize(2);
                 assertThat(actualEvaluator.getProjectIds())
-                        .containsExactlyInAnyOrder(UUID.fromString(projectId2), UUID.fromString(projectId3));
+                        .containsExactlyInAnyOrder(projectId2, projectId3);
                 assertThat(actualEvaluator.getName()).isEqualTo("Updated Rule");
             }
         }
@@ -2557,7 +2557,7 @@ class AutomationRuleEvaluatorsResourceTest {
                     .chat(any(ChatRequest.class)))
                     .thenAnswer(invocationOnMock -> chatResponse);
 
-            Set<UUID> sharedProjects = Set.of(UUID.fromString(projectId1), UUID.fromString(projectId2));
+            Set<UUID> sharedProjects = Set.of(projectId1, projectId2);
 
             AutomationRuleEvaluatorLlmAsJudge evaluator1 = factory
                     .manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class)
@@ -2606,9 +2606,9 @@ class AutomationRuleEvaluatorsResourceTest {
                     .manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class)
                     .toBuilder()
                     .projectIds(Set.of(
-                            UUID.fromString(projectId1),
-                            UUID.fromString(projectId2),
-                            UUID.fromString(projectId3)))
+                            projectId1,
+                            projectId2,
+                            projectId3))
                     .build();
 
             UUID ruleId = evaluatorsResourceClient.createEvaluator(evaluator, WORKSPACE_NAME, API_KEY);
@@ -2633,7 +2633,7 @@ class AutomationRuleEvaluatorsResourceTest {
             AutomationRuleEvaluatorLlmAsJudge evaluator = factory
                     .manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class)
                     .toBuilder()
-                    .projectIds(Set.of(UUID.fromString(projectId1)))
+                    .projectIds(Set.of(projectId1))
                     .build();
 
             // When
@@ -2645,7 +2645,7 @@ class AutomationRuleEvaluatorsResourceTest {
 
                 var actualEvaluator = actualResponse.readEntity(AutomationRuleEvaluator.class);
                 assertThat(actualEvaluator.getProjectIds()).hasSize(1);
-                assertThat(actualEvaluator.getProjectIds()).containsExactly(UUID.fromString(projectId1));
+                assertThat(actualEvaluator.getProjectIds()).containsExactly(projectId1);
             }
         }
     }
