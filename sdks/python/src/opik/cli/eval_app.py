@@ -109,12 +109,12 @@ def eval_app(host: str, port: int, reload: bool) -> None:
 
     # Import and create the app
     from opik import eval_app as eval_app_module
-    from opik.eval_app.services.metrics import get_default_registry
+    from opik.eval_app.services import metrics
 
     app = eval_app_module.create_app()
 
     # Get metrics count for display
-    registry = get_default_registry()
+    registry = metrics.get_default_registry()
     metrics_count = len(registry.list_all())
 
     _print_startup_message(host, port, metrics_count)

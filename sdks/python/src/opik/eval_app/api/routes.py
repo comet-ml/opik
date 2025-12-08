@@ -4,8 +4,8 @@ import logging
 from typing import Optional
 
 import fastapi
+import fastapi.responses
 import pydantic
-from fastapi import responses
 
 from .. import exceptions
 from .. import schemas
@@ -76,9 +76,9 @@ def evaluate_trace(
 
 
 @healthcheck_router.get("/healthcheck")
-def healthcheck() -> responses.JSONResponse:
+def healthcheck() -> fastapi.responses.JSONResponse:
     """Health check endpoint."""
-    return responses.JSONResponse(content={"status": "ok"})
+    return fastapi.responses.JSONResponse(content={"status": "ok"})
 
 
 def register_exception_handlers(app: fastapi.FastAPI) -> None:
@@ -87,8 +87,8 @@ def register_exception_handlers(app: fastapi.FastAPI) -> None:
     @app.exception_handler(exceptions.UnknownMetricError)
     def unknown_metric_handler(
         request: fastapi.Request, exc: exceptions.UnknownMetricError
-    ) -> responses.JSONResponse:
-        return responses.JSONResponse(
+    ) -> fastapi.responses.JSONResponse:
+        return fastapi.responses.JSONResponse(
             status_code=fastapi.status.HTTP_404_NOT_FOUND,
             content={"detail": str(exc), "metric_name": exc.metric_name},
         )
@@ -96,8 +96,8 @@ def register_exception_handlers(app: fastapi.FastAPI) -> None:
     @app.exception_handler(exceptions.TraceNotFoundError)
     def trace_not_found_handler(
         request: fastapi.Request, exc: exceptions.TraceNotFoundError
-    ) -> responses.JSONResponse:
-        return responses.JSONResponse(
+    ) -> fastapi.responses.JSONResponse:
+        return fastapi.responses.JSONResponse(
             status_code=fastapi.status.HTTP_404_NOT_FOUND,
             content={"detail": str(exc), "trace_id": exc.trace_id},
         )
@@ -105,8 +105,8 @@ def register_exception_handlers(app: fastapi.FastAPI) -> None:
     @app.exception_handler(exceptions.MetricInstantiationError)
     def metric_instantiation_handler(
         request: fastapi.Request, exc: exceptions.MetricInstantiationError
-    ) -> responses.JSONResponse:
-        return responses.JSONResponse(
+    ) -> fastapi.responses.JSONResponse:
+        return fastapi.responses.JSONResponse(
             status_code=fastapi.status.HTTP_400_BAD_REQUEST,
             content={
                 "detail": str(exc),
@@ -118,8 +118,8 @@ def register_exception_handlers(app: fastapi.FastAPI) -> None:
     @app.exception_handler(exceptions.InvalidFieldMappingError)
     def invalid_field_mapping_handler(
         request: fastapi.Request, exc: exceptions.InvalidFieldMappingError
-    ) -> responses.JSONResponse:
-        return responses.JSONResponse(
+    ) -> fastapi.responses.JSONResponse:
+        return fastapi.responses.JSONResponse(
             status_code=fastapi.status.HTTP_400_BAD_REQUEST,
             content={"detail": str(exc), "field": exc.field, "error": exc.error},
         )
@@ -127,8 +127,8 @@ def register_exception_handlers(app: fastapi.FastAPI) -> None:
     @app.exception_handler(exceptions.EvaluationError)
     def evaluation_error_handler(
         request: fastapi.Request, exc: exceptions.EvaluationError
-    ) -> responses.JSONResponse:
-        return responses.JSONResponse(
+    ) -> fastapi.responses.JSONResponse:
+        return fastapi.responses.JSONResponse(
             status_code=fastapi.status.HTTP_500_INTERNAL_SERVER_ERROR,
             content={
                 "detail": str(exc),
@@ -140,8 +140,8 @@ def register_exception_handlers(app: fastapi.FastAPI) -> None:
     @app.exception_handler(pydantic.ValidationError)
     def validation_error_handler(
         request: fastapi.Request, exc: pydantic.ValidationError
-    ) -> responses.JSONResponse:
-        return responses.JSONResponse(
+    ) -> fastapi.responses.JSONResponse:
+        return fastapi.responses.JSONResponse(
             status_code=fastapi.status.HTTP_422_UNPROCESSABLE_ENTITY,
             content={"detail": exc.errors()},
         )

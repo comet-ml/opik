@@ -5,13 +5,13 @@ from typing import Any, Dict, List, Optional
 
 import opik
 import opik.api_objects.opik_client
+from opik import types as opik_types
 from opik.evaluation.metrics import base_metric
 from opik.rest_api.types import trace_public
-from opik.types import FeedbackScoreDict
 
 from .. import exceptions
 from .. import schemas
-from .metrics import MetricInfo, MetricsRegistry, get_default_registry
+from . import metrics
 
 LOGGER = logging.getLogger(__name__)
 
@@ -19,10 +19,10 @@ LOGGER = logging.getLogger(__name__)
 class EvalService:
     """Service for running metric evaluations on traces."""
 
-    def __init__(self, registry: MetricsRegistry) -> None:
+    def __init__(self, registry: metrics.MetricsRegistry) -> None:
         self._registry = registry
 
-    def list_metrics(self) -> List[MetricInfo]:
+    def list_metrics(self) -> List[metrics.MetricInfo]:
         """List all available metrics with their descriptors."""
         return self._registry.list_all()
 
@@ -126,7 +126,7 @@ class EvalService:
         metric_configs: List[schemas.MetricEvaluationConfig],
     ) -> None:
         """Run all metrics and log feedback scores to the trace."""
-        feedback_scores: List[FeedbackScoreDict] = []
+        feedback_scores: List[opik_types.FeedbackScoreDict] = []
 
         for config in metric_configs:
             try:
@@ -158,7 +158,7 @@ class EvalService:
 
         if feedback_scores:
             try:
-                scores_with_trace_id: List[FeedbackScoreDict] = [
+                scores_with_trace_id: List[opik_types.FeedbackScoreDict] = [
                     {
                         "id": trace_id,
                         "name": score["name"],
@@ -180,9 +180,9 @@ class EvalService:
 
 
 def create_service(
-    registry: Optional[MetricsRegistry] = None,
+    registry: Optional[metrics.MetricsRegistry] = None,
 ) -> EvalService:
     """Create an EvalService instance."""
     if registry is None:
-        registry = get_default_registry()
+        registry = metrics.get_default_registry()
     return EvalService(registry)

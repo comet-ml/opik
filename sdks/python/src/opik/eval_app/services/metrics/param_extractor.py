@@ -2,6 +2,7 @@
 
 import dataclasses
 import inspect
+import typing
 from typing import Any, List, Optional
 
 
@@ -45,8 +46,6 @@ def extract_params(callable_obj: Any) -> List[ParamInfo]:
 
 def _format_annotation(annotation: Any) -> str:
     """Format a type annotation as a string, preserving the full Python annotation."""
-    import typing
-
     # Handle None type
     if annotation is type(None):
         return "None"
