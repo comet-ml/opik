@@ -1,14 +1,13 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo } from "react";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import get from "lodash/get";
-import toLower from "lodash/toLower";
 import { v4 as uuidv4 } from "uuid";
-import { Check, Info } from "lucide-react";
+import { Info } from "lucide-react";
 
 import { cn } from "@/lib/utils";
-import SearchInput from "@/components/shared/SearchInput/SearchInput";
+import LoadableSelectBox from "@/components/shared/LoadableSelectBox/LoadableSelectBox";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -228,23 +227,13 @@ const AddPlaygroundMetricDialog: React.FC<AddPlaygroundMetricDialogProps> = ({
     return metrics.find((m) => m.name === selectedMetricName);
   }, [metrics, selectedMetricName]);
 
-  // Search state for metric filtering
-  const [metricSearch, setMetricSearch] = useState("");
-
-  // Filter metrics based on search
-  const filteredMetrics = useMemo(() => {
-    if (!metricSearch) return metrics;
-    return metrics.filter((m) =>
-      toLower(m.name).includes(toLower(metricSearch)),
-    );
-  }, [metrics, metricSearch]);
-
-  // Reset search when dialog opens
-  useEffect(() => {
-    if (open) {
-      setMetricSearch("");
-    }
-  }, [open]);
+  // Convert metrics to options format for LoadableSelectBox
+  const metricOptions = useMemo(() => {
+    return metrics.map((m) => ({
+      label: m.name,
+      value: m.name,
+    }));
+  }, [metrics]);
 
   // Create dynamic resolver when metric changes
   const formSchema = useMemo(
@@ -359,7 +348,7 @@ const AddPlaygroundMetricDialog: React.FC<AddPlaygroundMetricDialogProps> = ({
               className="flex flex-col gap-4"
               onSubmit={form.handleSubmit(handleSubmit)}
             >
-              {/* Metric Selection - Inline searchable list */}
+              {/* Metric Selection */}
               <FormField
                 control={form.control}
                 name="metric_name"
@@ -368,47 +357,14 @@ const AddPlaygroundMetricDialog: React.FC<AddPlaygroundMetricDialogProps> = ({
                     <FormItem className="flex flex-col">
                       <Label>Metric</Label>
                       <FormControl>
-                        <div className="flex flex-col rounded-md border">
-                          <SearchInput
-                            searchText={metricSearch}
-                            setSearchText={setMetricSearch}
-                            placeholder="Search metrics..."
-                            variant="ghost"
-                            disabled={isEdit}
-                          />
-                          <Separator />
-                          <div className="max-h-[200px] overflow-y-auto p-1">
-                            {filteredMetrics.length === 0 ? (
-                              <div className="py-4 text-center text-sm text-muted-foreground">
-                                No metrics found
-                              </div>
-                            ) : (
-                              filteredMetrics.map((metric) => (
-                                <div
-                                  key={metric.name}
-                                  className={cn(
-                                    "flex cursor-pointer items-center gap-2 rounded-md px-3 py-2 text-sm hover:bg-primary-foreground",
-                                    field.value === metric.name && "bg-primary-foreground",
-                                    isEdit && "pointer-events-none opacity-50",
-                                  )}
-                                  onClick={() => {
-                                    if (!isEdit) {
-                                      field.onChange(metric.name);
-                                      setMetricSearch(metric.name);
-                                    }
-                                  }}
-                                >
-                                  <div className="w-4">
-                                    {field.value === metric.name && (
-                                      <Check className="size-3.5" strokeWidth="3" />
-                                    )}
-                                  </div>
-                                  <span>{metric.name}</span>
-                                </div>
-                              ))
-                            )}
-                          </div>
-                        </div>
+                        <LoadableSelectBox
+                          options={metricOptions}
+                          value={field.value}
+                          onChange={field.onChange}
+                          placeholder="Select a metric"
+                          searchPlaceholder="Search metrics..."
+                          disabled={isEdit}
+                        />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
