@@ -48,7 +48,7 @@ public final class AutomationRuleEvaluatorUpdateSpanUserDefinedMetricPython
     @JsonProperty
     @Override
     public List<SpanFilter> getFilters() {
-        return super.filters;
+        return super.getFilters();
     }
 
     @Override

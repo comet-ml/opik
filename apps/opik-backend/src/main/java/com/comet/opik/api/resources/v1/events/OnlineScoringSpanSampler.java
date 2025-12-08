@@ -10,6 +10,7 @@ import com.comet.opik.api.evaluators.AutomationRuleEvaluatorTraceThreadUserDefin
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorType;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorUserDefinedMetricPython;
 import com.comet.opik.api.events.SpanToScoreLlmAsJudge;
+import com.comet.opik.api.events.SpanToScoreUserDefinedMetricPython;
 import com.comet.opik.api.events.SpansCreated;
 import com.comet.opik.api.filter.SpanFilter;
 import com.comet.opik.domain.evaluators.AutomationRuleEvaluatorService;
@@ -215,6 +216,19 @@ public class OnlineScoringSpanSampler {
                 .ruleId(evaluator.getId())
                 .ruleName(evaluator.getName())
                 .llmAsJudgeCode(evaluator.getCode())
+                .workspaceId(spansBatch.workspaceId())
+                .userName(spansBatch.userName())
+                .build();
+    }
+
+    private SpanToScoreUserDefinedMetricPython toUserDefinedMetricPythonMessage(SpansCreated spansBatch,
+            AutomationRuleEvaluatorSpanUserDefinedMetricPython evaluator,
+            Span span) {
+        return SpanToScoreUserDefinedMetricPython.builder()
+                .span(span)
+                .ruleId(evaluator.getId())
+                .ruleName(evaluator.getName())
+                .code(evaluator.getCode())
                 .workspaceId(spansBatch.workspaceId())
                 .userName(spansBatch.userName())
                 .build();

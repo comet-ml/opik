@@ -143,37 +143,34 @@ class ManualEvaluationServiceImpl implements ManualEvaluationService {
         log.info("Evaluating '{}' traces with '{}' rules", traceIds.size(), rules.size());
 
         // Separate rules by type - only trace-level rules are valid for trace evaluation
-        List<AutomationRuleEvaluatorLlmAsJudge> traceLevelLlmAsJudgeRules = new ArrayList<>();
+        List<AutomationRuleEvaluatorLlmAsJudge> spanLevelLlmAsJudgeRules = new ArrayList<>();
         List<AutomationRuleEvaluatorUserDefinedMetricPython> spanLevelPythonRules = new ArrayList<>();
         List<AutomationRuleEvaluator<?, ?>> traceThreadRules = new ArrayList<>();
 
         for (AutomationRuleEvaluator<?, ?> rule : rules) {
             switch (rule) {
-                case AutomationRuleEvaluatorLlmAsJudge llmAsJudge -> traceLevelLlmAsJudgeRules.add(llmAsJudge);
+                case AutomationRuleEvaluatorLlmAsJudge llmAsJudge -> spanLevelLlmAsJudgeRules.add(llmAsJudge);
                 case AutomationRuleEvaluatorUserDefinedMetricPython python -> spanLevelPythonRules.add(python);
                 case AutomationRuleEvaluatorTraceThreadLlmAsJudge traceThreadLlmAsJudge ->
                     traceThreadRules.add(traceThreadLlmAsJudge);
                 case AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython traceThreadPython ->
                     traceThreadRules.add(traceThreadPython);
-                case AutomationRuleEvaluatorSpanLlmAsJudge spanLlmAsJudge -> {
-                    if (serviceTogglesConfig.isSpanLlmAsJudgeEnabled()) {
-                        spanLlmAsJudgeRules.add(spanLlmAsJudge);
-                    } else {
-                        log.info("Span LLM as Judge evaluator is disabled, skipping rule '{}'", rule.getId());
-                    }
-                }
-                case AutomationRuleEvaluatorSpanUserDefinedMetricPython spanPython ->
-                    spanPythonRules.add(spanPython);
-                default -> {
-                    log.warn("Invalid rule type '{}' for trace evaluation, skipping", rule.getType());
-                }
+                // Reject span-level rules for trace evaluation
+                case AutomationRuleEvaluatorSpanLlmAsJudge spanLlmRule ->
+                    throw new BadRequestException(
+                            String.format("Rule '%s' of type '%s' cannot be used for TRACE evaluation",
+                                    spanLlmRule.getId(), spanLlmRule.getType()));
+                case AutomationRuleEvaluatorSpanUserDefinedMetricPython spanPythonRule ->
+                    throw new BadRequestException(
+                            String.format("Rule '%s' of type '%s' cannot be used for TRACE evaluation",
+                                    spanPythonRule.getId(), spanPythonRule.getType()));
             }
         }
 
         // Handle span-level evaluators - need to fetch full traces
         Mono<Void> spanLevelMono = Mono.empty();
-        if (!traceLevelLlmAsJudgeRules.isEmpty() || !spanLevelPythonRules.isEmpty()) {
-            spanLevelMono = enqueueSpanLevelEvaluations(traceIds, traceLevelLlmAsJudgeRules,
+        if (!spanLevelLlmAsJudgeRules.isEmpty() || !spanLevelPythonRules.isEmpty()) {
+            spanLevelMono = enqueueSpanLevelEvaluations(traceIds, spanLevelLlmAsJudgeRules,
                     spanLevelPythonRules, projectId, workspaceId, userName);
         }
 

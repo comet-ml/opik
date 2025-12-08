@@ -48,8 +48,9 @@ public final class AutomationRuleEvaluatorSpanUserDefinedMetricPython
             @NotNull SpanUserDefinedMetricPythonCode code,
             Instant createdAt,
             String createdBy, Instant lastUpdatedAt, String lastUpdatedBy) {
-        super(id, projectId, projectName, name, samplingRate, enabled, code, createdAt, createdBy,
-                lastUpdatedAt, lastUpdatedBy, filters);
+        super(id, projectId, projectName, name, samplingRate, enabled, filters, code, createdAt, createdBy,
+                lastUpdatedAt,
+                lastUpdatedBy);
     }
 
     /**
@@ -66,9 +67,15 @@ public final class AutomationRuleEvaluatorSpanUserDefinedMetricPython
     @JsonView({View.Public.class, View.Write.class})
     @Override
     public List<SpanFilter> getFilters() {
-        return super.filters;
+        return super.getFilters();
     }
 
+    /**
+     * Two purposes:
+     * - Makes the polymorphic T code available for serialization.
+     * - Provides the specific type T for Open API and Fern.
+     */
+    @JsonView({View.Public.class, View.Write.class})
     @Override
     public AutomationRuleEvaluatorType getType() {
         return AutomationRuleEvaluatorType.SPAN_USER_DEFINED_METRIC_PYTHON;
