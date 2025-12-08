@@ -26,6 +26,7 @@ import FiltersButton from "@/components/shared/FiltersButton/FiltersButton";
 import TracesOrSpansPathsAutocomplete from "@/components/pages-shared/traces/TracesOrSpansPathsAutocomplete/TracesOrSpansPathsAutocomplete";
 import TracesOrSpansFeedbackScoresSelect from "@/components/pages-shared/traces/TracesOrSpansFeedbackScoresSelect/TracesOrSpansFeedbackScoresSelect";
 import MetricContainerChart from "./MetricChart/MetricChartContainer";
+import { CHART_TYPE } from "@/constants/chart";
 import {
   INTERVAL_DESCRIPTIONS,
   renderCostTooltipValue,
@@ -245,7 +246,7 @@ const ProjectMetricsSection: React.FC<ProjectMetricsSectionProps> = ({
             intervalEnd={intervalEnd}
             projectId={projectId}
             customYTickFormatter={tokenYTickFormatter}
-            chartType="line"
+            chartType={CHART_TYPE.line}
             traceFilters={processedProjectMetricsFilters}
           />
         </div>
@@ -262,7 +263,7 @@ const ProjectMetricsSection: React.FC<ProjectMetricsSectionProps> = ({
             projectId={projectId}
             renderValue={renderCostTooltipValue}
             customYTickFormatter={costYTickFormatter}
-            chartType="line"
+            chartType={CHART_TYPE.line}
             traceFilters={processedProjectMetricsFilters}
           />
         </div>
