@@ -5,6 +5,9 @@ import com.comet.opik.api.Dashboard.DashboardPage;
 import com.comet.opik.api.DashboardUpdate;
 import com.comet.opik.api.error.EntityAlreadyExistsException;
 import com.comet.opik.api.error.ErrorMessage;
+import com.comet.opik.api.sorting.SortingFactoryDashboards;
+import com.comet.opik.api.sorting.SortingField;
+import com.comet.opik.domain.sorting.SortingQueryBuilder;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.google.inject.ImplementedBy;
@@ -21,6 +24,7 @@ import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
 import java.sql.SQLIntegrityConstraintViolationException;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONLY;
@@ -33,11 +37,13 @@ public interface DashboardService {
 
     Dashboard findById(@NonNull UUID id);
 
-    DashboardPage find(int page, int size, String name);
+    DashboardPage find(int page, int size, String name, List<SortingField> sortingFields);
 
     Dashboard update(@NonNull UUID id, @NonNull DashboardUpdate dashboardUpdate);
 
     void delete(@NonNull UUID id);
+
+    void delete(@NonNull Set<UUID> ids);
 }
 
 @Slf4j
@@ -52,6 +58,8 @@ class DashboardServiceImpl implements DashboardService {
     private final @NonNull TransactionTemplateAsync templateAsync;
     private final @NonNull Provider<RequestContext> requestContext;
     private final @NonNull IdGenerator idGenerator;
+    private final @NonNull SortingFactoryDashboards sortingFactory;
+    private final @NonNull SortingQueryBuilder sortingQueryBuilder;
 
     @Override
     public Dashboard create(@NonNull Dashboard dashboard) {
@@ -114,8 +122,9 @@ class DashboardServiceImpl implements DashboardService {
     }
 
     @Override
-    public DashboardPage find(int page, int size, String name) {
+    public DashboardPage find(int page, int size, String name, List<SortingField> sortingFields) {
         String workspaceId = requestContext.get().getWorkspaceId();
+        String sortingFieldsSql = sortingQueryBuilder.toOrderBySql(sortingFields);
 
         log.info("Finding dashboards in workspace '{}', page '{}', size '{}', name '{}'", workspaceId, page, size,
                 name);
@@ -127,7 +136,7 @@ class DashboardServiceImpl implements DashboardService {
             int offset = (page - 1) * size;
 
             long total = dao.findCount(workspaceId, nameTerm);
-            List<Dashboard> dashboards = dao.find(workspaceId, nameTerm, size, offset);
+            List<Dashboard> dashboards = dao.find(workspaceId, nameTerm, sortingFieldsSql, size, offset);
 
             log.info("Found '{}' dashboards in workspace '{}'", total, workspaceId);
             return DashboardPage.builder()
@@ -135,6 +144,7 @@ class DashboardServiceImpl implements DashboardService {
                     .page(page)
                     .size(dashboards.size())
                     .total(total)
+                    .sortableBy(sortingFactory.getSortableFields())
                     .build();
         });
     }
@@ -199,5 +209,24 @@ class DashboardServiceImpl implements DashboardService {
 
             return null;
         });
+    }
+
+    @Override
+    public void delete(@NonNull Set<UUID> ids) {
+        if (ids.isEmpty()) {
+            log.info("Dashboard ids list is empty, returning");
+            return;
+        }
+
+        String workspaceId = requestContext.get().getWorkspaceId();
+
+        log.info("Deleting dashboards by ids, count '{}' in workspace '{}'", ids.size(), workspaceId);
+
+        template.inTransaction(WRITE, handle -> {
+            handle.attach(DashboardDAO.class).delete(ids, workspaceId);
+            return null;
+        });
+
+        log.info("Deleted dashboards by ids, count '{}' in workspace '{}'", ids.size(), workspaceId);
     }
 }

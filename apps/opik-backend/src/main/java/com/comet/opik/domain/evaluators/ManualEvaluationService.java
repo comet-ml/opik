@@ -148,8 +148,13 @@ class ManualEvaluationServiceImpl implements ManualEvaluationService {
                     traceThreadRules.add(traceThreadLlmAsJudge);
                 case AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython traceThreadPython ->
                     traceThreadRules.add(traceThreadPython);
-                case AutomationRuleEvaluatorSpanLlmAsJudge spanLlmAsJudge ->
-                    spanLlmAsJudgeRules.add(spanLlmAsJudge);
+                case AutomationRuleEvaluatorSpanLlmAsJudge spanLlmAsJudge -> {
+                    if (serviceTogglesConfig.isSpanLlmAsJudgeEnabled()) {
+                        spanLlmAsJudgeRules.add(spanLlmAsJudge);
+                    } else {
+                        log.info("Span LLM as Judge evaluator is disabled, skipping rule '{}'", rule.getId());
+                    }
+                }
             }
         }
 

@@ -17,6 +17,7 @@ import com.comet.opik.domain.attachment.AttachmentReinjectorService;
 import com.comet.opik.domain.attachment.AttachmentService;
 import com.comet.opik.domain.attachment.AttachmentStripperService;
 import com.comet.opik.domain.attachment.AttachmentUtils;
+import com.comet.opik.infrastructure.ServiceTogglesConfig;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.lock.LockService;
 import com.comet.opik.utils.BinaryOperatorUtils;
@@ -68,6 +69,7 @@ public class SpanService {
     private final @NonNull AttachmentStripperService attachmentStripperService;
     private final @NonNull AttachmentReinjectorService attachmentReinjectorService;
     private final @NonNull EventBus eventBus;
+    private final @NonNull ServiceTogglesConfig serviceTogglesConfig;
 
     @WithSpan
     public Mono<Span.SpanPage> find(int page, int size, @NonNull SpanSearchCriteria searchCriteria) {
@@ -183,11 +185,13 @@ public class SpanService {
                                 processedSpan.parentSpanId());
                         return spanDAO.insert(processedSpan)
                                 .doOnSuccess(__ -> {
-                                    var savedSpan = processedSpan.toBuilder()
-                                            .projectId(project.id())
-                                            .projectName(projectName)
-                                            .build();
-                                    eventBus.post(new SpansCreated(List.of(savedSpan), workspaceId, userName));
+                                    if (serviceTogglesConfig.isSpanLlmAsJudgeEnabled()) {
+                                        var savedSpan = processedSpan.toBuilder()
+                                                .projectId(project.id())
+                                                .projectName(projectName)
+                                                .build();
+                                        eventBus.post(new SpansCreated(List.of(savedSpan), workspaceId, userName));
+                                    }
                                 })
                                 .thenReturn(processedSpan.id());
                     });
@@ -369,7 +373,9 @@ public class SpanService {
                             .flatMap(this::stripAttachmentsFromSpanBatch)
                             .flatMap(spans -> spanDAO.batchInsert(spans)
                                     .doOnSuccess(__ -> {
-                                        eventBus.post(new SpansCreated(spans, workspaceId, userName));
+                                        if (serviceTogglesConfig.isSpanLlmAsJudgeEnabled()) {
+                                            eventBus.post(new SpansCreated(spans, workspaceId, userName));
+                                        }
                                     }));
                 }));
     }

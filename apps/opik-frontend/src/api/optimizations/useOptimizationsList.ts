@@ -6,11 +6,14 @@ import api, {
   QueryConfig,
 } from "@/api/api";
 import { Optimization } from "@/types/optimizations";
+import { Filters } from "@/types/filters";
+import { processFilters } from "@/lib/filters";
 
 export type UseOptimizationsListParams = {
   workspaceName: string;
   datasetId?: string;
   datasetDeleted?: boolean;
+  filters?: Filters;
   search?: string;
   page: number;
   size: number;
@@ -28,6 +31,7 @@ export const getOptimizationsList = async (
     workspaceName,
     datasetId,
     datasetDeleted,
+    filters,
     search,
     size,
     page,
@@ -36,8 +40,9 @@ export const getOptimizationsList = async (
   const { data } = await api.get(OPTIMIZATIONS_REST_ENDPOINT, {
     signal,
     params: {
-      workspace_name: workspaceName, // we just need it to reset the cash in case workspace is changed
+      workspace_name: workspaceName,
       ...(isBoolean(datasetDeleted) && { dataset_deleted: datasetDeleted }),
+      ...processFilters(filters),
       ...(search && { name: search }),
       ...(datasetId && { dataset_id: datasetId }),
       size,

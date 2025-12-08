@@ -12,9 +12,9 @@
         Opik
     </div>
 </h1>
-<h2 align="center" style="border-bottom: none">Open-source LLM evaluation platform</h2>
+<h2 align="center" style="border-bottom: none">Open-source AI Observability, Evaluation, and Optimization</h2>
 <p align="center">
-Opik helps you build, evaluate, and optimize LLM systems that run better, faster, and cheaper. From RAG chatbots to code assistants to complex agentic pipelines, Opik provides comprehensive tracing, evaluations, dashboards, and powerful features like <b>Opik Agent Optimizer</b> and <b>Opik Guardrails</b> to improve and secure your LLM powered applications in production.
+Opik helps you build, test, and optimize generative AI application that run better, from prototype to production.  From RAG chatbots to code assistants to complex agentic systems, Opik provides comprehensive tracing, evaluation, and automatic prompt and tool optimization to take the guesswork out of AI development.
 </p>
 
 <div align="center">

@@ -457,14 +457,18 @@ def _export_prompts(
                 prompt_data = {
                     "name": prompt.name,
                     "current_version": {
-                        "prompt": prompt.prompt,
+                        "prompt": prompt.prompt
+                        if isinstance(prompt, opik.Prompt)
+                        else None,  # TODO: add support for chat prompts
                         "metadata": prompt.metadata,
                         "type": prompt.type if prompt.type else None,
                         "commit": prompt.commit,
                     },
                     "history": [
                         {
-                            "prompt": version.prompt,
+                            "prompt": version.prompt
+                            if isinstance(version, opik.Prompt)
+                            else None,  # TODO: add support for chat prompts
                             "metadata": version.metadata,
                             "type": version.type if version.type else None,
                             "commit": version.commit,

@@ -16,6 +16,7 @@ export interface PlaygroundPromptType {
   model: PROVIDER_MODEL_TYPE | "";
   provider: COMPOSED_PROVIDER_TYPE | "";
   configs: LLMPromptConfigsType;
+  loadedChatPromptId?: string;
 }
 
 export interface ChatCompletionMessageChoiceType {
