@@ -46,39 +46,39 @@ public interface AutomationRuleEvaluatorDAO extends AutomationRuleDAO {
     <T> int updateEvaluator(@Bind("id") UUID id, @BindMethods("rule") AutomationRuleEvaluatorModel<T> rule);
 
     @SqlQuery("""
-            SELECT rule.id,
-                   MAX(rule.action) as action,
-                   MAX(rule.name) AS name,
-                   MAX(rule.sampling_rate) as sampling_rate,
-                   MAX(rule.enabled) as enabled,
-                   MAX(rule.filters) as filters,
-                   MAX(evaluator.type) as type,
-                   MAX(evaluator.code) as code,
-                   MAX(evaluator.created_at) as created_at,
-                   MAX(evaluator.created_by) as created_by,
-                   MAX(evaluator.last_updated_at) as last_updated_at,
-                   MAX(evaluator.last_updated_by) as last_updated_by,
-                   GROUP_CONCAT(DISTINCT arp.project_id SEPARATOR ',') as project_ids
-            FROM automation_rules rule
-            JOIN automation_rule_evaluators evaluator
-              ON rule.id = evaluator.id
-            <if(projectIds)>
-            JOIN automation_rule_projects arp
-              ON rule.id = arp.rule_id AND rule.workspace_id = arp.workspace_id AND arp.project_id IN (<projectIds>)
-            <else>
-            LEFT JOIN automation_rule_projects arp
-              ON rule.id = arp.rule_id AND rule.workspace_id = arp.workspace_id
-            </if>
-            WHERE rule.workspace_id = :workspaceId AND rule.action = :action
-            <if(type)> AND evaluator.type = :type <endif>
-            <if(ids)> AND rule.id IN (<ids>) <endif>
-            <if(id)> AND rule.id like concat('%', :id, '%') <endif>
-            <if(name)> AND rule.name like concat('%', :name, '%') <endif>
-            <if(filters)> AND <filters> <endif>
-            GROUP BY rule.id
-            <if(sort_fields)> ORDER BY <sort_fields> <else> ORDER BY MAX(rule.id) DESC <endif>
-            <if(limit)> LIMIT :limit <endif>
-            <if(offset)> OFFSET :offset <endif>
+            SELECT outer_rule.id, outer_rule.action, outer_rule.name AS name,
+                   outer_rule.sampling_rate, outer_rule.enabled, outer_rule.filters,
+                   outer_evaluator.type, outer_evaluator.code,
+                   outer_evaluator.created_at, outer_evaluator.created_by,
+                   outer_evaluator.last_updated_at, outer_evaluator.last_updated_by,
+                   GROUP_CONCAT(DISTINCT outer_arp.project_id SEPARATOR ',') as project_ids
+            FROM (
+                SELECT DISTINCT rule.id
+                FROM automation_rules rule
+                JOIN automation_rule_evaluators evaluator ON rule.id = evaluator.id
+                <if(projectIds)>
+                JOIN automation_rule_projects arp ON rule.id = arp.rule_id
+                    AND rule.workspace_id = arp.workspace_id
+                    AND arp.project_id IN (<projectIds>)
+                </if>
+                WHERE rule.workspace_id = :workspaceId AND rule.action = :action
+                <if(type)> AND evaluator.type = :type <endif>
+                <if(ids)> AND rule.id IN (<ids>) <endif>
+                <if(id)> AND rule.id like concat('%', :id, '%') <endif>
+                <if(name)> AND rule.name like concat('%', :name, '%') <endif>
+                <if(filters)> AND <filters> <endif>
+                <if(sort_fields)> ORDER BY <sort_fields> <else> ORDER BY rule.id DESC <endif>
+                <if(limit)> LIMIT :limit <endif>
+                <if(offset)> OFFSET :offset <endif>
+            ) AS paginated_rule_ids
+            JOIN automation_rules outer_rule ON paginated_rule_ids.id = outer_rule.id
+            JOIN automation_rule_evaluators outer_evaluator ON outer_rule.id = outer_evaluator.id
+            LEFT JOIN automation_rule_projects outer_arp
+                ON outer_rule.id = outer_arp.rule_id AND outer_rule.workspace_id = outer_arp.workspace_id
+            GROUP BY outer_rule.id, outer_rule.action, outer_rule.name, outer_rule.sampling_rate,
+                     outer_rule.enabled, outer_rule.filters, outer_evaluator.type, outer_evaluator.code,
+                     outer_evaluator.created_at, outer_evaluator.created_by,
+                     outer_evaluator.last_updated_at, outer_evaluator.last_updated_by
             """)
     @UseStringTemplateEngine
     @AllowUnusedBindings
