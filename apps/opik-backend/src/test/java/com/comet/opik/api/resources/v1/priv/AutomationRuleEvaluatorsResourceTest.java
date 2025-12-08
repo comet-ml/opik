@@ -2582,14 +2582,14 @@ class AutomationRuleEvaluatorsResourceTest {
                     ruleId1, null, WORKSPACE_NAME, API_KEY, HttpStatus.SC_OK)) {
 
                 var rule1 = response1.readEntity(AutomationRuleEvaluator.class);
-                assertThat(rule1.getProjectIds()).containsExactly(sharedProjects);
+                assertThat(rule1.getProjectIds()).containsExactlyInAnyOrderElementsOf(sharedProjects);
             }
 
             try (var response2 = evaluatorsResourceClient.getEvaluator(
                     ruleId2, null, WORKSPACE_NAME, API_KEY, HttpStatus.SC_OK)) {
 
                 var rule2 = response2.readEntity(AutomationRuleEvaluator.class);
-                assertThat(rule2.getProjectIds()).containsExactly(sharedProjects);
+                assertThat(rule2.getProjectIds()).containsExactlyInAnyOrderElementsOf(sharedProjects);
             }
         }
 
