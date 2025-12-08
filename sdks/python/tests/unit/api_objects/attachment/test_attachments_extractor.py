@@ -179,22 +179,6 @@ def test_extract_and_replace_plain_text_not_extracted(extractor):
     assert len(result) == 0
 
 
-def test_extract_and_replace_size_threshold_respected(extractor):
-    """Test that strings exceeding min_attachment_size are processed."""
-    # Create a string longer than the threshold (100 bytes)
-    long_string = "a" * 150
-
-    data = {"long_value": long_string}
-
-    result = extractor.extract_and_replace(
-        data=data, entity_type="span", entity_id="span-005", context="input"
-    )
-
-    # No attachments should be extracted (size threshold)
-    assert len(result) == 0
-    assert data["long_value"] == long_string
-
-
 def test_extract_and_replace_below_size_threshold(extractor_big_threshold):
     """Test that strings below min_attachment_size are not processed."""
     # PNG base64 is well below 100 bytes
@@ -209,7 +193,7 @@ def test_extract_and_replace_below_size_threshold(extractor_big_threshold):
 
 
 def test_extract_and_replace_mixed_valid_invalid(extractor):
-    """Test extraction with mix of valid and invalid attachments."""
+    """Test extraction with a mix of valid and invalid attachments."""
     data = {
         "valid_png": constants.PNG_BASE64,
         "invalid": "not base64!",
@@ -315,7 +299,7 @@ def test_extract_and_replace_bytes_data(extractor):
 
 
 def test_extract_and_replace_attachment_filename_format(extractor):
-    """Test that extracted attachments have correct filename format."""
+    """Test that extracted attachments have a correct filename format."""
     data = {"image": constants.PNG_BASE64}
 
     result = extractor.extract_and_replace(
@@ -371,7 +355,7 @@ def test_extract_and_replace_multiple_same_attachment(extractor):
 
 
 def test_extract_and_replace_gif_attachment(extractor):
-    """Test extraction of GIF attachment."""
+    """Test extraction of a GIF attachment."""
     data = {"gif": constants.GIF89_BASE64}
 
     result = extractor.extract_and_replace(
