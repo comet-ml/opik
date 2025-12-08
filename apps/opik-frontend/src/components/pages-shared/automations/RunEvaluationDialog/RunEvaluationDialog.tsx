@@ -293,9 +293,17 @@ const RunEvaluationDialog: React.FunctionComponent<
   };
 
   const entityLabel =
-    entityType === "trace" ? "traces" : entityType === "thread" ? "threads" : "spans";
+    entityType === "trace"
+      ? "traces"
+      : entityType === "thread"
+        ? "threads"
+        : "spans";
   const capitalizedEntityLabel =
-    entityType === "trace" ? "Traces" : entityType === "thread" ? "Threads" : "Spans";
+    entityType === "trace"
+      ? "Traces"
+      : entityType === "thread"
+        ? "Threads"
+        : "Spans";
   const isRunDisabled =
     selectedRuleIds.size === 0 || manualEvaluationMutation.isPending;
 
