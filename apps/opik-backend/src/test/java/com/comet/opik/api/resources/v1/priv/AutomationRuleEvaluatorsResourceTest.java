@@ -1323,6 +1323,7 @@ class AutomationRuleEvaluatorsResourceTest {
             // Send a trace that should be skipped due to disabled rules (not sampling rate)
             var trace = factory.manufacturePojo(Trace.class).toBuilder()
                     .projectId(projectId)
+                    .projectName(projectName) // Backend uses projectName, not projectId!
                     .threadId(null)
                     .build();
             traceResourceClient.createTrace(trace, API_KEY, WORKSPACE_NAME);
@@ -1371,6 +1372,8 @@ class AutomationRuleEvaluatorsResourceTest {
             // Send a trace that should create a thread but be skipped due to disabled rules
             var trace = factory.manufacturePojo(Trace.class).toBuilder()
                     .projectId(projectId)
+                    .projectName(projectName) // Backend uses projectName, not projectId!
+                    .threadId("thread-" + RandomStringUtils.secure().nextAlphanumeric(36)) // Must have threadId for thread-level evaluation
                     .build();
 
             Instant createdAt = trace.createdAt();
@@ -1461,6 +1464,7 @@ class AutomationRuleEvaluatorsResourceTest {
             for (int i = 0; i < 5; i++) {
                 var trace = factory.manufacturePojo(Trace.class).toBuilder()
                         .projectId(projectId)
+                        .projectName(projectName) // Backend uses projectName, not projectId!
                         .threadId(null)
                         .build();
                 traceResourceClient.createTrace(trace, API_KEY, WORKSPACE_NAME);
