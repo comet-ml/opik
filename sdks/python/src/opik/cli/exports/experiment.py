@@ -340,8 +340,10 @@ def export_experiment_by_name(
         for experiment in experiments:
             if experiment.dataset_name:
                 unique_datasets.add(experiment.dataset_name)
-            if getattr(experiment, "prompt_versions", None):
-                for prompt_version in experiment.prompt_versions:
+            # Get experiment data to access prompt_versions
+            experiment_data = experiment.get_experiment_data()
+            if experiment_data.prompt_versions:
+                for prompt_version in experiment_data.prompt_versions:
                     unique_prompt_ids.add(prompt_version.prompt_id)
 
         # Export all unique datasets once before processing experiments
