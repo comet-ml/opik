@@ -3,7 +3,6 @@ package com.comet.opik.infrastructure.llm;
 import lombok.experimental.UtilityClass;
 import lombok.extern.slf4j.Slf4j;
 
-import java.io.IOException;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -96,16 +95,9 @@ public class VideoMimeTypeUtils {
                         url.substring(0, Math.min(50, url.length())));
                 return contentType;
             }
-        } catch (IllegalArgumentException e) {
-            log.debug("Invalid URL format for MIME detection: '{}', error: '{}'",
+        } catch (Exception e) {
+            log.error("Failed to detect MIME type for URL: '{}', error: '{}'",
                     url.substring(0, Math.min(50, url.length())), e.getMessage());
-        } catch (IOException e) {
-            log.debug("IO error during MIME type detection: '{}', error: '{}'",
-                    url.substring(0, Math.min(50, url.length())), e.getMessage());
-        } catch (InterruptedException e) {
-            log.debug("HEAD request interrupted: '{}', error: '{}'",
-                    url.substring(0, Math.min(50, url.length())), e.getMessage());
-            Thread.currentThread().interrupt();
         }
         return null;
     }
