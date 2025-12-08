@@ -38,10 +38,13 @@ public class AutomationRuleEvaluatorWithProjectRowMapper implements RowMapper<Au
         // Get project_ids from GROUP_CONCAT result (comma-separated)
         Set<UUID> projectIds = new HashSet<>();
         String projectIdsStr = rs.getString("project_ids");
-        if (projectIdsStr != null && !rs.wasNull() && !projectIdsStr.isEmpty()) {
+        if (projectIdsStr != null && !rs.wasNull() && !projectIdsStr.trim().isEmpty()) {
             String[] ids = projectIdsStr.split(",");
             for (String idStr : ids) {
-                projectIds.add(UUID.fromString(idStr.trim()));
+                String trimmed = idStr.trim();
+                if (!trimmed.isEmpty()) {
+                    projectIds.add(UUID.fromString(trimmed));
+                }
             }
         }
 
