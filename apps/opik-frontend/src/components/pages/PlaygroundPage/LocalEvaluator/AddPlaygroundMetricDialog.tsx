@@ -7,7 +7,7 @@ import { v4 as uuidv4 } from "uuid";
 import { Info } from "lucide-react";
 
 import { cn } from "@/lib/utils";
-import LoadableSelectBox from "@/components/shared/LoadableSelectBox/LoadableSelectBox";
+import Autocomplete from "@/components/shared/Autocomplete/Autocomplete";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -227,12 +227,9 @@ const AddPlaygroundMetricDialog: React.FC<AddPlaygroundMetricDialogProps> = ({
     return metrics.find((m) => m.name === selectedMetricName);
   }, [metrics, selectedMetricName]);
 
-  // Convert metrics to options format for LoadableSelectBox
-  const metricOptions = useMemo(() => {
-    return metrics.map((m) => ({
-      label: m.name,
-      value: m.name,
-    }));
+  // Convert metrics to string array for Autocomplete
+  const metricNames = useMemo(() => {
+    return metrics.map((m) => m.name);
   }, [metrics]);
 
   // Create dynamic resolver when metric changes
@@ -357,14 +354,17 @@ const AddPlaygroundMetricDialog: React.FC<AddPlaygroundMetricDialogProps> = ({
                     <FormItem className="flex flex-col">
                       <Label>Metric</Label>
                       <FormControl>
-                        <LoadableSelectBox
-                          options={metricOptions}
-                          value={field.value}
-                          onChange={field.onChange}
-                          placeholder="Select a metric"
-                          searchPlaceholder="Search metrics..."
-                          disabled={isEdit}
-                        />
+                        {isEdit ? (
+                          <Input value={field.value} disabled />
+                        ) : (
+                          <Autocomplete
+                            items={metricNames}
+                            value={field.value}
+                            onValueChange={field.onChange}
+                            placeholder="Select a metric"
+                            emptyMessage="No metrics found"
+                          />
+                        )}
                       </FormControl>
                       <FormMessage />
                     </FormItem>
