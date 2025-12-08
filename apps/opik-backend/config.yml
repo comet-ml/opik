@@ -553,7 +553,7 @@ serviceToggles:
   traceThreadPythonEvaluatorEnabled: ${TOGGLE_TRACE_THREAD_PYTHON_EVALUATOR_ENABLED:-"true"}
   # Default: false
   # Description: Whether or not to enable the span LLM as Judge evaluator
-  spanLlmAsJudgeEnabled: ${TOGGLE_SPAN_LLM_AS_JUDGE_ENABLED:-"false"}
+  spanLlmAsJudgeEnabled: ${TOGGLE_SPAN_LLM_AS_JUDGE_ENABLED:-"true"}
   # Default: true
   # Description: Whether or not to enable the span user-defined metric Python evaluator
   spanUserDefinedMetricPythonEnabled: ${TOGGLE_SPAN_USER_DEFINED_METRIC_PYTHON_ENABLED:-"true"}
