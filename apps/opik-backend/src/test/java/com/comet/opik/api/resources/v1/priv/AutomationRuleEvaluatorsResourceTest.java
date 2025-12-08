@@ -2166,6 +2166,7 @@ class AutomationRuleEvaluatorsResourceTest {
         @Test
         void createAndGetEvaluatorWithFilters() {
             // Given
+            var projectId = projectResourceClient.createProject(UUID.randomUUID().toString(), API_KEY, WORKSPACE_NAME);
             List<TraceFilter> filters = List.of(
                     TraceFilter.builder()
                             .field(TraceField.NAME)
@@ -2181,6 +2182,7 @@ class AutomationRuleEvaluatorsResourceTest {
             var automationRuleEvaluator = factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class)
                     .toBuilder()
                     .filters(filters)
+                    .projectIds(Set.of(projectId))
                     .build();
 
             // When
@@ -2202,11 +2204,13 @@ class AutomationRuleEvaluatorsResourceTest {
         @Test
         void createEvaluatorWithEmptyFilters() {
             // Given
+            var projectId = projectResourceClient.createProject(UUID.randomUUID().toString(), API_KEY, WORKSPACE_NAME);
             List<TraceFilter> emptyFilters = List.of();
             @SuppressWarnings("unchecked")
             var automationRuleEvaluator = factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class)
                     .toBuilder()
                     .filters(emptyFilters)
+                    .projectIds(Set.of(projectId))
                     .build();
 
             // When
@@ -2224,6 +2228,7 @@ class AutomationRuleEvaluatorsResourceTest {
         @Test
         void updateEvaluatorWithFilters() {
             // Given
+            var projectId = projectResourceClient.createProject(UUID.randomUUID().toString(), API_KEY, WORKSPACE_NAME);
             List<TraceFilter> initialFilters = List.of(
                     TraceFilter.builder()
                             .field(TraceField.NAME)
@@ -2236,6 +2241,7 @@ class AutomationRuleEvaluatorsResourceTest {
                     .manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class)
                     .toBuilder()
                     .filters(initialFilters)
+                    .projectIds(Set.of(projectId))
                     .build();
             UUID id = evaluatorsResourceClient.createEvaluator(automationRuleEvaluator, WORKSPACE_NAME, API_KEY);
 
@@ -2356,10 +2362,12 @@ class AutomationRuleEvaluatorsResourceTest {
         void createEvaluatorWithFiltersForAllTypes(Class<? extends AutomationRuleEvaluator<?, ?>> evaluatorClass,
                 List<?> filters) {
             // Given
+            var projectId = projectResourceClient.createProject(UUID.randomUUID().toString(), API_KEY, WORKSPACE_NAME);
             AutomationRuleEvaluator<?, ?> automationRuleEvaluator = factory
                     .manufacturePojo(evaluatorClass)
                     .toBuilder()
                     .filters((List) filters)
+                    .projectIds(Set.of(projectId))
                     .build();
 
             // When
@@ -2380,6 +2388,7 @@ class AutomationRuleEvaluatorsResourceTest {
         @Test
         void createEvaluatorWithComplexFilters() {
             // Given
+            var projectId = projectResourceClient.createProject(UUID.randomUUID().toString(), API_KEY, WORKSPACE_NAME);
             List<TraceFilter> complexFilters = List.of(
                     TraceFilter.builder()
                             .field(TraceField.INPUT)
@@ -2404,6 +2413,7 @@ class AutomationRuleEvaluatorsResourceTest {
                     .manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class)
                     .toBuilder()
                     .filters(complexFilters)
+                    .projectIds(Set.of(projectId))
                     .build();
 
             // When
