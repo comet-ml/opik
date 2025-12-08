@@ -826,21 +826,24 @@ class AutomationRuleEvaluatorsResourceTest {
         @MethodSource
         void update(AutomationRuleEvaluator<Object, ?> automationRuleEvaluator,
                 AutomationRuleEvaluatorUpdate<?, ?> automationRuleEvaluatorUpdate) {
+            // Create project and set it on the evaluator
             var projectId = projectResourceClient.createProject(UUID.randomUUID().toString(), API_KEY, WORKSPACE_NAME);
             var evaluatorWithProject = automationRuleEvaluator.toBuilder()
                     .projectIds(Set.of(projectId))
                     .build();
             var id = evaluatorsResourceClient.createEvaluator(evaluatorWithProject, WORKSPACE_NAME, API_KEY);
 
+            // Prepare update with same projectIds
             var updatedEvaluator = automationRuleEvaluatorUpdate.toBuilder()
-                    .projectIds(evaluatorWithProject.getProjectIds())
+                    .projectIds(Set.of(projectId))
                     .build();
             try (var actualResponse = evaluatorsResourceClient.updateEvaluator(
                     id, WORKSPACE_NAME, updatedEvaluator, API_KEY, HttpStatus.SC_NO_CONTENT)) {
                 assertThat(actualResponse.hasEntity()).isFalse();
             }
 
-            var expectedAutomationRuleEvaluator = automationRuleEvaluator.toBuilder()
+            // Build expected result from the evaluator with correct projectIds
+            var expectedAutomationRuleEvaluator = evaluatorWithProject.toBuilder()
                     .id(id)
                     .createdBy(USER)
                     .lastUpdatedBy(USER)
