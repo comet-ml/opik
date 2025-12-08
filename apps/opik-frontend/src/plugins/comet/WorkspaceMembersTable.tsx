@@ -1,5 +1,9 @@
 import React, { useMemo } from "react";
-import { ColumnDef } from "@tanstack/react-table";
+import {
+  ColumnDef,
+  OnChangeFn,
+  ColumnSizingState,
+} from "@tanstack/react-table";
 import useUser from "@/plugins/comet/useUser";
 import useAllWorkspaces from "@/plugins/comet/useAllWorkspaces";
 import useAllWorkspaceMembers from "@/plugins/comet/useWorkspaceMembers";
@@ -16,10 +20,16 @@ interface WorkspaceMember {
 
 export interface WorkspaceMembersTableProps {
   columns: ColumnDef<WorkspaceMember, WorkspaceMember>[];
+  resizeConfig?: {
+    enabled: boolean;
+    columnSizing?: ColumnSizingState;
+    onColumnResize?: OnChangeFn<ColumnSizingState>;
+  };
 }
 
 const WorkspaceMembersTable: React.FC<WorkspaceMembersTableProps> = ({
   columns,
+  resizeConfig,
 }) => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
 
@@ -54,7 +64,9 @@ const WorkspaceMembersTable: React.FC<WorkspaceMembersTableProps> = ({
     return <Loader />;
   }
 
-  return <DataTable columns={columns} data={tableData} />;
+  return (
+    <DataTable columns={columns} data={tableData} resizeConfig={resizeConfig} />
+  );
 };
 
 export default WorkspaceMembersTable;

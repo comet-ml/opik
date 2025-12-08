@@ -1,9 +1,12 @@
 import { useMemo } from "react";
+import useLocalStorageState from "use-local-storage-state";
 import usePluginsStore from "@/store/PluginsStore";
 import DataTable from "@/components/shared/DataTable/DataTable";
 import { COLUMN_TYPE, ColumnData } from "@/types/shared";
 import { convertColumnDataToColumn } from "@/lib/table";
 import { formatDate } from "@/lib/date";
+
+const COLUMNS_WIDTH_KEY = "workspace-members-columns-width";
 
 interface WorkspaceMember {
   id: string;
@@ -45,6 +48,12 @@ const CollaboratorsTab = () => {
     (state) => state.WorkspaceMembersTable,
   );
 
+  const [columnsWidth, setColumnsWidth] = useLocalStorageState<
+    Record<string, number>
+  >(COLUMNS_WIDTH_KEY, {
+    defaultValue: {},
+  });
+
   const columns = useMemo(() => {
     return convertColumnDataToColumn<WorkspaceMember, WorkspaceMember>(
       DEFAULT_COLUMNS,
@@ -52,11 +61,22 @@ const CollaboratorsTab = () => {
     );
   }, []);
 
+  const resizeConfig = useMemo(
+    () => ({
+      enabled: true,
+      columnSizing: columnsWidth,
+      onColumnResize: setColumnsWidth,
+    }),
+    [columnsWidth, setColumnsWidth],
+  );
+
   if (WorkspaceMembersTable) {
-    return <WorkspaceMembersTable columns={columns} />;
+    return (
+      <WorkspaceMembersTable columns={columns} resizeConfig={resizeConfig} />
+    );
   }
 
-  return <DataTable columns={columns} data={[]} />;
+  return <DataTable columns={columns} data={[]} resizeConfig={resizeConfig} />;
 };
 
 export default CollaboratorsTab;
