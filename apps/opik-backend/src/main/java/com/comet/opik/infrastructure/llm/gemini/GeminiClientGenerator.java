@@ -26,13 +26,17 @@ public class GeminiClientGenerator implements LlmProviderClientGenerator<GoogleA
 
     public GoogleAiGeminiChatModel newGeminiClient(@NonNull String apiKey, @NonNull ChatCompletionRequest request) {
         return GeminiChatModelMapper.INSTANCE.toGeminiChatModel(apiKey, request,
-                llmProviderClientConfig.getCallTimeout().toJavaDuration(), MAX_RETRIES);
+                llmProviderClientConfig.getCallTimeout().toJavaDuration(), MAX_RETRIES,
+                llmProviderClientConfig.getLogRequests(),
+                llmProviderClientConfig.getLogResponses());
     }
 
     public GoogleAiGeminiStreamingChatModel newGeminiStreamingClient(
             @NonNull String apiKey, @NonNull ChatCompletionRequest request) {
         return GeminiChatModelMapper.INSTANCE.toGeminiStreamingChatModel(apiKey, request,
-                llmProviderClientConfig.getCallTimeout().toJavaDuration(), MAX_RETRIES);
+                llmProviderClientConfig.getCallTimeout().toJavaDuration(), MAX_RETRIES,
+                llmProviderClientConfig.getLogRequests(),
+                llmProviderClientConfig.getLogResponses());
     }
 
     @Override
@@ -48,7 +52,9 @@ public class GeminiClientGenerator implements LlmProviderClientGenerator<GoogleA
             LlmAsJudgeModelParameters modelParameters) {
         GoogleAiGeminiChatModelBuilder modelBuilder = GoogleAiGeminiChatModel.builder()
                 .modelName(modelParameters.name())
-                .apiKey(config.apiKey());
+                .apiKey(config.apiKey())
+                .logRequests(llmProviderClientConfig.getLogRequests())
+                .logResponses(llmProviderClientConfig.getLogResponses());
 
         Optional.ofNullable(llmProviderClientConfig.getConnectTimeout())
                 .ifPresent(connectTimeout -> modelBuilder.timeout(connectTimeout.toJavaDuration()));
