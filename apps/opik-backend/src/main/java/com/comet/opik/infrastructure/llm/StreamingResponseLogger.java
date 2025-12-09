@@ -61,16 +61,26 @@ public class StreamingResponseLogger {
     }
 
     /**
-     * Log error with any accumulated partial content
+     * Log error with any accumulated partial content.
+     * Always logs at ERROR level. Includes partial content only when DEBUG is enabled.
      */
     public void logError(Throwable throwable) {
-        if (log.isDebugEnabled()) {
-            log.debug(
-                    "LLM Streaming Response Error - Request: {}, Model: {}, Partial Content: {}, Error: {}",
+        if (log.isDebugEnabled() && !accumulatedContent.isEmpty()) {
+            // DEBUG enabled: Include partial content (may be sensitive)
+            log.error(
+                    "LLM Streaming Response Error - Request: {}, Model: {}, Content: {}, Error: {}",
                     requestSummary,
                     model,
-                    accumulatedContent.toString(),
-                    throwable.getMessage());
+                    accumulatedContent,
+                    throwable.getMessage(),
+                    throwable);
+        } else {
+            // DEBUG disabled: No partial content (security)
+            log.error("LLM Streaming Response Error - Request: {}, Model: {}, Error: {}",
+                    requestSummary,
+                    model,
+                    throwable.getMessage(),
+                    throwable);
         }
     }
 }
