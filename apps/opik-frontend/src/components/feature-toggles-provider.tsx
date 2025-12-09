@@ -25,7 +25,7 @@ const DEFAULT_STATE: FeatureToggles = {
   [FeatureToggleKeys.OPTIMIZATION_STUDIO_ENABLED]: false,
   [FeatureToggleKeys.SPAN_LLM_AS_JUDGE_ENABLED]: false,
   [FeatureToggleKeys.DASHBOARDS_ENABLED]: false,
-  [FeatureToggleKeys.COLLABORATORS_TAB_ENABLED]: true,
+  [FeatureToggleKeys.COLLABORATORS_TAB_ENABLED]: false,
 };
 
 const initialState: FeatureTogglesState = {

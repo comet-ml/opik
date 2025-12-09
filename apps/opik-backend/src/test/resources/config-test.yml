@@ -430,7 +430,7 @@ serviceToggles:
   optimizationStudioEnabled: "false"
   # Default: false
   # Description: Whether or not Collaborators tab feature is enabled
-  collaboratorsTabEnabled: "true"
+  collaboratorsTabEnabled: "false"
 
 # Trace Thread configuration
 traceThreadConfig:
