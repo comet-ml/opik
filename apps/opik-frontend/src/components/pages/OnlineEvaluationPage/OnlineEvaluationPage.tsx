@@ -199,13 +199,14 @@ export const OnlineEvaluationPage: React.FC = () => {
   });
 
   // Create project ID to name mapping
-  const projectIdToNameMap = useMemo(() => {
-    const map = new Map<string, string>();
-    projectsData?.content?.forEach((project) => {
-      map.set(project.id, project.name);
-    });
-    return map;
-  }, [projectsData]);
+  const projectIdToNameMap = useMemo(
+    () =>
+      (projectsData?.content || []).reduce((map, project) => {
+        map.set(project.id, project.name);
+        return map;
+      }, new Map<string, string>()),
+    [projectsData],
+  );
 
   const sortableBy: string[] = useMemo(
     () => data?.sortable_by ?? [],
