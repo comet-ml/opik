@@ -11,8 +11,6 @@ Note: Some optimizers are expected to fail initially as they don't yet
 support content_parts. These will be updated to support multimodal prompts.
 """
 
-import copy
-
 import pytest
 from typing import Any
 

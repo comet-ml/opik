@@ -11,7 +11,6 @@ from .. import prompts as evo_prompts
 from ....api_objects import chat_prompt
 from ....api_objects.types import (
     Content,
-    Messages,
     extract_text_from_content,
     rebuild_content_with_new_text,
 )
