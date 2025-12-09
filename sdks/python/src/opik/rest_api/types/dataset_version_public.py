@@ -12,6 +12,11 @@ class DatasetVersionPublic(UniversalBaseModel):
     dataset_id: typing.Optional[str] = None
     version_hash: typing.Optional[str] = None
     tags: typing.Optional[typing.List[str]] = None
+    is_latest: typing.Optional[bool] = pydantic.Field(default=None)
+    """
+    Indicates whether this is the latest version of the dataset
+    """
+
     items_total: typing.Optional[int] = pydantic.Field(default=None)
     """
     Total number of items in this version

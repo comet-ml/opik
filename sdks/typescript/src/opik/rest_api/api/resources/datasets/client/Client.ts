@@ -2581,6 +2581,113 @@ export class Datasets {
         }
     }
 
+    /**
+     * Update a dataset version's change_description and/or add new tags
+     *
+     * @param {string} versionHash
+     * @param {string} id
+     * @param {OpikApi.DatasetVersionUpdatePublic} request
+     * @param {Datasets.RequestOptions} requestOptions - Request-specific configuration.
+     *
+     * @throws {@link OpikApi.BadRequestError}
+     * @throws {@link OpikApi.NotFoundError}
+     * @throws {@link OpikApi.ConflictError}
+     *
+     * @example
+     *     await client.datasets.updateDatasetVersion("versionHash", "id")
+     */
+    public updateDatasetVersion(
+        versionHash: string,
+        id: string,
+        request: OpikApi.DatasetVersionUpdatePublic = {},
+        requestOptions?: Datasets.RequestOptions,
+    ): core.HttpResponsePromise<OpikApi.DatasetVersionPublic> {
+        return core.HttpResponsePromise.fromPromise(
+            this.__updateDatasetVersion(versionHash, id, request, requestOptions),
+        );
+    }
+
+    private async __updateDatasetVersion(
+        versionHash: string,
+        id: string,
+        request: OpikApi.DatasetVersionUpdatePublic = {},
+        requestOptions?: Datasets.RequestOptions,
+    ): Promise<core.WithRawResponse<OpikApi.DatasetVersionPublic>> {
+        const _response = await core.fetcher({
+            url: urlJoin(
+                (await core.Supplier.get(this._options.baseUrl)) ??
+                    (await core.Supplier.get(this._options.environment)) ??
+                    environments.OpikApiEnvironment.Default,
+                `v1/private/datasets/${encodeURIComponent(id)}/versions/hash/${encodeURIComponent(versionHash)}`,
+            ),
+            method: "PATCH",
+            headers: {
+                "Comet-Workspace":
+                    (await core.Supplier.get(this._options.workspaceName)) != null
+                        ? await core.Supplier.get(this._options.workspaceName)
+                        : undefined,
+                "X-Fern-Language": "JavaScript",
+                "X-Fern-Runtime": core.RUNTIME.type,
+                "X-Fern-Runtime-Version": core.RUNTIME.version,
+                ...(await this._getCustomAuthorizationHeaders()),
+                ...requestOptions?.headers,
+            },
+            contentType: "application/json",
+            requestType: "json",
+            body: serializers.DatasetVersionUpdatePublic.jsonOrThrow(request, { unrecognizedObjectKeys: "strip" }),
+            timeoutMs: requestOptions?.timeoutInSeconds != null ? requestOptions.timeoutInSeconds * 1000 : 60000,
+            maxRetries: requestOptions?.maxRetries,
+            withCredentials: true,
+            abortSignal: requestOptions?.abortSignal,
+        });
+        if (_response.ok) {
+            return {
+                data: serializers.DatasetVersionPublic.parseOrThrow(_response.body, {
+                    unrecognizedObjectKeys: "passthrough",
+                    allowUnrecognizedUnionMembers: true,
+                    allowUnrecognizedEnumValues: true,
+                    breadcrumbsPrefix: ["response"],
+                }),
+                rawResponse: _response.rawResponse,
+            };
+        }
+
+        if (_response.error.reason === "status-code") {
+            switch (_response.error.statusCode) {
+                case 400:
+                    throw new OpikApi.BadRequestError(_response.error.body, _response.rawResponse);
+                case 404:
+                    throw new OpikApi.NotFoundError(_response.error.body, _response.rawResponse);
+                case 409:
+                    throw new OpikApi.ConflictError(_response.error.body, _response.rawResponse);
+                default:
+                    throw new errors.OpikApiError({
+                        statusCode: _response.error.statusCode,
+                        body: _response.error.body,
+                        rawResponse: _response.rawResponse,
+                    });
+            }
+        }
+
+        switch (_response.error.reason) {
+            case "non-json":
+                throw new errors.OpikApiError({
+                    statusCode: _response.error.statusCode,
+                    body: _response.error.rawBody,
+                    rawResponse: _response.rawResponse,
+                });
+            case "timeout":
+                throw new errors.OpikApiTimeoutError(
+                    "Timeout exceeded when calling PATCH /v1/private/datasets/{id}/versions/hash/{versionHash}.",
+                );
+            case "unknown":
+                throw new errors.OpikApiError({
+                    message: _response.error.errorMessage,
+                    rawResponse: _response.rawResponse,
+                });
+        }
+    }
+
     protected async _getCustomAuthorizationHeaders() {
         const apiKeyValue = await core.Supplier.get(this._options.apiKey);
         return { Authorization: apiKeyValue };

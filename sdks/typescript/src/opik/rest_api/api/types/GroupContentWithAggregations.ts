@@ -5,5 +5,6 @@
 import * as OpikApi from "../index";
 
 export interface GroupContentWithAggregations {
+    label?: string;
     aggregations?: OpikApi.AggregationData;
 }
