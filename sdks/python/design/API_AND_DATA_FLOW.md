@@ -605,28 +605,28 @@ def trace(self, name: str, input: dict, metadata: dict, **kwargs):
 # In streamer.py: Streamer.put()
 
 def put(self, message: BaseMessage) -> None:
-    with self._lock:
-        # Check if draining
-        if self._drain:
-            return
+   with self._lock:
+      # Check if draining
+      if self._drain:
+         return
 
-        # Route based on message type and capabilities
-        if (
-            self._batch_manager is not None
-            and self._batch_manager.message_supports_batching(message)
-        ):
-            # Route to batching
-            self._batch_manager.process_message(message)
+      # Route based on message type and capabilities
+      if (
+              self._batch_manager is not None
+              and self._batch_manager.message_supports_batching(message)
+      ):
+         # Route to batching
+         self._batch_manager.process_message(message)
 
-        elif base_upload_manager.message_supports_upload(message):
-            # Route to file upload
-            self._file_upload_manager.upload(message)
+      elif base_upload_manager.message_supports_upload(message):
+         # Route to file upload
+         self._upload_preprocessor.upload(message)
 
-        else:
-            # Route to queue
-            if not self._message_queue.accept_put_without_discarding():
-                LOGGER.warning("Queue full, discarding oldest message")
-            self._message_queue.put(message)
+      else:
+         # Route to queue
+         if not self._message_queue.accept_put_without_discarding():
+            LOGGER.warning("Queue full, discarding oldest message")
+         self._message_queue.put(message)
 ```
 
 **Decision Tree**:
@@ -999,38 +999,38 @@ class CreateExperimentItemsBatchMessage(BaseMessage):
 
 ```python
 def put(self, message: BaseMessage) -> None:
-    """Route message to appropriate handler"""
+   """Route message to appropriate handler"""
 
-    # 1. Check if draining
-    if self._drain:
-        return  # Drop message (shutdown in progress)
+   # 1. Check if draining
+   if self._drain:
+      return  # Drop message (shutdown in progress)
 
-    # 2. Check batching support
-    if (
-        self._batch_manager is not None
-        and self._batch_manager.message_supports_batching(message)
-    ):
-        # Messages that support batching:
-        # - CreateSpanMessage
-        # - CreateTraceMessage
-        # - Feedback score messages (always batched)
-        self._batch_manager.process_message(message)
-        return
+   # 2. Check batching support
+   if (
+           self._batch_manager is not None
+           and self._batch_manager.message_supports_batching(message)
+   ):
+      # Messages that support batching:
+      # - CreateSpanMessage
+      # - CreateTraceMessage
+      # - Feedback score messages (always batched)
+      self._batch_manager.process_message(message)
+      return
 
-    # 3. Check file upload support
-    if base_upload_manager.message_supports_upload(message):
-        # Messages with attachments
-        # - Uploaded to S3 first
-        # - Then regular message sent with S3 URLs
-        self._file_upload_manager.upload(message)
-        return
+   # 3. Check file upload support
+   if base_upload_manager.message_supports_upload(message):
+      # Messages with attachments
+      # - Uploaded to S3 first
+      # - Then regular message sent with S3 URLs
+      self._upload_preprocessor.upload(message)
+      return
 
-    # 4. Default: Add to queue
-    if not self._message_queue.accept_put_without_discarding():
-        # Queue is full
-        LOGGER.warning("Queue full, discarding oldest message")
+   # 4. Default: Add to queue
+   if not self._message_queue.accept_put_without_discarding():
+      # Queue is full
+      LOGGER.warning("Queue full, discarding oldest message")
 
-    self._message_queue.put(message)
+   self._message_queue.put(message)
 ```
 
 ### Consumer Processing Loop

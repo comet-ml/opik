@@ -16,7 +16,7 @@ def steamer_with_mock_message_processor():
         message_processor=mock_message_processor,
         n_consumers=1,
         use_batching=False,
-        file_upload_manager=mock.Mock(),
+        upload_preprocessor=mock.Mock(),
         max_queue_size=MAX_QUEUE_SIZE,
     )
 

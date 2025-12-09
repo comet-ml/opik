@@ -4,6 +4,7 @@ from unittest.mock import sentinel, patch
 
 from opik.message_processing import messages, streamer_constructors
 from opik.file_upload import upload_manager
+from opik.message_processing.preprocessing import file_upload_preprocessor
 
 NOT_USED = sentinel.NOT_USED
 
@@ -23,7 +24,9 @@ def test_streamer__attachment_uploads__flush__ok(temp_file_15mb):
             message_processor=mock.Mock(),
             n_consumers=1,
             use_batching=True,
-            file_upload_manager=file_upload_manager,
+            upload_preprocessor=file_upload_preprocessor.FileUploadPreprocessor(
+                file_upload_manager
+            ),
             max_queue_size=None,
         )
 
@@ -63,7 +66,9 @@ def test_streamer__attachment_uploads__flush__timeout(temp_file_15mb):
             message_processor=mock.Mock(),
             n_consumers=1,
             use_batching=True,
-            file_upload_manager=file_upload_manager,
+            upload_preprocessor=file_upload_preprocessor.FileUploadPreprocessor(
+                file_upload_manager
+            ),
             max_queue_size=None,
         )
 

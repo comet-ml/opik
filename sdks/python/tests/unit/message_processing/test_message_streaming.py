@@ -19,7 +19,7 @@ def batched_streamer_and_mock_message_processor():
             message_processor=mock_message_processor,
             n_consumers=1,
             use_batching=True,
-            file_upload_manager=mock.Mock(),
+            upload_preprocessor=mock.Mock(),
             max_queue_size=None,
         )
 
@@ -63,7 +63,7 @@ def test_streamer__batching_disabled__messages_that_support_batching_are_process
             message_processor=mock_message_processor,
             n_consumers=1,
             use_batching=False,
-            file_upload_manager=mock.Mock(),
+            upload_preprocessor=mock.Mock(),
             max_queue_size=None,
         )
 

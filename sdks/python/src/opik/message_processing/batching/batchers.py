@@ -99,26 +99,21 @@ class BaseAddFeedbackScoresBatchMessageBatcher(base_batcher.BaseBatcher):
             messages.AddThreadsFeedbackScoresBatchMessage,
         ],
     ) -> None:
-        with self._lock:
-            new_messages = message.batch
-            n_new_messages = len(new_messages)
-            n_accumulated_messages = len(self._accumulated_messages)
+        new_messages = message.batch
+        n_new_messages = len(new_messages)
+        n_accumulated_messages = len(self._accumulated_messages)
 
-            if n_new_messages + n_accumulated_messages >= self._max_batch_size:
-                free_space_in_accumulator = (
-                    self._max_batch_size - n_accumulated_messages
-                )
+        if n_new_messages + n_accumulated_messages >= self._max_batch_size:
+            free_space_in_accumulator = self._max_batch_size - n_accumulated_messages
 
-                messages_that_fit_in_batch = new_messages[:free_space_in_accumulator]
-                messages_that_dont_fit_in_batch = new_messages[
-                    free_space_in_accumulator:
-                ]
+            messages_that_fit_in_batch = new_messages[:free_space_in_accumulator]
+            messages_that_dont_fit_in_batch = new_messages[free_space_in_accumulator:]
 
-                self._accumulated_messages += messages_that_fit_in_batch
-                new_messages = messages_that_dont_fit_in_batch
-                self.flush()
+            self._accumulated_messages += messages_that_fit_in_batch
+            new_messages = messages_that_dont_fit_in_batch
+            self.flush()
 
-            self._accumulated_messages += new_messages
+        self._accumulated_messages += new_messages
 
 
 class AddSpanFeedbackScoresBatchMessageBatcher(
@@ -195,23 +190,18 @@ class CreateExperimentItemsBatchMessageBatcher(base_batcher.BaseBatcher):
     def add(  # type: ignore
         self, message: messages.CreateExperimentItemsBatchMessage
     ) -> None:
-        with self._lock:
-            new_messages = message.batch
-            n_new_messages = len(new_messages)
-            n_accumulated_messages = len(self._accumulated_messages)
+        new_messages = message.batch
+        n_new_messages = len(new_messages)
+        n_accumulated_messages = len(self._accumulated_messages)
 
-            if n_new_messages + n_accumulated_messages >= self._max_batch_size:
-                free_space_in_accumulator = (
-                    self._max_batch_size - n_accumulated_messages
-                )
+        if n_new_messages + n_accumulated_messages >= self._max_batch_size:
+            free_space_in_accumulator = self._max_batch_size - n_accumulated_messages
 
-                messages_that_fit_in_batch = new_messages[:free_space_in_accumulator]
-                messages_that_dont_fit_in_batch = new_messages[
-                    free_space_in_accumulator:
-                ]
+            messages_that_fit_in_batch = new_messages[:free_space_in_accumulator]
+            messages_that_dont_fit_in_batch = new_messages[free_space_in_accumulator:]
 
-                self._accumulated_messages += messages_that_fit_in_batch
-                new_messages = messages_that_dont_fit_in_batch
-                self.flush()
+            self._accumulated_messages += messages_that_fit_in_batch
+            new_messages = messages_that_dont_fit_in_batch
+            self.flush()
 
-            self._accumulated_messages += new_messages
+        self._accumulated_messages += new_messages

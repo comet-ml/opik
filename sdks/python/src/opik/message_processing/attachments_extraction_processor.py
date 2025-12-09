@@ -1,7 +1,8 @@
 import logging
 from typing import Optional, NamedTuple, List, Literal
 
-from . import attachments_preprocessor, message_processors, messages, streamer
+from . import message_processors, messages, streamer
+from .preprocessing import constants
 from ..api_objects.attachment import (
     attachments_extractor,
     attachment_context,
@@ -16,21 +17,6 @@ class EntityDetails(NamedTuple):
     entity_type: Literal["span", "trace"]
     entity_id: str
     project_name: str
-
-
-def entity_type_from_attachment_message(
-    message: messages.BaseMessage,
-) -> Optional[EntityDetails]:
-    if isinstance(message, (messages.CreateSpanMessage, messages.UpdateSpanMessage)):
-        return EntityDetails("span", message.span_id, project_name=message.project_name)
-    elif isinstance(
-        message, (messages.CreateTraceMessage, messages.UpdateTraceMessage)
-    ):
-        return EntityDetails(
-            "trace", message.trace_id, project_name=message.project_name
-        )
-    else:
-        return None
 
 
 class AttachmentsExtractionProcessor(message_processors.BaseMessageProcessor):
@@ -86,7 +72,7 @@ class AttachmentsExtractionProcessor(message_processors.BaseMessageProcessor):
 
         # put the original message into the streamer for further processing
         original_message = message.original_message
-        setattr(original_message, attachments_preprocessor.MARKER_ATTRIBUTE_NAME, True)
+        setattr(original_message, constants.MARKER_ATTRIBUTE_NAME, True)
         self.messages_streamer.put(original_message)
 
     def _process_attachments_in_message(self, original: messages.BaseMessage) -> None:
@@ -157,3 +143,18 @@ class AttachmentsExtractionProcessor(message_processors.BaseMessageProcessor):
                 url_override=self._url_override,
             )
             self.messages_streamer.put(create_attachment_message)
+
+
+def entity_type_from_attachment_message(
+    message: messages.BaseMessage,
+) -> Optional[EntityDetails]:
+    if isinstance(message, (messages.CreateSpanMessage, messages.UpdateSpanMessage)):
+        return EntityDetails("span", message.span_id, project_name=message.project_name)
+    elif isinstance(
+        message, (messages.CreateTraceMessage, messages.UpdateTraceMessage)
+    ):
+        return EntityDetails(
+            "trace", message.trace_id, project_name=message.project_name
+        )
+    else:
+        return None

@@ -192,6 +192,7 @@ class Opik:
             rest_client=self._rest_client,
             httpx_client=httpx_client_,
             use_batching=use_batching,
+            extract_attachments=self._config.is_attachment_extraction_active,
             file_upload_worker_count=file_upload_worker_count,
             max_queue_size=max_queue_size,
             message_processor=self._message_processor,

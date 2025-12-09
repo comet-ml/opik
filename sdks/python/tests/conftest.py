@@ -13,6 +13,7 @@ import pytest
 from opik import context_storage
 from opik.api_objects import opik_client
 from opik.message_processing import streamer_constructors
+from opik.message_processing.preprocessing import file_upload_preprocessor
 
 from . import testlib
 from .testlib import (
@@ -48,8 +49,11 @@ def patch_streamer():
             message_processor=fake_message_processor_,
             n_consumers=1,
             use_batching=True,
-            file_upload_manager=fake_upload_manager,
+            upload_preprocessor=file_upload_preprocessor.FileUploadPreprocessor(
+                fake_upload_manager
+            ),
             max_queue_size=None,
+            extract_attachments=False,
         )
 
         yield streamer, fake_message_processor_
@@ -70,8 +74,11 @@ def patch_streamer_without_batching():
             message_processor=fake_message_processor_,
             n_consumers=1,
             use_batching=False,
-            file_upload_manager=fake_upload_manager,
+            upload_preprocessor=file_upload_preprocessor.FileUploadPreprocessor(
+                fake_upload_manager
+            ),
             max_queue_size=None,
+            extract_attachments=False,
         )
 
         yield streamer, fake_message_processor_
