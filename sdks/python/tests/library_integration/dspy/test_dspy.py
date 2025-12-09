@@ -21,55 +21,15 @@ from ...testlib import (
 )
 
 
-def _get_usage_dict_matcher():
-    """
-    Returns a matcher for usage dict that checks for required token fields.
-    DSPy uses LiteLLM which returns OpenAI-compatible usage format.
-    """
-
-    class UsageDictMatcher:
-        def __eq__(self, other):
-            if other is None:
-                return False
-            if not isinstance(other, dict):
-                return False
-            # Check that the usage dict contains the expected token fields
-            # The usage is flattened with original_usage prefix
-            has_prompt_tokens = "prompt_tokens" in other
-            has_completion_tokens = "completion_tokens" in other
-            has_total_tokens = "total_tokens" in other
-            return has_prompt_tokens and has_completion_tokens and has_total_tokens
-
-        def __repr__(self):
-            return "UsageDictMatcher(prompt_tokens, completion_tokens, total_tokens)"
-
-    return UsageDictMatcher()
-
-
-def _get_metadata_with_created_from_matcher():
-    """
-    Returns a matcher for metadata dict that checks for created_from.
-    """
-
-    class MetadataWithCreatedFromMatcher:
-        def __eq__(self, other):
-            if other is None:
-                return False
-            if not isinstance(other, dict):
-                return False
-            # Check that created_from is present
-            if other.get("created_from") != "dspy":
-                return False
-            return True
-
-        def __repr__(self):
-            return "MetadataWithCreatedFromMatcher(created_from=dspy)"
-
-    return MetadataWithCreatedFromMatcher()
-
-
-ANY_USAGE_DICT = _get_usage_dict_matcher()
-ANY_METADATA_WITH_CREATED_FROM = _get_metadata_with_created_from_matcher()
+# Matchers using ANY_DICT.containing() as recommended in PR review
+ANY_USAGE_DICT = ANY_DICT.containing(
+    {
+        "completion_tokens": ANY_BUT_NONE,
+        "prompt_tokens": ANY_BUT_NONE,
+        "total_tokens": ANY_BUT_NONE,
+    }
+)
+ANY_METADATA_WITH_CREATED_FROM = ANY_DICT.containing({"created_from": "dspy"})
 
 
 def sort_spans_by_name(tree: Union[SpanModel, TraceModel]) -> None:
