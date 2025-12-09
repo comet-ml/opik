@@ -3,7 +3,7 @@
 import sys
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Optional, Union
+from typing import Any, List, Optional, Union
 
 import click
 from rich.console import Console
@@ -79,10 +79,11 @@ def export_single_prompt(
             return 0
 
         # Get prompt history - use appropriate method based on prompt type
+        prompt_history: List[Union[Prompt, ChatPrompt]]
         if isinstance(prompt, ChatPrompt):
-            prompt_history = client.get_chat_prompt_history(prompt.name)
+            prompt_history = list(client.get_chat_prompt_history(prompt.name))
         else:
-            prompt_history = client.get_prompt_history(prompt.name)
+            prompt_history = list(client.get_prompt_history(prompt.name))
 
         # Create prompt data structure
         prompt_data = {
@@ -152,10 +153,10 @@ def export_prompt_by_name(
 
         # Try to get prompt by exact name
         # Try ChatPrompt first, then regular Prompt
-        prompt = None
+        prompt: Optional[Union[Prompt, ChatPrompt]] = None
         try:
             prompt = client.get_chat_prompt(name)
-            if debug:
+            if debug and prompt:
                 debug_print(f"Found ChatPrompt by direct lookup: {prompt.name}", debug)
         except Exception:
             # Not a ChatPrompt, try regular Prompt
@@ -169,6 +170,10 @@ def export_prompt_by_name(
             except Exception as e:
                 console.print(f"[red]Prompt '{name}' not found: {e}[/red]")
                 return
+
+        if prompt is None:
+            console.print(f"[red]Prompt '{name}' not found[/red]")
+            return
 
         # Export the prompt
         exported_count = export_single_prompt(
@@ -225,7 +230,7 @@ def export_prompts_by_ids(
     for prompt_id in prompt_ids:
         try:
             # Get the prompt - try ChatPrompt first, then regular Prompt
-            prompt = None
+            prompt: Optional[Union[Prompt, ChatPrompt]] = None
             try:
                 prompt = client.get_chat_prompt(prompt_id)
             except Exception:
@@ -266,10 +271,11 @@ def export_prompts_by_ids(
                 continue
 
             # Get prompt history - use appropriate method based on prompt type
+            prompt_history: List[Union[Prompt, ChatPrompt]]
             if isinstance(prompt, ChatPrompt):
-                prompt_history = client.get_chat_prompt_history(prompt.name)
+                prompt_history = list(client.get_chat_prompt_history(prompt.name))
             else:
-                prompt_history = client.get_prompt_history(prompt_id)
+                prompt_history = list(client.get_prompt_history(prompt_id))
 
             # Create prompt data structure
             prompt_data = {
@@ -351,7 +357,7 @@ def export_experiment_prompts(
                 debug_print(f"Exporting prompt: {prompt_version.prompt_id}", debug)
 
                 # Get the prompt - try ChatPrompt first, then regular Prompt
-                prompt = None
+                prompt: Optional[Union[Prompt, ChatPrompt]] = None
                 try:
                     prompt = client.get_chat_prompt(prompt_version.prompt_id)
                 except Exception:
@@ -366,10 +372,13 @@ def export_experiment_prompts(
                     continue
 
                 # Get prompt history - use appropriate method based on prompt type
+                prompt_history: List[Union[Prompt, ChatPrompt]]
                 if isinstance(prompt, ChatPrompt):
-                    prompt_history = client.get_chat_prompt_history(prompt.name)
+                    prompt_history = list(client.get_chat_prompt_history(prompt.name))
                 else:
-                    prompt_history = client.get_prompt_history(prompt_version.prompt_id)
+                    prompt_history = list(
+                        client.get_prompt_history(prompt_version.prompt_id)
+                    )
 
                 # Create prompt data structure
                 prompt_data = {
@@ -520,10 +529,11 @@ def export_related_prompts_by_name(
                 debug_print(f"Exporting related prompt: {prompt.name}", debug)
 
                 # Get prompt history - use appropriate method based on prompt type
+                prompt_history: List[Union[Prompt, ChatPrompt]]
                 if isinstance(prompt, ChatPrompt):
-                    prompt_history = client.get_chat_prompt_history(prompt.name)
+                    prompt_history = list(client.get_chat_prompt_history(prompt.name))
                 else:
-                    prompt_history = client.get_prompt_history(prompt.name)
+                    prompt_history = list(client.get_prompt_history(prompt.name))
 
                 # Create prompt data structure
                 prompt_data = {
