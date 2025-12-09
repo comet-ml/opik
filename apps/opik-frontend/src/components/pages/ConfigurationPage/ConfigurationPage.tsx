@@ -3,10 +3,10 @@ import AIProvidersTab from "@/components/pages/ConfigurationPage/AIProvidersTab/
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { StringParam, useQueryParam } from "use-query-params";
 import FeedbackDefinitionsTab from "@/components/pages/ConfigurationPage/FeedbackDefinitionsTab/FeedbackDefinitionsTab";
-import WorkspacePreferencesTab from "./WorkspacePreferencesTab/WorkspacePreferencesTab";
-import CollaboratorsTab from "./CollaboratorsTab/CollaboratorsTab";
 import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
+import WorkspacePreferencesTab from "./WorkspacePreferencesTab/WorkspacePreferencesTab";
+import CollaboratorsTab from "./CollaboratorsTab/CollaboratorsTab";
 
 enum CONFIGURATION_TABS {
   FEEDBACK_DEFINITIONS = "feedback-definitions",
@@ -23,8 +23,6 @@ const ConfigurationPage = () => {
   const isCollaboratorsTabEnabled = useIsFeatureEnabled(
     FeatureToggleKeys.COLLABORATORS_TAB_ENABLED,
   );
-
-  console.log("* 🧪 isCollaboratorsTabEnabled", isCollaboratorsTabEnabled);
 
   useEffect(() => {
     if (!tab) {

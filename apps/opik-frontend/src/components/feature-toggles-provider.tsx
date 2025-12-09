@@ -50,10 +50,6 @@ export function FeatureTogglesProvider({ children }: FeatureTogglesProps) {
     }
   }, [data]);
 
-  useEffect(() => {
-    console.log("* 📍 features", features);
-  }, [features]);
-
   const value = useMemo(() => {
     return {
       features,
