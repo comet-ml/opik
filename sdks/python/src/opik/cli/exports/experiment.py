@@ -656,7 +656,7 @@ def export_experiment_command(
     debug: bool,
     format: str,
 ) -> None:
-    """Export an experiment by name or ID to workspace/experiments.
+    """Export an experiment by exact name to workspace/experiments.
 
     The command will first try to find the experiment by ID. If not found, it will try by name.
     """

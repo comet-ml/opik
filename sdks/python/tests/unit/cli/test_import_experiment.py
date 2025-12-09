@@ -143,7 +143,8 @@ class TestRecreateExperiment:
     def mock_client(self):
         """Create a mock Opik client."""
         client = Mock()
-        client.flush = Mock()
+        # Ensure flush returns True to indicate success
+        client.flush = Mock(return_value=True)
 
         # Mock dataset
         mock_dataset = Mock()
@@ -153,9 +154,14 @@ class TestRecreateExperiment:
         # Mock experiment
         mock_experiment = Mock()
         mock_experiment.insert = Mock()
+        mock_experiment.id = "exp-123"
 
         client.get_or_create_dataset = Mock(return_value=mock_dataset)
         client.create_experiment = Mock(return_value=mock_experiment)
+        # Mock REST client for experiment items creation
+        client._rest_client = Mock()
+        client._rest_client.experiments = Mock()
+        client._rest_client.experiments.create_experiment_items = Mock()
 
         return client
 
@@ -225,6 +231,7 @@ class TestRecreateExperiment:
         with (
             patch("opik.cli.imports.experiment.dataset_item_module") as mock_ds_module,
             patch("opik.cli.imports.experiment.id_helpers_module") as mock_id_helpers,
+            patch("time.sleep"),  # Patch to avoid actual delays
         ):
             # Create mock dataset items
             mock_items = []
