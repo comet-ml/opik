@@ -2,7 +2,9 @@
 
 import json
 import sys
-from typing import Dict
+import types
+from pathlib import Path
+from typing import Dict, Any
 from unittest.mock import Mock, MagicMock, patch
 import pytest
 
@@ -25,7 +27,7 @@ from opik.cli.imports.utils import (  # noqa: E402
 class TestExperimentData:
     """Test ExperimentData dataclass."""
 
-    def test_experiment_data_from_dict(self):
+    def test_experiment_data_from_dict(self) -> None:
         """Test creating ExperimentData from dictionary."""
         data = {
             "experiment": {
@@ -47,7 +49,7 @@ class TestExperimentData:
         assert len(exp_data.items) == 2
         assert exp_data.downloaded_at == "2024-01-01T00:00:00"
 
-    def test_experiment_data_from_dict_minimal(self):
+    def test_experiment_data_from_dict_minimal(self) -> None:
         """Test creating ExperimentData with minimal data."""
         data = {
             "experiment": {"id": "exp-123", "dataset_name": "test-dataset"},
@@ -60,7 +62,7 @@ class TestExperimentData:
         assert exp_data.items == []
         assert exp_data.downloaded_at is None
 
-    def test_load_experiment_data_from_file(self, tmp_path):
+    def test_load_experiment_data_from_file(self, tmp_path: Path) -> None:
         """Test loading experiment data from JSON file."""
         experiment_file = tmp_path / "experiment_test.json"
         data = {
@@ -85,7 +87,7 @@ class TestExperimentData:
 class TestTranslateTraceId:
     """Test translate_trace_id function."""
 
-    def test_translate_trace_id_found(self):
+    def test_translate_trace_id_found(self) -> None:
         """Test translating trace ID when mapping exists."""
         trace_id_map = {"old-trace-1": "new-trace-1", "old-trace-2": "new-trace-2"}
 
@@ -93,7 +95,7 @@ class TestTranslateTraceId:
 
         assert result == "new-trace-1"
 
-    def test_translate_trace_id_not_found(self):
+    def test_translate_trace_id_not_found(self) -> None:
         """Test translating trace ID when mapping doesn't exist."""
         trace_id_map = {"old-trace-1": "new-trace-1"}
 
@@ -101,15 +103,15 @@ class TestTranslateTraceId:
 
         assert result is None
 
-    def test_translate_trace_id_empty_map(self):
+    def test_translate_trace_id_empty_map(self) -> None:
         """Test translating trace ID with empty map."""
-        trace_id_map = {}
+        trace_id_map: Dict[str, str] = {}
 
         result = utils_translate_trace_id("old-trace-1", trace_id_map)
 
         assert result is None
 
-    def test_translate_trace_id_requires_dict(self):
+    def test_translate_trace_id_requires_dict(self) -> None:
         """Test that translate_trace_id requires Dict, not Optional."""
         # This test verifies the type signature is correct
         # If someone tries to pass None, type checker should catch it
@@ -124,7 +126,7 @@ class TestRecreateExperiment:
     """Test recreate_experiment function."""
 
     @staticmethod
-    def _extract_items_arg_from_call_args(call_args):
+    def _extract_items_arg_from_call_args(call_args: Any) -> Any:
         """Helper to extract the items argument from call_args.
 
         Handles both positional and keyword arguments.
@@ -140,7 +142,7 @@ class TestRecreateExperiment:
         return None
 
     @pytest.fixture
-    def mock_client(self):
+    def mock_client(self) -> Mock:
         """Create a mock Opik client."""
         client = Mock()
         # Ensure flush returns True to indicate success
@@ -166,7 +168,7 @@ class TestRecreateExperiment:
         return client
 
     @pytest.fixture
-    def experiment_data(self):
+    def experiment_data(self) -> ExperimentData:
         """Create sample experiment data."""
         return ExperimentData(
             experiment={
@@ -191,8 +193,8 @@ class TestRecreateExperiment:
         )
 
     def test_recreate_experiment_requires_trace_id_map(
-        self, mock_client, experiment_data
-    ):
+        self, mock_client: Mock, experiment_data: ExperimentData
+    ) -> None:
         """Test that recreate_experiment requires trace_id_map (not Optional)."""
         # This test verifies the type signature
         trace_id_map: Dict[str, str] = {
@@ -225,8 +227,8 @@ class TestRecreateExperiment:
             assert mock_ds_module.DatasetItem.called
 
     def test_recreate_experiment_batches_dataset_items(
-        self, mock_client, experiment_data
-    ):
+        self, mock_client: Mock, experiment_data: ExperimentData
+    ) -> None:
         """Test that dataset items are inserted in batch, not one at a time."""
         with (
             patch("opik.cli.imports.experiment.dataset_item_module") as mock_ds_module,
@@ -280,8 +282,8 @@ class TestRecreateExperiment:
             ), f"Expected 2 items in batch, got {len(items_arg)}"
 
     def test_recreate_experiment_uses_module_names_correctly(
-        self, mock_client, experiment_data
-    ):
+        self, mock_client: Mock, experiment_data: ExperimentData
+    ) -> None:
         """Test that module names (dataset_item_module, id_helpers_module) are used correctly."""
         with (
             patch("opik.cli.imports.experiment.dataset_item_module") as mock_ds_module,
@@ -308,8 +310,8 @@ class TestRecreateExperiment:
             assert mock_id_helpers.generate_id.called
 
     def test_recreate_experiment_handles_empty_trace_id_map(
-        self, mock_client, experiment_data
-    ):
+        self, mock_client: Mock, experiment_data: ExperimentData
+    ) -> None:
         """Test that empty trace_id_map is handled correctly."""
         trace_id_map: Dict[str, str] = {}  # Empty but valid
 
@@ -326,7 +328,9 @@ class TestRecreateExperiment:
         assert mock_client.get_or_create_dataset.called
         assert mock_client.create_experiment.called
 
-    def test_recreate_experiment_dry_run(self, mock_client, experiment_data):
+    def test_recreate_experiment_dry_run(
+        self, mock_client: Mock, experiment_data: ExperimentData
+    ) -> None:
         """Test dry run mode."""
         trace_id_map = {"trace-1": "new-trace-1"}
 
@@ -349,7 +353,7 @@ class TestImportTracesWithSpans:
     """Test trace import with span parent_span_id preservation."""
 
     @pytest.fixture
-    def mock_client(self):
+    def mock_client(self) -> Mock:
         """Create a mock Opik client."""
         client = Mock()
         client.flush = Mock()
@@ -370,7 +374,9 @@ class TestImportTracesWithSpans:
 
         return client
 
-    def test_import_traces_preserves_span_hierarchy(self, mock_client, tmp_path):
+    def test_import_traces_preserves_span_hierarchy(
+        self, mock_client: Mock, tmp_path: Path
+    ) -> None:
         """Test that span parent_span_id relationships are preserved."""
         # Create test trace file with spans
         projects_dir = tmp_path / "projects" / "test-project"
@@ -413,7 +419,7 @@ class TestImportTracesWithSpans:
             json.dump(trace_data, f)
 
         # Import traces
-        trace_id_map = _import_traces_from_projects_directory(
+        trace_id_map, _ = _import_traces_from_projects_directory(
             mock_client, tmp_path, dry_run=False, debug=False
         )
 
@@ -439,7 +445,9 @@ class TestImportTracesWithSpans:
         assert mock_client.trace.called
         assert "original-trace-1" in trace_id_map
 
-    def test_import_traces_sorts_spans_correctly(self, mock_client, tmp_path):
+    def test_import_traces_sorts_spans_correctly(
+        self, mock_client: Mock, tmp_path: Path
+    ) -> None:
         """Test that spans are sorted (root spans first, then children)."""
         projects_dir = tmp_path / "projects" / "test-project"
         projects_dir.mkdir(parents=True)
@@ -474,9 +482,9 @@ class TestImportTracesWithSpans:
             json.dump(trace_data, f)
 
         # Import traces
-        _import_traces_from_projects_directory(
+        _, _ = _import_traces_from_projects_directory(
             mock_client, tmp_path, dry_run=False, debug=False
-        )
+        )  # Returns (trace_id_map, stats), but we don't need them for this test
 
         # Verify spans were created in correct order
         span_calls = mock_client.span.call_args_list
@@ -491,7 +499,7 @@ class TestImportTracesWithSpans:
 class TestModuleNameUsage:
     """Test that module names are used correctly (not checked for None)."""
 
-    def test_module_names_are_modules_not_variables(self):
+    def test_module_names_are_modules_not_variables(self) -> None:
         """Test that dataset_item_module and id_helpers_module are modules."""
         from opik.cli.imports.experiment import dataset_item_module, id_helpers_module
 
@@ -500,7 +508,5 @@ class TestModuleNameUsage:
         assert id_helpers_module is not None
 
         # They should be modules, not None
-        import types
-
         assert isinstance(dataset_item_module, types.ModuleType)
         assert isinstance(id_helpers_module, types.ModuleType)

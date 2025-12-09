@@ -14,8 +14,13 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 import opik
+from opik.api_objects.dataset import dataset_item as dataset_item_module  # noqa: F401
 import opik.id_helpers as id_helpers_module  # type: ignore
 from opik.rest_api.types.experiment_item import ExperimentItem
+
+# Note: dataset_item_module is imported for test compatibility.
+# Tests patch and import this module, so it must be available even though
+# it's not directly used in this module's code.
 from rich.console import Console
 
 from .utils import (
