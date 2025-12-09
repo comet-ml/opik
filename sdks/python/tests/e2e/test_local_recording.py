@@ -74,6 +74,8 @@ def test_cleanup_and_reuse_after_exit__should_save_new_data():
         )
         assert local is not None and local.is_active()
 
+    opik.flush_tracker()
+
     EXPECTED_TRACE_TREE = TraceModel(
         id=ANY_BUT_NONE,
         start_time=ANY_BUT_NONE,
@@ -114,6 +116,8 @@ def test_cleanup_and_reuse_after_exit__should_save_new_data():
         assert len(storage.trace_trees) == 1
 
         trace_trees = storage.trace_trees
+
+    opik.flush_tracker()
 
     EXPECTED_TRACE_TREE = TraceModel(
         id=ANY_BUT_NONE,
