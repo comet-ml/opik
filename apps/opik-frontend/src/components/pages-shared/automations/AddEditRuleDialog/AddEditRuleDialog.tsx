@@ -484,6 +484,7 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
                           <Label>Projects</Label>
                           <FormControl>
                             <ProjectsSelectBox
+                              align="start"
                               value={field.value}
                               onValueChange={field.onChange}
                               className={cn({
