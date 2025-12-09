@@ -7,8 +7,8 @@
  *     {}
  */
 export interface DatasetVersionCreatePublic {
-    /** Optional tag for this version */
-    tag?: string;
+    /** Optional list of tags for this version */
+    tags?: string[];
     /** Optional description of changes in this version */
     changeDescription?: string;
     /** Optional user-defined metadata */

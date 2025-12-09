@@ -7,6 +7,7 @@ import * as OpikApi from "../../api/index";
 import * as core from "../../core";
 import { DatasetVisibility } from "./DatasetVisibility";
 import { DatasetStatus } from "./DatasetStatus";
+import { DatasetVersionSummary } from "./DatasetVersionSummary";
 
 export const Dataset: core.serialization.ObjectSchema<serializers.Dataset.Raw, OpikApi.Dataset> =
     core.serialization.object({
@@ -39,6 +40,7 @@ export const Dataset: core.serialization.ObjectSchema<serializers.Dataset.Raw, O
             core.serialization.date().optional(),
         ),
         status: DatasetStatus.optional(),
+        latestVersion: core.serialization.property("latest_version", DatasetVersionSummary.optional()),
     });
 
 export declare namespace Dataset {
@@ -60,5 +62,6 @@ export declare namespace Dataset {
         most_recent_optimization_at?: string | null;
         last_created_optimization_at?: string | null;
         status?: DatasetStatus.Raw | null;
+        latest_version?: DatasetVersionSummary.Raw | null;
     }
 }
