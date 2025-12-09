@@ -25,9 +25,8 @@ import java.util.UUID;
 @RegisterRowMapper(AutomationRuleEvaluatorRowMapper.class)
 interface AutomationRuleDAO {
 
-    @SqlUpdate("INSERT INTO automation_rules(id, project_id, workspace_id, `action`, name, sampling_rate, enabled, filters) "
-            +
-            "VALUES (:rule.id, :rule.projectId, :workspaceId, :rule.action, :rule.name, :rule.samplingRate, :rule.enabled, :rule.filters)")
+    @SqlUpdate("INSERT INTO automation_rules(id, workspace_id, `action`, name, sampling_rate, enabled, filters) " +
+            "VALUES (:rule.id, :workspaceId, :rule.action, :rule.name, :rule.samplingRate, :rule.enabled, :rule.filters)")
     void saveBaseRule(@BindMethods("rule") AutomationRuleModel rule, @Bind("workspaceId") String workspaceId);
 
     @SqlUpdate("""
@@ -36,10 +35,9 @@ interface AutomationRuleDAO {
                 sampling_rate = :samplingRate,
                 enabled = :enabled,
                 filters = :filters
-            WHERE id = :id AND project_id = :projectId AND workspace_id = :workspaceId
+            WHERE id = :id AND workspace_id = :workspaceId
             """)
     int updateBaseRule(@Bind("id") UUID id,
-            @Bind("projectId") UUID projectId,
             @Bind("workspaceId") String workspaceId,
             @Bind("name") String name,
             @Bind("samplingRate") float samplingRate,
@@ -49,26 +47,28 @@ interface AutomationRuleDAO {
     @SqlUpdate("""
             DELETE FROM automation_rules
             WHERE workspace_id = :workspaceId
-            <if(projectId)> AND project_id = :projectId <endif>
             <if(ids)> AND id IN (<ids>) <endif>
             """)
     @UseStringTemplateEngine
     @AllowUnusedBindings
     void deleteBaseRules(
             @Define("ids") @BindList(onEmpty = BindList.EmptyHandling.NULL_VALUE, value = "ids") Set<UUID> ids,
-            @Define("projectId") @Bind("projectId") UUID projectId,
             @Bind("workspaceId") String workspaceId);
 
     @SqlQuery("""
-            SELECT COUNT(*)
-            FROM automation_rules
-            WHERE workspace_id = :workspaceId
-            <if(projectId)> AND project_id = :projectId <endif>
-            <if(action)> AND `action` = :action <endif>
+            SELECT COUNT(DISTINCT rule.id)
+            FROM automation_rules rule
+            <if(projectIds)>
+            LEFT JOIN automation_rule_projects arp ON rule.id = arp.rule_id
+            <endif>
+            WHERE rule.workspace_id = :workspaceId
+            <if(projectIds)> AND arp.project_id IN (<projectIds>) <endif>
+            <if(action)> AND rule.`action` = :action <endif>
             """)
     @UseStringTemplateEngine
     @AllowUnusedBindings
-    long findCount(@Define("projectId") @Bind("projectId") UUID projectId,
+    long findCount(
+            @Define("projectIds") @BindList(onEmpty = BindList.EmptyHandling.NULL_VALUE, value = "projectIds") Set<UUID> projectIds,
             @Bind("workspaceId") String workspaceId,
             @Define("action") @Bind("action") AutomationRule.AutomationRuleAction action);
 }
