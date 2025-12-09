@@ -1,9 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { Loader } from "lucide-react";
-import useLocalStorageState from "use-local-storage-state";
 
-import { PLAYGROUND_SELECTED_DATASET_KEY } from "@/constants/llm";
 import PlaygroundOutputs from "@/components/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundOutputs";
+import { useValidatedDatasetId } from "@/hooks/useValidatedDatasetId";
 import useAppStore from "@/store/AppStore";
 import useProviderKeys from "@/api/provider-keys/useProviderKeys";
 import ResizablePromptContainer from "@/components/pages/PlaygroundPage/ResizablePromptContainer";
@@ -23,12 +22,7 @@ const PlaygroundPage = () => {
   const triggerProviderValidation = useTriggerProviderValidation();
   const isRunning = useIsRunning();
 
-  const [datasetId, setDatasetId] = useLocalStorageState<string | null>(
-    PLAYGROUND_SELECTED_DATASET_KEY,
-    {
-      defaultValue: null,
-    },
-  );
+  const [datasetId, setDatasetId] = useValidatedDatasetId();
   const hasDataset = !!datasetId;
 
   const { DialogComponent } = useNavigationBlocker({
