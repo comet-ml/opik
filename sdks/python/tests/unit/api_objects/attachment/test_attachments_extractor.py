@@ -31,7 +31,11 @@ def test_extract_and_replace_single_attachment(extractor):
     data = {"image": constants.PNG_BASE64}
 
     result = extractor.extract_and_replace(
-        data=data, entity_type="span", entity_id="span-123", context="input"
+        data=data,
+        entity_type="span",
+        entity_id="span-123",
+        context="input",
+        project_name="test",
     )
 
     # Verify attachments were extracted
@@ -59,7 +63,11 @@ def test_extract_and_replace_multiple_attachments_single_key(extractor):
     }
 
     result = extractor.extract_and_replace(
-        data=data, entity_type="trace", entity_id="trace-456", context="output"
+        data=data,
+        entity_type="trace",
+        entity_id="trace-456",
+        context="output",
+        project_name="test",
     )
 
     # Verify both attachments were extracted
@@ -100,7 +108,11 @@ def test_extract_and_replace_multiple_keys_with_attachments(extractor):
     }
 
     result = extractor.extract_and_replace(
-        data=data, entity_type="span", entity_id="span-789", context="metadata"
+        data=data,
+        entity_type="span",
+        entity_id="span-789",
+        context="metadata",
+        project_name="test",
     )
 
     # Verify two attachments were extracted (text should be ignored)
@@ -130,7 +142,11 @@ def test_extract_and_replace_non_string_values_ignored(extractor):
     }
 
     result = extractor.extract_and_replace(
-        data=data, entity_type="span", entity_id="span-001", context="input"
+        data=data,
+        entity_type="span",
+        entity_id="span-001",
+        context="input",
+        project_name="test",
     )
 
     # No attachments should be extracted
@@ -149,7 +165,11 @@ def test_extract_and_replace_empty_data(extractor):
     data = {}
 
     result = extractor.extract_and_replace(
-        data=data, entity_type="span", entity_id="span-002", context="input"
+        data=data,
+        entity_type="span",
+        entity_id="span-002",
+        context="input",
+        project_name="test",
     )
 
     assert len(result) == 0
@@ -164,7 +184,11 @@ def test_extract_and_replace_invalid_base64(extractor):
     }
 
     result = extractor.extract_and_replace(
-        data=data, entity_type="span", entity_id="span-003", context="input"
+        data=data,
+        entity_type="span",
+        entity_id="span-003",
+        context="input",
+        project_name="test",
     )
 
     # No attachments should be extracted
@@ -180,7 +204,11 @@ def test_extract_and_replace_plain_text_not_extracted(extractor):
     data = {"text": constants.PLAIN_TEXT_BASE64}
 
     result = extractor.extract_and_replace(
-        data=data, entity_type="span", entity_id="span-004", context="input"
+        data=data,
+        entity_type="span",
+        entity_id="span-004",
+        context="input",
+        project_name="test",
     )
 
     # Plain text should not be extracted (decoder returns None)
@@ -193,7 +221,11 @@ def test_extract_and_replace_below_size_threshold(extractor_big_threshold):
     data = {"short_value": constants.PNG_BASE64}
 
     result = extractor_big_threshold.extract_and_replace(
-        data=data, entity_type="span", entity_id="span-006", context="input"
+        data=data,
+        entity_type="span",
+        entity_id="span-006",
+        context="input",
+        project_name="test",
     )
 
     # Attachment should not be extracted
@@ -210,7 +242,11 @@ def test_extract_and_replace_mixed_valid_invalid(extractor):
     }
 
     result = extractor.extract_and_replace(
-        data=data, entity_type="span", entity_id="span-007", context="input"
+        data=data,
+        entity_type="span",
+        entity_id="span-007",
+        context="input",
+        project_name="test",
     )
 
     # Only valid image attachments should be extracted (plain text excluded by decoder)
@@ -238,7 +274,11 @@ def test_extract_and_replace_context_preservation(extractor):
         data = {"image": constants.PNG_BASE64}
 
         result = extractor.extract_and_replace(
-            data=data, entity_type="trace", entity_id="trace-ctx", context=ctx
+            data=data,
+            entity_type="trace",
+            entity_id="trace-ctx",
+            context=ctx,
+            project_name="test",
         )
 
         assert len(result) == 1
@@ -258,7 +298,11 @@ def test_extract_and_replace_entity_info_preservation(extractor):
             data = {"image": constants.PNG_BASE64}
 
             result = extractor.extract_and_replace(
-                data=data, entity_type=entity_type, entity_id=entity_id, context="input"
+                data=data,
+                entity_type=entity_type,
+                entity_id=entity_id,
+                context="input",
+                project_name="test",
             )
 
             assert len(result) == 1
@@ -274,7 +318,11 @@ def test_extract_and_replace_empty_string(extractor):
     data = {"empty": ""}
 
     result = extractor.extract_and_replace(
-        data=data, entity_type="span", entity_id="span-008", context="input"
+        data=data,
+        entity_type="span",
+        entity_id="span-008",
+        context="input",
+        project_name="test",
     )
 
     assert len(result) == 0
@@ -286,7 +334,11 @@ def test_extract_and_replace_whitespace_only(extractor):
     data = {"whitespace": "   \n\t  "}
 
     result = extractor.extract_and_replace(
-        data=data, entity_type="span", entity_id="span-009", context="input"
+        data=data,
+        entity_type="span",
+        entity_id="span-009",
+        context="input",
+        project_name="test",
     )
 
     assert len(result) == 0
@@ -299,7 +351,11 @@ def test_extract_and_replace_bytes_data(extractor):
     data = {"bytes_value": b"some bytes data"}
 
     result = extractor.extract_and_replace(
-        data=data, entity_type="span", entity_id="span-010", context="input"
+        data=data,
+        entity_type="span",
+        entity_id="span-010",
+        context="input",
+        project_name="test",
     )
 
     # Bytes should not be processed (pattern.finditer expects string)
@@ -311,7 +367,11 @@ def test_extract_and_replace_attachment_filename_format(extractor):
     data = {"image": constants.PNG_BASE64}
 
     result = extractor.extract_and_replace(
-        data=data, entity_type="span", entity_id="span-011", context="output"
+        data=data,
+        entity_type="span",
+        entity_id="span-011",
+        context="output",
+        project_name="test",
     )
 
     assert len(result) == 1
@@ -328,7 +388,11 @@ def test_extract_and_replace_sanitized_data_format(extractor):
     data = {"doc": constants.PDF_BASE64}
 
     result = extractor.extract_and_replace(
-        data=data, entity_type="span", entity_id="span-012", context="metadata"
+        data=data,
+        entity_type="span",
+        entity_id="span-012",
+        context="metadata",
+        project_name="test",
     )
 
     assert len(result) == 1
@@ -345,7 +409,11 @@ def test_extract_and_replace_multiple_same_attachment(extractor):
     data = {"images": f"{constants.PNG_BASE64} and {constants.PNG_BASE64}"}
 
     result = extractor.extract_and_replace(
-        data=data, entity_type="span", entity_id="span-013", context="input"
+        data=data,
+        entity_type="span",
+        entity_id="span-013",
+        context="input",
+        project_name="test",
     )
 
     # Both instances should be extracted
@@ -367,7 +435,11 @@ def test_extract_and_replace_gif_attachment(extractor):
     data = {"gif": constants.GIF89_BASE64}
 
     result = extractor.extract_and_replace(
-        data=data, entity_type="span", entity_id="span-014", context="input"
+        data=data,
+        entity_type="span",
+        entity_id="span-014",
+        context="input",
+        project_name="test",
     )
 
     assert len(result) == 1
@@ -383,7 +455,11 @@ def test_extract_and_replace_webp_attachment(extractor):
     data = {"webp": constants.WEBP_BASE64}
 
     result = extractor.extract_and_replace(
-        data=data, entity_type="span", entity_id="span-015", context="input"
+        data=data,
+        entity_type="span",
+        entity_id="span-015",
+        context="input",
+        project_name="test",
     )
 
     assert len(result) == 1
@@ -399,7 +475,11 @@ def test_extract_and_replace_svg_attachment(extractor):
     data = {"svg": constants.SVG_BASE64}
 
     result = extractor.extract_and_replace(
-        data=data, entity_type="span", entity_id="span-016", context="input"
+        data=data,
+        entity_type="span",
+        entity_id="span-016",
+        context="input",
+        project_name="test",
     )
 
     assert len(result) == 1
@@ -415,7 +495,11 @@ def test_extract_and_replace_json_attachment(extractor):
     data = {"json": constants.JSON_BASE64}
 
     result = extractor.extract_and_replace(
-        data=data, entity_type="span", entity_id="span-017", context="input"
+        data=data,
+        entity_type="span",
+        entity_id="span-017",
+        context="input",
+        project_name="test",
     )
 
     assert len(result) == 1
@@ -431,7 +515,11 @@ def test_extract_and_replace_octet_stream_not_extracted(extractor):
     data = {"binary": constants.RANDOM_BINARY_BASE64}
 
     result = extractor.extract_and_replace(
-        data=data, entity_type="span", entity_id="span-018", context="input"
+        data=data,
+        entity_type="span",
+        entity_id="span-018",
+        context="input",
+        project_name="test",
     )
 
     # Should not be extracted (decoder returns None for octet-stream)
@@ -445,7 +533,11 @@ def test_extract_and_replace_data_mutation(extractor):
     original_data_ref = data
 
     result = extractor.extract_and_replace(
-        data=data, entity_type="span", entity_id="span-019", context="input"
+        data=data,
+        entity_type="span",
+        entity_id="span-019",
+        context="input",
+        project_name="test",
     )
 
     # Verify the same object was mutated
@@ -464,7 +556,11 @@ def test_extract_and_replace_complex_text_with_base64(extractor):
     }
 
     result = extractor.extract_and_replace(
-        data=data, entity_type="span", entity_id="span-020", context="input"
+        data=data,
+        entity_type="span",
+        entity_id="span-020",
+        context="input",
+        project_name="test",
     )
 
     assert len(result) == 1

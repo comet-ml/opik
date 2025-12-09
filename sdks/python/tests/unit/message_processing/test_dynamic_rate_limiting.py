@@ -10,13 +10,14 @@ MAX_QUEUE_SIZE = 10
 
 
 @pytest.fixture
-def steamer_with_mock_message_processor():
+def steamer_with_mock_message_processor(noop_file_upload_preprocessor):
     mock_message_processor = mock.Mock()
     streamer = streamer_constructors.construct_streamer(
         message_processor=mock_message_processor,
         n_consumers=1,
         use_batching=False,
-        upload_preprocessor=mock.Mock(),
+        extract_attachments=False,
+        upload_preprocessor=noop_file_upload_preprocessor,
         max_queue_size=MAX_QUEUE_SIZE,
     )
 

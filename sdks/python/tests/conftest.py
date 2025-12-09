@@ -38,20 +38,23 @@ def shutdown_cached_client_after_test():
 
 
 @pytest.fixture
-def patch_streamer():
+def noop_file_upload_preprocessor():
+    fake_upload_manager = noop_file_upload_manager.NoopFileUploadManager()
+    yield file_upload_preprocessor.FileUploadPreprocessor(fake_upload_manager)
+
+
+@pytest.fixture
+def patch_streamer(noop_file_upload_preprocessor):
     streamer = None
     try:
         fake_message_processor_ = (
             backend_emulator_message_processor.BackendEmulatorMessageProcessor()
         )
-        fake_upload_manager = noop_file_upload_manager.NoopFileUploadManager()
         streamer = streamer_constructors.construct_streamer(
             message_processor=fake_message_processor_,
             n_consumers=1,
             use_batching=True,
-            upload_preprocessor=file_upload_preprocessor.FileUploadPreprocessor(
-                fake_upload_manager
-            ),
+            upload_preprocessor=noop_file_upload_preprocessor,
             max_queue_size=None,
             extract_attachments=False,
         )
@@ -63,20 +66,18 @@ def patch_streamer():
 
 
 @pytest.fixture
-def patch_streamer_without_batching():
+def patch_streamer_without_batching(noop_file_upload_preprocessor):
     streamer = None
     try:
         fake_message_processor_ = (
             backend_emulator_message_processor.BackendEmulatorMessageProcessor()
         )
-        fake_upload_manager = noop_file_upload_manager.NoopFileUploadManager()
+
         streamer = streamer_constructors.construct_streamer(
             message_processor=fake_message_processor_,
             n_consumers=1,
             use_batching=False,
-            upload_preprocessor=file_upload_preprocessor.FileUploadPreprocessor(
-                fake_upload_manager
-            ),
+            upload_preprocessor=noop_file_upload_preprocessor,
             max_queue_size=None,
             extract_attachments=False,
         )
