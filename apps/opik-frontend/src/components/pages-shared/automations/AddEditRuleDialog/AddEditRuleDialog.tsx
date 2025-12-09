@@ -308,7 +308,7 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
       [EVALUATORS_RULE_SCOPE.thread]:
         EXPLAINER_ID.i_added_edited_a_new_online_evaluation_thread_level_rule_now_what,
       [EVALUATORS_RULE_SCOPE.span]:
-        EXPLAINER_ID.i_added_edited_a_new_online_evaluation_rule_now_what,
+        EXPLAINER_ID.i_added_edited_a_new_online_evaluation_span_level_rule_now_what,
     };
     const explainer = EXPLAINERS_MAP[expainerIdMap[scope]];
 
@@ -617,15 +617,16 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
                               >
                                 LLM-as-judge
                               </ToggleGroupItem>
-                              {((isCodeMetricEnabled && !isSpanScope) ||
-                                (isSpanScope && isSpanPythonCodeEnabled)) && (
-                                <ToggleGroupItem
-                                  value={UI_EVALUATORS_RULE_TYPE.python_code}
-                                  aria-label="Code metric"
-                                >
-                                  Code metric
-                                </ToggleGroupItem>
-                              )}
+                              {isCodeMetricEnabled &&
+                                (!isSpanScope ||
+                                  (isSpanScope && isSpanPythonCodeEnabled)) && (
+                                  <ToggleGroupItem
+                                    value={UI_EVALUATORS_RULE_TYPE.python_code}
+                                    aria-label="Code metric"
+                                  >
+                                    Code metric
+                                  </ToggleGroupItem>
+                                )}
                             </ToggleGroup>
                           </div>
                         </FormControl>
