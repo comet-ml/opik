@@ -6,7 +6,7 @@ import subprocess
 import tempfile
 import uuid
 from pathlib import Path
-from typing import List
+from typing import Iterator, List
 import pytest
 
 import opik
@@ -18,20 +18,20 @@ class TestChatPromptImportExport:
     """Test ChatPrompt import/export functionality end-to-end."""
 
     @pytest.fixture
-    def test_data_dir(self):
+    def test_data_dir(self) -> Iterator[Path]:
         """Create a temporary directory for test data."""
         with tempfile.TemporaryDirectory() as temp_dir:
             yield Path(temp_dir)
 
     @pytest.fixture
-    def source_project_name(self, opik_client: opik.Opik):
+    def source_project_name(self, opik_client: opik.Opik) -> Iterator[str]:
         """Create a source project for testing."""
         project_name = f"cli-test-chat-source-{random_chars()}"
         yield project_name
         # Cleanup is handled by the test framework
 
     @pytest.fixture
-    def target_project_name(self, opik_client: opik.Opik):
+    def target_project_name(self, opik_client: opik.Opik) -> Iterator[str]:
         """Create a target project for testing."""
         project_name = f"cli-test-chat-target-{random_chars()}"
         yield project_name
@@ -110,7 +110,7 @@ class TestChatPromptImportExport:
         opik_client: opik.Opik,
         source_project_name: str,
         test_data_dir: Path,
-    ):
+    ) -> None:
         """Test that exported ChatPrompt has correct structure."""
         # Step 1: Create a ChatPrompt
         prompt_name = self._create_test_chat_prompt(opik_client, source_project_name)
@@ -188,7 +188,7 @@ class TestChatPromptImportExport:
         opik_client: opik.Opik,
         source_project_name: str,
         test_data_dir: Path,
-    ):
+    ) -> None:
         """Test exporting ChatPrompt with JINJA2 template type."""
         # Step 1: Create a ChatPrompt with JINJA2
         prompt_name = self._create_test_chat_prompt_with_jinja(
@@ -224,7 +224,7 @@ class TestChatPromptImportExport:
         opik_client: opik.Opik,
         source_project_name: str,
         test_data_dir: Path,
-    ):
+    ) -> None:
         """Test importing a ChatPrompt from exported JSON."""
         # Step 1: Create and export a ChatPrompt
         prompt_name = self._create_test_chat_prompt(opik_client, source_project_name)
@@ -243,6 +243,8 @@ class TestChatPromptImportExport:
 
         # Step 2: Get the original ChatPrompt for comparison
         original_prompt = opik_client.get_chat_prompt(prompt_name)
+        if original_prompt is None:
+            raise AssertionError(f"Prompt {prompt_name} not found")
         original_messages = original_prompt.template
 
         # Step 3: Delete the original prompt to test import
@@ -254,6 +256,8 @@ class TestChatPromptImportExport:
             "import",
             "default",
             "prompt",
+            ".*",  # Match all prompts
+            "--path",
             str(test_data_dir / "default"),
         ]
 
@@ -282,7 +286,7 @@ class TestChatPromptImportExport:
         opik_client: opik.Opik,
         source_project_name: str,
         test_data_dir: Path,
-    ):
+    ) -> None:
         """Test complete round-trip: export ChatPrompt then import it."""
         # Step 1: Create a ChatPrompt with specific content
         unique_identifier = str(uuid.uuid4())[-6:]
@@ -340,6 +344,8 @@ class TestChatPromptImportExport:
             "import",
             "default",
             "prompt",
+            ".*",  # Match all prompts
+            "--path",
             str(test_data_dir / "default"),
         ]
 
@@ -374,7 +380,7 @@ class TestChatPromptImportExport:
         opik_client: opik.Opik,
         source_project_name: str,
         test_data_dir: Path,
-    ):
+    ) -> None:
         """Test exporting and importing ChatPrompt with version history."""
         # Step 1: Create a ChatPrompt with multiple versions
         unique_identifier = str(uuid.uuid4())[-6:]
@@ -430,6 +436,8 @@ class TestChatPromptImportExport:
             "import",
             "default",
             "prompt",
+            ".*",  # Match all prompts
+            "--path",
             str(test_data_dir / "default"),
         ]
 
@@ -445,7 +453,7 @@ class TestChatPromptImportExport:
         opik_client: opik.Opik,
         source_project_name: str,
         test_data_dir: Path,
-    ):
+    ) -> None:
         """Test that ChatPrompt and text Prompt export differently."""
         # Step 1: Create both types of prompts
         chat_prompt_name = self._create_test_chat_prompt(

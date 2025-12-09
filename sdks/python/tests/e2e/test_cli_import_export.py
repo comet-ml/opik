@@ -5,7 +5,7 @@ import os
 import subprocess
 import tempfile
 from pathlib import Path
-from typing import List
+from typing import Iterator, List
 import pytest
 
 import opik
@@ -17,20 +17,20 @@ class TestCLIImportExport:
     """Test CLI import/export functionality end-to-end."""
 
     @pytest.fixture
-    def test_data_dir(self):
+    def test_data_dir(self) -> Iterator[Path]:
         """Create a temporary directory for test data."""
         with tempfile.TemporaryDirectory() as temp_dir:
             yield Path(temp_dir)
 
     @pytest.fixture
-    def source_project_name(self, opik_client: opik.Opik):
+    def source_project_name(self, opik_client: opik.Opik) -> Iterator[str]:
         """Create a source project for testing."""
         project_name = f"cli-test-source-{random_chars()}"
         yield project_name
         # Cleanup is handled by the test framework
 
     @pytest.fixture
-    def target_project_name(self, opik_client: opik.Opik):
+    def target_project_name(self, opik_client: opik.Opik) -> Iterator[str]:
         """Create a target project for testing."""
         project_name = f"cli-test-target-{random_chars()}"
         yield project_name
@@ -46,14 +46,18 @@ class TestCLIImportExport:
         def test_function_1(x: str) -> str:
             """Test function 1."""
             # Capture trace ID during execution
-            trace_ids.append(opik_context.get_current_trace_data().id)
+            trace_data = opik_context.get_current_trace_data()
+            if trace_data is not None:
+                trace_ids.append(trace_data.id)
             return f"processed_{x}"
 
         @opik.track(project_name=project_name)
         def test_function_2(y: int) -> int:
             """Test function 2."""
             # Capture trace ID during execution
-            trace_ids.append(opik_context.get_current_trace_data().id)
+            trace_data = opik_context.get_current_trace_data()
+            if trace_data is not None:
+                trace_ids.append(trace_data.id)
             return y * 2
 
         # Create traces
@@ -126,7 +130,7 @@ class TestCLIImportExport:
             # Create experiment items linking traces to dataset items
             experiment_items = []
             for i, trace in enumerate(traces[:2]):  # Use up to 2 traces
-                if i < len(dataset_items):
+                if i < len(dataset_items) and trace.id is not None:
                     experiment_items.append(
                         opik.ExperimentItemReferences(
                             dataset_item_id=dataset_items[i]["id"],
@@ -202,7 +206,7 @@ class TestCLIImportExport:
         source_project_name: str,
         target_project_name: str,
         test_data_dir: Path,
-    ):
+    ) -> None:
         """Test the complete export/import flow for traces."""
         # Step 1: Prepare test data
         self._create_test_traces(opik_client, source_project_name)
@@ -252,7 +256,7 @@ class TestCLIImportExport:
         # Step 3: Create target project first
         # Create a dummy trace in the target project to ensure it exists
         @opik.track(project_name=target_project_name)
-        def dummy_function():
+        def dummy_function() -> str:
             return "dummy"
 
         dummy_function()
@@ -263,6 +267,8 @@ class TestCLIImportExport:
             "import",
             "default",
             "project",
+            ".*",  # Match all projects
+            "--path",
             str(test_data_dir / "default"),
         ]
 
@@ -279,7 +285,7 @@ class TestCLIImportExport:
         source_project_name: str,
         target_project_name: str,
         test_data_dir: Path,
-    ):
+    ) -> None:
         """Test the complete export/import flow for datasets."""
         # Step 1: Prepare test data
         dataset_name = self._create_test_dataset(opik_client, source_project_name)
@@ -324,6 +330,8 @@ class TestCLIImportExport:
             "import",
             "default",
             "dataset",
+            ".*",  # Match all datasets
+            "--path",
             str(test_data_dir / "default"),
         ]
 
@@ -340,7 +348,7 @@ class TestCLIImportExport:
         source_project_name: str,
         target_project_name: str,
         test_data_dir: Path,
-    ):
+    ) -> None:
         """Test the complete export/import flow for prompts."""
         # Step 1: Prepare test data
         prompt_name = self._create_test_prompt(opik_client, source_project_name)
@@ -389,6 +397,8 @@ class TestCLIImportExport:
             "import",
             "default",
             "prompt",
+            ".*",  # Match all prompts
+            "--path",
             str(test_data_dir / "default"),
         ]
 
@@ -405,7 +415,7 @@ class TestCLIImportExport:
         source_project_name: str,
         target_project_name: str,
         test_data_dir: Path,
-    ):
+    ) -> None:
         """Test the complete export/import flow for all data types."""
         # Step 1: Prepare test data (minimal)
         self._create_test_traces(opik_client, source_project_name)
@@ -482,6 +492,8 @@ class TestCLIImportExport:
             "import",
             "default",
             "project",
+            ".*",  # Match all projects
+            "--path",
             str(test_data_dir / "default"),
         ]
 
@@ -493,6 +505,8 @@ class TestCLIImportExport:
             "import",
             "default",
             "dataset",
+            ".*",  # Match all datasets
+            "--path",
             str(test_data_dir / "default"),
         ]
 
@@ -504,6 +518,8 @@ class TestCLIImportExport:
             "import",
             "default",
             "prompt",
+            ".*",  # Match all prompts
+            "--path",
             str(test_data_dir / "default"),
         ]
 
@@ -516,7 +532,7 @@ class TestCLIImportExport:
 
     def test_export_with_filters(
         self, opik_client: opik.Opik, source_project_name: str, test_data_dir: Path
-    ):
+    ) -> None:
         """Test export with various filters."""
         # Create test data
         self._create_test_traces(opik_client, source_project_name)
@@ -550,7 +566,7 @@ class TestCLIImportExport:
         source_project_name: str,
         target_project_name: str,
         test_data_dir: Path,
-    ):
+    ) -> None:
         """Test import with dry run option."""
         # Create test data and export it
         self._create_test_traces(opik_client, source_project_name)
@@ -572,6 +588,8 @@ class TestCLIImportExport:
             "import",
             "default",
             "project",
+            ".*",  # Match all projects
+            "--path",
             str(test_data_dir / "default"),
             "--dry-run",
         ]
@@ -593,7 +611,7 @@ class TestCLIImportExport:
 
     def test_export_import_error_handling(
         self, opik_client: opik.Opik, test_data_dir: Path
-    ):
+    ) -> None:
         """Test error handling for invalid commands."""
         # Test export with non-existent project using new CLI structure
         export_cmd = [
@@ -616,6 +634,8 @@ class TestCLIImportExport:
             "import",
             "default",
             "project",
+            ".*",  # Match all projects
+            "--path",
             str(test_data_dir / "non-existent"),
         ]
 
@@ -628,7 +648,7 @@ class TestCLIImportExport:
         source_project_name: str,
         target_project_name: str,
         test_data_dir: Path,
-    ):
+    ) -> None:
         """Test import projects automatically recreates experiments."""
         # Step 1: Prepare test data with experiments
         dataset_name = self._create_test_dataset(opik_client, source_project_name)
@@ -657,6 +677,8 @@ class TestCLIImportExport:
             "import",
             "default",
             "project",
+            ".*",  # Match all projects
+            "--path",
             str(test_data_dir / "default"),
         ]
 
