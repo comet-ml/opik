@@ -480,14 +480,14 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
                       ]);
 
                       return (
-                        <FormItem className="flex-1">
+                        <FormItem className="flex-1 min-w-0">
                           <Label>Projects</Label>
                           <FormControl>
                             <ProjectsSelectBox
                               align="start"
                               value={field.value}
                               onValueChange={field.onChange}
-                              className={cn("w-full", {
+                              className={cn({
                                 "border-destructive": Boolean(
                                   validationErrors?.message,
                                 ),
@@ -507,7 +507,7 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
                       control={form.control}
                       name="scope"
                       render={({ field }) => (
-                        <FormItem className="flex-1">
+                        <FormItem className="flex-1 min-w-0">
                           <Label className="flex items-center">
                             Scope{" "}
                             <TooltipWrapper content="Choose whether the evaluation rule scores the entire thread or each individual trace. Thread-level rules assess the full conversation, while trace-level rules evaluate one model response at a time.">
