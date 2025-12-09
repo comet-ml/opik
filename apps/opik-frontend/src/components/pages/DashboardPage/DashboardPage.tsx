@@ -1,93 +1,40 @@
-import React, { useEffect, useState, useCallback } from "react";
+import React, { useEffect, useCallback } from "react";
 import { useParams } from "@tanstack/react-router";
 
 import {
   useDashboardStore,
-  selectAddSection,
-  selectAddWidget,
-  selectUpdateWidget,
   selectSetConfig,
-  selectClearConfig,
-  selectClearDashboard,
-  selectSetOnAddEditWidgetCallback,
-  selectSetWidgetResolver,
-  selectConfig,
+  selectMixedConfig,
 } from "@/store/DashboardStore";
-import useDashboardById from "@/api/dashboards/useDashboardById";
 import useBreadcrumbsStore from "@/store/BreadcrumbsStore";
 import { useMetricDateRangeCore } from "@/components/pages-shared/traces/MetricDateRangeSelect/useMetricDateRangeCore";
 import { DEFAULT_DATE_PRESET } from "@/components/pages-shared/traces/MetricDateRangeSelect/constants";
 import MetricDateRangeSelect from "@/components/pages-shared/traces/MetricDateRangeSelect/MetricDateRangeSelect";
 import { DateRangeSerializedValue } from "@/components/shared/DateRangeSelect";
-import DashboardSectionsContainer from "@/components/shared/Dashboard/Dashboard";
-import AddSectionButton from "@/components/shared/Dashboard/DashboardSection/AddSectionButton";
-import WidgetConfigDialog from "@/components/shared/Dashboard/WidgetConfigDialog/WidgetConfigDialog";
 import Loader from "@/components/shared/Loader/Loader";
-import useNavigationBlocker from "@/hooks/useNavigationBlocker";
 import { Separator } from "@/components/ui/separator";
-import { useDashboardSave } from "./useDashboardSave";
+import { useDashboardLifecycle } from "@/components/pages-shared/dashboards/hooks/useDashboardLifecycle";
 import DashboardSaveActions from "@/components/pages-shared/dashboards/DashboardSaveActions/DashboardSaveActions";
 import DashboardProjectSettingsButton from "@/components/pages-shared/dashboards/DashboardProjectSettingsButton/DashboardProjectSettingsButton";
 import ShareDashboardButton from "@/components/pages-shared/dashboards/ShareDashboardButton/ShareDashboardButton";
-import {
-  DashboardWidget,
-  WIDGET_TYPE,
-  AddWidgetConfig,
-  UpdateWidgetConfig,
-  AddEditWidgetCallbackParams,
-} from "@/types/dashboard";
-import { createWidgetResolver } from "@/components/shared/Dashboard/widgets/widgetRegistry";
+import DashboardContent from "@/components/pages-shared/dashboards/DashboardContent/DashboardContent";
 
 const DashboardPage: React.FunctionComponent = () => {
   const { dashboardId } = useParams({ strict: false }) as {
     dashboardId: string;
   };
   const setBreadcrumbParam = useBreadcrumbsStore((state) => state.setParam);
-  const [widgetDialogOpen, setWidgetDialogOpen] = useState(false);
-  const [targetSectionId, setTargetSectionId] = useState<string | null>(null);
-  const [targetWidgetId, setTargetWidgetId] = useState<string | null>(null);
 
-  const { data: dashboard, isPending } = useDashboardById(
-    { dashboardId },
-    { enabled: Boolean(dashboardId) },
-  );
+  const { dashboard, isPending, hasUnsavedChanges, save, discard } =
+    useDashboardLifecycle({
+      dashboardId,
+      enabled: Boolean(dashboardId),
+    });
 
-  const addSection = useDashboardStore(selectAddSection);
-  const addWidget = useDashboardStore(selectAddWidget);
-  const updateWidget = useDashboardStore(selectUpdateWidget);
-  const loadDashboardFromBackend = useDashboardStore(
-    (state) => state.loadDashboardFromBackend,
-  );
-  const config = useDashboardStore(selectConfig);
+  const config = useDashboardStore(selectMixedConfig);
   const setConfig = useDashboardStore(selectSetConfig);
-  const clearConfig = useDashboardStore(selectClearConfig);
-  const clearDashboard = useDashboardStore(selectClearDashboard);
-  const setOnAddEditWidgetCallback = useDashboardStore(
-    selectSetOnAddEditWidgetCallback,
-  );
-  const setWidgetResolver = useDashboardStore(selectSetWidgetResolver);
 
   const dateRangeValue = config?.dateRange || DEFAULT_DATE_PRESET;
-
-  useEffect(() => {
-    if (dashboard?.config) {
-      loadDashboardFromBackend(dashboard.config);
-    }
-  }, [dashboard, loadDashboardFromBackend]);
-
-  const { hasUnsavedChanges, save, discard } = useDashboardSave({
-    dashboardId,
-    enabled: Boolean(dashboardId && dashboard),
-  });
-
-  const { DialogComponent } = useNavigationBlocker({
-    condition: hasUnsavedChanges,
-    title: "You have unsaved changes",
-    description:
-      "If you leave now, your changes will be lost. Are you sure you want to continue?",
-    confirmText: "Leave without saving",
-    cancelText: "Stay on page",
-  });
 
   useEffect(() => {
     if (dashboard?.name) {
@@ -108,57 +55,6 @@ const DashboardPage: React.FunctionComponent = () => {
       value: dateRangeValue,
       setValue: handleDateRangeValueChange,
     });
-
-  const handleOpenWidgetDialog = useCallback(
-    ({ sectionId, widgetId }: AddEditWidgetCallbackParams) => {
-      setTargetSectionId(sectionId);
-      setTargetWidgetId(widgetId || null);
-      setWidgetDialogOpen(true);
-    },
-    [],
-  );
-
-  const handleSaveWidget = (widgetData: Partial<DashboardWidget>) => {
-    if (!targetSectionId) return;
-
-    if (targetWidgetId) {
-      updateWidget(targetSectionId, targetWidgetId, {
-        title: widgetData.title,
-        subtitle: widgetData.subtitle,
-        config: widgetData.config,
-      } as UpdateWidgetConfig);
-    } else if (widgetData.type && widgetData.title) {
-      addWidget(targetSectionId, {
-        type: widgetData.type as WIDGET_TYPE,
-        title: widgetData.title,
-        subtitle: widgetData.subtitle,
-        config: widgetData.config || {},
-      } as AddWidgetConfig);
-    }
-  };
-
-  useEffect(() => {
-    setOnAddEditWidgetCallback(handleOpenWidgetDialog);
-  }, [handleOpenWidgetDialog, setOnAddEditWidgetCallback]);
-
-  useEffect(() => {
-    const resolver = createWidgetResolver();
-    setWidgetResolver(resolver);
-  }, [setWidgetResolver]);
-
-  useEffect(() => {
-    return () => {
-      clearDashboard();
-      clearConfig();
-      setOnAddEditWidgetCallback(null);
-      setWidgetResolver(null);
-    };
-  }, [
-    clearDashboard,
-    clearConfig,
-    setOnAddEditWidgetCallback,
-    setWidgetResolver,
-  ]);
 
   if (isPending) {
     return <Loader />;
@@ -208,23 +104,7 @@ const DashboardPage: React.FunctionComponent = () => {
         </div>
       </div>
 
-      <div className="flex-1 overflow-auto">
-        <DashboardSectionsContainer />
-
-        <div className="text-clip rounded-md">
-          <AddSectionButton onAddSection={addSection} />
-        </div>
-
-        <WidgetConfigDialog
-          open={widgetDialogOpen}
-          onOpenChange={setWidgetDialogOpen}
-          sectionId={targetSectionId || ""}
-          widgetId={targetWidgetId || undefined}
-          onSave={handleSaveWidget}
-        />
-      </div>
-
-      {DialogComponent}
+      <DashboardContent hasUnsavedChanges={hasUnsavedChanges} />
     </div>
   );
 };

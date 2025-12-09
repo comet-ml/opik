@@ -25,7 +25,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Description } from "@/components/ui/description";
 import SelectBox from "@/components/shared/SelectBox/SelectBox";
-import { useDashboardStore } from "@/store/DashboardStore";
+import { useDashboardStore, selectMixedConfig } from "@/store/DashboardStore";
 import ProjectsSelectBox from "@/components/pages-shared/automations/ProjectsSelectBox";
 import ProjectWidgetFiltersSection from "@/components/shared/Dashboard/widgets/shared/ProjectWidgetFiltersSection/ProjectWidgetFiltersSection";
 import {
@@ -64,9 +64,10 @@ const ProjectStatsCardEditor = forwardRef<
     [widgetConfig?.spanFilters],
   );
 
-  const globalProjectId = useDashboardStore(
-    (state) => state.config?.projectIds?.[0],
-  );
+  const globalProjectId = useDashboardStore((state) => {
+    const config = selectMixedConfig(state);
+    return config?.projectIds?.[0];
+  });
   const projectId = localProjectId || globalProjectId || "";
   const isTraceSource = source === TRACE_DATA_TYPE.traces;
 

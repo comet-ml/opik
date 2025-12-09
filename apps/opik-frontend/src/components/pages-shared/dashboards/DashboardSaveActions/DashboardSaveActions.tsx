@@ -30,9 +30,7 @@ const DashboardSaveActions: React.FunctionComponent<
   const [isSaving, setIsSaving] = useState(false);
   const { toast } = useToast();
 
-  const getDashboardConfig = useDashboardStore(
-    (state) => state.getDashboardConfig,
-  );
+  const getDashboard = useDashboardStore((state) => state.getDashboard);
 
   const dashboardWithCurrentConfigRef = useRef(dashboard);
 
@@ -72,11 +70,11 @@ const DashboardSaveActions: React.FunctionComponent<
     // Get fresh config when opening the dialog
     dashboardWithCurrentConfigRef.current = {
       ...dashboard,
-      config: getDashboardConfig(),
+      config: getDashboard(),
     };
     setSaveAsDialogOpen(true);
     resetKeyRef.current = resetKeyRef.current + 1;
-  }, [dashboard, getDashboardConfig]);
+  }, [dashboard, getDashboard]);
 
   if (!hasUnsavedChanges) {
     return null;

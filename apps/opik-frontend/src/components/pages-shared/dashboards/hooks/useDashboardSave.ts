@@ -27,7 +27,7 @@ export const useDashboardSave = ({
   const { mutateAsync: updateDashboard } = useDashboardUpdateMutation();
 
   const save = useCallback(async () => {
-    const currentConfig = useDashboardStore.getState().getDashboardConfig();
+    const currentConfig = useDashboardStore.getState().getDashboard();
 
     if (!isDashboardChanged(currentConfig, lastSavedConfigRef.current)) return;
 
@@ -59,7 +59,7 @@ export const useDashboardSave = ({
     if (!enabled) return;
 
     const unsubscribe = useDashboardStore.subscribe((state) => {
-      const config = state.getDashboardConfig();
+      const config = state.getDashboard();
 
       if (!isInitializedRef.current) {
         lastSavedConfigRef.current = config;
