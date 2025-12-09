@@ -30,9 +30,6 @@ const useDatasetDeleteMutation = () => {
       });
     },
     onSettled: () => {
-      queryClient.invalidateQueries({
-        queryKey: ["dataset"],
-      });
       return queryClient.invalidateQueries({ queryKey: ["datasets"] });
     },
   });
