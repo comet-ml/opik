@@ -1,9 +1,10 @@
 """Experiment export functionality."""
 
 import sys
+from concurrent.futures import Future, ThreadPoolExecutor, as_completed
 from datetime import datetime
 from pathlib import Path
-from typing import Optional, List, Dict
+from typing import Optional, List, Dict, Tuple
 
 import click
 from rich.console import Console
@@ -34,6 +35,118 @@ from .prompt import (
 
 console = Console()
 
+# Batch size for parallel trace fetching
+BATCH_SIZE = 100
+# Maximum number of concurrent workers for parallel execution
+MAX_WORKERS = 20
+
+
+def _fetch_trace_data(
+    client: opik.Opik,
+    trace_id: str,
+    project_name_cache: dict[str, str],
+    debug: bool,
+) -> Optional[Tuple[str, dict, str]]:
+    """Fetch trace and span data for a single trace ID.
+
+    Returns:
+        Tuple of (trace_id, trace_data_dict, project_name) or None if failed.
+    """
+    try:
+        # Get trace by ID
+        trace = client.get_trace_content(trace_id)
+
+        # Get project name for this trace
+        if not trace.project_id:
+            return None
+
+        # Get project name (use cache if available)
+        if trace.project_id not in project_name_cache:
+            try:
+                project = client.get_project(trace.project_id)
+                project_name_cache[trace.project_id] = project.name
+            except Exception as e:
+                if debug:
+                    debug_print(
+                        f"Warning: Could not get project for trace {trace_id}: {e}",
+                        debug,
+                    )
+                return None
+
+        project_name = project_name_cache[trace.project_id]
+
+        # Get spans for this trace
+        spans = client.search_spans(
+            trace_id=trace_id,
+            max_results=1000,
+            truncate=False,
+        )
+
+        # Create trace data structure
+        trace_data = {
+            "trace": trace.model_dump(),
+            "spans": [span.model_dump() for span in spans],
+            "downloaded_at": datetime.now().isoformat(),
+            "project_name": project_name,
+        }
+
+        return (trace_id, trace_data, project_name)
+    except Exception as e:
+        if debug:
+            import traceback
+
+            debug_print(
+                f"Error fetching trace {trace_id}: {e}\n{traceback.format_exc()}", debug
+            )
+        return None
+
+
+def _write_trace_file(
+    trace_id: str,
+    trace_data: dict,
+    project_name: str,
+    workspace_root: Path,
+    format: str,
+    force: bool,
+    debug: bool,
+) -> bool:
+    """Write a single trace to file. Returns True if exported, False if skipped."""
+    try:
+        # Save trace in projects/PROJECT_NAME/ directory
+        project_dir = workspace_root / "projects" / project_name
+        project_dir.mkdir(parents=True, exist_ok=True)
+
+        # Determine file path based on format
+        if format.lower() == "csv":
+            file_path = project_dir / f"trace_{trace_id}.csv"
+        else:
+            file_path = project_dir / f"trace_{trace_id}.json"
+
+        # Check if file already exists and should be skipped
+        if should_skip_file(file_path, force):
+            if debug:
+                debug_print(f"Skipping trace {trace_id} (already exists)", debug)
+            return False
+
+        # Save to file using the appropriate format
+        if format.lower() == "csv":
+            write_csv_data(trace_data, file_path, trace_to_csv_rows)
+            if debug:
+                debug_print(f"Wrote CSV file: {file_path}", debug)
+        else:
+            write_json_data(trace_data, file_path)
+            if debug:
+                debug_print(f"Wrote JSON file: {file_path}", debug)
+
+        return True
+    except Exception as e:
+        console.print(f"[red]Error writing trace {trace_id} to file: {e}[/red]")
+        if debug:
+            import traceback
+
+            debug_print(f"Traceback: {traceback.format_exc()}", debug)
+        return False
+
 
 def export_traces_by_ids(
     client: opik.Opik,
@@ -44,26 +157,26 @@ def export_traces_by_ids(
     debug: bool,
     force: bool,
 ) -> tuple[int, int]:
-    """Export traces by their IDs (e.g., from experiment items).
+    """Export traces by their IDs using parallel batch processing.
 
     Traces are saved in projects/PROJECT_NAME/ directory based on each trace's project.
+    Uses parallel execution to fetch traces/spans and write files concurrently.
     """
     exported_count = 0
     skipped_count = 0
 
-    # Limit the number of traces if max_traces is specified
     if max_traces:
         trace_ids = trace_ids[:max_traces]
 
     if not trace_ids:
-        if debug:
-            debug_print("No trace IDs provided for export", debug)
         return 0, 0
 
     if debug:
-        debug_print(f"Exporting {len(trace_ids)} trace(s) by ID", debug)
+        debug_print(
+            f"Exporting {len(trace_ids)} trace(s) in batches of {BATCH_SIZE}", debug
+        )
 
-    # Cache project names to avoid repeated API calls
+    # Cache project names to avoid repeated API calls (shared across threads)
     project_name_cache: dict[str, str] = {}
 
     # Use progress bar for trace export
@@ -78,105 +191,93 @@ def export_traces_by_ids(
             f"Exporting {len(trace_ids)} traces...", total=len(trace_ids)
         )
 
-        for trace_id in trace_ids:
-            try:
-                # Get trace by ID
-                trace = client.get_trace_content(trace_id)
+        # Process traces in batches
+        for batch_start in range(0, len(trace_ids), BATCH_SIZE):
+            batch_end = min(batch_start + BATCH_SIZE, len(trace_ids))
+            batch_trace_ids = trace_ids[batch_start:batch_end]
 
-                # Get project name for this trace
-                if not trace.project_id:
-                    console.print(
-                        f"[yellow]Warning: Trace {trace_id} has no project_id, skipping[/yellow]"
-                    )
-                    progress.update(task, advance=1)
-                    continue
-
-                # Get project name (use cache if available)
-                if trace.project_id not in project_name_cache:
-                    try:
-                        project = client.get_project(trace.project_id)
-                        project_name_cache[trace.project_id] = project.name
-                    except Exception as e:
-                        console.print(
-                            f"[yellow]Warning: Could not get project for trace {trace_id}: {e}[/yellow]"
-                        )
-                        progress.update(task, advance=1)
-                        continue
-
-                project_name = project_name_cache[trace.project_id]
-
-                # Get spans for this trace
-                spans = client.search_spans(
-                    trace_id=trace_id,
-                    max_results=1000,  # Get all spans for the trace
-                    truncate=False,
+            if debug:
+                debug_print(
+                    f"Batch {batch_start // BATCH_SIZE + 1}: traces {batch_start + 1}-{batch_end}",
+                    debug,
                 )
 
-                # Create trace data structure
-                trace_data = {
-                    "trace": trace.model_dump(),
-                    "spans": [span.model_dump() for span in spans],
-                    "downloaded_at": datetime.now().isoformat(),
-                    "project_name": project_name,
-                }
+            # Fetch trace data in parallel
+            fetched_traces: dict[str, Tuple[dict, str]] = {}
 
-                # Save trace in projects/PROJECT_NAME/ directory
-                project_dir = workspace_root / "projects" / project_name
-                project_dir.mkdir(parents=True, exist_ok=True)
-
-                # Determine file path based on format
-                if format.lower() == "csv":
-                    file_path = project_dir / f"trace_{trace_id}.csv"
-                else:
-                    file_path = project_dir / f"trace_{trace_id}.json"
-
-                # Check if file already exists and should be skipped
-                if should_skip_file(file_path, force):
-                    if debug:
-                        debug_print(
-                            f"Skipping trace {trace_id} (already exists)",
+            with ThreadPoolExecutor(max_workers=MAX_WORKERS) as fetch_executor:
+                # Submit all trace fetch tasks and track trace_id for each future
+                fetch_futures: Dict[Future[Optional[Tuple[str, dict, str]]], str] = {}
+                for trace_id in batch_trace_ids:
+                    fetch_future: Future[Optional[Tuple[str, dict, str]]] = (
+                        fetch_executor.submit(
+                            _fetch_trace_data,
+                            client,
+                            trace_id,
+                            project_name_cache,
                             debug,
                         )
-                    skipped_count += 1
-                    progress.update(task, advance=1)
-                    continue
-
-                # Save to file using the appropriate format
-                try:
-                    if format.lower() == "csv":
-                        write_csv_data(trace_data, file_path, trace_to_csv_rows)
-                        if debug:
-                            debug_print(f"Wrote CSV file: {file_path}", debug)
-                    else:
-                        write_json_data(trace_data, file_path)
-                        if debug:
-                            debug_print(f"Wrote JSON file: {file_path}", debug)
-
-                    exported_count += 1
-                    progress.update(
-                        task,
-                        advance=1,
-                        description=f"Exported {exported_count}/{len(trace_ids)} traces",
                     )
-                except Exception as write_error:
-                    console.print(
-                        f"[red]Error writing trace {trace_id} to file: {write_error}[/red]"
+                    fetch_futures[fetch_future] = trace_id
+
+                # Collect completed fetches
+                for fetch_future in as_completed(fetch_futures):
+                    trace_id = fetch_futures[fetch_future]
+                    try:
+                        result = fetch_future.result()
+                        if result is not None:
+                            fetched_trace_id, trace_data, project_name = result
+                            fetched_traces[fetched_trace_id] = (
+                                trace_data,
+                                project_name,
+                            )
+                    except Exception as e:
+                        if debug:
+                            console.print(
+                                f"[red]Error fetching trace {trace_id}: {e}[/red]"
+                            )
+
+            # Write files in parallel
+            with ThreadPoolExecutor(max_workers=MAX_WORKERS) as write_executor:
+                # Submit all write tasks and track trace_id for each future
+                write_futures: Dict[Future[bool], str] = {}
+                for trace_id, (trace_data, project_name) in fetched_traces.items():
+                    write_future: Future[bool] = write_executor.submit(
+                        _write_trace_file,
+                        trace_id,
+                        trace_data,
+                        project_name,
+                        workspace_root,
+                        format,
+                        force,
+                        debug,
                     )
-                    if debug:
-                        import traceback
+                    write_futures[write_future] = trace_id
 
-                        debug_print(f"Traceback: {traceback.format_exc()}", debug)
-                    progress.update(task, advance=1)
-                    continue
+                # Process completed writes
+                for write_future in as_completed(write_futures):
+                    trace_id = write_futures[write_future]
+                    try:
+                        if write_future.result():
+                            exported_count += 1
+                        else:
+                            skipped_count += 1
+                    except Exception as e:
+                        if debug:
+                            console.print(
+                                f"[red]Error writing trace {trace_id}: {e}[/red]"
+                            )
+                    finally:
+                        progress.update(
+                            task,
+                            advance=1,
+                            description=f"Exported {exported_count}/{len(trace_ids)} traces",
+                        )
 
-            except Exception as e:
-                console.print(f"[red]Error exporting trace {trace_id}: {e}[/red]")
-                if debug:
-                    import traceback
-
-                    debug_print(f"Traceback: {traceback.format_exc()}", debug)
-                progress.update(task, advance=1)
-                continue
+                # Update progress for traces that failed to fetch
+                for trace_id in batch_trace_ids:
+                    if trace_id not in fetched_traces:
+                        progress.update(task, advance=1)
 
     return exported_count, skipped_count
 
