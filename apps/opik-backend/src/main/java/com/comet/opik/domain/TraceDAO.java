@@ -110,6 +110,8 @@ interface TraceDAO {
 
     Mono<ProjectStats> getStats(TraceSearchCriteria criteria);
 
+    Mono<ProjectStats> getThreadStats(TraceSearchCriteria criteria);
+
     Mono<Long> getDailyTraces(Map<UUID, Instant> excludedProjectIds);
 
     Mono<Map<UUID, ProjectStats>> getStatsByProjectIds(List<UUID> projectIds, String workspaceId);
@@ -2284,6 +2286,179 @@ class TraceDAOImpl implements TraceDAO {
             """;
 
     /***
+     * Calculates statistics for threads by performing two-level aggregation:
+     * 1. First level: Aggregates traces into threads (duration, cost, usage, feedback scores per thread)
+     * 2. Second level: Calculates stats across all threads (AVG, SUM, quantiles of thread-level metrics)
+     * <p>
+     * This query follows the same thread aggregation logic as SELECT_TRACES_THREADS_BY_PROJECT_IDS
+     * but applies statistical aggregations on top of the thread-level metrics.
+     ***/
+    private static final String SELECT_TRACE_THREADS_STATS = """
+            WITH traces_final AS (
+                SELECT
+                    *
+                FROM traces final
+                WHERE workspace_id = :workspace_id
+                  AND project_id IN :project_ids
+                  AND thread_id <> ''
+                <if(uuid_from_time)>AND id >= :uuid_from_time<endif>
+                <if(uuid_to_time)>AND id \\<= :uuid_to_time<endif>
+            ), spans_agg AS (
+                SELECT
+                    trace_id,
+                    sumMap(usage) as usage,
+                    sum(total_estimated_cost) as total_estimated_cost
+                FROM spans final
+                WHERE workspace_id = :workspace_id
+                  AND project_id IN :project_ids
+                  AND trace_id IN (SELECT DISTINCT id FROM traces_final)
+                GROUP BY workspace_id, project_id, trace_id
+            ), trace_threads_final AS (
+                SELECT
+                    workspace_id,
+                    project_id,
+                    thread_id,
+                    id as thread_model_id
+                FROM trace_threads final
+                WHERE workspace_id = :workspace_id
+                AND project_id IN :project_ids
+                <if(uuid_from_time)>
+                    AND id >= :uuid_from_time
+                    <if(uuid_to_time)>AND id \\<= :uuid_to_time<endif>
+                <else>
+                AND thread_id IN (SELECT thread_id FROM traces_final)
+                <endif>
+            ), feedback_scores_combined_raw AS (
+                SELECT
+                    workspace_id,
+                    project_id,
+                    entity_id,
+                    name,
+                    value,
+                    feedback_scores.last_updated_by AS author,
+                    last_updated_at
+                FROM feedback_scores FINAL
+                WHERE entity_type = 'thread'
+                   AND workspace_id = :workspace_id
+                   AND project_id IN :project_ids
+                   AND entity_id IN (SELECT thread_model_id FROM trace_threads_final)
+                UNION ALL
+                SELECT
+                    workspace_id,
+                    project_id,
+                    entity_id,
+                    name,
+                    value,
+                    author,
+                    last_updated_at
+                FROM authored_feedback_scores FINAL
+                WHERE entity_type = 'thread'
+                   AND workspace_id = :workspace_id
+                   AND project_id IN :project_ids
+                   AND entity_id IN (SELECT thread_model_id FROM trace_threads_final)
+             ),
+             feedback_scores_with_ranking AS (
+                 SELECT workspace_id,
+                        *,
+                        ROW_NUMBER() OVER (
+                            PARTITION BY workspace_id, project_id, entity_id, name, author
+                            ORDER BY last_updated_at DESC
+                        ) as rn
+                 FROM feedback_scores_combined_raw
+             ),
+             feedback_scores_combined AS (
+                 SELECT workspace_id,
+                     project_id,
+                     entity_id,
+                     name,
+                     value
+                 FROM feedback_scores_with_ranking
+                 WHERE rn = 1
+             ),
+             feedback_scores_agg AS (
+                SELECT
+                    entity_id,
+                    mapFromArrays(
+                            groupArray(name),
+                            groupArray(value)
+                    ) AS feedback_scores
+                FROM feedback_scores_combined
+                GROUP BY workspace_id, project_id, entity_id
+            ),
+            -- LEVEL 1 AGGREGATION: Aggregate traces into threads
+            threads_aggregated AS (
+                SELECT
+                    t.workspace_id as workspace_id,
+                    t.project_id as project_id,
+                    t.thread_id as thread_id,
+                    tt.thread_model_id as thread_model_id,
+                    if(t.end_time IS NOT NULL AND t.start_time IS NOT NULL
+                           AND notEquals(t.start_time, toDateTime64('1970-01-01 00:00:00.000', 9)),
+                       (dateDiff('microsecond', t.start_time, t.end_time) / 1000.0),
+                       NULL) AS duration,
+                    t.total_estimated_cost as total_estimated_cost,
+                    t.usage as usage,
+                    fsagg.feedback_scores as feedback_scores,
+                    if(length(arrayFilter(x -> x != '', t.tags)) > 0, 1, 0) as has_tags
+                FROM (
+                    SELECT
+                        t.thread_id as thread_id,
+                        t.workspace_id as workspace_id,
+                        t.project_id as project_id,
+                        min(t.start_time) as start_time,
+                        max(t.end_time) as end_time,
+                        sum(s.total_estimated_cost) as total_estimated_cost,
+                        sumMap(s.usage) as usage,
+                        arrayConcat(groupUniqArray(t.tags)) as tags
+                    FROM traces_final AS t
+                        LEFT JOIN spans_agg AS s ON t.id = s.trace_id
+                    <if(filters)> WHERE <filters> <endif>
+                    GROUP BY
+                        t.workspace_id, t.project_id, t.thread_id
+                ) AS t
+                LEFT JOIN trace_threads_final AS tt ON t.workspace_id = tt.workspace_id
+                    AND t.project_id = tt.project_id
+                    AND t.thread_id = tt.thread_id
+                LEFT JOIN feedback_scores_agg fsagg ON fsagg.entity_id = tt.thread_model_id
+                WHERE t.workspace_id = :workspace_id
+                <if(trace_thread_filters)>AND<trace_thread_filters><endif>
+            )
+            -- LEVEL 2 AGGREGATION: Calculate stats across all threads
+            SELECT
+                workspace_id,
+                project_id,
+                count(DISTINCT thread_id) AS thread_count,
+                arrayMap(
+                  v -> toDecimal64(
+                         greatest(
+                           least(if(isFinite(v), v, 0),  999999999.999999999),
+                           -999999999.999999999
+                         ),
+                         9
+                       ),
+                  quantiles(0.5, 0.9, 0.99)(duration)
+                ) AS duration,
+                toInt64(0) AS input,
+                toInt64(0) AS output,
+                toInt64(0) AS metadata,
+                avg(has_tags) AS tags,
+                avgMap(usage) as usage,
+                avgMap(feedback_scores) AS feedback_scores,
+                avgMap(cast((map(), 'Map(String, Float64)'), 'Map(String, Float64)')) AS span_feedback_scores,
+                toFloat64(0) AS llm_span_count_avg,
+                toFloat64(0) AS span_count_avg,
+                avgIf(total_estimated_cost, total_estimated_cost > 0) AS total_estimated_cost_,
+                toDecimal128(if(isNaN(total_estimated_cost_), 0, total_estimated_cost_), 12) AS total_estimated_cost_avg,
+                sumIf(total_estimated_cost, total_estimated_cost > 0) AS total_estimated_cost_sum_,
+                toDecimal128(total_estimated_cost_sum_, 12) AS total_estimated_cost_sum,
+                toInt64(0) AS guardrails_failed_count,
+                toInt64(0) AS error_count
+            FROM threads_aggregated
+            GROUP BY workspace_id, project_id
+            ;
+            """;
+
+    /***
      * When treating a list of traces as threads, many aggregations are performed to get the thread details.
      * <p>
      * Please refer to the SELECT_TRACES_THREAD_BY_ID query for more details.
@@ -3981,6 +4156,28 @@ class TraceDAOImpl implements TraceDAO {
                     .doFinally(signalType -> endSegment(segment))
                     .flatMap(
                             result -> result.map((row, rowMetadata) -> StatsMapper.mapProjectStats(row, "trace_count")))
+                    .singleOrEmpty();
+        });
+    }
+
+    @Override
+    public Mono<ProjectStats> getThreadStats(@NonNull TraceSearchCriteria criteria) {
+        return asyncTemplate.nonTransaction(connection -> {
+
+            var statsSQL = newFindTemplate(SELECT_TRACE_THREADS_STATS, criteria);
+
+            var statement = connection.createStatement(statsSQL.render())
+                    .bind("project_ids", List.of(criteria.projectId()));
+
+            bindSearchCriteria(criteria, statement);
+
+            Segment segment = startSegment("threads", "Clickhouse", "stats");
+
+            return makeFluxContextAware(bindWorkspaceIdToFlux(statement))
+                    .doFinally(signalType -> endSegment(segment))
+                    .flatMap(
+                            result -> result
+                                    .map((row, rowMetadata) -> StatsMapper.mapProjectStats(row, "thread_count")))
                     .singleOrEmpty();
         });
     }
