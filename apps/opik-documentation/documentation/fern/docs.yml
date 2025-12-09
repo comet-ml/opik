@@ -1296,9 +1296,6 @@ redirects:
   - source: "/docs/opik/tracing/log_agents"
     destination: "/docs/opik/tracing/log_traces"
     permanent: true
-  - source: "/docs/opik/changelog/2024/9/31"
-    destination: "/docs/opik/changelog"
-    permanent: true
   - source: "/docs/opik/self-host/kubernetes/backup"
     destination: "/docs/opik/self-host/backup"
     permanent: true
@@ -1307,4 +1304,36 @@ redirects:
     permanent: true
   - source: "/docs/opik/getting-started/logging-traces/"
     destination: "/docs/opik/quickstart"
+    permanent: true
+  # 404 fixes - common broken link patterns
+  - source: "/docs/opik/agent_optimization/api-reference"
+    destination: "/docs/opik/agent_optimization/advanced/api_reference"
+    permanent: true
+  - source: "/docs/opik/tracing/integrations"
+    destination: "/docs/opik/integrations/overview"
+    permanent: true
+  - source: "/docs/opik/agent_optimization/optimizer-cookbooks/synthetic_data_optimizer_cookbook"
+    destination: "/docs/opik/agent_optimization/cookbooks/synthetic_data_optimizer_cookbook"
+    permanent: true
+  - source: "/docs/opik/agent_optimization/optimizer-concepts"
+    destination: "/docs/opik/agent_optimization/optimization/concepts"
+    permanent: true
+  - source: "/docs/opik/agent_optimization/optimizer-cookbooks/optimizer_introduction_cookbook"
+    destination: "/docs/opik/agent_optimization/cookbooks/optimizer_introduction_cookbook"
+    permanent: true
+  - source: "/docs/opik/library/prompt_management/"
+    destination: "/docs/opik/prompt_engineering/prompt_management"
+    permanent: true
+  - source: "/docs/opik/library/prompt_management"
+    destination: "/docs/opik/prompt_engineering/prompt_management"
+    permanent: true
+  - source: "/docs/opik/agent-optimization"
+    destination: "/docs/opik/agent_optimization/overview"
+    permanent: true
+  # Catch-all for old changelog date URLs (e.g., /changelog/2025/8/2, /changelog/2025/6/7)
+  - source: "/docs/opik/changelog/2025/:slug*"
+    destination: "/docs/opik/changelog"
+    permanent: true
+  - source: "/docs/opik/changelog/2024/:slug*"
+    destination: "/docs/opik/changelog"
     permanent: true

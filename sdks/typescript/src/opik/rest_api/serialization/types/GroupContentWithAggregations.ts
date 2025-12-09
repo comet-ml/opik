@@ -11,11 +11,13 @@ export const GroupContentWithAggregations: core.serialization.ObjectSchema<
     serializers.GroupContentWithAggregations.Raw,
     OpikApi.GroupContentWithAggregations
 > = core.serialization.object({
+    label: core.serialization.string().optional(),
     aggregations: AggregationData.optional(),
 });
 
 export declare namespace GroupContentWithAggregations {
     export interface Raw {
+        label?: string | null;
         aggregations?: AggregationData.Raw | null;
     }
 }

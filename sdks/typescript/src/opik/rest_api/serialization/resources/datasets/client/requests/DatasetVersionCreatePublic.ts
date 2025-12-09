@@ -10,14 +10,14 @@ export const DatasetVersionCreatePublic: core.serialization.Schema<
     serializers.DatasetVersionCreatePublic.Raw,
     OpikApi.DatasetVersionCreatePublic
 > = core.serialization.object({
-    tag: core.serialization.string().optional(),
+    tags: core.serialization.list(core.serialization.string()).optional(),
     changeDescription: core.serialization.property("change_description", core.serialization.string().optional()),
     metadata: core.serialization.record(core.serialization.string(), core.serialization.string()).optional(),
 });
 
 export declare namespace DatasetVersionCreatePublic {
     export interface Raw {
-        tag?: string | null;
+        tags?: string[] | null;
         change_description?: string | null;
         metadata?: Record<string, string> | null;
     }
