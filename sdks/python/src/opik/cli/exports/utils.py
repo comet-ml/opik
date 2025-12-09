@@ -1,12 +1,15 @@
 """Common utilities for export functionality."""
 
 import csv
+import dataclasses
 import json
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
 from rich.console import Console
+
+from opik.api_objects.experiment.experiment_item import ExperimentItemContent
 
 console = Console()
 
@@ -19,62 +22,9 @@ def matches_name_pattern(name: str, pattern: Optional[str]) -> bool:
     return pattern.lower() in name.lower()
 
 
-def serialize_experiment_item(item: Any) -> Dict[str, Any]:
-    """Safely serialize an experiment item to a dictionary."""
-    try:
-        # Try model_dump() first (Pydantic v2)
-        if hasattr(item, "model_dump"):
-            return item.model_dump()
-    except Exception:
-        pass
-
-    try:
-        # Try dict() method (Pydantic v1)
-        if hasattr(item, "dict"):
-            return item.dict()
-    except Exception:
-        pass
-
-    # Fallback: manually extract attributes
-    result = {}
-    for attr in [
-        "id",
-        "experiment_id",
-        "dataset_item_id",
-        "trace_id",
-        "input",
-        "output",
-        "feedback_scores",
-        "comments",
-        "total_estimated_cost",
-        "duration",
-        "usage",
-        "created_at",
-        "last_updated_at",
-        "created_by",
-        "last_updated_by",
-        "trace_visibility_mode",
-        "dataset_item_data",  # Include dataset item data for import
-        "evaluation_task_output",  # Include evaluation task output if present
-    ]:
-        if hasattr(item, attr):
-            value = getattr(item, attr)
-            if value is not None:
-                # Handle datetime objects
-                if hasattr(value, "isoformat"):
-                    result[attr] = value.isoformat()
-                # Handle lists of objects
-                elif isinstance(value, list):
-                    result[attr] = [
-                        serialize_experiment_item(v) if hasattr(v, "__dict__") else v
-                        for v in value
-                    ]
-                # Handle other objects
-                elif hasattr(value, "__dict__"):
-                    result[attr] = serialize_experiment_item(value)
-                else:
-                    result[attr] = value
-    return result
+def serialize_experiment_item(item: ExperimentItemContent) -> Dict[str, Any]:
+    """Serialize an ExperimentItemContent dataclass to a dictionary."""
+    return dataclasses.asdict(item)
 
 
 def flatten_dict_with_prefix(data: Dict, prefix: str = "") -> Dict:
@@ -131,7 +81,7 @@ def debug_print(message: str, debug: bool) -> None:
 
 
 def create_experiment_data_structure(
-    experiment: Any, experiment_items: List[Any]
+    experiment: Any, experiment_items: List[ExperimentItemContent]
 ) -> Dict[str, Any]:
     """Create a comprehensive experiment data structure for export."""
     # Get the full experiment data which contains all fields
