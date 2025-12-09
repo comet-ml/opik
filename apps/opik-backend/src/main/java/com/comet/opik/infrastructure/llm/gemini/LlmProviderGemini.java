@@ -4,6 +4,8 @@ import com.comet.opik.api.ChunkedResponseHandler;
 import com.comet.opik.domain.llm.LlmProviderService;
 import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
 import com.comet.opik.infrastructure.llm.LlmProviderLangChainMapper;
+import com.comet.opik.infrastructure.llm.LoggingChunkedResponseHandler;
+import com.comet.opik.infrastructure.llm.StreamingResponseLogger;
 import dev.langchain4j.model.openai.internal.chat.ChatCompletionRequest;
 import dev.langchain4j.model.openai.internal.chat.ChatCompletionResponse;
 import io.dropwizard.jersey.errors.ErrorMessage;
@@ -43,11 +45,20 @@ public class LlmProviderGemini implements LlmProviderService {
 
                         var mappedMessages = GeminiLangChainMapper.INSTANCE.mapMessagesForGemini(request);
 
+                        // Create a simple summary of the request for logging
+                        String requestSummary = String.format("model=%s, messages=%d",
+                                request.model(),
+                                request.messages() != null ? request.messages().size() : 0);
+
+                        // Create dependencies following IoC principle
+                        var delegate = new ChunkedResponseHandler(handleMessage, handleClose, handleError,
+                                request.model());
+                        var logger = new StreamingResponseLogger(requestSummary, request.model());
+
                         streamingChatLanguageModel
                                 .chat(
                                         mappedMessages,
-                                        new ChunkedResponseHandler(handleMessage, handleClose, handleError,
-                                                request.model()));
+                                        new LoggingChunkedResponseHandler(delegate, logger));
                     } catch (Exception e) {
                         handleError.accept(e);
                         handleClose.run();

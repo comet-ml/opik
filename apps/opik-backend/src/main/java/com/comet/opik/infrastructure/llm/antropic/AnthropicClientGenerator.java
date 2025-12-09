@@ -49,7 +49,9 @@ public class AnthropicClientGenerator implements LlmProviderClientGenerator<Anth
             LlmAsJudgeModelParameters modelParameters) {
         var builder = AnthropicChatModel.builder()
                 .apiKey(config.apiKey())
-                .modelName(modelParameters.name());
+                .modelName(modelParameters.name())
+                .logRequests(llmProviderClientConfig.getLogRequests())
+                .logResponses(llmProviderClientConfig.getLogResponses());
 
         Optional.ofNullable(llmProviderClientConfig.getConnectTimeout())
                 .ifPresent(connectTimeout -> builder.timeout(connectTimeout.toJavaDuration()));

@@ -21,7 +21,8 @@ interface GeminiChatModelMapper {
     @Mapping(expression = "java(request.temperature())", target = "temperature")
     @Mapping(expression = "java(request.topP())", target = "topP")
     GoogleAiGeminiChatModel toGeminiChatModel(
-            @NonNull String apiKey, @NonNull ChatCompletionRequest request, @NonNull Duration timeout, int maxRetries);
+            @NonNull String apiKey, @NonNull ChatCompletionRequest request, @NonNull Duration timeout, int maxRetries,
+            boolean logRequests, boolean logResponses);
 
     @Mapping(expression = "java(request.model())", target = "modelName")
     @Mapping(expression = "java(request.maxCompletionTokens())", target = "maxOutputTokens")
@@ -29,6 +30,7 @@ interface GeminiChatModelMapper {
     @Mapping(expression = "java(request.temperature())", target = "temperature")
     @Mapping(expression = "java(request.topP())", target = "topP")
     GoogleAiGeminiStreamingChatModel toGeminiStreamingChatModel(
-            @NonNull String apiKey, @NonNull ChatCompletionRequest request, @NonNull Duration timeout, int maxRetries);
+            @NonNull String apiKey, @NonNull ChatCompletionRequest request, @NonNull Duration timeout, int maxRetries,
+            boolean logRequests, boolean logResponses);
 
 }

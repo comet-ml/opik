@@ -8,6 +8,7 @@ logging:
   #  Description: Individual logger configuration
   loggers:
     com.comet: DEBUG
+    com.comet.opik.infrastructure.llm: INFO
 
 # Description: state database configuration
 # https://www.dropwizard.io/en/stable/manual/configuration.html#database

@@ -2,6 +2,7 @@ package com.comet.opik.infrastructure.llm.customllm;
 
 import com.comet.opik.domain.llm.LlmProviderService;
 import com.comet.opik.infrastructure.llm.LlmProviderLangChainMapper;
+import com.comet.opik.infrastructure.llm.OpenAiStreamingHelper;
 import dev.langchain4j.model.openai.internal.OpenAiClient;
 import dev.langchain4j.model.openai.internal.chat.ChatCompletionRequest;
 import dev.langchain4j.model.openai.internal.chat.ChatCompletionResponse;
@@ -35,11 +36,8 @@ public class CustomLlmProvider implements LlmProviderService {
             @NonNull Runnable handleClose,
             @NonNull Consumer<Throwable> handleError) {
         ChatCompletionRequest cleanedRequest = cleanModelName(request);
-        openAiClient.chatCompletion(cleanedRequest)
-                .onPartialResponse(handleMessage)
-                .onComplete(handleClose)
-                .onError(handleError)
-                .execute();
+        OpenAiStreamingHelper.executeStreamingRequest(openAiClient, cleanedRequest, handleMessage, handleClose,
+                handleError);
     }
 
     @Override
