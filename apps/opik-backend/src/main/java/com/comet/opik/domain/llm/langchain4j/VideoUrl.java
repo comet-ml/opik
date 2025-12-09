@@ -32,10 +32,6 @@ public final class VideoUrl {
         return url;
     }
 
-    public String getUrl() {
-        return url;
-    }
-
     public String mimeType() {
         return mimeType;
     }

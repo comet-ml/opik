@@ -362,7 +362,7 @@ public class OnlineScoringEngine {
 
     /**
      * Build a UserMessage from structured content parts (array format).
-     * Supports text, image_url, and video_url content types.
+     * Supports text, image_url, video_url, and audio_url content types.
      */
     private UserMessage buildUserMessageFromContentParts(
             List<LlmAsJudgeMessageContent> contentParts, Map<String, String> replacements) {

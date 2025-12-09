@@ -28,10 +28,6 @@ public final class AudioUrl {
         return url;
     }
 
-    public String getUrl() {
-        return url;
-    }
-
     public static Builder builder() {
         return new Builder();
     }

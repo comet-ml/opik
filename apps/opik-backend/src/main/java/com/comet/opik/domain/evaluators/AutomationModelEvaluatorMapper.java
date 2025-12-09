@@ -20,6 +20,7 @@ import org.mapstruct.Mapping;
 import org.mapstruct.factory.Mappers;
 
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 @Mapper
@@ -210,7 +211,7 @@ interface AutomationModelEvaluatorMapper {
             return content;
         }
 
-        if (obj instanceof java.util.Map<?, ?> map) {
+        if (obj instanceof Map<?, ?> map) {
             return LlmAsJudgeMessageContent.builder()
                     .type((String) map.get("type"))
                     .text((String) map.get("text"))
@@ -234,7 +235,7 @@ interface AutomationModelEvaluatorMapper {
             return imageUrl;
         }
 
-        if (obj instanceof java.util.Map<?, ?> map) {
+        if (obj instanceof Map<?, ?> map) {
             return LlmAsJudgeMessageContent.ImageUrl.builder()
                     .url((String) map.get("url"))
                     .detail((String) map.get("detail"))
@@ -249,7 +250,7 @@ interface AutomationModelEvaluatorMapper {
             return videoUrl;
         }
 
-        if (obj instanceof java.util.Map<?, ?> map) {
+        if (obj instanceof Map<?, ?> map) {
             return LlmAsJudgeMessageContent.VideoUrl.builder()
                     .url((String) map.get("url"))
                     .build();
@@ -263,7 +264,7 @@ interface AutomationModelEvaluatorMapper {
             return audioUrl;
         }
 
-        if (obj instanceof java.util.Map<?, ?> map) {
+        if (obj instanceof Map<?, ?> map) {
             return LlmAsJudgeMessageContent.AudioUrl.builder()
                     .url((String) map.get("url"))
                     .build();

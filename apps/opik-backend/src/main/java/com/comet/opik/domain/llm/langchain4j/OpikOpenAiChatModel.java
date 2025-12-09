@@ -34,11 +34,11 @@ import static dev.langchain4j.model.openai.internal.OpenAiUtils.tokenUsageFrom;
 import static dev.langchain4j.model.openai.internal.OpenAiUtils.validate;
 
 /**
- * Custom OpenAI chat model that supports video content through OpikUserMessage.
+ * Custom OpenAI chat model that supports video and audio content through OpikUserMessage.
  * This extends OpenAiChatModel to override the doChat() method where we'll intercept
- * and convert VideoContent to OpikUserMessage format before serialization.
+ * and convert VideoContent/AudioContent to OpikUserMessage format before serialization.
  *
- * This is a hack that we can remove once they add support for video content in the OpenAI API.
+ * This is a hack that we can remove once LangChain4j adds native support for video_url and audio_url.
  */
 @Slf4j
 public class OpikOpenAiChatModel extends OpenAiChatModel {
