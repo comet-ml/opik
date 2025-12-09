@@ -15,7 +15,8 @@ class OpenAILlmServiceProvider implements LlmServiceProvider {
     private final OpenAIClientGenerator clientGenerator;
 
     OpenAILlmServiceProvider(
-            @Named("openaiGenerator") OpenAIClientGenerator clientGenerator, LlmProviderFactory factory) {
+            @Named("openaiGenerator") OpenAIClientGenerator clientGenerator,
+            LlmProviderFactory factory) {
         this.clientGenerator = clientGenerator;
         factory.register(LlmProvider.OPEN_AI, this);
     }

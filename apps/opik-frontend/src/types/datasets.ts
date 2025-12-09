@@ -154,6 +154,7 @@ export interface ExperimentsGroupNode {
 }
 
 export interface ExperimentsGroupNodeWithAggregations {
+  label?: string;
   aggregations?: ExperimentsAggregations;
   groups?: Record<string, ExperimentsGroupNodeWithAggregations>;
 }
