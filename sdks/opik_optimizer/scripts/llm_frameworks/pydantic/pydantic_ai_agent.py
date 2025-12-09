@@ -14,7 +14,7 @@ if TYPE_CHECKING:
 
 
 @track(type="tool")
-def search_wikipedia_tool(ctx: RunContext, query: str) -> list[str]:
+def search_wikipedia_tool(_ctx: RunContext, query: str) -> list[str]:
     """Search Wikipedia for information about a topic."""
     return search_wikipedia(query, search_type="api")
 

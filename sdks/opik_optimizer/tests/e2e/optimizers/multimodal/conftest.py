@@ -23,4 +23,3 @@ def setup_driving_hazard_dataset() -> opik.Dataset:
     dataset = opik_optimizer.datasets.driving_hazard(test_mode=True)
     yield dataset
     # Cleanup is optional - leave dataset for future runs
-
