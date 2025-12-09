@@ -17,6 +17,8 @@ import org.jdbi.v3.sqlobject.statement.SqlQuery;
 import org.jdbi.v3.sqlobject.statement.SqlUpdate;
 import org.jdbi.v3.stringtemplate4.UseStringTemplateEngine;
 
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -109,10 +111,10 @@ public interface AutomationRuleEvaluatorDAO extends AutomationRuleDAO {
      */
     default Map<UUID, Set<UUID>> findProjectMappings(List<UUID> ruleIds, String workspaceId) {
         var mappings = findProjectMappingsList(ruleIds, workspaceId);
-        var result = new java.util.HashMap<UUID, Set<UUID>>();
+        var result = new HashMap<UUID, Set<UUID>>();
 
         for (var mapping : mappings) {
-            result.computeIfAbsent(mapping.ruleId(), k -> new java.util.HashSet<>())
+            result.computeIfAbsent(mapping.ruleId(), k -> new HashSet<>())
                     .add(mapping.projectId());
         }
 

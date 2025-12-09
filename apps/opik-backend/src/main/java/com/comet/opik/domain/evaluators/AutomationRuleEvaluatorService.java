@@ -292,8 +292,7 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
             var dao = handle.attach(AutomationRuleEvaluatorDAO.class);
             var singleIdSet = Collections.singleton(id);
             var criteria = AutomationRuleEvaluatorCriteria.builder().ids(singleIdSet).build();
-            List<UUID> projectIdsList = projectIds != null ? new java.util.ArrayList<>(projectIds) : null;
-            List<AutomationRuleEvaluatorModel<?>> models = dao.find(workspaceId, projectIdsList, criteria, null, null,
+            List<AutomationRuleEvaluatorModel<?>> models = dao.find(workspaceId, projectIds, criteria, null, null,
                     Map.of(), null, null);
             return models.stream()
                     .findFirst()
@@ -324,8 +323,7 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
         return template.inTransaction(READ_ONLY, handle -> {
             var dao = handle.attach(AutomationRuleEvaluatorDAO.class);
             var criteria = AutomationRuleEvaluatorCriteria.builder().ids(ids).build();
-            List<UUID> projectIdsList = projectIds != null ? new java.util.ArrayList<>(projectIds) : null;
-            List<AutomationRuleEvaluatorModel<?>> models = dao.find(workspaceId, projectIdsList, criteria, null, null,
+            List<AutomationRuleEvaluatorModel<?>> models = dao.find(workspaceId, projectIds, criteria, null, null,
                     Map.of(), null, null);
             return models.stream()
                     .map(ruleEvaluator -> (AutomationRuleEvaluator<?, ?>) switch (ruleEvaluator) {
