@@ -5916,8 +5916,8 @@ class ExperimentsResourceTest {
                 .build();
         datasetResourceClient.createDatasetItems(batch2, TEST_WORKSPACE, API_KEY);
 
-        // Verify draft now has 2 items
-        var itemsAfterDraftAdd = datasetResourceClient.getDatasetItems(datasetId, 1, 10, null, API_KEY, TEST_WORKSPACE);
+        // Verify draft now has 2 items (using the draft items endpoint)
+        var itemsAfterDraftAdd = datasetResourceClient.getDatasetDraftItems(datasetId, 1, 10, API_KEY, TEST_WORKSPACE);
         assertThat(itemsAfterDraftAdd.content()).hasSize(2);
         var draftItemId = itemsAfterDraftAdd.content().stream()
                 .filter(item -> !item.id().equals(versionItemId))

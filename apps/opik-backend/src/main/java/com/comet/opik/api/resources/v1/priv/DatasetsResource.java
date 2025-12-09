@@ -397,6 +397,45 @@ public class DatasetsResource {
         return Response.ok(datasetItemPage).build();
     }
 
+    @GET
+    @Path("/{id}/items/draft")
+    @Operation(operationId = "getDatasetDraftItems", summary = "Get dataset draft items", description = "Get dataset draft items (working copy, not from any committed version)", responses = {
+            @ApiResponse(responseCode = "200", description = "Dataset draft items resource", content = @Content(schema = @Schema(implementation = DatasetItem.DatasetItemPage.class)))
+    })
+    @JsonView(DatasetItem.View.Public.class)
+    public Response getDatasetDraftItems(
+            @PathParam("id") UUID id,
+            @QueryParam("page") @Min(1) @DefaultValue("1") int page,
+            @QueryParam("size") @Min(1) @DefaultValue("10") int size,
+            @QueryParam("filters") String filters,
+            @QueryParam("truncate") @Schema(description = "Truncate image included in either input, output or metadata") boolean truncate) {
+
+        var queryFilters = filtersFactory.newFilters(filters, DatasetItemFilter.LIST_TYPE_REFERENCE);
+        String workspaceId = requestContext.get().getWorkspaceId();
+
+        log.info(
+                "Finding dataset draft items by id '{}', page '{}', size '{}', filters '{}' on workspace_id '{}'",
+                id, page, size, filters, workspaceId);
+
+        var datasetItemSearchCriteria = DatasetItemSearchCriteria.builder()
+                .datasetId(id)
+                .experimentIds(Set.of()) // Empty set for regular dataset items
+                .filters(queryFilters)
+                .entityType(EntityType.TRACE)
+                .truncate(truncate)
+                .versionHashOrTag(null) // No version - draft items
+                .build();
+
+        var datasetItemPage = itemService.getDraftItems(page, size, datasetItemSearchCriteria)
+                .contextWrite(ctx -> setRequestContext(ctx, requestContext))
+                .block();
+
+        log.info("Found dataset draft items by id '{}', count '{}', page '{}', size '{}' on workspace_id '{}'", id,
+                datasetItemPage.content().size(), page, size, workspaceId);
+
+        return Response.ok(datasetItemPage).build();
+    }
+
     @POST
     @Path("/items/stream")
     @Produces(MediaType.APPLICATION_OCTET_STREAM)

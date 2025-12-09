@@ -468,7 +468,15 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                 LIMIT 1 BY id
             ), experiment_items_scope as (
                 SELECT
-                    ei.*,
+                    ei.id,
+                    ei.experiment_id,
+                    ei.dataset_item_id,
+                    ei.trace_id,
+                    ei.workspace_id,
+                    ei.created_at,
+                    ei.last_updated_at,
+                    ei.created_by,
+                    ei.last_updated_by,
                     e.dataset_version_id
                 FROM experiment_items ei
                 INNER JOIN experiments_with_versions e ON ei.experiment_id = e.experiment_id

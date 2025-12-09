@@ -62,6 +62,8 @@ public interface DatasetItemService {
 
     Mono<DatasetItemPage> getItems(int page, int size, DatasetItemSearchCriteria datasetItemSearchCriteria);
 
+    Mono<DatasetItemPage> getDraftItems(int page, int size, DatasetItemSearchCriteria datasetItemSearchCriteria);
+
     Flux<DatasetItem> getItems(String workspaceId, DatasetItemStreamRequest request, Visibility visibility);
 
     Mono<PageColumns> getOutputColumns(UUID datasetId, Set<UUID> experimentIds);
@@ -469,6 +471,19 @@ class DatasetItemServiceImpl implements DatasetItemService {
                         });
             }
         });
+    }
+
+    @Override
+    @WithSpan
+    public Mono<DatasetItemPage> getDraftItems(int page, int size,
+            @NonNull DatasetItemSearchCriteria datasetItemSearchCriteria) {
+        log.info("Finding draft dataset items for dataset '{}', page '{}', size '{}'",
+                datasetItemSearchCriteria.datasetId(), page, size);
+
+        // Always fetch draft items regardless of version existence
+        return dao.getItems(datasetItemSearchCriteria, page, size)
+                .flatMap(itemPage -> computeHasDraft(datasetItemSearchCriteria.datasetId(), itemPage))
+                .defaultIfEmpty(DatasetItemPage.empty(page, sortingFactory.getSortableFields()));
     }
 
     private Mono<DatasetItemPage> computeHasDraft(UUID datasetId, DatasetItemPage itemPage) {
