@@ -48,9 +48,9 @@ public class ExperimentResponseBuilder {
     }
 
     public ExperimentGroupAggregationsResponse buildGroupAggregationsResponse(
-            @NonNull List<ExperimentGroupAggregationItem> groupItems,
+            List<ExperimentGroupAggregationItem> groupItems,
             @NonNull ExperimentGroupEnrichInfoHolder enrichInfoHolder,
-            @NonNull List<GroupBy> groups) {
+            List<GroupBy> groups) {
         var contentMap = new HashMap<String, GroupContentWithAggregations>();
 
         if (CollectionUtils.isEmpty(groupItems) || CollectionUtils.isEmpty(groups)) {
