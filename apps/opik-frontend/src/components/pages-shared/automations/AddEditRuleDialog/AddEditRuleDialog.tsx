@@ -487,7 +487,7 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
                               align="start"
                               value={field.value}
                               onValueChange={field.onChange}
-                              className={cn({
+                              className={cn("w-full", {
                                 "border-destructive": Boolean(
                                   validationErrors?.message,
                                 ),
