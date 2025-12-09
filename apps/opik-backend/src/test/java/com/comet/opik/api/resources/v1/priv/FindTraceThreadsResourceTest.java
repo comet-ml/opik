@@ -1883,9 +1883,112 @@ class FindTraceThreadsResourceTest {
                     expectedFeedbackStats);
         }
 
-        @Test
-        @DisplayName("When getting thread stats with STATUS filter, should apply filter correctly")
-        void whenFiltersProvided__thenApplyFiltersCorrectly() {
+        private Stream<Arguments> getValidFiltersForStats() {
+            return Stream.of(
+                    // ID filter - test filtering by thread ID
+                    Arguments.of(
+                            "ID = thread_id",
+                            (Function<List<Trace>, TraceThreadFilter>) traces -> TraceThreadFilter.builder()
+                                    .field(TraceThreadField.ID)
+                                    .operator(Operator.EQUAL)
+                                    .value(traces.getFirst().threadId())
+                                    .build(),
+                            (Function<List<Trace>, List<Trace>>) traces -> traces.stream()
+                                    .filter(trace -> trace.threadId().equals(traces.getFirst().threadId()))
+                                    .toList(),
+                            false // Don't close threads
+                    ),
+                    // FIRST_MESSAGE filter - test filtering by message content
+                    Arguments.of(
+                            "FIRST_MESSAGE CONTAINS substring",
+                            (Function<List<Trace>, TraceThreadFilter>) traces -> TraceThreadFilter.builder()
+                                    .field(TraceThreadField.FIRST_MESSAGE)
+                                    .operator(Operator.CONTAINS)
+                                    .value(traces.stream().min(Comparator.comparing(Trace::startTime))
+                                            .orElseThrow().input().toString().substring(0, 20))
+                                    .build(),
+                            (Function<List<Trace>, List<Trace>>) traces -> traces.stream()
+                                    .filter(trace -> trace.threadId().equals(traces.getFirst().threadId()))
+                                    .toList(),
+                            false),
+                    // LAST_MESSAGE filter - test filtering by message content
+                    Arguments.of(
+                            "LAST_MESSAGE CONTAINS substring",
+                            (Function<List<Trace>, TraceThreadFilter>) traces -> TraceThreadFilter.builder()
+                                    .field(TraceThreadField.LAST_MESSAGE)
+                                    .operator(Operator.CONTAINS)
+                                    .value(traces.stream().max(Comparator.comparing(Trace::endTime)).orElseThrow()
+                                            .output().toString().substring(0, 20))
+                                    .build(),
+                            (Function<List<Trace>, List<Trace>>) traces -> traces.stream()
+                                    .filter(trace -> trace.threadId().equals(traces.getFirst().threadId()))
+                                    .toList(),
+                            false),
+                    // DURATION filter - test filtering by exact duration
+                    Arguments.of(
+                            "DURATION = exact value",
+                            (Function<List<Trace>, TraceThreadFilter>) traces -> TraceThreadFilter.builder()
+                                    .field(TraceThreadField.DURATION)
+                                    .operator(Operator.EQUAL)
+                                    .value(DurationUtils.getDurationInMillisWithSubMilliPrecision(
+                                            traces.stream().min(Comparator.comparing(Trace::startTime)).get()
+                                                    .startTime(),
+                                            traces.stream().max(Comparator.comparing(Trace::endTime)).get().endTime())
+                                            .toString())
+                                    .build(),
+                            (Function<List<Trace>, List<Trace>>) traces -> traces.stream()
+                                    .filter(trace -> trace.threadId().equals(traces.getFirst().threadId()))
+                                    .toList(),
+                            false),
+                    // LAST_UPDATED_AT filter
+                    Arguments.of(
+                            "LAST_UPDATED_AT = timestamp",
+                            (Function<List<Trace>, TraceThreadFilter>) traces -> TraceThreadFilter.builder()
+                                    .field(TraceThreadField.LAST_UPDATED_AT)
+                                    .operator(Operator.EQUAL)
+                                    .value(traces.stream().max(Comparator.comparing(Trace::lastUpdatedAt)).get()
+                                            .lastUpdatedAt().toString())
+                                    .build(),
+                            (Function<List<Trace>, List<Trace>>) traces -> traces.stream()
+                                    .filter(trace -> trace.threadId().equals(traces.getFirst().threadId()))
+                                    .toList(),
+                            false),
+                    // NUMBER_OF_MESSAGES filter
+                    Arguments.of(
+                            "NUMBER_OF_MESSAGES = count",
+                            (Function<List<Trace>, TraceThreadFilter>) traces -> TraceThreadFilter.builder()
+                                    .field(TraceThreadField.NUMBER_OF_MESSAGES)
+                                    .operator(Operator.EQUAL)
+                                    .value(String.valueOf(traces.size() * 2))
+                                    .build(),
+                            (Function<List<Trace>, List<Trace>>) traces -> traces.stream()
+                                    .filter(trace -> trace.threadId().equals(traces.getFirst().threadId()))
+                                    .toList(),
+                            false),
+                    // STATUS filter - test filtering by active status
+                    Arguments.of(
+                            "STATUS = ACTIVE",
+                            (Function<List<Trace>, TraceThreadFilter>) traces -> TraceThreadFilter.builder()
+                                    .field(TraceThreadField.STATUS)
+                                    .operator(Operator.EQUAL)
+                                    .value(TraceThreadStatus.ACTIVE.getValue())
+                                    .build(),
+                            (Function<List<Trace>, List<Trace>>) traces -> traces.stream()
+                                    .filter(trace -> trace.threadId().equals(traces.getFirst().threadId()))
+                                    .toList(),
+                            true // shouldCloseSecondThread to make it inactive
+                    ));
+        }
+
+        @ParameterizedTest(name = "{0}")
+        @MethodSource("getValidFiltersForStats")
+        @DisplayName("When getting thread stats with filters, should apply filters correctly and return accurate stats")
+        void whenFiltersProvided__thenApplyFiltersCorrectly(
+                String filterDescription,
+                Function<List<Trace>, TraceThreadFilter> filterFunction,
+                Function<List<Trace>, List<Trace>> getExpectedTraces,
+                boolean shouldCloseSecondThread) {
+
             var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
             var workspaceId = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();
@@ -1897,44 +2000,66 @@ class FindTraceThreadsResourceTest {
                     .name(projectName)
                     .build();
 
-            UUID projectId = projectResourceClient.createProject(project, apiKey, workspaceName);
+            projectResourceClient.createProject(project, apiKey, workspaceName);
 
-            var activeThreadId = UUID.randomUUID().toString();
-            var inactiveThreadId = UUID.randomUUID().toString();
+            var thread1Id = UUID.randomUUID().toString();
+            var thread2Id = UUID.randomUUID().toString();
 
-            // Create traces
-            var traces = Stream.of(activeThreadId, inactiveThreadId)
-                    .map(threadId -> createTrace().toBuilder()
-                            .threadId(threadId)
-                            .projectId(projectId)
-                            .projectName(projectName)
-                            .build())
+            // Create 2 threads, each with 2 traces
+            var thread1Traces = IntStream.range(0, 2)
+                    .mapToObj(it -> {
+                        Instant now = Instant.now().truncatedTo(ChronoUnit.MILLIS);
+                        return createTrace().toBuilder()
+                                .projectName(projectName)
+                                .usage(null)
+                                .threadId(thread1Id)
+                                .endTime(now.plus(it, ChronoUnit.MILLIS))
+                                .startTime(now)
+                                .build();
+                    })
                     .toList();
 
-            traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
+            var thread2Traces = IntStream.range(0, 3) // Different number of messages
+                    .mapToObj(it -> {
+                        Instant now = Instant.now().truncatedTo(ChronoUnit.MILLIS);
+                        return createTrace().toBuilder()
+                                .projectName(projectName)
+                                .usage(null)
+                                .threadId(thread2Id)
+                                .endTime(now.plus(it + 100, ChronoUnit.MILLIS)) // Different duration
+                                .startTime(now)
+                                .build();
+                    })
+                    .toList();
 
-            // Wait and close one thread to make it inactive
+            var allTraces = Stream.concat(thread1Traces.stream(), thread2Traces.stream()).toList();
+
+            traceResourceClient.batchCreateTraces(allTraces, apiKey, workspaceName);
+
+            // Wait and optionally close second thread to make it inactive
             Mono.delay(Duration.ofMillis(500)).block();
-            traceResourceClient.closeTraceThread(inactiveThreadId, null, projectName, apiKey, workspaceName);
+            if (shouldCloseSecondThread) {
+                traceResourceClient.closeTraceThread(thread2Id, null, projectName, apiKey, workspaceName);
+            }
 
-            // Create filter for active threads only
-            var statusFilter = TraceThreadFilter.builder()
-                    .field(TraceThreadField.STATUS)
-                    .operator(Operator.EQUAL)
-                    .value(TraceThreadStatus.ACTIVE.getValue())
-                    .build();
+            // Create filter based on first thread characteristics
+            var filter = filterFunction.apply(thread1Traces);
 
             var stats = traceResourceClient.getTraceThreadStats(projectName, null, apiKey, workspaceName,
-                    List.of(statusFilter), Map.of());
+                    List.of(filter), Map.of());
 
-            // Verify only active thread is counted
-            assertThat(getThreadCount(stats)).isEqualTo(1L);
+            // Get expected traces that match the filter
+            var expectedTraces = getExpectedTraces.apply(thread1Traces);
+            long expectedThreadCount = expectedTraces.stream()
+                    .map(Trace::threadId)
+                    .distinct()
+                    .count();
 
-            // Build expected stats from active thread traces only
-            var activeThreadTraces = traces.stream()
-                    .filter(trace -> trace.threadId().equals(activeThreadId))
-                    .toList();
-            var expectedStats = buildExpectedThreadStats(activeThreadTraces, List.of(), null);
+            // Verify filtered thread count
+            assertThat(getThreadCount(stats)).isEqualTo(expectedThreadCount);
+
+            // Build expected stats from filtered traces
+            var expectedStats = buildExpectedThreadStats(expectedTraces, List.of(), null);
 
             // Assert all stats match expected
             TraceAssertions.assertStats(stats.stats(), expectedStats);

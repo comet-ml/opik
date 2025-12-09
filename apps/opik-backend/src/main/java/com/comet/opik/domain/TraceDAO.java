@@ -2347,7 +2347,11 @@ class TraceDAOImpl implements TraceDAO {
                         thread_id,
                         id as thread_model_id,
                         status,
-                        tags
+                        tags,
+                        created_by,
+                        last_updated_by,
+                        created_at,
+                        last_updated_at
                     FROM trace_threads final
                     WHERE workspace_id = :workspace_id
                     AND project_id = :project_id
@@ -2483,9 +2487,21 @@ class TraceDAOImpl implements TraceDAO {
                     t.workspace_id as workspace_id,
                     t.project_id as project_id,
                     t.id as id,
+                    t.start_time as start_time,
+                    t.end_time as end_time,
                     t.duration as duration,
+                    t.first_message as first_message,
+                    t.last_message as last_message,
+                    t.number_of_messages as number_of_messages,
                     t.total_estimated_cost as total_estimated_cost,
                     t.usage as usage,
+                    if(tt.created_by = '', t.created_by, tt.created_by) as created_by,
+                    if(tt.last_updated_by = '', t.last_updated_by, tt.last_updated_by) as last_updated_by,
+                    if(tt.last_updated_at == toDateTime64(0, 6, 'UTC'), t.last_updated_at, tt.last_updated_at) as last_updated_at,
+                    if(tt.created_at = toDateTime64(0, 9, 'UTC'), t.created_at, tt.created_at) as created_at,
+                    if(tt.status = 'unknown', 'active', tt.status) as status,
+                    if(LENGTH(CAST(tt.thread_model_id AS Nullable(String))) > 0, tt.thread_model_id, NULL) as thread_model_id,
+                    tt.tags as tags,
                     fsagg.feedback_scores as feedback_scores
                 FROM (
                     SELECT
@@ -2498,8 +2514,15 @@ class TraceDAOImpl implements TraceDAO {
                                AND notEquals(min(t.start_time), toDateTime64('1970-01-01 00:00:00.000', 9)),
                            (dateDiff('microsecond', min(t.start_time), max(t.end_time)) / 1000.0),
                            NULL) AS duration,
+                        argMin(t.input, t.start_time) as first_message,
+                        argMax(t.output, t.end_time) as last_message,
+                        count(DISTINCT t.id) * 2 as number_of_messages,
                         sum(s.total_estimated_cost) as total_estimated_cost,
-                        sumMap(s.usage) as usage
+                        sumMap(s.usage) as usage,
+                        max(t.last_updated_at) as last_updated_at,
+                        argMax(t.last_updated_by, t.last_updated_at) as last_updated_by,
+                        argMin(t.created_by, t.created_at) as created_by,
+                        min(t.created_at) as created_at
                     FROM traces_final AS t
                         LEFT JOIN spans_agg AS s ON t.id = s.trace_id
                     GROUP BY
