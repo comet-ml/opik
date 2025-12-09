@@ -1,5 +1,6 @@
 """
-E2E integration tests for Harbor with Opik tracking.
+E2E integration tests for Harbor with Opik tracking. This file is for running tests locally only and
+is not used in CI.
 
 These tests require:
 - Harbor installed: pip install harbor
@@ -7,15 +8,18 @@ These tests require:
 - OPENAI_API_KEY environment variable set
 """
 
-import asyncio
 import json
 import os
+import yaml
 import tempfile
 from datetime import datetime
 from pathlib import Path
 
 import pytest
 
+from click.testing import CliRunner
+
+from opik.cli.main import cli
 from opik import Opik, synchronization
 from opik.integrations.harbor import track_harbor, reset_harbor_tracking
 from . import constants
@@ -31,6 +35,8 @@ from harbor.models.job.config import (
 from harbor.models.registry import RemoteRegistryInfo
 
 pytest.importorskip("harbor")
+
+pytestmark = pytest.mark.usefixtures("ensure_openai_configured")
 
 
 def get_job_id_from_harbor_job_dir(jobs_dir: Path, job_name: str) -> str:
@@ -103,13 +109,13 @@ def temp_jobs_dir():
 
 
 class TestHarborSDKIntegration:
+    @pytest.mark.asyncio
     @pytest.mark.skipif(
         not os.getenv("OPENAI_API_KEY"),
         reason="OPENAI_API_KEY not set",
     )
-    def test_track_harbor_creates_traces_and_experiment(
+    async def test_track_harbor_creates_traces_and_experiment(
         self,
-        ensure_openai_configured,
         opik_client: Opik,
         configure_e2e_tests_env_unique_project_name: str,
         temp_jobs_dir: Path,
@@ -144,7 +150,7 @@ class TestHarborSDKIntegration:
 
         tracked_job = track_harbor(job)
 
-        asyncio.get_event_loop().run_until_complete(tracked_job.run())
+        await tracked_job.run()
 
         if not synchronization.until(
             function=lambda: opik_client.search_traces(
@@ -181,15 +187,11 @@ class TestHarborCLIIntegration:
     )
     def test_opik_harbor_cli_creates_traces_and_experiment(
         self,
-        ensure_openai_configured,
         opik_client: Opik,
         configure_e2e_tests_env_unique_project_name: str,
         temp_jobs_dir: Path,
     ):
         """Test that `opik harbor run` automatically creates traces, dataset, and experiment."""
-        import yaml
-        from click.testing import CliRunner
-        from opik.cli.main import cli
 
         timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
         job_name = f"opik-cli-test-{timestamp}"

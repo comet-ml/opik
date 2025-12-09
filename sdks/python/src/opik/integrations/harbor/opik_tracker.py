@@ -23,20 +23,20 @@ Or enable tracking globally (for CLI usage):
 
 import functools
 import logging
-from datetime import datetime
-from typing import Any, Callable, Dict, List, Optional, TYPE_CHECKING
+from typing import Any, Callable, Dict, List, Optional
 
-from opik import context_storage, id_helpers, opik_context, track
+from harbor.job import Job
+from harbor.models.trajectories.step import Step
+from harbor.models.trial.result import TrialResult
+from harbor.models.verifier.result import VerifierResult
+from harbor.trial.trial import Trial
+from harbor.verifier.verifier import Verifier
+
+from opik import datetime_helpers, id_helpers, opik_context, track
 from opik.api_objects import opik_client
 from opik.types import FeedbackScoreDict, SpanType
 
 from . import experiment_service
-
-if TYPE_CHECKING:
-    from harbor.job import Job
-    from harbor.trial.trial import Trial
-    from harbor.models.trial.result import TrialResult
-    from harbor.models.trajectories.step import Step
 
 LOGGER = logging.getLogger(__name__)
 
@@ -65,17 +65,6 @@ def _rewards_to_feedback_scores(
     return feedback_scores
 
 
-def _parse_iso_timestamp(timestamp_str: Optional[str]) -> Optional[datetime]:
-    """Parse an ISO 8601 timestamp string to datetime."""
-    if timestamp_str is None:
-        return None
-    try:
-        timestamp_str = timestamp_str.replace("Z", "+00:00")
-        return datetime.fromisoformat(timestamp_str)
-    except (ValueError, TypeError):
-        return None
-
-
 def _source_to_span_type(source: str) -> SpanType:
     """Convert ATIF step source to Opik span type."""
     if source == "agent":
@@ -85,12 +74,6 @@ def _source_to_span_type(source: str) -> SpanType:
 
 def _patch_step_class() -> None:
     """Patch the Harbor Step class to create Opik spans on instantiation."""
-    try:
-        from harbor.models.trajectories.step import Step
-    except ImportError:
-        LOGGER.debug("Could not import Step class, skipping step patching")
-        return
-
     # Check if already patched
     if hasattr(_patch_step_class, "_patched"):
         return
@@ -98,14 +81,14 @@ def _patch_step_class() -> None:
     original_init = Step.__init__
 
     @functools.wraps(original_init)
-    def patched_init(self: "Step", *args: Any, **kwargs: Any) -> None:
+    def patched_init(self: Step, *args: Any, **kwargs: Any) -> None:
         original_init(self, *args, **kwargs)
 
-        trace_data = context_storage.get_trace_data()
+        trace_data = opik_context.get_current_trace_data()
         if trace_data is None:
             return
 
-        parent_span = context_storage.top_span_data()
+        parent_span = opik_context.get_current_span_data()
         parent_span_id = parent_span.id if parent_span else None
 
         try:
@@ -161,7 +144,7 @@ def _patch_step_class() -> None:
                 parent_span_id=parent_span_id,
                 name=f"step_{self.step_id}",
                 type=_source_to_span_type(self.source),
-                start_time=_parse_iso_timestamp(self.timestamp),
+                start_time=datetime_helpers.parse_iso_timestamp(self.timestamp),
                 input=input_dict if input_dict else None,
                 output=output_dict,
                 metadata=metadata,
@@ -186,14 +169,6 @@ def _enable_harbor_tracking(project_name: Optional[str] = None) -> None:
     Args:
         project_name: Opik project name. If None, uses OPIK_PROJECT_NAME env var.
     """
-    try:
-        from harbor.trial.trial import Trial
-        from harbor.verifier.verifier import Verifier
-    except ImportError as e:
-        raise ImportError(
-            "Harbor is not installed. Please install it with: pip install harbor"
-        ) from e
-
     # Patch Trial methods (only if not already patched)
     if not hasattr(Trial.run, "opik_tracked"):
         Trial.run = _wrap_trial_run(Trial.run, project_name)
@@ -261,7 +236,7 @@ def _wrap_trial_run(original: Callable, project_name: Optional[str]) -> Callable
         capture_output=False,
     )
     @functools.wraps(original)
-    async def wrapped(self: "Trial") -> "TrialResult":
+    async def wrapped(self: Trial) -> TrialResult:
         # Set nice trace name
         config = self.config
         trace_name = f"{config.agent.name}/{config.trial_name}"
@@ -292,20 +267,26 @@ def _wrap_trial_run(original: Callable, project_name: Optional[str]) -> Callable
                 experiment_name = (
                     f"harbor-job-{str(config.job_id)[:8]}" if config.job_id else None
                 )
-                source = getattr(config.task, "source", None)
+                # Build experiment config with agent/model info
+                experiment_config: Dict[str, Any] = {
+                    "agent_name": config.agent.name,
+                }
+                model_name = getattr(config.agent, "model_name", None)
+                if model_name:
+                    experiment_config["model_name"] = model_name
+
                 LOGGER.debug(
-                    "Lazily setting up experiment service: experiment_name=%s, source=%s",
+                    "Lazily setting up experiment service: experiment_name=%s",
                     experiment_name,
-                    source,
                 )
                 experiment_service.setup_lazy(
                     experiment_name=experiment_name,
-                    source=source,
+                    experiment_config=experiment_config,
                 )
             except Exception as e:
                 LOGGER.debug("Failed to lazily setup experiment service: %s", e)
 
-        result = await original(self)
+        result: TrialResult = await original(self)
 
         # Update trace with output and feedback scores
         output_dict: Dict[str, Any] = {
@@ -331,7 +312,7 @@ def _wrap_trial_run(original: Callable, project_name: Optional[str]) -> Callable
         )
 
         # Link to experiment
-        trace_data = context_storage.get_trace_data()
+        trace_data = opik_context.get_current_trace_data()
         if trace_data is not None:
             service = experiment_service.get_service()
             LOGGER.debug(
@@ -347,13 +328,11 @@ def _wrap_trial_run(original: Callable, project_name: Optional[str]) -> Callable
                     if hasattr(config.task, "name")
                     else str(config.task.path)
                 )
-                service.link_trial(
+                service.link_trial_to_experiment(
                     trial_name=config.trial_name,
                     trace_id=trace_data.id,
                     source=source,
                     task_name=task_name,
-                    agent_name=config.agent.name,
-                    model_name=getattr(config.agent, "model_name", None),
                 )
             else:
                 LOGGER.debug(
@@ -362,7 +341,6 @@ def _wrap_trial_run(original: Callable, project_name: Optional[str]) -> Callable
 
         return result
 
-    wrapped.opik_tracked = True  # type: ignore[union-attr]
     return wrapped
 
 
@@ -373,7 +351,7 @@ def _wrap_setup_environment(
 
     @track(name="setup_environment", tags=["harbor"], project_name=project_name)
     @functools.wraps(original)
-    async def wrapped(self: "Trial") -> None:
+    async def wrapped(self: Trial) -> None:
         opik_context.update_current_span(
             input={"phase": "environment_setup"},
             metadata={"created_from": "harbor"},
@@ -381,7 +359,6 @@ def _wrap_setup_environment(
         await original(self)
         opik_context.update_current_span(output={"status": "completed"})
 
-    wrapped.opik_tracked = True  # type: ignore[union-attr]
     return wrapped
 
 
@@ -390,7 +367,7 @@ def _wrap_setup_agent(original: Callable, project_name: Optional[str]) -> Callab
 
     @track(name="setup_agent", tags=["harbor"], project_name=project_name)
     @functools.wraps(original)
-    async def wrapped(self: "Trial") -> None:
+    async def wrapped(self: Trial) -> None:
         opik_context.update_current_span(
             input={"phase": "agent_setup"},
             metadata={"created_from": "harbor"},
@@ -398,7 +375,6 @@ def _wrap_setup_agent(original: Callable, project_name: Optional[str]) -> Callab
         await original(self)
         opik_context.update_current_span(output={"status": "completed"})
 
-    wrapped.opik_tracked = True  # type: ignore[union-attr]
     return wrapped
 
 
@@ -407,7 +383,7 @@ def _wrap_execute_agent(original: Callable, project_name: Optional[str]) -> Call
 
     @track(name="execute_agent", tags=["harbor"], project_name=project_name)
     @functools.wraps(original)
-    async def wrapped(self: "Trial") -> None:
+    async def wrapped(self: Trial) -> None:
         input_dict = {}
         if hasattr(self, "_task") and self._task:
             input_dict["instruction"] = self._task.instruction
@@ -418,7 +394,6 @@ def _wrap_execute_agent(original: Callable, project_name: Optional[str]) -> Call
         await original(self)
         opik_context.update_current_span(output={"status": "completed"})
 
-    wrapped.opik_tracked = True  # type: ignore[union-attr]
     return wrapped
 
 
@@ -427,7 +402,7 @@ def _wrap_run_verification(original: Callable, project_name: Optional[str]) -> C
 
     @track(name="run_verification", tags=["harbor"], project_name=project_name)
     @functools.wraps(original)
-    async def wrapped(self: "Trial") -> None:
+    async def wrapped(self: Trial) -> None:
         opik_context.update_current_span(
             input={"phase": "verification"},
             metadata={"created_from": "harbor"},
@@ -435,7 +410,6 @@ def _wrap_run_verification(original: Callable, project_name: Optional[str]) -> C
         await original(self)
         opik_context.update_current_span(output={"status": "completed"})
 
-    wrapped.opik_tracked = True  # type: ignore[union-attr]
     return wrapped
 
 
@@ -444,15 +418,15 @@ def _wrap_verify(original: Callable, project_name: Optional[str]) -> Callable:
 
     @track(name="verify", tags=["harbor"], project_name=project_name)
     @functools.wraps(original)
-    async def wrapped(self: Any) -> Any:
+    async def wrapped(self: Verifier) -> VerifierResult:
         opik_context.update_current_span(
             input={"phase": "verify"},
             metadata={"created_from": "harbor"},
         )
-        result = await original(self)
+        result: VerifierResult = await original(self)
 
         output_dict: Dict[str, Any] = {}
-        if hasattr(result, "rewards") and result.rewards:
+        if result.rewards:
             output_dict["rewards"] = result.rewards
         opik_context.update_current_span(
             output=output_dict if output_dict else {"status": "completed"}
@@ -460,7 +434,6 @@ def _wrap_verify(original: Callable, project_name: Optional[str]) -> Callable:
 
         return result
 
-    wrapped.opik_tracked = True  # type: ignore[union-attr]
     return wrapped
 
 
