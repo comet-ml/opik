@@ -10,30 +10,22 @@ import com.fasterxml.jackson.databind.annotation.JsonPOJOBuilder;
 import lombok.EqualsAndHashCode;
 import lombok.ToString;
 
-@JsonDeserialize(builder = VideoUrl.Builder.class)
+@JsonDeserialize(builder = AudioUrl.Builder.class)
 @JsonInclude(JsonInclude.Include.NON_NULL)
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
 @EqualsAndHashCode
 @ToString
-public final class VideoUrl {
+public final class AudioUrl {
 
     @JsonProperty
     private final String url;
 
-    @JsonProperty
-    private final String mimeType;
-
-    public VideoUrl(Builder builder) {
+    public AudioUrl(Builder builder) {
         this.url = builder.url;
-        this.mimeType = builder.mimeType;
     }
 
     public String url() {
         return url;
-    }
-
-    public String mimeType() {
-        return mimeType;
     }
 
     public static Builder builder() {
@@ -46,20 +38,14 @@ public final class VideoUrl {
     public static final class Builder {
 
         private String url;
-        private String mimeType;
 
         public Builder url(String url) {
             this.url = url;
             return this;
         }
 
-        public Builder mimeType(String mimeType) {
-            this.mimeType = mimeType;
-            return this;
-        }
-
-        public VideoUrl build() {
-            return new VideoUrl(this);
+        public AudioUrl build() {
+            return new AudioUrl(this);
         }
     }
 }
