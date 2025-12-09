@@ -265,7 +265,9 @@ class MetaPromptOptimizer(BaseOptimizer):
             print(f"Best prompt: {result.best_prompt}")
             ```
         """
-        self._validate_optimization_inputs(prompt, dataset, metric)
+        self._validate_optimization_inputs(
+            prompt, dataset, metric, support_content_parts=True
+        )
 
         if agent is None:
             agent = LiteLLMAgent(project_name=project_name)

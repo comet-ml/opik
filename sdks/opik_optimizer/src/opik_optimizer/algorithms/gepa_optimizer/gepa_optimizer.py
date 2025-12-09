@@ -13,6 +13,7 @@ from ...reporting_utils import (
     suppress_opik_logs,
 )
 from ...api_objects import chat_prompt
+from ...api_objects.types import rebuild_content_with_new_text
 from ...optimization_result import OptimizationResult
 from ...agents import OptimizableAgent, LiteLLMAgent
 from ...utils import (
@@ -205,7 +206,9 @@ class GepaOptimizer(BaseOptimizer):
             OptimizationResult: Result of the optimization
         """
         # Use base class validation
-        self._validate_optimization_inputs(prompt, dataset, metric)
+        self._validate_optimization_inputs(
+            prompt, dataset, metric, support_content_parts=True
+        )
 
         # Create default agent if None
         if agent is None:
@@ -693,7 +696,7 @@ class GepaOptimizer(BaseOptimizer):
 
         Returns:
             Dict of ChatPrompt objects with optimized message content,
-            preserving tools, function_map, model, and model_kwargs.
+            preserving tools, function_map, model, model_kwargs, and multimodal parts.
         """
         rebuilt: dict[str, chat_prompt.ChatPrompt] = {}
         for prompt_name, prompt_obj in base_prompts.items():
@@ -701,10 +704,18 @@ class GepaOptimizer(BaseOptimizer):
             new_messages = []
             for idx, msg in enumerate(original_messages):
                 component_key = f"{prompt_name}_{msg['role']}_{idx}"
-                # Use optimized content if available, otherwise keep original
                 original_content = msg.get("content", "")
-                optimized_content = candidate.get(component_key, original_content)
-                new_messages.append({"role": msg["role"], "content": optimized_content})
+                optimized_text = candidate.get(component_key)
+
+                if optimized_text is not None:
+                    # Use helper to preserve image parts while updating text
+                    new_content = rebuild_content_with_new_text(
+                        original_content, optimized_text
+                    )
+                else:
+                    new_content = original_content
+
+                new_messages.append({"role": msg["role"], "content": new_content})
 
             # prompt.copy() preserves tools, function_map, model, model_kwargs
             new_prompt = prompt_obj.copy()
