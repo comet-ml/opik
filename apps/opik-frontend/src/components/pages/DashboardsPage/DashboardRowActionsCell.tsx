@@ -12,8 +12,7 @@ import {
 import ConfirmDialog from "@/components/shared/ConfirmDialog/ConfirmDialog";
 import { Dashboard } from "@/types/dashboard";
 import useDashboardBatchDeleteMutation from "@/api/dashboards/useDashboardBatchDeleteMutation";
-import DashboardCreateDialog from "@/components/pages/DashboardsPage/DashboardCreateDialog";
-import DashboardCloneDialog from "@/components/pages/DashboardsPage/DashboardCloneDialog";
+import AddEditCloneDashboardDialog from "@/components/pages/DashboardsPage/AddEditCloneDashboardDialog";
 
 export const DashboardRowActionsCell: React.FunctionComponent<
   CellContext<Dashboard, unknown>
@@ -78,13 +77,15 @@ export const DashboardRowActionsCell: React.FunctionComponent<
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
-      <DashboardCreateDialog
+      <AddEditCloneDashboardDialog
+        mode="edit"
         key={`edit-${resetKeyRef.current}`}
         dashboard={dashboard}
         open={openEdit}
         setOpen={setOpenEdit}
       />
-      <DashboardCloneDialog
+      <AddEditCloneDashboardDialog
+        mode="clone"
         key={`clone-${resetKeyRef.current}`}
         dashboard={dashboard}
         open={openClone}

@@ -13,9 +13,9 @@
         Opik
     </div>
 </h1>
-<h2 align="center" style="border-bottom: none">오픈 소스 LLM 평가 플랫폼</h2>
+<h2 align="center" style="border-bottom: none">오픈 소스 AI 관측성, 평가 및 최적화 플랫폼</h2>
 <p align="center">
-Opik은 LLM 시스템을 더 나은 품질로, 더 빠르게, 더 저렴하게 실행하도록 구축(build), 평가(evaluate), 최적화(optimize)하는 것을 지원합니다. RAG 챗봇에서 코드 어시스턴트, 복잡한 에이전트 파이프라인에 이르기까지, Opik은 포괄적인 트레이싱, 평가, 대시보드와 함께 <b>Opik Agent Optimizer</b>, <b>Opik Guardrails</b> 같은 강력한 기능을 제공하여 프로덕션 환경의 LLM 애플리케이션 개선과 보안을 돕습니다.
+Opik은 프로토타입에서 프로덕션까지 더 잘 작동하는 생성형 AI 애플리케이션을 구축, 테스트, 최적화하도록 도와줍니다. RAG 챗봇에서 코드 어시스턴트, 복잡한 에이전트 시스템(agentic systems)에 이르기까지, Opik은 포괄적인 트레이싱(tracing), 평가(evaluation) 및 자동 프롬프트 및 도구 최적화(automatic prompt and tool optimization)를 제공하여 AI 개발에서의 추측을 없애줍니다.
 </p>
 
 <div align="center">

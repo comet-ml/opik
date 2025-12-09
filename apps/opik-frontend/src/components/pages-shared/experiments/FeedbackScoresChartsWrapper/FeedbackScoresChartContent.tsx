@@ -5,7 +5,7 @@ import { Dot, LineChart } from "recharts";
 import { DropdownOption } from "@/types/shared";
 import ChartTooltipContent, {
   ChartTooltipRenderHeaderArguments,
-} from "@/components/shared/ChartTooltipContent/ChartTooltipContent";
+} from "@/components/shared/Charts/ChartTooltipContent/ChartTooltipContent";
 import {
   ChartContainer,
   ChartTooltip,
@@ -16,7 +16,7 @@ import {
   DEFAULT_CHART_TICK,
 } from "@/constants/chart";
 import { CartesianGrid, YAxis, Line } from "recharts";
-import ChartVerticalLegendContent from "@/components/shared/ChartVerticalLegendContent/ChartHorizontalLegendContent";
+import ChartVerticalLegend from "@/components/shared/Charts/ChartVerticalLegend/ChartVerticalLegend";
 import useChartTickDefaultConfig from "@/hooks/charts/useChartTickDefaultConfig";
 import { LineDot } from "recharts/types/cartesian/Line";
 
@@ -157,7 +157,7 @@ const FeedbackScoresChartContent: React.FC<FeedbackScoresChartContentProps> = ({
           layout="vertical"
           align="right"
           content={
-            <ChartVerticalLegendContent
+            <ChartVerticalLegend
               setActiveLine={setActiveLine}
               chartId={chartId}
             />

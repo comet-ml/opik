@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Database, Plus, X } from "lucide-react";
 
@@ -50,11 +50,7 @@ const DatasetSelectBox: React.FC<DatasetSelectBoxProps> = ({
   const [isDatasetDropdownOpen, setIsDatasetDropdownOpen] = useState(false);
   const queryClient = useQueryClient();
 
-  const {
-    data: datasetsData,
-    isLoading: isLoadingDatasets,
-    isFetching: isFetchingDatasets,
-  } = useDatasetsList({
+  const { data: datasetsData, isLoading: isLoadingDatasets } = useDatasetsList({
     workspaceName,
     page: 1,
     size: !isLoadedMore ? DEFAULT_LOADED_DATASETS : MAX_LOADED_DATASETS,
@@ -77,16 +73,6 @@ const DatasetSelectBox: React.FC<DatasetSelectBoxProps> = ({
       },
     }));
   }, [datasets, workspaceName]);
-
-  // Clear value if the selected dataset no longer exists
-  useEffect(() => {
-    if (value && !isLoadingDatasets && !isFetchingDatasets) {
-      const datasetExists = datasets.some((ds) => ds.id === value);
-      if (!datasetExists) {
-        onChange(null);
-      }
-    }
-  }, [value, datasets, isLoadingDatasets, isFetchingDatasets, onChange]);
 
   const handleChangeDatasetId = useCallback(
     (id: string | null) => {

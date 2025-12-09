@@ -65,11 +65,15 @@ examples, or tool interactions.
   </Accordion>
   <Accordion title="Prompt model">
   The model that is used to evaluate the prompt. This is the model that you use the prompt with,
-  should be the same as the model you use in your application.
+  should be the same as the model you use in your application. Configure it via `ChatPrompt(model="provider/model-name")`.
+  
+  See [Configure LLM Providers](/agent_optimization/optimization/configure_models) for setup instructions.
   </Accordion>
   <Accordion title="Optimizer model">
     The model that is used to optimize the prompt. This is the model that the optimizer uses to improve your prompt,
-    you will get the best performance by using the most powerful model for the optimization.
+    you will get the best performance by using the most powerful model for the optimization. Configure it via the optimizer's `model` parameter.
+    
+    See [Configure LLM Providers](/agent_optimization/optimization/configure_models) for setup instructions.
   </Accordion>
 </AccordionGroup>
 
