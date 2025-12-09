@@ -6,9 +6,18 @@ Using a prompt library does not mean you can't store your prompt in code, we
 have designed the prompt library to work seamlessly with your existing prompt
 files while providing the benefits of a central prompt library.
 
-## Managing prompts stored in code
+Opik supports two types of prompts:
 
-The recommended way to create and manage prompts is using the
+- **Text Prompts**: Simple string-based prompts with variable substitution
+- **Chat Prompts**: Structured message-based prompts in OpenAI format for conversational AI applications, supporting multimodal content (text, images, videos)
+
+## Text Prompts
+
+Text prompts are simple string-based templates that support variable substitution. They are ideal for single-turn interactions or when you need to generate a single piece of text.
+
+### Managing text prompts stored in code
+
+The recommended way to create and manage text prompts is using the
 [`Prompt`](https://www.comet.com/docs/opik/python-sdk-reference/library/Prompt.html)
 object. This will allow you to continue versioning your prompts in code while
 also getting the benefit of having prompt versions managed in the Opik platform
@@ -76,12 +85,20 @@ duplicate prompts.
 
 </Tip>
 
-## Using the low level SDK
+### Using the low level SDK for text prompts
 
-If you would rather keep prompts in the Opik platform and manually update / download
+If you would rather keep text prompts in the Opik platform and manually update / download
 them, you can use the low-level Python SDK to manage your prompts.
 
-### Creating prompts
+<Note>
+**When to use client methods vs. classes:**
+
+- **Use `Prompt()` class** (recommended): For most use cases, this class automatically uses the global Opik configuration set by `opik.configure()`.
+
+- **Use `client.create_prompt()`**: When you need to use a specific client configuration that differs from the global configuration (e.g., different workspace, host, or API key).
+</Note>
+
+#### Creating text prompts
 
 You can create a new prompt in the library using both the SDK and the UI:
 
@@ -110,7 +127,7 @@ You can create a new prompt in the library using both the SDK and the UI:
 
 </Tabs>
 
-### Adding prompts to traces and spans
+#### Adding prompts to traces and spans
 
 You can associate prompts with your traces and spans using the `opik_context` module. This is useful when you want to track which prompts were used during the execution of your functions:
 
@@ -231,14 +248,14 @@ You can view the prompts associated with a trace or span in the Opik UI:
 Further details on using prompts from the Prompt library are provided in the following sections.
 
 
-### Using prompts in supported integrations
+#### Using prompts in supported integrations
 
 Prompts can be used in all supported third-party integrations by attaching them to traces and spans through the [`opik_context` module](/docs/opik/prompt_engineering/prompt_management#adding-prompts-to-traces-and-spans).
 
 For instance, you can use prompts with the `Google ADK` integration, as shown in the [example here](/docs/opik/integrations/adk#prompts-integration).
 
 
-### Downloading your prompts
+#### Downloading your text prompts
 
 Once a prompt is created in the library, you can download it in code using the [`Opik.get_prompt`](https://www.comet.com/docs/opik/python-sdk-reference/Opik.html#opik.Opik.get_prompt) method:
 
@@ -260,7 +277,7 @@ prompt.format(text="Hello, world!")
 
 If you are not using the SDK, you can download a prompt by using the [REST API](/reference/rest-api/overview).
 
-### Searching prompts
+#### Searching prompts
 
 To discover prompts by name substring and/or filters, use [`search_prompts`](https://www.comet.com/docs/opik/python-sdk-reference/Opik.html#opik.Opik.search_prompts). Filters are written in Opik Query Language (OQL):
 
@@ -279,21 +296,29 @@ filtered = client.search_prompts(
     filter_string='name contains "summary" AND tags contains "alpha" AND tags contains "beta"',
 )
 
+# Search for only text prompts
+text_prompts = client.search_prompts(
+    filter_string='template_structure = "text"'
+)
+
 for prompt in filtered:
     print(prompt.name, prompt.commit, prompt.prompt)
 ```
+
+You can filter by `template_structure` to search for only text prompts (`"text"`) or only chat prompts (`"chat"`). Without the filter, `search_prompts` returns both types.
 
 The `filter_string` parameter uses Opik Query Language (OQL) with the format:
 `"<COLUMN> <OPERATOR> <VALUE> [AND <COLUMN> <OPERATOR> <VALUE>]*"`
 
 **Supported columns for prompts:**
 
-| Column       | Type   | Operators                                                                   |
-| ------------ | ------ | --------------------------------------------------------------------------- |
-| `id`         | String | `=`, `!=`, `contains`, `not_contains`, `starts_with`, `ends_with`, `>`, `<` |
-| `name`       | String | `=`, `!=`, `contains`, `not_contains`, `starts_with`, `ends_with`, `>`, `<` |
-| `created_by` | String | `=`, `!=`, `contains`, `not_contains`, `starts_with`, `ends_with`, `>`, `<` |
-| `tags`       | List   | `contains`                                                                  |
+| Column               | Type   | Operators                                                                   |
+| -------------------- | ------ | --------------------------------------------------------------------------- |
+| `id`                 | String | `=`, `!=`, `contains`, `not_contains`, `starts_with`, `ends_with`, `>`, `<` |
+| `name`               | String | `=`, `!=`, `contains`, `not_contains`, `starts_with`, `ends_with`, `>`, `<` |
+| `created_by`         | String | `=`, `!=`, `contains`, `not_contains`, `starts_with`, `ends_with`, `>`, `<` |
+| `tags`               | List   | `contains`                                                                  |
+| `template_structure` | String | `=`, `!=`                                                                   |
 
 **Examples:**
 
@@ -301,34 +326,575 @@ The `filter_string` parameter uses Opik Query Language (OQL) with the format:
 - `name contains "summary"` - Filter by name substring
 - `created_by = "user@example.com"` - Filter by creator
 - `tags contains "alpha" AND tags contains "beta"` - Multiple tag filtering
+- `template_structure = "text"` - Filter for only text prompts
+- `template_structure = "chat"` - Filter for only chat prompts
 
 `search_prompts` returns the **latest** version for each matching prompt.
 
-## Working with prompt versions
+## Chat Prompts
 
-### Viewing prompt history (all versions)
+Chat prompts are structured message-based templates designed for conversational AI applications. They support multiple message roles (system, user, assistant) and multimodal content including text, images, and videos.
 
-You can fetch the complete version history for a prompt by its exact name using [`get_prompt_history`](https://www.comet.com/docs/opik/python-sdk-reference/Opik.html#opik.Opik.get_prompt_history):
+### Key Features
 
-```python maxLines=1000
+- **Structured Messages**: Organize prompts as a list of messages with roles (system, user, assistant)
+- **Multimodal Support**: Include images, videos, and text in the same prompt
+- **Variable Substitution**: Use Mustache (`{{variable}}`) or Jinja2 syntax
+- **Version Control**: Automatic versioning when messages change
+- **Template Validation**: Optional validation of template placeholders
+
+### Managing chat prompts stored in code
+
+Similar to text prompts, you can create and manage chat prompts using the
+[`ChatPrompt`](https://www.comet.com/docs/opik/python-sdk-reference/library/ChatPrompt.html)
+class. This allows you to version your chat prompts in code while benefiting from
+centralized management in the Opik platform.
+
+<Tabs>
+    <Tab value="Simple chat prompt" title="Simple chat prompt">
+
+        ```python
+        import opik
+
+        # Define chat messages with variables
+        messages = [
+            {"role": "system", "content": "You are a helpful assistant specializing in {{domain}}."},
+            {"role": "user", "content": "Explain {{topic}} in simple terms."}
+        ]
+
+        # Create a chat prompt
+        chat_prompt = opik.ChatPrompt(
+            name="educational-assistant",
+            messages=messages,
+            metadata={"category": "education"}
+        )
+
+        # Format the prompt with variables
+        formatted_messages = chat_prompt.format(
+            variables={
+                "domain": "physics",
+                "topic": "quantum entanglement"
+            }
+        )
+
+        # Use formatted messages with your LLM
+        print(formatted_messages)
+        # Output:
+        # [
+        #     {"role": "system", "content": "You are a helpful assistant specializing in physics."},
+        #     {"role": "user", "content": "Explain quantum entanglement in simple terms."}
+        # ]
+        ```
+
+    </Tab>
+    <Tab value="With OpenAI" title="With OpenAI">
+
+        ```python
+        import opik
+        from openai import OpenAI
+
+        # Define chat messages with variables
+        messages = [
+            {"role": "system", "content": "You are a helpful assistant specializing in {{domain}}."},
+            {"role": "user", "content": "Explain {{topic}} in simple terms."}
+        ]
+
+        # Create a chat prompt
+        chat_prompt = opik.ChatPrompt(
+            name="educational-assistant",
+            messages=messages,
+            metadata={"category": "education"}
+        )
+
+        # Format the prompt with variables
+        formatted_messages = chat_prompt.format(
+            variables={
+                "domain": "physics",
+                "topic": "quantum entanglement"
+            }
+        )
+
+        # Use with OpenAI API
+        client = OpenAI()
+        response = client.chat.completions.create(
+            model="gpt-4",
+            messages=formatted_messages
+        )
+
+        print(response.choices[0].message.content)
+        ```
+
+    </Tab>
+    <Tab value="Multi-turn conversation" title="Multi-turn conversation">
+
+        ```python
+        import opik
+
+        # Define a multi-turn conversation template
+        messages = [
+            {"role": "system", "content": "You are a customer support agent for {{company}}."},
+            {"role": "user", "content": "I have an issue with {{product}}."},
+            {"role": "assistant", "content": "I'd be happy to help with your {{product}}. Can you describe the issue?"},
+            {"role": "user", "content": "{{issue_description}}"}
+        ]
+
+        chat_prompt = opik.ChatPrompt(
+            name="customer-support-flow",
+            messages=messages
+        )
+
+        # Format with specific values
+        formatted = chat_prompt.format(
+            variables={
+                "company": "Acme Corp",
+                "product": "Widget Pro",
+                "issue_description": "It won't turn on"
+            }
+        )
+        ```
+
+    </Tab>
+</Tabs>
+
+The chat prompt will now be stored in the library and versioned, just like text prompts.
+
+<Tip>
+The [`ChatPrompt`](https://www.comet.com/docs/opik/python-sdk-reference/library/ChatPrompt.html)
+class will create a new chat prompt in the library if it doesn't already exist,
+otherwise it will return the existing prompt.
+
+This means you can safely run the code multiple times without creating duplicate prompts.
+</Tip>
+
+### Multimodal chat prompts
+
+Chat prompts support multimodal content, allowing you to include images and videos alongside text. This is useful for vision-enabled models.
+
+<Tabs>
+    <Tab value="Image analysis" title="Image analysis">
+
+        ```python
+        import opik
+
+        # Chat prompt with image content
+        messages = [
+            {"role": "system", "content": "You analyze images and provide detailed descriptions."},
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": "What's in this image of {{subject}}?"},
+                    {
+                        "type": "image_url",
+                        "image_url": {
+                            "url": "{{image_url}}",
+                            "detail": "high"
+                        }
+                    }
+                ]
+            }
+        ]
+
+        chat_prompt = opik.ChatPrompt(
+            name="image-analyzer",
+            messages=messages
+        )
+
+        # Format with variables
+        formatted = chat_prompt.format(
+            variables={
+                "subject": "a sunset",
+                "image_url": "https://example.com/sunset.jpg"
+            },
+            supported_modalities={"vision": True}
+        )
+        ```
+
+    </Tab>
+    <Tab value="Video analysis" title="Video analysis">
+
+        ```python
+        import opik
+
+        # Chat prompt with video content
+        messages = [
+            {"role": "system", "content": "You analyze videos and provide insights."},
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": "Analyze this video: {{description}}"},
+                    {
+                        "type": "video_url",
+                        "video_url": {
+                            "url": "{{video_url}}",
+                            "mime_type": "video/mp4"
+                        }
+                    }
+                ]
+            }
+        ]
+
+        chat_prompt = opik.ChatPrompt(
+            name="video-analyzer",
+            messages=messages
+        )
+
+        # Format with variables
+        formatted = chat_prompt.format(
+            variables={
+                "description": "traffic analysis",
+                "video_url": "https://example.com/traffic.mp4"
+            },
+            supported_modalities={"vision": True}
+        )
+        ```
+
+    </Tab>
+    <Tab value="Mixed content" title="Mixed content">
+
+        ```python
+        import opik
+
+        # Chat prompt with multiple images and text
+        messages = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": "Compare these two images:"},
+                    {
+                        "type": "image_url",
+                        "image_url": {"url": "{{image1_url}}"}
+                    },
+                    {"type": "text", "text": "and"},
+                    {
+                        "type": "image_url",
+                        "image_url": {"url": "{{image2_url}}"}
+                    },
+                    {"type": "text", "text": "What are the main differences?"}
+                ]
+            }
+        ]
+
+        chat_prompt = opik.ChatPrompt(
+            name="image-comparison",
+            messages=messages
+        )
+
+        formatted = chat_prompt.format(
+            variables={
+                "image1_url": "https://example.com/before.jpg",
+                "image2_url": "https://example.com/after.jpg"
+            },
+            supported_modalities={"vision": True}
+        )
+        ```
+
+    </Tab>
+</Tabs>
+
+<Note>
+When formatting multimodal prompts, you can specify `supported_modalities` to control how content is rendered:
+
+- If a modality is supported (e.g., `{"vision": True}`), the structured content is preserved
+- If a modality is not supported, it's replaced with text placeholders (e.g., `<<<image>>><<</image>>>`)
+
+This allows you to use the same prompt template with different models that may or may not support certain modalities.
+</Note>
+
+### Using the low level SDK for chat prompts
+
+You can also use the low-level Python SDK to create and manage chat prompts directly.
+
+<Note>
+**When to use client methods vs. classes:**
+
+- **Use `ChatPrompt()` or `Prompt()` classes** (recommended): For most use cases, these classes automatically use the global Opik configuration set by `opik.configure()`.
+
+- **Use `client.create_chat_prompt()` or `client.create_prompt()`**: When you need to use a specific client configuration that differs from the global configuration (e.g., different workspace, host, or API key).
+</Note>
+
+#### Creating chat prompts
+
+<Tabs>
+    <Tab value="Using the Python SDK" title="Using the Python SDK">
+        Use [`Opik.create_chat_prompt`](https://www.comet.com/docs/opik/python-sdk-reference/Opik.html#opik.Opik.create_chat_prompt) to create a chat prompt:
+
+        ```python
+        import opik
+
+        opik.configure()
+        client = opik.Opik()
+
+        # Create a new chat prompt
+        messages = [
+            {"role": "system", "content": "You are a helpful assistant."},
+            {"role": "user", "content": "Hello, {{name}}!"}
+        ]
+
+        chat_prompt = client.create_chat_prompt(
+            name="greeting-prompt",
+            messages=messages,
+            metadata={"environment": "development"}
+        )
+
+        # Format and use the prompt
+        formatted = chat_prompt.format(variables={"name": "Alice"})
+        print(formatted)
+        ```
+    </Tab>
+    <Tab value="Using the UI" title="Using the UI">
+        You can create a chat prompt in the UI by navigating to the Prompt library and clicking `Create new prompt`. Select "Chat prompt" as the prompt type, then enter the prompt name, add your chat messages with different roles (system, user, assistant), and optionally add metadata.
+
+        <Frame>
+            <img src="/img/prompt_engineering/create_chat_prompt.png" />
+        </Frame>
+
+        You can also edit a chat prompt by clicking on the prompt name in the library and clicking `Edit prompt`.
+    </Tab>
+</Tabs>
+
+#### Downloading chat prompts
+
+Once a chat prompt is created in the library, you can download it in code using the [`Opik.get_chat_prompt`](https://www.comet.com/docs/opik/python-sdk-reference/Opik.html#opik.Opik.get_chat_prompt) method:
+
+```python
 import opik
 
 opik.configure()
 client = opik.Opik()
 
-# Get the complete version history for a prompt
-prompt_history = client.get_prompt_history(name="prompt-summary")
+# Get a chat prompt
+chat_prompt = client.get_chat_prompt(name="greeting-prompt")
 
-# Iterate through all versions
-for version in prompt_history:
-    print(f"Commit: {version.commit}")
-    print(f"Created at: {version.created_at}")
-    print(f"Prompt text: {version.prompt}")
-    print(f"Metadata: {version.metadata}")
-    print("-" * 50)
+# Format the messages
+formatted_messages = chat_prompt.format(variables={"name": "Bob"})
+
+# Use with your LLM
+# response = llm.chat(messages=formatted_messages)
 ```
 
-This returns a list of Prompt objects (each representing a specific version) for the given prompt name.
+#### Searching chat prompts
+
+You can search for chat prompts specifically by using the `template_structure` filter with [`Opik.search_prompts`](https://www.comet.com/docs/opik/python-sdk-reference/Opik.html#opik.Opik.search_prompts):
+
+```python
+import opik
+
+client = opik.Opik()
+
+# Search for only chat prompts
+chat_prompts = client.search_prompts(
+    filter_string='template_structure = "chat" AND name contains "assistant"'
+)
+
+for prompt in chat_prompts:
+    print(f"Chat prompt: {prompt.name}")
+    print(f"Messages: {prompt.template}")
+```
+
+To search for text prompts only, use `template_structure = "text"`. Without the filter, `search_prompts` returns both text and chat prompts.
+
+The `filter_string` parameter uses Opik Query Language (OQL) and supports the same columns and operators as text prompts (see [Searching prompts](#searching-prompts) above).
+
+### Template types for chat prompts
+
+Chat prompts support two template types for variable substitution, specified using [`PromptType`](https://www.comet.com/docs/opik/python-sdk-reference/library/PromptType.html):
+
+<Tabs>
+    <Tab value="Mustache (default)" title="Mustache (default)">
+        ```python
+        import opik
+        from opik.api_objects.prompt import PromptType
+
+        messages = [
+            {"role": "user", "content": "Hello {{name}}, you live in {{city}}."}
+        ]
+
+        chat_prompt = opik.ChatPrompt(
+            name="mustache-example",
+            messages=messages,
+            type=PromptType.MUSTACHE  # Default
+        )
+
+        formatted = chat_prompt.format(variables={"name": "Alice", "city": "Paris"})
+        # Result: [{"role": "user", "content": "Hello Alice, you live in Paris."}]
+        ```
+    </Tab>
+    <Tab value="Jinja2" title="Jinja2">
+        ```python
+        import opik
+        from opik.api_objects.prompt import PromptType
+
+        messages = [
+            {
+                "role": "user",
+                "content": """
+                {% if is_premium %}
+                Hello {{ name }}, welcome to our premium service!
+                {% else %}
+                Hello {{ name }}, welcome!
+                {% endif %}
+                """
+            }
+        ]
+
+        chat_prompt = opik.ChatPrompt(
+            name="jinja-example",
+            messages=messages,
+            type=PromptType.JINJA2
+        )
+
+        # With premium user
+        formatted = chat_prompt.format(
+            variables={"name": "Alice", "is_premium": True}
+        )
+        # Result includes: "Hello Alice, welcome to our premium service!"
+
+        # With regular user
+        formatted = chat_prompt.format(
+            variables={"name": "Bob", "is_premium": False}
+        )
+        # Result includes: "Hello Bob, welcome!"
+        ```
+    </Tab>
+</Tabs>
+
+<Note>
+Jinja2 templates support advanced features like conditionals, loops, and filters, making them more powerful for complex prompt logic. However, Mustache templates are simpler and more portable.
+</Note>
+
+### Chat prompt versioning
+
+Chat prompts are automatically versioned when the messages change. Each version has a unique commit hash.
+
+```python
+import opik
+
+# Create initial version
+messages_v1 = [
+    {"role": "system", "content": "You are helpful."},
+    {"role": "user", "content": "Hi!"}
+]
+
+chat_prompt_v1 = opik.ChatPrompt(
+    name="assistant-prompt",
+    messages=messages_v1
+)
+
+print(f"Version 1 commit: {chat_prompt_v1.commit}")
+
+# Create new version with different messages
+messages_v2 = [
+    {"role": "system", "content": "You are very helpful."},
+    {"role": "user", "content": "Hello there!"},
+    {"role": "assistant", "content": "How can I assist you?"}
+]
+
+chat_prompt_v2 = opik.ChatPrompt(
+    name="assistant-prompt",
+    messages=messages_v2
+)
+
+print(f"Version 2 commit: {chat_prompt_v2.commit}")
+
+# Get specific version by commit
+client = opik.Opik()
+specific_version = client.get_chat_prompt(
+    name="assistant-prompt",
+    commit=chat_prompt_v1.commit
+)
+
+# Get version history
+history = client.get_chat_prompt_history(name="assistant-prompt")
+print(f"Total versions: {len(history)}")
+```
+
+You can use [`get_chat_prompt`](https://www.comet.com/docs/opik/python-sdk-reference/Opik.html#opik.Opik.get_chat_prompt) to retrieve a specific version by commit hash, and [`get_chat_prompt_history`](https://www.comet.com/docs/opik/python-sdk-reference/Opik.html#opik.Opik.get_chat_prompt_history) to get all versions.
+
+<Tip>
+If you create a chat prompt with identical messages to an existing version, Opik will return the existing version instead of creating a duplicate. This helps avoid unnecessary version proliferation.
+</Tip>
+
+### Prompt structure immutability
+
+Once you create a prompt with a specific structure (text or chat), that structure cannot be changed. This ensures consistency and prevents accidental mixing of prompt types.
+
+```python
+import opik
+
+# Create a chat prompt
+chat_prompt = opik.ChatPrompt(
+    name="my-prompt",
+    messages=[{"role": "user", "content": "Hello"}]
+)
+
+# Attempting to create a text prompt with the same name will raise an error
+try:
+    text_prompt = opik.Prompt(
+        name="my-prompt",
+        prompt="Hello {{name}}"
+    )
+except opik.exceptions.PromptTemplateStructureMismatch as e:
+    print("Error: Cannot change prompt structure from chat to text")
+```
+
+Similarly, if you create a text prompt first, you cannot later create a chat prompt with the same name.
+
+Both [`Prompt`](https://www.comet.com/docs/opik/python-sdk-reference/library/Prompt.html) and [`ChatPrompt`](https://www.comet.com/docs/opik/python-sdk-reference/library/ChatPrompt.html) classes will raise a [`PromptTemplateStructureMismatch`](https://www.comet.com/docs/opik/python-sdk-reference/exceptions.html#opik.exceptions.PromptTemplateStructureMismatch) exception if you attempt to change the structure of an existing prompt.
+
+## Working with prompt versions
+
+### Viewing prompt history (all versions)
+
+<Tabs>
+    <Tab value="Text prompts" title="Text prompts">
+        Use [`get_prompt_history`](https://www.comet.com/docs/opik/python-sdk-reference/Opik.html#opik.Opik.get_prompt_history) for text prompts:
+
+        ```python maxLines=1000
+        import opik
+
+        opik.configure()
+        client = opik.Opik()
+
+        # Get the complete version history for a text prompt
+        prompt_history = client.get_prompt_history(name="prompt-summary")
+
+        # Iterate through all versions
+        for version in prompt_history:
+            print(f"Name: {version.name}")
+            print(f"Commit: {version.commit}")
+            print(f"Prompt text: {version.prompt}")
+            print(f"Metadata: {version.metadata}")
+            print(f"Type: {version.type}")
+            print("-" * 50)
+        ```
+
+        This returns a list of Prompt objects (each representing a specific version) for the given prompt name.
+    </Tab>
+    <Tab value="Chat prompts" title="Chat prompts">
+        Use [`get_chat_prompt_history`](https://www.comet.com/docs/opik/python-sdk-reference/Opik.html#opik.Opik.get_chat_prompt_history) for chat prompts:
+
+        ```python maxLines=1000
+        import opik
+
+        opik.configure()
+        client = opik.Opik()
+
+        # Get the complete version history for a chat prompt
+        chat_prompt_history = client.get_chat_prompt_history(name="assistant-prompt")
+
+        # Iterate through all versions
+        for version in chat_prompt_history:
+            print(f"Name: {version.name}")
+            print(f"Commit: {version.commit}")
+            print(f"Messages: {version.template}")
+            print(f"Metadata: {version.metadata}")
+            print(f"Type: {version.type}")
+            print("-" * 50)
+        ```
+
+        This returns a list of ChatPrompt objects (each representing a specific version) for the given prompt name.
+    </Tab>
+</Tabs>
 
 You can use this information to:
 
@@ -339,23 +905,44 @@ You can use this information to:
 
 ### Accessing specific prompt versions
 
-When working with prompts, you may want to retrieve a specific version of a prompt rather than the latest version. You can do this by passing the `commit` parameter to the [`get_prompt`](https://www.comet.com/docs/opik/python-sdk-reference/Opik.html#opik.Opik.get_prompt) method:
+<Tabs>
+    <Tab value="Text prompts" title="Text prompts">
+        Use the `commit` parameter with [`get_prompt`](https://www.comet.com/docs/opik/python-sdk-reference/Opik.html#opik.Opik.get_prompt):
 
-```python maxLines=1000
-import opik
+        ```python maxLines=1000
+        import opik
 
-opik.configure()
-client = opik.Opik()
+        opik.configure()
+        client = opik.Opik()
 
-# Get a specific version of a prompt by commit ID
-prompt = client.get_prompt(name="prompt-summary", commit="abc123def456")
+        # Get a specific version of a text prompt by commit ID
+        prompt = client.get_prompt(name="prompt-summary", commit="abc123def456")
 
-# Use the prompt in your application
-formatted_prompt = prompt.format(text="Hello, world!")
-print(formatted_prompt)
-```
+        # Use the prompt in your application
+        formatted_prompt = prompt.format(text="Hello, world!")
+        print(formatted_prompt)
+        ```
+    </Tab>
+    <Tab value="Chat prompts" title="Chat prompts">
+        Use the `commit` parameter with [`get_chat_prompt`](https://www.comet.com/docs/opik/python-sdk-reference/Opik.html#opik.Opik.get_chat_prompt):
 
-The `commit` parameter accepts the commit ID (also called commit hash) of the specific prompt version you want to retrieve. You can find commit IDs in the prompt history in the Opik UI or by using the `get_prompt_history` method (see above).
+        ```python maxLines=1000
+        import opik
+
+        opik.configure()
+        client = opik.Opik()
+
+        # Get a specific version of a chat prompt by commit ID
+        chat_prompt = client.get_chat_prompt(name="assistant-prompt", commit="abc123def456")
+
+        # Use the prompt in your application
+        formatted_messages = chat_prompt.format(variables={"name": "Alice"})
+        print(formatted_messages)
+        ```
+    </Tab>
+</Tabs>
+
+The `commit` parameter accepts the commit ID (also called commit hash) of the specific prompt version you want to retrieve. You can find commit IDs in the prompt history in the Opik UI or by using the `get_prompt_history` or `get_chat_prompt_history` methods (see above).
 
 This is particularly useful when you want to:
 - **Pin to a specific version** in production to ensure consistent behavior
@@ -367,39 +954,94 @@ This is particularly useful when you want to:
 
 ### Linking prompts to experiments
 
-[Experiments](/evaluation/evaluate_your_llm) allow you to evaluate the performance
-of your LLM application on a set of examples. When evaluating different prompts,
-it can be useful to link the evaluation to a specific prompt version. This can
-be achieved by passing the `prompts` parameter when creating an Experiment:
+<Tabs>
+    <Tab value="Text prompt" title="Text prompt">
+        ```python maxLines=1000
+        import opik
+        from opik.evaluation import evaluate
+        from opik.evaluation.metrics import Hallucination
+        from openai import OpenAI
 
-```python maxLines=1000
-import opik
-from opik.evaluation import evaluate
-from opik.evaluation.metrics import Hallucination
+        opik.configure()
+        opik_client = opik.Opik()
+        openai_client = OpenAI()
 
-opik.configure()
-client = opik.Opik()
+        # Get a dataset
+        dataset = opik_client.get_or_create_dataset("test_dataset")
 
-# Get a dataset
-dataset = client.get_or_create_dataset("test_dataset")
+        # Create a text prompt
+        prompt = opik.Prompt(name="My prompt", prompt="Summarize: {{text}}")
 
-# Create a prompt
-prompt = opik.Prompt(name="My prompt", prompt="...")
+        # Create an evaluation task
+        def evaluation_task(dataset_item):
+            # Use the prompt in your task
+            formatted_prompt = prompt.format(text=dataset_item["input"])
+            
+            # Call OpenAI API with formatted prompt
+            response = openai_client.chat.completions.create(
+                model="gpt-4",
+                messages=[{"role": "user", "content": formatted_prompt}]
+            )
+            
+            return {"output": response.choices[0].message.content}
 
-# Create an evaluation task
-def evaluation_task(dataset_item):
-    return {"output": "llm_response"}
+        # Run the evaluation
+        evaluation = evaluate(
+            experiment_name="My experiment",
+            dataset=dataset,
+            task=evaluation_task,
+            prompts=[prompt],
+        )
+        ```
+    </Tab>
+    <Tab value="Chat prompt" title="Chat prompt">
+        ```python maxLines=1000
+        import opik
+        from opik.evaluation import evaluate
+        from opik.evaluation.metrics import Hallucination
+        from openai import OpenAI
 
-# Run the evaluation
-evaluation = evaluate(
-    experiment_name="My experiment",
-    dataset=dataset,
-    task=evaluation_task,
-    prompts=[prompt],
-)
-```
+        opik.configure()
+        opik_client = opik.Opik()
+        openai_client = OpenAI()
 
-The experiment will now be linked to the prompt allowing you to view all experiments that use a specific prompt:
+        # Get a dataset
+        dataset = opik_client.get_or_create_dataset("test_dataset")
+
+        # Create a chat prompt
+        messages = [
+            {"role": "system", "content": "You are a helpful assistant."},
+            {"role": "user", "content": "Summarize: {{text}}"}
+        ]
+        chat_prompt = opik.ChatPrompt(name="My chat prompt", messages=messages)
+
+        # Create an evaluation task
+        def evaluation_task(dataset_item):
+            # Use the chat prompt in your task
+            formatted_messages = chat_prompt.format(
+                variables={"text": dataset_item["input"]}
+            )
+            
+            # Call OpenAI API with formatted messages
+            response = openai_client.chat.completions.create(
+                model="gpt-4",
+                messages=formatted_messages
+            )
+            
+            return {"output": response.choices[0].message.content}
+
+        # Run the evaluation
+        evaluation = evaluate(
+            experiment_name="My experiment",
+            dataset=dataset,
+            task=evaluation_task,
+            prompts=[chat_prompt],
+        )
+        ```
+    </Tab>
+</Tabs>
+
+The experiment will now be linked to the prompt, allowing you to view all experiments that use a specific prompt:
 
 <Frame>
   <img src="/img/evaluation/linked_prompt.png" />
@@ -407,42 +1049,99 @@ The experiment will now be linked to the prompt allowing you to view all experim
 
 ### Comparing prompt versions in experiments
 
-You can run experiments with different prompt versions to determine which performs best:
+<Tabs>
+    <Tab value="Text prompts" title="Text prompts">
+        ```python maxLines=1000
+        import opik
+        from opik.evaluation import evaluate
 
-```python maxLines=1000
-import opik
-from opik.evaluation import evaluate
+        opik.configure()
+        client = opik.Opik()
 
-opik.configure()
-client = opik.Opik()
+        # Get the dataset
+        dataset = client.get_or_create_dataset("test_dataset")
 
-# Get the dataset
-dataset = client.get_or_create_dataset("test_dataset")
+        # Get different versions of the same text prompt
+        prompt_v1 = client.get_prompt(name="prompt-summary", commit="abc123")
+        prompt_v2 = client.get_prompt(name="prompt-summary", commit="def456")
 
-# Get different versions of the same prompt
-prompt_v1 = client.get_prompt(name="prompt-summary", commit="abc123")
-prompt_v2 = client.get_prompt(name="prompt-summary", commit="def456")
+        # Define evaluation task that uses the prompt
+        def evaluation_task_v1(dataset_item):
+            formatted_prompt = prompt_v1.format(text=dataset_item["input"])
+            # Call your LLM with the formatted prompt
+            return {"output": "llm_response"}
+        
+        def evaluation_task_v2(dataset_item):
+            formatted_prompt = prompt_v2.format(text=dataset_item["input"])
+            # Call your LLM with the formatted prompt
+            return {"output": "llm_response"}
 
-# Define evaluation task
-def evaluation_task(dataset_item):
-    return {"output": "llm_response"}
+        # Run experiments with different prompt versions
+        experiment_v1 = evaluate(
+            experiment_name="My experiment - v1",
+            dataset=dataset,
+            task=evaluation_task_v1,
+            prompts=[prompt_v1],
+        )
 
-# Run experiments with different prompt versions
-experiment_v1 = evaluate(
-    experiment_name="My experiment - v1",
-    dataset=dataset,
-    task=evaluation_task,
-    prompts=[prompt_v1],
-)
+        experiment_v2 = evaluate(
+            experiment_name="My experiment - v2",
+            dataset=dataset,
+            task=evaluation_task_v2,
+            prompts=[prompt_v2],
+        )
 
-experiment_v2 = evaluate(
-    experiment_name="My experiment - v2",
-    dataset=dataset,
-    task=evaluation_task,
-    prompts=[prompt_v2],
-)
+        # Compare results in the Opik UI
+        ```
+    </Tab>
+    <Tab value="Chat prompts" title="Chat prompts">
+        ```python maxLines=1000
+        import opik
+        from opik.evaluation import evaluate
 
-# Compare results in the Opik UI
-```
+        opik.configure()
+        client = opik.Opik()
+
+        # Get the dataset
+        dataset = client.get_or_create_dataset("test_dataset")
+
+        # Get different versions of the same chat prompt
+        chat_prompt_v1 = client.get_chat_prompt(name="assistant-prompt", commit="abc123")
+        chat_prompt_v2 = client.get_chat_prompt(name="assistant-prompt", commit="def456")
+
+        # Define evaluation tasks that use the prompts
+        def evaluation_task_v1(dataset_item):
+            formatted_messages = chat_prompt_v1.format(
+                variables={"text": dataset_item["input"]}
+            )
+            # Call your LLM with the formatted messages
+            return {"output": "llm_response"}
+        
+        def evaluation_task_v2(dataset_item):
+            formatted_messages = chat_prompt_v2.format(
+                variables={"text": dataset_item["input"]}
+            )
+            # Call your LLM with the formatted messages
+            return {"output": "llm_response"}
+
+        # Run experiments with different chat prompt versions
+        experiment_v1 = evaluate(
+            experiment_name="My experiment - v1",
+            dataset=dataset,
+            task=evaluation_task_v1,
+            prompts=[chat_prompt_v1],
+        )
+
+        experiment_v2 = evaluate(
+            experiment_name="My experiment - v2",
+            dataset=dataset,
+            task=evaluation_task_v2,
+            prompts=[chat_prompt_v2],
+        )
+
+        # Compare results in the Opik UI
+        ```
+    </Tab>
+</Tabs>
 
 This workflow allows you to systematically test and compare different prompt versions to identify the most effective one for your use case.
