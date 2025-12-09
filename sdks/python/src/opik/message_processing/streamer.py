@@ -60,7 +60,7 @@ class Streamer:
 
     def close(self, timeout: Optional[int]) -> bool:
         """
-        Stops data sending threads
+        Stops data processing threads
         """
         with self._lock:
             self._drain = True
@@ -96,7 +96,10 @@ class Streamer:
             timeout=timeout, sleep_time=upload_sleep_time
         )
 
-        return upload_flushed and self._all_done()
+        flushed = upload_flushed and self._all_done()
+        LOGGER.debug(f"Stream flushed completely: {flushed}")
+
+        return flushed
 
     def _all_done(self) -> bool:
         return (

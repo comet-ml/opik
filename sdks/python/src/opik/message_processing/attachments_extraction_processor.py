@@ -78,7 +78,7 @@ class AttachmentsExtractionProcessor(message_processors.BaseMessageProcessor):
         if self._is_active:
             # do attachment processing only if the processor is active
             try:
-                self._process_attachment_support_message(message)
+                self._process_attachments_in_message(message.original_message)
             except Exception as ex:
                 LOGGER.error(
                     "Failed to process attachment support message: %s", ex, exc_info=ex
@@ -89,10 +89,7 @@ class AttachmentsExtractionProcessor(message_processors.BaseMessageProcessor):
         setattr(original_message, attachments_preprocessor.MARKER_ATTRIBUTE_NAME, True)
         self.messages_streamer.put(original_message)
 
-    def _process_attachment_support_message(
-        self, message: messages.AttachmentSupportingMessage
-    ) -> None:
-        original = message.original_message
+    def _process_attachments_in_message(self, original: messages.BaseMessage) -> None:
         entity_details = entity_type_from_attachment_message(original)
         if entity_details is None:
             LOGGER.error(
