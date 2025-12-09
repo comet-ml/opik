@@ -493,7 +493,7 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
                                 ),
                               })}
                               disabled={Boolean(projectId)}
-                              multiselect={true}
+                              multiselect
                             />
                           </FormControl>
                           <FormMessage />
