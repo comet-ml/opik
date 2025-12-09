@@ -47,6 +47,7 @@ import lombok.extern.slf4j.Slf4j;
 
 import java.net.URI;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
@@ -122,7 +123,7 @@ public class AutomationRuleEvaluatorsResource {
 
         log.info("Looking for automated evaluator: id '{}' on project_id '{}'", projectId, workspaceId);
         AutomationRuleEvaluator<?, ?> evaluator = service.findById(evaluatorId,
-                projectId != null ? Set.of(projectId) : null, workspaceId);
+                Optional.ofNullable(projectId).map(Set::of).orElse(null), workspaceId);
         log.info("Found automated evaluator: id '{}' on project_id '{}'", projectId, workspaceId);
 
         return Response.ok().entity(evaluator).build();
@@ -191,7 +192,7 @@ public class AutomationRuleEvaluatorsResource {
         log.info("Deleting automation rule evaluators by ids, count '{}', on workspace_id '{}'",
                 batchDelete.ids().size(),
                 workspaceId);
-        service.delete(batchDelete.ids(), projectId != null ? Set.of(projectId) : null, workspaceId);
+        service.delete(batchDelete.ids(), Optional.ofNullable(projectId).map(Set::of).orElse(null), workspaceId);
         log.info("Deleted automation rule evaluators by ids, count '{}', on workspace_id '{}'",
                 batchDelete.ids().size(),
                 workspaceId);

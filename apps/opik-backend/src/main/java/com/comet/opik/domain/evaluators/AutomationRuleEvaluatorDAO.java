@@ -19,6 +19,7 @@ import org.jdbi.v3.stringtemplate4.UseStringTemplateEngine;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
@@ -76,7 +77,7 @@ public interface AutomationRuleEvaluatorDAO extends AutomationRuleDAO {
     @AllowUnusedBindings
     List<AutomationRuleEvaluatorModel<?>> findRulesWithoutProjects(
             @Bind("workspaceId") String workspaceId,
-            @Define("projectIds") @BindList(onEmpty = BindList.EmptyHandling.NULL_VALUE, value = "projectIds") List<UUID> projectIds,
+            @Define("projectIds") @BindList(onEmpty = BindList.EmptyHandling.NULL_VALUE, value = "projectIds") Set<UUID> projectIds,
             @Bind("action") AutomationRule.AutomationRuleAction action,
             @Define("type") @Bind("type") AutomationRuleEvaluatorType type,
             @Define("ids") @BindList(onEmpty = BindList.EmptyHandling.NULL_VALUE, value = "ids") Set<UUID> ids,
@@ -137,7 +138,7 @@ public interface AutomationRuleEvaluatorDAO extends AutomationRuleDAO {
         }
     }
 
-    default List<AutomationRuleEvaluatorModel<?>> find(String workspaceId, List<UUID> projectIds,
+    default List<AutomationRuleEvaluatorModel<?>> find(String workspaceId, Set<UUID> projectIds,
             AutomationRuleEvaluatorCriteria criteria, String sortingFields, String filters,
             Map<String, Object> filterMapping, Integer offset, Integer limit) {
 
@@ -165,9 +166,9 @@ public interface AutomationRuleEvaluatorDAO extends AutomationRuleDAO {
     default List<AutomationRuleEvaluatorModel<?>> find(String workspaceId, UUID projectId,
             AutomationRuleEvaluatorCriteria criteria, String sortingFields, String filters,
             Map<String, Object> filterMapping, Integer offset, Integer limit) {
-        // Backward compatibility: convert single projectId to list
-        List<UUID> projectIds = projectId != null ? List.of(projectId) : null;
-        return find(workspaceId, projectIds, criteria, sortingFields, filters, filterMapping, offset, limit);
+        // Backward compatibility: convert single projectId to set
+        return find(workspaceId, Optional.ofNullable(projectId).map(Set::of).orElse(null),
+                criteria, sortingFields, filters, filterMapping, offset, limit);
     }
 
     default List<AutomationRuleEvaluatorModel<?>> find(String workspaceId, UUID projectId,
@@ -211,7 +212,7 @@ public interface AutomationRuleEvaluatorDAO extends AutomationRuleDAO {
     @AllowUnusedBindings
     long findCount(
             @Bind("workspaceId") String workspaceId,
-            @Define("projectIds") @BindList(onEmpty = BindList.EmptyHandling.NULL_VALUE, value = "projectIds") List<UUID> projectIds,
+            @Define("projectIds") @BindList(onEmpty = BindList.EmptyHandling.NULL_VALUE, value = "projectIds") Set<UUID> projectIds,
             @Bind("action") AutomationRule.AutomationRuleAction action,
             @Define("type") @Bind("type") AutomationRuleEvaluatorType type,
             @Define("ids") @BindList(onEmpty = BindList.EmptyHandling.NULL_VALUE, value = "ids") Set<UUID> ids,
@@ -219,7 +220,7 @@ public interface AutomationRuleEvaluatorDAO extends AutomationRuleDAO {
             @Define("name") @Bind("name") String name);
 
     default long findCount(String workspaceId,
-            List<UUID> projectIds,
+            Set<UUID> projectIds,
             AutomationRuleEvaluatorCriteria criteria) {
         return findCount(workspaceId, projectIds, criteria.action(), criteria.type(), criteria.ids(),
                 criteria.id(),
@@ -229,9 +230,8 @@ public interface AutomationRuleEvaluatorDAO extends AutomationRuleDAO {
     default long findCount(String workspaceId,
             UUID projectId,
             AutomationRuleEvaluatorCriteria criteria) {
-        // Backward compatibility: convert single projectId to list
-        List<UUID> projectIds = projectId != null ? List.of(projectId) : null;
-        return findCount(workspaceId, projectIds, criteria);
+        // Backward compatibility: convert single projectId to set
+        return findCount(workspaceId, Optional.ofNullable(projectId).map(Set::of).orElse(null), criteria);
     }
 
     @SqlUpdate("""
