@@ -102,7 +102,7 @@ class Streamer:
         )
 
         flushed = upload_flushed and self._all_done()
-        LOGGER.debug(f"Stream flushed completely: {flushed}")
+        LOGGER.debug(f"Streamer flushed completely: {flushed}")
 
         return flushed
 
