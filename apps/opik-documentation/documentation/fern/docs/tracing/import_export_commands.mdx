@@ -19,7 +19,7 @@ Exports specific data types from the specified workspace to local files.
 - `NAME`: Exact name of the item to export
 
 **Options:**
-- `--path, -p`: Directory to save exported data (default: `./`)
+- `--path, -p`: Directory to save exported data (default: `opik_exports`)
 - `--max-results`: Maximum number of items to export per data type (default: 1000)
 - `--filter`: Filter string using Opik Query Language (OQL) to narrow down the search (for projects only)
 - `--force`: Re-download items even if they already exist locally
@@ -53,6 +53,9 @@ opik export my-workspace prompt "my-template"
 # Export with custom output directory
 opik export my-workspace dataset "my-dataset" --path ./backup_data
 
+# Export using default directory (opik_exports)
+opik export my-workspace dataset "my-dataset"
+
 # Export with filter and limit
 opik export my-workspace project "my-project" --filter "start_time >= '2024-01-01T00:00:00Z'" --max-results 100
 
@@ -72,7 +75,7 @@ opik export my-workspace prompt "my-template" --format csv --path ./analysis_dat
 opik export my-workspace experiment "my-experiment" --format csv --path ./analysis_data
 ```
 
-## `opik import WORKSPACE TYPE NAME WORKSPACE_FOLDER`
+## `opik import WORKSPACE TYPE NAME`
 
 Imports specific data types from local files to the specified workspace.
 
@@ -80,9 +83,9 @@ Imports specific data types from local files to the specified workspace.
 - `WORKSPACE`: The workspace name to import to
 - `TYPE`: The type of data to import (`dataset`, `project`, `experiment`, or `prompt`)
 - `NAME`: Name pattern to match items (case-insensitive substring matching)
-- `WORKSPACE_FOLDER`: Directory containing exported data to import
 
 **Options:**
+- `--path, -p`: Directory containing exported data (default: `opik_exports`)
 - `--dry-run`: Show what would be imported without actually importing
 - `--debug`: Enable debug output to show detailed information about the import process
 
@@ -90,26 +93,29 @@ Imports specific data types from local files to the specified workspace.
 
 **Examples:**
 ```bash
-# Import datasets from workspace/datasets directory
-opik import my-workspace dataset "my-dataset" ./exported_data
+# Import datasets from default directory (opik_exports)
+opik import my-workspace dataset "my-dataset"
 
-# Import projects from workspace/projects directory
-opik import my-workspace project "my-project" ./exported_data
+# Import projects from default directory
+opik import my-workspace project "my-project"
 
-# Import experiments from workspace/experiments directory (automatically recreates experiments)
-opik import my-workspace experiment "my-experiment" ./exported_data
+# Import experiments from default directory (automatically recreates experiments)
+opik import my-workspace experiment "my-experiment"
 
-# Import prompts from workspace/prompts directory
-opik import my-workspace prompt "my-prompt" ./exported_data
+# Import prompts from default directory
+opik import my-workspace prompt "my-prompt"
 
 # Import with name pattern matching
-opik import my-workspace dataset "test" ./exported_data
+opik import my-workspace dataset "test"
+
+# Import from custom path
+opik import my-workspace dataset "my-dataset" --path ./custom-exports
 
 # Dry run to see what would be imported
-opik import my-workspace project "my-project" ./exported_data --dry-run
+opik import my-workspace project "my-project" --dry-run
 
 # Import with debug output
-opik import my-workspace experiment "my-experiment" ./exported_data --debug
+opik import my-workspace experiment "my-experiment" --debug
 ```
 
 ## File Format
@@ -289,7 +295,7 @@ trace-123,my-trace,2024-01-01T00:00:00Z,2024-01-01T00:01:00Z,thread-456,span-789
 opik export my-workspace project "old-project" --path ./migration_data
 
 # Import to new workspace
-opik import my-workspace project "old-project" ./migration_data
+opik import my-workspace project "old-project" --path ./migration_data
 ```
 
 ### 2. Data Backup
@@ -304,7 +310,7 @@ opik export my-workspace experiment "my-experiment" --path ./backup_$(date +%Y%m
 ```bash
 # Sync from staging to production
 opik export my-workspace project "staging-project" --filter "tags contains 'ready-for-prod'"
-opik import my-workspace project "staging-project" ./exported_data
+opik import my-workspace project "staging-project"
 ```
 
 ### 4. Data Analysis
@@ -319,8 +325,8 @@ opik export my-workspace project "my-project" --filter "start_time >= '2024-01-0
 # Export specific dataset from a workspace
 opik export my-workspace dataset "my-dataset"
 
-# Import datasets to another workspace
-opik import my-workspace dataset "my-dataset" ./exported_data
+# Import datasets to another workspace (uses default opik_exports directory)
+opik import my-workspace dataset "my-dataset"
 ```
 
 ### 6. Data Analysis with CSV
@@ -352,10 +358,10 @@ opik export my-workspace prompt "my-template" --path ./prompt_backup
 opik export my-workspace prompt "system-prompt" --path ./templates
 
 # Import prompts to another workspace
-opik import my-workspace prompt "my-template" ./prompt_backup
+opik import my-workspace prompt "my-template" --path ./prompt_backup
 
 # Import with name pattern matching
-opik import my-workspace prompt "production" ./prompt_backup
+opik import my-workspace prompt "production" --path ./prompt_backup
 ```
 
 ### 8. Experiment Migration
@@ -370,10 +376,10 @@ opik export my-workspace experiment "evaluation-exp" --dataset "test-dataset"
 opik export my-workspace experiment "large-experiment" --max-traces 50
 
 # Import experiments (automatically recreates experiments)
-opik import my-workspace experiment "my-experiment" ./experiment_data
+opik import my-workspace experiment "my-experiment" --path ./experiment_data
 
 # Import experiments matching name pattern
-opik import my-workspace experiment "evaluation" ./experiment_data
+opik import my-workspace experiment "evaluation" --path ./experiment_data
 ```
 
 ## Troubleshooting
@@ -447,16 +453,16 @@ ls ./temp_data/my-workspace/prompts/
 cat ./temp_data/my-workspace/projects/my-project/trace_*.json | head -20
 
 # 3. Dry run import to see what would be imported
-opik import my-workspace dataset "my-dataset" ./temp_data --dry-run
-opik import my-workspace project "my-project" ./temp_data --dry-run
-opik import my-workspace experiment "my-experiment" ./temp_data --dry-run
-opik import my-workspace prompt "my-template" ./temp_data --dry-run
+opik import my-workspace dataset "my-dataset" --path ./temp_data --dry-run
+opik import my-workspace project "my-project" --path ./temp_data --dry-run
+opik import my-workspace experiment "my-experiment" --path ./temp_data --dry-run
+opik import my-workspace prompt "my-template" --path ./temp_data --dry-run
 
 # 4. Actually import all data including experiments and prompts
-opik import my-workspace dataset "my-dataset" ./temp_data
-opik import my-workspace project "my-project" ./temp_data
-opik import my-workspace experiment "my-experiment" ./temp_data
-opik import my-workspace prompt "my-template" ./temp_data
+opik import my-workspace dataset "my-dataset" --path ./temp_data
+opik import my-workspace project "my-project" --path ./temp_data
+opik import my-workspace experiment "my-experiment" --path ./temp_data
+opik import my-workspace prompt "my-template" --path ./temp_data
 
 # 5. Clean up temporary data
 rm -rf ./temp_data

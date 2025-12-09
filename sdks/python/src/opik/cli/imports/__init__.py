@@ -22,7 +22,7 @@ IMPORT_CONTEXT_SETTINGS = {"help_option_names": ["-h", "--help"]}
 
 def _import_by_type(
     import_type: str,
-    workspace_folder: str,
+    path: str,
     workspace: str,
     dry_run: bool,
     name_pattern: Optional[str],
@@ -35,7 +35,7 @@ def _import_by_type(
 
     Args:
         import_type: Type of data to import ("dataset", "project", "experiment")
-        workspace_folder: Base workspace folder containing the data
+        path: Base directory containing the exported data
         workspace: Target workspace name
         dry_run: Whether to show what would be imported without importing
         name_pattern: Optional string pattern to filter items by name (case-insensitive substring matching)
@@ -43,9 +43,7 @@ def _import_by_type(
         recreate_experiments: Whether to recreate experiments after importing
     """
     try:
-        debug_print(
-            f"DEBUG: Starting {import_type} import from {workspace_folder}", debug
-        )
+        debug_print(f"DEBUG: Starting {import_type} import from {path}", debug)
 
         # Initialize Opik client
         if api_key:
@@ -54,7 +52,7 @@ def _import_by_type(
             client = opik.Opik(workspace=workspace)
 
         # Determine source directory based on import type
-        base_path = Path(workspace_folder)
+        base_path = Path(path)
 
         if import_type == "dataset":
             source_dir = base_path / "datasets"
@@ -145,30 +143,34 @@ def import_group(ctx: click.Context, workspace: str, api_key: Optional[str]) -> 
 
     \b
     General Usage:
-        opik import WORKSPACE TYPE NAME FOLDER/ [OPTIONS]
+        opik import WORKSPACE TYPE NAME [OPTIONS]
 
     \b
     Data Types:
-        project     Import projects from workspace_folder/projects/
-        dataset     Import datasets from workspace_folder/datasets/
-        experiment  Import experiments from workspace_folder/experiments/
-        prompt      Import prompts from workspace_folder/prompts/
+        project     Import projects from path/projects/ (default: opik_exports)
+        dataset     Import datasets from path/datasets/ (default: opik_exports)
+        experiment  Import experiments from path/experiments/ (default: opik_exports)
+        prompt      Import prompts from path/prompts/ (default: opik_exports)
 
     \b
     Common Options:
+        --path, -p  Directory containing exported data (default: opik_exports)
         --dry-run   Preview what would be imported without actually importing
         --debug     Show detailed information about the import process
 
     \b
     Examples:
         # Preview an experiment that would be imported
-        opik import my-workspace experiment "my-experiment" ./exported-data/ --dry-run
+        opik import my-workspace experiment "my-experiment" --dry-run
 
         # Import a specific project
-        opik import my-workspace project "my-project" ./exported-data/
+        opik import my-workspace project "my-project"
 
         # Import a specific dataset
-        opik import my-workspace dataset "my-dataset" ./exported-data/
+        opik import my-workspace dataset "my-dataset"
+
+        # Import from a custom path
+        opik import my-workspace project "my-project" --path ./custom-exports/
     """
     ctx.ensure_object(dict)
     ctx.obj["workspace"] = workspace
@@ -206,13 +208,21 @@ def format_commands(
 
 
 # Override format_commands method
-import_group.format_commands = format_commands.__get__(import_group, type(import_group))
+setattr(
+    import_group,
+    "format_commands",
+    format_commands.__get__(import_group, type(import_group)),
+)
 
 
 @import_group.command(name="dataset")
 @click.argument("name", type=str)
-@click.argument(
-    "workspace_folder", type=click.Path(file_okay=False, dir_okay=True, readable=True)
+@click.option(
+    "--path",
+    "-p",
+    type=click.Path(file_okay=False, dir_okay=True, readable=True),
+    default="opik_exports",
+    help="Directory containing exported data. Defaults to opik_exports.",
 )
 @click.option(
     "--dry-run",
@@ -228,38 +238,43 @@ import_group.format_commands = format_commands.__get__(import_group, type(import
 def import_dataset(
     ctx: click.Context,
     name: str,
-    workspace_folder: str,
+    path: str,
     dry_run: bool,
     debug: bool,
 ) -> None:
     """Import datasets from workspace/datasets directory.
 
-    This command imports datasets matching the specified name from the workspace_folder/datasets/ directory.
+    This command imports datasets matching the specified name from the path/datasets/ directory.
     The name is matched using case-insensitive substring matching.
 
     \b
     Examples:
     \b
         # Preview a dataset that would be imported
-        opik import my-workspace dataset "my-dataset" ./exported-data/ --dry-run
+        opik import my-workspace dataset "my-dataset" --dry-run
     \b
         # Import a specific dataset
-        opik import my-workspace dataset "my-dataset" ./exported-data/
+        opik import my-workspace dataset "my-dataset"
     \b
         # Import datasets containing "training" in the name
-        opik import my-workspace dataset "training" ./exported-data/
+        opik import my-workspace dataset "training"
+    \b
+        # Import from a custom path
+        opik import my-workspace dataset "my-dataset" --path ./custom-exports/
     """
     workspace = ctx.obj["workspace"]
     api_key = ctx.obj.get("api_key") if ctx.obj else None
-    _import_by_type(
-        "dataset", workspace_folder, workspace, dry_run, name, debug, api_key=api_key
-    )
+    _import_by_type("dataset", path, workspace, dry_run, name, debug, api_key=api_key)
 
 
 @import_group.command(name="project")
 @click.argument("name", type=str)
-@click.argument(
-    "workspace_folder", type=click.Path(file_okay=False, dir_okay=True, readable=True)
+@click.option(
+    "--path",
+    "-p",
+    type=click.Path(file_okay=False, dir_okay=True, readable=True),
+    default="opik_exports",
+    help="Directory containing exported data. Defaults to opik_exports.",
 )
 @click.option(
     "--dry-run",
@@ -275,35 +290,38 @@ def import_dataset(
 def import_project(
     ctx: click.Context,
     name: str,
-    workspace_folder: str,
+    path: str,
     dry_run: bool,
     debug: bool,
 ) -> None:
     """Import projects from workspace/projects directory.
 
-    This command imports projects matching the specified name from the workspace_folder/projects/ directory.
+    This command imports projects matching the specified name from the path/projects/ directory.
     The name is matched using case-insensitive substring matching.
 
     \b
     Examples:
     \b
         # Preview a project that would be imported
-        opik import my-workspace project "my-project" ./exported-data/ --dry-run
+        opik import my-workspace project "my-project" --dry-run
     \b
         # Import a specific project
-        opik import my-workspace project "my-project" ./exported-data/
+        opik import my-workspace project "my-project"
     \b
         # Import projects containing "test" in the name
-        opik import my-workspace project "test" ./exported-data/
+        opik import my-workspace project "test"
     \b
         # Import projects with debug output
-        opik import my-workspace project "my-project" ./exported-data/ --debug
+        opik import my-workspace project "my-project" --debug
+    \b
+        # Import from a custom path
+        opik import my-workspace project "my-project" --path ./custom-exports/
     """
     workspace = ctx.obj["workspace"]
     api_key = ctx.obj.get("api_key") if ctx.obj else None
     _import_by_type(
         "project",
-        workspace_folder,
+        path,
         workspace,
         dry_run,
         name,
@@ -315,8 +333,12 @@ def import_project(
 
 @import_group.command(name="experiment")
 @click.argument("name", type=str)
-@click.argument(
-    "workspace_folder", type=click.Path(file_okay=False, dir_okay=True, readable=True)
+@click.option(
+    "--path",
+    "-p",
+    type=click.Path(file_okay=False, dir_okay=True, readable=True),
+    default="opik_exports",
+    help="Directory containing exported data. Defaults to opik_exports.",
 )
 @click.option(
     "--dry-run",
@@ -332,30 +354,33 @@ def import_project(
 def import_experiment(
     ctx: click.Context,
     name: str,
-    workspace_folder: str,
+    path: str,
     dry_run: bool,
     debug: bool,
 ) -> None:
     """Import experiments from workspace/experiments directory.
 
-    This command imports experiments matching the specified name from the workspace_folder/experiments/ directory.
+    This command imports experiments matching the specified name from the path/experiments/ directory.
     The name is matched using case-insensitive substring matching.
 
     \b
     Examples:
     \b
         # Preview an experiment that would be imported
-        opik import my-workspace experiment "my-experiment" ./exported-data/ --dry-run
+        opik import my-workspace experiment "my-experiment" --dry-run
     \b
         # Import a specific experiment
-        opik import my-workspace experiment "my-experiment" ./exported-data/
+        opik import my-workspace experiment "my-experiment"
+    \b
+        # Import from a custom path
+        opik import my-workspace experiment "my-experiment" --path ./custom-exports/
     """
     workspace = ctx.obj["workspace"]
     api_key = ctx.obj.get("api_key") if ctx.obj else None
     # Always recreate experiments when importing
     _import_by_type(
         "experiment",
-        workspace_folder,
+        path,
         workspace,
         dry_run,
         name,
@@ -367,8 +392,12 @@ def import_experiment(
 
 @import_group.command(name="prompt")
 @click.argument("name", type=str)
-@click.argument(
-    "workspace_folder", type=click.Path(file_okay=False, dir_okay=True, readable=True)
+@click.option(
+    "--path",
+    "-p",
+    type=click.Path(file_okay=False, dir_okay=True, readable=True),
+    default="opik_exports",
+    help="Directory containing exported data. Defaults to opik_exports.",
 )
 @click.option(
     "--dry-run",
@@ -384,26 +413,27 @@ def import_experiment(
 def import_prompt(
     ctx: click.Context,
     name: str,
-    workspace_folder: str,
+    path: str,
     dry_run: bool,
     debug: bool,
 ) -> None:
     """Import prompts from workspace/prompts directory.
 
-    This command imports prompts matching the specified name from the workspace_folder/prompts/ directory.
+    This command imports prompts matching the specified name from the path/prompts/ directory.
     The name is matched using case-insensitive substring matching.
 
     \b
     Examples:
     \b
         # Preview a prompt that would be imported
-        opik import my-workspace prompt "my-prompt" ./exported-data/ --dry-run
+        opik import my-workspace prompt "my-prompt" --dry-run
     \b
         # Import a specific prompt
-        opik import my-workspace prompt "my-prompt" ./exported-data/
+        opik import my-workspace prompt "my-prompt"
+    \b
+        # Import from a custom path
+        opik import my-workspace prompt "my-prompt" --path ./custom-exports/
     """
     workspace = ctx.obj["workspace"]
     api_key = ctx.obj.get("api_key") if ctx.obj else None
-    _import_by_type(
-        "prompt", workspace_folder, workspace, dry_run, name, debug, api_key=api_key
-    )
+    _import_by_type("prompt", path, workspace, dry_run, name, debug, api_key=api_key)

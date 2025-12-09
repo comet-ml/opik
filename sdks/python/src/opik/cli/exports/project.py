@@ -643,8 +643,8 @@ def export_project_by_name_or_id(
     "--path",
     "-p",
     type=click.Path(file_okay=False, dir_okay=True, writable=True),
-    default="./",
-    help="Directory to save exported data. Defaults to current directory.",
+    default="opik_exports",
+    help="Directory to save exported data. Defaults to opik_exports.",
 )
 @click.option(
     "--force",

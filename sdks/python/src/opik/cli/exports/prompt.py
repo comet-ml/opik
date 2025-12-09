@@ -540,8 +540,8 @@ def export_related_prompts_by_name(
     "--path",
     "-p",
     type=click.Path(file_okay=False, dir_okay=True, writable=True),
-    default="./",
-    help="Directory to save exported data. Defaults to current directory.",
+    default="opik_exports",
+    help="Directory to save exported data. Defaults to opik_exports.",
 )
 @click.option(
     "--force",

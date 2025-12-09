@@ -435,7 +435,7 @@ def export_experiment_by_name(
 
         # Collect all unique resources from all experiments first
         unique_datasets = set()
-        unique_prompt_ids = set()
+        unique_prompt_ids: set[str] = set()
 
         # First pass: collect datasets and prompt IDs (these are available without fetching items)
         for experiment in experiments:
@@ -445,7 +445,8 @@ def export_experiment_by_name(
             experiment_data = experiment.get_experiment_data()
             if experiment_data.prompt_versions:
                 for prompt_version in experiment_data.prompt_versions:
-                    unique_prompt_ids.add(prompt_version.prompt_id)
+                    if prompt_version.prompt_id:
+                        unique_prompt_ids.add(prompt_version.prompt_id)
 
         # Export all unique datasets once before processing experiments
         datasets_exported = 0
@@ -727,8 +728,8 @@ def export_experiment_by_name_or_id(
     "--path",
     "-p",
     type=click.Path(file_okay=False, dir_okay=True, writable=True),
-    default="./",
-    help="Directory to save exported data. Defaults to current directory.",
+    default="opik_exports",
+    help="Directory to save exported data. Defaults to opik_exports.",
 )
 @click.option(
     "--force",

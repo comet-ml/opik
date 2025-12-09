@@ -41,7 +41,7 @@ def export_group(ctx: click.Context, workspace: str, api_key: Optional[str]) -> 
 
     \b
     Common Options:
-        --path, -p       Directory to save exported data (default: ./)
+        --path, -p       Directory to save exported data (default: opik_exports)
         --format         Export format: json or csv (default: json)
         --max-results    Maximum number of items to export (varies by data type)
         --force          Re-download items even if they already exist locally
@@ -60,7 +60,7 @@ def export_group(ctx: click.Context, workspace: str, api_key: Optional[str]) -> 
         opik export my-workspace experiment "01234567-89ab-cdef-0123-456789abcdef" --dataset "my-dataset"
 
         # Export in CSV format to a specific directory
-        opik export my-workspace prompt "my-template" --format csv --path ./exports
+        opik export my-workspace prompt "my-template" --format csv --path ./custom-exports
     """
     ctx.ensure_object(dict)
     ctx.obj["workspace"] = workspace
@@ -117,7 +117,11 @@ def format_commands(
 
 
 # Override format_commands method
-export_group.format_commands = format_commands.__get__(export_group, type(export_group))
+setattr(
+    export_group,
+    "format_commands",
+    format_commands.__get__(export_group, type(export_group)),
+)
 
 
 # Add the subcommands
