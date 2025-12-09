@@ -180,6 +180,7 @@ class TestRecreateExperiment:
             items=[
                 {
                     "trace_id": "trace-1",
+                    "dataset_item_id": "ds-item-1",
                     "dataset_item_data": {
                         "input": "test input",
                         "expected_output": "test output",
@@ -187,6 +188,7 @@ class TestRecreateExperiment:
                 },
                 {
                     "trace_id": "trace-2",
+                    "dataset_item_id": "ds-item-2",
                     "dataset_item_data": {"input": "test input 2"},
                 },
             ],
@@ -201,17 +203,14 @@ class TestRecreateExperiment:
             "trace-1": "new-trace-1",
             "trace-2": "new-trace-2",
         }
+        dataset_item_id_map: Dict[str, str] = {
+            "ds-item-1": "new-ds-item-1",
+            "ds-item-2": "new-ds-item-2",
+        }
 
         # Should not accept None - type checker would catch this
         # We test that it works with a dict
-        with (
-            patch("opik.cli.imports.experiment.dataset_item_module") as mock_ds_module,
-            patch("opik.cli.imports.experiment.id_helpers_module") as mock_id_helpers,
-        ):
-            # Mock DatasetItem
-            mock_dataset_item = Mock()
-            mock_dataset_item.id = "ds-item-1"
-            mock_ds_module.DatasetItem = Mock(return_value=mock_dataset_item)
+        with patch("opik.cli.imports.experiment.id_helpers_module") as mock_id_helpers:
             mock_id_helpers.generate_id = Mock(return_value="generated-id")
 
             recreate_experiment(
@@ -219,94 +218,84 @@ class TestRecreateExperiment:
                 experiment_data,
                 "test-project",
                 trace_id_map,  # Required, not Optional
+                dataset_item_id_map,  # Required for mapping dataset items
                 dry_run=False,
                 debug=False,
             )
 
-            # Verify dataset items were created
-            assert mock_ds_module.DatasetItem.called
+            # Verify experiment items were created via REST API
+            assert mock_client._rest_client.experiments.create_experiment_items.called
 
     def test_recreate_experiment_batches_dataset_items(
         self, mock_client: Mock, experiment_data: ExperimentData
     ) -> None:
-        """Test that dataset items are inserted in batch, not one at a time."""
-        with (
-            patch("opik.cli.imports.experiment.dataset_item_module") as mock_ds_module,
-            patch("opik.cli.imports.experiment.id_helpers_module") as mock_id_helpers,
-            patch("time.sleep"),  # Patch to avoid actual delays
-        ):
-            # Create mock dataset items
-            mock_items = []
-            for i in range(2):
-                mock_item = Mock()
-                mock_item.id = f"ds-item-{i+1}"
-                mock_items.append(mock_item)
-
-            mock_ds_module.DatasetItem = Mock(side_effect=mock_items)
-            mock_id_helpers.generate_id = Mock(return_value="generated-id")
+        """Test that experiment items are created in batch, not one at a time."""
+        with patch("opik.cli.imports.experiment.id_helpers_module") as mock_id_helpers:
+            mock_id_helpers.generate_id = Mock(side_effect=["exp-item-1", "exp-item-2"])
 
             trace_id_map = {"trace-1": "new-trace-1", "trace-2": "new-trace-2"}
+            dataset_item_id_map = {
+                "ds-item-1": "new-ds-item-1",
+                "ds-item-2": "new-ds-item-2",
+            }
 
             recreate_experiment(
                 mock_client,
                 experiment_data,
                 "test-project",
                 trace_id_map,
+                dataset_item_id_map,
                 dry_run=False,
                 debug=False,
             )
 
-            # Get the dataset from the mock
-            mock_dataset = mock_client.get_or_create_dataset.return_value
-
             # Verify batch insert was called ONCE with all items
             assert (
-                mock_dataset.__internal_api__insert_items_as_dataclasses__.call_count
+                mock_client._rest_client.experiments.create_experiment_items.call_count
                 == 1
             )
 
             # Verify it was called with a list of items (batch)
             call_args = (
-                mock_dataset.__internal_api__insert_items_as_dataclasses__.call_args
+                mock_client._rest_client.experiments.create_experiment_items.call_args
             )
             assert call_args is not None
 
-            # Use helper to extract items argument from call_args
-            items_arg = self._extract_items_arg_from_call_args(call_args)
+            # Extract experiment_items argument from call_args
+            experiment_items_arg = None
+            if hasattr(call_args, "kwargs") and "experiment_items" in call_args.kwargs:
+                experiment_items_arg = call_args.kwargs["experiment_items"]
+            elif hasattr(call_args, "args") and call_args.args:
+                experiment_items_arg = call_args.args[0]
 
             assert (
-                items_arg is not None
-            ), f"Could not find items in call_args: {call_args}"
+                experiment_items_arg is not None
+            ), f"Could not find experiment_items in call_args: {call_args}"
             assert (
-                len(items_arg) == 2
-            ), f"Expected 2 items in batch, got {len(items_arg)}"
+                len(experiment_items_arg) == 2
+            ), f"Expected 2 items in batch, got {len(experiment_items_arg)}"
 
     def test_recreate_experiment_uses_module_names_correctly(
         self, mock_client: Mock, experiment_data: ExperimentData
     ) -> None:
-        """Test that module names (dataset_item_module, id_helpers_module) are used correctly."""
-        with (
-            patch("opik.cli.imports.experiment.dataset_item_module") as mock_ds_module,
-            patch("opik.cli.imports.experiment.id_helpers_module") as mock_id_helpers,
-        ):
-            mock_item = Mock()
-            mock_item.id = "ds-item-1"
-            mock_ds_module.DatasetItem = Mock(return_value=mock_item)
+        """Test that module names (id_helpers_module) are used correctly."""
+        with patch("opik.cli.imports.experiment.id_helpers_module") as mock_id_helpers:
             mock_id_helpers.generate_id = Mock(return_value="generated-id")
 
             trace_id_map = {"trace-1": "new-trace-1"}
+            dataset_item_id_map = {"ds-item-1": "new-ds-item-1"}
 
             recreate_experiment(
                 mock_client,
                 experiment_data,
                 "test-project",
                 trace_id_map,
+                dataset_item_id_map,
                 dry_run=False,
                 debug=False,
             )
 
-            # Verify modules are used (not checked for None)
-            assert mock_ds_module.DatasetItem.called
+            # Verify id_helpers module is used (not checked for None)
             assert mock_id_helpers.generate_id.called
 
     def test_recreate_experiment_handles_empty_trace_id_map(
@@ -314,12 +303,14 @@ class TestRecreateExperiment:
     ) -> None:
         """Test that empty trace_id_map is handled correctly."""
         trace_id_map: Dict[str, str] = {}  # Empty but valid
+        dataset_item_id_map: Dict[str, str] = {}  # Empty but valid
 
         recreate_experiment(
             mock_client,
             experiment_data,
             "test-project",
             trace_id_map,
+            dataset_item_id_map,
             dry_run=False,
             debug=False,
         )
@@ -333,12 +324,14 @@ class TestRecreateExperiment:
     ) -> None:
         """Test dry run mode."""
         trace_id_map = {"trace-1": "new-trace-1"}
+        dataset_item_id_map = {"ds-item-1": "new-ds-item-1"}
 
         result = recreate_experiment(
             mock_client,
             experiment_data,
             "test-project",
             trace_id_map,
+            dataset_item_id_map,
             dry_run=True,
             debug=False,
         )
