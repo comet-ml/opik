@@ -492,7 +492,6 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
                                   validationErrors?.message,
                                 ),
                               })}
-                              disabled={Boolean(projectId)}
                               multiselect
                             />
                           </FormControl>
