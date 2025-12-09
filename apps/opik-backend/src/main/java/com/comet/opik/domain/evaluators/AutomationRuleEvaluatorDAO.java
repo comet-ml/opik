@@ -17,13 +17,12 @@ import org.jdbi.v3.sqlobject.statement.SqlQuery;
 import org.jdbi.v3.sqlobject.statement.SqlUpdate;
 import org.jdbi.v3.stringtemplate4.UseStringTemplateEngine;
 
-import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @RegisterArgumentFactory(UUIDArgumentFactory.class)
 @RegisterArgumentFactory(JsonNodeArgumentFactory.class)
@@ -110,15 +109,10 @@ public interface AutomationRuleEvaluatorDAO extends AutomationRuleDAO {
      * Helper to convert list of mappings into Map<RuleId, Set<ProjectId>>
      */
     default Map<UUID, Set<UUID>> findProjectMappings(List<UUID> ruleIds, String workspaceId) {
-        var mappings = findProjectMappingsList(ruleIds, workspaceId);
-        var result = new HashMap<UUID, Set<UUID>>();
-
-        for (var mapping : mappings) {
-            result.computeIfAbsent(mapping.ruleId(), k -> new HashSet<>())
-                    .add(mapping.projectId());
-        }
-
-        return result;
+        return findProjectMappingsList(ruleIds, workspaceId).stream()
+                .collect(Collectors.groupingBy(
+                        RuleProjectMapping::ruleId,
+                        Collectors.mapping(RuleProjectMapping::projectId, Collectors.toSet())));
     }
 
     /**
