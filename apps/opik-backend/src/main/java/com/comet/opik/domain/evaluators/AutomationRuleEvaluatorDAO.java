@@ -4,6 +4,8 @@ import com.comet.opik.api.evaluators.AutomationRule;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorType;
 import com.comet.opik.infrastructure.db.JsonNodeArgumentFactory;
 import com.comet.opik.infrastructure.db.UUIDArgumentFactory;
+import org.jdbi.v3.core.mapper.RowMapper;
+import org.jdbi.v3.core.statement.StatementContext;
 import org.jdbi.v3.sqlobject.config.RegisterArgumentFactory;
 import org.jdbi.v3.sqlobject.config.RegisterConstructorMapper;
 import org.jdbi.v3.sqlobject.config.RegisterRowMapper;
@@ -17,6 +19,8 @@ import org.jdbi.v3.sqlobject.statement.SqlQuery;
 import org.jdbi.v3.sqlobject.statement.SqlUpdate;
 import org.jdbi.v3.stringtemplate4.UseStringTemplateEngine;
 
+import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -124,10 +128,10 @@ public interface AutomationRuleEvaluatorDAO extends AutomationRuleDAO {
     /**
      * Row mapper for RuleProjectMapping.
      */
-    class RuleProjectMappingRowMapper implements org.jdbi.v3.core.mapper.RowMapper<RuleProjectMapping> {
+    class RuleProjectMappingRowMapper implements RowMapper<RuleProjectMapping> {
         @Override
-        public RuleProjectMapping map(java.sql.ResultSet rs, org.jdbi.v3.core.statement.StatementContext ctx)
-                throws java.sql.SQLException {
+        public RuleProjectMapping map(ResultSet rs, StatementContext ctx)
+                throws SQLException {
             return new RuleProjectMapping(
                     UUID.fromString(rs.getString("rule_id")),
                     UUID.fromString(rs.getString("project_id")));
