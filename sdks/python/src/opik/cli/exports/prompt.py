@@ -56,6 +56,29 @@ def _get_template_structure(prompt: Any) -> str:
     return "text"
 
 
+def _get_prompt_type_string(prompt: Any) -> Optional[str]:
+    """Get prompt type as uppercase string.
+
+    Args:
+        prompt: A Prompt or ChatPrompt instance
+
+    Returns:
+        Uppercase type string (e.g., "JINJA2", "MUSTACHE") or None
+    """
+    prompt_type = getattr(prompt, "type", None)
+    if prompt_type is None:
+        return None
+
+    # If it's an enum, get the value and convert to uppercase
+    if hasattr(prompt_type, "value"):
+        return prompt_type.value.upper()
+    # If it's already a string, convert to uppercase
+    if isinstance(prompt_type, str):
+        return prompt_type.upper()
+    # Otherwise, convert to string and uppercase
+    return str(prompt_type).upper()
+
+
 def export_single_prompt(
     client: opik.Opik,
     prompt: Union[Prompt, ChatPrompt],
@@ -91,7 +114,7 @@ def export_single_prompt(
             "current_version": {
                 "prompt": _get_prompt_content(prompt),
                 "metadata": getattr(prompt, "metadata", None),
-                "type": getattr(prompt, "type", None) or None,
+                "type": _get_prompt_type_string(prompt),
                 "commit": getattr(prompt, "commit", None),
                 "template_structure": _get_template_structure(prompt),
             },
@@ -99,7 +122,7 @@ def export_single_prompt(
                 {
                     "prompt": _get_prompt_content(version),
                     "metadata": getattr(version, "metadata", None),
-                    "type": getattr(version, "type", None) or None,
+                    "type": _get_prompt_type_string(version),
                     "commit": getattr(version, "commit", None),
                     "template_structure": _get_template_structure(version),
                 }
@@ -297,7 +320,7 @@ def export_prompts_by_ids(
                 "current_version": {
                     "prompt": _get_prompt_content(prompt),
                     "metadata": getattr(prompt, "metadata", None),
-                    "type": getattr(prompt, "type", None) or None,
+                    "type": _get_prompt_type_string(prompt),
                     "commit": getattr(prompt, "commit", None),
                     "template_structure": _get_template_structure(prompt),
                 },
@@ -305,7 +328,7 @@ def export_prompts_by_ids(
                     {
                         "prompt": _get_prompt_content(version),
                         "metadata": getattr(version, "metadata", None),
-                        "type": getattr(version, "type", None) or None,
+                        "type": _get_prompt_type_string(version),
                         "commit": getattr(version, "commit", None),
                         "template_structure": _get_template_structure(version),
                     }
@@ -404,7 +427,7 @@ def export_experiment_prompts(
                     "current_version": {
                         "prompt": _get_prompt_content(prompt),
                         "metadata": getattr(prompt, "metadata", None),
-                        "type": getattr(prompt, "type", None) or None,
+                        "type": _get_prompt_type_string(prompt),
                         "commit": getattr(prompt, "commit", None),
                         "template_structure": _get_template_structure(prompt),
                     },
@@ -412,7 +435,7 @@ def export_experiment_prompts(
                         {
                             "prompt": _get_prompt_content(version),
                             "metadata": getattr(version, "metadata", None),
-                            "type": getattr(version, "type", None) or None,
+                            "type": _get_prompt_type_string(version),
                             "commit": getattr(version, "commit", None),
                             "template_structure": _get_template_structure(version),
                         }
@@ -547,7 +570,7 @@ def export_related_prompts_by_name(
                     "current_version": {
                         "prompt": _get_prompt_content(prompt),
                         "metadata": getattr(prompt, "metadata", None),
-                        "type": getattr(prompt, "type", None) or None,
+                        "type": _get_prompt_type_string(prompt),
                         "commit": getattr(prompt, "commit", None),
                         "template_structure": _get_template_structure(prompt),
                     },
@@ -555,7 +578,7 @@ def export_related_prompts_by_name(
                         {
                             "prompt": _get_prompt_content(version),
                             "metadata": getattr(version, "metadata", None),
-                            "type": getattr(version, "type", None) or None,
+                            "type": _get_prompt_type_string(version),
                             "commit": getattr(version, "commit", None),
                             "template_structure": _get_template_structure(version),
                         }
