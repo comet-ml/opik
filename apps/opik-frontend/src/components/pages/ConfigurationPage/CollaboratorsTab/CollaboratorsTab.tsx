@@ -2,9 +2,11 @@ import { useMemo } from "react";
 import useLocalStorageState from "use-local-storage-state";
 import usePluginsStore from "@/store/PluginsStore";
 import DataTable from "@/components/shared/DataTable/DataTable";
+import ExplainerCallout from "@/components/shared/ExplainerCallout/ExplainerCallout";
 import { COLUMN_TYPE, ColumnData } from "@/types/shared";
 import { convertColumnDataToColumn } from "@/lib/table";
 import { formatDate } from "@/lib/date";
+import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 
 const COLUMNS_WIDTH_KEY = "workspace-members-columns-width";
 
@@ -70,13 +72,26 @@ const CollaboratorsTab = () => {
     [columnsWidth, setColumnsWidth],
   );
 
-  if (WorkspaceMembersTable) {
+  const renderTable = () => {
+    if (WorkspaceMembersTable) {
+      return (
+        <WorkspaceMembersTable columns={columns} resizeConfig={resizeConfig} />
+      );
+    }
     return (
-      <WorkspaceMembersTable columns={columns} resizeConfig={resizeConfig} />
+      <DataTable columns={columns} data={[]} resizeConfig={resizeConfig} />
     );
-  }
+  };
 
-  return <DataTable columns={columns} data={[]} resizeConfig={resizeConfig} />;
+  return (
+    <>
+      <ExplainerCallout
+        className="mb-4"
+        {...EXPLAINERS_MAP[EXPLAINER_ID.why_do_i_need_the_collaborators_tab]}
+      />
+      {renderTable()}
+    </>
+  );
 };
 
 export default CollaboratorsTab;
