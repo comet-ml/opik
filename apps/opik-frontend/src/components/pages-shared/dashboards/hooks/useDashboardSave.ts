@@ -1,6 +1,9 @@
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useRef, useCallback } from "react";
 
-import { useDashboardStore } from "@/store/DashboardStore";
+import {
+  useDashboardStore,
+  selectSetHasUnsavedChanges,
+} from "@/store/DashboardStore";
 import useDashboardUpdateMutation from "@/api/dashboards/useDashboardUpdateMutation";
 import { DashboardState } from "@/types/dashboard";
 import { isDashboardChanged } from "@/lib/dashboard/utils";
@@ -11,7 +14,6 @@ interface UseDashboardSaveOptions {
 }
 
 interface UseDashboardSaveReturn {
-  hasUnsavedChanges: boolean;
   save: () => Promise<void>;
   discard: () => void;
 }
@@ -20,14 +22,13 @@ export const useDashboardSave = ({
   dashboardId,
   enabled = true,
 }: UseDashboardSaveOptions): UseDashboardSaveReturn => {
-  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const setHasUnsavedChanges = useDashboardStore(selectSetHasUnsavedChanges);
   const lastSavedConfigRef = useRef<DashboardState | null>(null);
-  const isInitializedRef = useRef(false);
 
   const { mutateAsync: updateDashboard } = useDashboardUpdateMutation();
 
   const save = useCallback(async () => {
-    const currentConfig = useDashboardStore.getState().getDashboardConfig();
+    const currentConfig = useDashboardStore.getState().getDashboard();
 
     if (!isDashboardChanged(currentConfig, lastSavedConfigRef.current)) return;
 
@@ -44,7 +45,7 @@ export const useDashboardSave = ({
     } catch (error) {
       console.error("Failed to save dashboard:", error);
     }
-  }, [dashboardId, updateDashboard]);
+  }, [dashboardId, updateDashboard, setHasUnsavedChanges]);
 
   const discard = useCallback(() => {
     if (!lastSavedConfigRef.current) return;
@@ -53,35 +54,34 @@ export const useDashboardSave = ({
       .getState()
       .loadDashboardFromBackend(lastSavedConfigRef.current);
     setHasUnsavedChanges(false);
-  }, []);
+  }, [setHasUnsavedChanges]);
 
   useEffect(() => {
     if (!enabled) return;
 
     const unsubscribe = useDashboardStore.subscribe((state) => {
-      const config = state.getDashboardConfig();
+      const config = state.getDashboard();
 
-      if (!isInitializedRef.current) {
+      if (lastSavedConfigRef.current === null) {
         lastSavedConfigRef.current = config;
-        isInitializedRef.current = true;
         return;
       }
 
-      setHasUnsavedChanges(
-        isDashboardChanged(config, lastSavedConfigRef.current),
-      );
+      const hasChanges = isDashboardChanged(config, lastSavedConfigRef.current);
+
+      if (hasChanges !== state.hasUnsavedChanges) {
+        setHasUnsavedChanges(hasChanges);
+      }
     });
 
     return () => {
       unsubscribe();
-      isInitializedRef.current = false;
       lastSavedConfigRef.current = null;
       setHasUnsavedChanges(false);
     };
-  }, [enabled, dashboardId]);
+  }, [enabled, dashboardId, setHasUnsavedChanges]);
 
   return {
-    hasUnsavedChanges,
     save,
     discard,
   };
