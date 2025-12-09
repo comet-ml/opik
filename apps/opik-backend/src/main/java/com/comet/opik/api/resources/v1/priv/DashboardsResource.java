@@ -1,9 +1,12 @@
 package com.comet.opik.api.resources.v1.priv;
 
 import com.codahale.metrics.annotation.Timed;
+import com.comet.opik.api.BatchDelete;
 import com.comet.opik.api.Dashboard;
 import com.comet.opik.api.Dashboard.DashboardPage;
 import com.comet.opik.api.DashboardUpdate;
+import com.comet.opik.api.sorting.SortingFactoryDashboards;
+import com.comet.opik.api.sorting.SortingField;
 import com.comet.opik.domain.DashboardService;
 import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.infrastructure.auth.RequestContext;
@@ -40,6 +43,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
 import java.net.URI;
+import java.util.List;
 import java.util.UUID;
 
 @Path("/v1/private/dashboards")
@@ -54,6 +58,7 @@ public class DashboardsResource {
     private final @NonNull DashboardService service;
     private final @NonNull Provider<RequestContext> requestContext;
     private final @NonNull IdGenerator idGenerator;
+    private final @NonNull SortingFactoryDashboards sortingFactory;
 
     @POST
     @Operation(operationId = "createDashboard", summary = "Create dashboard", description = "Create a new dashboard in a workspace", responses = {
@@ -104,13 +109,16 @@ public class DashboardsResource {
     public Response findDashboards(
             @QueryParam("page") @Min(1) @DefaultValue("1") int page,
             @QueryParam("size") @Min(1) @DefaultValue("10") int size,
-            @QueryParam("name") @Schema(description = "Filter dashboards by name (partial match, case insensitive)") String name) {
+            @QueryParam("name") @Schema(description = "Filter dashboards by name (partial match, case insensitive)") String name,
+            @QueryParam("sorting") String sorting) {
 
         String workspaceId = requestContext.get().getWorkspaceId();
-        log.info("Finding dashboards in workspace '{}', page '{}', size '{}', name '{}'",
-                workspaceId, page, size, name);
+        List<SortingField> sortingFields = sortingFactory.newSorting(sorting);
 
-        DashboardPage dashboardPage = service.find(page, size, name);
+        log.info("Finding dashboards in workspace '{}', page '{}', size '{}', name '{}', sorting '{}'",
+                workspaceId, page, size, name, sorting);
+
+        DashboardPage dashboardPage = service.find(page, size, name, sortingFields);
 
         log.info("Found '{}' dashboards in workspace '{}'", dashboardPage.total(), workspaceId);
         return Response.ok(dashboardPage).build();
@@ -153,6 +161,23 @@ public class DashboardsResource {
         service.delete(id);
 
         log.info("Deleted dashboard by id '{}' in workspace '{}'", id, workspaceId);
+        return Response.noContent().build();
+    }
+
+    @POST
+    @Path("/delete-batch")
+    @Operation(operationId = "deleteDashboardsBatch", summary = "Delete dashboards", description = "Delete dashboards batch", responses = {
+            @ApiResponse(responseCode = "204", description = "No content"),
+    })
+    public Response deleteDashboardsBatch(
+            @NotNull @RequestBody(content = @Content(schema = @Schema(implementation = BatchDelete.class))) @Valid BatchDelete batchDelete) {
+
+        String workspaceId = requestContext.get().getWorkspaceId();
+
+        log.info("Deleting dashboards by ids, count '{}' in workspace '{}'", batchDelete.ids().size(), workspaceId);
+        service.delete(batchDelete.ids());
+        log.info("Deleted dashboards by ids, count '{}' in workspace '{}'", batchDelete.ids().size(), workspaceId);
+
         return Response.noContent().build();
     }
 }

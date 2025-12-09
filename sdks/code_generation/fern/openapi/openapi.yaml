@@ -1169,6 +1169,10 @@ paths:
         schema:
           type: string
           description: "Filter dashboards by name (partial match, case insensitive)"
+      - name: sorting
+        in: query
+        schema:
+          type: string
       responses:
         "200":
           description: Dashboard page
@@ -1270,6 +1274,21 @@ paths:
           description: Dashboard not found
         "409":
           description: Conflict - dashboard with this name already exists
+  /v1/private/dashboards/delete-batch:
+    post:
+      tags:
+      - Dashboards
+      summary: Delete dashboards
+      description: Delete dashboards batch
+      operationId: deleteDashboardsBatch
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BatchDelete"
+      responses:
+        "204":
+          description: No content
   /v1/private/datasets/items/batch:
     patch:
       tags:
@@ -2027,6 +2046,90 @@ paths:
       responses:
         "204":
           description: Tag deleted successfully
+  /v1/private/datasets/{id}/versions/restore:
+    post:
+      tags:
+      - Datasets
+      summary: Restore dataset to a previous version
+      description: "Restores the dataset to a previous version state. All draft items\
+        \ are replaced with items from the specified version. If the version is not\
+        \ the latest, a new version snapshot is created. If the version is the latest,\
+        \ only draft items are replaced (revert functionality)."
+      operationId: restoreDatasetVersion
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DatasetVersionRestore_Public"
+      responses:
+        "200":
+          description: Version restored successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DatasetVersion_Public"
+        "404":
+          description: Version not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage_Public"
+  /v1/private/datasets/{id}/versions/hash/{versionHash}:
+    patch:
+      tags:
+      - Datasets
+      summary: Update dataset version
+      description: Update a dataset version's change_description and/or add new tags
+      operationId: updateDatasetVersion
+      parameters:
+      - name: versionHash
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DatasetVersionUpdate_Public"
+      responses:
+        "200":
+          description: Version updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DatasetVersion_Public"
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage_Public"
+        "404":
+          description: Not Found - Version not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage_Public"
+        "409":
+          description: Conflict - Tag already exists
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage_Public"
   /v1/private/experiments:
     get:
       tags:
@@ -8190,6 +8293,10 @@ components:
         total:
           type: integer
           format: int64
+        sortable_by:
+          type: array
+          items:
+            type: string
     DashboardUpdate_Public:
       type: object
       properties:
@@ -8356,6 +8463,30 @@ components:
           - processing
           - completed
           - failed
+        latest_version:
+          $ref: "#/components/schemas/DatasetVersionSummary"
+    DatasetVersionSummary:
+      type: object
+      properties:
+        id:
+          type: string
+          description: Unique identifier of the version
+          format: uuid
+        version_hash:
+          type: string
+          description: Hash of the version content
+        change_description:
+          type: string
+          description: Description of changes in this version
+        tags:
+          uniqueItems: true
+          type: array
+          description: Tags associated with this version
+          items:
+            type: string
+            description: Tags associated with this version
+      description: Summary of the latest dataset version
+      readOnly: true
     Dataset_Write:
       required:
       - name
@@ -8925,6 +9056,8 @@ components:
           type: array
           items:
             type: string
+        hasDraft:
+          type: boolean
     DatasetItem_Compare:
       required:
       - data
@@ -9147,6 +9280,28 @@ components:
           type: array
           items:
             type: string
+    DatasetVersionSummary_Public:
+      type: object
+      properties:
+        id:
+          type: string
+          description: Unique identifier of the version
+          format: uuid
+        version_hash:
+          type: string
+          description: Hash of the version content
+        change_description:
+          type: string
+          description: Description of changes in this version
+        tags:
+          uniqueItems: true
+          type: array
+          description: Tags associated with this version
+          items:
+            type: string
+            description: Tags associated with this version
+      description: Summary of the latest dataset version
+      readOnly: true
     Dataset_Public:
       required:
       - name
@@ -9223,6 +9378,8 @@ components:
           - processing
           - completed
           - failed
+        latest_version:
+          $ref: "#/components/schemas/DatasetVersionSummary_Public"
     DatasetIdentifier_Public:
       required:
       - dataset_name
@@ -9433,6 +9590,8 @@ components:
           type: array
           items:
             type: string
+        hasDraft:
+          type: boolean
     Column:
       type: object
       properties:
@@ -9548,11 +9707,18 @@ components:
     DatasetVersionCreate_Public:
       type: object
       properties:
-        tag:
-          maxLength: 100
-          minLength: 0
-          type: string
-          description: Optional tag for this version
+        tags:
+          type: array
+          description: Optional list of tags for this version
+          example:
+          - baseline
+          - v1.0
+          items:
+            maxLength: 100
+            minLength: 0
+            type: string
+            description: Optional list of tags for this version
+            example: "[\"baseline\",\"v1.0\"]"
         change_description:
           type: string
           description: Optional description of changes in this version
@@ -9600,6 +9766,10 @@ components:
           items:
             type: string
             readOnly: true
+        is_latest:
+          type: boolean
+          description: Indicates whether this is the latest version of the dataset
+          readOnly: true
         items_total:
           type: integer
           description: Total number of items in this version
@@ -9643,6 +9813,36 @@ components:
         last_updated_by:
           type: string
           readOnly: true
+    DatasetVersionRestore_Public:
+      required:
+      - version_ref
+      type: object
+      properties:
+        version_ref:
+          minLength: 1
+          type: string
+          description: Version hash or tag to restore from
+    DatasetVersionUpdate_Public:
+      type: object
+      properties:
+        change_description:
+          type: string
+          description: Optional description of changes in this version
+          example: Updated baseline version
+        tags_to_add:
+          maxItems: 100
+          minItems: 0
+          type: array
+          description: Optional list of tags to add to this version
+          example:
+          - production
+          - reviewed
+          items:
+            maxLength: 100
+            minLength: 0
+            type: string
+            description: Optional list of tags to add to this version
+            example: "[\"production\",\"reviewed\"]"
     Experiment:
       required:
       - dataset_name
@@ -10641,6 +10841,8 @@ components:
     GroupContentWithAggregations:
       type: object
       properties:
+        label:
+          type: string
         aggregations:
           $ref: "#/components/schemas/AggregationData"
     IdsHolder:
@@ -12560,6 +12762,14 @@ components:
           enum:
           - mustache
           - jinja2
+        template_structure:
+          type: string
+          description: "Template structure type: 'text' or 'chat'. Immutable after\
+            \ creation."
+          default: text
+          enum:
+          - text
+          - chat
         tags:
           uniqueItems: true
           type: array
@@ -12622,6 +12832,12 @@ components:
           items:
             type: string
             readOnly: true
+        template_structure:
+          type: string
+          readOnly: true
+          enum:
+          - text
+          - chat
         created_at:
           type: string
           format: date-time
@@ -12658,6 +12874,14 @@ components:
           enum:
           - mustache
           - jinja2
+        template_structure:
+          type: string
+          description: "Template structure type: 'text' or 'chat'. Immutable after\
+            \ creation."
+          default: text
+          enum:
+          - text
+          - chat
         tags:
           uniqueItems: true
           type: array
@@ -12702,6 +12926,12 @@ components:
           items:
             type: string
             readOnly: true
+        template_structure:
+          type: string
+          readOnly: true
+          enum:
+          - text
+          - chat
         created_at:
           type: string
           format: date-time
@@ -12730,6 +12960,17 @@ components:
           type: string
         version:
           $ref: "#/components/schemas/PromptVersion_Detail"
+        template_structure:
+          type: string
+          description: "Template structure for the prompt: 'text' or 'chat'. Note:\
+            \ This field is only used when creating a new prompt. If a prompt with\
+            \ the given name already exists, this field is ignored and the existing\
+            \ prompt's template structure is used. Template structure is immutable\
+            \ after prompt creation."
+          default: text
+          enum:
+          - text
+          - chat
     Prompt_Detail:
       required:
       - name
@@ -12746,6 +12987,14 @@ components:
           minLength: 0
           pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
+        template_structure:
+          type: string
+          description: "Template structure type: 'text' or 'chat'. Immutable after\
+            \ creation."
+          default: text
+          enum:
+          - text
+          - chat
         tags:
           uniqueItems: true
           type: array
@@ -12817,6 +13066,12 @@ components:
           - jinja2
         change_description:
           type: string
+        template_structure:
+          type: string
+          readOnly: true
+          enum:
+          - text
+          - chat
         created_at:
           type: string
           format: date-time
@@ -12860,6 +13115,14 @@ components:
           minLength: 0
           pattern: (?s)^\s*(\S.*\S|\S)\s*$
           type: string
+        template_structure:
+          type: string
+          description: "Template structure type: 'text' or 'chat'. Immutable after\
+            \ creation."
+          default: text
+          enum:
+          - text
+          - chat
         tags:
           uniqueItems: true
           type: array
@@ -12916,9 +13179,11 @@ components:
       - alertsEnabled
       - csvUploadEnabled
       - dashboardsEnabled
+      - datasetVersioningEnabled
       - exportEnabled
       - guardrailsEnabled
       - opikAIEnabled
+      - optimizationStudioEnabled
       - pythonEvaluatorEnabled
       - spanLlmAsJudgeEnabled
       - traceThreadPythonEvaluatorEnabled
@@ -12943,7 +13208,11 @@ components:
           type: boolean
         exportEnabled:
           type: boolean
+        optimizationStudioEnabled:
+          type: boolean
         dashboardsEnabled:
+          type: boolean
+        datasetVersioningEnabled:
           type: boolean
     SpanBatchUpdate:
       required:

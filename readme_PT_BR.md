@@ -14,9 +14,9 @@
         Opik
     </div>
 </h1>
-<h2 align="center" style="border-bottom: none">Plataforma de avaliação de LLM de código aberto</h2>
+<h2 align="center" style="border-bottom: none">Plataforma de observabilidade, avaliação e otimização de IA de código aberto</h2>
 <p align="center">
-Opik ajuda você a construir, avaliar e otimizar sistemas LLM que funcionam melhor, mais rápido e com menor custo. De chatbots RAG a assistentes de código e pipelines agentes complexos, o Opik fornece rastreamento completo, avaliações, painéis e recursos poderosos como <b>Opik Agent Optimizer</b> e <b>Opik Guardrails</b> para melhorar e proteger suas aplicações LLM em produção.
+O Opik ajuda você a construir, testar e otimizar aplicações de IA generativa que funcionam melhor, do protótipo à produção. De chatbots RAG a assistentes de código e pipelines agentes complexos, o Opik fornece rastreamento abrangente, avaliação e otimização automática de prompts e ferramentas para eliminar as suposições no desenvolvimento de IA.
 </p>
 
 <div align="center">

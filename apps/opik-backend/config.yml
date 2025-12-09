@@ -8,6 +8,9 @@ logging:
   #  Description: Individual logger configuration
   loggers:
     com.comet: ${OPIK_LOG_LEVEL:-INFO}
+    # Default: INFO
+    # Description: Set to DEBUG to see complete assembled LLM streaming responses (application-level logging)
+    com.comet.opik.infrastructure.llm: ${LLM_PROXY_REQUEST_LOG_LEVEL:-INFO}
 
 # Description: state database configuration
 # https://www.dropwizard.io/en/stable/manual/configuration.html#database
@@ -434,10 +437,10 @@ llmProviderClient:
   # Description: Write timeout for LLM providers
   writeTimeout: ${LLM_PROVIDER_CLIENT_WRITE_TIMEOUT:-60s}
   # Default: false
-  # Description: Whether or not to log requests
+  # Description: Whether or not to log requests (HTTP-level logging via langchain4j - can be verbose and may contain credentials)
   logRequests: ${LLM_PROVIDER_CLIENT_LOG_REQUESTS:-false}
   # Default: false
-  # Description: Whether or not to log responses
+  # Description: Whether or not to log responses (HTTP-level logging via langchain4j - can be verbose)
   logResponses: ${LLM_PROVIDER_CLIENT_LOG_RESPONSES:-false}
   # Configuration for OpenAI client
   openAiClient:
@@ -541,9 +544,9 @@ serviceToggles:
   # Default: false
   # Description: Whether or not to enable the trace thread Python evaluator
   traceThreadPythonEvaluatorEnabled: ${TOGGLE_TRACE_THREAD_PYTHON_EVALUATOR_ENABLED:-"true"}
-  # Default: true
+  # Default: false
   # Description: Whether or not to enable the span LLM as Judge evaluator
-  spanLlmAsJudgeEnabled: ${TOGGLE_SPAN_LLM_AS_JUDGE_ENABLED:-"true"}
+  spanLlmAsJudgeEnabled: ${TOGGLE_SPAN_LLM_AS_JUDGE_ENABLED:-"false"}
   # Default: false
   # Description: Whether or not OpikAI feature is enabled
   opikAIEnabled: ${TOGGLE_OPIK_AI_ENABLED:-"false"}
@@ -565,6 +568,9 @@ serviceToggles:
   # Default: false
   # Description: Whether or not dataset versioning feature is enabled
   datasetVersioningEnabled: ${TOGGLE_DATASET_VERSIONING_ENABLED:-"false"}
+  # Default: false
+  # Description: Whether or not Optimization Studio feature is enabled
+  optimizationStudioEnabled: ${TOGGLE_OPTIMIZATION_STUDIO_ENABLED:-"false"}
 
 # Trace Thread configuration
 traceThreadConfig:
@@ -711,3 +717,24 @@ webhook:
     # Default: 1s
     # Description: Maximum time to wait for acquiring metrics alert job lock
     metricsAlertJobLockWaitTimeout: ${WEBHOOK_METRICS_ALERT_JOB_LOCK_WAIT_TIMEOUT:-1s}
+
+# Built-in LLM Provider configuration
+# Note: The model name "opik-builtin-model" is hardcoded and cannot be changed.
+# This ensures backward compatibility with automation rules that store the model name.
+builtinLlmProvider:
+  # Default: false
+  # Description: Whether or not to enable the built-in LLM provider
+  enabled: ${BUILTIN_LLM_PROVIDER_ENABLED:-false}
+  # Default: gpt-4o-mini
+  # Description: Actual model name sent to the AI server (the underlying LLM)
+  actualModel: ${BUILTIN_LLM_PROVIDER_ACTUAL_MODEL:-gpt-4o-mini}
+  # Default: openai
+  # Description: Provider name stored in spans for cost tracking
+  spanProvider: ${BUILTIN_LLM_PROVIDER_SPAN_PROVIDER:-openai}
+  # Default: empty
+  # Description: API key for the OpenAI endpoint
+  apiKey: ${BUILTIN_LLM_PROVIDER_API_KEY:-}
+  # Default: empty
+  # Description: Base URL for OpenAI-compatible endpoint (empty for built-in OpenAI)
+  baseUrl: ${BUILTIN_LLM_PROVIDER_BASE_URL:-}
+
