@@ -161,6 +161,10 @@ const LLMJudgeBaseSchema = z.object({
                 type: z.literal("video_url"),
                 video_url: z.object({ url: z.string() }),
               }),
+              z.object({
+                type: z.literal("audio_url"),
+                audio_url: z.object({ url: z.string() }),
+              }),
             ]),
           )
           .min(1, { message: "Message is required" }),

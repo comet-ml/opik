@@ -10,6 +10,8 @@ public enum OpikContentType {
     IMAGE_URL,
     @JsonProperty("video_url")
     VIDEO_URL,
+    @JsonProperty("audio_url")
+    AUDIO_URL,
     @JsonProperty("input_audio")
     AUDIO,
     @JsonProperty("file")

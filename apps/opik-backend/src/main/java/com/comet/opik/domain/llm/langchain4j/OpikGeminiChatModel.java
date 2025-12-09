@@ -1,5 +1,6 @@
 package com.comet.opik.domain.llm.langchain4j;
 
+import dev.langchain4j.data.image.Image;
 import dev.langchain4j.data.message.ChatMessage;
 import dev.langchain4j.data.message.Content;
 import dev.langchain4j.data.message.ImageContent;
@@ -84,10 +85,15 @@ public class OpikGeminiChatModel implements ChatModel {
                 convertedContents.add(content);
             } else if (content instanceof VideoContent videoContent) {
                 // Convert VideoContent to ImageContent (Gemini treats videos as images)
+                // Preserve mimeType if available
                 String videoUrlString = videoContent.video().url().toString();
                 log.debug("Converting VideoContent to ImageContent for Gemini: {}",
                         videoUrlString.substring(0, Math.min(50, videoUrlString.length())));
-                convertedContents.add(ImageContent.from(videoContent.video().url()));
+                var imageBuilder = Image.builder().url(videoContent.video().url());
+                if (videoContent.video().mimeType() != null) {
+                    imageBuilder.mimeType(videoContent.video().mimeType());
+                }
+                convertedContents.add(ImageContent.from(imageBuilder.build()));
             }
             // Other content types are passed through as-is
         }

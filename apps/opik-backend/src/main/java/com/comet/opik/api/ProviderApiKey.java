@@ -44,7 +44,9 @@ public record ProviderApiKey(
         @JsonView({View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) Instant createdAt,
         @JsonView({View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) String createdBy,
         @JsonView({View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) Instant lastUpdatedAt,
-        @JsonView({View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) String lastUpdatedBy){
+        @JsonView({View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) String lastUpdatedBy,
+        @JsonView({
+                View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY, description = "If true, this provider is system-managed and cannot be edited or deleted") boolean readOnly){
 
     @Override
     public String toString() {
@@ -60,6 +62,7 @@ public record ProviderApiKey(
                 ", createdBy='" + createdBy + '\'' +
                 ", lastUpdatedAt=" + lastUpdatedAt +
                 ", lastUpdatedBy='" + lastUpdatedBy + '\'' +
+                ", readOnly=" + readOnly +
                 '}';
     }
 

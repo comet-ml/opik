@@ -3,6 +3,8 @@ package com.comet.opik.infrastructure.llm.gemini;
 import com.comet.opik.domain.llm.langchain4j.OpikContent;
 import com.comet.opik.domain.llm.langchain4j.OpikUserMessage;
 import com.comet.opik.infrastructure.llm.LlmProviderLangChainMapper;
+import com.comet.opik.infrastructure.llm.VideoMimeTypeUtils;
+import dev.langchain4j.data.image.Image;
 import dev.langchain4j.data.message.ChatMessage;
 import dev.langchain4j.data.message.Content;
 import dev.langchain4j.data.message.ImageContent;
@@ -14,7 +16,10 @@ import jakarta.ws.rs.BadRequestException;
 import lombok.NonNull;
 import org.mapstruct.Mapper;
 import org.mapstruct.factory.Mappers;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
+import java.net.URI;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -24,6 +29,8 @@ import java.util.List;
  */
 @Mapper
 public interface GeminiLangChainMapper {
+
+    Logger log = LoggerFactory.getLogger(GeminiLangChainMapper.class);
 
     GeminiLangChainMapper INSTANCE = Mappers.getMapper(GeminiLangChainMapper.class);
 
@@ -86,10 +93,29 @@ public interface GeminiLangChainMapper {
             case VIDEO_URL -> {
                 // Gemini treats videos as images - convert VIDEO_URL to ImageContent
                 if (opikContent.videoUrl() != null) {
-                    yield ImageContent.from(opikContent.videoUrl().url());
+                    String videoUrl = opikContent.videoUrl().url();
+                    var imageBuilder = Image.builder()
+                            .url(URI.create(videoUrl));
+
+                    // Use explicit mimeType if provided
+                    String mimeType = opikContent.videoUrl().mimeType();
+
+                    // Only detect MIME type if not provided AND URL has no file extension
+                    // (LangChain4j can detect MIME type from extensions automatically)
+                    if (mimeType == null && !VideoMimeTypeUtils.hasVideoFileExtension(videoUrl)) {
+                        mimeType = VideoMimeTypeUtils.detectMimeTypeFromHttpHead(videoUrl);
+                    }
+
+                    if (mimeType != null) {
+                        imageBuilder.mimeType(mimeType);
+                        log.debug("Set mimeType '{}' for video URL: '{}'", mimeType,
+                                videoUrl.substring(0, Math.min(60, videoUrl.length())));
+                    }
+                    yield ImageContent.from(imageBuilder.build());
                 }
                 throw new BadRequestException("Video URL is null");
             }
+            case AUDIO_URL -> throw new BadRequestException("Audio URL content not yet supported for Gemini");
             case AUDIO -> throw new BadRequestException("Audio content not yet supported for Gemini");
             case FILE -> throw new BadRequestException("File content not yet supported for Gemini");
         };

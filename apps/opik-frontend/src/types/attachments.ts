@@ -41,6 +41,17 @@ export type ParsedVideoData = {
   mimeType?: string;
 };
 
+export type ParsedAudioData = {
+  url: string;
+  name: string;
+  /**
+   * Optional mime type hint for rendering (e.g. audio/mpeg).
+   * When provided, consumers can display or transform the audio appropriately.
+   */
+  mimeType?: string;
+};
+
 export type ParsedMediaData =
   | (ParsedImageData & { type: ATTACHMENT_TYPE.IMAGE })
-  | (ParsedVideoData & { type: ATTACHMENT_TYPE.VIDEO });
+  | (ParsedVideoData & { type: ATTACHMENT_TYPE.VIDEO })
+  | (ParsedAudioData & { type: ATTACHMENT_TYPE.AUDIO });
