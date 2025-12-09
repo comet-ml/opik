@@ -2081,6 +2081,55 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorMessage_Public"
+  /v1/private/datasets/{id}/versions/hash/{versionHash}:
+    patch:
+      tags:
+      - Datasets
+      summary: Update dataset version
+      description: Update a dataset version's change_description and/or add new tags
+      operationId: updateDatasetVersion
+      parameters:
+      - name: versionHash
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DatasetVersionUpdate_Public"
+      responses:
+        "200":
+          description: Version updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DatasetVersion_Public"
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage_Public"
+        "404":
+          description: Not Found - Version not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage_Public"
+        "409":
+          description: Conflict - Tag already exists
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage_Public"
   /v1/private/experiments:
     get:
       tags:
@@ -6569,10 +6618,6 @@ components:
         last_updated_by:
           type: string
           readOnly: true
-        action:
-          type: string
-          enum:
-          - evaluator
         type:
           type: string
           enum:
@@ -6581,6 +6626,10 @@ components:
           - trace_thread_llm_as_judge
           - trace_thread_user_defined_metric_python
           - span_llm_as_judge
+        action:
+          type: string
+          enum:
+          - evaluator
       discriminator:
         propertyName: type
         mapping:
@@ -7028,10 +7077,6 @@ components:
           format: float
         enabled:
           type: boolean
-        action:
-          type: string
-          enum:
-          - evaluator
         type:
           type: string
           enum:
@@ -7040,6 +7085,10 @@ components:
           - trace_thread_llm_as_judge
           - trace_thread_user_defined_metric_python
           - span_llm_as_judge
+        action:
+          type: string
+          enum:
+          - evaluator
       discriminator:
         propertyName: type
         mapping:
@@ -7346,10 +7395,6 @@ components:
         last_updated_by:
           type: string
           readOnly: true
-        action:
-          type: string
-          enum:
-          - evaluator
         type:
           type: string
           enum:
@@ -7358,6 +7403,10 @@ components:
           - trace_thread_llm_as_judge
           - trace_thread_user_defined_metric_python
           - span_llm_as_judge
+        action:
+          type: string
+          enum:
+          - evaluator
       discriminator:
         propertyName: type
         mapping:
@@ -7738,10 +7787,6 @@ components:
         last_updated_by:
           type: string
           readOnly: true
-        action:
-          type: string
-          enum:
-          - evaluator
         type:
           type: string
           enum:
@@ -7750,6 +7795,10 @@ components:
           - trace_thread_llm_as_judge
           - trace_thread_user_defined_metric_python
           - span_llm_as_judge
+        action:
+          type: string
+          enum:
+          - evaluator
       discriminator:
         propertyName: type
         mapping:
@@ -7821,10 +7870,6 @@ components:
         project_id:
           type: string
           format: uuid
-        action:
-          type: string
-          enum:
-          - evaluator
         type:
           type: string
           enum:
@@ -7833,6 +7878,10 @@ components:
           - trace_thread_llm_as_judge
           - trace_thread_user_defined_metric_python
           - span_llm_as_judge
+        action:
+          type: string
+          enum:
+          - evaluator
       discriminator:
         propertyName: type
         mapping:
@@ -8414,6 +8463,30 @@ components:
           - processing
           - completed
           - failed
+        latest_version:
+          $ref: "#/components/schemas/DatasetVersionSummary"
+    DatasetVersionSummary:
+      type: object
+      properties:
+        id:
+          type: string
+          description: Unique identifier of the version
+          format: uuid
+        version_hash:
+          type: string
+          description: Hash of the version content
+        change_description:
+          type: string
+          description: Description of changes in this version
+        tags:
+          uniqueItems: true
+          type: array
+          description: Tags associated with this version
+          items:
+            type: string
+            description: Tags associated with this version
+      description: Summary of the latest dataset version
+      readOnly: true
     Dataset_Write:
       required:
       - name
@@ -9207,6 +9280,28 @@ components:
           type: array
           items:
             type: string
+    DatasetVersionSummary_Public:
+      type: object
+      properties:
+        id:
+          type: string
+          description: Unique identifier of the version
+          format: uuid
+        version_hash:
+          type: string
+          description: Hash of the version content
+        change_description:
+          type: string
+          description: Description of changes in this version
+        tags:
+          uniqueItems: true
+          type: array
+          description: Tags associated with this version
+          items:
+            type: string
+            description: Tags associated with this version
+      description: Summary of the latest dataset version
+      readOnly: true
     Dataset_Public:
       required:
       - name
@@ -9283,6 +9378,8 @@ components:
           - processing
           - completed
           - failed
+        latest_version:
+          $ref: "#/components/schemas/DatasetVersionSummary_Public"
     DatasetIdentifier_Public:
       required:
       - dataset_name
@@ -9610,11 +9707,18 @@ components:
     DatasetVersionCreate_Public:
       type: object
       properties:
-        tag:
-          maxLength: 100
-          minLength: 0
-          type: string
-          description: Optional tag for this version
+        tags:
+          type: array
+          description: Optional list of tags for this version
+          example:
+          - baseline
+          - v1.0
+          items:
+            maxLength: 100
+            minLength: 0
+            type: string
+            description: Optional list of tags for this version
+            example: "[\"baseline\",\"v1.0\"]"
         change_description:
           type: string
           description: Optional description of changes in this version
@@ -9662,6 +9766,10 @@ components:
           items:
             type: string
             readOnly: true
+        is_latest:
+          type: boolean
+          description: Indicates whether this is the latest version of the dataset
+          readOnly: true
         items_total:
           type: integer
           description: Total number of items in this version
@@ -9714,6 +9822,27 @@ components:
           minLength: 1
           type: string
           description: Version hash or tag to restore from
+    DatasetVersionUpdate_Public:
+      type: object
+      properties:
+        change_description:
+          type: string
+          description: Optional description of changes in this version
+          example: Updated baseline version
+        tags_to_add:
+          maxItems: 100
+          minItems: 0
+          type: array
+          description: Optional list of tags to add to this version
+          example:
+          - production
+          - reviewed
+          items:
+            maxLength: 100
+            minLength: 0
+            type: string
+            description: Optional list of tags to add to this version
+            example: "[\"production\",\"reviewed\"]"
     Experiment:
       required:
       - dataset_name
@@ -10712,6 +10841,8 @@ components:
     GroupContentWithAggregations:
       type: object
       properties:
+        label:
+          type: string
         aggregations:
           $ref: "#/components/schemas/AggregationData"
     IdsHolder:
@@ -12635,10 +12766,10 @@ components:
           type: string
           description: "Template structure type: 'text' or 'chat'. Immutable after\
             \ creation."
+          default: text
           enum:
           - text
           - chat
-          default: text
         tags:
           uniqueItems: true
           type: array
@@ -12747,10 +12878,10 @@ components:
           type: string
           description: "Template structure type: 'text' or 'chat'. Immutable after\
             \ creation."
+          default: text
           enum:
           - text
           - chat
-          default: text
         tags:
           uniqueItems: true
           type: array
@@ -12836,10 +12967,10 @@ components:
             \ the given name already exists, this field is ignored and the existing\
             \ prompt's template structure is used. Template structure is immutable\
             \ after prompt creation."
+          default: text
           enum:
           - text
           - chat
-          default: text
     Prompt_Detail:
       required:
       - name
@@ -12860,10 +12991,10 @@ components:
           type: string
           description: "Template structure type: 'text' or 'chat'. Immutable after\
             \ creation."
+          default: text
           enum:
           - text
           - chat
-          default: text
         tags:
           uniqueItems: true
           type: array
@@ -12988,10 +13119,10 @@ components:
           type: string
           description: "Template structure type: 'text' or 'chat'. Immutable after\
             \ creation."
+          default: text
           enum:
           - text
           - chat
-          default: text
         tags:
           uniqueItems: true
           type: array

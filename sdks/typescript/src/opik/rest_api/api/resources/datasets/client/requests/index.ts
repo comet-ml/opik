@@ -19,3 +19,4 @@ export { type DatasetVersionTag } from "./DatasetVersionTag";
 export { type ListDatasetVersionsRequest } from "./ListDatasetVersionsRequest";
 export { type DatasetVersionCreatePublic } from "./DatasetVersionCreatePublic";
 export { type DatasetVersionRestorePublic } from "./DatasetVersionRestorePublic";
+export { type DatasetVersionUpdatePublic } from "./DatasetVersionUpdatePublic";

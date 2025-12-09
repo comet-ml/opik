@@ -193,6 +193,8 @@ from .dataset_version_diff import DatasetVersionDiff
 from .dataset_version_diff_stats import DatasetVersionDiffStats
 from .dataset_version_page_public import DatasetVersionPagePublic
 from .dataset_version_public import DatasetVersionPublic
+from .dataset_version_summary import DatasetVersionSummary
+from .dataset_version_summary_public import DatasetVersionSummaryPublic
 from .dataset_visibility import DatasetVisibility
 from .delete_attachments_request import DeleteAttachmentsRequest
 from .delete_attachments_request_entity_type import DeleteAttachmentsRequestEntityType
@@ -684,6 +686,8 @@ __all__ = [
     "DatasetVersionDiffStats",
     "DatasetVersionPagePublic",
     "DatasetVersionPublic",
+    "DatasetVersionSummary",
+    "DatasetVersionSummaryPublic",
     "DatasetVisibility",
     "DeleteAttachmentsRequest",
     "DeleteAttachmentsRequestEntityType",
