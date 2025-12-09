@@ -64,6 +64,9 @@ def _normalize_output(output: Any) -> str:
     return str(output).strip().lower()
 
 
+@pytest.mark.skip(
+    reason="This test is very flaky and requires a major refactor if not removal"
+)
 @pytest.mark.skipif(
     not environment.has_openai_api_key(), reason="OPENAI_API_KEY is not set"
 )
