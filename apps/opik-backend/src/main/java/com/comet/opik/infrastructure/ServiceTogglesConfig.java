@@ -31,4 +31,6 @@ public class ServiceTogglesConfig {
     @NotNull boolean dashboardsEnabled;
     @JsonProperty
     @NotNull boolean datasetVersioningEnabled;
+    @JsonProperty
+    @NotNull boolean collaboratorsTabEnabled;
 }

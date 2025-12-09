@@ -11,4 +11,5 @@ export enum FeatureToggleKeys {
   SPAN_LLM_AS_JUDGE_ENABLED = "span_llm_as_judge_enabled",
   DASHBOARDS_ENABLED = "dashboards_enabled",
   OPTIMIZATION_STUDIO_ENABLED = "optimization_studio_enabled",
+  COLLABORATORS_TAB_ENABLED = "collaborators_tab_enabled",
 }
