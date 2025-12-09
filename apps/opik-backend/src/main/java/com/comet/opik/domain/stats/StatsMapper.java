@@ -5,6 +5,7 @@ import com.comet.opik.api.FeedbackScoreAverage;
 import com.comet.opik.api.PercentageValues;
 import com.comet.opik.api.ProjectStats;
 import io.r2dbc.spi.Row;
+import org.apache.commons.collections4.MapUtils;
 
 import java.math.BigDecimal;
 import java.util.List;
@@ -269,8 +270,8 @@ public class StatsMapper {
             BigDecimal p99 = toBigDecimal(percentilesMap.get("p99"));
 
             if (p50 != null || p90 != null || p99 != null) {
-                var percentiles = new PercentageValues(p50, p90, p99);
-                statsBuilder.add(new PercentageValueStat(statName, percentiles));
+                var percentiles = PercentageValues.builder().p50(p50).p90(p90).p99(p99).build();
+                statsBuilder.add(PercentageValueStat.builder().name(statName).value(percentiles).build());
             }
         }
     }
@@ -284,7 +285,7 @@ public class StatsMapper {
             Row row,
             Stream.Builder<ProjectStats.ProjectStatItem<?>> statsBuilder) {
         Map<String, Map<String, ?>> feedbackScoresPercentilesMap = row.get(FEEDBACK_SCORES_PERCENTILES, Map.class);
-        if (feedbackScoresPercentilesMap != null && !feedbackScoresPercentilesMap.isEmpty()) {
+        if (MapUtils.isNotEmpty(feedbackScoresPercentilesMap)) {
             feedbackScoresPercentilesMap.entrySet().stream()
                     .sorted(Map.Entry.comparingByKey())
                     .forEach(entry -> {
@@ -310,14 +311,11 @@ public class StatsMapper {
      * Converts a value to BigDecimal, handling various numeric types.
      */
     private static BigDecimal toBigDecimal(Object value) {
-        if (value == null) {
-            return null;
-        }
         if (value instanceof BigDecimal bd) {
             return bd;
         }
         if (value instanceof Number number) {
-            return BigDecimal.valueOf(number.doubleValue());
+            return new BigDecimal(number.toString());
         }
         return null;
     }
