@@ -1,7 +1,9 @@
 package com.comet.opik.infrastructure.llm;
 
+import com.google.common.io.Files;
 import lombok.experimental.UtilityClass;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.StringUtils;
 
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -45,10 +47,10 @@ public class VideoMimeTypeUtils {
     public static boolean hasVideoFileExtension(String url) {
         try {
             String path = URI.create(url).getPath();
-            if (path == null || path.isBlank()) {
+            if (StringUtils.isBlank(path)) {
                 return false;
             }
-            String extension = com.google.common.io.Files.getFileExtension(path).toLowerCase();
+            String extension = Files.getFileExtension(path).toLowerCase();
             return VIDEO_EXTENSIONS.contains(extension);
         } catch (IllegalArgumentException e) {
             log.debug("Invalid URL format: '{}'", url.substring(0, Math.min(50, url.length())));
