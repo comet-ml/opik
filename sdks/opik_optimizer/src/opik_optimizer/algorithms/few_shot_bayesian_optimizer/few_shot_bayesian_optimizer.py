@@ -711,7 +711,9 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             optimizable_prompts = prompt
             is_single_prompt_optimization = False
 
-        self._validate_optimization_inputs(optimizable_prompts, dataset, metric)
+        self._validate_optimization_inputs(
+            optimizable_prompts, dataset, metric, support_content_parts=True
+        )
 
         optimization = None
         try:

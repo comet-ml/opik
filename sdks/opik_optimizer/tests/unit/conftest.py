@@ -13,7 +13,7 @@ Usage:
 """
 
 import pytest
-from unittest.mock import Mock, AsyncMock, MagicMock
+from unittest.mock import MagicMock
 from typing import Any
 
 from opik_optimizer import ChatPrompt
@@ -480,9 +480,21 @@ def sample_dataset_items() -> list[dict[str, Any]]:
     """
     return [
         {"id": "item-1", "question": "What is 2+2?", "answer": "4"},
-        {"id": "item-2", "question": "What is the capital of France?", "answer": "Paris"},
-        {"id": "item-3", "question": "What is the largest planet?", "answer": "Jupiter"},
-        {"id": "item-4", "question": "Who wrote Romeo and Juliet?", "answer": "Shakespeare"},
+        {
+            "id": "item-2",
+            "question": "What is the capital of France?",
+            "answer": "Paris",
+        },
+        {
+            "id": "item-3",
+            "question": "What is the largest planet?",
+            "answer": "Jupiter",
+        },
+        {
+            "id": "item-4",
+            "question": "Who wrote Romeo and Juliet?",
+            "answer": "Shakespeare",
+        },
         {"id": "item-5", "question": "What is H2O?", "answer": "Water"},
     ]
 
@@ -509,7 +521,9 @@ def sample_metric():
     Case-insensitive matching.
     """
 
-    def accuracy_metric(dataset_item: dict[str, Any], llm_output: dict[str, Any]) -> float:
+    def accuracy_metric(
+        dataset_item: dict[str, Any], llm_output: dict[str, Any]
+    ) -> float:
         expected = dataset_item.get("answer", "").lower()
         actual = str(llm_output.get("llm_output", "")).lower()
         return 1.0 if expected in actual else 0.0
@@ -634,5 +648,3 @@ def mock_evaluation_result():
         return mock_result
 
     return _create
-
-
