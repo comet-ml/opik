@@ -58,6 +58,7 @@ import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import uk.co.jemos.podam.api.PodamFactory;
 
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Stream;
 
@@ -192,7 +193,7 @@ class ManualEvaluationResourceTest {
 
             // Create rule
             var rule = factory.manufacturePojo(AutomationRuleEvaluatorTraceThreadLlmAsJudge.class).toBuilder()
-                    .projectId(projectId)
+                    .projectIds(Set.of(projectId))
                     .samplingRate(1f)
                     .enabled(true)
                     .filters(List.of())
@@ -258,14 +259,14 @@ class ManualEvaluationResourceTest {
 
             // Create multiple rules
             var rule1 = factory.manufacturePojo(AutomationRuleEvaluatorTraceThreadLlmAsJudge.class).toBuilder()
-                    .projectId(projectId)
+                    .projectIds(Set.of(projectId))
                     .samplingRate(1f)
                     .enabled(true)
                     .filters(List.of())
                     .build();
             var rule2 = factory.manufacturePojo(AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython.class)
                     .toBuilder()
-                    .projectId(projectId)
+                    .projectIds(Set.of(projectId))
                     .samplingRate(1f)
                     .enabled(true)
                     .filters(List.of())
@@ -408,7 +409,7 @@ class ManualEvaluationResourceTest {
             var traceId = traceResourceClient.createTrace(trace, API_KEY, WORKSPACE_NAME);
 
             var rule = factory.manufacturePojo(AutomationRuleEvaluatorTraceThreadLlmAsJudge.class).toBuilder()
-                    .projectId(projectId)
+                    .projectIds(Set.of(projectId))
                     .samplingRate(0.5f)
                     .enabled(true)
                     .filters(List.of())
@@ -448,7 +449,7 @@ class ManualEvaluationResourceTest {
 
             var rule = factory.manufacturePojo(AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython.class)
                     .toBuilder()
-                    .projectId(projectId)
+                    .projectIds(Set.of(projectId))
                     .samplingRate(1f)
                     .enabled(true)
                     .filters(List.of())
@@ -496,7 +497,7 @@ class ManualEvaluationResourceTest {
 
             // Create span-level LLM as Judge rule
             var rule = factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class).toBuilder()
-                    .projectId(projectId)
+                    .projectIds(Set.of(projectId))
                     .samplingRate(1f)
                     .enabled(true)
                     .filters(List.of())
@@ -555,7 +556,7 @@ class ManualEvaluationResourceTest {
 
             // Create span-level LLM as Judge rule
             var spanLevelRule = factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class).toBuilder()
-                    .projectId(projectId)
+                    .projectIds(Set.of(projectId))
                     .samplingRate(1f)
                     .enabled(true)
                     .filters(List.of())
@@ -565,7 +566,7 @@ class ManualEvaluationResourceTest {
             // Create trace-thread LLM as Judge rule
             var traceThreadRule = factory.manufacturePojo(AutomationRuleEvaluatorTraceThreadLlmAsJudge.class)
                     .toBuilder()
-                    .projectId(projectId)
+                    .projectIds(Set.of(projectId))
                     .samplingRate(1f)
                     .enabled(true)
                     .filters(List.of())
