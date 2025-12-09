@@ -336,22 +336,6 @@ def get_trial_compare_url(
     return urllib.parse.urljoin(base, compare_path)
 
 
-def create_litellm_agent_class() -> type["OptimizableAgent"]:
-    """
-    Create an `OptimizableAgent` subclass scoped to the provided chat prompt.
-
-    Args:
-        prompt: The chat prompt to use when instantiating the agent.
-        optimizer_ref: Optional optimizer instance attached to the generated class.
-
-    Returns:
-        A concrete subclass with a sanitized class name, bound optimizer reference,
-        and an invoke method that prefers the prompt's custom `invoke` callable while
-        still routing default calls through `OptimizableAgent`.
-    """
-    pass
-
-
 def function_to_tool_definition(
     func: Callable, description: str | None = None
 ) -> dict[str, Any]:

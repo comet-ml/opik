@@ -581,7 +581,7 @@ class MetaPromptOptimizer(BaseOptimizer):
 
                 if best_cand_score_avg > best_score:
                     best_score = best_cand_score_avg
-                    best_prompt = best_candidate_this_round
+                    best_prompts = best_candidate_this_round
 
                 # Increment counters
                 round_num += 1
