@@ -25,6 +25,7 @@ const DEFAULT_STATE: FeatureToggles = {
   [FeatureToggleKeys.OPTIMIZATION_STUDIO_ENABLED]: false,
   [FeatureToggleKeys.SPAN_LLM_AS_JUDGE_ENABLED]: false,
   [FeatureToggleKeys.DASHBOARDS_ENABLED]: false,
+  [FeatureToggleKeys.COLLABORATORS_TAB_ENABLED]: true,
 };
 
 const initialState: FeatureTogglesState = {
@@ -48,6 +49,10 @@ export function FeatureTogglesProvider({ children }: FeatureTogglesProps) {
       setFeatures(data);
     }
   }, [data]);
+
+  useEffect(() => {
+    console.log("* 📍 features", features);
+  }, [features]);
 
   const value = useMemo(() => {
     return {

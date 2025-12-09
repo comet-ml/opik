@@ -4,17 +4,27 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { StringParam, useQueryParam } from "use-query-params";
 import FeedbackDefinitionsTab from "@/components/pages/ConfigurationPage/FeedbackDefinitionsTab/FeedbackDefinitionsTab";
 import WorkspacePreferencesTab from "./WorkspacePreferencesTab/WorkspacePreferencesTab";
+import CollaboratorsTab from "./CollaboratorsTab/CollaboratorsTab";
+import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
+import { FeatureToggleKeys } from "@/types/feature-toggles";
 
 enum CONFIGURATION_TABS {
   FEEDBACK_DEFINITIONS = "feedback-definitions",
   AI_PROVIDER = "ai-provider",
   WORKSPACE_PREFERENCES = "workspace-preferences",
+  COLLABORATORS = "collaborators",
 }
 
 const DEFAULT_TAB = CONFIGURATION_TABS.FEEDBACK_DEFINITIONS;
 
 const ConfigurationPage = () => {
   const [tab, setTab] = useQueryParam("tab", StringParam);
+
+  const isCollaboratorsTabEnabled = useIsFeatureEnabled(
+    FeatureToggleKeys.COLLABORATORS_TAB_ENABLED,
+  );
+
+  console.log("* 🧪 isCollaboratorsTabEnabled", isCollaboratorsTabEnabled);
 
   useEffect(() => {
     if (!tab) {
@@ -51,6 +61,14 @@ const ConfigurationPage = () => {
             >
               Workspace preferences
             </TabsTrigger>
+            {isCollaboratorsTabEnabled && (
+              <TabsTrigger
+                variant="underline"
+                value={CONFIGURATION_TABS.COLLABORATORS}
+              >
+                Collaborators
+              </TabsTrigger>
+            )}
           </TabsList>
 
           <TabsContent value={CONFIGURATION_TABS.FEEDBACK_DEFINITIONS}>
@@ -64,6 +82,12 @@ const ConfigurationPage = () => {
           <TabsContent value={CONFIGURATION_TABS.WORKSPACE_PREFERENCES}>
             <WorkspacePreferencesTab />
           </TabsContent>
+
+          {isCollaboratorsTabEnabled && (
+            <TabsContent value={CONFIGURATION_TABS.COLLABORATORS}>
+              <CollaboratorsTab />
+            </TabsContent>
+          )}
         </Tabs>
       </div>
     </div>
