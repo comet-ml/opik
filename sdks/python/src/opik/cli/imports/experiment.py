@@ -6,6 +6,7 @@ not a "full & honest" migration. Spans are imported as part of trace import,
 not experiment recreation.
 """
 
+import hashlib
 import json
 from dataclasses import dataclass
 from datetime import datetime
@@ -13,7 +14,6 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 import opik
-from opik.api_objects.dataset import dataset_item as dataset_item_module
 import opik.id_helpers as id_helpers_module  # type: ignore
 from opik.rest_api.types.experiment_item import ExperimentItem
 from rich.console import Console
@@ -23,8 +23,10 @@ from .utils import (
     translate_trace_id,
     matches_name_pattern,
     clean_feedback_scores,
+    debug_print,
 )
 from .prompt import import_prompts_from_directory
+from .dataset import import_datasets_from_directory
 
 console = Console()
 
@@ -62,11 +64,305 @@ def load_experiment_data(experiment_file: Path) -> ExperimentData:
         return ExperimentData.from_dict(data)
 
 
+def _build_dataset_item_id_map(
+    client: opik.Opik,
+    experiment_files: List[Path],
+    datasets_dir: Path,
+    dry_run: bool,
+    debug: bool,
+) -> tuple[Dict[str, str], Dict[str, int]]:
+    """Build a mapping from original dataset_item_id to new dataset_item_id.
+
+    This function:
+    1. Collects all dataset_item_id and dataset_item_data from experiment files
+    2. Imports datasets from the datasets directory
+    3. Matches imported dataset items by content to build the mapping
+
+    Args:
+        client: Opik client instance
+        experiment_files: List of experiment JSON files
+        datasets_dir: Directory containing dataset exports
+        dry_run: If True, only simulate without making changes
+        debug: If True, print debug messages
+
+    Returns:
+        Tuple of (dataset_item_id_map, dataset_stats) where:
+        - dataset_item_id_map: Dictionary mapping original dataset_item_id to new dataset_item_id
+        - dataset_stats: Dictionary with 'datasets', 'datasets_skipped', 'datasets_errors' keys
+    """
+    dataset_item_id_map: Dict[str, str] = {}
+    dataset_stats: Dict[str, int] = {
+        "datasets": 0,
+        "datasets_skipped": 0,
+        "datasets_errors": 0,
+    }
+
+    if dry_run:
+        return dataset_item_id_map, dataset_stats
+
+    # Step 1: Collect all dataset_item_id and dataset_item_data from experiment files
+    # Map: content_hash -> list of (original_dataset_item_id, dataset_item_data)
+    # Multiple original IDs can have the same content (they should all map to the same new item)
+    content_to_original_ids: Dict[str, List[tuple[str, Dict[str, Any]]]] = {}
+
+    for experiment_file in experiment_files:
+        try:
+            experiment_data = load_experiment_data(experiment_file)
+            items_data = experiment_data.items
+
+            for item_data in items_data:
+                original_dataset_item_id = item_data.get("dataset_item_id")
+                dataset_item_data = item_data.get("dataset_item_data")
+
+                # Fallback to input for older exports
+                if not dataset_item_data:
+                    dataset_item_data = item_data.get("input")
+
+                if not original_dataset_item_id or not dataset_item_data:
+                    continue
+
+                # Remove 'id' field from dataset_item_data for consistent hashing
+                # (imported items don't have 'id' field, so we need to match without it)
+                if isinstance(dataset_item_data, dict):
+                    dataset_item_data_for_hash = {
+                        k: v for k, v in dataset_item_data.items() if k != "id"
+                    }
+                else:
+                    dataset_item_data_for_hash = dataset_item_data
+
+                # Create a hash of the content for matching (without 'id' field)
+                # Sort keys to ensure consistent hashing
+                content_str = json.dumps(dataset_item_data_for_hash, sort_keys=True)
+                content_hash = hashlib.sha256(content_str.encode()).hexdigest()
+
+                # Store the mapping (content_hash -> list of (original_id, data))
+                # Store the original data without 'id' for matching
+                if content_hash not in content_to_original_ids:
+                    content_to_original_ids[content_hash] = []
+                content_to_original_ids[content_hash].append(
+                    (original_dataset_item_id, dataset_item_data_for_hash)
+                )
+
+        except Exception as e:
+            debug_print(
+                f"Warning: Failed to process experiment file {experiment_file} for dataset mapping: {e}",
+                debug,
+            )
+            continue
+
+    if not content_to_original_ids:
+        debug_print("No dataset items found in experiment files", debug)
+        return dataset_item_id_map, dataset_stats
+
+    # Count total unique original IDs
+    total_original_ids = sum(len(ids) for ids in content_to_original_ids.values())
+    console.print(
+        f"[blue]Found {total_original_ids} dataset item reference(s) ({len(content_to_original_ids)} unique content(s)) in experiment files[/blue]"
+    )
+    debug_print(
+        f"Found {total_original_ids} dataset item reference(s) ({len(content_to_original_ids)} unique content(s)) in experiment files",
+        debug,
+    )
+
+    # Step 2: Import datasets
+    datasets_dir = (
+        datasets_dir if datasets_dir.exists() else datasets_dir.parent / "datasets"
+    )
+    if not datasets_dir.exists():
+        console.print(
+            f"[yellow]Warning: No datasets directory found at {datasets_dir}, skipping dataset import[/yellow]"
+        )
+        debug_print(
+            f"No datasets directory found at {datasets_dir}, skipping dataset import",
+            debug,
+        )
+        return dataset_item_id_map, dataset_stats
+
+    console.print(
+        f"[blue]Importing datasets from {datasets_dir} to build dataset item ID mapping...[/blue]"
+    )
+
+    # Import datasets (this will create dataset items with new IDs)
+    dataset_import_stats = import_datasets_from_directory(
+        client, datasets_dir, dry_run, None, debug
+    )
+
+    # Update dataset_stats with import results
+    dataset_stats["datasets"] = dataset_import_stats.get("datasets", 0)
+    dataset_stats["datasets_skipped"] = dataset_import_stats.get("datasets_skipped", 0)
+    dataset_stats["datasets_errors"] = dataset_import_stats.get("datasets_errors", 0)
+
+    if dataset_import_stats.get("datasets", 0) == 0:
+        console.print(
+            f"[yellow]Warning: No datasets were imported from {datasets_dir}[/yellow]"
+        )
+        dataset_files = list(datasets_dir.glob("dataset_*.json"))
+        if dataset_files:
+            console.print(
+                f"[yellow]Found {len(dataset_files)} dataset file(s) but none were imported[/yellow]"
+            )
+        else:
+            console.print(f"[yellow]No dataset files found in {datasets_dir}[/yellow]")
+
+    # Flush to ensure datasets are persisted
+    if not dry_run:
+        client.flush()
+        console.print(
+            f"[green]Imported {dataset_import_stats.get('datasets', 0)} dataset(s)[/green]"
+        )
+
+    # Step 3: Get all imported dataset items and match by content
+    dataset_files = list(datasets_dir.glob("dataset_*.json"))
+
+    if not dataset_files:
+        console.print(
+            f"[yellow]Warning: No dataset files found in {datasets_dir}[/yellow]"
+        )
+        return dataset_item_id_map, dataset_stats
+
+    console.print(
+        f"[blue]Processing {len(dataset_files)} dataset file(s) to build item ID mapping...[/blue]"
+    )
+
+    for dataset_file in dataset_files:
+        try:
+            with open(dataset_file, "r", encoding="utf-8") as f:
+                dataset_data = json.load(f)
+
+            dataset_name = dataset_data.get("name") or (
+                dataset_data.get("dataset", {}).get("name")
+                if dataset_data.get("dataset")
+                else None
+            )
+
+            if not dataset_name:
+                continue
+
+            # Get the imported dataset
+            try:
+                dataset = client.get_dataset(dataset_name)
+            except Exception:
+                debug_print(
+                    f"Warning: Could not get dataset '{dataset_name}' after import",
+                    debug,
+                )
+                continue
+
+            # Get all items from the imported dataset (with their new IDs)
+            try:
+                imported_items = dataset.get_items()
+                console.print(
+                    f"[blue]Dataset '{dataset_name}' has {len(imported_items)} item(s)[/blue]"
+                )
+            except Exception as e:
+                console.print(
+                    f"[yellow]Warning: Could not get items from dataset '{dataset_name}': {e}[/yellow]"
+                )
+                continue
+
+            # Match imported items to original items by content
+            matched_count = 0
+            for imported_item in imported_items:
+                imported_item_id = imported_item.get("id")
+                if not imported_item_id:
+                    continue
+
+                # Remove 'id' from content for comparison
+                imported_content = {k: v for k, v in imported_item.items() if k != "id"}
+
+                # Create hash of imported content
+                imported_content_str = json.dumps(imported_content, sort_keys=True)
+                imported_content_hash = hashlib.sha256(
+                    imported_content_str.encode()
+                ).hexdigest()
+
+                # Match to original - map all original IDs with this content to the same new item
+                if imported_content_hash in content_to_original_ids:
+                    original_ids_list = content_to_original_ids[imported_content_hash]
+                    for original_id, _ in original_ids_list:
+                        dataset_item_id_map[original_id] = imported_item_id
+                        matched_count += 1
+                        debug_print(
+                            f"Mapped dataset item {original_id} -> {imported_item_id}",
+                            debug,
+                        )
+                    # Remove from dict to avoid rematching (though duplicates are fine)
+                    # We keep it in case the same content appears in multiple datasets
+
+            if matched_count > 0:
+                console.print(
+                    f"[green]Matched {matched_count} dataset item(s) from dataset '{dataset_name}'[/green]"
+                )
+            elif imported_items:
+                # Show why items weren't matched
+                unmatched_hashes = set(content_to_original_ids.keys())
+                imported_hashes = set()
+                for item in imported_items:
+                    item_content = {k: v for k, v in item.items() if k != "id"}
+                    content_str = json.dumps(item_content, sort_keys=True)
+                    imported_hashes.add(
+                        hashlib.sha256(content_str.encode()).hexdigest()
+                    )
+
+                if unmatched_hashes and imported_hashes:
+                    console.print(
+                        f"[yellow]Warning: Could not match any items from dataset '{dataset_name}'. Content hashes don't match.[/yellow]"
+                    )
+                    if debug:
+                        # Show sample content from both sides
+                        sample_original = list(content_to_original_ids.values())[0][0][
+                            1
+                        ]
+                        sample_imported = imported_items[0] if imported_items else {}
+                        console.print(
+                            f"[yellow]Sample original content: {json.dumps(sample_original, sort_keys=True)[:200]}...[/yellow]"
+                        )
+                        imported_sample = {
+                            k: v for k, v in sample_imported.items() if k != "id"
+                        }
+                        console.print(
+                            f"[yellow]Sample imported content: {json.dumps(imported_sample, sort_keys=True)[:200]}...[/yellow]"
+                        )
+
+        except Exception as e:
+            console.print(
+                f"[yellow]Warning: Failed to process dataset file {dataset_file.name} for mapping: {e}[/yellow]"
+            )
+            if debug:
+                import traceback
+
+                console.print(f"[yellow]Traceback: {traceback.format_exc()}[/yellow]")
+            continue
+
+    if dataset_item_id_map:
+        console.print(
+            f"[green]Built dataset item ID mapping with {len(dataset_item_id_map)} item(s)[/green]"
+        )
+        debug_print(
+            f"Dataset item ID mapping has {len(dataset_item_id_map)} entries",
+            debug,
+        )
+    else:
+        console.print(
+            "[yellow]Warning: Dataset item ID mapping is empty. This may cause experiment items to be skipped.[/yellow]"
+        )
+        if content_to_original_ids:
+            console.print(
+                f"[yellow]Found {total_original_ids} dataset item reference(s) in experiment files but couldn't match them to imported items.[/yellow]"
+            )
+            console.print(
+                "[yellow]This usually means the dataset items weren't imported correctly or the content structure doesn't match.[/yellow]"
+            )
+
+    return dataset_item_id_map, dataset_stats
+
+
 def recreate_experiment(
     client: opik.Opik,
     experiment_data: ExperimentData,
     project_name: str,
     trace_id_map: Dict[str, str],
+    dataset_item_id_map: Optional[Dict[str, str]] = None,
     dry_run: bool = False,
     debug: bool = False,
 ) -> bool:
@@ -77,13 +373,17 @@ def recreate_experiment(
         experiment_data: Experiment data structure from export
         project_name: Name of the project to create the experiment in
         trace_id_map: Mapping from original trace IDs to new trace IDs (required, can be empty dict)
+        dataset_item_id_map: Mapping from original dataset_item_id to new dataset_item_id (optional)
         dry_run: If True, only simulate the import without making changes
         debug: If True, print debug messages
 
-    Note: This function expects that traces have already been imported into the target workspace.
+    Note: This function expects that traces and datasets have already been imported into the target workspace.
     When traces are imported, they receive new IDs. The trace_id_map maps original trace IDs
     to the newly created trace IDs. Items referencing traces not in trace_id_map will be skipped.
-    An empty trace_id_map is valid and will result in all items being skipped.
+    When datasets are imported, their items receive new IDs. The dataset_item_id_map maps original
+    dataset_item_id to the newly created dataset_item_id. Items referencing dataset items not in
+    dataset_item_id_map will be skipped. An empty trace_id_map or dataset_item_id_map is valid and
+    will result in items being skipped.
     """
     experiment_info = experiment_data.experiment
     items_data = experiment_data.items
@@ -104,227 +404,142 @@ def recreate_experiment(
     try:
         # Get or create the dataset
         # Ensure dataset is in the same workspace as the client
-        dataset = client.get_or_create_dataset(
+        _ = client.get_or_create_dataset(
             name=dataset_name,
             description=f"Recreated dataset for experiment {experiment_name}",
         )
 
-        if debug:
-            console.print(
-                f"[blue]Using dataset '{dataset_name}' for experiment '{experiment_name}'[/blue]"
+        debug_print(
+            f"Using dataset '{dataset_name}' for experiment '{experiment_name}'",
+            debug,
+        )
+
+        # Ensure project_name is in metadata for future imports
+        experiment_metadata = experiment_info.get("metadata") or {}
+        if project_name and "project_name" not in experiment_metadata:
+            experiment_metadata = experiment_metadata.copy()
+            experiment_metadata["project_name"] = project_name
+            debug_print(
+                f"Adding project_name '{project_name}' to experiment metadata",
+                debug,
             )
 
         # Create the experiment
         experiment = client.create_experiment(
             dataset_name=dataset_name,
             name=experiment_name,
-            experiment_config=experiment_info.get("metadata"),
+            experiment_config=experiment_metadata,
             type=experiment_info.get("type", "regular"),
         )
 
-        if debug:
-            console.print(
-                f"[blue]Created experiment '{experiment_name}' with ID: {experiment.id}[/blue]"
-            )
+        debug_print(
+            f"Created experiment '{experiment_name}' with ID: {experiment.id}",
+            debug,
+        )
 
-        # Process experiment items and accumulate dataset items for batch insertion
-        # Track pending items: (dataset_item_obj, new_trace_id)
-        pending_items: List[tuple[Any, str]] = []
+        # Process experiment items using dataset_item_id_map
+        rest_experiment_items = []
         successful_items = 0
         skipped_items = 0
+        skipped_no_trace_id = 0
+        skipped_no_trace_mapping = 0
+        skipped_no_dataset_item_id = 0
+        skipped_no_dataset_item_mapping = 0
 
         for item_data in items_data:
             # Handle trace reference (from deduplicated exports)
             trace_id = handle_trace_reference(item_data)
             if not trace_id:
-                if debug:
-                    console.print(
-                        f"[yellow]Warning: No trace ID found in item {item_data.get('id', 'unknown')}, skipping item[/yellow]"
-                    )
+                debug_print(
+                    f"Warning: No trace ID found in item {item_data.get('id', 'unknown')}, skipping item",
+                    debug,
+                )
                 skipped_items += 1
+                skipped_no_trace_id += 1
                 continue
 
             # Translate trace id from source (workspace A) to newly created trace id (workspace B)
             new_trace_id = translate_trace_id(trace_id, trace_id_map)
             if not new_trace_id:
-                if debug:
-                    console.print(
-                        f"[yellow]Warning: No mapping for trace {trace_id}. "
-                        f"Trace ID map has {len(trace_id_map)} entries. Skipping item.[/yellow]"
-                    )
-                    if trace_id_map and debug:
-                        # Show first few trace IDs in map for debugging
-                        sample_ids = list(trace_id_map.keys())[:3]
-                        console.print(
-                            f"[blue]Sample trace IDs in map: {sample_ids}[/blue]"
-                        )
+                debug_print(
+                    f"Warning: No mapping for trace {trace_id}. "
+                    f"Trace ID map has {len(trace_id_map)} entries. Skipping item.",
+                    debug,
+                )
+                if trace_id_map:
+                    # Show first few trace IDs in map for debugging
+                    sample_ids = list(trace_id_map.keys())[:3]
+                    debug_print(f"Sample trace IDs in map: {sample_ids}", debug)
                 skipped_items += 1
+                skipped_no_trace_mapping += 1
                 continue
 
-            if debug:
-                console.print(f"[blue]Mapped trace {trace_id} -> {new_trace_id}[/blue]")
+            debug_print(f"Mapped trace {trace_id} -> {new_trace_id}", debug)
 
-            # Handle dataset item
-            dataset_item_data = item_data.get("dataset_item_data")
-
-            # If dataset_item_data is missing, try to use input as fallback (for older exports)
-            if not dataset_item_data:
-                # Check if input field exists and use it as dataset item data
-                input_data = item_data.get("input")
-                if input_data and isinstance(input_data, dict):
-                    dataset_item_data = input_data
-                    if debug:
-                        console.print(
-                            "[blue]Using 'input' field as dataset_item_data (export may be from older version)[/blue]"
-                        )
-                else:
-                    console.print(
-                        "[yellow]Warning: No dataset item data found, skipping item. "
-                        "This may be due to an older export format. Please re-export the experiment.[/yellow]"
-                    )
-                    skipped_items += 1
-                    continue
-
-            # Ensure dataset_item_data is a dict
-            if not isinstance(dataset_item_data, dict):
-                console.print(
-                    "[yellow]Warning: dataset_item_data is not a dictionary, skipping item[/yellow]"
+            # Translate dataset_item_id using dataset_item_id_map
+            original_dataset_item_id = item_data.get("dataset_item_id")
+            if not original_dataset_item_id:
+                debug_print(
+                    f"Warning: No dataset_item_id found in item {item_data.get('id', 'unknown')}, skipping item",
+                    debug,
                 )
                 skipped_items += 1
+                skipped_no_dataset_item_id += 1
                 continue
 
+            # Use dataset_item_id_map to get the new dataset_item_id
+            new_dataset_item_id = None
+            if dataset_item_id_map:
+                new_dataset_item_id = dataset_item_id_map.get(original_dataset_item_id)
+
+            if not new_dataset_item_id:
+                debug_print(
+                    f"Warning: No mapping for dataset_item_id {original_dataset_item_id}. "
+                    f"Dataset item ID map has {len(dataset_item_id_map) if dataset_item_id_map else 0} entries. Skipping item.",
+                    debug,
+                )
+                if dataset_item_id_map:
+                    # Show first few dataset item IDs in map for debugging
+                    sample_ids = list(dataset_item_id_map.keys())[:3]
+                    debug_print(f"Sample dataset item IDs in map: {sample_ids}", debug)
+                skipped_items += 1
+                skipped_no_dataset_item_mapping += 1
+                continue
+
+            debug_print(
+                f"Mapped dataset_item_id {original_dataset_item_id} -> {new_dataset_item_id}",
+                debug,
+            )
+
+            # Create experiment item with mapped IDs
             try:
-                # Always generate new IDs for dataset items to avoid workspace conflicts
-                # The exported IDs might not be valid in the target workspace
-
-                # Build DatasetItem with all fields from dataset_item_data
-                # Exclude 'id' as we'll generate a new one
-                content = {
-                    k: v
-                    for k, v in dataset_item_data.items()
-                    if k != "id" and v is not None
-                }
-
-                # Ensure content is not empty (backend requires non-empty data)
-                if not content:
-                    console.print(
-                        "[yellow]Warning: Dataset item data is empty, skipping item[/yellow]"
+                experiment_item_id = id_helpers_module.generate_id()
+                rest_experiment_items.append(
+                    ExperimentItem(
+                        id=experiment_item_id,
+                        experiment_id=experiment.id,
+                        dataset_item_id=new_dataset_item_id,
+                        trace_id=new_trace_id,
                     )
-                    skipped_items += 1
-                    continue
-
-                # Always generate a new ID for the dataset item
-                # This ensures the ID is valid in the target workspace
-                try:
-                    chosen_id = id_helpers_module.generate_id()  # type: ignore[attr-defined]
-                except Exception:
-                    # Fallback: create without ID and let backend generate it
-                    chosen_id = None
-
-                # Create DatasetItem object with new ID
-                if chosen_id is not None:
-                    ds_obj = dataset_item_module.DatasetItem(id=chosen_id, **content)  # type: ignore[attr-defined]
-                else:
-                    ds_obj = dataset_item_module.DatasetItem(**content)  # type: ignore[attr-defined]
-
-                # Store for batch insertion
-                pending_items.append((ds_obj, new_trace_id))
-
+                )
+                successful_items += 1
+                debug_print(
+                    f"Prepared experiment item: dataset_item_id={new_dataset_item_id}, trace_id={new_trace_id}",
+                    debug,
+                )
             except Exception as e:
                 console.print(
-                    f"[yellow]Warning: Failed to handle dataset item: {e}[/yellow]"
+                    f"[yellow]Warning: Failed to create experiment item: {e}[/yellow]"
                 )
                 skipped_items += 1
                 continue
-
-        # Batch insert all dataset items
-        rest_experiment_items = []
-        if pending_items:
-            try:
-                # Extract dataset items for batch insertion
-                dataset_items_to_insert = [ds_obj for ds_obj, _ in pending_items]
-
-                # Batch insert dataset items
-                # Note: We use the IDs we generated to ensure consistency
-                dataset.__internal_api__insert_items_as_dataclasses__(
-                    items=dataset_items_to_insert
-                )
-
-                # Flush client to ensure dataset items are persisted before using their IDs
-                # Use a longer timeout to ensure items are fully persisted
-                import time
-
-                flush_success = client.flush(timeout=30)
-                if not flush_success:
-                    console.print(
-                        "[yellow]Warning: Flush may not have completed fully. Dataset items might not be persisted yet.[/yellow]"
-                    )
-                if debug:
-                    console.print(
-                        "[blue]Flushed client after inserting dataset items (timeout=30s)[/blue]"
-                    )
-
-                # Small delay to ensure backend has processed the items
-                time.sleep(1)
-
-                # Create REST API experiment items with actual IDs
-                # Use REST API directly instead of streamer for more reliable insertion
-                for ds_obj, new_trace_id in pending_items:
-                    if ds_obj.id:
-                        # Generate ID for experiment item
-                        experiment_item_id = id_helpers_module.generate_id()
-                        rest_experiment_items.append(
-                            ExperimentItem(
-                                id=experiment_item_id,
-                                experiment_id=experiment.id,
-                                dataset_item_id=ds_obj.id,
-                                trace_id=new_trace_id,
-                            )
-                        )
-                        successful_items += 1
-                        if debug:
-                            console.print(
-                                f"[blue]Prepared experiment item: dataset_item_id={ds_obj.id}, trace_id={new_trace_id}[/blue]"
-                            )
-                    else:
-                        console.print(
-                            "[yellow]Warning: Dataset item inserted but has no ID, skipping experiment item[/yellow]"
-                        )
-                        skipped_items += 1
-
-            except Exception as e:
-                console.print(
-                    f"[yellow]Warning: Failed to batch insert dataset items: {e}[/yellow]"
-                )
-                # Fallback: try individual inserts
-                for ds_obj, new_trace_id in pending_items:
-                    try:
-                        dataset.__internal_api__insert_items_as_dataclasses__(
-                            items=[ds_obj]
-                        )
-                        # Flush after each item to ensure it's persisted
-                        client.flush()
-                        if ds_obj.id:
-                            experiment_item_id = id_helpers_module.generate_id()
-                            rest_experiment_items.append(
-                                ExperimentItem(
-                                    id=experiment_item_id,
-                                    experiment_id=experiment.id,
-                                    dataset_item_id=ds_obj.id,
-                                    trace_id=new_trace_id,
-                                )
-                            )
-                            successful_items += 1
-                    except Exception:
-                        skipped_items += 1
-                        continue
 
         # Insert experiment items using REST API directly (more reliable than streamer)
         if rest_experiment_items:
-            if debug:
-                console.print(
-                    f"[blue]Inserting {len(rest_experiment_items)} experiment items via REST API...[/blue]"
-                )
+            debug_print(
+                f"Inserting {len(rest_experiment_items)} experiment items via REST API...",
+                debug,
+            )
             try:
                 # Use REST API directly instead of streamer
                 client._rest_client.experiments.create_experiment_items(
@@ -335,8 +550,24 @@ def recreate_experiment(
                 )
                 if skipped_items > 0:
                     console.print(
-                        f"[yellow]Skipped {skipped_items} items due to missing data[/yellow]"
+                        f"[yellow]Skipped {skipped_items} items due to missing data:[/yellow]"
                     )
+                    if skipped_no_trace_id > 0:
+                        console.print(
+                            f"  - {skipped_no_trace_id} items missing trace_id"
+                        )
+                    if skipped_no_trace_mapping > 0:
+                        console.print(
+                            f"  - {skipped_no_trace_mapping} items with trace_id not found in trace_id_map (map has {len(trace_id_map)} entries)"
+                        )
+                    if skipped_no_dataset_item_id > 0:
+                        console.print(
+                            f"  - {skipped_no_dataset_item_id} items missing dataset_item_id"
+                        )
+                    if skipped_no_dataset_item_mapping > 0:
+                        console.print(
+                            f"  - {skipped_no_dataset_item_mapping} items with dataset_item_id not found in dataset_item_id_map (map has {len(dataset_item_id_map) if dataset_item_id_map else 0} entries)"
+                        )
             except Exception as e:
                 console.print(f"[red]Error inserting experiment items: {e}[/red]")
                 if debug:
@@ -348,13 +579,45 @@ def recreate_experiment(
             console.print(
                 f"[yellow]No valid items found for experiment '{experiment_name}'[/yellow]"
             )
-            if debug and trace_id_map:
+            console.print(
+                f"[yellow]Total items in experiment: {len(items_data)}[/yellow]"
+            )
+            if trace_id_map:
                 console.print(
-                    f"[blue]Trace ID map has {len(trace_id_map)} entries but no items were created[/blue]"
+                    f"[yellow]Trace ID map has {len(trace_id_map)} entries[/yellow]"
                 )
-            elif debug:
+                # Show sample trace IDs from experiment items vs map
+                experiment_trace_ids = [
+                    handle_trace_reference(item) for item in items_data
+                ]
+                experiment_trace_ids = [tid for tid in experiment_trace_ids if tid]
+                if experiment_trace_ids:
+                    matched = sum(
+                        1 for tid in experiment_trace_ids if tid in trace_id_map
+                    )
+                    console.print(
+                        f"[yellow]Experiment references {len(experiment_trace_ids)} trace(s), {matched} found in trace_id_map[/yellow]"
+                    )
+                    if matched < len(experiment_trace_ids):
+                        missing = [
+                            tid
+                            for tid in experiment_trace_ids
+                            if tid not in trace_id_map
+                        ]
+                        console.print(
+                            f"[yellow]Missing trace IDs (first 5): {missing[:5]}[/yellow]"
+                        )
+            else:
                 console.print(
                     "[yellow]No trace ID map available - traces may not have been imported[/yellow]"
+                )
+            if dataset_item_id_map:
+                console.print(
+                    f"[yellow]Dataset item ID map has {len(dataset_item_id_map)} entries[/yellow]"
+                )
+            else:
+                console.print(
+                    "[yellow]No dataset item ID map available - datasets may not have been imported[/yellow]"
                 )
 
         return True
@@ -373,6 +636,7 @@ def recreate_experiments(
     dry_run: bool = False,
     name_pattern: Optional[str] = None,
     trace_id_map: Optional[Dict[str, str]] = None,
+    dataset_item_id_map: Optional[Dict[str, str]] = None,
     debug: bool = False,
 ) -> int:
     """Recreate experiments from JSON files.
@@ -380,6 +644,8 @@ def recreate_experiments(
     Args:
         trace_id_map: Mapping from original trace IDs to new trace IDs.
                      If None, will be treated as empty dict (all items will be skipped).
+        dataset_item_id_map: Mapping from original dataset_item_id to new dataset_item_id.
+                            If None, will be treated as empty dict (all items will be skipped).
     """
     experiment_files = find_experiment_files(project_dir)
 
@@ -424,6 +690,7 @@ def recreate_experiments(
                 experiment_data,
                 project_name,
                 trace_id_map or {},
+                dataset_item_id_map or {},
                 dry_run,
                 debug,
             ):
@@ -458,37 +725,35 @@ def _import_traces_from_projects_directory(
     projects_dir = workspace_root / "projects"
 
     if not projects_dir.exists():
-        if debug:
-            console.print(
-                f"[blue]No projects directory found at {projects_dir}, skipping trace import[/blue]"
-            )
+        debug_print(
+            f"No projects directory found at {projects_dir}, skipping trace import",
+            debug,
+        )
         return trace_id_map, {"traces": 0, "traces_errors": 0}
 
     project_dirs = [d for d in projects_dir.iterdir() if d.is_dir()]
 
     if not project_dirs:
-        if debug:
-            console.print(
-                "[blue]No project directories found, skipping trace import[/blue]"
-            )
+        debug_print("No project directories found, skipping trace import", debug)
         return trace_id_map, {"traces": 0, "traces_errors": 0}
 
-    if debug:
-        console.print(
-            f"[blue]Importing traces from {len(project_dirs)} project(s) to build trace ID mapping...[/blue]"
-        )
+    debug_print(
+        f"Importing traces from {len(project_dirs)} project(s) to build trace ID mapping...",
+        debug,
+    )
 
     for project_dir in project_dirs:
         project_name = project_dir.name
         trace_files = list(project_dir.glob("trace_*.json"))
 
         if not trace_files:
+            debug_print(f"No trace files found in project '{project_name}'", debug)
             continue
 
-        if debug:
-            console.print(
-                f"[blue]Importing {len(trace_files)} trace(s) from project '{project_name}'...[/blue]"
-            )
+        debug_print(
+            f"Importing {len(trace_files)} trace(s) from project '{project_name}'...",
+            debug,
+        )
 
         for trace_file in trace_files:
             try:
@@ -500,13 +765,18 @@ def _import_traces_from_projects_directory(
                 original_trace_id = trace_info.get("id")
 
                 if not original_trace_id:
+                    debug_print(
+                        f"Warning: Trace file {trace_file.name} has no trace ID, skipping",
+                        debug,
+                    )
+                    traces_errors += 1
                     continue
 
                 if dry_run:
-                    if debug:
-                        console.print(
-                            f"[blue]Would import trace {original_trace_id} from project '{project_name}'[/blue]"
-                        )
+                    debug_print(
+                        f"Would import trace {original_trace_id} from project '{project_name}'",
+                        debug,
+                    )
                     continue
 
                 # Create trace with full data
@@ -544,6 +814,10 @@ def _import_traces_from_projects_directory(
                 # Map original trace ID to new trace ID
                 trace_id_map[original_trace_id] = trace.id
                 traces_imported += 1
+                debug_print(
+                    f"Mapped trace {original_trace_id} -> {trace.id} (project: {project_name})",
+                    debug,
+                )
 
                 # Create spans with full data, preserving parent-child relationships
                 # Build span_id_map to translate parent_span_id references
@@ -619,9 +893,20 @@ def _import_traces_from_projects_directory(
     if not dry_run and trace_id_map:
         # Flush client to ensure traces are persisted before recreating experiments
         client.flush()
-        if debug:
+        console.print(
+            f"[green]Imported {len(trace_id_map)} trace(s) and built trace ID mapping[/green]"
+        )
+        debug_print(
+            f"Trace ID mapping has {len(trace_id_map)} entries",
+            debug,
+        )
+    elif not dry_run:
+        console.print(
+            "[yellow]Warning: No traces were imported. Trace ID map is empty.[/yellow]"
+        )
+        if traces_imported == 0 and traces_errors == 0:
             console.print(
-                f"[green]Imported {len(trace_id_map)} trace(s) and built trace ID mapping[/green]"
+                f"[yellow]No trace files were found in {projects_dir}[/yellow]"
             )
 
     return trace_id_map, {"traces": traces_imported, "traces_errors": traces_errors}
@@ -653,6 +938,9 @@ def import_experiments_from_directory(
                 "experiments": 0,
                 "experiments_skipped": 0,
                 "experiments_errors": 0,
+                "datasets": 0,
+                "datasets_skipped": 0,
+                "datasets_errors": 0,
                 "prompts": 0,
                 "prompts_skipped": 0,
                 "prompts_errors": 0,
@@ -667,23 +955,40 @@ def import_experiments_from_directory(
         prompts_stats = {"prompts": 0, "prompts_skipped": 0, "prompts_errors": 0}
         prompts_dir = workspace_root / "prompts"
         if prompts_dir.exists():
-            if debug:
-                console.print(
-                    "[blue]Importing prompts from prompts directory...[/blue]"
-                )
+            debug_print("Importing prompts from prompts directory...", debug)
             prompts_stats = import_prompts_from_directory(
                 client, prompts_dir, dry_run, name_pattern, debug
             )
             if prompts_stats.get("prompts", 0) > 0 and not dry_run:
                 # Flush client to ensure prompts are persisted
                 client.flush()
-                if debug:
-                    console.print(
-                        f"[green]Imported {prompts_stats.get('prompts', 0)} prompt(s)[/green]"
-                    )
-        elif debug:
-            console.print(
-                "[blue]No prompts directory found, skipping prompt import[/blue]"
+                debug_print(
+                    f"Imported {prompts_stats.get('prompts', 0)} prompt(s)",
+                    debug,
+                )
+        else:
+            debug_print("No prompts directory found, skipping prompt import", debug)
+
+        # Import datasets first to build dataset_item_id_map
+        datasets_dir = workspace_root / "datasets"
+        dataset_item_id_map: Dict[str, str] = {}
+        datasets_stats: Dict[str, int] = {
+            "datasets": 0,
+            "datasets_skipped": 0,
+            "datasets_errors": 0,
+        }
+        if datasets_dir.exists():
+            debug_print(
+                "Importing datasets and building dataset item ID mapping...",
+                debug,
+            )
+            dataset_item_id_map, datasets_stats = _build_dataset_item_id_map(
+                client, experiment_files, datasets_dir, dry_run, debug
+            )
+        else:
+            debug_print(
+                f"No datasets directory found at {datasets_dir}, skipping dataset import",
+                debug,
             )
 
         # Import traces first to build trace_id_map
@@ -696,30 +1001,33 @@ def import_experiments_from_directory(
                 "[yellow]Warning: No traces were imported. Experiment items may be skipped if they reference traces.[/yellow]"
             )
             # Try to diagnose why traces weren't imported
-            if debug:
-                projects_dir = workspace_root / "projects"
-                if projects_dir.exists():
-                    project_dirs = [d for d in projects_dir.iterdir() if d.is_dir()]
-                    console.print(
-                        f"[blue]Found {len(project_dirs)} project directory(ies): {[d.name for d in project_dirs]}[/blue]"
+            projects_dir = workspace_root / "projects"
+            if projects_dir.exists():
+                project_dirs = [d for d in projects_dir.iterdir() if d.is_dir()]
+                debug_print(
+                    f"Found {len(project_dirs)} project directory(ies): {[d.name for d in project_dirs]}",
+                    debug,
+                )
+                for project_dir in project_dirs:
+                    trace_files = list(project_dir.glob("trace_*.json"))
+                    debug_print(
+                        f"Project '{project_dir.name}' has {len(trace_files)} trace file(s)",
+                        debug,
                     )
-                    for project_dir in project_dirs:
-                        trace_files = list(project_dir.glob("trace_*.json"))
-                        console.print(
-                            f"[blue]Project '{project_dir.name}' has {len(trace_files)} trace file(s)[/blue]"
-                        )
-                else:
-                    console.print(
-                        f"[blue]Projects directory not found at {projects_dir}[/blue]"
-                    )
-        elif trace_id_map and debug:
-            console.print(
-                f"[green]Built trace ID mapping with {len(trace_id_map)} trace(s)[/green]"
+            else:
+                debug_print(
+                    f"Projects directory not found at {projects_dir}",
+                    debug,
+                )
+        elif trace_id_map:
+            debug_print(
+                f"Built trace ID mapping with {len(trace_id_map)} trace(s)",
+                debug,
             )
             # Show sample trace IDs for debugging
             sample_original_ids = list(trace_id_map.keys())[:3]
-            console.print(
-                f"[blue]Sample original trace IDs in map: {sample_original_ids}[/blue]"
+            debug_print(
+                f"Sample original trace IDs in map: {sample_original_ids}", debug
             )
 
         # Build a map of trace_id -> project_name from trace files for project inference
@@ -783,10 +1091,10 @@ def import_experiments_from_directory(
                 if name_pattern and not matches_name_pattern(
                     experiment_name, name_pattern
                 ):
-                    if debug:
-                        console.print(
-                            f"[blue]Skipping experiment {experiment_name} (doesn't match pattern)[/blue]"
-                        )
+                    debug_print(
+                        f"Skipping experiment {experiment_name} (doesn't match pattern)",
+                        debug,
+                    )
                     skipped_count += 1
                     continue
 
@@ -797,10 +1105,7 @@ def import_experiments_from_directory(
                     imported_count += 1
                     continue
 
-                if debug:
-                    console.print(
-                        f"[blue]Importing experiment: {experiment_name}[/blue]"
-                    )
+                debug_print(f"Importing experiment: {experiment_name}", debug)
 
                 # Determine project name: try metadata first, then infer from trace files
                 project_for_logs = (experiment_info.get("metadata") or {}).get(
@@ -815,36 +1120,35 @@ def import_experiments_from_directory(
                         trace_id = handle_trace_reference(item_data)
                         if trace_id and trace_id in trace_to_project_map:
                             project_for_logs = trace_to_project_map[trace_id]
-                            if debug:
-                                console.print(
-                                    f"[blue]Inferred project name '{project_for_logs}' from trace files[/blue]"
-                                )
+                            debug_print(
+                                f"Inferred project name '{project_for_logs}' from trace files",
+                                debug,
+                            )
                             break
 
                 # Default to "default" if still not found
                 if not project_for_logs:
                     project_for_logs = "default"
-                    if debug:
-                        console.print(
-                            "[blue]Using default project name (no project found in metadata or trace files)[/blue]"
-                        )
+                    debug_print(
+                        "Using default project name (no project found in metadata or trace files)",
+                        debug,
+                    )
 
-                # Use trace_id_map to translate trace IDs (empty dict if None)
+                # Use trace_id_map and dataset_item_id_map to translate IDs (empty dicts if None)
+                # Note: dataset_item_id_map is already a dict (not None) from _build_dataset_item_id_map
                 success = recreate_experiment(
                     client,
                     experiment_data,
                     project_for_logs,
                     trace_id_map or {},
+                    dataset_item_id_map,
                     dry_run,
                     debug,
                 )
 
                 if success:
                     imported_count += 1
-                    if debug:
-                        console.print(
-                            f"[green]Imported experiment: {experiment_name}[/green]"
-                        )
+                    debug_print(f"Imported experiment: {experiment_name}", debug)
 
             except Exception as e:
                 console.print(
@@ -857,6 +1161,9 @@ def import_experiments_from_directory(
             "experiments": imported_count,
             "experiments_skipped": skipped_count,
             "experiments_errors": error_count,
+            "datasets": datasets_stats.get("datasets", 0),
+            "datasets_skipped": datasets_stats.get("datasets_skipped", 0),
+            "datasets_errors": datasets_stats.get("datasets_errors", 0),
             "prompts": prompts_stats.get("prompts", 0),
             "prompts_skipped": prompts_stats.get("prompts_skipped", 0),
             "prompts_errors": prompts_stats.get("prompts_errors", 0),
@@ -870,6 +1177,9 @@ def import_experiments_from_directory(
             "experiments": 0,
             "experiments_skipped": 0,
             "experiments_errors": 1,
+            "datasets": 0,
+            "datasets_skipped": 0,
+            "datasets_errors": 0,
             "prompts": 0,
             "prompts_skipped": 0,
             "prompts_errors": 0,

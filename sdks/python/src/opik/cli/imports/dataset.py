@@ -80,13 +80,44 @@ def import_datasets_from_directory(
                 if debug:
                     console.print(f"[blue]Importing dataset: {dataset_name}[/blue]")
 
-                # Create dataset
-                dataset = client.create_dataset(name=dataset_name)
+                # Get or create dataset (handles case where dataset already exists)
+                try:
+                    dataset = client.get_dataset(dataset_name)
+                    if debug:
+                        console.print(
+                            f"[blue]Dataset '{dataset_name}' already exists, using existing dataset[/blue]"
+                        )
+                except Exception:
+                    # Dataset doesn't exist, create it
+                    dataset = client.create_dataset(name=dataset_name)
+                    if debug:
+                        console.print(
+                            f"[blue]Created new dataset: {dataset_name}[/blue]"
+                        )
 
                 # Import dataset items
                 items = dataset_data.get("items", [])
                 if items:
-                    dataset.insert(items)
+                    # Remove 'id' field from items before inserting (IDs are auto-generated)
+                    items_to_insert = []
+                    for item in items:
+                        if isinstance(item, dict):
+                            # Create a copy without the 'id' field
+                            item_copy = {k: v for k, v in item.items() if k != "id"}
+                            items_to_insert.append(item_copy)
+                        else:
+                            items_to_insert.append(item)
+
+                    if items_to_insert:
+                        dataset.insert(items_to_insert)
+                        if debug:
+                            console.print(
+                                f"[blue]Inserted {len(items_to_insert)} items into dataset '{dataset_name}'[/blue]"
+                            )
+                    else:
+                        console.print(
+                            f"[yellow]Warning: No items to insert for dataset '{dataset_name}' (all items were empty after removing 'id' field)[/yellow]"
+                        )
 
                 imported_count += 1
                 if debug:
