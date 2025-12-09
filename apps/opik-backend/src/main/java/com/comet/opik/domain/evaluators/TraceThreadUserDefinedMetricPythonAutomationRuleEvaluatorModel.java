@@ -5,6 +5,7 @@ import lombok.Builder;
 import org.jdbi.v3.json.Json;
 
 import java.time.Instant;
+import java.util.Set;
 import java.util.UUID;
 
 import static com.comet.opik.domain.evaluators.TraceThreadUserDefinedMetricPythonAutomationRuleEvaluatorModel.TraceThreadUserDefinedMetricPythonCode;
@@ -12,8 +13,7 @@ import static com.comet.opik.domain.evaluators.TraceThreadUserDefinedMetricPytho
 @Builder(toBuilder = true)
 public record TraceThreadUserDefinedMetricPythonAutomationRuleEvaluatorModel(
         UUID id,
-        UUID projectId,
-        String projectName,
+        Set<UUID> projectIds,
         String name,
         Float samplingRate,
         boolean enabled,

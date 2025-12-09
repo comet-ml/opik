@@ -47,6 +47,7 @@ import lombok.extern.slf4j.Slf4j;
 
 import java.net.URI;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 import static com.comet.opik.api.LogItem.LogPage;
@@ -120,7 +121,8 @@ public class AutomationRuleEvaluatorsResource {
         String workspaceId = requestContext.get().getWorkspaceId();
 
         log.info("Looking for automated evaluator: id '{}' on project_id '{}'", projectId, workspaceId);
-        AutomationRuleEvaluator<?, ?> evaluator = service.findById(evaluatorId, projectId, workspaceId);
+        AutomationRuleEvaluator<?, ?> evaluator = service.findById(evaluatorId,
+                projectId != null ? Set.of(projectId) : null, workspaceId);
         log.info("Found automated evaluator: id '{}' on project_id '{}'", projectId, workspaceId);
 
         return Response.ok().entity(evaluator).build();
@@ -129,7 +131,7 @@ public class AutomationRuleEvaluatorsResource {
     @POST
     @Operation(operationId = "createAutomationRuleEvaluator", summary = "Create automation rule evaluator", description = "Create automation rule evaluator", responses = {
             @ApiResponse(responseCode = "201", description = "Created", headers = {
-                    @Header(name = "Location", required = true, example = "${basePath}/v1/private/automations/projects/{projectId}/evaluators/{evaluatorId}", schema = @Schema(implementation = String.class))
+                    @Header(name = "Location", required = true, example = "${basePath}/v1/private/automations/evaluators/{evaluatorId}", schema = @Schema(implementation = String.class))
             })
     })
     @RateLimited
@@ -140,16 +142,15 @@ public class AutomationRuleEvaluatorsResource {
         String workspaceId = requestContext.get().getWorkspaceId();
         String userName = requestContext.get().getUserName();
 
-        UUID projectId = evaluator.getProjectId();
-        log.info("Creating {} evaluator for project_id '{}' on workspace_id '{}'", evaluator.getType(),
-                evaluator.getProjectId(), workspaceId);
-        AutomationRuleEvaluator<?, ?> savedEvaluator = service.save(evaluator, projectId, workspaceId, userName);
-        log.info("Created {} evaluator '{}' for project_id '{}' on workspace_id '{}'", savedEvaluator.getType(),
-                savedEvaluator.getId(), savedEvaluator.getProjectId(), workspaceId);
+        Set<UUID> projectIds = evaluator.getProjectIds();
+        log.info("Creating {} evaluator for project_ids '{}' on workspace_id '{}'", evaluator.getType(),
+                evaluator.getProjectIds(), workspaceId);
+        AutomationRuleEvaluator<?, ?> savedEvaluator = service.save(evaluator, projectIds, workspaceId, userName);
+        log.info("Created {} evaluator '{}' for project_ids '{}' on workspace_id '{}'", savedEvaluator.getType(),
+                savedEvaluator.getId(), savedEvaluator.getProjectIds(), workspaceId);
 
         URI uri = uriInfo.getBaseUriBuilder()
-                .path("v1/private/automations/projects/{projectId}/evaluators/{id}")
-                .resolveTemplate("projectId", savedEvaluator.getProjectId().toString())
+                .path("v1/private/automations/evaluators/{id}")
                 .resolveTemplate("id", savedEvaluator.getId().toString())
                 .build();
         return Response.created(uri).build();
@@ -167,11 +168,12 @@ public class AutomationRuleEvaluatorsResource {
         var workspaceId = requestContext.get().getWorkspaceId();
         var userName = requestContext.get().getUserName();
 
-        var projectId = evaluatorUpdate.getProjectId();
-        log.info("Updating automation rule evaluator by id '{}' and project_id '{}' on workspace_id '{}'", id,
-                projectId, workspaceId);
-        service.update(id, projectId, workspaceId, userName, evaluatorUpdate);
-        log.info("Updated automation rule evaluator by id '{}' and project_id '{}' on workspace_id '{}'", id, projectId,
+        var projectIds = evaluatorUpdate.getProjectIds();
+        log.info("Updating automation rule evaluator by id '{}' and project_ids '{}' on workspace_id '{}'", id,
+                projectIds, workspaceId);
+        service.update(id, projectIds, workspaceId, userName, evaluatorUpdate);
+        log.info("Updated automation rule evaluator by id '{}' and project_ids '{}' on workspace_id '{}'", id,
+                projectIds,
                 workspaceId);
 
         return Response.noContent().build();
@@ -189,7 +191,7 @@ public class AutomationRuleEvaluatorsResource {
         log.info("Deleting automation rule evaluators by ids, count '{}', on workspace_id '{}'",
                 batchDelete.ids().size(),
                 workspaceId);
-        service.delete(batchDelete.ids(), projectId, workspaceId);
+        service.delete(batchDelete.ids(), projectId != null ? Set.of(projectId) : null, workspaceId);
         log.info("Deleted automation rule evaluators by ids, count '{}', on workspace_id '{}'",
                 batchDelete.ids().size(),
                 workspaceId);
