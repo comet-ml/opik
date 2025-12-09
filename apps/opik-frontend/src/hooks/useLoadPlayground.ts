@@ -116,10 +116,10 @@ const useLoadPlayground = () => {
           }
         } catch (error) {
           console.error("Failed to parse chat prompt:", error);
-          // Fallback to single message if parsing fails
+          // Fallback to single message if parsing fails, preserving full content
           newPrompt.messages = [
             generateDefaultLLMPromptMessage({
-              content: getTextFromMessageContent(promptContent),
+              content: promptContent,
               promptId,
               promptVersionId,
               autoImprove,
@@ -127,10 +127,10 @@ const useLoadPlayground = () => {
           ];
         }
       } else {
-        // For text prompts, create a single message
+        // For text prompts, create a single message preserving full content (including media)
         newPrompt.messages = [
           generateDefaultLLMPromptMessage({
-            content: getTextFromMessageContent(promptContent),
+            content: promptContent,
             promptId,
             promptVersionId,
             autoImprove,

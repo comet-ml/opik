@@ -24,7 +24,10 @@ export interface LLMJudgeSchema {
 export type TextPart = { type: "text"; text: string };
 export type ImagePart = { type: "image_url"; image_url: { url: string } };
 export type VideoPart = { type: "video_url"; video_url: { url: string } };
-export type MessageContent = string | Array<TextPart | ImagePart | VideoPart>;
+export type AudioPart = { type: "audio_url"; audio_url: { url: string } };
+export type MessageContent =
+  | string
+  | Array<TextPart | ImagePart | VideoPart | AudioPart>;
 
 export interface LLMMessage {
   id: string;
@@ -36,7 +39,7 @@ export interface LLMMessage {
 }
 
 export type ProviderMessageType = Omit<LLMMessage, "id"> & {
-  content_array?: Array<TextPart | ImagePart | VideoPart> | null;
+  content_array?: Array<TextPart | ImagePart | VideoPart | AudioPart> | null;
 };
 
 export interface PlaygroundPromptMetadata {
