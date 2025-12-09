@@ -56,9 +56,9 @@ const RunEvaluationDialog: React.FunctionComponent<
   const { data, isLoading } = useRulesList(
     {
       workspaceName,
-      projectId,
+      projectId: undefined, // Don't filter by project - show all workspace rules for manual evaluation
       page: 1,
-      size: 1000, // Load all rules for the project
+      size: 1000, // Load all rules in the workspace
     },
     {
       enabled: open,
