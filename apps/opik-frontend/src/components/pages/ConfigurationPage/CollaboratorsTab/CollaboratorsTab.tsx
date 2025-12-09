@@ -1,8 +1,9 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import useLocalStorageState from "use-local-storage-state";
 import usePluginsStore from "@/store/PluginsStore";
 import DataTable from "@/components/shared/DataTable/DataTable";
 import ExplainerCallout from "@/components/shared/ExplainerCallout/ExplainerCallout";
+import SearchInput from "@/components/shared/SearchInput/SearchInput";
 import { COLUMN_TYPE, ColumnData } from "@/types/shared";
 import { convertColumnDataToColumn } from "@/lib/table";
 import { formatDate } from "@/lib/date";
@@ -56,6 +57,8 @@ const CollaboratorsTab = () => {
     defaultValue: {},
   });
 
+  const [search, setSearch] = useState("");
+
   const columns = useMemo(() => {
     return convertColumnDataToColumn<WorkspaceMember, WorkspaceMember>(
       DEFAULT_COLUMNS,
@@ -75,7 +78,11 @@ const CollaboratorsTab = () => {
   const renderTable = () => {
     if (WorkspaceMembersTable) {
       return (
-        <WorkspaceMembersTable columns={columns} resizeConfig={resizeConfig} />
+        <WorkspaceMembersTable
+          columns={columns}
+          resizeConfig={resizeConfig}
+          search={search}
+        />
       );
     }
     return (
@@ -88,6 +95,13 @@ const CollaboratorsTab = () => {
       <ExplainerCallout
         className="mb-4"
         {...EXPLAINERS_MAP[EXPLAINER_ID.why_do_i_need_the_collaborators_tab]}
+      />
+      <SearchInput
+        searchText={search}
+        setSearchText={setSearch}
+        placeholder="Search by name or email"
+        className="mb-4 w-[320px]"
+        dimension="sm"
       />
       {renderTable()}
     </>
