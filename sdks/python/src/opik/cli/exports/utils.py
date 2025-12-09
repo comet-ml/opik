@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
 from rich.console import Console
+from rich.table import Table
 
 import opik.dict_utils as dict_utils
 from opik.api_objects.experiment.experiment_item import ExperimentItemContent
@@ -299,8 +300,6 @@ def experiment_to_csv_rows(experiment_data: dict) -> List[Dict]:
 
 def print_export_summary(stats: Dict[str, int], format: str = "json") -> None:
     """Print a nice summary table of export statistics."""
-    from rich.table import Table
-
     table = Table(
         title="📊 Export Summary", show_header=True, header_style="bold magenta"
     )
