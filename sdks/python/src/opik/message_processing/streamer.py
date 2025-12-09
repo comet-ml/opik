@@ -72,12 +72,12 @@ class Streamer:
         with self._lock:
             self._drain = True
 
-            self._batch_preprocessor.stop()  # stopping causes adding remaining batch messages to the queue
+        self._batch_preprocessor.stop()  # stopping causes adding remaining batch messages to the queue
 
-            self.flush(timeout)
-            self._close_queue_consumers()
+        self.flush(timeout)
+        self._close_queue_consumers()
 
-            return self._message_queue.empty()
+        return self._message_queue.empty()
 
     def flush(self, timeout: Optional[float], upload_sleep_time: int = 5) -> bool:
         self._batch_preprocessor.flush()

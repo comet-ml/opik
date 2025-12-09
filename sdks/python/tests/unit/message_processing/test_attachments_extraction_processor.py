@@ -5,9 +5,9 @@ import pytest
 from opik.api_objects.attachment import attachment, attachment_context
 from opik.message_processing import (
     attachments_extraction_processor,
-    attachments_preprocessor,
     messages,
 )
+from opik.message_processing.preprocessing import constants
 
 
 @pytest.fixture
@@ -108,11 +108,8 @@ def test_process_attachment_support_message_with_no_attachments(
     assert mock_streamer.put.call_count == 1
     requeued_message = mock_streamer.put.call_args[0][0]
     assert requeued_message is original_message
-    assert hasattr(requeued_message, attachments_preprocessor.MARKER_ATTRIBUTE_NAME)
-    assert (
-        getattr(requeued_message, attachments_preprocessor.MARKER_ATTRIBUTE_NAME)
-        is True
-    )
+    assert hasattr(requeued_message, constants.MARKER_ATTRIBUTE_NAME)
+    assert getattr(requeued_message, constants.MARKER_ATTRIBUTE_NAME) is True
 
 
 def test_process_span_message_extracts_from_input(processor, mock_streamer):
@@ -182,7 +179,7 @@ def test_process_span_message_extracts_from_input(processor, mock_streamer):
     # Second call should be the original message with marker
     second_call = mock_streamer.put.call_args_list[1][0][0]
     assert second_call is original_message
-    assert hasattr(second_call, attachments_preprocessor.MARKER_ATTRIBUTE_NAME)
+    assert hasattr(second_call, constants.MARKER_ATTRIBUTE_NAME)
 
 
 def test_process_span_message_extracts_from_output(processor, mock_streamer):
@@ -354,7 +351,7 @@ def test_process_trace_message_extracts_attachments(processor, mock_streamer):
     # Last call should be the original message with marker
     second_call = mock_streamer.put.call_args_list[1][0][0]
     assert second_call is original_message
-    assert hasattr(second_call, attachments_preprocessor.MARKER_ATTRIBUTE_NAME)
+    assert hasattr(second_call, constants.MARKER_ATTRIBUTE_NAME)
 
 
 def test_process_update_span_message(processor, mock_streamer):
@@ -627,7 +624,7 @@ def test_process_inactive_processor_skips_extraction(inactive_processor, mock_st
     assert mock_streamer.put.call_count == 1
     requeued_message = mock_streamer.put.call_args[0][0]
     assert requeued_message is original_message
-    assert hasattr(requeued_message, attachments_preprocessor.MARKER_ATTRIBUTE_NAME)
+    assert hasattr(requeued_message, constants.MARKER_ATTRIBUTE_NAME)
 
 
 def test_process_handles_extraction_exception_gracefully(processor, mock_streamer):
@@ -670,7 +667,7 @@ def test_process_handles_extraction_exception_gracefully(processor, mock_streame
     assert mock_streamer.put.call_count == 1
     requeued_message = mock_streamer.put.call_args[0][0]
     assert requeued_message is original_message
-    assert hasattr(requeued_message, attachments_preprocessor.MARKER_ATTRIBUTE_NAME)
+    assert hasattr(requeued_message, constants.MARKER_ATTRIBUTE_NAME)
 
 
 def test_process_message_already_marked_returns_early(processor):
@@ -699,7 +696,7 @@ def test_process_message_already_marked_returns_early(processor):
     )
 
     # Mark the message as already processed
-    setattr(original_message, attachments_preprocessor.MARKER_ATTRIBUTE_NAME, True)
+    setattr(original_message, constants.MARKER_ATTRIBUTE_NAME, True)
 
     wrapped_message = messages.AttachmentSupportingMessage(
         original_message=original_message
@@ -784,99 +781,3 @@ def test_entity_type_from_attachment_message_unsupported():
     )
 
     assert result is None
-
-
-def test_preprocess_message_wraps_create_span():
-    """Test preprocess_message wraps CreateSpanMessage."""
-    span_message = messages.CreateSpanMessage(
-        span_id="span-123",
-        trace_id="trace-456",
-        project_name="test-project",
-        parent_span_id=None,
-        name="test",
-        start_time=mock.Mock(),
-        end_time=None,
-        input=None,
-        output=None,
-        metadata=None,
-        tags=None,
-        type="general",
-        usage=None,
-        model=None,
-        provider=None,
-        error_info=None,
-        total_cost=None,
-        last_updated_at=mock.Mock(),
-    )
-
-    result = attachments_preprocessor.preprocess_message(span_message)
-
-    assert isinstance(result, messages.AttachmentSupportingMessage)
-    assert result.original_message is span_message
-
-
-def test_preprocess_message_wraps_create_trace():
-    """Test preprocess_message wraps CreateTraceMessage."""
-    trace_message = messages.CreateTraceMessage(
-        trace_id="trace-789",
-        project_name="test-project",
-        name="test-trace",
-        start_time=mock.Mock(),
-        end_time=None,
-        input=None,
-        output=None,
-        metadata=None,
-        tags=None,
-        error_info=None,
-        thread_id=None,
-        last_updated_at=mock.Mock(),
-    )
-
-    result = attachments_preprocessor.preprocess_message(trace_message)
-
-    assert isinstance(result, messages.AttachmentSupportingMessage)
-    assert result.original_message is trace_message
-
-
-def test_preprocess_message_does_not_wrap_other_messages():
-    """Test preprocess_message doesn't wrap unsupported message types."""
-    base_message = messages.BaseMessage()
-
-    result = attachments_preprocessor.preprocess_message(base_message)
-
-    # Should return the original message unchanged
-    assert result is base_message
-    assert not isinstance(result, messages.AttachmentSupportingMessage)
-
-
-def test_preprocess_message_avoids_double_wrapping():
-    """Test preprocess_message doesn't re-wrap already marked messages."""
-    span_message = messages.CreateSpanMessage(
-        span_id="span-123",
-        trace_id="trace-456",
-        project_name="test-project",
-        parent_span_id=None,
-        name="test",
-        start_time=mock.Mock(),
-        end_time=None,
-        input=None,
-        output=None,
-        metadata=None,
-        tags=None,
-        type="general",
-        usage=None,
-        model=None,
-        provider=None,
-        error_info=None,
-        total_cost=None,
-        last_updated_at=mock.Mock(),
-    )
-
-    # Mark the message as already preprocessed
-    setattr(span_message, attachments_preprocessor.MARKER_ATTRIBUTE_NAME, True)
-
-    result = attachments_preprocessor.preprocess_message(span_message)
-
-    # Should return an original message without wrapping
-    assert result is span_message
-    assert not isinstance(result, messages.AttachmentSupportingMessage)
