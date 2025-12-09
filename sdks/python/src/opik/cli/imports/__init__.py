@@ -13,7 +13,7 @@ from .dataset import import_datasets_from_directory
 from .experiment import import_experiments_from_directory
 from .project import import_projects_from_directory
 from .prompt import import_prompts_from_directory
-from .utils import print_import_summary
+from .utils import print_import_summary, debug_print
 
 console = Console()
 
@@ -43,10 +43,9 @@ def _import_by_type(
         recreate_experiments: Whether to recreate experiments after importing
     """
     try:
-        if debug:
-            console.print(
-                f"[blue]DEBUG: Starting {import_type} import from {workspace_folder}[/blue]"
-            )
+        debug_print(
+            f"DEBUG: Starting {import_type} import from {workspace_folder}", debug
+        )
 
         # Initialize Opik client
         if api_key:
@@ -73,8 +72,7 @@ def _import_by_type(
             console.print(f"[red]Source directory {source_dir} does not exist[/red]")
             sys.exit(1)
 
-        if debug:
-            console.print(f"[blue]Source directory: {source_dir}[/blue]")
+        debug_print(f"Source directory: {source_dir}", debug)
 
         stats: Dict[str, int] = {}
 

@@ -10,6 +10,12 @@ from rich.table import Table
 console = Console()
 
 
+def debug_print(message: str, debug: bool) -> None:
+    """Print debug message only if debug is enabled."""
+    if debug:
+        console.print(f"[blue]{message}[/blue]")
+
+
 def matches_name_pattern(name: str, pattern: Optional[str]) -> bool:
     """Check if a name matches the given pattern using case-insensitive substring matching."""
     if pattern is None:
