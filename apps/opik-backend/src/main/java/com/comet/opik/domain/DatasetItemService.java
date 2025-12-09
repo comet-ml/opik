@@ -264,11 +264,50 @@ class DatasetItemServiceImpl implements DatasetItemService {
     @WithSpan
     public Flux<DatasetItem> getItems(@NonNull String workspaceId, @NonNull DatasetItemStreamRequest request,
             Visibility visibility) {
-        log.info("Getting dataset items by '{}' on workspaceId '{}'", request, workspaceId);
-        return Mono
-                .fromCallable(() -> datasetService.findByName(workspaceId, request.datasetName(), visibility))
+        log.info("Streaming dataset items by '{}' on workspaceId '{}'", request, workspaceId);
+
+        return Mono.fromCallable(() -> datasetService.findByName(workspaceId, request.datasetName(), visibility))
                 .subscribeOn(Schedulers.boundedElastic())
-                .flatMapMany(dataset -> dao.getItems(dataset.id(), request.steamLimit(), request.lastRetrievedId()));
+                .flatMapMany(dataset -> {
+                    if (StringUtils.isNotBlank(request.version())) {
+                        // Case 1: Version param is explicitly specified
+                        log.info("Streaming dataset items from specified version '{}' for dataset '{}'",
+                                request.version(), dataset.id());
+
+                        return Mono.fromCallable(
+                                () -> versionService.resolveVersionId(workspaceId, dataset.id(), request.version()))
+                                .subscribeOn(Schedulers.boundedElastic())
+                                .doOnNext(versionId -> log.info(
+                                        "Resolved version '{}' to version ID '{}' for dataset '{}'",
+                                        request.version(), versionId, dataset.id()))
+                                .flatMapMany(versionId -> versionDao.getItems(dataset.id(), versionId,
+                                        request.steamLimit(), request.lastRetrievedId()));
+                    } else {
+                        // Case 2 & 3: Version param not specified - check if latest version exists
+                        return Mono.fromCallable(() -> template.inTransaction(READ_ONLY, handle -> {
+                            var dao = handle.attach(DatasetVersionDAO.class);
+                            return dao.findByTag(dataset.id(), DatasetVersionService.LATEST_TAG, workspaceId);
+                        })).subscribeOn(Schedulers.boundedElastic())
+                                .flatMapMany(latestVersionOpt -> {
+                                    if (latestVersionOpt.isEmpty()) {
+                                        // Case 3: No version exists - stream draft items
+                                        log.info("No version exists for dataset '{}', streaming draft items",
+                                                dataset.id());
+
+                                        return dao.getItems(dataset.id(), request.steamLimit(),
+                                                request.lastRetrievedId());
+                                    } else {
+                                        // Case 2: Latest version exists - stream items from that version
+                                        UUID latestVersionId = latestVersionOpt.get().id();
+                                        log.info("Latest version '{}' exists for dataset '{}', streaming version items",
+                                                latestVersionId, dataset.id());
+
+                                        return versionDao.getItems(dataset.id(), latestVersionId, request.steamLimit(),
+                                                request.lastRetrievedId());
+                                    }
+                                });
+                    }
+                });
     }
 
     @Override

@@ -1,8 +1,10 @@
 package com.comet.opik.domain;
 
 import com.comet.opik.api.Column;
+import com.comet.opik.api.DatasetItem;
 import com.comet.opik.api.DatasetItem.DatasetItemPage;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
+import com.comet.opik.utils.template.TemplateUtils;
 import com.google.inject.ImplementedBy;
 import io.opentelemetry.instrumentation.annotations.WithSpan;
 import io.r2dbc.spi.Result;
@@ -34,6 +36,8 @@ public interface DatasetItemVersionDAO {
     Flux<DatasetItemIdAndHash> getItemIdsAndHashes(UUID datasetId, UUID versionId);
 
     Mono<ItemsHash> getVersionItemsHashAgg(UUID datasetId, UUID versionId);
+
+    Flux<DatasetItem> getItems(UUID datasetId, UUID versionId, int limit, UUID lastRetrievedId);
 }
 
 @Singleton
@@ -107,7 +111,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
 
     private static final String SELECT_DATASET_ITEM_VERSIONS = """
             SELECT
-                id,
+                dataset_item_id AS id,
                 dataset_item_id,
                 dataset_id,
                 data,
@@ -134,6 +138,31 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
             WHERE dataset_id = :datasetId
             AND dataset_version_id = :versionId
             AND workspace_id = :workspace_id
+            """;
+
+    private static final String SELECT_DATASET_ITEM_VERSIONS_STREAM = """
+            SELECT
+                dataset_item_id AS id,
+                dataset_item_id,
+                dataset_id,
+                data,
+                trace_id,
+                span_id,
+                source,
+                tags,
+                item_created_at as created_at,
+                item_last_updated_at as last_updated_at,
+                item_created_by as created_by,
+                item_last_updated_by as last_updated_by,
+                null AS experiment_items_array
+            FROM dataset_item_versions
+            WHERE dataset_id = :datasetId
+            AND dataset_version_id = :versionId
+            AND workspace_id = :workspace_id
+            <if(lastRetrievedId)>AND dataset_item_id \\< :lastRetrievedId <endif>
+            ORDER BY dataset_item_id DESC, last_updated_at DESC
+            LIMIT 1 BY dataset_item_id
+            LIMIT :limit
             """;
 
     private static final String SELECT_VERSION_ITEMS_HASH = """
@@ -285,6 +314,41 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                     }))
                     .singleOrEmpty()
                     .defaultIfEmpty(ItemsHash.builder().idHash(0L).dataHash(0L).build());
+        });
+    }
+
+    @Override
+    @WithSpan
+    public Flux<DatasetItem> getItems(@NonNull UUID datasetId, @NonNull UUID versionId, int limit,
+            UUID lastRetrievedId) {
+        log.info(
+                "Streaming dataset items from version: datasetId='{}', versionId='{}', limit='{}', lastRetrievedId='{}'",
+                datasetId, versionId, limit, lastRetrievedId);
+
+        var template = TemplateUtils.newST(SELECT_DATASET_ITEM_VERSIONS_STREAM);
+
+        if (lastRetrievedId != null) {
+            template.add("lastRetrievedId", lastRetrievedId);
+        }
+
+        return asyncTemplate.stream(connection -> {
+            var statement = connection.createStatement(template.render())
+                    .bind("datasetId", datasetId)
+                    .bind("versionId", versionId)
+                    .bind("limit", limit);
+
+            if (lastRetrievedId != null) {
+                statement.bind("lastRetrievedId", lastRetrievedId);
+            }
+
+            Segment segment = startSegment(DATASET_ITEM_VERSIONS, CLICKHOUSE, "stream_dataset_item_versions");
+
+            return makeFluxContextAware(bindWorkspaceIdToFlux(statement))
+                    .doFinally(signalType -> endSegment(segment))
+                    .flatMap(DatasetItemResultMapper::mapItem)
+                    .doOnComplete(() -> log.info(
+                            "Completed streaming dataset items from version: datasetId='{}', versionId='{}'",
+                            datasetId, versionId));
         });
     }
 }

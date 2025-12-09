@@ -709,7 +709,7 @@ class DatasetsResourceTest {
             mockTargetWorkspace(okApikey, TEST_WORKSPACE, WORKSPACE_ID);
             mockGetWorkspaceIdByName(TEST_WORKSPACE, WORKSPACE_ID);
 
-            var request = new DatasetItemStreamRequest(name, null, null);
+            var request = new DatasetItemStreamRequest(name, null, null, null);
 
             try (var actualResponse = client.target(BASE_RESOURCE_URI.formatted(baseURI))
                     .path("items")
@@ -1197,7 +1197,7 @@ class DatasetsResourceTest {
             mockSessionCookieTargetWorkspace(this.sessionToken, workspaceName, WORKSPACE_ID);
             mockGetWorkspaceIdByName(workspaceName, WORKSPACE_ID);
 
-            var request = new DatasetItemStreamRequest(name, null, null);
+            var request = new DatasetItemStreamRequest(name, null, null, null);
 
             try (var actualResponse = client.target(BASE_RESOURCE_URI.formatted(baseURI))
                     .path("items")
@@ -3867,6 +3867,320 @@ class DatasetsResourceTest {
                 List<DatasetItem> actualItems = getStreamedItems(response);
 
                 assertPage(items.reversed().subList(500, 1000), actualItems);
+            }
+        }
+
+        @Test
+        @DisplayName("Stream dataset items: when no version exists and version not specified, then return draft items")
+        void streamDatasetItems__whenNoVersionExistsAndVersionNotSpecified__thenReturnDraftItems() {
+            // Create dataset with draft items only
+            var draftItems = IntStream.range(0, 5)
+                    .mapToObj(i -> factory.manufacturePojo(DatasetItem.class))
+                    .toList();
+
+            var batch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+                    .items(draftItems)
+                    .datasetId(null)
+                    .build();
+
+            putAndAssert(batch, TEST_WORKSPACE, API_KEY);
+
+            // Stream without version parameter
+            var streamRequest = DatasetItemStreamRequest.builder()
+                    .datasetName(batch.datasetName())
+                    .build();
+
+            try (Response response = client.target(BASE_RESOURCE_URI.formatted(baseURI))
+                    .path("items")
+                    .path("stream")
+                    .request()
+                    .accept(MediaType.APPLICATION_OCTET_STREAM)
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
+                    .post(Entity.json(streamRequest))) {
+
+                assertThat(response.getStatus()).isEqualTo(200);
+                List<DatasetItem> actualItems = getStreamedItems(response);
+
+                assertThat(actualItems).hasSize(5);
+                // Verify we got the draft items (ordered by ID desc)
+                assertThat(actualItems.stream().map(DatasetItem::id).toList())
+                        .containsExactlyElementsOf(draftItems.stream()
+                                .sorted((a, b) -> b.id().compareTo(a.id()))
+                                .map(DatasetItem::id)
+                                .toList());
+
+                // CRITICAL: Verify that data field is populated (not empty)
+                // Without the fix, items would have wrong IDs and data would be empty
+                actualItems.forEach(item -> {
+                    assertThat(item.data())
+                            .as("Data field should not be null for item '%s'", item.id())
+                            .isNotNull();
+                    assertThat(item.data())
+                            .as("Data field should not be empty for item '%s'", item.id())
+                            .isNotEmpty();
+                });
+            }
+        }
+
+        @Test
+        @DisplayName("Stream dataset items: when version exists and version not specified, then return latest version items")
+        void streamDatasetItems__whenVersionExistsAndVersionNotSpecified__thenReturnLatestVersionItems() {
+            // Create dataset with items
+            var v1Items = IntStream.range(0, 3)
+                    .mapToObj(i -> factory.manufacturePojo(DatasetItem.class))
+                    .toList();
+
+            var batch1 = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+                    .items(v1Items)
+                    .datasetId(null)
+                    .build();
+
+            putAndAssert(batch1, TEST_WORKSPACE, API_KEY);
+
+            // Get the created dataset by querying the dataset page
+            var datasetPage = datasetResourceClient.getDatasetPage(API_KEY, TEST_WORKSPACE, batch1.datasetName(), 10);
+            var createdDataset = datasetPage.content().get(0);
+
+            // Commit as v1
+            datasetResourceClient.commitVersion(
+                    createdDataset.id(),
+                    DatasetVersionCreate.builder().tags(List.of("v1")).build(),
+                    API_KEY,
+                    TEST_WORKSPACE);
+
+            // Add more items to draft
+            var draftItem = IntStream.range(0, 1)
+                    .mapToObj(i -> factory.manufacturePojo(DatasetItem.class).toBuilder().id(null).build())
+                    .toList();
+            var batch2 = DatasetItemBatch.builder()
+                    .datasetId(createdDataset.id())
+                    .items(draftItem)
+                    .build();
+            datasetResourceClient.createDatasetItems(batch2, TEST_WORKSPACE, API_KEY);
+
+            // Stream without version parameter - should return v1 items (3 items), not draft (4 items)
+            var streamRequest = DatasetItemStreamRequest.builder()
+                    .datasetName(batch1.datasetName())
+                    .build();
+
+            try (Response response = client.target(BASE_RESOURCE_URI.formatted(baseURI))
+                    .path("items")
+                    .path("stream")
+                    .request()
+                    .accept(MediaType.APPLICATION_OCTET_STREAM)
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
+                    .post(Entity.json(streamRequest))) {
+
+                assertThat(response.getStatus()).isEqualTo(200);
+                List<DatasetItem> actualItems = getStreamedItems(response);
+
+                // Should return 3 items from v1, not 4 items from draft
+                assertThat(actualItems).hasSize(3);
+
+                // CRITICAL: Verify that data field is populated (not empty)
+                // Without the fix, items would have version item IDs instead of dataset_item_ids,
+                // causing data to be empty when those IDs are used to create experiment items
+                actualItems.forEach(item -> {
+                    assertThat(item.data())
+                            .as("Data field should not be null for versioned item '%s'", item.id())
+                            .isNotNull();
+                    assertThat(item.data())
+                            .as("Data field should not be empty for versioned item '%s'", item.id())
+                            .isNotEmpty();
+                });
+            }
+        }
+
+        @Test
+        @DisplayName("Stream dataset items: when version specified by hash, then return specified version items")
+        void streamDatasetItems__whenVersionSpecifiedByHash__thenReturnSpecifiedVersionItems() {
+            // Create dataset with items
+            var v1Items = IntStream.range(0, 2)
+                    .mapToObj(i -> factory.manufacturePojo(DatasetItem.class))
+                    .toList();
+
+            var batch1 = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+                    .items(v1Items)
+                    .datasetId(null)
+                    .build();
+
+            putAndAssert(batch1, TEST_WORKSPACE, API_KEY);
+
+            // Get the created dataset by querying the dataset page
+            var datasetPage = datasetResourceClient.getDatasetPage(API_KEY, TEST_WORKSPACE, batch1.datasetName(), 10);
+            var createdDataset = datasetPage.content().get(0);
+
+            // Commit as v1
+            var v1Version = datasetResourceClient.commitVersion(
+                    createdDataset.id(),
+                    DatasetVersionCreate.builder().tags(List.of("v1")).build(),
+                    API_KEY,
+                    TEST_WORKSPACE);
+
+            // Add more items and commit as v2
+            var v2Items = IntStream.range(0, 1)
+                    .mapToObj(i -> factory.manufacturePojo(DatasetItem.class).toBuilder().id(null).build())
+                    .toList();
+            var batch2 = DatasetItemBatch.builder()
+                    .datasetId(createdDataset.id())
+                    .items(v2Items)
+                    .build();
+            datasetResourceClient.createDatasetItems(batch2, TEST_WORKSPACE, API_KEY);
+
+            datasetResourceClient.commitVersion(
+                    createdDataset.id(),
+                    DatasetVersionCreate.builder().tags(List.of("v2")).build(),
+                    API_KEY,
+                    TEST_WORKSPACE);
+
+            // Stream with v1 version hash - should return 2 items, not 3
+            var streamRequest = DatasetItemStreamRequest.builder()
+                    .datasetName(batch1.datasetName())
+                    .version(v1Version.versionHash())
+                    .build();
+
+            try (Response response = client.target(BASE_RESOURCE_URI.formatted(baseURI))
+                    .path("items")
+                    .path("stream")
+                    .request()
+                    .accept(MediaType.APPLICATION_OCTET_STREAM)
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
+                    .post(Entity.json(streamRequest))) {
+
+                assertThat(response.getStatus()).isEqualTo(200);
+                List<DatasetItem> actualItems = getStreamedItems(response);
+
+                // Should return only 2 items from v1
+                assertThat(actualItems).hasSize(2);
+
+                // CRITICAL: Verify that data field is populated (not empty)
+                // This ensures the correct dataset_item_id is being used, not the version item ID
+                actualItems.forEach(item -> {
+                    assertThat(item.data())
+                            .as("Data field should not be null for item '%s' from v1", item.id())
+                            .isNotNull();
+                    assertThat(item.data())
+                            .as("Data field should not be empty for item '%s' from v1", item.id())
+                            .isNotEmpty();
+                });
+            }
+        }
+
+        @Test
+        @DisplayName("Stream dataset items: when version specified by tag, then return specified version items")
+        void streamDatasetItems__whenVersionSpecifiedByTag__thenReturnSpecifiedVersionItems() {
+            // Create dataset with items
+            var v1Items = IntStream.range(0, 2)
+                    .mapToObj(i -> factory.manufacturePojo(DatasetItem.class))
+                    .toList();
+
+            var batch1 = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+                    .items(v1Items)
+                    .datasetId(null)
+                    .build();
+
+            putAndAssert(batch1, TEST_WORKSPACE, API_KEY);
+
+            // Get the created dataset by querying the dataset page
+            var datasetPage = datasetResourceClient.getDatasetPage(API_KEY, TEST_WORKSPACE, batch1.datasetName(), 10);
+            var createdDataset = datasetPage.content().get(0);
+
+            // Commit as v1 with custom tag
+            datasetResourceClient.commitVersion(
+                    createdDataset.id(),
+                    DatasetVersionCreate.builder().tags(List.of("my-custom-tag")).build(),
+                    API_KEY,
+                    TEST_WORKSPACE);
+
+            // Add more items and commit as v2
+            var v2Items = IntStream.range(0, 1)
+                    .mapToObj(i -> factory.manufacturePojo(DatasetItem.class).toBuilder().id(null).build())
+                    .toList();
+            var batch2 = DatasetItemBatch.builder()
+                    .datasetId(createdDataset.id())
+                    .items(v2Items)
+                    .build();
+            datasetResourceClient.createDatasetItems(batch2, TEST_WORKSPACE, API_KEY);
+
+            datasetResourceClient.commitVersion(
+                    createdDataset.id(),
+                    DatasetVersionCreate.builder().tags(List.of("latest-tag")).build(),
+                    API_KEY,
+                    TEST_WORKSPACE);
+
+            // Stream with custom tag - should return 2 items from first version
+            var streamRequest = DatasetItemStreamRequest.builder()
+                    .datasetName(batch1.datasetName())
+                    .version("my-custom-tag")
+                    .build();
+
+            try (Response response = client.target(BASE_RESOURCE_URI.formatted(baseURI))
+                    .path("items")
+                    .path("stream")
+                    .request()
+                    .accept(MediaType.APPLICATION_OCTET_STREAM)
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
+                    .post(Entity.json(streamRequest))) {
+
+                assertThat(response.getStatus()).isEqualTo(200);
+                List<DatasetItem> actualItems = getStreamedItems(response);
+
+                // Should return only 2 items from the tagged version
+                assertThat(actualItems).hasSize(2);
+
+                // CRITICAL: Verify that data field is populated (not empty)
+                // This ensures the correct dataset_item_id is being used, not the version item ID
+                actualItems.forEach(item -> {
+                    assertThat(item.data())
+                            .as("Data field should not be null for item '%s' from tagged version", item.id())
+                            .isNotNull();
+                    assertThat(item.data())
+                            .as("Data field should not be empty for item '%s' from tagged version", item.id())
+                            .isNotEmpty();
+                });
+            }
+        }
+
+        @Test
+        @DisplayName("Stream dataset items: when invalid version specified, then return empty stream")
+        void streamDatasetItems__whenInvalidVersionSpecified__thenReturnEmptyStream() {
+            // Create dataset with draft items
+            var draftItems = IntStream.range(0, 2)
+                    .mapToObj(i -> factory.manufacturePojo(DatasetItem.class))
+                    .toList();
+
+            var batch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+                    .items(draftItems)
+                    .datasetId(null)
+                    .build();
+
+            putAndAssert(batch, TEST_WORKSPACE, API_KEY);
+
+            // Stream with non-existent version
+            var streamRequest = DatasetItemStreamRequest.builder()
+                    .datasetName(batch.datasetName())
+                    .version("non-existent-version")
+                    .build();
+
+            try (Response response = client.target(BASE_RESOURCE_URI.formatted(baseURI))
+                    .path("items")
+                    .path("stream")
+                    .request()
+                    .accept(MediaType.APPLICATION_OCTET_STREAM)
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
+                    .post(Entity.json(streamRequest))) {
+
+                // Streaming endpoints return 200 even on errors, with error written to stream
+                assertThat(response.getStatus()).isEqualTo(200);
+
+                // The stream should be empty (no items returned due to invalid version)
+                var content = response.readEntity(String.class);
+                assertThat(content).isEmpty();
             }
         }
     }
@@ -8415,6 +8729,16 @@ class DatasetsResourceTest {
 
             // Then - Should return draft items
             assertThat(itemsPage.content()).hasSize(2);
+
+            // CRITICAL: Verify that data field is populated (not empty)
+            itemsPage.content().forEach(item -> {
+                assertThat(item.data())
+                        .as("Data field should not be null for draft item '%s'", item.id())
+                        .isNotNull();
+                assertThat(item.data())
+                        .as("Data field should not be empty for draft item '%s'", item.id())
+                        .isNotEmpty();
+            });
         }
 
         @Test
@@ -8472,6 +8796,17 @@ class DatasetsResourceTest {
                     .toList();
             // Items from version should reference the original draft items
             assertThat(returnedItemDraftIds).containsExactlyInAnyOrder(draftItemIdsBeforeVersion.toArray(new UUID[0]));
+
+            // CRITICAL: Verify that data field is populated (not empty)
+            // Without the fix, items would have version item IDs instead of dataset_item_ids
+            itemsPage.content().forEach(item -> {
+                assertThat(item.data())
+                        .as("Data field should not be null for versioned item '%s'", item.id())
+                        .isNotNull();
+                assertThat(item.data())
+                        .as("Data field should not be empty for versioned item '%s'", item.id())
+                        .isNotEmpty();
+            });
         }
 
         @Test
@@ -8539,6 +8874,16 @@ class DatasetsResourceTest {
                     .toList();
             assertThat(v1ReturnedDraftIds).containsExactlyInAnyOrder(v1DraftItemIds.toArray(new UUID[0]));
 
+            // CRITICAL: Verify that data field is populated for v1 items
+            v1ItemsPage.content().forEach(item -> {
+                assertThat(item.data())
+                        .as("Data field should not be null for v1 item '%s'", item.id())
+                        .isNotNull();
+                assertThat(item.data())
+                        .as("Data field should not be empty for v1 item '%s'", item.id())
+                        .isNotEmpty();
+            });
+
             // When - Get items without specifying version (should default to latest = v2)
             var latestItemsPage = datasetResourceClient.getDatasetItems(datasetId, 1, 10, null, API_KEY,
                     TEST_WORKSPACE);
@@ -8549,6 +8894,16 @@ class DatasetsResourceTest {
                     .map(DatasetItem::draftItemId)
                     .toList();
             assertThat(latestReturnedDraftIds).containsExactlyInAnyOrder(allDraftItemIds.toArray(new UUID[0]));
+
+            // CRITICAL: Verify that data field is populated for v2 items
+            latestItemsPage.content().forEach(item -> {
+                assertThat(item.data())
+                        .as("Data field should not be null for v2 item '%s'", item.id())
+                        .isNotNull();
+                assertThat(item.data())
+                        .as("Data field should not be empty for v2 item '%s'", item.id())
+                        .isNotEmpty();
+            });
         }
     }
 }
