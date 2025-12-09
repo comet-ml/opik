@@ -14,7 +14,7 @@ def test_preprocess_message_wraps_create_span():
         name="test",
         start_time=mock.Mock(),
         end_time=None,
-        input=None,
+        input={"input_key": "input_value"},
         output=None,
         metadata=None,
         tags=None,
@@ -43,7 +43,7 @@ def test_preprocess_message_wraps_create_trace():
         start_time=mock.Mock(),
         end_time=None,
         input=None,
-        output=None,
+        output={"output_key": "output_value"},
         metadata=None,
         tags=None,
         error_info=None,
@@ -81,7 +81,7 @@ def test_preprocess_message_avoids_double_wrapping():
         start_time=mock.Mock(),
         end_time=None,
         input=None,
-        output=None,
+        output={"output_key": "output_value"},
         metadata=None,
         tags=None,
         type="general",
@@ -95,6 +95,37 @@ def test_preprocess_message_avoids_double_wrapping():
 
     # Mark the message as already preprocessed
     setattr(span_message, constants.MARKER_ATTRIBUTE_NAME, True)
+
+    processor = attachments_preprocessor.AttachmentsPreprocessor()
+    result = processor.preprocess(span_message)
+
+    # Should return an original message without wrapping
+    assert result is span_message
+    assert not isinstance(result, messages.AttachmentSupportingMessage)
+
+
+def test_preprocess_message_avoids_wrapping_message_with_empty_candidate_fields():
+    """Test preprocess_message doesn't wrap messages with empty candidate fields."""
+    span_message = messages.CreateSpanMessage(
+        span_id="span-123",
+        trace_id="trace-456",
+        project_name="test-project",
+        parent_span_id=None,
+        name="test",
+        start_time=mock.Mock(),
+        end_time=None,
+        input=None,
+        output=None,
+        metadata=None,
+        tags=None,
+        type="general",
+        usage=None,
+        model=None,
+        provider=None,
+        error_info=None,
+        total_cost=None,
+        last_updated_at=mock.Mock(),
+    )
 
     processor = attachments_preprocessor.AttachmentsPreprocessor()
     result = processor.preprocess(span_message)

@@ -35,15 +35,26 @@ class AttachmentsPreprocessor(preprocessor.MessagePreprocessor):
             # already pre-processed - just return the original message to avoid infinite recursion
             return message
 
-        if isinstance(
-            message,
-            (
-                messages.CreateSpanMessage,
-                messages.UpdateSpanMessage,
-                messages.CreateTraceMessage,
-                messages.UpdateTraceMessage,
-            ),
-        ):
+        if _has_potential_content_with_attachments(message):
             return messages.AttachmentSupportingMessage(message)
         else:
             return message
+
+
+def _has_potential_content_with_attachments(message: messages.BaseMessage) -> bool:
+    if not isinstance(
+        message,
+        (
+            messages.CreateSpanMessage,
+            messages.UpdateSpanMessage,
+            messages.CreateTraceMessage,
+            messages.UpdateTraceMessage,
+        ),
+    ):
+        return False
+
+    return (
+        message.input is not None
+        or message.output is not None
+        or message.metadata is not None
+    )
