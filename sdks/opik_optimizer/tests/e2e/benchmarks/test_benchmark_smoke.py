@@ -23,7 +23,7 @@ class InlineExecutor:
     def __enter__(self) -> "InlineExecutor":
         return self
 
-    def __exit__(self, exc_type: Any, exc: Any, tb: Any) -> None:  # type: ignore[override]
+    def __exit__(self, exc_type: Any, exc: Any, _tb: Any) -> None:  # type: ignore[override]
         return None
 
     def submit(self, fn: Callable[..., Any], *args: Any, **kwargs: Any) -> Future[Any]:

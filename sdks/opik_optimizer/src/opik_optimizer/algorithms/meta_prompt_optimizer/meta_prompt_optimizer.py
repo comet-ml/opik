@@ -381,7 +381,7 @@ class MetaPromptOptimizer(BaseOptimizer):
         n_samples: int | None,
         auto_continue: bool,
         is_single_prompt_optimization: bool = False,
-        tool_panel_style: str = "bright_magenta",
+        _tool_panel_style: str = "bright_magenta",
     ) -> OptimizationResult:
         self.auto_continue = auto_continue
         self.dataset = dataset

@@ -155,9 +155,6 @@ def test_multimodal_prompt(optimizer_class: type) -> None:
     # Create multimodal prompt
     original_prompt = create_multimodal_prompt()
 
-    # Keep copy for comparison
-    original_messages = copy.deepcopy(original_prompt.get_messages())
-
     # Get multimodal dataset
     dataset = get_driving_hazard_dataset()
 
