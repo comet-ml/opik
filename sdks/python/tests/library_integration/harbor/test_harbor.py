@@ -12,8 +12,6 @@ These tests do NOT require:
 
 import pytest
 
-pytest.importorskip("harbor")
-
 from harbor.trial.trial import Trial
 from harbor.verifier.verifier import Verifier
 from harbor.models.trajectories.step import Step
@@ -130,4 +128,3 @@ class TestHarborClassesExist:
         """Verify Step class exists and can be imported."""
         # Step is imported at module level, so if we get here it exists
         assert Step is not None, "Step class should exist"
-
