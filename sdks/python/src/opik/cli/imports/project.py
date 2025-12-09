@@ -217,6 +217,7 @@ def import_projects_from_directory(
                             dry_run,
                             name_pattern,
                             trace_id_map,
+                            None,  # dataset_item_id_map - not available in project import context
                             debug,
                         )
 
