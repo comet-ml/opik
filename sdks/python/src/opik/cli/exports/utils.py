@@ -9,6 +9,7 @@ from typing import Any, Callable, Dict, List, Optional
 
 from rich.console import Console
 
+import opik.dict_utils as dict_utils
 from opik.api_objects.experiment.experiment_item import ExperimentItemContent
 
 console = Console()
@@ -25,22 +26,6 @@ def matches_name_pattern(name: str, pattern: Optional[str]) -> bool:
 def serialize_experiment_item(item: ExperimentItemContent) -> Dict[str, Any]:
     """Serialize an ExperimentItemContent dataclass to a dictionary."""
     return dataclasses.asdict(item)
-
-
-def flatten_dict_with_prefix(data: Dict, prefix: str = "") -> Dict:
-    """Flatten a nested dictionary with a prefix for CSV export."""
-    if not data:
-        return {}
-
-    flattened = {}
-    for key, value in data.items():
-        prefixed_key = f"{prefix}_{key}" if prefix else key
-        if isinstance(value, (dict, list)):
-            flattened[prefixed_key] = str(value)
-        else:
-            flattened[prefixed_key] = value if value is not None else ""
-
-    return flattened
 
 
 def should_skip_file(file_path: Path, force: bool) -> bool:
@@ -186,7 +171,7 @@ def trace_to_csv_rows(trace_data: dict) -> List[Dict]:
     spans = trace_data.get("spans", [])
 
     # Flatten trace data with "trace" prefix
-    trace_flat = flatten_dict_with_prefix(trace, "trace")
+    trace_flat = dict_utils.flatten_dict(trace, parent_key="trace", delim="_")
 
     # If no spans, create a single row for the trace
     if not spans:
@@ -202,7 +187,7 @@ def trace_to_csv_rows(trace_data: dict) -> List[Dict]:
     rows = []
     for span in spans:
         # Flatten span data with "span" prefix
-        span_flat = flatten_dict_with_prefix(span, "span")
+        span_flat = dict_utils.flatten_dict(span, parent_key="span", delim="_")
 
         # Combine trace and span data
         row = {**trace_flat, **span_flat}
@@ -220,9 +205,10 @@ def dataset_to_csv_rows(dataset_data: dict) -> List[Dict]:
     for i, item in enumerate(items):
         # Flatten item data - use all fields from the item
         # (datasets can have any user-defined keys/values)
-        item_flat = flatten_dict_with_prefix(
+        item_flat = dict_utils.flatten_dict(
             item,  # Use the entire item dict, not just hardcoded fields
-            "item",
+            parent_key="item",
+            delim="_",
         )
 
         # Create row with item data and index
@@ -236,7 +222,7 @@ def dataset_to_csv_rows(dataset_data: dict) -> List[Dict]:
 def prompt_to_csv_rows(prompt_data: dict) -> List[Dict]:
     """Convert prompt data to CSV rows format."""
     # Flatten prompt data
-    prompt_flat = flatten_dict_with_prefix(prompt_data, "prompt")
+    prompt_flat = dict_utils.flatten_dict(prompt_data, parent_key="prompt", delim="_")
 
     # Create a single row for the prompt
     return [prompt_flat]
@@ -247,7 +233,7 @@ def experiment_to_csv_rows(experiment_data: dict) -> List[Dict]:
     rows = []
 
     # Flatten experiment metadata
-    experiment_flat = flatten_dict_with_prefix(
+    experiment_flat = dict_utils.flatten_dict(
         {
             "id": experiment_data.get("experiment", {}).get("id"),
             "name": experiment_data.get("experiment", {}).get("name"),
@@ -268,14 +254,15 @@ def experiment_to_csv_rows(experiment_data: dict) -> List[Dict]:
             ),
             "downloaded_at": experiment_data.get("downloaded_at"),
         },
-        "experiment",
+        parent_key="experiment",
+        delim="_",
     )
 
     # Create a row for each experiment item
     items = experiment_data.get("items", [])
     for i, item in enumerate(items):
         # Flatten item data
-        item_flat = flatten_dict_with_prefix(
+        item_flat = dict_utils.flatten_dict(
             {
                 "id": item.get("id"),
                 "experiment_id": item.get("experiment_id"),
@@ -294,7 +281,8 @@ def experiment_to_csv_rows(experiment_data: dict) -> List[Dict]:
                 "last_updated_by": item.get("last_updated_by"),
                 "trace_visibility_mode": item.get("trace_visibility_mode"),
             },
-            "item",
+            parent_key="item",
+            delim="_",
         )
 
         # Combine experiment and item data
