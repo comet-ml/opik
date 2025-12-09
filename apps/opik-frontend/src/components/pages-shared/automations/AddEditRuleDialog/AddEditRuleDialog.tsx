@@ -493,6 +493,7 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
                                 ),
                               })}
                               multiselect
+                              showSelectAll
                             />
                           </FormControl>
                           <FormMessage />
