@@ -64,16 +64,19 @@ public class LlmProviderApiKeyResource {
         ProviderApiKey.ProviderApiKeyPage providerApiKeyPage = llmProviderApiKeyService.find(workspaceId);
         log.info("Found LLM Provider's ApiKeys for workspaceId '{}'", workspaceId);
 
+        var maskedContent = providerApiKeyPage.content().stream()
+                .map(providerApiKey -> providerApiKey.toBuilder()
+                        .apiKey(providerApiKey.apiKey() != null
+                                ? maskApiKey(decrypt(providerApiKey.apiKey()))
+                                : "null")
+                        .build())
+                .toList();
+
         return Response.ok().entity(
                 providerApiKeyPage.toBuilder()
-                        .content(
-                                providerApiKeyPage.content().stream()
-                                        .map(providerApiKey -> providerApiKey.toBuilder()
-                                                .apiKey(providerApiKey.apiKey() != null
-                                                        ? maskApiKey(decrypt(providerApiKey.apiKey()))
-                                                        : "null")
-                                                .build())
-                                        .toList())
+                        .content(maskedContent)
+                        .size(maskedContent.size())
+                        .total(maskedContent.size())
                         .build())
                 .build();
     }
@@ -148,6 +151,7 @@ public class LlmProviderApiKeyResource {
     public Response deleteApiKeys(
             @NotNull @RequestBody(content = @Content(schema = @Schema(implementation = BatchDelete.class))) @Valid BatchDelete batchDelete) {
         String workspaceId = requestContext.get().getWorkspaceId();
+
         log.info("Deleting api keys for LLM provider by ids, count '{}', on workspace_id '{}'",
                 batchDelete.ids().size(), workspaceId);
         llmProviderApiKeyService.delete(batchDelete.ids(), workspaceId);

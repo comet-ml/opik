@@ -32,6 +32,9 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.glassfish.jersey.server.ChunkedOutput;
 
+import static com.comet.opik.infrastructure.http.CorsFactory.OPIK_ACTUAL_MODEL_HEADER;
+import static com.comet.opik.infrastructure.http.CorsFactory.OPIK_PROVIDER_HEADER;
+
 @Path("/v1/private/chat/completions")
 @Produces(MediaType.APPLICATION_JSON)
 @Consumes(MediaType.APPLICATION_JSON)
@@ -43,6 +46,7 @@ public class ChatCompletionsResource {
 
     private final @NonNull Provider<RequestContext> requestContextProvider;
     private final @NonNull ChatCompletionService chatCompletionService;
+    private final @NonNull LlmProviderFactory llmProviderFactory;
 
     @POST
     @Produces({MediaType.SERVER_SENT_EVENTS, MediaType.APPLICATION_JSON})
@@ -63,20 +67,33 @@ public class ChatCompletionsResource {
             throw new BadRequestException(LlmProviderFactory.ERROR_MODEL_NOT_SUPPORTED.formatted(request.model()));
         }
 
+        // Get the resolved model info for span tracking
+        var resolvedModelInfo = llmProviderFactory.getResolvedModelInfo(request.model());
+
         if (Boolean.TRUE.equals(request.stream())) {
-            log.info("Creating and streaming chat completions, workspaceId '{}', model '{}'",
-                    workspaceId, request.model());
+            log.info("Creating and streaming chat completions, workspaceId '{}', model '{}', actualModel '{}'",
+                    workspaceId, request.model(), resolvedModelInfo.actualModel());
             type = MediaType.SERVER_SENT_EVENTS;
             var chunkedOutput = new ChunkedOutput<String>(String.class, "\r\n");
             chatCompletionService.createAndStreamResponse(request, workspaceId,
                     new ChunkedOutputHandlers(chunkedOutput));
             entity = chunkedOutput;
         } else {
-            log.info("Creating chat completions, workspaceId '{}', model '{}'", workspaceId, request.model());
+            log.info("Creating chat completions, workspaceId '{}', model '{}', actualModel '{}'",
+                    workspaceId, request.model(), resolvedModelInfo.actualModel());
             type = MediaType.APPLICATION_JSON;
             entity = chatCompletionService.create(request, workspaceId);
         }
-        var response = Response.ok().type(type).entity(entity).build();
+
+        // Include actual model and provider in response headers for frontend span tracking.
+        // For OPIK_BUILTIN provider, the user-facing model name (e.g., "opik-builtin-model") differs
+        // from the actual model used (e.g., "gpt-4o-mini"), and these headers allow correct cost calculation.
+        var response = Response.ok()
+                .type(type)
+                .entity(entity)
+                .header(OPIK_ACTUAL_MODEL_HEADER, resolvedModelInfo.actualModel())
+                .header(OPIK_PROVIDER_HEADER, resolvedModelInfo.provider())
+                .build();
         log.info("Created chat completions, workspaceId '{}', model '{}'", workspaceId, request.model());
         return response;
     }

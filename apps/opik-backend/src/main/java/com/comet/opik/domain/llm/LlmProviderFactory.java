@@ -16,4 +16,14 @@ public interface LlmProviderFactory {
     ChatModel getLanguageModel(String workspaceId, LlmAsJudgeModelParameters modelParameters);
 
     LlmProvider getLlmProvider(String model);
+
+    /**
+     * Returns the resolved model info for the given model name.
+     * For the built-in provider, this returns the actual model name and span provider.
+     * For other providers, returns the original model name and provider type.
+     */
+    ResolvedModelInfo getResolvedModelInfo(String model);
+
+    record ResolvedModelInfo(String actualModel, String provider) {
+    }
 }

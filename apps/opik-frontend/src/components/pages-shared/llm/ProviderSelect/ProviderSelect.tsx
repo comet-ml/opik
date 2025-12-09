@@ -58,6 +58,11 @@ const ProviderSelect: React.FC<ProviderSelectProps> = ({
     );
 
     standardProviders.forEach((option) => {
+      // Skip read-only providers - they are system-managed and users don't configure them
+      if (option.readOnly) {
+        return;
+      }
+
       const [id] =
         configuredProvidersList
           ?.filter((key) => key.provider === option.value)

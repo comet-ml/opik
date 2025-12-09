@@ -93,6 +93,9 @@ export interface RunStreamingReturn {
   providerError: null | string;
   opikError: null | string;
   pythonProxyError: null | string;
+  // Resolved model and provider from headers (for span tracking)
+  actualModel: string | null;
+  actualProvider: string | null;
 }
 
 interface UseCompletionProxyStreamingParameters {
@@ -121,6 +124,10 @@ const useCompletionProxyStreaming = ({
       let opikError = null;
       let providerError = null;
 
+      // Resolved model/provider from headers
+      let actualModel: string | null = null;
+      let actualProvider: string | null = null;
+
       try {
         const response = await getCompletionProxyStream({
           model,
@@ -129,6 +136,10 @@ const useCompletionProxyStreaming = ({
           signal,
           workspaceName,
         });
+
+        // Extract resolved model and provider from headers
+        actualModel = response.headers.get("X-Opik-Actual-Model");
+        actualProvider = response.headers.get("X-Opik-Provider");
 
         const reader = response?.body?.getReader();
         const decoder = new TextDecoder("utf-8");
@@ -222,6 +233,8 @@ const useCompletionProxyStreaming = ({
           pythonProxyError,
           usage,
           choices,
+          actualModel,
+          actualProvider,
         };
         //   abort signal also jumps into here
       } catch (error) {
@@ -240,6 +253,8 @@ const useCompletionProxyStreaming = ({
           pythonProxyError,
           usage: null,
           choices,
+          actualModel,
+          actualProvider,
         };
       }
     },

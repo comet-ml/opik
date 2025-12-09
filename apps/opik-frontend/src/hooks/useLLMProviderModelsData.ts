@@ -22,6 +22,12 @@ export type ModelResolver = (
 ) => PROVIDER_MODEL_TYPE | "";
 
 export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
+  [PROVIDER_TYPE.OPIK_BUILTIN]: [
+    {
+      value: PROVIDER_MODEL_TYPE.OPIK_BUILTIN_MODEL,
+      label: "Built-in Model",
+    },
+  ],
   [PROVIDER_TYPE.OPEN_AI]: [
     // GPT-5 Models
     {

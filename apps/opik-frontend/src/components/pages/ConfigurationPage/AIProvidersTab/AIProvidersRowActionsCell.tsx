@@ -22,6 +22,9 @@ const AIProvidersRowActionsCell: React.FunctionComponent<
   const providerKey = context.row.original;
   const [open, setOpen] = useState<boolean | number>(false);
 
+  // Check if this provider is read-only (system-managed)
+  const isReadOnly = providerKey.read_only === true;
+
   const { mutate: deleteProviderKey } = useProviderKeysDeleteMutation();
 
   const deleteProviderKeyHandler = useCallback(() => {
@@ -29,6 +32,22 @@ const AIProvidersRowActionsCell: React.FunctionComponent<
       providerId: providerKey.id,
     });
   }, [providerKey.id, deleteProviderKey]);
+
+  // Don't show actions menu for read-only providers
+  if (isReadOnly) {
+    return (
+      <CellWrapper
+        metadata={context.column.columnDef.meta}
+        tableMetadata={context.table.options.meta}
+        className="justify-end p-0"
+        stopClickPropagation
+      >
+        <span className="pr-2 text-xs text-muted-foreground">
+          Read-Only Provider
+        </span>
+      </CellWrapper>
+    );
+  }
 
   return (
     <CellWrapper
@@ -49,7 +68,7 @@ const AIProvidersRowActionsCell: React.FunctionComponent<
         setOpen={setOpen}
         onConfirm={deleteProviderKeyHandler}
         title="Delete configuration"
-        description="This configuration is shared across the workspace. Deleting it will remove access for everyone. This action can’t be undone. Are you sure you want to proceed?"
+        description="This configuration is shared across the workspace. Deleting it will remove access for everyone. This action can't be undone. Are you sure you want to proceed?"
         confirmText="Delete configuration"
         confirmButtonVariant="destructive"
       />

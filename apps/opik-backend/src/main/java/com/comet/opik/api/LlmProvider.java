@@ -16,6 +16,7 @@ public enum LlmProvider {
     OPEN_ROUTER("openrouter"),
     VERTEX_AI("vertex-ai"),
     CUSTOM_LLM("custom-llm"),
+    OPIK_BUILTIN("opik-builtin"),
     ;
 
     @JsonValue
