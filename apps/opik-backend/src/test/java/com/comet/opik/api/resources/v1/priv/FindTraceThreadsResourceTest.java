@@ -4,6 +4,7 @@ import com.comet.opik.api.AnnotationQueue;
 import com.comet.opik.api.FeedbackScore;
 import com.comet.opik.api.FeedbackScoreItem;
 import com.comet.opik.api.Project;
+import com.comet.opik.api.ProjectStats;
 import com.comet.opik.api.Span;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.TraceThread;
@@ -88,6 +89,7 @@ import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
+import static com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItemThread;
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static java.util.function.Predicate.not;
 import static java.util.stream.Collectors.toList;
@@ -1479,6 +1481,372 @@ class FindTraceThreadsResourceTest {
                     .llmSpanCount(0)
                     .guardrailsValidations(null)
                     .build();
+        }
+    }
+
+    @Nested
+    @DisplayName("Get Thread Stats:")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class GetThreadStats {
+
+        @Test
+        @DisplayName("When getting thread stats with no threads, should return empty stats")
+        void whenNoThreads__thenReturnEmptyStats() {
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
+            projectResourceClient.createProject(
+                    factory.manufacturePojo(Project.class).toBuilder().name(projectName).build(),
+                    apiKey, workspaceName);
+
+            var stats = traceResourceClient.getTraceThreadStats(projectName, null, apiKey, workspaceName, List.of(),
+                    Map.of());
+
+            assertThat(stats.stats()).isEmpty();
+        }
+
+        @Test
+        @DisplayName("When getting thread stats with single thread, should return correct aggregated stats")
+        void whenSingleThread__thenReturnCorrectStats() {
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var threadId = UUID.randomUUID().toString();
+
+            // Create traces with thread
+            var traces = IntStream.range(0, 3)
+                    .mapToObj(it -> {
+                        Instant now = Instant.now().truncatedTo(ChronoUnit.MILLIS);
+                        return createTrace().toBuilder()
+                                .projectName(projectName)
+                                .usage(null)
+                                .threadId(threadId)
+                                .endTime(now.plus(it, ChronoUnit.MILLIS))
+                                .startTime(now)
+                                .build();
+                    })
+                    .toList();
+
+            // Create spans with usage and cost
+            List<Span> spans = traces.stream()
+                    .flatMap(trace -> PodamFactoryUtils.manufacturePojoList(factory, Span.class).stream()
+                            .map(span -> span.toBuilder()
+                                    .usage(spanResourceClient.getTokenUsage())
+                                    .model(spanResourceClient.randomModel().toString())
+                                    .provider(spanResourceClient.provider())
+                                    .traceId(trace.id())
+                                    .projectName(projectName)
+                                    .totalEstimatedCost(null)
+                                    .build()))
+                    .toList();
+
+            batchCreateSpansAndAssert(spans, apiKey, workspaceName);
+            traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
+
+            var stats = traceResourceClient.getTraceThreadStats(projectName, null, apiKey, workspaceName, List.of(),
+                    Map.of());
+
+            // Verify stats structure
+            assertThat(stats.stats()).isNotEmpty();
+
+            // Verify thread_count
+            var threadCount = stats.stats().stream()
+                    .filter(stat -> stat.getName().equals("thread_count"))
+                    .findFirst()
+                    .orElseThrow();
+            assertThat(((ProjectStats.CountValueStat) threadCount).getValue()).isEqualTo(1L);
+
+            // Verify duration stats exist
+            var duration = stats.stats().stream()
+                    .filter(stat -> stat.getName().equals("duration"))
+                    .findFirst();
+            assertThat(duration).isPresent();
+
+            // Verify cost stats exist
+            var totalCost = stats.stats().stream()
+                    .filter(stat -> stat.getName().equals("total_estimated_cost"))
+                    .findFirst();
+            assertThat(totalCost).isPresent();
+
+            // Verify usage stats exist (tokens)
+            var usageStats = stats.stats().stream()
+                    .filter(stat -> stat.getName().startsWith("usage."))
+                    .toList();
+            assertThat(usageStats).isNotEmpty();
+        }
+
+        @Test
+        @DisplayName("When getting thread stats with multiple threads, should aggregate correctly")
+        void whenMultipleThreads__thenAggregateCorrectly() {
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var threadId1 = UUID.randomUUID().toString();
+            var threadId2 = UUID.randomUUID().toString();
+            var threadId3 = UUID.randomUUID().toString();
+
+            // Create traces for 3 different threads
+            var traces = Stream.of(threadId1, threadId2, threadId3)
+                    .flatMap(threadId -> IntStream.range(0, 2)
+                            .mapToObj(it -> {
+                                Instant now = Instant.now().truncatedTo(ChronoUnit.MILLIS);
+                                return createTrace().toBuilder()
+                                        .projectName(projectName)
+                                        .usage(null)
+                                        .threadId(threadId)
+                                        .endTime(now.plus(it, ChronoUnit.MILLIS))
+                                        .startTime(now)
+                                        .build();
+                            }))
+                    .toList();
+
+            // Create spans with usage
+            List<Span> spans = traces.stream()
+                    .flatMap(trace -> PodamFactoryUtils.manufacturePojoList(factory, Span.class).stream()
+                            .map(span -> span.toBuilder()
+                                    .usage(spanResourceClient.getTokenUsage())
+                                    .model(spanResourceClient.randomModel().toString())
+                                    .provider(spanResourceClient.provider())
+                                    .traceId(trace.id())
+                                    .projectName(projectName)
+                                    .totalEstimatedCost(null)
+                                    .build()))
+                    .toList();
+
+            batchCreateSpansAndAssert(spans, apiKey, workspaceName);
+            traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
+
+            var stats = traceResourceClient.getTraceThreadStats(projectName, null, apiKey, workspaceName, List.of(),
+                    Map.of());
+
+            // Verify thread_count is 3
+            var threadCount = stats.stats().stream()
+                    .filter(stat -> stat.getName().equals("thread_count"))
+                    .findFirst()
+                    .orElseThrow();
+            assertThat(((ProjectStats.CountValueStat) threadCount).getValue()).isEqualTo(3L);
+
+            // Verify aggregated stats exist
+            assertThat(stats.stats()).hasSizeGreaterThan(5); // Should have multiple stat items
+        }
+
+        @Test
+        @DisplayName("When getting thread stats with time range, should filter correctly")
+        void whenTimeRangeProvided__thenFilterCorrectly() {
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
+
+            Instant baseTime = Instant.now();
+            Instant lowerBound = baseTime.minus(Duration.ofHours(2));
+            Instant upperBound = baseTime.plus(Duration.ofHours(1));
+
+            // Create threads within time range
+            var threadInRange1 = UUID.randomUUID().toString();
+            var threadInRange2 = UUID.randomUUID().toString();
+            var threadOutOfRange = UUID.randomUUID().toString();
+
+            var tracesInRange = Stream.of(threadInRange1, threadInRange2)
+                    .map(threadId -> createTrace().toBuilder()
+                            .projectName(projectName)
+                            .threadId(threadId)
+                            .id(idGenerator.generateId(baseTime))
+                            .startTime(baseTime)
+                            .endTime(baseTime.plus(Duration.ofMinutes(5)))
+                            .build())
+                    .toList();
+
+            var traceOutOfRange = createTrace().toBuilder()
+                    .projectName(projectName)
+                    .threadId(threadOutOfRange)
+                    .id(idGenerator.generateId(upperBound.plus(Duration.ofHours(1))))
+                    .startTime(upperBound.plus(Duration.ofHours(1)))
+                    .endTime(upperBound.plus(Duration.ofHours(1)).plus(Duration.ofMinutes(5)))
+                    .build();
+
+            traceResourceClient.batchCreateTraces(
+                    Stream.concat(tracesInRange.stream(), Stream.of(traceOutOfRange)).toList(),
+                    apiKey, workspaceName);
+
+            var queryParams = Map.of(
+                    "from_time", lowerBound.toString(),
+                    "to_time", upperBound.toString());
+
+            var stats = traceResourceClient.getTraceThreadStats(projectName, null, apiKey, workspaceName, List.of(),
+                    queryParams);
+
+            // Verify only threads within time range are counted
+            var threadCount = stats.stats().stream()
+                    .filter(stat -> stat.getName().equals("thread_count"))
+                    .findFirst()
+                    .orElseThrow();
+            assertThat(((ProjectStats.CountValueStat) threadCount).getValue()).isEqualTo(2L);
+        }
+
+        @Test
+        @DisplayName("When getting thread stats with feedback scores, should include feedback score stats")
+        void whenThreadsHaveFeedbackScores__thenIncludeFeedbackScoreStats() {
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var project = factory.manufacturePojo(Project.class).toBuilder()
+                    .name(projectName)
+                    .build();
+
+            UUID projectId = projectResourceClient.createProject(project, apiKey, workspaceName);
+
+            var threadId1 = UUID.randomUUID().toString();
+            var threadId2 = UUID.randomUUID().toString();
+
+            // Create traces for threads
+            var traces = Stream.of(threadId1, threadId2)
+                    .map(threadId -> createTrace().toBuilder()
+                            .threadId(threadId)
+                            .projectId(projectId)
+                            .projectName(projectName)
+                            .lastUpdatedAt(Instant.now().truncatedTo(ChronoUnit.MICROS))
+                            .build())
+                    .toList();
+
+            traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
+
+            // Wait for threads to be created
+            Mono.delay(Duration.ofMillis(500)).block();
+
+            // Close threads
+            traceResourceClient.closeTraceThread(threadId1, null, projectName, apiKey, workspaceName);
+            traceResourceClient.closeTraceThread(threadId2, null, projectName, apiKey, workspaceName);
+
+            // Add feedback scores
+            String scoreName = RandomStringUtils.secure().nextAlphanumeric(10);
+
+            List<FeedbackScoreBatchItemThread> scoreItems = Stream.of(threadId1, threadId2)
+                    .map(threadId -> factory.manufacturePojo(FeedbackScoreBatchItemThread.class)
+                            .toBuilder()
+                            .threadId(threadId)
+                            .projectName(projectName)
+                            .name(scoreName)
+                            .build())
+                    .collect(toList());
+
+            traceResourceClient.threadFeedbackScores(scoreItems, apiKey, workspaceName);
+
+            // Wait for feedback scores to be processed
+            Mono.delay(Duration.ofMillis(500)).block();
+
+            var stats = traceResourceClient.getTraceThreadStats(projectName, null, apiKey, workspaceName, List.of(),
+                    Map.of());
+
+            // Verify thread count
+            var threadCount = stats.stats().stream()
+                    .filter(stat -> stat.getName().equals("thread_count"))
+                    .findFirst()
+                    .orElseThrow();
+            assertThat(((ProjectStats.CountValueStat) threadCount).getValue()).isEqualTo(2L);
+
+            // Verify feedback score stats exist
+            var feedbackScoreStats = stats.stats().stream()
+                    .filter(stat -> stat.getName().startsWith("feedback_scores."))
+                    .toList();
+            assertThat(feedbackScoreStats).isNotEmpty();
+
+            // Verify the specific feedback score is present
+            var specificScore = stats.stats().stream()
+                    .filter(stat -> stat.getName().equals("feedback_scores." + scoreName))
+                    .findFirst();
+            assertThat(specificScore).isPresent();
+        }
+
+        @Test
+        @DisplayName("When getting thread stats with filters, should apply filters correctly")
+        void whenFiltersProvided__thenApplyFiltersCorrectly() {
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var project = factory.manufacturePojo(Project.class).toBuilder()
+                    .name(projectName)
+                    .build();
+
+            UUID projectId = projectResourceClient.createProject(project, apiKey, workspaceName);
+
+            var activeThreadId = UUID.randomUUID().toString();
+            var inactiveThreadId = UUID.randomUUID().toString();
+
+            // Create traces
+            var traces = Stream.of(activeThreadId, inactiveThreadId)
+                    .map(threadId -> createTrace().toBuilder()
+                            .threadId(threadId)
+                            .projectId(projectId)
+                            .projectName(projectName)
+                            .build())
+                    .toList();
+
+            traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
+
+            // Wait and close one thread to make it inactive
+            Mono.delay(Duration.ofMillis(500)).block();
+            traceResourceClient.closeTraceThread(inactiveThreadId, null, projectName, apiKey, workspaceName);
+
+            // Create filter for active threads only
+            var statusFilter = TraceThreadFilter.builder()
+                    .field(TraceThreadField.STATUS)
+                    .operator(Operator.EQUAL)
+                    .value(TraceThreadStatus.ACTIVE.getValue())
+                    .build();
+
+            var stats = traceResourceClient.getTraceThreadStats(projectName, null, apiKey, workspaceName,
+                    List.of(statusFilter), Map.of());
+
+            // Verify only active thread is counted
+            var threadCount = stats.stats().stream()
+                    .filter(stat -> stat.getName().equals("thread_count"))
+                    .findFirst()
+                    .orElseThrow();
+            assertThat(((ProjectStats.CountValueStat) threadCount).getValue()).isEqualTo(1L);
+        }
+
+        @Test
+        @DisplayName("When project has no data, should return empty stats")
+        void whenProjectHasNoData__thenReturnEmptyStats() {
+            var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
+            projectResourceClient.createProject(
+                    factory.manufacturePojo(Project.class).toBuilder().name(projectName).build(),
+                    apiKey, workspaceName);
+
+            var stats = traceResourceClient.getTraceThreadStats(projectName, null, apiKey, workspaceName, List.of(),
+                    Map.of());
+
+            assertThat(stats.stats()).isEmpty();
         }
     }
 
