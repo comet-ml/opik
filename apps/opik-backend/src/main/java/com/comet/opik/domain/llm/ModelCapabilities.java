@@ -23,14 +23,17 @@ import java.util.regex.Pattern;
 @UtilityClass
 public class ModelCapabilities {
 
-    // Hardcoded vision-capable models or patterns that should support vision
+    // Hardcoded vision-capable models or patterns that should support vision/multimodal
     // This set of patterns overrides the JSON configuration to handle cases where:
     // - The JSON uses different naming conventions (e.g., openrouter/ prefix)
     // - Models are missing from the JSON
     // - The JSON is not yet updated with new vision models
+    // - Custom LLM models that support multimodal (audio, video, images)
     private static final Set<Pattern> VISION_MODEL_PATTERNS = Set.of(
             // Made pattern more flexible to match anywhere in the name
-            Pattern.compile(".*qwen.*vl.*", Pattern.CASE_INSENSITIVE));
+            Pattern.compile(".*qwen.*vl.*", Pattern.CASE_INSENSITIVE),
+            // Qwen Omni models support multimodal (audio, video, images)
+            Pattern.compile(".*qwen.*omni.*", Pattern.CASE_INSENSITIVE));
 
     private static final Map<String, ModelCapability> CAPABILITIES_BY_NORMALIZED_NAME = loadCapabilities();
 

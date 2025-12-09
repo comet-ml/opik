@@ -26,7 +26,10 @@ public record LlmAsJudgeMessageContent(
                 AutomationRuleEvaluator.View.Write.class}) ImageUrl imageUrl,
         @JsonView({
                 AutomationRuleEvaluator.View.Public.class,
-                AutomationRuleEvaluator.View.Write.class}) VideoUrl videoUrl){
+                AutomationRuleEvaluator.View.Write.class}) VideoUrl videoUrl,
+        @JsonView({
+                AutomationRuleEvaluator.View.Public.class,
+                AutomationRuleEvaluator.View.Write.class}) AudioUrl audioUrl){
 
     @Builder(toBuilder = true)
     @JsonIgnoreProperties(ignoreUnknown = true)
@@ -44,6 +47,15 @@ public record LlmAsJudgeMessageContent(
     @JsonIgnoreProperties(ignoreUnknown = true)
     @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
     public record VideoUrl(
+            @JsonView( {
+                    AutomationRuleEvaluator.View.Public.class,
+                    AutomationRuleEvaluator.View.Write.class}) @NotNull String url){
+    }
+
+    @Builder(toBuilder = true)
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
+    public record AudioUrl(
             @JsonView( {
                     AutomationRuleEvaluator.View.Public.class,
                     AutomationRuleEvaluator.View.Write.class}) @NotNull String url){

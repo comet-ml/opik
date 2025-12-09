@@ -115,6 +115,7 @@ public interface GeminiLangChainMapper {
                 }
                 throw new BadRequestException("Video URL is null");
             }
+            case AUDIO_URL -> throw new BadRequestException("Audio URL content not yet supported for Gemini");
             case AUDIO -> throw new BadRequestException("Audio content not yet supported for Gemini");
             case FILE -> throw new BadRequestException("File content not yet supported for Gemini");
         };

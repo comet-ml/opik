@@ -8,6 +8,7 @@ import com.comet.opik.infrastructure.llm.openai.OpenAiErrorMessage;
 import com.comet.opik.infrastructure.llm.openrouter.OpenRouterErrorMessage;
 import com.comet.opik.utils.JsonUtils;
 import dev.langchain4j.data.message.AiMessage;
+import dev.langchain4j.data.message.AudioContent;
 import dev.langchain4j.data.message.ChatMessage;
 import dev.langchain4j.data.message.Content;
 import dev.langchain4j.data.message.ImageContent;
@@ -147,6 +148,12 @@ public interface LlmProviderLangChainMapper {
                     yield new VideoContent(videoBuilder.build());
                 }
                 throw new BadRequestException("Video URL is null");
+            }
+            case AUDIO_URL -> {
+                if (opikContent.audioUrl() != null) {
+                    yield AudioContent.from(opikContent.audioUrl().url());
+                }
+                throw new BadRequestException("Audio URL is null");
             }
             case AUDIO -> throw new BadRequestException("Audio content not yet supported in conversion");
             case FILE -> throw new BadRequestException("File content not yet supported in conversion");

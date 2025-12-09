@@ -129,6 +129,18 @@ public final class OpikUserMessage implements Message {
             return this;
         }
 
+        public Builder addAudioUrl(String audioUrl) {
+            initializeContent();
+            OpikContent content = OpikContent.builder()
+                    .type(OpikContentType.AUDIO_URL)
+                    .audioUrl(AudioUrl.builder()
+                            .url(audioUrl)
+                            .build())
+                    .build();
+            this.content.add(content);
+            return this;
+        }
+
         public Builder addInputAudio(InputAudio inputAudio) {
             initializeContent();
             this.content.add(

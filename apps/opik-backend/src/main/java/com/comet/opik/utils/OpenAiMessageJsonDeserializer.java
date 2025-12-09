@@ -67,6 +67,7 @@ public class OpenAiMessageJsonDeserializer extends JsonDeserializer<Message> {
                     case "text", "input_text" -> builder.addText(partNode.path("text").asText(""));
                     case "image_url" -> handleImageUrlPart(builder, partNode.path("image_url"));
                     case "video_url" -> handleVideoUrlPart(builder, partNode.path("video_url"));
+                    case "audio_url" -> handleAudioUrlPart(builder, partNode.path("audio_url"));
                     default -> log.warn("Skipping part of user message due to unknown type: '{}'", type);
                 }
             }
@@ -114,5 +115,18 @@ public class OpenAiMessageJsonDeserializer extends JsonDeserializer<Message> {
         }
 
         builder.addVideoUrl(url);
+    }
+
+    private void handleAudioUrlPart(OpikUserMessage.Builder builder, JsonNode audioUrlNode) {
+        if (audioUrlNode == null || audioUrlNode.isNull()) {
+            return;
+        }
+
+        var url = audioUrlNode.path("url").asText(null);
+        if (StringUtils.isBlank(url)) {
+            return;
+        }
+
+        builder.addAudioUrl(url);
     }
 }

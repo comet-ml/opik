@@ -20,6 +20,7 @@ import org.mapstruct.Mapping;
 import org.mapstruct.factory.Mappers;
 
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 @Mapper
@@ -210,7 +211,7 @@ interface AutomationModelEvaluatorMapper {
             return content;
         }
 
-        if (obj instanceof java.util.Map<?, ?> map) {
+        if (obj instanceof Map<?, ?> map) {
             return LlmAsJudgeMessageContent.builder()
                     .type((String) map.get("type"))
                     .text((String) map.get("text"))
@@ -219,6 +220,9 @@ interface AutomationModelEvaluatorMapper {
                             : null)
                     .videoUrl(map.get("video_url") != null
                             ? convertToVideoUrl(map.get("video_url"))
+                            : null)
+                    .audioUrl(map.get("audio_url") != null
+                            ? convertToAudioUrl(map.get("audio_url"))
                             : null)
                     .build();
         }
@@ -231,7 +235,7 @@ interface AutomationModelEvaluatorMapper {
             return imageUrl;
         }
 
-        if (obj instanceof java.util.Map<?, ?> map) {
+        if (obj instanceof Map<?, ?> map) {
             return LlmAsJudgeMessageContent.ImageUrl.builder()
                     .url((String) map.get("url"))
                     .detail((String) map.get("detail"))
@@ -246,13 +250,27 @@ interface AutomationModelEvaluatorMapper {
             return videoUrl;
         }
 
-        if (obj instanceof java.util.Map<?, ?> map) {
+        if (obj instanceof Map<?, ?> map) {
             return LlmAsJudgeMessageContent.VideoUrl.builder()
                     .url((String) map.get("url"))
                     .build();
         }
 
         throw new IllegalStateException("Unexpected video_url type: " + obj.getClass());
+    }
+
+    private LlmAsJudgeMessageContent.AudioUrl convertToAudioUrl(Object obj) {
+        if (obj instanceof LlmAsJudgeMessageContent.AudioUrl audioUrl) {
+            return audioUrl;
+        }
+
+        if (obj instanceof Map<?, ?> map) {
+            return LlmAsJudgeMessageContent.AudioUrl.builder()
+                    .url((String) map.get("url"))
+                    .build();
+        }
+
+        throw new IllegalStateException("Unexpected audio_url type: " + obj.getClass());
     }
 
     /**
