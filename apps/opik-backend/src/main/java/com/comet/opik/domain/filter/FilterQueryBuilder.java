@@ -117,7 +117,6 @@ public class FilterQueryBuilder {
     // Table alias prefixes for AutomationRuleEvaluator queries
     private static final String AUTOMATION_RULE_TABLE_ALIAS = "rule.%s";
     private static final String AUTOMATION_EVALUATOR_TABLE_ALIAS = "evaluator.%s";
-    private static final String AUTOMATION_PROJECT_TABLE_ALIAS = "p.%s";
 
     private static final Map<Operator, Map<FieldType, String>> ANALYTICS_DB_OPERATOR_MAP = new EnumMap<>(
             ImmutableMap.<Operator, Map<FieldType, String>>builder()
