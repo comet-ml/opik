@@ -3,7 +3,7 @@
 import sys
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Optional, Union
 
 import click
 from rich.console import Console
@@ -58,7 +58,7 @@ def _get_template_structure(prompt: Any) -> str:
 
 def export_single_prompt(
     client: opik.Opik,
-    prompt: Prompt,
+    prompt: Union[Prompt, ChatPrompt],
     output_dir: Path,
     max_results: Optional[int],
     force: bool,
@@ -78,8 +78,11 @@ def export_single_prompt(
                 debug_print(f"Skipping {prompt.name} (already exists)", debug)
             return 0
 
-        # Get prompt history
-        prompt_history = client.get_prompt_history(prompt.name)
+        # Get prompt history - use appropriate method based on prompt type
+        if isinstance(prompt, ChatPrompt):
+            prompt_history = client.get_chat_prompt_history(prompt.name)
+        else:
+            prompt_history = client.get_prompt_history(prompt.name)
 
         # Create prompt data structure
         prompt_data = {
@@ -148,17 +151,24 @@ def export_prompt_by_name(
             debug_print(f"Target directory: {output_dir}", debug)
 
         # Try to get prompt by exact name
+        # Try ChatPrompt first, then regular Prompt
+        prompt = None
         try:
-            prompt = client.get_prompt(name)
-            if not prompt:
-                console.print(f"[red]Prompt '{name}' not found[/red]")
-                return
-
+            prompt = client.get_chat_prompt(name)
             if debug:
-                debug_print(f"Found prompt by direct lookup: {prompt.name}", debug)
-        except Exception as e:
-            console.print(f"[red]Prompt '{name}' not found: {e}[/red]")
-            return
+                debug_print(f"Found ChatPrompt by direct lookup: {prompt.name}", debug)
+        except Exception:
+            # Not a ChatPrompt, try regular Prompt
+            try:
+                prompt = client.get_prompt(name)
+                if not prompt:
+                    console.print(f"[red]Prompt '{name}' not found[/red]")
+                    return
+                if debug:
+                    debug_print(f"Found Prompt by direct lookup: {prompt.name}", debug)
+            except Exception as e:
+                console.print(f"[red]Prompt '{name}' not found: {e}[/red]")
+                return
 
         # Export the prompt
         exported_count = export_single_prompt(
@@ -214,8 +224,14 @@ def export_prompts_by_ids(
 
     for prompt_id in prompt_ids:
         try:
-            # Get the prompt
-            prompt = client.get_prompt(prompt_id)
+            # Get the prompt - try ChatPrompt first, then regular Prompt
+            prompt = None
+            try:
+                prompt = client.get_chat_prompt(prompt_id)
+            except Exception:
+                # Not a ChatPrompt, try regular Prompt
+                prompt = client.get_prompt(prompt_id)
+
             if not prompt:
                 if debug:
                     console.print(
@@ -249,8 +265,11 @@ def export_prompts_by_ids(
                 skipped_count += 1
                 continue
 
-            # Get prompt history
-            prompt_history = client.get_prompt_history(prompt_id)
+            # Get prompt history - use appropriate method based on prompt type
+            if isinstance(prompt, ChatPrompt):
+                prompt_history = client.get_chat_prompt_history(prompt.name)
+            else:
+                prompt_history = client.get_prompt_history(prompt_id)
 
             # Create prompt data structure
             prompt_data = {
@@ -331,8 +350,14 @@ def export_experiment_prompts(
             try:
                 debug_print(f"Exporting prompt: {prompt_version.prompt_id}", debug)
 
-                # Get the prompt
-                prompt = client.get_prompt(prompt_version.prompt_id)
+                # Get the prompt - try ChatPrompt first, then regular Prompt
+                prompt = None
+                try:
+                    prompt = client.get_chat_prompt(prompt_version.prompt_id)
+                except Exception:
+                    # Not a ChatPrompt, try regular Prompt
+                    prompt = client.get_prompt(prompt_version.prompt_id)
+
                 if not prompt:
                     if debug:
                         console.print(
@@ -340,8 +365,11 @@ def export_experiment_prompts(
                         )
                     continue
 
-                # Get prompt history
-                prompt_history = client.get_prompt_history(prompt_version.prompt_id)
+                # Get prompt history - use appropriate method based on prompt type
+                if isinstance(prompt, ChatPrompt):
+                    prompt_history = client.get_chat_prompt_history(prompt.name)
+                else:
+                    prompt_history = client.get_prompt_history(prompt_version.prompt_id)
 
                 # Create prompt data structure
                 prompt_data = {
@@ -491,8 +519,11 @@ def export_related_prompts_by_name(
             try:
                 debug_print(f"Exporting related prompt: {prompt.name}", debug)
 
-                # Get prompt history
-                prompt_history = client.get_prompt_history(prompt.name)
+                # Get prompt history - use appropriate method based on prompt type
+                if isinstance(prompt, ChatPrompt):
+                    prompt_history = client.get_chat_prompt_history(prompt.name)
+                else:
+                    prompt_history = client.get_prompt_history(prompt.name)
 
                 # Create prompt data structure
                 prompt_data = {
