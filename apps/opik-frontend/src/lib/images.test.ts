@@ -29,6 +29,7 @@ describe("processInputData", () => {
       formattedData: undefined,
       videos: [],
       media: [],
+      audios: [],
     });
   });
 

@@ -29,10 +29,11 @@ import { LLM_MESSAGE_ROLE_NAME_MAP } from "@/constants/llm";
 import LLMPromptMessageActions, {
   ImprovePromptConfig,
 } from "@/components/pages-shared/llm/LLMPromptMessages/LLMPromptMessageActions";
-import PromptMessageMediaTags from "@/components/pages-shared/llm/PromptMessageMediaTags/PromptMessageMediaTags";
+import PromptMessageMediaSection from "@/components/pages-shared/llm/PromptMessageMediaTags/PromptMessageMediaSection";
 import { useMessageContent } from "@/hooks/useMessageContent";
 import {
   getTextFromMessageContent,
+  hasAudiosInContent,
   hasImagesInContent,
   hasVideosInContent,
   isMediaAllowedForRole,
@@ -109,8 +110,10 @@ const LLMPromptMessage = ({
     localText,
     images,
     videos,
+    audios,
     setImages,
     setVideos,
+    setAudios,
     handleContentChange,
   } = useMessageContent({
     content,
@@ -120,7 +123,9 @@ const LLMPromptMessage = ({
   const handleRoleChange = (newRole: LLM_MESSAGE_ROLE) => {
     if (
       !isMediaAllowedForRole(newRole) &&
-      (hasImagesInContent(content) || hasVideosInContent(content))
+      (hasImagesInContent(content) ||
+        hasVideosInContent(content) ||
+        hasAudiosInContent(content))
     ) {
       const textOnlyContent = getTextFromMessageContent(content);
       onChangeMessage({ role: newRole, content: textOnlyContent });
@@ -253,24 +258,15 @@ const LLMPromptMessage = ({
                 extensions={[EditorView.lineWrapping, mustachePlugin]}
               />
               {!disableMedia && role === LLM_MESSAGE_ROLE.user && (
-                <div className="mt-3 flex gap-2">
-                  <div className="comet-body-s-accented pt-1">Images</div>
-                  <PromptMessageMediaTags
-                    type="image"
-                    items={images}
-                    setItems={setImages}
-                  />
-                </div>
-              )}
-              {!disableMedia && role === LLM_MESSAGE_ROLE.user && (
-                <div className="mt-3 flex gap-2">
-                  <div className="comet-body-s-accented pt-1">Videos</div>
-                  <PromptMessageMediaTags
-                    type="video"
-                    items={videos}
-                    setItems={setVideos}
-                  />
-                </div>
+                <PromptMessageMediaSection
+                  images={images}
+                  videos={videos}
+                  audios={audios}
+                  setImages={setImages}
+                  setVideos={setVideos}
+                  setAudios={setAudios}
+                  disabled={disabled}
+                />
               )}
             </>
           )}
