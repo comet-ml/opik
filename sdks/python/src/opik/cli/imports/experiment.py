@@ -444,12 +444,17 @@ def _import_traces_from_projects_directory(
     workspace_root: Path,
     dry_run: bool,
     debug: bool,
-) -> Dict[str, str]:
-    """Import traces from projects directory and return trace_id_map.
+) -> tuple[Dict[str, str], Dict[str, int]]:
+    """Import traces from projects directory and return trace_id_map and statistics.
 
-    Returns a mapping from original trace ID to new trace ID.
+    Returns:
+        Tuple of (trace_id_map, stats_dict) where:
+        - trace_id_map: mapping from original trace ID to new trace ID
+        - stats_dict: dictionary with 'traces' and 'traces_errors' keys
     """
     trace_id_map: Dict[str, str] = {}
+    traces_imported = 0
+    traces_errors = 0
     projects_dir = workspace_root / "projects"
 
     if not projects_dir.exists():
@@ -457,7 +462,7 @@ def _import_traces_from_projects_directory(
             console.print(
                 f"[blue]No projects directory found at {projects_dir}, skipping trace import[/blue]"
             )
-        return trace_id_map
+        return trace_id_map, {"traces": 0, "traces_errors": 0}
 
     project_dirs = [d for d in projects_dir.iterdir() if d.is_dir()]
 
@@ -466,7 +471,7 @@ def _import_traces_from_projects_directory(
             console.print(
                 "[blue]No project directories found, skipping trace import[/blue]"
             )
-        return trace_id_map
+        return trace_id_map, {"traces": 0, "traces_errors": 0}
 
     if debug:
         console.print(
@@ -538,6 +543,7 @@ def _import_traces_from_projects_directory(
 
                 # Map original trace ID to new trace ID
                 trace_id_map[original_trace_id] = trace.id
+                traces_imported += 1
 
                 # Create spans with full data, preserving parent-child relationships
                 # Build span_id_map to translate parent_span_id references
@@ -607,6 +613,7 @@ def _import_traces_from_projects_directory(
                 console.print(
                     f"[yellow]Warning: Failed to import trace from {trace_file}: {e}[/yellow]"
                 )
+                traces_errors += 1
                 continue
 
     if not dry_run and trace_id_map:
@@ -617,7 +624,7 @@ def _import_traces_from_projects_directory(
                 f"[green]Imported {len(trace_id_map)} trace(s) and built trace ID mapping[/green]"
             )
 
-    return trace_id_map
+    return trace_id_map, {"traces": traces_imported, "traces_errors": traces_errors}
 
 
 def import_experiments_from_directory(
@@ -627,38 +634,52 @@ def import_experiments_from_directory(
     name_pattern: Optional[str],
     debug: bool,
     recreate_experiments_flag: bool,
-) -> int:
+) -> Dict[str, int]:
     """Import experiments from a directory.
 
     This function will first import prompts and traces from their respective directories
     (if they exist) to build a trace_id_map, then use that map when recreating experiments.
+
+    Returns:
+        Dictionary with keys: 'experiments', 'experiments_skipped', 'experiments_errors',
+        'prompts', 'prompts_skipped', 'prompts_errors', 'traces', 'traces_errors'
     """
     try:
         experiment_files = list(source_dir.glob("experiment_*.json"))
 
         if not experiment_files:
             console.print("[yellow]No experiment files found in the directory[/yellow]")
-            return 0
+            return {
+                "experiments": 0,
+                "experiments_skipped": 0,
+                "experiments_errors": 0,
+                "prompts": 0,
+                "prompts_skipped": 0,
+                "prompts_errors": 0,
+                "traces": 0,
+                "traces_errors": 0,
+            }
 
         # source_dir is typically workspace/experiments, so parent is workspace root
         workspace_root = source_dir.parent
 
         # Import prompts first (they may be referenced by experiments)
+        prompts_stats = {"prompts": 0, "prompts_skipped": 0, "prompts_errors": 0}
         prompts_dir = workspace_root / "prompts"
         if prompts_dir.exists():
             if debug:
                 console.print(
                     "[blue]Importing prompts from prompts directory...[/blue]"
                 )
-            prompts_imported = import_prompts_from_directory(
+            prompts_stats = import_prompts_from_directory(
                 client, prompts_dir, dry_run, name_pattern, debug
             )
-            if prompts_imported > 0 and not dry_run:
+            if prompts_stats.get("prompts", 0) > 0 and not dry_run:
                 # Flush client to ensure prompts are persisted
                 client.flush()
                 if debug:
                     console.print(
-                        f"[green]Imported {prompts_imported} prompt(s)[/green]"
+                        f"[green]Imported {prompts_stats.get('prompts', 0)} prompt(s)[/green]"
                     )
         elif debug:
             console.print(
@@ -666,7 +687,7 @@ def import_experiments_from_directory(
             )
 
         # Import traces first to build trace_id_map
-        trace_id_map = _import_traces_from_projects_directory(
+        trace_id_map, traces_stats = _import_traces_from_projects_directory(
             client, workspace_root, dry_run, debug
         )
 
@@ -720,6 +741,8 @@ def import_experiments_from_directory(
                         continue
 
         imported_count = 0
+        skipped_count = 0
+        error_count = 0
         for experiment_file in experiment_files:
             try:
                 experiment_data = load_experiment_data(experiment_file)
@@ -764,6 +787,7 @@ def import_experiments_from_directory(
                         console.print(
                             f"[blue]Skipping experiment {experiment_name} (doesn't match pattern)[/blue]"
                         )
+                    skipped_count += 1
                     continue
 
                 if dry_run:
@@ -826,10 +850,29 @@ def import_experiments_from_directory(
                 console.print(
                     f"[red]Error importing experiment from {experiment_file}: {e}[/red]"
                 )
+                error_count += 1
                 continue
 
-        return imported_count
+        return {
+            "experiments": imported_count,
+            "experiments_skipped": skipped_count,
+            "experiments_errors": error_count,
+            "prompts": prompts_stats.get("prompts", 0),
+            "prompts_skipped": prompts_stats.get("prompts_skipped", 0),
+            "prompts_errors": prompts_stats.get("prompts_errors", 0),
+            "traces": traces_stats.get("traces", 0),
+            "traces_errors": traces_stats.get("traces_errors", 0),
+        }
 
     except Exception as e:
         console.print(f"[red]Error importing experiments: {e}[/red]")
-        return 0
+        return {
+            "experiments": 0,
+            "experiments_skipped": 0,
+            "experiments_errors": 1,
+            "prompts": 0,
+            "prompts_skipped": 0,
+            "prompts_errors": 0,
+            "traces": 0,
+            "traces_errors": 0,
+        }

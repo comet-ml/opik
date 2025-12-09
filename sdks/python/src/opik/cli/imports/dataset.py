@@ -2,7 +2,7 @@
 
 import json
 from pathlib import Path
-from typing import Optional
+from typing import Dict, Optional
 
 import opik
 from rich.console import Console
@@ -18,16 +18,21 @@ def import_datasets_from_directory(
     dry_run: bool,
     name_pattern: Optional[str],
     debug: bool,
-) -> int:
-    """Import datasets from a directory."""
+) -> Dict[str, int]:
+    """Import datasets from a directory.
+
+    Returns:
+        Dictionary with keys: 'datasets', 'datasets_skipped', 'datasets_errors'
+    """
     try:
         dataset_files = list(source_dir.glob("dataset_*.json"))
 
         if not dataset_files:
             console.print("[yellow]No dataset files found in the directory[/yellow]")
-            return 0
+            return {"datasets": 0, "datasets_skipped": 0, "datasets_errors": 0}
 
         imported_count = 0
+        skipped_count = 0
         error_count = 0
         for dataset_file in dataset_files:
             try:
@@ -64,6 +69,7 @@ def import_datasets_from_directory(
                         console.print(
                             f"[blue]Skipping dataset {dataset_name} (doesn't match pattern)[/blue]"
                         )
+                    skipped_count += 1
                     continue
 
                 if dry_run:
@@ -95,12 +101,12 @@ def import_datasets_from_directory(
                 error_count += 1
                 continue
 
-        if error_count > 0 and imported_count == 0:
-            # If there were errors and nothing was imported, return -1 to indicate failure
-            return -1
-
-        return imported_count
+        return {
+            "datasets": imported_count,
+            "datasets_skipped": skipped_count,
+            "datasets_errors": error_count,
+        }
 
     except Exception as e:
         console.print(f"[red]Error importing datasets: {e}[/red]")
-        return -1
+        return {"datasets": 0, "datasets_skipped": 0, "datasets_errors": 1}

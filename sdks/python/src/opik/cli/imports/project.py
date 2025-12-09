@@ -21,16 +21,30 @@ def import_projects_from_directory(
     name_pattern: Optional[str],
     debug: bool,
     recreate_experiments_flag: bool = False,
-) -> int:
-    """Import projects from a directory."""
+) -> Dict[str, int]:
+    """Import projects from a directory.
+
+    Returns:
+        Dictionary with keys: 'projects', 'projects_skipped', 'projects_errors', 'traces', 'traces_errors'
+    """
     try:
         project_dirs = [d for d in source_dir.iterdir() if d.is_dir()]
 
         if not project_dirs:
             console.print("[yellow]No project directories found[/yellow]")
-            return 0
+            return {
+                "projects": 0,
+                "projects_skipped": 0,
+                "projects_errors": 0,
+                "traces": 0,
+                "traces_errors": 0,
+            }
 
         imported_count = 0
+        skipped_count = 0
+        error_count = 0
+        total_traces_imported = 0
+        total_traces_errors = 0
         for project_dir in project_dirs:
             try:
                 project_name = project_dir.name
@@ -45,6 +59,7 @@ def import_projects_from_directory(
                         console.print(
                             f"[blue]Skipping project {project_name} (doesn't match pattern)[/blue]"
                         )
+                    skipped_count += 1
                     continue
 
                 if dry_run:
@@ -58,6 +73,7 @@ def import_projects_from_directory(
                 # Import traces from the project directory
                 trace_files = list(project_dir.glob("trace_*.json"))
                 traces_imported = 0
+                traces_errors = 0
 
                 for trace_file in trace_files:
                     try:
@@ -178,6 +194,7 @@ def import_projects_from_directory(
                         console.print(
                             f"[red]Error importing trace from {trace_file}: {e}[/red]"
                         )
+                        traces_errors += 1
                         continue
 
                 # Handle experiment recreation if requested
@@ -208,6 +225,9 @@ def import_projects_from_directory(
                                 f"[green]Recreated {experiments_recreated} experiments for project {project_name}[/green]"
                             )
 
+                total_traces_imported += traces_imported
+                total_traces_errors += traces_errors
+
                 if traces_imported > 0:
                     imported_count += 1
                     if debug:
@@ -219,10 +239,23 @@ def import_projects_from_directory(
                 console.print(
                     f"[red]Error importing project {project_dir.name}: {e}[/red]"
                 )
+                error_count += 1
                 continue
 
-        return imported_count
+        return {
+            "projects": imported_count,
+            "projects_skipped": skipped_count,
+            "projects_errors": error_count,
+            "traces": total_traces_imported,
+            "traces_errors": total_traces_errors,
+        }
 
     except Exception as e:
         console.print(f"[red]Error importing projects: {e}[/red]")
-        return 0
+        return {
+            "projects": 0,
+            "projects_skipped": 0,
+            "projects_errors": 1,
+            "traces": 0,
+            "traces_errors": 0,
+        }

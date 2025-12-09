@@ -5,6 +5,7 @@ from typing import Any, Dict, List, Optional
 import opik
 from opik.types import FeedbackScoreDict
 from rich.console import Console
+from rich.table import Table
 
 console = Console()
 
@@ -140,3 +141,135 @@ def clean_feedback_scores(
         cleaned_scores.append(cleaned_score)
 
     return cleaned_scores if cleaned_scores else None
+
+
+def print_import_summary(stats: Dict[str, int]) -> None:
+    """Print a nice summary table of import statistics."""
+    table = Table(
+        title="📥 Import Summary", show_header=True, header_style="bold magenta"
+    )
+    table.add_column("Type", style="cyan", no_wrap=True)
+    table.add_column("Imported", justify="right", style="green")
+    table.add_column("Skipped", justify="right", style="yellow")
+    table.add_column("Errors", justify="right", style="red")
+
+    # Add rows for each type
+    if (
+        stats.get("experiments", 0) > 0
+        or stats.get("experiments_skipped", 0) > 0
+        or stats.get("experiments_errors", 0) > 0
+    ):
+        imported = stats.get("experiments", 0)
+        skipped = stats.get("experiments_skipped", 0)
+        errors = stats.get("experiments_errors", 0)
+        table.add_row(
+            "🧪 Experiments",
+            str(imported),
+            str(skipped) if skipped > 0 else "",
+            str(errors) if errors > 0 else "",
+        )
+
+    if (
+        stats.get("datasets", 0) > 0
+        or stats.get("datasets_skipped", 0) > 0
+        or stats.get("datasets_errors", 0) > 0
+    ):
+        imported = stats.get("datasets", 0)
+        skipped = stats.get("datasets_skipped", 0)
+        errors = stats.get("datasets_errors", 0)
+        table.add_row(
+            "📊 Datasets",
+            str(imported),
+            str(skipped) if skipped > 0 else "",
+            str(errors) if errors > 0 else "",
+        )
+
+    if (
+        stats.get("traces", 0) > 0
+        or stats.get("traces_skipped", 0) > 0
+        or stats.get("traces_errors", 0) > 0
+    ):
+        imported = stats.get("traces", 0)
+        skipped = stats.get("traces_skipped", 0)
+        errors = stats.get("traces_errors", 0)
+        table.add_row(
+            "🔍 Traces",
+            str(imported),
+            str(skipped) if skipped > 0 else "",
+            str(errors) if errors > 0 else "",
+        )
+
+    if (
+        stats.get("prompts", 0) > 0
+        or stats.get("prompts_skipped", 0) > 0
+        or stats.get("prompts_errors", 0) > 0
+    ):
+        imported = stats.get("prompts", 0)
+        skipped = stats.get("prompts_skipped", 0)
+        errors = stats.get("prompts_errors", 0)
+        table.add_row(
+            "💬 Prompts",
+            str(imported),
+            str(skipped) if skipped > 0 else "",
+            str(errors) if errors > 0 else "",
+        )
+
+    if (
+        stats.get("projects", 0) > 0
+        or stats.get("projects_skipped", 0) > 0
+        or stats.get("projects_errors", 0) > 0
+    ):
+        imported = stats.get("projects", 0)
+        skipped = stats.get("projects_skipped", 0)
+        errors = stats.get("projects_errors", 0)
+        table.add_row(
+            "📁 Projects",
+            str(imported),
+            str(skipped) if skipped > 0 else "",
+            str(errors) if errors > 0 else "",
+        )
+
+    # Calculate totals
+    total_imported = sum(
+        [
+            stats.get(key, 0)
+            for key in ["experiments", "datasets", "traces", "prompts", "projects"]
+        ]
+    )
+    total_skipped = sum(
+        [
+            stats.get(key, 0)
+            for key in [
+                "experiments_skipped",
+                "datasets_skipped",
+                "traces_skipped",
+                "prompts_skipped",
+                "projects_skipped",
+            ]
+        ]
+    )
+    total_errors = sum(
+        [
+            stats.get(key, 0)
+            for key in [
+                "experiments_errors",
+                "datasets_errors",
+                "traces_errors",
+                "prompts_errors",
+                "projects_errors",
+            ]
+        ]
+    )
+
+    table.add_row("", "", "", "", style="bold")
+    table.add_row(
+        "📦 Total",
+        str(total_imported),
+        str(total_skipped) if total_skipped > 0 else "",
+        str(total_errors) if total_errors > 0 else "",
+        style="bold green",
+    )
+
+    console.print()
+    console.print(table)
+    console.print()

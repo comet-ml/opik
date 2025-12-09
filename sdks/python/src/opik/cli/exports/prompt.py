@@ -1,5 +1,6 @@
 """Prompt export functionality."""
 
+import json
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -358,137 +359,6 @@ def export_prompts_by_ids(
     return exported_count, skipped_count
 
 
-def export_experiment_prompts(
-    client: opik.Opik,
-    experiment: Any,
-    output_dir: Path,
-    force: bool,
-    debug: bool,
-    format: str = "json",
-) -> int:
-    """Export prompts referenced by an experiment."""
-    try:
-        if not getattr(experiment, "prompt_versions", None):
-            return 0
-
-        prompts_dir = output_dir.parent / "prompts"
-        prompts_dir.mkdir(parents=True, exist_ok=True)
-
-        exported_count = 0
-        for prompt_version in experiment.prompt_versions:
-            try:
-                debug_print(f"Exporting prompt: {prompt_version.prompt_id}", debug)
-
-                # Get the prompt - try ChatPrompt first, then regular Prompt
-                prompt: Optional[Union[Prompt, ChatPrompt]] = None
-                try:
-                    prompt = client.get_chat_prompt(prompt_version.prompt_id)
-                except Exception:
-                    # Not a ChatPrompt, try regular Prompt
-                    prompt = client.get_prompt(prompt_version.prompt_id)
-
-                if not prompt:
-                    if debug:
-                        console.print(
-                            f"[yellow]Warning: Prompt {prompt_version.prompt_id} not found[/yellow]"
-                        )
-                    continue
-
-                # Get prompt history - use appropriate method based on prompt type
-                prompt_history: List[Union[Prompt, ChatPrompt]]
-                if isinstance(prompt, ChatPrompt):
-                    prompt_history = list(client.get_chat_prompt_history(prompt.name))
-                else:
-                    prompt_history = list(
-                        client.get_prompt_history(prompt_version.prompt_id)
-                    )
-
-                # Create prompt data structure
-                prompt_data = {
-                    "prompt": {
-                        "id": getattr(prompt, "id", None),
-                        "name": prompt.name,
-                        "description": getattr(prompt, "description", None),
-                        "created_at": (
-                            created_at.isoformat()
-                            if (created_at := getattr(prompt, "created_at", None))
-                            else None
-                        ),
-                        "last_updated_at": (
-                            last_updated_at.isoformat()
-                            if (
-                                last_updated_at := getattr(
-                                    prompt, "last_updated_at", None
-                                )
-                            )
-                            else None
-                        ),
-                    },
-                    "current_version": {
-                        "prompt": _get_prompt_content(prompt),
-                        "metadata": getattr(prompt, "metadata", None),
-                        "type": _get_prompt_type_string(prompt),
-                        "commit": getattr(prompt, "commit", None),
-                        "template_structure": _get_template_structure(prompt),
-                    },
-                    "history": [
-                        {
-                            "prompt": _get_prompt_content(version),
-                            "metadata": getattr(version, "metadata", None),
-                            "type": _get_prompt_type_string(version),
-                            "commit": getattr(version, "commit", None),
-                            "template_structure": _get_template_structure(version),
-                        }
-                        for version in prompt_history
-                    ],
-                    "downloaded_at": datetime.now().isoformat(),
-                }
-
-                # Save prompt data using the appropriate format
-                if format.lower() == "csv":
-                    prompt_file = (
-                        prompts_dir
-                        / f"prompts_{prompt.name or getattr(prompt, 'id', 'unknown')}.csv"
-                    )
-                else:
-                    prompt_file = (
-                        prompts_dir
-                        / f"prompt_{prompt.name or getattr(prompt, 'id', 'unknown')}.json"
-                    )
-                if not prompt_file.exists() or force:
-                    if format.lower() == "csv":
-                        write_csv_data(prompt_data, prompt_file, prompt_to_csv_rows)
-                    else:
-                        write_json_data(prompt_data, prompt_file)
-
-                    if debug:
-                        console.print(
-                            f"[green]Exported prompt: {prompt.name or getattr(prompt, 'id', 'unknown')}[/green]"
-                        )
-                    exported_count += 1
-                else:
-                    debug_print(
-                        f"Skipping prompt {prompt.name} (already exists)", debug
-                    )
-                    exported_count += 1  # Count as exported even if skipped
-
-            except Exception as e:
-                if debug:
-                    console.print(
-                        f"[yellow]Warning: Could not export prompt {prompt_version.prompt_id}: {e}[/yellow]"
-                    )
-                continue
-
-        return exported_count
-
-    except Exception as e:
-        if debug:
-            console.print(
-                f"[yellow]Warning: Could not export experiment prompts: {e}[/yellow]"
-            )
-        return 0
-
-
 def export_related_prompts_by_name(
     client: opik.Opik,
     experiment: Any,
@@ -497,59 +367,88 @@ def export_related_prompts_by_name(
     debug: bool,
     format: str = "json",
 ) -> int:
-    """Export prompts that might be related to the experiment by name or content."""
+    """Export prompts explicitly related to the experiment from experiment metadata."""
     try:
         prompts_dir = output_dir.parent / "prompts"
         prompts_dir.mkdir(parents=True, exist_ok=True)
 
-        # Get all prompts in the workspace
-        all_prompts = client.search_prompts()
-        debug_print(f"Found {len(all_prompts)} total prompts in workspace", debug)
+        # Get experiment data to access metadata
+        experiment_data = experiment.get_experiment_data()
+        if not experiment_data:
+            debug_print("Could not get experiment data", debug)
+            return 0
 
-        # Look for prompts that might be related to this experiment
-        related_prompts = []
-        experiment_name = experiment.name or ""
-        experiment_id = experiment.id or ""
+        # Extract prompt names from experiment metadata
+        prompt_names = []
+        metadata = experiment_data.metadata
 
-        for prompt in all_prompts:
-            prompt_name = getattr(prompt, "name", "").lower()
-            is_related = False
+        if metadata:
+            # Metadata can be a dict, list, or string (JsonListStringPublic)
+            # Parse if it's a string, otherwise use directly
+            if isinstance(metadata, str):
+                try:
+                    metadata = json.loads(metadata)
+                except (json.JSONDecodeError, Exception) as e:
+                    if debug:
+                        debug_print(f"Could not parse metadata as JSON: {e}", debug)
+                    metadata = None
 
-            # Check if prompt name contains experiment keywords
-            if any(
-                keyword in prompt_name
-                for keyword in ["mcp", "evaluation", "experiment"]
-            ):
-                is_related = True
-            elif any(
-                keyword in prompt_name for keyword in experiment_name.lower().split("-")
-            ):
-                is_related = True
-            elif any(
-                keyword in prompt_name for keyword in experiment_id.lower().split("-")
-            ):
-                is_related = True
-
-            if is_related:
-                related_prompts.append(prompt)
+            # Check if metadata is a dict and has "prompts" key
+            if isinstance(metadata, dict) and "prompts" in metadata:
+                prompts_dict = metadata["prompts"]
+                if isinstance(prompts_dict, dict):
+                    # Prompts are stored as a dict with prompt names as keys
+                    prompt_names = list(prompts_dict.keys())
+                    if debug:
+                        debug_print(
+                            f"Found {len(prompt_names)} prompt(s) in experiment metadata: {prompt_names}",
+                            debug,
+                        )
+                else:
+                    if debug:
+                        debug_print(
+                            f"Metadata 'prompts' is not a dict, got: {type(prompts_dict)}",
+                            debug,
+                        )
+            else:
                 if debug:
-                    console.print(
-                        f"[blue]Found potentially related prompt: {prompt.name}[/blue]"
-                    )
+                    debug_print("No 'prompts' key found in experiment metadata", debug)
 
-        if not related_prompts:
-            debug_print("No related prompts found by name matching", debug)
+        if not prompt_names:
+            debug_print("No prompts found in experiment metadata", debug)
             return 0
 
         console.print(
-            f"[blue]Exporting {len(related_prompts)} potentially related prompts...[/blue]"
+            f"[blue]Exporting {len(prompt_names)} prompt(s) from experiment metadata...[/blue]"
         )
 
         exported_count = 0
-        # Export each related prompt
-        for prompt in related_prompts:
+        # Export each prompt by name from metadata
+        for prompt_name in prompt_names:
             try:
-                debug_print(f"Exporting related prompt: {prompt.name}", debug)
+                debug_print(f"Exporting prompt: {prompt_name}", debug)
+
+                # Try to get the prompt - try ChatPrompt first, then regular Prompt
+                prompt: Optional[Union[Prompt, ChatPrompt]] = None
+                try:
+                    prompt = client.get_chat_prompt(prompt_name)
+                except Exception:
+                    # Not a ChatPrompt, try regular Prompt
+                    try:
+                        prompt = client.get_prompt(prompt_name)
+                    except Exception as e:
+                        if debug:
+                            console.print(
+                                f"[yellow]Warning: Could not get prompt '{prompt_name}': {e}[/yellow]"
+                            )
+                        continue
+
+                if not prompt:
+                    if debug:
+                        console.print(
+                            f"[yellow]Warning: Prompt '{prompt_name}' not found[/yellow]"
+                        )
+                    continue
 
                 # Get prompt history - use appropriate method based on prompt type
                 prompt_history: List[Union[Prompt, ChatPrompt]]
@@ -614,8 +513,9 @@ def export_related_prompts_by_name(
 
             except Exception as e:
                 if debug:
+                    prompt_display_name = prompt.name if prompt else prompt_name
                     console.print(
-                        f"[yellow]Warning: Could not export related prompt {prompt.name}: {e}[/yellow]"
+                        f"[yellow]Warning: Could not export related prompt {prompt_display_name}: {e}[/yellow]"
                     )
                 continue
 

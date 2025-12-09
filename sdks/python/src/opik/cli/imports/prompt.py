@@ -2,7 +2,7 @@
 
 import json
 from pathlib import Path
-from typing import Optional
+from typing import Dict, Optional
 
 import opik
 from opik.api_objects.prompt import Prompt, ChatPrompt
@@ -20,16 +20,22 @@ def import_prompts_from_directory(
     dry_run: bool,
     name_pattern: Optional[str],
     debug: bool,
-) -> int:
-    """Import prompts from a directory."""
+) -> Dict[str, int]:
+    """Import prompts from a directory.
+
+    Returns:
+        Dictionary with keys: 'prompts', 'prompts_skipped', 'prompts_errors'
+    """
     try:
         prompt_files = list(source_dir.glob("prompt_*.json"))
 
         if not prompt_files:
             console.print("[yellow]No prompt files found in the directory[/yellow]")
-            return 0
+            return {"prompts": 0, "prompts_skipped": 0, "prompts_errors": 0}
 
         imported_count = 0
+        skipped_count = 0
+        error_count = 0
         for prompt_file in prompt_files:
             try:
                 with open(prompt_file, "r", encoding="utf-8") as f:
@@ -51,6 +57,7 @@ def import_prompts_from_directory(
                     console.print(
                         f"[yellow]Skipping {prompt_file.name} (no name found)[/yellow]"
                     )
+                    skipped_count += 1
                     continue
 
                 # Strip whitespace from name
@@ -62,6 +69,7 @@ def import_prompts_from_directory(
                         console.print(
                             f"[blue]Skipping prompt {prompt_name} (doesn't match pattern)[/blue]"
                         )
+                    skipped_count += 1
                     continue
 
                 if dry_run:
@@ -84,6 +92,7 @@ def import_prompts_from_directory(
                     console.print(
                         f"[yellow]Skipping {prompt_name} (no prompt content found)[/yellow]"
                     )
+                    skipped_count += 1
                     continue
 
                 # Convert string type to PromptType enum if needed
@@ -106,6 +115,7 @@ def import_prompts_from_directory(
                             console.print(
                                 f"[yellow]Skipping {prompt_name} (chat prompt content must be a list of messages)[/yellow]"
                             )
+                            skipped_count += 1
                             continue
 
                         # Create ChatPrompt
@@ -125,6 +135,7 @@ def import_prompts_from_directory(
                             console.print(
                                 f"[yellow]Skipping {prompt_name} (text prompt content must be a string)[/yellow]"
                             )
+                            skipped_count += 1
                             continue
 
                         # Create Prompt
@@ -145,16 +156,22 @@ def import_prompts_from_directory(
                     console.print(
                         f"[red]Error creating prompt {prompt_name}: {e}[/red]"
                     )
+                    error_count += 1
                     continue
 
             except Exception as e:
                 console.print(
                     f"[red]Error importing prompt from {prompt_file}: {e}[/red]"
                 )
+                error_count += 1
                 continue
 
-        return imported_count
+        return {
+            "prompts": imported_count,
+            "prompts_skipped": skipped_count,
+            "prompts_errors": error_count,
+        }
 
     except Exception as e:
         console.print(f"[red]Error importing prompts: {e}[/red]")
-        return 0
+        return {"prompts": 0, "prompts_skipped": 0, "prompts_errors": 1}

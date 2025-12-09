@@ -2,7 +2,7 @@
 
 import sys
 from pathlib import Path
-from typing import Optional
+from typing import Dict, Optional
 
 import click
 from rich.console import Console
@@ -13,6 +13,7 @@ from .dataset import import_datasets_from_directory
 from .experiment import import_experiments_from_directory
 from .project import import_projects_from_directory
 from .prompt import import_prompts_from_directory
+from .utils import print_import_summary
 
 console = Console()
 
@@ -75,34 +76,48 @@ def _import_by_type(
         if debug:
             console.print(f"[blue]Source directory: {source_dir}[/blue]")
 
-        imported_count = 0
+        stats: Dict[str, int] = {}
 
         if import_type == "dataset":
-            imported_count = import_datasets_from_directory(
+            stats = import_datasets_from_directory(
                 client, source_dir, dry_run, name_pattern, debug
             )
         elif import_type == "project":
-            imported_count = import_projects_from_directory(
+            stats = import_projects_from_directory(
                 client, source_dir, dry_run, name_pattern, debug, recreate_experiments
             )
         elif import_type == "experiment":
-            imported_count = import_experiments_from_directory(
+            stats = import_experiments_from_directory(
                 client, source_dir, dry_run, name_pattern, debug, recreate_experiments
             )
         elif import_type == "prompt":
-            imported_count = import_prompts_from_directory(
+            stats = import_prompts_from_directory(
                 client, source_dir, dry_run, name_pattern, debug
             )
+
+        # Display summary
+        print_import_summary(stats)
+
+        # Also show a simple message for backward compatibility
+        # Map import_type to the key used in stats dictionary
+        type_key_map = {
+            "dataset": "datasets",
+            "prompt": "prompts",
+            "project": "projects",
+            "experiment": "experiments",
+        }
+        stats_key = type_key_map.get(import_type, import_type + "s")
+        imported_count = stats.get(stats_key, 0)
+        errors = stats.get(stats_key + "_errors", 0)
 
         if dry_run:
             console.print(
                 f"[blue]Dry run complete: Would import {imported_count} {import_type}s[/blue]"
             )
         else:
-            if imported_count < 0:
-                # Negative count indicates errors occurred
+            if errors > 0:
                 console.print(
-                    f"[red]Import failed: Errors occurred while importing {import_type}s[/red]"
+                    f"[yellow]Import completed with {errors} error(s) while importing {import_type}s[/yellow]"
                 )
             elif imported_count == 0:
                 console.print(f"[yellow]No {import_type}s were imported[/yellow]")
