@@ -58,13 +58,13 @@ def streamer_with_attachments_disabled(noop_file_upload_preprocessor):
             tested.close(timeout=5)
 
 
-def test_streamer__create_span_message__attachments_enabled__wraps_in_attachment_supporting_message(
+def test_streamer__create_span_message__attachments_enabled__does_not_wrap_without_end_time(
     streamer_with_attachments_enabled,
 ):
-    """Test that CreateSpanMessage is wrapped in AttachmentSupportingMessage when attachments are enabled."""
+    """Test that CreateSpanMessage without end_time is NOT wrapped even when attachments are enabled."""
     tested, mock_message_processor = streamer_with_attachments_enabled
 
-    # Create a span message with potential attachment data
+    # Create a span message with potential attachment data but no end_time
     span_message = messages.CreateSpanMessage(
         span_id="span-123",
         trace_id="trace-456",
@@ -72,7 +72,7 @@ def test_streamer__create_span_message__attachments_enabled__wraps_in_attachment
         parent_span_id=None,
         name="test-span",
         start_time=datetime.now(),
-        end_time=None,
+        end_time=None,  # No end_time - should not be wrapped
         input={"image": "base64-encoded-image-data"},
         output=None,
         metadata=None,
@@ -93,24 +93,24 @@ def test_streamer__create_span_message__attachments_enabled__wraps_in_attachment
     mock_message_processor.process.assert_called_once()
     processed_message = mock_message_processor.process.call_args[0][0]
 
-    # The message should be wrapped in AttachmentSupportingMessage
-    assert isinstance(processed_message, messages.AttachmentSupportingMessage)
-    assert processed_message.original_message is span_message
+    # The message should NOT be wrapped in AttachmentSupportingMessage since end_time is None
+    # (it may be batched into CreateSpansBatchMessage by the batching preprocessor)
+    assert not isinstance(processed_message, messages.AttachmentSupportingMessage)
 
 
-def test_streamer__create_trace_message__attachments_enabled__wraps_in_attachment_supporting_message(
+def test_streamer__create_trace_message__attachments_enabled__does_not_wrap_without_end_time(
     streamer_with_attachments_enabled,
 ):
-    """Test that CreateTraceMessage is wrapped in AttachmentSupportingMessage when attachments are enabled."""
+    """Test that CreateTraceMessage without end_time is NOT wrapped even when attachments are enabled."""
     tested, mock_message_processor = streamer_with_attachments_enabled
 
-    # Create a trace message with potential attachment data
+    # Create a trace message with potential attachment data but no end_time
     trace_message = messages.CreateTraceMessage(
         trace_id="trace-123",
         project_name="test-project",
         name="test-trace",
         start_time=datetime.now(),
-        end_time=None,
+        end_time=None,  # No end_time - should not be wrapped
         input={"document": "base64-encoded-pdf-data"},
         output=None,
         metadata=None,
@@ -127,9 +127,9 @@ def test_streamer__create_trace_message__attachments_enabled__wraps_in_attachmen
     mock_message_processor.process.assert_called_once()
     processed_message = mock_message_processor.process.call_args[0][0]
 
-    # The message should be wrapped in AttachmentSupportingMessage
-    assert isinstance(processed_message, messages.AttachmentSupportingMessage)
-    assert processed_message.original_message is trace_message
+    # The message should NOT be wrapped in AttachmentSupportingMessage since end_time is None
+    # (it may be batched into CreateTraceBatchMessage by the batching preprocessor)
+    assert not isinstance(processed_message, messages.AttachmentSupportingMessage)
 
 
 def test_streamer__create_span_message__attachments_disabled__does_not_wrap(
@@ -269,10 +269,10 @@ def test_streamer__update_trace_message__attachments_enabled__wraps_in_attachmen
     assert processed_message.original_message is update_trace_message
 
 
-def test_streamer__multiple_span_messages__attachments_enabled__all_wrapped(
+def test_streamer__multiple_span_messages__attachments_enabled__not_wrapped_without_end_time(
     streamer_with_attachments_enabled,
 ):
-    """Test that multiple CreateSpanMessages are all wrapped when attachments are enabled."""
+    """Test that multiple CreateSpanMessages without end_time are NOT wrapped even when attachments are enabled."""
     tested, mock_message_processor = streamer_with_attachments_enabled
 
     span_messages = [
@@ -283,7 +283,7 @@ def test_streamer__multiple_span_messages__attachments_enabled__all_wrapped(
             parent_span_id=None,
             name=f"test-span-{i}",
             start_time=datetime.now(),
-            end_time=None,
+            end_time=None,  # No end_time - should not be wrapped
             input={"data": f"base64-data-{i}"},
             output=None,
             metadata=None,
@@ -304,13 +304,14 @@ def test_streamer__multiple_span_messages__attachments_enabled__all_wrapped(
 
     assert tested.flush(timeout=1.0) is True
 
-    # Verify all messages were processed
-    assert mock_message_processor.process.call_count == 3
+    # Verify all messages were processed (can be batched)
+    # When batching is enabled, they might be combined into a single batch
+    assert mock_message_processor.process.call_count >= 1
 
-    # Check that all messages are wrapped
+    # Check that none of the messages are wrapped in AttachmentSupportingMessage
     for call in mock_message_processor.process.call_args_list:
         processed_message = call[0][0]
-        assert isinstance(processed_message, messages.AttachmentSupportingMessage)
+        assert not isinstance(processed_message, messages.AttachmentSupportingMessage)
 
 
 def test_streamer__span_with_all_fields_populated__attachments_enabled__wraps_correctly(

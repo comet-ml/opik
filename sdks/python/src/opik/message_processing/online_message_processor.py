@@ -49,6 +49,7 @@ class OpikMessageProcessor(message_processors.BaseMessageProcessor):
             messages.CreateTraceBatchMessage: self._process_create_traces_batch_message,  # type: ignore
             messages.GuardrailBatchMessage: self._process_guardrail_batch_message,  # type: ignore
             messages.CreateExperimentItemsBatchMessage: self._process_create_experiment_items_batch_message,  # type: ignore
+            messages.AttachmentSupportingMessage: self._noop_handler,  # type: ignore
         }
 
     def is_active(self) -> bool:
@@ -303,6 +304,10 @@ class OpikMessageProcessor(message_processors.BaseMessageProcessor):
         LOGGER.debug(
             "Sent experiment items batch of size %d", len(experiment_items_batch)
         )
+
+    def _noop_handler(self, message: messages.BaseMessage) -> None:
+        # just ignore the message
+        pass
 
 
 def _generate_error_tracking_extra(
