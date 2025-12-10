@@ -35,6 +35,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Stream;
 
+import static com.comet.opik.api.resources.utils.TestUtils.waitForMillis;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
@@ -413,10 +414,5 @@ class BaseRedisSubscriberTest {
         await().atMost(AWAIT_TIMEOUT_SECONDS, TimeUnit.SECONDS)
                 // Verify messages were removed from stream
                 .untilAsserted(() -> assertThat(stream.size().block()).isEqualTo(pendingMessages));
-    }
-
-    private void waitForMillis(long millis) {
-        await().pollDelay(millis, TimeUnit.MILLISECONDS)
-                .until(() -> true);
     }
 }
