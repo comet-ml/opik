@@ -96,7 +96,7 @@ class Streamer:
         return self._message_queue.empty()
 
     def flush(self, timeout: Optional[float], upload_sleep_time: int = 5) -> bool:
-        # wait for current pedning messages processing to be completed
+        # wait for current pending messages processing to be completed
         # this should be done before flushing batch preprocessor because some
         # batch messages may be added to the queue during processing
         with self._lock:

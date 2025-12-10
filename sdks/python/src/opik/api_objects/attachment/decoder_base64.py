@@ -9,7 +9,7 @@ from . import attachment, decoder, decoder_helpers
 LOGGER = logging.getLogger(__name__)
 
 
-class Base44AttachmentDecoder(decoder.AttachmentDecoder):
+class Base64AttachmentDecoder(decoder.AttachmentDecoder):
     """Decodes base64 encoded attachment data.
 
     This decoder decodes base64 strings, detects MIME types from content, and creates Attachment objects.

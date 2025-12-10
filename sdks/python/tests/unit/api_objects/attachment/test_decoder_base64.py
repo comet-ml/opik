@@ -14,7 +14,7 @@ from opik.api_objects.attachment import decoder_helpers
 @pytest.fixture
 def decoder():
     """Create a Base44AttachmentDecoder instance."""
-    return decoder_base64.Base44AttachmentDecoder()
+    return decoder_base64.Base64AttachmentDecoder()
 
 
 def test_decode_png_success(decoder):

@@ -30,7 +30,7 @@ class AttachmentsExtractor:
                 base64 strings are matched to minimize false positives.
         """
         self._min_attachment_size = min_attachment_size
-        self.decoder = decoder_base64.Base44AttachmentDecoder()
+        self.decoder = decoder_base64.Base64AttachmentDecoder()
 
         # Pattern to match base64 strings (can be embedded in text)
         # Requires at least min_attachment_size characters to reduce false positives
