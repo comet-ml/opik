@@ -99,7 +99,6 @@ def handle_trace_reference(item_data: Dict[str, Any]) -> Optional[str]:
     trace_reference = item_data.get("trace_reference")
     if trace_reference:
         trace_id = trace_reference.get("trace_id")
-        console.print(f"[blue]Using trace reference: {trace_id}[/blue]")
         return trace_id
 
     # Fall back to direct trace_id

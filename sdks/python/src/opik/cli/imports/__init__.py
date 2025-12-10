@@ -84,7 +84,7 @@ def _import_by_type(
             )
         elif import_type == "experiment":
             stats = import_experiments_from_directory(
-                client, source_dir, dry_run, name_pattern, debug, recreate_experiments
+                client, source_dir, dry_run, name_pattern, debug
             )
         elif import_type == "prompt":
             stats = import_prompts_from_directory(

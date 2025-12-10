@@ -386,7 +386,6 @@ def export_experiment_by_name(
     name: str,
     workspace: str,
     output_path: str,
-    dataset: Optional[str],
     max_traces: Optional[int],
     force: bool,
     debug: bool,
@@ -572,7 +571,6 @@ def export_experiment_by_name_or_id(
     name_or_id: str,
     workspace: str,
     output_path: str,
-    dataset: Optional[str],
     max_traces: Optional[int],
     force: bool,
     debug: bool,
@@ -699,7 +697,6 @@ def export_experiment_by_name_or_id(
             name_or_id,
             workspace,
             output_path,
-            dataset,
             max_traces,
             force,
             debug,
@@ -714,11 +711,6 @@ def export_experiment_by_name_or_id(
 
 @click.command(name="experiment")
 @click.argument("name_or_id", type=str)
-@click.option(
-    "--dataset",
-    type=str,
-    help="Dataset name to filter traces by. If not provided, all traces will be exported.",
-)
 @click.option(
     "--max-traces",
     type=int,
@@ -751,7 +743,6 @@ def export_experiment_by_name_or_id(
 def export_experiment_command(
     ctx: click.Context,
     name_or_id: str,
-    dataset: Optional[str],
     max_traces: Optional[int],
     path: str,
     force: bool,
@@ -766,5 +757,5 @@ def export_experiment_command(
     workspace = ctx.obj["workspace"]
     api_key = ctx.obj.get("api_key") if ctx.obj else None
     export_experiment_by_name_or_id(
-        name_or_id, workspace, path, dataset, max_traces, force, debug, format, api_key
+        name_or_id, workspace, path, max_traces, force, debug, format, api_key
     )

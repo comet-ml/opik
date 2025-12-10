@@ -923,7 +923,6 @@ def import_experiments_from_directory(
     dry_run: bool,
     name_pattern: Optional[str],
     debug: bool,
-    recreate_experiments_flag: bool,
 ) -> Dict[str, int]:
     """Import experiments from a directory.
 
