@@ -121,7 +121,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
 
     private static final String SELECT_DATASET_ITEM_VERSIONS = """
             SELECT
-                dataset_item_id AS id,
+                id,
                 dataset_item_id,
                 dataset_id,
                 data,
@@ -152,7 +152,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
 
     private static final String SELECT_DATASET_ITEM_VERSIONS_STREAM = """
             SELECT
-                dataset_item_id AS id,
+                id,
                 dataset_item_id,
                 dataset_id,
                 data,
