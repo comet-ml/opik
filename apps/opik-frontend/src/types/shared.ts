@@ -95,6 +95,7 @@ export type ColumnData<T> = {
   overrideRowHeight?: ROW_HEIGHT;
   statisticKey?: string;
   statisticDataFormater?: (value: number) => string;
+  supportsPercentiles?: boolean;
   sortable?: boolean;
   disposable?: boolean;
 };
