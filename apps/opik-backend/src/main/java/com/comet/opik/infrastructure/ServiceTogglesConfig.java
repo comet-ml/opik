@@ -44,4 +44,6 @@ public class ServiceTogglesConfig {
     @NotNull boolean vertexaiProviderEnabled;
     @JsonProperty
     @NotNull boolean customllmProviderEnabled;
+    @JsonProperty
+    @NotNull boolean opikbuiltinProviderEnabled;
 }

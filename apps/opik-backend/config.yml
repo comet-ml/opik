@@ -589,6 +589,9 @@ serviceToggles:
   # Default: true
   # Description: Whether or not Custom LLM provider is enabled
   customllmProviderEnabled: ${TOGGLE_CUSTOMLLM_PROVIDER_ENABLED:-"true"}
+  # Default: true
+  # Description: Whether or not Opik Built-in provider is enabled
+  opikbuiltinProviderEnabled: ${TOGGLE_OPIKBUILTIN_PROVIDER_ENABLED:-"true"}
 
 # Trace Thread configuration
 traceThreadConfig:

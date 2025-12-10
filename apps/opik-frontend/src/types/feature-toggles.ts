@@ -18,4 +18,5 @@ export enum FeatureToggleKeys {
   OPENROUTER_PROVIDER_ENABLED = "openrouter_provider_enabled",
   VERTEXAI_PROVIDER_ENABLED = "vertexai_provider_enabled",
   CUSTOMLLM_PROVIDER_ENABLED = "customllm_provider_enabled",
+  OPIKBUILTIN_PROVIDER_ENABLED = "opikbuiltin_provider_enabled",
 }
