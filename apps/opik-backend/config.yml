@@ -571,6 +571,24 @@ serviceToggles:
   # Default: false
   # Description: Whether or not Optimization Studio feature is enabled
   optimizationStudioEnabled: ${TOGGLE_OPTIMIZATION_STUDIO_ENABLED:-"false"}
+  # Default: true
+  # Description: Whether or not OpenAI provider is enabled
+  openaiProviderEnabled: ${TOGGLE_OPENAI_PROVIDER_ENABLED:-"true"}
+  # Default: true
+  # Description: Whether or not Anthropic provider is enabled
+  anthropicProviderEnabled: ${TOGGLE_ANTHROPIC_PROVIDER_ENABLED:-"true"}
+  # Default: true
+  # Description: Whether or not Gemini provider is enabled
+  geminiProviderEnabled: ${TOGGLE_GEMINI_PROVIDER_ENABLED:-"true"}
+  # Default: true
+  # Description: Whether or not OpenRouter provider is enabled
+  openrouterProviderEnabled: ${TOGGLE_OPENROUTER_PROVIDER_ENABLED:-"true"}
+  # Default: true
+  # Description: Whether or not Vertex AI provider is enabled
+  vertexaiProviderEnabled: ${TOGGLE_VERTEXAI_PROVIDER_ENABLED:-"true"}
+  # Default: true
+  # Description: Whether or not Custom LLM provider is enabled
+  customllmProviderEnabled: ${TOGGLE_CUSTOMLLM_PROVIDER_ENABLED:-"true"}
 
 # Trace Thread configuration
 traceThreadConfig:
