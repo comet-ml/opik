@@ -1,5 +1,5 @@
 import logging
-from typing import Optional, NamedTuple, List, Literal
+from typing import Optional, NamedTuple, List, Literal, cast
 
 from . import message_processors, messages, streamer
 from .preprocessing import constants
@@ -95,7 +95,7 @@ class AttachmentsExtractionProcessor(message_processors.BaseMessageProcessor):
                     entity_type=entity_details.entity_type,
                     entity_id=entity_details.entity_id,
                     project_name=entity_details.project_name,
-                    context=attribute,
+                    context=cast(Literal["input", "output", "metadata"], attribute),
                 )
                 attachments.extend(results)
 
