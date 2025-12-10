@@ -665,7 +665,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                                 .flatMap(DatasetItemResultMapper::mapItem)
                                 .collectList()
                                 .map(items -> new DatasetItemPage(items, page, items.size(), total, columns, null,
-                                        false));
+                                        false, null));
                     });
                 });
     }
@@ -804,7 +804,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                             .flatMap(DatasetItemResultMapper::mapItem)
                             .collectList()
                             .map(items -> new DatasetItemPage(items, page, items.size(), total, columns,
-                                    sortingFactory.getSortableFields(), false));
+                                    sortingFactory.getSortableFields(), false, null));
                 }));
     }
 

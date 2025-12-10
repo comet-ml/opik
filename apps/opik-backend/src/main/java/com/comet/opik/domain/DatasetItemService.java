@@ -437,6 +437,7 @@ class DatasetItemServiceImpl implements DatasetItemService {
 
                 // For versioned items, hasDraft is always false (concept doesn't apply to immutable versions)
                 return versionDao.getItems(datasetItemSearchCriteria, page, size, versionId)
+                        .map(itemPage -> itemPage.toBuilder().datasetVersionId(versionId).build())
                         .defaultIfEmpty(DatasetItemPage.empty(page, sortingFactory.getSortableFields()));
             } else {
                 // Case 2 & 3: Version param not specified - check if latest version exists
@@ -465,6 +466,7 @@ class DatasetItemServiceImpl implements DatasetItemService {
                                         latestVersionId, datasetItemSearchCriteria.datasetId(), page, size);
 
                                 return versionDao.getItems(datasetItemSearchCriteria, page, size, latestVersionId)
+                                        .map(itemPage -> itemPage.toBuilder().datasetVersionId(latestVersionId).build())
                                         .defaultIfEmpty(
                                                 DatasetItemPage.empty(page, sortingFactory.getSortableFields()));
                             }

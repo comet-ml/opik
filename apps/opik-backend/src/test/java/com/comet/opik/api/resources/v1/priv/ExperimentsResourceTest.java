@@ -5784,6 +5784,10 @@ class ExperimentsResourceTest {
         // Verify experiment is linked to the correct version
         var createdExperiment = getExperiment(experimentId, TEST_WORKSPACE, API_KEY);
         assertThat(createdExperiment.datasetVersionId()).isEqualTo(versionId);
+
+        // Verify getDatasetItems returns the correct datasetVersionId
+        var datasetItemsPage = datasetResourceClient.getDatasetItems(datasetId, 1, 10, null, API_KEY, TEST_WORKSPACE);
+        assertThat(datasetItemsPage.datasetVersionId()).isEqualTo(versionId);
     }
 
     @Test
@@ -5821,6 +5825,10 @@ class ExperimentsResourceTest {
         // Verify experiment is linked to the latest version
         var createdExperiment = getExperiment(experimentId, TEST_WORKSPACE, API_KEY);
         assertThat(createdExperiment.datasetVersionId()).isEqualTo(versionId);
+
+        // Verify getDatasetItems returns the correct datasetVersionId (latest version)
+        var datasetItemsPage = datasetResourceClient.getDatasetItems(datasetId, 1, 10, null, API_KEY, TEST_WORKSPACE);
+        assertThat(datasetItemsPage.datasetVersionId()).isEqualTo(versionId);
     }
 
     @Test
@@ -5922,5 +5930,32 @@ class ExperimentsResourceTest {
         assertThat(datasetItemsWithExperimentItems.content().getFirst().experimentItems()).hasSize(1);
         assertThat(datasetItemsWithExperimentItems.content().getFirst().experimentItems().getFirst().datasetItemId())
                 .isEqualTo(versionItemId);
+
+        // Verify getDatasetItems returns the correct datasetVersionId
+        assertThat(datasetItemsWithExperimentItems.datasetVersionId()).isEqualTo(version.id());
+    }
+
+    @Test
+    @DisplayName("Get dataset items without version - should return null datasetVersionId for draft items")
+    void getDatasetItems__whenNoVersionExists__shouldReturnNullDatasetVersionId() {
+        // Create dataset
+        var dataset = podamFactory.manufacturePojo(Dataset.class);
+        UUID datasetId = datasetResourceClient.createDataset(dataset, API_KEY, TEST_WORKSPACE);
+
+        // Create dataset items (draft only, no version committed)
+        var items = List.of(
+                podamFactory.manufacturePojo(DatasetItem.class).toBuilder().id(null).build(),
+                podamFactory.manufacturePojo(DatasetItem.class).toBuilder().id(null).build());
+        var batch = DatasetItemBatch.builder()
+                .datasetId(datasetId)
+                .items(items)
+                .build();
+        datasetResourceClient.createDatasetItems(batch, TEST_WORKSPACE, API_KEY);
+
+        // Get dataset items - should return draft items with null datasetVersionId
+        var datasetItemsPage = datasetResourceClient.getDatasetItems(datasetId, 1, 10, null, API_KEY, TEST_WORKSPACE);
+
+        assertThat(datasetItemsPage.content()).hasSize(2);
+        assertThat(datasetItemsPage.datasetVersionId()).isNull();
     }
 }
