@@ -252,6 +252,11 @@
             <version>1.14.1</version>
         </dependency>
         <dependency>
+            <groupId>commons-io</groupId>
+            <artifactId>commons-io</artifactId>
+            <version>2.21.0</version>
+        </dependency>
+        <dependency>
             <groupId>org.mvel</groupId>
             <artifactId>mvel2</artifactId>
             <version>2.5.2.Final</version>
