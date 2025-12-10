@@ -2,7 +2,7 @@
 
 A Helm chart for Comet Opik
 
-![Version: 0.1.0](https://img.shields.io/badge/Version-0.1.0-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 0.1.0](https://img.shields.io/badge/AppVersion-0.1.0-informational?style=flat-square)
+![Version: 1.9.43](https://img.shields.io/badge/Version-1.9.43-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 1.9.43](https://img.shields.io/badge/AppVersion-1.9.43-informational?style=flat-square)
 [![Artifact Hub](https://img.shields.io/endpoint?url=https://artifacthub.io/badge/repository/opik)](https://artifacthub.io/packages/search?repo=opik)
 
 # Run Comet Opik with Helm
@@ -81,7 +81,7 @@ Call opik api on http://localhost:5173/api
 
 | Repository | Name | Version |
 |------------|------|---------|
-| https://comet-ml.github.io/comet-mysql-helm/ | mysql | 1.0.4 |
+| https://comet-ml.github.io/comet-mysql-helm/ | mysql | 1.0.6 |
 | https://docs.altinity.com/clickhouse-operator/ | altinity-clickhouse-operator | 0.25.4 |
 | oci://registry-1.docker.io/bitnamicharts | common | 2.x.x |
 | oci://registry-1.docker.io/cloudpirates | minio | 0.5.6 |
