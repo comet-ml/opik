@@ -8906,4 +8906,171 @@ class DatasetsResourceTest {
             });
         }
     }
+
+    @Nested
+    @DisplayName("Get Draft Dataset Items Tests")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class GetDraftDatasetItems {
+
+        @Test
+        @DisplayName("Get draft items when no version exists - should return items with hasDraft=true")
+        void getDraftItems__whenNoVersionExists__shouldReturnItemsWithHasDraftTrue() {
+            // Create dataset
+            var dataset = factory.manufacturePojo(Dataset.class).toBuilder()
+                    .id(null)
+                    .build();
+            UUID datasetId = createAndAssert(dataset, API_KEY, TEST_WORKSPACE);
+
+            // Create draft items
+            var items = List.of(
+                    factory.manufacturePojo(DatasetItem.class).toBuilder().id(null).build(),
+                    factory.manufacturePojo(DatasetItem.class).toBuilder().id(null).build());
+            var batch = DatasetItemBatch.builder()
+                    .datasetId(datasetId)
+                    .items(items)
+                    .build();
+            datasetResourceClient.createDatasetItems(batch, TEST_WORKSPACE, API_KEY);
+
+            // Get draft items
+            var draftItemsPage = datasetResourceClient.getDraftDatasetItems(datasetId, 1, 10, API_KEY, TEST_WORKSPACE);
+
+            // Verify
+            assertThat(draftItemsPage.content()).hasSize(2);
+            assertThat(draftItemsPage.hasDraft()).isTrue();
+            assertThat(draftItemsPage.datasetVersionId()).isNull(); // Draft items have no version
+        }
+
+        @Test
+        @DisplayName("Get draft items when version exists but draft has changes - should return items with hasDraft=true")
+        void getDraftItems__whenVersionExistsAndDraftHasChanges__shouldReturnItemsWithHasDraftTrue() {
+            // Create dataset
+            var dataset = factory.manufacturePojo(Dataset.class).toBuilder()
+                    .id(null)
+                    .build();
+            UUID datasetId = createAndAssert(dataset, API_KEY, TEST_WORKSPACE);
+
+            // Create initial items
+            var item1 = factory.manufacturePojo(DatasetItem.class).toBuilder().id(null).build();
+            var batch1 = DatasetItemBatch.builder()
+                    .datasetId(datasetId)
+                    .items(List.of(item1))
+                    .build();
+            datasetResourceClient.createDatasetItems(batch1, TEST_WORKSPACE, API_KEY);
+
+            // Commit version
+            var versionCreate = DatasetVersionCreate.builder()
+                    .changeDescription("Initial version")
+                    .build();
+            datasetResourceClient.commitVersion(datasetId, versionCreate, API_KEY, TEST_WORKSPACE);
+
+            // Add new item to draft
+            var item2 = factory.manufacturePojo(DatasetItem.class).toBuilder().id(null).build();
+            var batch2 = DatasetItemBatch.builder()
+                    .datasetId(datasetId)
+                    .items(List.of(item2))
+                    .build();
+            datasetResourceClient.createDatasetItems(batch2, TEST_WORKSPACE, API_KEY);
+
+            // Get draft items
+            var draftItemsPage = datasetResourceClient.getDraftDatasetItems(datasetId, 1, 10, API_KEY, TEST_WORKSPACE);
+
+            // Verify
+            assertThat(draftItemsPage.content()).hasSize(2); // Both items in draft
+            assertThat(draftItemsPage.hasDraft()).isTrue(); // Draft differs from version
+            assertThat(draftItemsPage.datasetVersionId()).isNull(); // Draft items have no version
+        }
+
+        @Test
+        @DisplayName("Get draft items when draft matches version - should return items with hasDraft=false")
+        void getDraftItems__whenDraftMatchesVersion__shouldReturnItemsWithHasDraftFalse() {
+            // Create dataset
+            var dataset = factory.manufacturePojo(Dataset.class).toBuilder()
+                    .id(null)
+                    .build();
+            UUID datasetId = createAndAssert(dataset, API_KEY, TEST_WORKSPACE);
+
+            // Create items
+            var items = List.of(
+                    factory.manufacturePojo(DatasetItem.class).toBuilder().id(null).build(),
+                    factory.manufacturePojo(DatasetItem.class).toBuilder().id(null).build());
+            var batch = DatasetItemBatch.builder()
+                    .datasetId(datasetId)
+                    .items(items)
+                    .build();
+            datasetResourceClient.createDatasetItems(batch, TEST_WORKSPACE, API_KEY);
+
+            // Commit version (draft now matches version)
+            var versionCreate = DatasetVersionCreate.builder()
+                    .changeDescription("Version 1")
+                    .build();
+            datasetResourceClient.commitVersion(datasetId, versionCreate, API_KEY, TEST_WORKSPACE);
+
+            // Get draft items
+            var draftItemsPage = datasetResourceClient.getDraftDatasetItems(datasetId, 1, 10, API_KEY, TEST_WORKSPACE);
+
+            // Verify
+            assertThat(draftItemsPage.content()).hasSize(2);
+            assertThat(draftItemsPage.hasDraft()).isFalse(); // Draft matches version
+            assertThat(draftItemsPage.datasetVersionId()).isNull(); // Draft items have no version
+        }
+
+        @Test
+        @DisplayName("Get draft items with pagination - should respect page and size")
+        void getDraftItems__withPagination__shouldRespectPageAndSize() {
+            // Create dataset
+            var dataset = factory.manufacturePojo(Dataset.class).toBuilder()
+                    .id(null)
+                    .build();
+            UUID datasetId = createAndAssert(dataset, API_KEY, TEST_WORKSPACE);
+
+            // Create 5 items
+            var items = List.of(
+                    factory.manufacturePojo(DatasetItem.class).toBuilder().id(null).build(),
+                    factory.manufacturePojo(DatasetItem.class).toBuilder().id(null).build(),
+                    factory.manufacturePojo(DatasetItem.class).toBuilder().id(null).build(),
+                    factory.manufacturePojo(DatasetItem.class).toBuilder().id(null).build(),
+                    factory.manufacturePojo(DatasetItem.class).toBuilder().id(null).build());
+            var batch = DatasetItemBatch.builder()
+                    .datasetId(datasetId)
+                    .items(items)
+                    .build();
+            datasetResourceClient.createDatasetItems(batch, TEST_WORKSPACE, API_KEY);
+
+            // Get first page (size 2)
+            var page1 = datasetResourceClient.getDraftDatasetItems(datasetId, 1, 2, API_KEY, TEST_WORKSPACE);
+            assertThat(page1.content()).hasSize(2);
+            assertThat(page1.page()).isEqualTo(1);
+            assertThat(page1.size()).isEqualTo(2);
+            assertThat(page1.total()).isEqualTo(5);
+
+            // Get second page (size 2)
+            var page2 = datasetResourceClient.getDraftDatasetItems(datasetId, 2, 2, API_KEY, TEST_WORKSPACE);
+            assertThat(page2.content()).hasSize(2);
+            assertThat(page2.page()).isEqualTo(2);
+
+            // Get third page (size 2, should have 1 item)
+            var page3 = datasetResourceClient.getDraftDatasetItems(datasetId, 3, 2, API_KEY, TEST_WORKSPACE);
+            assertThat(page3.content()).hasSize(1);
+            assertThat(page3.page()).isEqualTo(3);
+        }
+
+        @Test
+        @DisplayName("Get draft items for empty dataset - should return empty page")
+        void getDraftItems__whenDatasetEmpty__shouldReturnEmptyPage() {
+            // Create empty dataset
+            var dataset = factory.manufacturePojo(Dataset.class).toBuilder()
+                    .id(null)
+                    .build();
+            UUID datasetId = createAndAssert(dataset, API_KEY, TEST_WORKSPACE);
+
+            // Get draft items
+            var draftItemsPage = datasetResourceClient.getDraftDatasetItems(datasetId, 1, 10, API_KEY, TEST_WORKSPACE);
+
+            // Verify
+            assertThat(draftItemsPage.content()).isEmpty();
+            assertThat(draftItemsPage.total()).isEqualTo(0);
+            assertThat(draftItemsPage.hasDraft()).isFalse(); // No items means no draft
+            assertThat(draftItemsPage.datasetVersionId()).isNull();
+        }
+    }
 }

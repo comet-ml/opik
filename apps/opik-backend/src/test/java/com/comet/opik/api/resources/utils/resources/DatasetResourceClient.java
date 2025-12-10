@@ -617,4 +617,25 @@ public class DatasetResourceClient {
                 .header(WORKSPACE_HEADER, workspaceName)
                 .post(Entity.json(deleteRequest));
     }
+
+    public DatasetItemPage getDraftDatasetItems(UUID datasetId, int page, int size, String apiKey,
+            String workspaceName) {
+        WebTarget target = client.target(RESOURCE_PATH.formatted(baseURI))
+                .path(datasetId.toString())
+                .path("items")
+                .path("draft")
+                .queryParam("page", page)
+                .queryParam("size", size);
+
+        try (var actualResponse = target
+                .request()
+                .accept(MediaType.APPLICATION_JSON_TYPE)
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .get()) {
+
+            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
+            return actualResponse.readEntity(DatasetItemPage.class);
+        }
+    }
 }
