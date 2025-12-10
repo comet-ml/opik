@@ -26,6 +26,14 @@ const DEFAULT_STATE: FeatureToggles = {
   [FeatureToggleKeys.SPAN_LLM_AS_JUDGE_ENABLED]: false,
   [FeatureToggleKeys.SPAN_USER_DEFINED_METRIC_PYTHON_ENABLED]: false,
   [FeatureToggleKeys.DASHBOARDS_ENABLED]: false,
+  // LLM Provider feature flags - default enabled
+  [FeatureToggleKeys.OPENAI_PROVIDER_ENABLED]: true,
+  [FeatureToggleKeys.ANTHROPIC_PROVIDER_ENABLED]: true,
+  [FeatureToggleKeys.GEMINI_PROVIDER_ENABLED]: true,
+  [FeatureToggleKeys.OPENROUTER_PROVIDER_ENABLED]: true,
+  [FeatureToggleKeys.VERTEXAI_PROVIDER_ENABLED]: true,
+  [FeatureToggleKeys.CUSTOMLLM_PROVIDER_ENABLED]: true,
+  [FeatureToggleKeys.OPIKBUILTIN_PROVIDER_ENABLED]: true,
 };
 
 const initialState: FeatureTogglesState = {
@@ -74,4 +82,15 @@ export const useIsFeatureEnabled = (feature: FeatureToggleKeys) => {
     );
 
   return context.isFeatureEnabled(feature);
+};
+
+export const useFeatureToggles = () => {
+  const context = useContext(FeatureTogglesProviderContext);
+
+  if (context === undefined)
+    throw new Error(
+      "useFeatureToggles must be used within a FeatureTogglesProvider",
+    );
+
+  return context;
 };

@@ -1,8 +1,12 @@
 import React, { useMemo } from "react";
 import { Label } from "@/components/ui/label";
 import { PROVIDER_TYPE } from "@/types/providers";
-import { PROVIDERS_OPTIONS } from "@/constants/providers";
+import {
+  PROVIDERS_OPTIONS,
+  PROVIDER_FEATURE_TOGGLE_MAP,
+} from "@/constants/providers";
 import { cn } from "@/lib/utils";
+import { useFeatureToggles } from "@/components/feature-toggles-provider";
 
 interface ProviderGridProps {
   selectedProvider: PROVIDER_TYPE | "";
@@ -13,10 +17,17 @@ const ProviderGrid: React.FC<ProviderGridProps> = ({
   selectedProvider,
   onSelectProvider,
 }) => {
-  // Filter out read-only providers - they are system-managed and users don't configure them
+  const { isFeatureEnabled } = useFeatureToggles();
+
+  // Filter out read-only providers and disabled providers based on feature flags
   const configurableProviders = useMemo(
-    () => PROVIDERS_OPTIONS.filter((provider) => !provider.readOnly),
-    [],
+    () =>
+      PROVIDERS_OPTIONS.filter((provider) => {
+        if (provider.readOnly) return false;
+        const featureToggleKey = PROVIDER_FEATURE_TOGGLE_MAP[provider.value];
+        return isFeatureEnabled(featureToggleKey);
+      }),
+    [isFeatureEnabled],
   );
 
   return (
