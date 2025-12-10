@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Optional, Union
 
 from opik.message_processing import messages
 
@@ -42,17 +42,27 @@ class AttachmentsPreprocessor(preprocessor.MessagePreprocessor):
 
 
 def _has_potential_content_with_attachments(message: messages.BaseMessage) -> bool:
-    if not isinstance(
-        message,
-        (
-            messages.CreateSpanMessage,
-            messages.UpdateSpanMessage,
-            messages.CreateTraceMessage,
-            messages.UpdateTraceMessage,
-        ),
-    ):
-        return False
+    # Check if it's an Update message - always process these
+    if isinstance(message, (messages.UpdateSpanMessage, messages.UpdateTraceMessage)):
+        return _message_has_field_of_interest_set(message)
 
+    # Check if it's a Create message with end_time set - only process these
+    if isinstance(message, (messages.CreateSpanMessage, messages.CreateTraceMessage)):
+        if message.end_time is not None:
+            return _message_has_field_of_interest_set(message)
+
+    # All other message types should not be wrapped
+    return False
+
+
+def _message_has_field_of_interest_set(
+    message: Union[
+        messages.UpdateSpanMessage,
+        messages.UpdateTraceMessage,
+        messages.CreateSpanMessage,
+        messages.CreateTraceMessage,
+    ],
+) -> bool:
     return (
         message.input is not None
         or message.output is not None
