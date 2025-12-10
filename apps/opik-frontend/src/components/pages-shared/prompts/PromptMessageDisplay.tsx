@@ -2,7 +2,6 @@ import React from "react";
 
 import { Card, CardContent } from "@/components/ui/card";
 import { LLM_MESSAGE_ROLE_NAME_MAP } from "@/constants/llm";
-import MarkdownPreview from "@/components/shared/MarkdownPreview/MarkdownPreview";
 import { cn } from "@/lib/utils";
 import {
   extractMessageContent,
@@ -34,7 +33,9 @@ export const ReadOnlyMessage: React.FC<{
           <span className="comet-body-s-accented">{roleName}</span>
         </div>
         <div className="mt-1">
-          <MarkdownPreview>{content || ""}</MarkdownPreview>
+          <pre className="whitespace-pre-wrap font-sans text-sm">
+            {content || ""}
+          </pre>
         </div>
       </CardContent>
     </Card>

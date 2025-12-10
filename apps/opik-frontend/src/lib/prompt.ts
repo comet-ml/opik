@@ -130,6 +130,24 @@ export const formatMessagesAsText = (messages: OpenAIMessage[]): string => {
     .join("\n\n");
 };
 
+/**
+ * Type guard that validates if the given data is a NamedPrompts structure.
+ *
+ * A valid NamedPrompts is a non-empty object where:
+ * - All keys are strings (prompt names)
+ * - All values are arrays of valid OpenAI messages (with role and content)
+ *
+ * This differs from a single prompt array (OpenAIMessage[]) in that it's
+ * an object with named keys, allowing multiple prompts to be organized
+ * by name (e.g., for multi-agent optimization scenarios).
+ *
+ * @example
+ * // Valid NamedPrompts:
+ * { "agent1": [{ role: "system", content: "..." }], "agent2": [...] }
+ *
+ * // Not NamedPrompts (single prompt array):
+ * [{ role: "system", content: "..." }]
+ */
 export const isNamedPrompts = (data: unknown): data is NamedPrompts => {
   if (!isObject(data) || isArray(data)) {
     return false;

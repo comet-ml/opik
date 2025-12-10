@@ -6,6 +6,7 @@ import isObject from "lodash/isObject";
 import toLower from "lodash/toLower";
 import find from "lodash/find";
 import get from "lodash/get";
+import isEqual from "lodash/isEqual";
 
 import { CellContext } from "@tanstack/react-table";
 import { COLUMN_TYPE, ColumnData } from "@/types/shared";
@@ -34,16 +35,18 @@ import {
   OPTIMIZATION_PROMPT_KEY,
 } from "@/constants/experiments";
 import { toString } from "@/lib/utils";
-import { extractPromptData, NamedPrompts, OpenAIMessage } from "@/lib/prompt";
+import { extractPromptData, OpenAIMessage } from "@/lib/prompt";
 
 const COLUMNS_WIDTH_KEY = "compare-trials-prompt-columns-width";
 
 const PROMPT_KEY_PREFIX = "Prompt";
 const EXAMPLES_KEY = "Examples";
 
-const extractPromptForDisplay = (
-  promptData: unknown,
-): Record<string, OpenAIMessage[] | NamedPrompts | unknown> => {
+type PromptDisplayResult =
+  | Record<string, OpenAIMessage[]>
+  | { [key: string]: unknown };
+
+const extractPromptForDisplay = (promptData: unknown): PromptDisplayResult => {
   const extracted = extractPromptData(promptData);
 
   if (!extracted) {
@@ -118,6 +121,9 @@ const PromptTab: React.FunctionComponent<PromptTabProps> = ({
         header: CompareExperimentsHeader as never,
         cell: (context) => {
           const row = context.row.original;
+          // Type assertion is necessary here because TanStack Table's CellContext
+          // cannot be narrowed based on the row's discriminant field (rowType).
+          // The rowType check ensures type safety at runtime.
           if (row.rowType === "prompt") {
             return (
               <ComparePromptCell
@@ -202,7 +208,7 @@ const PromptTab: React.FunctionComponent<PromptTabProps> = ({
       const values = Object.values(data);
 
       const different = isPromptRow
-        ? !values.every((v) => JSON.stringify(values[0]) === JSON.stringify(v))
+        ? !values.every((v) => isEqual(values[0], v))
         : !values.every((v) => values[0] === v);
 
       return {
