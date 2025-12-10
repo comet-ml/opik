@@ -48,8 +48,8 @@ def upload_attachment(
 def _delete_attachment_file(file_path: str) -> None:
     try:
         os.unlink(file_path)
-    except FileNotFoundError:
-        LOGGER.info(f"Attachment file '{file_path}' does not exist. Skipping deletion.")
+    except OSError as e:
+        LOGGER.info(f"Failed to delete attachment file: '{file_path}'. Reason: {e}.")
         pass
 
 
