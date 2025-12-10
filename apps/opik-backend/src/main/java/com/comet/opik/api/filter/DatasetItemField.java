@@ -11,6 +11,7 @@ import java.util.Arrays;
 public enum DatasetItemField implements Field {
     ID(ID_QUERY_PARAM, FieldType.STRING),
     DATA(DATA_QUERY_PARAM, FieldType.MAP),
+    FULL_DATA(FULL_DATA_QUERY_PARAM, FieldType.STRING),
     SOURCE(SOURCE_QUERY_PARAM, FieldType.STRING),
     TRACE_ID(TRACE_ID_QUERY_PARAM, FieldType.STRING),
     SPAN_ID(SPAN_ID_QUERY_PARAM, FieldType.STRING),

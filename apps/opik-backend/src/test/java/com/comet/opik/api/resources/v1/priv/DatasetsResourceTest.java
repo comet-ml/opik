@@ -4828,6 +4828,78 @@ class DatasetsResourceTest {
             assertDatasetItemPage(actualEntity, List.of(matchingItem), columns, 1);
         }
 
+        Stream<Arguments> fullDataFieldFilterOperators() {
+            return Stream.of(
+                    // CONTAINS - matches when entire data contains the search term
+                    Arguments.of(
+                            Named.of("CONTAINS operator", Operator.CONTAINS),
+                            (Function<String, Map<String, JsonNode>>) searchKey -> Map.of(
+                                    "query", new TextNode("search for " + searchKey + " model"),
+                                    "type", new TextNode("question"),
+                                    "priority", new TextNode("high")),
+                            (Function<String, Map<String, JsonNode>>) searchKey -> Map.of(
+                                    "query", new TextNode("completely different content"),
+                                    "type", new TextNode("recipe"),
+                                    "priority", new TextNode("low"))),
+
+                    // NOT_CONTAINS - matches when entire data does NOT contain the search term
+                    Arguments.of(
+                            Named.of("NOT_CONTAINS operator", Operator.NOT_CONTAINS),
+                            (Function<String, Map<String, JsonNode>>) searchKey -> Map.of(
+                                    "query", new TextNode("completely different content"),
+                                    "type", new TextNode("recipe"),
+                                    "priority", new TextNode("low")),
+                            (Function<String, Map<String, JsonNode>>) searchKey -> Map.of(
+                                    "query", new TextNode("search for " + searchKey + " model"),
+                                    "type", new TextNode("question"),
+                                    "priority", new TextNode("high"))));
+        }
+
+        @ParameterizedTest
+        @MethodSource("fullDataFieldFilterOperators")
+        @DisplayName("when filtering full data field with operator, then return matching items")
+        void getDatasetItemsByDatasetId__whenFilteringFullDataFieldWithOperator__thenReturnMatchingItems(
+                Operator operator,
+                Function<String, Map<String, JsonNode>> matchingDataSupplier,
+                Function<String, Map<String, JsonNode>> nonMatchingDataSupplier) {
+
+            UUID datasetId = createAndAssert(factory.manufacturePojo(Dataset.class).toBuilder()
+                    .id(null)
+                    .build());
+
+            var searchKey = RandomStringUtils.secure().nextAlphabetic(8);
+            var matchingItem = factory.manufacturePojo(DatasetItem.class).toBuilder()
+                    .data(matchingDataSupplier.apply(searchKey))
+                    .build();
+
+            var nonMatchingItem = factory.manufacturePojo(DatasetItem.class).toBuilder()
+                    .data(nonMatchingDataSupplier.apply(searchKey))
+                    .build();
+
+            var items = List.of(matchingItem, nonMatchingItem);
+            var batch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+                    .items(items)
+                    .datasetId(datasetId)
+                    .build();
+
+            List<Map<String, JsonNode>> data = batch.items()
+                    .stream()
+                    .map(DatasetItem::data)
+                    .toList();
+
+            Set<Column> columns = getColumns(data);
+
+            putAndAssert(batch, TEST_WORKSPACE, API_KEY);
+
+            // FULL_DATA doesn't need a key - it filters by the entire data column (toString(data))
+            var filter = new DatasetItemFilter(DatasetItemField.FULL_DATA, operator, null, searchKey);
+
+            var actualEntity = datasetResourceClient.getDatasetItems(datasetId,
+                    Map.of("filters", toURLEncodedQueryParam(List.of(filter))), API_KEY, TEST_WORKSPACE);
+
+            assertDatasetItemPage(actualEntity, List.of(matchingItem), columns, 1);
+        }
+
         // Helper method to create dataset items with content
         private DatasetItem createDatasetItem(String content) {
             return factory.manufacturePojo(DatasetItem.class).toBuilder()
