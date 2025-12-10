@@ -5958,4 +5958,70 @@ class ExperimentsResourceTest {
         assertThat(datasetItemsPage.content()).hasSize(2);
         assertThat(datasetItemsPage.datasetVersionId()).isNull();
     }
+
+    @Test
+    @DisplayName("List experiments with mixed version states - some with version, some without")
+    void listExperiments__whenMixedVersionStates__shouldReturnCorrectVersionIds() {
+        // Create dataset
+        var dataset = podamFactory.manufacturePojo(Dataset.class);
+        UUID datasetId = datasetResourceClient.createDataset(dataset, API_KEY, TEST_WORKSPACE);
+
+        // Create dataset items
+        var items = List.of(
+                podamFactory.manufacturePojo(DatasetItem.class).toBuilder().id(null).build());
+        var batch = DatasetItemBatch.builder()
+                .datasetId(datasetId)
+                .items(items)
+                .build();
+        datasetResourceClient.createDatasetItems(batch, TEST_WORKSPACE, API_KEY);
+
+        // Create first experiment WITHOUT version (old behavior)
+        var experiment1 = experimentResourceClient.createPartialExperiment()
+                .datasetName(dataset.name())
+                .datasetVersionId(null) // Explicitly no version
+                .build();
+        UUID experimentId1 = experimentResourceClient.create(experiment1, API_KEY, TEST_WORKSPACE);
+
+        // Commit a version
+        var versionRequest = com.comet.opik.api.DatasetVersionCreate.builder()
+                .changeDescription("Initial version")
+                .build();
+        var version = datasetResourceClient.commitVersion(datasetId, versionRequest, API_KEY, TEST_WORKSPACE);
+
+        // Create second experiment WITH version (new behavior)
+        var experiment2 = experimentResourceClient.createPartialExperiment()
+                .datasetName(dataset.name())
+                .datasetVersionId(version.id())
+                .build();
+        UUID experimentId2 = experimentResourceClient.create(experiment2, API_KEY, TEST_WORKSPACE);
+
+        // Fetch experiments by ID to verify their dataset_version_id
+        try (var response1 = client.target(URL_TEMPLATE.formatted(baseURI))
+                .path(experimentId1.toString())
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                .header(WORKSPACE_HEADER, TEST_WORKSPACE)
+                .get()) {
+
+            assertThat(response1.getStatus()).isEqualTo(200);
+            var exp1 = response1.readEntity(Experiment.class);
+
+            // CRITICAL ASSERTION: Experiment 1 should have NULL dataset_version_id
+            assertThat(exp1.datasetVersionId()).isNull();
+        }
+
+        try (var response2 = client.target(URL_TEMPLATE.formatted(baseURI))
+                .path(experimentId2.toString())
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                .header(WORKSPACE_HEADER, TEST_WORKSPACE)
+                .get()) {
+
+            assertThat(response2.getStatus()).isEqualTo(200);
+            var exp2 = response2.readEntity(Experiment.class);
+
+            // CRITICAL ASSERTION: Experiment 2 should have the version ID
+            assertThat(exp2.datasetVersionId()).isEqualTo(version.id());
+        }
+    }
 }

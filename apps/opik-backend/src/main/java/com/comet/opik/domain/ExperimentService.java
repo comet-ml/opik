@@ -356,10 +356,8 @@ public class ExperimentService {
         var name = StringUtils.getIfBlank(experiment.name(), nameGenerator::generateName);
         return datasetService.getOrCreateDataset(experiment.datasetName())
                 .flatMap(datasetId -> {
-                    // Resolve dataset version, handling the case when it returns empty (no version)
+                    // Resolve dataset version using 3-tier logic
                     return resolveDatasetVersion(experiment, datasetId)
-                            .map(Optional::of)
-                            .switchIfEmpty(Mono.just(Optional.empty()))
                             .flatMap(optionalVersionId -> {
                                 var experimentWithVersion = experiment.toBuilder()
                                         .datasetVersionId(optionalVersionId.orElse(null))
@@ -401,14 +399,13 @@ public class ExperimentService {
         return experiment.promptVersion() != null || CollectionUtils.isNotEmpty(experiment.promptVersions());
     }
 
-    private Mono<UUID> resolveDatasetVersion(Experiment experiment, UUID datasetId) {
+    private Mono<Optional<UUID>> resolveDatasetVersion(Experiment experiment, UUID datasetId) {
         return Mono.deferContextual(ctx -> {
             String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
 
             // Use the 3-tier version resolution logic from DatasetVersionService
             return datasetVersionService.resolveVersionIdWithFallback(datasetId, experiment.datasetVersionId(),
-                    workspaceId)
-                    .map(optionalVersionId -> optionalVersionId.orElse(null));
+                    workspaceId);
         });
     }
 
