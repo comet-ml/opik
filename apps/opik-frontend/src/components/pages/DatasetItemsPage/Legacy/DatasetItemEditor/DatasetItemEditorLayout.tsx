@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import { Copy, MoreHorizontal, Pencil, Share, Trash } from "lucide-react";
 import copy from "clipboard-copy";
 import ResizableSidePanel from "@/components/shared/ResizableSidePanel/ResizableSidePanel";
@@ -16,6 +16,8 @@ import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import TagListRenderer from "@/components/shared/TagListRenderer/TagListRenderer";
 import { processInputData } from "@/lib/images";
 import ImagesListWrapper from "@/components/pages-shared/attachments/ImagesListWrapper/ImagesListWrapper";
+import RemoveDatasetItemsDialog from "@/components/pages/DatasetItemsPage/RemoveDatasetItemsDialog";
+import { useDatasetItemDeletePreference } from "@/components/pages/DatasetItemsPage/hooks/useDatasetItemDeletePreference";
 import { useDatasetItemEditorContext } from "./DatasetItemEditorContext";
 import DatasetItemEditorForm from "./DatasetItemEditorForm";
 
@@ -98,6 +100,8 @@ const DatasetItemEditorLayout: React.FC<DatasetItemEditorLayoutProps> = ({
   } = useDatasetItemEditorContext();
 
   const { toast } = useToast();
+  const [popupOpen, setPopupOpen] = useState(false);
+  const [dontAskAgain] = useDatasetItemDeletePreference();
 
   const { media } = useMemo(
     () => processInputData(datasetItem?.data),
@@ -128,6 +132,14 @@ const DatasetItemEditorLayout: React.FC<DatasetItemEditorLayoutProps> = ({
     handleDelete(onClose);
   }, [handleDelete, onClose]);
 
+  const handleDeleteClick = useCallback(() => {
+    if (dontAskAgain) {
+      handleDeleteItemConfirm();
+    } else {
+      setPopupOpen(true);
+    }
+  }, [dontAskAgain, handleDeleteItemConfirm]);
+
   return (
     <ResizableSidePanel
       panelId="dataset-item-editor"
@@ -138,7 +150,7 @@ const DatasetItemEditorLayout: React.FC<DatasetItemEditorLayoutProps> = ({
           datasetItemId={datasetItemId}
           onShare={handleShare}
           onCopyId={handleCopyId}
-          onDelete={handleDeleteItemConfirm}
+          onDelete={handleDeleteClick}
         />
       }
       onClose={handleCloseWithConfirm}
@@ -212,8 +224,17 @@ const DatasetItemEditorLayout: React.FC<DatasetItemEditorLayoutProps> = ({
           </div>
         </div>
       )}
+      <RemoveDatasetItemsDialog
+        open={popupOpen}
+        setOpen={setPopupOpen}
+        onConfirm={handleDeleteItemConfirm}
+        title="Remove dataset item"
+        description="The item will be deleted from your current dataset view. The changes won't take effect until you save and create a new version."
+        confirmText="Remove dataset item"
+      />
     </ResizableSidePanel>
   );
 };
 
 export default DatasetItemEditorLayout;
+

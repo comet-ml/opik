@@ -26,7 +26,6 @@ type DataTableProps = {
   sizeChange?: (number: number) => void;
   supportsTruncation?: boolean;
   truncationEnabled?: boolean;
-  hideTruncationWarning?: boolean;
   variant?: "default" | "minimal";
   itemsPerPage?: number[];
   disabled?: boolean;
@@ -43,7 +42,6 @@ const DataTablePagination = ({
   sizeChange,
   supportsTruncation = false,
   truncationEnabled = true,
-  hideTruncationWarning = false,
   variant = "default",
   itemsPerPage = DEFAULT_ITEMS_PER_PAGE,
   disabled = false,
@@ -54,8 +52,7 @@ const DataTablePagination = ({
       ? TRUNCATION_DISABLED_MAX_PAGE_SIZE
       : undefined;
 
-  const showWarning =
-    supportsTruncation && !truncationEnabled && !hideTruncationWarning;
+  const showWarning = supportsTruncation && !truncationEnabled;
   const isMinimal = variant === "minimal";
 
   const from = Math.max(size * (page - 1) + 1, 0);

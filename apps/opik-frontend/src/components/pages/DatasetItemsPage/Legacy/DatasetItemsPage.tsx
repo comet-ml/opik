@@ -36,13 +36,13 @@ import {
   DynamicColumn,
   ROW_HEIGHT,
 } from "@/types/shared";
-import DatasetItemEditor from "@/components/pages/DatasetItemsPage/DatasetItemEditor/DatasetItemEditor";
-import DatasetItemsActionsPanelLegacy from "@/components/pages/DatasetItemsPage/DatasetItemsActionsPanelLegacy";
-import { DatasetItemRowActionsCell } from "@/components/pages/DatasetItemsPage/DatasetItemRowActionsCell";
+import DatasetItemEditor from "./DatasetItemEditor/DatasetItemEditor";
+import DatasetItemsActionsPanel from "./DatasetItemsActionsPanel";
+import { DatasetItemRowActionsCell } from "./DatasetItemRowActionsCell";
 import DataTableRowHeightSelector from "@/components/shared/DataTableRowHeightSelector/DataTableRowHeightSelector";
 import SelectAllBanner from "@/components/shared/SelectAllBanner/SelectAllBanner";
 import AddEditDatasetItemDialog from "@/components/pages/DatasetItemsPage/AddEditDatasetItemDialog";
-import AddDatasetItemSidebar from "@/components/pages/DatasetItemsPage/AddDatasetItemSidebar";
+import AddDatasetItemSidebar from "./AddDatasetItemSidebar";
 import DatasetTagsList from "@/components/pages/DatasetItemsPage/DatasetTagsList";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
@@ -100,9 +100,8 @@ const PAGINATION_SIZE_KEY = "dataset-items-pagination-size";
 const ROW_HEIGHT_KEY = "dataset-items-row-height";
 const POLLING_INTERVAL_MS = 3000;
 
-const DatasetItemsPageLegacy = () => {
+const DatasetItemsPage = () => {
   const datasetId = useDatasetIdFromURL();
-  const truncationEnabled = false;
 
   const [activeRowId = "", setActiveRowId] = useQueryParam("row", StringParam, {
     updateType: "replaceIn",
@@ -183,7 +182,7 @@ const DatasetItemsPageLegacy = () => {
         page: page as number,
         size: size as number,
         search: search!,
-        truncate: truncationEnabled,
+        truncate: false,
       },
       {
         placeholderData: keepPreviousData,
@@ -527,7 +526,7 @@ const DatasetItemsPageLegacy = () => {
           />
         </div>
         <div className="flex items-center gap-2">
-          <DatasetItemsActionsPanelLegacy
+          <DatasetItemsActionsPanel
             getDataForExport={getDataForExport}
             selectedDatasetItems={selectedRows}
             datasetId={datasetId}
@@ -623,9 +622,6 @@ const DatasetItemsPageLegacy = () => {
           size={size as number}
           sizeChange={setSize}
           total={data?.total ?? 0}
-          supportsTruncation
-          truncationEnabled={truncationEnabled}
-          hideTruncationWarning
           isLoadingTotal={isProcessing}
         />
       </div>
@@ -656,4 +652,4 @@ const DatasetItemsPageLegacy = () => {
   );
 };
 
-export default DatasetItemsPageLegacy;
+export default DatasetItemsPage;

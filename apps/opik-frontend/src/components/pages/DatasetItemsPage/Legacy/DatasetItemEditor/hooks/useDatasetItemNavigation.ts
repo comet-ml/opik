@@ -6,7 +6,7 @@ interface UseDatasetItemNavigationParams {
   activeRowId: string;
   rows: DatasetItem[];
   setActiveRowId: (id: string) => void;
-  checkUnsavedChanges?: (action: () => void) => void;
+  checkUnsavedChanges: (action: () => void) => void;
 }
 
 interface HorizontalNavigationConfig {
@@ -42,13 +42,7 @@ export const useDatasetItemNavigation = ({
 
   const handleNavigate = useCallback(
     (shift: 1 | -1) => {
-      if (checkUnsavedChanges) {
-        // For modes with confirmation (create mode), check before navigating
-        checkUnsavedChanges(() => handleRowChange(shift));
-      } else {
-        // For auto-save mode, navigate immediately (auto-save happens in background)
-        handleRowChange(shift);
-      }
+      checkUnsavedChanges(() => handleRowChange(shift));
     },
     [checkUnsavedChanges, handleRowChange],
   );
@@ -66,3 +60,4 @@ export const useDatasetItemNavigation = ({
     horizontalNavigation,
   };
 };
+

@@ -104,8 +104,6 @@ const DatasetItemsTab: React.FC<DatasetItemsTabProps> = ({
   datasetName,
   datasetStatus,
 }) => {
-  const truncationEnabled = false;
-
   const { isProcessing, showSuccessMessage } = useDatasetLoadingStatus({
     datasetStatus,
   });
@@ -171,7 +169,7 @@ const DatasetItemsTab: React.FC<DatasetItemsTabProps> = ({
         page: page as number,
         size: size as number,
         search: search!,
-        truncate: truncationEnabled,
+        truncate: false,
       },
       {
         placeholderData: keepPreviousData,
@@ -580,9 +578,6 @@ const DatasetItemsTab: React.FC<DatasetItemsTabProps> = ({
           size={size as number}
           sizeChange={setSize}
           total={data?.total ?? 0}
-          supportsTruncation
-          truncationEnabled={truncationEnabled}
-          hideTruncationWarning
           isLoadingTotal={isProcessing}
         />
       </div>

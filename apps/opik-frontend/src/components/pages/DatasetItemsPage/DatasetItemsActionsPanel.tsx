@@ -11,12 +11,10 @@ import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import DatasetExpansionDialog from "./DatasetExpansionDialog";
 import GeneratedSamplesDialog from "./GeneratedSamplesDialog";
 import AddTagDialog from "./AddTagDialog";
-import RemoveDatasetItemsDialog from "./RemoveDatasetItemsDialog";
 import { DATASET_ITEM_DATA_PREFIX } from "@/constants/datasets";
 import { stripColumnPrefix } from "@/lib/utils";
 import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
-import { useDatasetItemDeletePreference } from "./hooks/useDatasetItemDeletePreference";
 import { Filters } from "@/types/filters";
 
 type DatasetItemsActionsPanelProps = {
@@ -47,7 +45,6 @@ const DatasetItemsActionsPanel: React.FunctionComponent<
   totalCount = 0,
 }) => {
   const resetKeyRef = useRef(0);
-  const [deleteDialogOpen, setDeleteDialogOpen] = useState<boolean>(false);
   const [expansionDialogOpen, setExpansionDialogOpen] =
     useState<boolean>(false);
   const [generatedSamplesDialogOpen, setGeneratedSamplesDialogOpen] =
@@ -58,7 +55,6 @@ const DatasetItemsActionsPanel: React.FunctionComponent<
 
   const { mutate } = useDatasetItemBatchDeleteMutation();
   const isExportEnabled = useIsFeatureEnabled(FeatureToggleKeys.EXPORT_ENABLED);
-  const [dontAskAgain] = useDatasetItemDeletePreference();
 
   const deleteDatasetItemsHandler = useCallback(() => {
     mutate({
@@ -68,15 +64,6 @@ const DatasetItemsActionsPanel: React.FunctionComponent<
       search,
     });
   }, [selectedDatasetItems, mutate, isAllItemsSelected, filters, search]);
-
-  const handleDeleteClick = useCallback(() => {
-    if (dontAskAgain) {
-      deleteDatasetItemsHandler();
-    } else {
-      setDeleteDialogOpen(true);
-      resetKeyRef.current = resetKeyRef.current + 1;
-    }
-  }, [dontAskAgain, deleteDatasetItemsHandler]);
 
   const handleSamplesGenerated = useCallback((samples: DatasetItem[]) => {
     setGeneratedSamples(samples);
@@ -115,13 +102,6 @@ const DatasetItemsActionsPanel: React.FunctionComponent<
 
   return (
     <div className="flex items-center gap-2">
-      <RemoveDatasetItemsDialog
-        key={`delete-${resetKeyRef.current}`}
-        open={deleteDialogOpen}
-        setOpen={setDeleteDialogOpen}
-        onConfirm={deleteDatasetItemsHandler}
-      />
-
       <DatasetExpansionDialog
         key={`dataset-expansion-${resetKeyRef.current}`}
         datasetId={datasetId}
@@ -193,7 +173,7 @@ const DatasetItemsActionsPanel: React.FunctionComponent<
         <Button
           variant="outline"
           size="icon-sm"
-          onClick={handleDeleteClick}
+          onClick={deleteDatasetItemsHandler}
           disabled={disabled}
         >
           <Trash />

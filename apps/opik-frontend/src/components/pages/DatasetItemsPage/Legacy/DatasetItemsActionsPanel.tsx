@@ -9,16 +9,16 @@ import useDatasetItemBatchDeleteMutation from "@/api/datasets/useDatasetItemBatc
 import ConfirmDialog from "@/components/shared/ConfirmDialog/ConfirmDialog";
 import ExportToButton from "@/components/shared/ExportToButton/ExportToButton";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
-import DatasetExpansionDialog from "./DatasetExpansionDialog";
-import GeneratedSamplesDialog from "./GeneratedSamplesDialog";
-import AddTagDialog from "./AddTagDialog";
+import DatasetExpansionDialog from "@/components/pages/DatasetItemsPage/DatasetExpansionDialog";
+import GeneratedSamplesDialog from "@/components/pages/DatasetItemsPage/GeneratedSamplesDialog";
+import AddTagDialog from "@/components/pages/DatasetItemsPage/AddTagDialog";
 import { DATASET_ITEM_DATA_PREFIX } from "@/constants/datasets";
 import { stripColumnPrefix } from "@/lib/utils";
 import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
 import { Filters } from "@/types/filters";
 
-type DatasetItemsActionsPanelLegacyProps = {
+type DatasetItemsActionsPanelProps = {
   getDataForExport: () => Promise<DatasetItem[]>;
   selectedDatasetItems: DatasetItem[];
   datasetId: string;
@@ -31,8 +31,8 @@ type DatasetItemsActionsPanelLegacyProps = {
   totalCount?: number;
 };
 
-const DatasetItemsActionsPanelLegacy: React.FunctionComponent<
-  DatasetItemsActionsPanelLegacyProps
+const DatasetItemsActionsPanel: React.FunctionComponent<
+  DatasetItemsActionsPanelProps
 > = ({
   getDataForExport,
   selectedDatasetItems,
@@ -199,4 +199,4 @@ const DatasetItemsActionsPanelLegacy: React.FunctionComponent<
   );
 };
 
-export default DatasetItemsActionsPanelLegacy;
+export default DatasetItemsActionsPanel;
