@@ -405,42 +405,24 @@ public class ExperimentService {
         return Mono.deferContextual(ctx -> {
             String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
 
-            // If both hash and tag are provided, hash takes precedence
-            String versionRef = null;
-            if (StringUtils.isNotBlank(experiment.datasetVersionHash())) {
-                versionRef = experiment.datasetVersionHash();
-                log.info("Resolving dataset version by hash '{}' for dataset '{}'", versionRef, datasetId);
-            } else if (StringUtils.isNotBlank(experiment.datasetVersionTag())) {
-                versionRef = experiment.datasetVersionTag();
-                log.info("Resolving dataset version by tag '{}' for dataset '{}'", versionRef, datasetId);
+            // If version ID is provided, use it
+            if (experiment.datasetVersionId() != null) {
+                log.info("Using provided dataset version ID '{}' for dataset '{}'", experiment.datasetVersionId(),
+                        datasetId);
+                return Mono.just(experiment.datasetVersionId());
             }
 
-            // If neither hash nor tag provided, use latest version if exists, otherwise empty
-            if (versionRef == null) {
-                return Mono.fromCallable(() -> {
-                    var latestVersion = datasetVersionService.getLatestVersion(datasetId, workspaceId);
-                    if (latestVersion.isPresent()) {
-                        log.info("Using latest version '{}' for dataset '{}'", latestVersion.get().id(), datasetId);
-                        return latestVersion.get().id();
-                    }
-                    log.info("No version specified and no latest version found for dataset '{}', using draft items",
-                            datasetId);
-                    return null;
-                }).subscribeOn(Schedulers.boundedElastic());
-            }
-
-            // Resolve hash or tag to version ID
-            final String finalVersionRef = versionRef;
+            // If no version ID provided, use latest version if exists, otherwise return empty (draft items)
             return Mono.fromCallable(() -> {
-                try {
-                    UUID versionId = datasetVersionService.resolveVersionId(datasetId, finalVersionRef, workspaceId);
-                    log.info("Resolved version '{}' to version ID '{}' for dataset '{}'", finalVersionRef, versionId,
-                            datasetId);
-                    return versionId;
-                } catch (NotFoundException e) {
-                    log.warn("Version not found: '{}' for dataset '{}'", finalVersionRef, datasetId);
-                    throw new NotFoundException("Dataset version not found: '%s'".formatted(finalVersionRef));
+                var latestVersion = datasetVersionService.getLatestVersion(datasetId, workspaceId);
+                if (latestVersion.isPresent()) {
+                    log.info("No version specified, using latest version '{}' for dataset '{}'",
+                            latestVersion.get().id(), datasetId);
+                    return latestVersion.get().id();
                 }
+                log.info("No version specified and no latest version found for dataset '{}', using draft items",
+                        datasetId);
+                return null;
             }).subscribeOn(Schedulers.boundedElastic());
         });
     }

@@ -75,8 +75,7 @@ public class ExperimentResourceClient {
                 .type(ExperimentType.REGULAR)
                 .optimizationId(null)
                 .usage(null)
-                .datasetVersionHash(null)
-                .datasetVersionTag(null);
+                .datasetVersionId(null);
     }
 
     public List<Experiment> generateExperimentList() {
