@@ -1,9 +1,16 @@
 import React from "react";
-import find from "lodash/find";
 import { ColumnMeta, TableMeta } from "@tanstack/react-table";
 import HeaderStatistic from "@/components/shared/DataTableHeaders/HeaderStatistic";
 import { cn } from "@/lib/utils";
 import { CELL_HORIZONTAL_ALIGNMENT_MAP } from "@/constants/shared";
+import { COLUMN_TYPE } from "@/types/shared";
+
+type CustomColumnMeta = {
+  type?: COLUMN_TYPE;
+  statisticKey?: string;
+  statisticDataFormater?: (value: number) => string;
+  supportsPercentiles?: boolean;
+};
 
 type HeaderWrapperProps<TData> = {
   children?: React.ReactNode;
@@ -22,7 +29,11 @@ const HeaderWrapper = <TData,>({
   onClick,
   supportStatistic = true,
 }: HeaderWrapperProps<TData>) => {
-  const { type, statisticKey, statisticDataFormater } = metadata || {};
+  const metaData = metadata as CustomColumnMeta | undefined;
+  const type = metaData?.type;
+  const statisticKey = metaData?.statisticKey;
+  const statisticDataFormater = metaData?.statisticDataFormater;
+  const supportsPercentiles = metaData?.supportsPercentiles;
   const { columnsStatistic } = tableMetadata || {};
 
   const horizontalAlignClass =
@@ -31,11 +42,6 @@ const HeaderWrapper = <TData,>({
   const heightClass = columnsStatistic ? "h-14" : "h-11";
 
   if (supportStatistic && columnsStatistic) {
-    const columnStatistic = find(
-      columnsStatistic,
-      (s) => s.name === statisticKey,
-    );
-
     return (
       <div
         className={cn("flex flex-col py-2 px-3", heightClass, className)}
@@ -58,10 +64,10 @@ const HeaderWrapper = <TData,>({
           onClick={(e) => e.stopPropagation()}
         >
           <HeaderStatistic
-            statistic={columnStatistic}
             columnsStatistic={columnsStatistic}
             statisticKey={statisticKey}
             dataFormater={statisticDataFormater}
+            supportsPercentiles={supportsPercentiles}
           />
         </div>
       </div>
