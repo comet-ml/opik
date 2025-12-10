@@ -24,7 +24,6 @@ export enum DASHBOARD_CREATION_TYPE {
 
 export enum TEMPLATE_ID {
   PROJECT_METRICS = "project-metrics",
-  COST_USAGE = "cost-usage",
   PERFORMANCE = "performance",
 }
 

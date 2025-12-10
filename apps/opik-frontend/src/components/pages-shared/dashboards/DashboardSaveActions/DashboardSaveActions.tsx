@@ -1,7 +1,13 @@
-import React, { useCallback, useState, useMemo } from "react";
-import { Check, X } from "lucide-react";
+import React, { useCallback, useState, useRef } from "react";
+import { Copy } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import {
+  ButtonWithDropdown,
+  ButtonWithDropdownTrigger,
+  ButtonWithDropdownContent,
+  ButtonWithDropdownItem,
+} from "@/components/ui/button-with-dropdown";
 import ConfirmDialog from "@/components/shared/ConfirmDialog/ConfirmDialog";
 import { useToast } from "@/components/ui/use-toast";
 import AddEditCloneDashboardDialog from "@/components/pages-shared/dashboards/AddEditCloneDashboardDialog/AddEditCloneDashboardDialog";
@@ -18,6 +24,7 @@ interface DashboardSaveActionsProps {
 const DashboardSaveActions: React.FunctionComponent<
   DashboardSaveActionsProps
 > = ({ hasUnsavedChanges, onSave, onDiscard, dashboard }) => {
+  const resetKeyRef = useRef(0);
   const [showDiscardDialog, setShowDiscardDialog] = useState(false);
   const [saveAsDialogOpen, setSaveAsDialogOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -27,13 +34,7 @@ const DashboardSaveActions: React.FunctionComponent<
     (state) => state.getDashboardConfig,
   );
 
-  const dashboardWithCurrentConfig = useMemo(
-    () => ({
-      ...dashboard,
-      config: getDashboardConfig(),
-    }),
-    [dashboard, getDashboardConfig],
-  );
+  const dashboardWithCurrentConfigRef = useRef(dashboard);
 
   const handleSave = useCallback(async () => {
     setIsSaving(true);
@@ -68,54 +69,46 @@ const DashboardSaveActions: React.FunctionComponent<
   }, [onDiscard, toast]);
 
   const handleSaveAsClick = useCallback(() => {
+    // Get fresh config when opening the dialog
+    dashboardWithCurrentConfigRef.current = {
+      ...dashboard,
+      config: getDashboardConfig(),
+    };
     setSaveAsDialogOpen(true);
-  }, []);
+    resetKeyRef.current = resetKeyRef.current + 1;
+  }, [dashboard, getDashboardConfig]);
 
   if (!hasUnsavedChanges) {
-    return (
-      <>
-        <Button variant="outline" size="sm" onClick={handleSaveAsClick}>
-          Save as...
-        </Button>
-
-        <AddEditCloneDashboardDialog
-          mode="save_as"
-          open={saveAsDialogOpen}
-          setOpen={setSaveAsDialogOpen}
-          dashboard={dashboardWithCurrentConfig}
-        />
-      </>
-    );
+    return null;
   }
 
   return (
     <>
       <Button
-        variant="outline"
+        variant="destructive"
         size="sm"
         onClick={handleDiscardClick}
         disabled={isSaving}
       >
-        <X className="mr-2 size-4" />
         Discard changes
       </Button>
-      <Button
-        variant="default"
-        size="sm"
-        onClick={handleSave}
-        disabled={isSaving}
-      >
-        <Check className="mr-2 size-4" />
-        Save
-      </Button>
-      <Button
-        variant="outline"
-        size="sm"
-        onClick={handleSaveAsClick}
-        disabled={isSaving}
-      >
-        Save as...
-      </Button>
+
+      <ButtonWithDropdown>
+        <ButtonWithDropdownTrigger
+          variant="default"
+          size="sm"
+          onPrimaryClick={handleSave}
+          disabled={isSaving}
+        >
+          Save changes
+        </ButtonWithDropdownTrigger>
+        <ButtonWithDropdownContent align="end">
+          <ButtonWithDropdownItem onClick={handleSaveAsClick}>
+            <Copy className="mr-2 size-4" />
+            Save as new
+          </ButtonWithDropdownItem>
+        </ButtonWithDropdownContent>
+      </ButtonWithDropdown>
 
       <ConfirmDialog
         open={showDiscardDialog}
@@ -129,10 +122,12 @@ const DashboardSaveActions: React.FunctionComponent<
       />
 
       <AddEditCloneDashboardDialog
+        key={`save-as-${resetKeyRef.current}`}
         mode="save_as"
         open={saveAsDialogOpen}
         setOpen={setSaveAsDialogOpen}
-        dashboard={dashboardWithCurrentConfig}
+        dashboard={dashboardWithCurrentConfigRef.current}
+        onSuccess={onDiscard}
       />
     </>
   );

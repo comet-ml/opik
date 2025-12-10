@@ -1,10 +1,11 @@
-import React, { useCallback } from "react";
+import React, { useCallback, useState } from "react";
+import { flushSync } from "react-dom";
 import { AxiosError, HttpStatusCode } from "axios";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import get from "lodash/get";
-import { Loader2 } from "lucide-react";
+import { Loader2, ChevronLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -15,18 +16,9 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import {
-  Form,
-  FormControl,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormMessage,
-} from "@/components/ui/form";
-import { Input } from "@/components/ui/input";
+import { Form } from "@/components/ui/form";
 import useDashboardCreateMutation from "@/api/dashboards/useDashboardCreateMutation";
 import { Dashboard, TEMPLATE_ID } from "@/types/dashboard";
-import { Textarea } from "@/components/ui/textarea";
 import useDashboardUpdateMutation from "@/api/dashboards/useDashboardUpdateMutation";
 import { useNavigate } from "@tanstack/react-router";
 import useAppStore from "@/store/AppStore";
@@ -35,19 +27,15 @@ import {
   regenerateAllIds,
 } from "@/lib/dashboard/utils";
 import { useToast } from "@/components/ui/use-toast";
-import {
-  DASHBOARD_TEMPLATES,
-  TEMPLATE_OPTIONS_ORDER,
-} from "@/lib/dashboard/templates";
-import DashboardTemplateSelector from "@/components/pages-shared/dashboards/DashboardTemplateSelector/DashboardTemplateSelector";
-import { DASHBOARD_CREATION_TYPE } from "@/types/dashboard";
-import {
-  Accordion,
-  AccordionContent,
-  AccordionItem,
-  AccordionTrigger,
-} from "@/components/ui/accordion";
+import { DASHBOARD_TEMPLATES } from "@/lib/dashboard/templates";
 import { DialogAutoScrollBody } from "@/components/ui/dialog";
+import DashboardDialogSelectStep from "./DashboardDialogSelectStep";
+import DashboardDialogDetailsStep from "./DashboardDialogDetailsStep";
+
+enum DialogStep {
+  SELECT = "select",
+  DETAILS = "details",
+}
 
 const DashboardFormSchema = z
   .object({
@@ -61,36 +49,17 @@ const DashboardFormSchema = z
       .max(255, "Description must be less than 255 characters")
       .optional()
       .or(z.literal("")),
-    creationType: z
-      .enum([DASHBOARD_CREATION_TYPE.EMPTY, DASHBOARD_CREATION_TYPE.TEMPLATE])
-      .default(DASHBOARD_CREATION_TYPE.EMPTY),
-    templateId: z.string().optional(),
     projectId: z.string().optional(),
+    templateId: z.string().optional(),
   })
   .refine(
     (data) => {
-      // projectId is required only when creationType is "template"
-      return !(
-        data.creationType === DASHBOARD_CREATION_TYPE.TEMPLATE &&
-        !data.projectId
-      );
+      if (data.templateId) return !!data.projectId;
+      return true;
     },
     {
-      message: "Project is required for template creation",
+      message: "Project is required when using a template",
       path: ["projectId"],
-    },
-  )
-  .refine(
-    (data) => {
-      // templateId is required only when creationType is "template"
-      return !(
-        data.creationType === DASHBOARD_CREATION_TYPE.TEMPLATE &&
-        !data.templateId
-      );
-    },
-    {
-      message: "Template is required",
-      path: ["templateId"],
     },
   );
 
@@ -103,14 +72,20 @@ type AddEditCloneDashboardDialogProps = {
   dashboard?: Dashboard;
   open: boolean;
   setOpen: (open: boolean) => void;
+  onSuccess?: () => void;
 };
 
 const AddEditCloneDashboardDialog: React.FC<
   AddEditCloneDashboardDialogProps
-> = ({ mode, dashboard, open, setOpen }) => {
+> = ({ mode, dashboard, open, setOpen, onSuccess }) => {
   const navigate = useNavigate();
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const { toast } = useToast();
+
+  const isCreateMode = mode === "create";
+  const [currentStep, setCurrentStep] = useState<DialogStep>(
+    isCreateMode ? DialogStep.SELECT : DialogStep.DETAILS,
+  );
 
   const { mutate: createMutate, isPending: isCreating } =
     useDashboardCreateMutation({
@@ -123,7 +98,6 @@ const AddEditCloneDashboardDialog: React.FC<
 
   const isPending = isCreating || isUpdating;
 
-  // Initial values based on mode
   const getInitialName = () => {
     if (mode === "clone" || mode === "save_as") {
       return `${dashboard!.name} (Copy)`;
@@ -134,22 +108,33 @@ const AddEditCloneDashboardDialog: React.FC<
 
   const form = useForm<DashboardFormData>({
     resolver: zodResolver(DashboardFormSchema),
-    mode: "onTouched",
+    mode: "onChange",
     defaultValues: {
       name: getInitialName(),
       description: dashboard?.description || "",
-      creationType: DASHBOARD_CREATION_TYPE.EMPTY,
-      templateId: undefined,
       projectId: undefined,
+      templateId: undefined,
     },
   });
 
-  // UI configuration based on mode
+  const handleSelectOption = (templateId: string) => {
+    setCurrentStep(DialogStep.DETAILS);
+    form.setValue("templateId", templateId, {
+      shouldValidate: true,
+      shouldDirty: true,
+      shouldTouch: true,
+    });
+  };
+
+  const handleBack = () => {
+    setCurrentStep(DialogStep.SELECT);
+  };
+
   const config = {
     create: {
-      title: "Create a new dashboard",
+      title: "Create dashboard",
       description:
-        "Build a dashboard to track performance, cost, or other key metrics. You'll be able to add widgets and visualizations after creation.",
+        "Use a template with common metrics and adjust it to your needs, or start with an empty dashboard.",
       buttonText: "Create dashboard",
       showDescription: true,
     },
@@ -176,6 +161,11 @@ const AddEditCloneDashboardDialog: React.FC<
   const onDashboardCreated = useCallback(
     (dashboardData?: { id?: string }) => {
       if (dashboardData?.id) {
+        // Force synchronous state update before navigation
+        flushSync(() => {
+          onSuccess?.();
+        });
+
         navigate({
           to: "/$workspaceName/dashboards/$dashboardId",
           params: {
@@ -185,7 +175,7 @@ const AddEditCloneDashboardDialog: React.FC<
         });
       }
     },
-    [navigate, workspaceName],
+    [navigate, workspaceName, onSuccess],
   );
 
   const handleMutationError = useCallback(
@@ -233,35 +223,22 @@ const AddEditCloneDashboardDialog: React.FC<
           },
         );
       } else {
-        // "create", "clone", and "save_as" use createMutate
         let dashboardConfig;
 
         if (mode === "create") {
-          if (
-            values.creationType === DASHBOARD_CREATION_TYPE.TEMPLATE &&
-            values.templateId
-          ) {
-            // Create from template
+          if (values.templateId) {
             const template =
               DASHBOARD_TEMPLATES[values.templateId as TEMPLATE_ID];
-            if (template) {
-              dashboardConfig = regenerateAllIds(template.config);
-              // Set projectIds in config with selected project as first item
-              dashboardConfig.config.projectIds = values.projectId
-                ? [values.projectId]
-                : [];
-            } else {
-              dashboardConfig = generateEmptyDashboard();
-            }
+            dashboardConfig = regenerateAllIds(template.config);
+            dashboardConfig.config.projectIds = values.projectId
+              ? [values.projectId]
+              : [];
           } else {
-            // Create empty dashboard
             dashboardConfig = generateEmptyDashboard();
           }
         } else if (mode === "save_as") {
-          // Save as mode: Regenerate IDs from current config
           dashboardConfig = regenerateAllIds(dashboard!.config);
         } else {
-          // Clone mode
           dashboardConfig = regenerateAllIds(dashboard!.config);
         }
 
@@ -300,96 +277,56 @@ const AddEditCloneDashboardDialog: React.FC<
             <DialogDescription>{config.description}</DialogDescription>
           )}
         </DialogHeader>
+
         <DialogAutoScrollBody>
-          <Form {...form}>
-            <form
-              onSubmit={form.handleSubmit(onSubmit)}
-              className="flex flex-col gap-2 pb-4"
-              id="dashboard-form"
-            >
-              {/* Name field */}
-              <FormField
-                control={form.control}
-                name="name"
-                render={({ field }) => (
-                  <FormItem className="pb-2">
-                    <FormLabel>Name</FormLabel>
-                    <FormControl>
-                      <Input
-                        {...field}
-                        placeholder="Dashboard name"
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter") {
-                            e.preventDefault();
-                            form.handleSubmit(onSubmit)();
-                          }
-                        }}
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+          {isCreateMode && currentStep === DialogStep.SELECT && (
+            <DashboardDialogSelectStep onSelect={handleSelectOption} />
+          )}
 
-              {/* Type and Template selection (only for create mode) */}
-              {mode === "create" && (
-                <DashboardTemplateSelector
+          {currentStep === DialogStep.DETAILS && (
+            <Form {...form}>
+              <form
+                onSubmit={form.handleSubmit(onSubmit)}
+                id="dashboard-form"
+                className="flex flex-col gap-4"
+              >
+                <DashboardDialogDetailsStep
                   control={form.control}
-                  onCreationTypeChange={(value) => {
-                    if (value === DASHBOARD_CREATION_TYPE.EMPTY) {
-                      // Reset template and project when switching to empty
-                      form.setValue("templateId", undefined);
-                      form.setValue("projectId", undefined);
-                    } else if (value === DASHBOARD_CREATION_TYPE.TEMPLATE) {
-                      // Preselect the first template when switching to template mode (only if none is selected)
-                      if (
-                        TEMPLATE_OPTIONS_ORDER.length > 0 &&
-                        !form.getValues("templateId")
-                      ) {
-                        form.setValue("templateId", TEMPLATE_OPTIONS_ORDER[0]);
-                      }
-                    }
-                  }}
-                />
-              )}
-
-              {/* Description accordion at the bottom */}
-              <div className="flex flex-col gap-2 border-t border-border pb-4 pt-2">
-                <Accordion
-                  type="multiple"
-                  defaultValue={
-                    dashboard?.description ? ["description"] : undefined
+                  showProjectSelector={
+                    isCreateMode && !!form.watch("templateId")
                   }
-                >
-                  <AccordionItem value="description">
-                    <AccordionTrigger>Description</AccordionTrigger>
-                    <AccordionContent>
-                      <Textarea
-                        {...form.register("description")}
-                        placeholder="Dashboard description"
-                        maxLength={255}
-                      />
-                    </AccordionContent>
-                  </AccordionItem>
-                </Accordion>
-              </div>
-            </form>
-          </Form>
+                  defaultDescriptionOpen={!!dashboard?.description}
+                  onSubmit={form.handleSubmit(onSubmit)}
+                />
+              </form>
+            </Form>
+          )}
         </DialogAutoScrollBody>
-        <DialogFooter>
-          <DialogClose asChild>
-            <Button variant="outline" disabled={isPending}>
-              Cancel
-            </Button>
-          </DialogClose>
-          <Button
-            type="submit"
-            form="dashboard-form"
-            disabled={!form.formState.isValid || isPending}
-          >
-            {isPending && <Loader2 className="mr-2 size-4 animate-spin" />}
-            {config.buttonText}
-          </Button>
+
+        <DialogFooter className="flex flex-row justify-between gap-2 border-t pt-4 sm:flex-row sm:justify-between">
+          <div>
+            {isCreateMode && currentStep === DialogStep.DETAILS && (
+              <Button variant="outline" onClick={handleBack}>
+                <ChevronLeft className="mr-2 size-4" />
+                Back
+              </Button>
+            )}
+          </div>
+
+          <div className="flex gap-2">
+            <DialogClose asChild>
+              <Button variant="outline" disabled={isPending}>
+                Cancel
+              </Button>
+            </DialogClose>
+
+            {currentStep === DialogStep.DETAILS && (
+              <Button type="submit" form="dashboard-form" disabled={isPending}>
+                {isPending && <Loader2 className="mr-2 size-4 animate-spin" />}
+                {config.buttonText}
+              </Button>
+            )}
+          </div>
         </DialogFooter>
       </DialogContent>
     </Dialog>

@@ -3,10 +3,12 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { ChevronLeft } from "lucide-react";
 import {
   useDashboardStore,
   selectWidgetResolver,
@@ -157,10 +159,11 @@ const WidgetConfigDialog: React.FunctionComponent<WidgetConfigDialogProps> = ({
           />
         )}
 
-        <div className="flex justify-between gap-2 border-t pt-4">
+        <DialogFooter className="flex flex-row justify-between gap-2 border-t pt-4 sm:flex-row sm:justify-between">
           <div>
             {currentStep === DialogStep.EDIT && !isEditMode && (
               <Button variant="outline" onClick={handleBack}>
+                <ChevronLeft className="mr-2 size-4" />
                 Back
               </Button>
             )}
@@ -175,7 +178,7 @@ const WidgetConfigDialog: React.FunctionComponent<WidgetConfigDialogProps> = ({
               </Button>
             )}
           </div>
-        </div>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );
