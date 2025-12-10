@@ -141,6 +141,7 @@ class AttachmentsExtractionProcessor(message_processors.BaseMessageProcessor):
                 entity_id=attachment.entity_id,
                 project_name=attachment.project_name,
                 url_override=self._url_override,
+                delete_after_upload=True,  # make sure to delete attachments after upload to avoid leaking space and data
             )
             self.messages_streamer.put(create_attachment_message)
 

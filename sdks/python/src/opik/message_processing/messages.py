@@ -288,6 +288,7 @@ class CreateAttachmentMessage(BaseMessage):
     entity_id: str
     project_name: str
     encoded_url_override: str
+    delete_after_upload: bool = False
 
 
 @dataclasses.dataclass

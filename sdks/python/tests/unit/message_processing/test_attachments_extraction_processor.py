@@ -175,6 +175,7 @@ def test_process_span_message_extracts_from_input(processor, mock_streamer):
     assert first_call.entity_type == "span"
     assert first_call.entity_id == "span-123"
     assert first_call.project_name == "test-project"
+    assert first_call.delete_after_upload is True
 
     # Second call should be the original message with marker
     second_call = mock_streamer.put.call_args_list[1][0][0]
@@ -347,6 +348,7 @@ def test_process_trace_message_extracts_attachments(processor, mock_streamer):
     assert isinstance(attachment_msg, messages.CreateAttachmentMessage)
     assert attachment_msg.entity_type == "trace"
     assert attachment_msg.entity_id == "trace-123"
+    assert attachment_msg.delete_after_upload is True
 
     # Last call should be the original message with marker
     second_call = mock_streamer.put.call_args_list[1][0][0]

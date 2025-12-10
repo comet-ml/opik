@@ -1,4 +1,5 @@
 import logging
+import os
 from typing import Optional
 
 import httpx
@@ -38,6 +39,18 @@ def upload_attachment(
             exc_info=True,
         )
         raise
+    finally:
+        # delete the file after upload if requested
+        if upload_options.delete_after_upload:
+            _delete_attachment_file(upload_options.file_path)
+
+
+def _delete_attachment_file(file_path: str) -> None:
+    try:
+        os.unlink(file_path)
+    except FileNotFoundError:
+        LOGGER.info(f"Attachment file '{file_path}' does not exist. Skipping deletion.")
+        pass
 
 
 def _do_upload_attachment(
