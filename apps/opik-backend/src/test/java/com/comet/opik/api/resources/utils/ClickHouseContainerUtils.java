@@ -48,12 +48,10 @@ public class ClickHouseContainerUtils {
     }
 
     public static GenericContainer<?> newZookeeperContainer(boolean reusable, Network network) {
-        var container = new GenericContainer<>("zookeeper:3.9.3")
+        var container = new GenericContainer<>(DockerImageName.parse("zookeeper:3.9.4"))
                 .withExposedPorts(2181)
                 .withNetworkAliases("zookeeper")
                 .withNetwork(network)
-                .withEnv("ALLOW_ANONYMOUS_LOGIN", "yes")
-                .withEnv("ZOO_MY_ID", "1")
                 .withReuse(reusable);
 
         CONTAINERS.add(container);
