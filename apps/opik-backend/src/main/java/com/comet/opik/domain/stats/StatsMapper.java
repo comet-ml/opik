@@ -271,7 +271,7 @@ public class StatsMapper {
 
             if (p50 != null || p90 != null || p99 != null) {
                 var percentiles = PercentageValues.builder().p50(p50).p90(p90).p99(p99).build();
-                statsBuilder.add(PercentageValueStat.builder().name(statName).value(percentiles).build());
+                statsBuilder.add(new PercentageValueStat(statName, percentiles));
             }
         }
     }
