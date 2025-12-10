@@ -170,7 +170,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
             AND dataset_version_id = :versionId
             AND workspace_id = :workspace_id
             <if(lastRetrievedId)>AND dataset_item_id \\< :lastRetrievedId <endif>
-            ORDER BY dataset_item_id DESC, last_updated_at DESC
+            ORDER BY (workspace_id, dataset_id, dataset_version_id, id) DESC, last_updated_at DESC
             LIMIT 1 BY dataset_item_id
             LIMIT :limit
             """;
@@ -245,7 +245,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
             	) ei_with_version ON div.dataset_item_id = ei_with_version.dataset_item_id
             	    AND div.dataset_version_id = ei_with_version.dataset_version_id
             	WHERE div.workspace_id = :workspace_id
-            	ORDER BY div.dataset_item_id DESC, div.last_updated_at DESC
+            	ORDER BY (div.workspace_id, div.dataset_id, div.dataset_version_id, div.id) DESC, div.last_updated_at DESC
             	LIMIT 1 BY div.dataset_item_id
             ), feedback_scores_combined_raw AS (
                 SELECT
