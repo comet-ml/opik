@@ -108,6 +108,9 @@ export const mapColumnDataFields = <TColumnData, TData>(
       ...(columnData.statisticDataFormater && {
         statisticDataFormater: columnData.statisticDataFormater,
       }),
+      ...(columnData.supportsPercentiles !== undefined && {
+        supportsPercentiles: columnData.supportsPercentiles,
+      }),
       ...(columnData.verticalAlignment && {
         verticalAlignment: columnData.verticalAlignment,
       }),
