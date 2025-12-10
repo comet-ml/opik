@@ -85,7 +85,7 @@ const PlaygroundOutputs = ({
     },
     {
       enabled: !!datasetId,
-      placeholderData: keepPreviousData,
+      placeholderData: datasetId ? keepPreviousData : undefined,
     },
   );
 
