@@ -389,6 +389,8 @@ def generate_candidate_prompts(
                             user=user_content,
                             tools=current_prompt.tools,
                             function_map=current_prompt.function_map,
+                            model=current_prompt.model,
+                            model_parameters=current_prompt.model_kwargs,
                         )
                     )
 
@@ -771,6 +773,8 @@ def generate_synthesis_prompts(
                             user=user_text,
                             tools=current_prompt.tools,
                             function_map=current_prompt.function_map,
+                            model=current_prompt.model,
+                            model_parameters=current_prompt.model_kwargs,
                         )
                     )
 
