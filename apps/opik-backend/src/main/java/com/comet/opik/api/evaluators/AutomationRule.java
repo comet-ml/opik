@@ -11,6 +11,7 @@ import lombok.RequiredArgsConstructor;
 
 import java.time.Instant;
 import java.util.Arrays;
+import java.util.Set;
 import java.util.UUID;
 
 @JsonTypeInfo(use = JsonTypeInfo.Id.NAME, include = JsonTypeInfo.As.EXISTING_PROPERTY, property = "action", visible = true)
@@ -23,7 +24,7 @@ import java.util.UUID;
 public sealed interface AutomationRule permits AutomationRuleEvaluator {
 
     UUID getId();
-    UUID getProjectId();
+    Set<UUID> getProjectIds();
     String getName();
 
     AutomationRuleAction getAction();

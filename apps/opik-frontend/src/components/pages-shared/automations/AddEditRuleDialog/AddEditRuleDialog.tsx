@@ -197,7 +197,7 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
     resolver: zodResolver(EvaluationRuleFormSchema),
     defaultValues: {
       ruleName: defaultRule?.name || "",
-      projectId: defaultRule?.project_id || projectId || "",
+      projectIds: defaultRule?.project_ids || (projectId ? [projectId] : []),
       samplingRate: defaultRule?.sampling_rate ?? 1,
       uiType: formUIRuleType,
       scope: formScope,
@@ -230,7 +230,7 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
   const isThreadScope = scope === EVALUATORS_RULE_SCOPE.thread;
   const isSpanScope = scope === EVALUATORS_RULE_SCOPE.span;
 
-  const formProjectId = form.watch("projectId");
+  const formProjectIds = form.watch("projectIds");
 
   // Reset form to default values when dialog opens for creating a new rule
   useEffect(() => {
@@ -241,7 +241,7 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
 
       form.reset({
         ruleName: "",
-        projectId: projectId || "",
+        projectIds: projectId ? [projectId] : [],
         samplingRate: 1,
         uiType: defaultUIType,
         scope: defaultScope,
@@ -308,38 +308,44 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
     };
     const explainer = EXPLAINERS_MAP[expainerIdMap[scope]];
 
+    // Only show "Go to project" button if exactly one project is selected
+    const actions =
+      formProjectIds.length === 1
+        ? [
+            <ToastAction
+              variant="link"
+              size="sm"
+              className="px-0"
+              altText="Go to project"
+              key="Go to project"
+              onClick={() => {
+                navigate({
+                  to: "/$workspaceName/projects/$projectId/traces",
+                  params: {
+                    projectId: formProjectIds[0],
+                    workspaceName,
+                  },
+                  search: {
+                    type: {
+                      [EVALUATORS_RULE_SCOPE.trace]: "traces",
+                      [EVALUATORS_RULE_SCOPE.thread]: "threads",
+                      [EVALUATORS_RULE_SCOPE.span]: "spans",
+                    }[scope],
+                  },
+                });
+              }}
+            >
+              Go to project
+            </ToastAction>,
+          ]
+        : undefined;
+
     toast({
       title: explainer.title,
       description: explainer.description,
-      actions: [
-        <ToastAction
-          variant="link"
-          size="sm"
-          className="px-0"
-          altText="Go to project"
-          key="Go to project"
-          onClick={() => {
-            navigate({
-              to: "/$workspaceName/projects/$projectId/traces",
-              params: {
-                projectId: formProjectId,
-                workspaceName,
-              },
-              search: {
-                type: {
-                  [EVALUATORS_RULE_SCOPE.trace]: "traces",
-                  [EVALUATORS_RULE_SCOPE.thread]: "threads",
-                  [EVALUATORS_RULE_SCOPE.span]: "spans",
-                }[scope],
-              },
-            });
-          }}
-        >
-          Go to project
-        </ToastAction>,
-      ],
+      actions,
     });
-  }, [navigate, toast, workspaceName, scope, formProjectId]);
+  }, [navigate, toast, workspaceName, scope, formProjectIds]);
 
   const getRule = useCallback(() => {
     const formData = form.getValues();
@@ -350,7 +356,7 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
 
     const ruleData = {
       name: formData.ruleName,
-      project_id: formData.projectId,
+      project_ids: formData.projectIds,
       sampling_rate: formData.samplingRate,
       enabled: formData.enabled,
       filters: validFilters,
@@ -467,17 +473,18 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
                 <div className="flex gap-4">
                   <FormField
                     control={form.control}
-                    name="projectId"
+                    name="projectIds"
                     render={({ field, formState }) => {
                       const validationErrors = get(formState.errors, [
-                        "projectId",
+                        "projectIds",
                       ]);
 
                       return (
-                        <FormItem className="flex-1">
-                          <Label>Project</Label>
+                        <FormItem className="min-w-0 flex-1">
+                          <Label>Projects</Label>
                           <FormControl>
                             <ProjectsSelectBox
+                              align="start"
                               value={field.value}
                               onValueChange={field.onChange}
                               className={cn({
@@ -485,7 +492,8 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
                                   validationErrors?.message,
                                 ),
                               })}
-                              disabled={Boolean(projectId)}
+                              multiselect
+                              showSelectAll
                             />
                           </FormControl>
                           <FormMessage />
@@ -499,7 +507,7 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
                       control={form.control}
                       name="scope"
                       render={({ field }) => (
-                        <FormItem className="flex-1">
+                        <FormItem className="min-w-0 flex-1">
                           <Label className="flex items-center">
                             Scope{" "}
                             <TooltipWrapper content="Choose whether the evaluation rule scores the entire thread or each individual trace. Thread-level rules assess the full conversation, while trace-level rules evaluate one model response at a time.">
@@ -670,7 +678,10 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
                 )}
 
                 {/* Filtering Section */}
-                <RuleFilteringSection form={form} projectId={formProjectId} />
+                <RuleFilteringSection
+                  form={form}
+                  projectId={formProjectIds[0] || ""}
+                />
               </form>
             </Form>
           </DialogAutoScrollBody>

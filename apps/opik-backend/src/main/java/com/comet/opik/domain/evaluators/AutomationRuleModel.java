@@ -2,13 +2,14 @@ package com.comet.opik.domain.evaluators;
 
 import com.comet.opik.api.evaluators.AutomationRule;
 
+import java.util.Set;
 import java.util.UUID;
 
 public sealed interface AutomationRuleModel
         permits AutomationRuleEvaluatorModel {
 
     UUID id();
-    UUID projectId();
+    Set<UUID> projectIds();
     String name();
 
     Float samplingRate();
