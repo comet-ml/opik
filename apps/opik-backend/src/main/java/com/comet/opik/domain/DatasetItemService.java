@@ -270,46 +270,23 @@ class DatasetItemServiceImpl implements DatasetItemService {
 
         return Mono.fromCallable(() -> datasetService.findByName(workspaceId, request.datasetName(), visibility))
                 .subscribeOn(Schedulers.boundedElastic())
-                .flatMapMany(dataset -> {
-                    if (StringUtils.isNotBlank(request.version())) {
-                        // Case 1: Version param is explicitly specified
-                        log.info("Streaming dataset items from specified version '{}' for dataset '{}'",
-                                request.version(), dataset.id());
-
-                        return Mono.fromCallable(
-                                () -> versionService.resolveVersionId(workspaceId, dataset.id(), request.version()))
-                                .subscribeOn(Schedulers.boundedElastic())
-                                .doOnNext(versionId -> log.info(
-                                        "Resolved version '{}' to version ID '{}' for dataset '{}'",
-                                        request.version(), versionId, dataset.id()))
-                                .flatMapMany(versionId -> versionDao.getItems(dataset.id(), versionId,
-                                        request.steamLimit(), request.lastRetrievedId()));
-                    } else {
-                        // Case 2 & 3: Version param not specified - check if latest version exists
-                        return Mono.fromCallable(() -> template.inTransaction(READ_ONLY, handle -> {
-                            var dao = handle.attach(DatasetVersionDAO.class);
-                            return dao.findByTag(dataset.id(), DatasetVersionService.LATEST_TAG, workspaceId);
-                        })).subscribeOn(Schedulers.boundedElastic())
-                                .flatMapMany(latestVersionOpt -> {
-                                    if (latestVersionOpt.isEmpty()) {
-                                        // Case 3: No version exists - stream draft items
-                                        log.info("No version exists for dataset '{}', streaming draft items",
-                                                dataset.id());
-
-                                        return dao.getItems(dataset.id(), request.steamLimit(),
-                                                request.lastRetrievedId());
-                                    } else {
-                                        // Case 2: Latest version exists - stream items from that version
-                                        UUID latestVersionId = latestVersionOpt.get().id();
-                                        log.info("Latest version '{}' exists for dataset '{}', streaming version items",
-                                                latestVersionId, dataset.id());
-
-                                        return versionDao.getItems(dataset.id(), latestVersionId, request.steamLimit(),
-                                                request.lastRetrievedId());
-                                    }
-                                });
-                    }
-                });
+                .flatMapMany(dataset -> resolveVersionId(dataset.id(), request.version(), workspaceId)
+                        .flatMapMany(versionIdOpt -> {
+                            if (versionIdOpt.isPresent()) {
+                                // Version specified or latest version exists - stream from version
+                                UUID versionId = versionIdOpt.get();
+                                log.info("Streaming dataset items from version '{}' for dataset '{}'",
+                                        versionId, dataset.id());
+                                return versionDao.getItems(dataset.id(), versionId,
+                                        request.steamLimit(), request.lastRetrievedId());
+                            } else {
+                                // No version specified and no latest version - stream draft items
+                                log.info("No version exists for dataset '{}', streaming draft items",
+                                        dataset.id());
+                                return dao.getItems(dataset.id(), request.steamLimit(),
+                                        request.lastRetrievedId());
+                            }
+                        }));
     }
 
     @Override
@@ -422,56 +399,30 @@ class DatasetItemServiceImpl implements DatasetItemService {
         return Mono.deferContextual(ctx -> {
             String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
 
-            if (StringUtils.isNotBlank(datasetItemSearchCriteria.versionHashOrTag())) {
-                // Case 1: Version param is explicitly specified
-                log.info("Finding dataset items by version '{}' for dataset '{}', page '{}', size '{}'",
-                        datasetItemSearchCriteria.versionHashOrTag(), datasetItemSearchCriteria.datasetId(), page,
-                        size);
+            return resolveVersionId(datasetItemSearchCriteria.datasetId(),
+                    datasetItemSearchCriteria.versionHashOrTag(), workspaceId)
+                    .flatMap(versionIdOpt -> {
+                        if (versionIdOpt.isPresent()) {
+                            // Version specified or latest version exists - fetch from version
+                            UUID versionId = versionIdOpt.get();
+                            log.info("Finding dataset items from version '{}' for dataset '{}', page '{}', size '{}'",
+                                    versionId, datasetItemSearchCriteria.datasetId(), page, size);
 
-                // Resolve version hash/tag to version ID
-                UUID versionId = versionService.resolveVersionId(workspaceId,
-                        datasetItemSearchCriteria.datasetId(),
-                        datasetItemSearchCriteria.versionHashOrTag());
-                log.info("Resolved version '{}' to version ID '{}' for dataset '{}'",
-                        datasetItemSearchCriteria.versionHashOrTag(), versionId, datasetItemSearchCriteria.datasetId());
+                            return versionDao.getItems(datasetItemSearchCriteria, page, size, versionId)
+                                    .map(itemPage -> itemPage.toBuilder().datasetVersionId(versionId).build())
+                                    .defaultIfEmpty(DatasetItemPage.empty(page, sortingFactory.getSortableFields()));
+                        } else {
+                            // No version specified and no latest version - fetch draft items
+                            log.info("No version exists for dataset '{}', fetching draft items, page '{}', size '{}'",
+                                    datasetItemSearchCriteria.datasetId(), page, size);
 
-                // For versioned items, hasDraft is always false (concept doesn't apply to immutable versions)
-                return versionDao.getItems(datasetItemSearchCriteria, page, size, versionId)
-                        .map(itemPage -> itemPage.toBuilder().datasetVersionId(versionId).build())
-                        .defaultIfEmpty(DatasetItemPage.empty(page, sortingFactory.getSortableFields()));
-            } else {
-                // Case 2 & 3: Version param not specified - check if latest version exists
-                return Mono.fromCallable(() -> template.inTransaction(READ_ONLY, handle -> {
-                    var dao = handle.attach(DatasetVersionDAO.class);
-                    return dao.findByTag(datasetItemSearchCriteria.datasetId(), DatasetVersionService.LATEST_TAG,
-                            workspaceId);
-                })).subscribeOn(Schedulers.boundedElastic())
-                        .flatMap(latestVersionOpt -> {
-                            if (latestVersionOpt.isEmpty()) {
-                                // Case 3: No version exists - fetch draft items
-                                log.info(
-                                        "No version exists for dataset '{}', fetching draft items, page '{}', size '{}'",
-                                        datasetItemSearchCriteria.datasetId(), page, size);
-
-                                return dao.getItems(datasetItemSearchCriteria, page, size)
-                                        .flatMap(itemPage -> computeHasDraft(datasetItemSearchCriteria.datasetId(),
-                                                itemPage))
-                                        .defaultIfEmpty(
-                                                DatasetItemPage.empty(page, sortingFactory.getSortableFields()));
-                            } else {
-                                // Case 2: Latest version exists - fetch items from that version
-                                UUID latestVersionId = latestVersionOpt.get().id();
-                                log.info(
-                                        "Latest version '{}' exists for dataset '{}', fetching version items, page '{}', size '{}'",
-                                        latestVersionId, datasetItemSearchCriteria.datasetId(), page, size);
-
-                                return versionDao.getItems(datasetItemSearchCriteria, page, size, latestVersionId)
-                                        .map(itemPage -> itemPage.toBuilder().datasetVersionId(latestVersionId).build())
-                                        .defaultIfEmpty(
-                                                DatasetItemPage.empty(page, sortingFactory.getSortableFields()));
-                            }
-                        });
-            }
+                            return dao.getItems(datasetItemSearchCriteria, page, size)
+                                    .flatMap(itemPage -> computeHasDraft(datasetItemSearchCriteria.datasetId(),
+                                            itemPage))
+                                    .defaultIfEmpty(
+                                            DatasetItemPage.empty(page, sortingFactory.getSortableFields()));
+                        }
+                    });
         });
     }
 
@@ -486,6 +437,51 @@ class DatasetItemServiceImpl implements DatasetItemService {
         return dao.getItems(datasetItemSearchCriteria, page, size)
                 .flatMap(itemPage -> computeHasDraft(datasetItemSearchCriteria.datasetId(), itemPage))
                 .defaultIfEmpty(DatasetItemPage.empty(page, sortingFactory.getSortableFields()));
+    }
+
+    /**
+     * Resolves a version ID using the 3-tier selection logic:
+     * 1. If version param is set -> resolve and use it
+     * 2. If version param is not set but there is at least one committed version -> use the latest
+     * 3. If version param is not set and no version is committed -> return empty (use draft items)
+     *
+     * @param datasetId the dataset ID
+     * @param versionHashOrTag the version hash or tag (can be null/blank)
+     * @param workspaceId the workspace ID
+     * @return Mono containing Optional of version ID (empty means use draft items)
+     */
+    private Mono<Optional<UUID>> resolveVersionId(UUID datasetId, String versionHashOrTag, String workspaceId) {
+        if (StringUtils.isNotBlank(versionHashOrTag)) {
+            // Case 1: Version param is explicitly specified
+            log.info("Resolving specified version '{}' for dataset '{}'", versionHashOrTag, datasetId);
+
+            return Mono.fromCallable(
+                    () -> versionService.resolveVersionId(workspaceId, datasetId, versionHashOrTag))
+                    .subscribeOn(Schedulers.boundedElastic())
+                    .doOnNext(versionId -> log.info(
+                            "Resolved version '{}' to version ID '{}' for dataset '{}'",
+                            versionHashOrTag, versionId, datasetId))
+                    .map(Optional::of);
+        } else {
+            // Case 2 & 3: Version param not specified - check if latest version exists
+            return Mono.fromCallable(() -> template.inTransaction(READ_ONLY, handle -> {
+                var dao = handle.attach(DatasetVersionDAO.class);
+                return dao.findByTag(datasetId, DatasetVersionService.LATEST_TAG, workspaceId);
+            })).subscribeOn(Schedulers.boundedElastic())
+                    .map(latestVersionOpt -> {
+                        if (latestVersionOpt.isEmpty()) {
+                            // Case 3: No version exists - use draft items
+                            log.info("No version exists for dataset '{}', will use draft items", datasetId);
+                            return Optional.empty();
+                        } else {
+                            // Case 2: Latest version exists - use it
+                            UUID latestVersionId = latestVersionOpt.get().id();
+                            log.info("Latest version '{}' exists for dataset '{}', will use version items",
+                                    latestVersionId, datasetId);
+                            return Optional.of(latestVersionId);
+                        }
+                    });
+        }
     }
 
     private Mono<DatasetItemPage> computeHasDraft(UUID datasetId, DatasetItemPage itemPage) {
