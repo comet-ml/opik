@@ -1,5 +1,5 @@
 --liquibase formatted sql
---changeset idoberko2:000048_add_dataset_version_id_to_experiments
+--changeset idoberko2:000050_add_dataset_version_id_to_experiments
 --comment: Add dataset_version_id column to experiments table to link experiments to specific dataset versions
 
 -- Add dataset_version_id column to experiments table
