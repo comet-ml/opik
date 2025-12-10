@@ -82,14 +82,3 @@ export const useIsFeatureEnabled = (feature: FeatureToggleKeys) => {
 
   return context.isFeatureEnabled(feature);
 };
-
-export const useFeatureToggles = () => {
-  const context = useContext(FeatureTogglesProviderContext);
-
-  if (context === undefined)
-    throw new Error(
-      "useFeatureToggles must be used within a FeatureTogglesProvider",
-    );
-
-  return context;
-};

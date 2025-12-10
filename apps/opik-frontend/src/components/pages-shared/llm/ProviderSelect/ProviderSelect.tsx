@@ -7,12 +7,7 @@ import {
   PROVIDER_TYPE,
   ProviderObject,
 } from "@/types/providers";
-import {
-  IconType,
-  PROVIDERS,
-  PROVIDERS_OPTIONS,
-  PROVIDER_FEATURE_TOGGLE_MAP,
-} from "@/constants/providers";
+import { IconType, PROVIDERS, PROVIDERS_OPTIONS } from "@/constants/providers";
 import {
   Select,
   SelectContent,
@@ -26,7 +21,8 @@ import {
   buildComposedProviderKey,
   getProviderDisplayName,
 } from "@/lib/provider";
-import { useFeatureToggles } from "@/components/feature-toggles-provider";
+import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
+import { FeatureToggleKeys } from "@/types/feature-toggles";
 
 export const ADD_CUSTOM_PROVIDER_VALUE = buildComposedProviderKey(
   PROVIDER_TYPE.CUSTOM,
@@ -56,7 +52,49 @@ const ProviderSelect: React.FC<ProviderSelectProps> = ({
   configuredProvidersList,
   hasError,
 }) => {
-  const { isFeatureEnabled } = useFeatureToggles();
+  // Get feature flags for all providers
+  const isOpenAIEnabled = useIsFeatureEnabled(
+    FeatureToggleKeys.OPENAI_PROVIDER_ENABLED,
+  );
+  const isAnthropicEnabled = useIsFeatureEnabled(
+    FeatureToggleKeys.ANTHROPIC_PROVIDER_ENABLED,
+  );
+  const isGeminiEnabled = useIsFeatureEnabled(
+    FeatureToggleKeys.GEMINI_PROVIDER_ENABLED,
+  );
+  const isOpenRouterEnabled = useIsFeatureEnabled(
+    FeatureToggleKeys.OPENROUTER_PROVIDER_ENABLED,
+  );
+  const isVertexAIEnabled = useIsFeatureEnabled(
+    FeatureToggleKeys.VERTEXAI_PROVIDER_ENABLED,
+  );
+  const isCustomLLMEnabled = useIsFeatureEnabled(
+    FeatureToggleKeys.CUSTOMLLM_PROVIDER_ENABLED,
+  );
+  const isOpikBuiltinEnabled = useIsFeatureEnabled(
+    FeatureToggleKeys.OPIKBUILTIN_PROVIDER_ENABLED,
+  );
+
+  const providerEnabledMap = useMemo(
+    () => ({
+      [PROVIDER_TYPE.OPEN_AI]: isOpenAIEnabled,
+      [PROVIDER_TYPE.ANTHROPIC]: isAnthropicEnabled,
+      [PROVIDER_TYPE.GEMINI]: isGeminiEnabled,
+      [PROVIDER_TYPE.OPEN_ROUTER]: isOpenRouterEnabled,
+      [PROVIDER_TYPE.VERTEX_AI]: isVertexAIEnabled,
+      [PROVIDER_TYPE.CUSTOM]: isCustomLLMEnabled,
+      [PROVIDER_TYPE.OPIK_BUILTIN]: isOpikBuiltinEnabled,
+    }),
+    [
+      isOpenAIEnabled,
+      isAnthropicEnabled,
+      isGeminiEnabled,
+      isOpenRouterEnabled,
+      isVertexAIEnabled,
+      isCustomLLMEnabled,
+      isOpikBuiltinEnabled,
+    ],
+  );
 
   const options = useMemo(() => {
     const providerOptions: ProviderOption[] = [];
@@ -66,8 +104,7 @@ const ProviderSelect: React.FC<ProviderSelectProps> = ({
       if (option.value === PROVIDER_TYPE.CUSTOM) {
         return false;
       }
-      const featureToggleKey = PROVIDER_FEATURE_TOGGLE_MAP[option.value];
-      return isFeatureEnabled(featureToggleKey);
+      return providerEnabledMap[option.value];
     });
 
     standardProviders.forEach((option) => {
@@ -88,11 +125,7 @@ const ProviderSelect: React.FC<ProviderSelectProps> = ({
     });
 
     // Only add custom providers if custom LLM provider is enabled
-    const isCustomProviderEnabled = isFeatureEnabled(
-      PROVIDER_FEATURE_TOGGLE_MAP[PROVIDER_TYPE.CUSTOM],
-    );
-
-    if (isCustomProviderEnabled) {
+    if (isCustomLLMEnabled) {
       const customProviders =
         configuredProvidersList?.filter(
           (key) => key.provider === PROVIDER_TYPE.CUSTOM,
@@ -112,7 +145,7 @@ const ProviderSelect: React.FC<ProviderSelectProps> = ({
     }
 
     return providerOptions;
-  }, [configuredProvidersList, isFeatureEnabled]);
+  }, [configuredProvidersList, providerEnabledMap, isCustomLLMEnabled]);
 
   const renderTrigger = useCallback(
     (value: string) => {
@@ -189,11 +222,6 @@ const ProviderSelect: React.FC<ProviderSelectProps> = ({
     [onChange, options],
   );
 
-  // Check if custom provider is enabled for showing "Add custom provider" option
-  const isCustomProviderEnabled = isFeatureEnabled(
-    PROVIDER_FEATURE_TOGGLE_MAP[PROVIDER_TYPE.CUSTOM],
-  );
-
   return (
     <Select value={value} onValueChange={handleChange} disabled={disabled}>
       <SelectTrigger
@@ -206,7 +234,7 @@ const ProviderSelect: React.FC<ProviderSelectProps> = ({
       </SelectTrigger>
       <SelectContent>
         {options.map((option) => renderOption(option))}
-        {isCustomProviderEnabled && (
+        {isCustomLLMEnabled && (
           <>
             <SelectSeparator />
             <SelectItem

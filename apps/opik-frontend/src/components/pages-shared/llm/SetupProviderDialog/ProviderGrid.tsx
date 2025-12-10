@@ -1,12 +1,10 @@
 import React, { useMemo } from "react";
 import { Label } from "@/components/ui/label";
 import { PROVIDER_TYPE } from "@/types/providers";
-import {
-  PROVIDERS_OPTIONS,
-  PROVIDER_FEATURE_TOGGLE_MAP,
-} from "@/constants/providers";
+import { PROVIDERS_OPTIONS } from "@/constants/providers";
 import { cn } from "@/lib/utils";
-import { useFeatureToggles } from "@/components/feature-toggles-provider";
+import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
+import { FeatureToggleKeys } from "@/types/feature-toggles";
 
 interface ProviderGridProps {
   selectedProvider: PROVIDER_TYPE | "";
@@ -17,17 +15,58 @@ const ProviderGrid: React.FC<ProviderGridProps> = ({
   selectedProvider,
   onSelectProvider,
 }) => {
-  const { isFeatureEnabled } = useFeatureToggles();
+  // Get feature flags for all providers
+  const isOpenAIEnabled = useIsFeatureEnabled(
+    FeatureToggleKeys.OPENAI_PROVIDER_ENABLED,
+  );
+  const isAnthropicEnabled = useIsFeatureEnabled(
+    FeatureToggleKeys.ANTHROPIC_PROVIDER_ENABLED,
+  );
+  const isGeminiEnabled = useIsFeatureEnabled(
+    FeatureToggleKeys.GEMINI_PROVIDER_ENABLED,
+  );
+  const isOpenRouterEnabled = useIsFeatureEnabled(
+    FeatureToggleKeys.OPENROUTER_PROVIDER_ENABLED,
+  );
+  const isVertexAIEnabled = useIsFeatureEnabled(
+    FeatureToggleKeys.VERTEXAI_PROVIDER_ENABLED,
+  );
+  const isCustomLLMEnabled = useIsFeatureEnabled(
+    FeatureToggleKeys.CUSTOMLLM_PROVIDER_ENABLED,
+  );
+  const isOpikBuiltinEnabled = useIsFeatureEnabled(
+    FeatureToggleKeys.OPIKBUILTIN_PROVIDER_ENABLED,
+  );
+
+  const providerEnabledMap = useMemo(
+    () => ({
+      [PROVIDER_TYPE.OPEN_AI]: isOpenAIEnabled,
+      [PROVIDER_TYPE.ANTHROPIC]: isAnthropicEnabled,
+      [PROVIDER_TYPE.GEMINI]: isGeminiEnabled,
+      [PROVIDER_TYPE.OPEN_ROUTER]: isOpenRouterEnabled,
+      [PROVIDER_TYPE.VERTEX_AI]: isVertexAIEnabled,
+      [PROVIDER_TYPE.CUSTOM]: isCustomLLMEnabled,
+      [PROVIDER_TYPE.OPIK_BUILTIN]: isOpikBuiltinEnabled,
+    }),
+    [
+      isOpenAIEnabled,
+      isAnthropicEnabled,
+      isGeminiEnabled,
+      isOpenRouterEnabled,
+      isVertexAIEnabled,
+      isCustomLLMEnabled,
+      isOpikBuiltinEnabled,
+    ],
+  );
 
   // Filter out read-only providers and disabled providers based on feature flags
   const configurableProviders = useMemo(
     () =>
       PROVIDERS_OPTIONS.filter((provider) => {
         if (provider.readOnly) return false;
-        const featureToggleKey = PROVIDER_FEATURE_TOGGLE_MAP[provider.value];
-        return isFeatureEnabled(featureToggleKey);
+        return providerEnabledMap[provider.value];
       }),
-    [isFeatureEnabled],
+    [providerEnabledMap],
   );
 
   return (
