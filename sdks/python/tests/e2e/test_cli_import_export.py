@@ -9,7 +9,6 @@ from typing import Iterator, List
 import pytest
 
 import opik
-from opik import opik_context
 from opik.api_objects.experiment.experiment_item import ExperimentItemReferences
 from opik.cli.exports.dataset import export_dataset_by_name
 from opik.cli.exports.experiment import export_experiment_by_name
@@ -19,6 +18,7 @@ from opik.cli.imports.project import import_projects_from_directory
 from opik.cli.imports.dataset import import_datasets_from_directory
 from opik.cli.imports.prompt import import_prompts_from_directory
 from ..conftest import random_chars
+from . import verifiers
 
 
 class TestCLIImportExport:
@@ -43,29 +43,27 @@ class TestCLIImportExport:
         """Create test traces in the specified project."""
         trace_ids = []
 
-        @opik.track(project_name=project_name)
-        def test_function_1(x: str) -> str:
-            """Test function 1."""
-            # Capture trace ID during execution
-            trace_data = opik_context.get_current_trace_data()
-            if trace_data is not None:
-                trace_ids.append(trace_data.id)
-            return f"processed_{x}"
+        # Create trace 1 with direct API
+        trace1 = opik_client.trace(
+            name="test-trace-1",
+            input={"x": "input1"},
+            output={"result": "processed_input1"},
+            metadata={"test": "import_export"},
+            project_name=project_name,
+        )
+        trace_ids.append(trace1.id)
 
-        @opik.track(project_name=project_name)
-        def test_function_2(y: int) -> int:
-            """Test function 2."""
-            # Capture trace ID during execution
-            trace_data = opik_context.get_current_trace_data()
-            if trace_data is not None:
-                trace_ids.append(trace_data.id)
-            return y * 2
+        # Create trace 2 with direct API
+        trace2 = opik_client.trace(
+            name="test-trace-2",
+            input={"y": 42},
+            output={"result": 84},
+            metadata={"test": "import_export"},
+            project_name=project_name,
+        )
+        trace_ids.append(trace2.id)
 
-        # Create traces
-        test_function_1("input1")
-        test_function_2(42)
-
-        opik.flush_tracker()
+        opik_client.flush()
 
         return trace_ids
 
@@ -167,7 +165,7 @@ class TestCLIImportExport:
         return experiment_name
 
     def _run_cli_command(
-        self, cmd: List[str], description: str = ""
+        self, cmd: List[str]
     ) -> subprocess.CompletedProcess:
         """Run a CLI command and return the result."""
         # Use the module path to ensure we get the latest code
@@ -380,6 +378,18 @@ class TestCLIImportExport:
 
         # Verify import succeeded
         assert stats.get("prompts", 0) >= 1, "Expected at least 1 prompt to be imported"
+        
+        # Verify prompt was correctly imported to backend
+        imported_prompts = opik_client.search_prompts()
+        imported_prompt_names = [p.name for p in imported_prompts]
+        assert prompt_name in imported_prompt_names, f"Expected prompt {prompt_name} to be imported"
+        
+        # Get the imported prompt and verify its content
+        imported_prompt = next(p for p in imported_prompts if p.name == prompt_name)
+        verifiers.verify_prompt_version(
+            imported_prompt,
+            name=prompt_name,
+        )
 
     def test_export_import_all_data_types_happy_flow(
         self,
@@ -583,7 +593,7 @@ class TestCLIImportExport:
             str(test_data_dir),
         ]
 
-        result = self._run_cli_command(export_cmd, "CLI Export validation")
+        result = self._run_cli_command(export_cmd)
         assert result.returncode == 0, f"CLI export failed: {result.stderr}"
 
         # Verify export worked
@@ -602,7 +612,7 @@ class TestCLIImportExport:
             str(test_data_dir / "default"),
         ]
 
-        result = self._run_cli_command(import_cmd, "CLI Import validation")
+        result = self._run_cli_command(import_cmd)
         assert result.returncode == 0, f"CLI import failed: {result.stderr}"
 
     def test_export_import_error_handling(
@@ -737,7 +747,7 @@ class TestCLIImportExport:
         assert experiments_dir.exists(), f"Export directory not found: {experiments_dir}"
 
         experiment_files = list(experiments_dir.glob(f"experiment_{exp1_name}_*.json"))
-        assert len(experiment_files) == 1, f"Expected 1 experiment file for {exp1_name}, found: {len(experiment_files)}"
+        assert len(experiment_files) == 1, f"Expected exactly 1 experiment file for {exp1_name}, found: {len(experiment_files)}"
 
         # Verify exp2 was NOT exported
         exp2_files = list(experiments_dir.glob(f"experiment_{exp2_name}_*.json"))
@@ -784,7 +794,7 @@ class TestCLIImportExport:
         assert prompts_dir.exists(), f"Export directory not found: {prompts_dir}"
 
         prompt_files = list(prompts_dir.glob("prompt_*.json"))
-        assert len(prompt_files) >= 1, f"Expected at least 1 chat prompt file, found: {len(prompt_files)}"
+        assert len(prompt_files) >= 1, "Expected at least 1 prompt file"
 
         # Verify chat-specific structure in exported file
         with open(prompt_files[0], "r") as f:
@@ -812,7 +822,19 @@ class TestCLIImportExport:
         )
 
         # Verify import succeeded
-        assert stats.get("prompts", 0) >= 1, "Expected at least 1 chat prompt to be imported"
+        assert stats.get("prompts", 0) >= 1, "Expected at least 1 prompt to be imported"
+        
+        # Verify chat prompt was correctly imported to backend
+        imported_prompts = opik_client.search_prompts()
+        imported_prompt_names = [p.name for p in imported_prompts]
+        assert prompt_name in imported_prompt_names, f"Expected chat prompt {prompt_name} to be imported"
+        
+        # Get the imported chat prompt and verify its content
+        imported_chat_prompt = opik_client.get_chat_prompt(name=prompt_name)
+        verifiers.verify_chat_prompt_version(
+            imported_chat_prompt,
+            name=prompt_name,
+        )
 
     def test_import_projects_automatically_recreates_experiments(
         self,
