@@ -34,6 +34,8 @@ class Streamer:
 
         self._drain = False
 
+        self._idle = True
+
         self._start_queue_consumers()
         self._batch_preprocessor.start()
 
@@ -42,34 +44,48 @@ class Streamer:
             if self._drain:
                 return
 
-            # do embedded attachments pre-processing first
-            preprocessed_message = self._attachments_preprocessor.preprocess(message)
+            self._idle = False
+            try:
+                # do embedded attachments pre-processing first
+                preprocessed_message = self._attachments_preprocessor.preprocess(
+                    message
+                )
 
-            # do file uploads pre-processing second
-            preprocessed_message = self._upload_preprocessor.preprocess(
-                preprocessed_message
-            )
+                # do file uploads pre-processing second
+                preprocessed_message = self._upload_preprocessor.preprocess(
+                    preprocessed_message
+                )
 
-            # do batching pre-processing third
-            preprocessed_message = self._batch_preprocessor.preprocess(
-                preprocessed_message
-            )
+                # do batching pre-processing third
+                preprocessed_message = self._batch_preprocessor.preprocess(
+                    preprocessed_message
+                )
 
-            # work with resulting message if not fully consumed by preprocessors
-            if preprocessed_message is not None:
-                if self._message_queue.accept_put_without_discarding() is False:
-                    _logging.log_once_at_level(
-                        logging.WARNING,
-                        "The message queue size limit has been reached. The new message has been added to the queue, and the oldest message has been discarded.",
-                        logger=LOGGER,
-                    )
-                self._message_queue.put(preprocessed_message)
+                # work with resulting message if not fully consumed by preprocessors
+                if preprocessed_message is not None:
+                    if self._message_queue.accept_put_without_discarding() is False:
+                        _logging.log_once_at_level(
+                            logging.WARNING,
+                            "The message queue size limit has been reached. The new message has been added to the queue, and the oldest message has been discarded.",
+                            logger=LOGGER,
+                        )
+                    self._message_queue.put(preprocessed_message)
+            except Exception as ex:
+                LOGGER.error(
+                    "Failed to process message by streamer: %s", ex, exc_info=ex
+                )
+            self._idle = True
 
     def close(self, timeout: Optional[int]) -> bool:
         """
         Stops data processing threads
         """
         with self._lock:
+            synchronization.wait_for_done(
+                check_function=lambda: self._idle,
+                timeout=timeout,
+                sleep_time=0.1,
+            )
             self._drain = True
 
         self._batch_preprocessor.stop()  # stopping causes adding remaining batch messages to the queue
@@ -80,6 +96,16 @@ class Streamer:
         return self._message_queue.empty()
 
     def flush(self, timeout: Optional[float], upload_sleep_time: int = 5) -> bool:
+        # wait for current pedning messages processing to be completed
+        # this should be done before flushing batch preprocessor because some
+        # batch messages may be added to the queue during processing
+        with self._lock:
+            synchronization.wait_for_done(
+                check_function=lambda: self._idle,
+                timeout=timeout,
+                sleep_time=0.1,
+            )
+
         self._batch_preprocessor.flush()
 
         start_time = time.time()
