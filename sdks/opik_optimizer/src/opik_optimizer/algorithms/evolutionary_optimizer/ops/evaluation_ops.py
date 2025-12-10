@@ -5,11 +5,11 @@ from collections.abc import Callable
 from .... import task_evaluator, helpers
 from ....api_objects import chat_prompt
 import opik
-from opik import opik_context
-import copy
+from opik import opik_context  # noqa: F401 - used in llm_task closure
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
     from .. import evolutionary_optimizer  # noqa: F401
+
 
 def evaluate_bundle(
     optimizer: "evolutionary_optimizer.EvolutionaryOptimizer",

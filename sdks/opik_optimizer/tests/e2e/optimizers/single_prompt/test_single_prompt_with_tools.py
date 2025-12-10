@@ -26,6 +26,8 @@ from opik_optimizer import (
     FewShotBayesianOptimizer,
     GepaOptimizer,
     HierarchicalReflectiveOptimizer,
+    ParameterOptimizer,
+    ParameterSearchSpace,
 )
 
 from ..utils import (
@@ -72,9 +74,10 @@ def create_optimizer_config(optimizer_class: type) -> dict[str, Any]:
         },
         "verbose": 0,
         "seed": 42,
+        "name": f"e2e-single-prompt-{optimizer_class.__name__}",
     }
 
-    optimizer_specific = {
+    optimizer_specific: dict[type, dict[str, Any]] = {
         EvolutionaryOptimizer: {
             "population_size": 2,
             "num_generations": 1,
@@ -100,9 +103,23 @@ def create_optimizer_config(optimizer_class: type) -> dict[str, Any]:
             "batch_size": 2,
             "convergence_threshold": 0.01,
         },
+        ParameterOptimizer: {
+            "n_threads": 2,
+            "default_n_trials": 2,
+            "local_search_ratio": 0.0,
+        },
     }
 
     return {**base_config, **optimizer_specific.get(optimizer_class, {})}
+
+
+def get_parameter_space() -> ParameterSearchSpace:
+    """Create a simple parameter space for testing."""
+    return ParameterSearchSpace.model_validate(
+        {
+            "temperature": {"type": "float", "min": 0.1, "max": 1.0},
+        }
+    )
 
 
 # -----------------------------------------------------------------------------
@@ -118,6 +135,7 @@ def create_optimizer_config(optimizer_class: type) -> dict[str, Any]:
         FewShotBayesianOptimizer,
         GepaOptimizer,
         HierarchicalReflectiveOptimizer,
+        ParameterOptimizer,
     ],
 )
 def test_single_prompt_with_tools(optimizer_class: type) -> None:
@@ -168,14 +186,24 @@ def test_single_prompt_with_tools(optimizer_class: type) -> None:
     config = create_optimizer_config(optimizer_class)
     optimizer = optimizer_class(**config)
 
-    # Run optimization
-    results = optimizer.optimize_prompt(
-        dataset=dataset,
-        metric=levenshtein_metric,
-        prompt=original_prompt,
-        n_samples=2,
-        max_trials=2,
-    )
+    # Run optimization - ParameterOptimizer uses optimize_parameter
+    if optimizer_class == ParameterOptimizer:
+        results = optimizer.optimize_parameter(
+            prompt=original_prompt,
+            dataset=dataset,
+            metric=levenshtein_metric,
+            parameter_space=get_parameter_space(),
+            n_samples=2,
+            max_trials=2,
+        )
+    else:
+        results = optimizer.optimize_prompt(
+            dataset=dataset,
+            metric=levenshtein_metric,
+            prompt=original_prompt,
+            n_samples=2,
+            max_trials=2,
+        )
 
     # Validate results structure
     assert results.optimizer == optimizer_class.__name__, (
@@ -214,48 +242,3 @@ def test_single_prompt_with_tools(optimizer_class: type) -> None:
         assert "content" in msg, "Message should have 'content' field"
 
     print(f"✅ {optimizer_class.__name__}: Single prompt with tools - PASSED")
-
-
-# -----------------------------------------------------------------------------
-# Individual Optimizer Tests (for targeted debugging)
-# -----------------------------------------------------------------------------
-
-
-def test_evolutionary_single_prompt_with_tools() -> None:
-    """Test EvolutionaryOptimizer with tools."""
-    test_single_prompt_with_tools(EvolutionaryOptimizer)
-
-
-def test_metaprompt_single_prompt_with_tools() -> None:
-    """Test MetaPromptOptimizer with tools."""
-    test_single_prompt_with_tools(MetaPromptOptimizer)
-
-
-def test_fewshot_single_prompt_with_tools() -> None:
-    """Test FewShotBayesianOptimizer with tools."""
-    test_single_prompt_with_tools(FewShotBayesianOptimizer)
-
-
-def test_gepa_single_prompt_with_tools() -> None:
-    """Test GepaOptimizer with tools."""
-    test_single_prompt_with_tools(GepaOptimizer)
-
-
-def test_hierarchical_single_prompt_with_tools() -> None:
-    """Test HierarchicalReflectiveOptimizer with tools."""
-    test_single_prompt_with_tools(HierarchicalReflectiveOptimizer)
-
-
-if __name__ == "__main__":
-    # Run tests manually
-    for optimizer_class in [
-        EvolutionaryOptimizer,
-        MetaPromptOptimizer,
-        FewShotBayesianOptimizer,
-        GepaOptimizer,
-        HierarchicalReflectiveOptimizer,
-    ]:
-        try:
-            test_single_prompt_with_tools(optimizer_class)
-        except Exception as e:
-            print(f"❌ {optimizer_class.__name__}: FAILED - {e}")

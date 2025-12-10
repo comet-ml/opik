@@ -14,10 +14,10 @@ from opik.integrations.litellm import track_completion
 from opik_optimizer import ChatPrompt, OptimizableAgent
 
 
-class TestMultiPromptAgent(OptimizableAgent):
+class MultiPromptTestAgent(OptimizableAgent):
     """
     A simple multi-prompt agent for testing multi-prompt optimization.
-    
+
     This agent orchestrates two prompts:
     - "analyze": Analyzes the input and extracts key information
     - "respond": Generates a response based on the analysis
@@ -41,18 +41,18 @@ class TestMultiPromptAgent(OptimizableAgent):
     ) -> str:
         """
         Execute the multi-prompt pipeline.
-        
+
         Args:
             prompts: Dict with "analyze" and "respond" ChatPrompt objects
             dataset_item: Dataset item containing the input
             allow_tool_use: Whether to allow tool use (not used in this agent)
             seed: Random seed for reproducibility
-            
+
         Returns:
             Final response string
         """
         tracked_completion = track_completion()(litellm.completion)
-        
+
         # Step 1: Analyze the input
         analyze_messages = prompts["analyze"].get_messages(dataset_item)
         analyze_response = tracked_completion(
@@ -82,7 +82,5 @@ class TestMultiPromptAgent(OptimizableAgent):
             },
             **self.model_parameters,
         )
-        
+
         return respond_response.choices[0].message.content
-
-
