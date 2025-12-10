@@ -37,8 +37,9 @@ class CreateSpanMessageBatcher(base_batcher.BaseBatcher):
         return batches
 
     def add(self, message: messages.CreateSpanMessage) -> None:  # type: ignore
-        # remove any duplicate spans from the batch that was already added
-        self._remove_matching_messages(lambda x: x.span_id == message.span_id)  # type: ignore
+        # remove any duplicate start span message from the batch that was already added
+        if message.end_time is not None:
+            self._remove_matching_messages(lambda x: x.span_id == message.span_id)  # type: ignore
 
         return super().add(message)
 
@@ -73,8 +74,9 @@ class CreateTraceMessageBatcher(base_batcher.BaseBatcher):
         return batches
 
     def add(self, message: messages.CreateTraceMessage) -> None:  # type: ignore
-        # remove any duplicate traces from the batch that was already added
-        self._remove_matching_messages(lambda x: x.trace_id == message.trace_id)  # type: ignore
+        # remove any duplicate start trace message from the batch that was already added
+        if message.end_time is not None:
+            self._remove_matching_messages(lambda x: x.trace_id == message.trace_id)  # type: ignore
 
         return super().add(message)
 
