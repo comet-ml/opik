@@ -92,6 +92,7 @@ public class FilterQueryBuilder {
     public static final String FEEDBACK_DEFINITIONS_DB = "feedback_definitions";
     public static final String SCOPE_DB = "scope";
     private static final String DATA_ANALYTICS_DB = "data";
+    private static final String FULL_DATA_ANALYTICS_DB = "toString(data)";
     private static final String SOURCE_DB = "source";
     private static final String TRACE_ID_DB = "trace_id";
     private static final String SPAN_ID_DB = "span_id";
@@ -352,6 +353,7 @@ public class FilterQueryBuilder {
             ImmutableMap.<DatasetItemField, String>builder()
                     .put(DatasetItemField.ID, ID_DB)
                     .put(DatasetItemField.DATA, DATA_ANALYTICS_DB)
+                    .put(DatasetItemField.FULL_DATA, FULL_DATA_ANALYTICS_DB)
                     .put(DatasetItemField.SOURCE, SOURCE_DB)
                     .put(DatasetItemField.TRACE_ID, TRACE_ID_DB)
                     .put(DatasetItemField.SPAN_ID, SPAN_ID_DB)
@@ -552,6 +554,7 @@ public class FilterQueryBuilder {
         map.put(FilterStrategy.DATASET_ITEM, Set.of(
                 DatasetItemField.ID,
                 DatasetItemField.DATA,
+                DatasetItemField.FULL_DATA,
                 DatasetItemField.SOURCE,
                 DatasetItemField.TRACE_ID,
                 DatasetItemField.SPAN_ID,
