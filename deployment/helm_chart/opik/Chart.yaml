@@ -30,11 +30,11 @@ appVersion: 1.9.47
 
 dependencies:
 - name: mysql
-  version: "0.1.7"
-  repository: "https://helm.dev.comet.com/"
+  version: 1.0.6
+  repository: "https://comet-ml.github.io/comet-mysql-helm/"
   condition: mysql.enabled
 - name: zookeeper
-  version: 0.3.2
+  version: 0.3.5
   repository: oci://registry-1.docker.io/cloudpirates
   condition: zookeeper.enabled
 - name: redis
@@ -46,7 +46,7 @@ dependencies:
   repository: oci://registry-1.docker.io/cloudpirates
   condition: minio.enabled
 - name: altinity-clickhouse-operator
-  version: "0.25.4"
+  version: 0.25.4
   repository: https://docs.altinity.com/clickhouse-operator/
   condition: clickhouse.enabled
 - name: common

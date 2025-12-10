@@ -115,39 +115,6 @@ spec:
               NAMESPACE="{{ .Release.Namespace }}"
               BACKEND_DEPLOYMENT="{{ include "opik.name" . }}-backend"
               
-              # Check current deployed backend image tag
-              # Skip migration if tag version is >= 1.9.39
-              if [ {{ .Release.Revision }} -eq 1 ]; then
-                echo "First install (revision 1), skipping migration"
-                exit 0
-              fi
-              
-              echo "Checking current backend deployment image tag"
-              if ! kubectl get deployment "$BACKEND_DEPLOYMENT" -n "$NAMESPACE" &>/dev/null; then
-                echo "Backend deployment not found, skipping migration"
-                exit 0
-              fi
-              
-              CURRENT_TAG=$(kubectl get deployment "$BACKEND_DEPLOYMENT" -n "$NAMESPACE" -o jsonpath='{.spec.template.spec.containers[0].image}' | sed 's/.*://' || echo "")
-              
-              if [ -z "$CURRENT_TAG" ]; then
-                echo "Could not extract image tag, running migration to be safe"
-              else
-                echo "Current backend image tag: $CURRENT_TAG"
-                # Compare tag versions - if >= 1.9.39, skip migration
-                # Extract version from tag (handle tags like "1.9.38" or "v1.9.38" or "1.9.38-suffix")
-                CURRENT_VERSION=$(echo "$CURRENT_TAG" | sed 's/^v//' | sed 's/-.*//')
-                TARGET_VERSION="1.9.39"
-                
-                # Use sort -V for version comparison
-                if printf '%s\n%s\n' "$CURRENT_VERSION" "$TARGET_VERSION" | sort -V | head -1 | grep -q "^${TARGET_VERSION}$"; then
-                  echo "Current version ($CURRENT_VERSION) is >= $TARGET_VERSION, skipping migration"
-                  exit 0
-                else
-                  echo "Current version ($CURRENT_VERSION) is < $TARGET_VERSION, proceeding with migration"
-                fi
-              fi
-              
               echo ""
               
               {{- if .Values.mysql.enabled }}
