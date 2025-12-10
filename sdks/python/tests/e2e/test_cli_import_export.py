@@ -164,9 +164,7 @@ class TestCLIImportExport:
 
         return experiment_name
 
-    def _run_cli_command(
-        self, cmd: List[str]
-    ) -> subprocess.CompletedProcess:
+    def _run_cli_command(self, cmd: List[str]) -> subprocess.CompletedProcess:
         """Run a CLI command and return the result."""
         # Use the module path to ensure we get the latest code
         full_cmd = ["python", "-m", "opik.cli"] + cmd
@@ -378,12 +376,14 @@ class TestCLIImportExport:
 
         # Verify import succeeded
         assert stats.get("prompts", 0) >= 1, "Expected at least 1 prompt to be imported"
-        
+
         # Verify prompt was correctly imported to backend
         imported_prompts = opik_client.search_prompts()
         imported_prompt_names = [p.name for p in imported_prompts]
-        assert prompt_name in imported_prompt_names, f"Expected prompt {prompt_name} to be imported"
-        
+        assert (
+            prompt_name in imported_prompt_names
+        ), f"Expected prompt {prompt_name} to be imported"
+
         # Get the imported prompt and verify its content
         imported_prompt = next(p for p in imported_prompts if p.name == prompt_name)
         verifiers.verify_prompt_version(
@@ -670,7 +670,7 @@ class TestCLIImportExport:
         # Step 1: Create two datasets
         dataset1_name = f"cli-test-dataset1-{random_chars()}"
         dataset2_name = f"cli-test-dataset2-{random_chars()}"
-        
+
         dataset1 = opik_client.create_dataset(
             dataset1_name, description="CLI test dataset 1"
         )
@@ -680,13 +680,27 @@ class TestCLIImportExport:
 
         # Add items to datasets
         for i in range(3):
-            dataset1.insert([{"input": f"test input 1-{i}", "expected_output": f"test output 1-{i}"}])
-            dataset2.insert([{"input": f"test input 2-{i}", "expected_output": f"test output 2-{i}"}])
+            dataset1.insert(
+                [
+                    {
+                        "input": f"test input 1-{i}",
+                        "expected_output": f"test output 1-{i}",
+                    }
+                ]
+            )
+            dataset2.insert(
+                [
+                    {
+                        "input": f"test input 2-{i}",
+                        "expected_output": f"test output 2-{i}",
+                    }
+                ]
+            )
 
         # Step 2: Create two experiments with different datasets
         exp1_name = f"cli-test-exp1-{random_chars()}"
         exp2_name = f"cli-test-exp2-{random_chars()}"
-        
+
         experiment1 = opik_client.create_experiment(
             name=exp1_name,
             dataset_name=dataset1_name,
@@ -699,7 +713,7 @@ class TestCLIImportExport:
         # Add items to experiments
         dataset1_items = dataset1.get_items()
         dataset2_items = dataset2.get_items()
-        
+
         for i in range(3):
             trace1 = opik_client.trace(
                 name=f"test-trace-exp1-{i}",
@@ -707,25 +721,29 @@ class TestCLIImportExport:
                 output={"response": f"test response 1-{i}"},
                 project_name=source_project_name,
             )
-            experiment1.insert([
-                ExperimentItemReferences(
-                    dataset_item_id=dataset1_items[i]["id"],
-                    trace_id=trace1.id,
-                )
-            ])
-            
+            experiment1.insert(
+                [
+                    ExperimentItemReferences(
+                        dataset_item_id=dataset1_items[i]["id"],
+                        trace_id=trace1.id,
+                    )
+                ]
+            )
+
             trace2 = opik_client.trace(
                 name=f"test-trace-exp2-{i}",
                 input={"prompt": f"test prompt 2-{i}"},
                 output={"response": f"test response 2-{i}"},
                 project_name=source_project_name,
             )
-            experiment2.insert([
-                ExperimentItemReferences(
-                    dataset_item_id=dataset2_items[i]["id"],
-                    trace_id=trace2.id,
-                )
-            ])
+            experiment2.insert(
+                [
+                    ExperimentItemReferences(
+                        dataset_item_id=dataset2_items[i]["id"],
+                        trace_id=trace2.id,
+                    )
+                ]
+            )
 
         opik_client.flush()
 
@@ -744,21 +762,28 @@ class TestCLIImportExport:
 
         # Step 4: Verify only experiment1 was exported
         experiments_dir = test_data_dir / "default" / "experiments"
-        assert experiments_dir.exists(), f"Export directory not found: {experiments_dir}"
+        assert (
+            experiments_dir.exists()
+        ), f"Export directory not found: {experiments_dir}"
 
         experiment_files = list(experiments_dir.glob(f"experiment_{exp1_name}_*.json"))
-        assert len(experiment_files) == 1, f"Expected exactly 1 experiment file for {exp1_name}, found: {len(experiment_files)}"
+        assert (
+            len(experiment_files) == 1
+        ), f"Expected exactly 1 experiment file for {exp1_name}, found: {len(experiment_files)}"
 
         # Verify exp2 was NOT exported
         exp2_files = list(experiments_dir.glob(f"experiment_{exp2_name}_*.json"))
-        assert len(exp2_files) == 0, f"Expected 0 experiment files for {exp2_name}, found: {len(exp2_files)}"
+        assert (
+            len(exp2_files) == 0
+        ), f"Expected 0 experiment files for {exp2_name}, found: {len(exp2_files)}"
 
         # Step 5: Verify the exported experiment has the correct dataset
         with open(experiment_files[0], "r") as f:
             exp_data = json.load(f)
-        
-        assert exp_data["experiment"]["dataset_name"] == dataset1_name, \
-            f"Expected dataset_name to be {dataset1_name}, got {exp_data['experiment']['dataset_name']}"
+
+        assert (
+            exp_data["experiment"]["dataset_name"] == dataset1_name
+        ), f"Expected dataset_name to be {dataset1_name}, got {exp_data['experiment']['dataset_name']}"
 
     def test_export_import_chat_prompts_happy_flow(
         self,
@@ -804,10 +829,12 @@ class TestCLIImportExport:
         assert prompt_data["name"] == prompt_name
         assert "current_version" in prompt_data
         current_version = prompt_data["current_version"]
-        
+
         # Verify it's a chat prompt (messages should be a list)
         assert "prompt" in current_version
-        assert isinstance(current_version["prompt"], list), "Chat prompt should have messages as a list"
+        assert isinstance(
+            current_version["prompt"], list
+        ), "Chat prompt should have messages as a list"
         assert "template_structure" in current_version
         assert current_version["template_structure"] == "chat"
 
@@ -823,12 +850,14 @@ class TestCLIImportExport:
 
         # Verify import succeeded
         assert stats.get("prompts", 0) >= 1, "Expected at least 1 prompt to be imported"
-        
+
         # Verify chat prompt was correctly imported to backend
         imported_prompts = opik_client.search_prompts()
         imported_prompt_names = [p.name for p in imported_prompts]
-        assert prompt_name in imported_prompt_names, f"Expected chat prompt {prompt_name} to be imported"
-        
+        assert (
+            prompt_name in imported_prompt_names
+        ), f"Expected chat prompt {prompt_name} to be imported"
+
         # Get the imported chat prompt and verify its content
         imported_chat_prompt = opik_client.get_chat_prompt(name=prompt_name)
         verifiers.verify_chat_prompt_version(
