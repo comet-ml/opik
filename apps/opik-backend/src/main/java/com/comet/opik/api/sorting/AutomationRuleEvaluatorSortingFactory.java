@@ -13,8 +13,6 @@ import static com.comet.opik.api.sorting.SortableFields.ID;
 import static com.comet.opik.api.sorting.SortableFields.LAST_UPDATED_AT;
 import static com.comet.opik.api.sorting.SortableFields.LAST_UPDATED_BY;
 import static com.comet.opik.api.sorting.SortableFields.NAME;
-import static com.comet.opik.api.sorting.SortableFields.PROJECT_ID;
-import static com.comet.opik.api.sorting.SortableFields.PROJECT_NAME;
 import static com.comet.opik.api.sorting.SortableFields.SAMPLING_RATE;
 import static com.comet.opik.api.sorting.SortableFields.TYPE;
 
@@ -24,7 +22,6 @@ public class AutomationRuleEvaluatorSortingFactory extends SortingFactory {
     // Table alias prefixes for AutomationRuleEvaluator queries
     private static final String AUTOMATION_RULE_TABLE_ALIAS = "rule.%s";
     private static final String AUTOMATION_EVALUATOR_TABLE_ALIAS = "evaluator.%s";
-    private static final String AUTOMATION_PROJECT_TABLE_ALIAS = "p.%s";
 
     private static final Map<String, String> FIELD_TO_DB_COLUMN_MAP = ImmutableMap.<String, String>builder()
             .put(ID, String.format(AUTOMATION_RULE_TABLE_ALIAS, "id"))
@@ -32,8 +29,6 @@ public class AutomationRuleEvaluatorSortingFactory extends SortingFactory {
             .put(TYPE, String.format(AUTOMATION_EVALUATOR_TABLE_ALIAS, "type"))
             .put(ENABLED, String.format(AUTOMATION_RULE_TABLE_ALIAS, "enabled"))
             .put(SAMPLING_RATE, String.format(AUTOMATION_RULE_TABLE_ALIAS, "sampling_rate"))
-            .put(PROJECT_ID, String.format(AUTOMATION_RULE_TABLE_ALIAS, "project_id"))
-            .put(PROJECT_NAME, String.format(AUTOMATION_PROJECT_TABLE_ALIAS, "name"))
             .put(CREATED_AT, String.format(AUTOMATION_EVALUATOR_TABLE_ALIAS, "created_at"))
             .put(LAST_UPDATED_AT, String.format(AUTOMATION_EVALUATOR_TABLE_ALIAS, "last_updated_at"))
             .put(CREATED_BY, String.format(AUTOMATION_EVALUATOR_TABLE_ALIAS, "created_by"))
@@ -48,8 +43,6 @@ public class AutomationRuleEvaluatorSortingFactory extends SortingFactory {
                 TYPE,
                 ENABLED,
                 SAMPLING_RATE,
-                PROJECT_ID,
-                PROJECT_NAME,
                 CREATED_AT,
                 LAST_UPDATED_AT,
                 CREATED_BY,
