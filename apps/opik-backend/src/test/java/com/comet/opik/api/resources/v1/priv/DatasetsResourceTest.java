@@ -7334,29 +7334,21 @@ class DatasetsResourceTest {
                     new CountValueStat(StatsMapper.TRACE_COUNT, traceCount),
                     new AvgValueStat(StatsMapper.TOTAL_ESTIMATED_COST, expectedCostAvg.doubleValue()),
                     new PercentageValueStat(StatsMapper.TOTAL_ESTIMATED_COST,
-                            new PercentageValues(
-                                    costPercentiles.get(0), // p50
-                                    costPercentiles.get(1), // p90
-                                    costPercentiles.get(2))), // p99
+                            PercentageValues.builder().p50(costPercentiles.get(0)).p90(costPercentiles.get(1))
+                                    .p99(costPercentiles.get(2)).build()),
                     new PercentageValueStat(StatsMapper.DURATION,
-                            new PercentageValues(
-                                    durationPercentiles.get(0), // p50
-                                    durationPercentiles.get(1), // p90
-                                    durationPercentiles.get(2))), // p99
+                            PercentageValues.builder().p50(durationPercentiles.get(0)).p90(durationPercentiles.get(1))
+                                    .p99(durationPercentiles.get(2)).build()),
                     new AvgValueStat("feedback_scores.accuracy", expectedFeedbackScoreAvg.doubleValue()),
                     new AvgValueStat("usage.completion_tokens", expectedCompletionTokensAvg),
                     new AvgValueStat("usage.prompt_tokens", expectedPromptTokensAvg),
                     new AvgValueStat("usage.total_tokens", expectedTotalTokensAvg),
                     new PercentageValueStat("feedback_scores.accuracy",
-                            new PercentageValues(
-                                    feedbackScorePercentiles.get(0), // p50
-                                    feedbackScorePercentiles.get(1), // p90
-                                    feedbackScorePercentiles.get(2))), // p99
+                            PercentageValues.builder().p50(feedbackScorePercentiles.get(0))
+                                    .p90(feedbackScorePercentiles.get(1)).p99(feedbackScorePercentiles.get(2)).build()),
                     new PercentageValueStat("usage.total_tokens",
-                            new PercentageValues(
-                                    totalTokensPercentiles.get(0), // p50
-                                    totalTokensPercentiles.get(1), // p90
-                                    totalTokensPercentiles.get(2)))); // p99
+                            PercentageValues.builder().p50(totalTokensPercentiles.get(0))
+                                    .p90(totalTokensPercentiles.get(1)).p99(totalTokensPercentiles.get(2)).build())); // p99
 
             // Assert the whole ProjectStats object using TraceAssertions
             TraceAssertions.assertStats(stats.stats(), expectedStats);
@@ -7493,26 +7485,18 @@ class DatasetsResourceTest {
                     new CountValueStat(StatsMapper.TRACE_COUNT, traceCount),
                     new AvgValueStat(StatsMapper.TOTAL_ESTIMATED_COST, 0.0), // No costs in test data
                     new PercentageValueStat(StatsMapper.TOTAL_ESTIMATED_COST,
-                            new PercentageValues(
-                                    BigDecimal.ZERO, // p50 - no cost data
-                                    BigDecimal.ZERO, // p90
-                                    BigDecimal.ZERO)), // p99
+                            PercentageValues.builder().p50(BigDecimal.ZERO).p90(BigDecimal.ZERO).p99(BigDecimal.ZERO)
+                                    .build()),
                     new PercentageValueStat(StatsMapper.DURATION,
-                            new PercentageValues(
-                                    durationPercentiles.get(0), // p50
-                                    durationPercentiles.get(1), // p90
-                                    durationPercentiles.get(2))), // p99
+                            PercentageValues.builder().p50(durationPercentiles.get(0)).p90(durationPercentiles.get(1))
+                                    .p99(durationPercentiles.get(2)).build()),
                     new AvgValueStat("feedback_scores.accuracy", expectedAvgValue.doubleValue()),
                     new PercentageValueStat("feedback_scores.accuracy",
-                            new PercentageValues(
-                                    feedbackScorePercentiles.get(0), // p50
-                                    feedbackScorePercentiles.get(1), // p90
-                                    feedbackScorePercentiles.get(2))), // p99
+                            PercentageValues.builder().p50(feedbackScorePercentiles.get(0))
+                                    .p90(feedbackScorePercentiles.get(1)).p99(feedbackScorePercentiles.get(2)).build()),
                     new PercentageValueStat("usage.total_tokens",
-                            new PercentageValues(
-                                    BigDecimal.ZERO, // p50 - no usage data
-                                    BigDecimal.ZERO, // p90
-                                    BigDecimal.ZERO))); // p99
+                            PercentageValues.builder().p50(BigDecimal.ZERO).p90(BigDecimal.ZERO).p99(BigDecimal.ZERO)
+                                    .build()));
 
             // Assert the whole ProjectStats object using TraceAssertions
             TraceAssertions.assertStats(stats.stats(), expectedStats);
@@ -7663,26 +7647,30 @@ class DatasetsResourceTest {
                     new CountValueStat(StatsMapper.TRACE_COUNT, traceCount),
                     new AvgValueStat(StatsMapper.TOTAL_ESTIMATED_COST, 0.0), // No costs in test data
                     new PercentageValueStat(StatsMapper.TOTAL_ESTIMATED_COST,
-                            new PercentageValues(
-                                    BigDecimal.ZERO, // p50 - no cost data
-                                    BigDecimal.ZERO, // p90
-                                    BigDecimal.ZERO)), // p99
+                            PercentageValues.builder()
+                                    .p50(BigDecimal.ZERO) // p50 - no cost data
+                                    .p90(BigDecimal.ZERO) // p90
+                                    .p99(BigDecimal.ZERO) // p99
+                                    .build()),
                     new PercentageValueStat(StatsMapper.DURATION,
-                            new PercentageValues(
-                                    durationPercentiles.get(0), // p50
-                                    durationPercentiles.get(1), // p90
-                                    durationPercentiles.get(2))), // p99
+                            PercentageValues.builder()
+                                    .p50(durationPercentiles.get(0)) // p50
+                                    .p90(durationPercentiles.get(1)) // p90
+                                    .p99(durationPercentiles.get(2)) // p99
+                                    .build()),
                     new AvgValueStat("feedback_scores.quality", expectedAvgValue.doubleValue()),
                     new PercentageValueStat("feedback_scores.quality",
-                            new PercentageValues(
-                                    feedbackScorePercentiles.get(0), // p50
-                                    feedbackScorePercentiles.get(1), // p90
-                                    feedbackScorePercentiles.get(2))), // p99
+                            PercentageValues.builder()
+                                    .p50(feedbackScorePercentiles.get(0)) // p50
+                                    .p90(feedbackScorePercentiles.get(1)) // p90
+                                    .p99(feedbackScorePercentiles.get(2)) // p99
+                                    .build()),
                     new PercentageValueStat("usage.total_tokens",
-                            new PercentageValues(
-                                    BigDecimal.ZERO, // p50 - no usage data
-                                    BigDecimal.ZERO, // p90
-                                    BigDecimal.ZERO))); // p99
+                            PercentageValues.builder()
+                                    .p50(BigDecimal.ZERO) // p50 - no usage data
+                                    .p90(BigDecimal.ZERO) // p90
+                                    .p99(BigDecimal.ZERO) // p99
+                                    .build()));
 
             // Assert the whole ProjectStats object using TraceAssertions
             TraceAssertions.assertStats(stats.stats(), expectedStats);
@@ -7793,27 +7781,31 @@ class DatasetsResourceTest {
                     new CountValueStat(StatsMapper.TRACE_COUNT, traceCount),
                     new AvgValueStat(StatsMapper.TOTAL_ESTIMATED_COST, 0.0), // No costs in test data
                     new PercentageValueStat(StatsMapper.TOTAL_ESTIMATED_COST,
-                            new PercentageValues(
-                                    BigDecimal.ZERO, // p50 - no cost data
-                                    BigDecimal.ZERO, // p90
-                                    BigDecimal.ZERO)), // p99
+                            PercentageValues.builder()
+                                    .p50(BigDecimal.ZERO) // p50 - no cost data
+                                    .p90(BigDecimal.ZERO) // p90
+                                    .p99(BigDecimal.ZERO) // p99
+                                    .build()),
                     new PercentageValueStat(StatsMapper.DURATION,
-                            new PercentageValues(
-                                    durationPercentiles.get(0), // p50
-                                    durationPercentiles.get(1), // p90
-                                    durationPercentiles.get(2))), // p99
+                            PercentageValues.builder()
+                                    .p50(durationPercentiles.get(0)) // p50
+                                    .p90(durationPercentiles.get(1)) // p90
+                                    .p99(durationPercentiles.get(2)) // p99
+                                    .build()),
                     new AvgValueStat("feedback_scores.%s".formatted(feedbackScoreName),
                             expectedAvgValue.doubleValue()),
                     new PercentageValueStat("feedback_scores.%s".formatted(feedbackScoreName),
-                            new PercentageValues(
-                                    feedbackScorePercentiles.get(0), // p50
-                                    feedbackScorePercentiles.get(1), // p90
-                                    feedbackScorePercentiles.get(2))), // p99
+                            PercentageValues.builder()
+                                    .p50(feedbackScorePercentiles.get(0)) // p50
+                                    .p90(feedbackScorePercentiles.get(1)) // p90
+                                    .p99(feedbackScorePercentiles.get(2)) // p99
+                                    .build()),
                     new PercentageValueStat("usage.total_tokens",
-                            new PercentageValues(
-                                    BigDecimal.ZERO, // p50 - no usage data
-                                    BigDecimal.ZERO, // p90
-                                    BigDecimal.ZERO))); // p99
+                            PercentageValues.builder()
+                                    .p50(BigDecimal.ZERO) // p50 - no usage data
+                                    .p90(BigDecimal.ZERO) // p90
+                                    .p99(BigDecimal.ZERO) // p99
+                                    .build()));
 
             // Assert the whole ProjectStats object using TraceAssertions
             TraceAssertions.assertStats(stats.stats(), expectedStats);

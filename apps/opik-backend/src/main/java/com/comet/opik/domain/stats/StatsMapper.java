@@ -297,7 +297,7 @@ public class StatsMapper {
                             BigDecimal p99 = toBigDecimal(percentilesMap.get("p99"));
 
                             if (p50 != null || p90 != null || p99 != null) {
-                                var percentiles = new PercentageValues(p50, p90, p99);
+                                var percentiles = PercentageValues.builder().p50(p50).p90(p90).p99(p99).build();
                                 statsBuilder.add(new PercentageValueStat(
                                         "%s.%s".formatted(FEEDBACK_SCORE, scoreName),
                                         percentiles));
