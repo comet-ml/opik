@@ -2160,6 +2160,64 @@ class PromptResourceTest {
                             new ErrorMessage(List.of("version.template must not be blank")),
                             ErrorMessage.class));
         }
+
+        @ParameterizedTest
+        @MethodSource
+        @DisplayName("when templateStructure is null, then handle correctly for both new and existing prompts")
+        void when__templateStructureIsNull__thenHandleCorrectly(boolean promptExists) {
+            // This test verifies backwards compatibility for clients that don't send templateStructure
+            // (e.g., TypeScript SDK which doesn't support ChatPrompt yet)
+            var apiKey = UUID.randomUUID().toString();
+            var workspaceName = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var promptName = UUID.randomUUID().toString();
+            UUID existingPromptId = null;
+
+            if (promptExists) {
+                // Create a prompt first with a specific templateStructure
+                var prompt = factory.manufacturePojo(Prompt.class).toBuilder()
+                        .name(promptName)
+                        .lastUpdatedBy(USER)
+                        .createdBy(USER)
+                        .template(null)
+                        .templateStructure(TemplateStructure.TEXT)
+                        .build();
+                existingPromptId = createPrompt(prompt, apiKey, workspaceName);
+            }
+
+            // Create a new version with null templateStructure (simulating SDK behavior)
+            var expectedPromptVersion = factory.manufacturePojo(PromptVersion.class).toBuilder()
+                    .createdBy(USER)
+                    .commit(null)
+                    .id(null)
+                    .build();
+
+            // Pass null for templateStructure - this previously caused NPE for existing prompts
+            // and should default to TEXT for new prompts
+            var request = createPromptVersionRequest(promptName, expectedPromptVersion, null);
+
+            PromptVersion actualPromptVersion = createPromptVersion(request, apiKey, workspaceName);
+
+            // Verify the prompt exists and has correct templateStructure
+            List<Prompt> prompts = getPrompts(promptName, apiKey, workspaceName);
+            assertThat(prompts).hasSize(1);
+
+            Prompt createdPrompt = prompts.getFirst();
+            assertThat(createdPrompt.templateStructure()).isEqualTo(TemplateStructure.TEXT);
+
+            UUID expectedPromptId = promptExists ? existingPromptId : createdPrompt.id();
+            assertPromptVersion(actualPromptVersion, expectedPromptVersion, expectedPromptId);
+        }
+
+        Stream<Arguments> when__templateStructureIsNull__thenHandleCorrectly() {
+            return Stream.of(
+                    arguments(true), // prompt exists - tests NPE fix
+                    arguments(false) // prompt doesn't exist - tests default to TEXT
+            );
+        }
     }
 
     @Nested
