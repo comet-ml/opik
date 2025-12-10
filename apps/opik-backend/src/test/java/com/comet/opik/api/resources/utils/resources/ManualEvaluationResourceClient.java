@@ -17,6 +17,7 @@ public class ManualEvaluationResourceClient {
 
     private static final String TRACES_RESOURCE_PATH = "%s/v1/private/manual-evaluation/traces";
     private static final String THREADS_RESOURCE_PATH = "%s/v1/private/manual-evaluation/threads";
+    private static final String SPANS_RESOURCE_PATH = "%s/v1/private/manual-evaluation/spans";
 
     private final ClientSupport client;
     private final String baseURI;
@@ -70,6 +71,31 @@ public class ManualEvaluationResourceClient {
     public Response callEvaluateThreads(UUID projectId, ManualEvaluationRequest request, String apiKey,
             String workspaceName) {
         return client.target(THREADS_RESOURCE_PATH.formatted(baseURI))
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .post(Entity.json(request));
+    }
+
+    public ManualEvaluationResponse evaluateSpans(UUID projectId, ManualEvaluationRequest request, String apiKey,
+            String workspaceName) {
+        try (var response = evaluateSpans(projectId, request, apiKey, workspaceName, HttpStatus.SC_ACCEPTED)) {
+            return response.readEntity(ManualEvaluationResponse.class);
+        }
+    }
+
+    public Response evaluateSpans(UUID projectId, ManualEvaluationRequest request, String apiKey,
+            String workspaceName, int expectedStatus) {
+        var response = callEvaluateSpans(projectId, request, apiKey, workspaceName);
+
+        assertThat(response.getStatus()).isEqualTo(expectedStatus);
+
+        return response;
+    }
+
+    public Response callEvaluateSpans(UUID projectId, ManualEvaluationRequest request, String apiKey,
+            String workspaceName) {
+        return client.target(SPANS_RESOURCE_PATH.formatted(baseURI))
                 .request()
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .header(WORKSPACE_HEADER, workspaceName)
