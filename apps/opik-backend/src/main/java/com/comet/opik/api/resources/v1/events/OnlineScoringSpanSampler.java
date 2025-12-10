@@ -4,11 +4,13 @@ import com.comet.opik.api.Span;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluator;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorLlmAsJudge;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorSpanLlmAsJudge;
+import com.comet.opik.api.evaluators.AutomationRuleEvaluatorSpanUserDefinedMetricPython;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorTraceThreadLlmAsJudge;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorType;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorUserDefinedMetricPython;
 import com.comet.opik.api.events.SpanToScoreLlmAsJudge;
+import com.comet.opik.api.events.SpanToScoreUserDefinedMetricPython;
 import com.comet.opik.api.events.SpansCreated;
 import com.comet.opik.api.filter.SpanFilter;
 import com.comet.opik.domain.evaluators.AutomationRuleEvaluatorService;
@@ -28,6 +30,7 @@ import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
 import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -73,10 +76,6 @@ public class OnlineScoringSpanSampler {
     @Subscribe
     public void onSpansCreated(SpansCreated spansBatch) {
         // Check if feature is enabled before processing spans
-        if (!serviceTogglesConfig.isSpanLlmAsJudgeEnabled()) {
-            log.debug("Span LLM as Judge evaluator is disabled. Skipping span sampling.");
-            return;
-        }
 
         var spansByProject = spansBatch.spans().stream().collect(Collectors.groupingBy(Span::projectId));
 
@@ -92,9 +91,18 @@ public class OnlineScoringSpanSampler {
             log.info("Fetching evaluators for '{}' spans, project '{}' on workspace '{}'",
                     spans.size(), projectId, spansBatch.workspaceId());
 
-            // Fetch only span-level evaluators by filtering at database level
-            List<? extends AutomationRuleEvaluator<?, ?>> evaluators = ruleEvaluatorService.findAll(
-                    projectId, spansBatch.workspaceId(), AutomationRuleEvaluatorType.SPAN_LLM_AS_JUDGE);
+            // Fetch all span-level evaluators by filtering at database level
+            // Only fetch evaluators if their respective feature toggles are enabled
+            List<AutomationRuleEvaluator<?, ?>> evaluators = new ArrayList<>();
+            if (serviceTogglesConfig.isSpanLlmAsJudgeEnabled()) {
+                evaluators.addAll(ruleEvaluatorService.findAll(
+                        projectId, spansBatch.workspaceId(), AutomationRuleEvaluatorType.SPAN_LLM_AS_JUDGE));
+            }
+            if (serviceTogglesConfig.isSpanUserDefinedMetricPythonEnabled()) {
+                evaluators.addAll(ruleEvaluatorService.findAll(
+                        projectId, spansBatch.workspaceId(),
+                        AutomationRuleEvaluatorType.SPAN_USER_DEFINED_METRIC_PYTHON));
+            }
 
             if (evaluators.isEmpty()) {
                 log.debug("No span-level evaluators found for project '{}' on workspace '{}'",
@@ -106,6 +114,13 @@ public class OnlineScoringSpanSampler {
             evaluators.parallelStream().forEach(evaluator -> {
                 switch (evaluator) {
                     case AutomationRuleEvaluatorSpanLlmAsJudge rule -> {
+                        // Toggle is already checked before fetching evaluators, so this should not happen
+                        // but keeping as a safety check
+                        if (!serviceTogglesConfig.isSpanLlmAsJudgeEnabled()) {
+                            log.warn(
+                                    "Span LLM as Judge evaluator is disabled. This should not happen as evaluators are filtered before fetching.");
+                            return;
+                        }
                         // samples spans for this rule
                         var samples = spans.stream()
                                 .filter(span -> shouldSampleSpan(rule, spansBatch.workspaceId(), span))
@@ -126,6 +141,26 @@ public class OnlineScoringSpanSampler {
                     case AutomationRuleEvaluatorTraceThreadLlmAsJudge rule -> logUnsupportedEvaluatorType(rule);
                     case AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython rule ->
                         logUnsupportedEvaluatorType(rule);
+                    case AutomationRuleEvaluatorSpanUserDefinedMetricPython rule -> {
+                        // Toggle is already checked before fetching evaluators, so this should not happen
+                        // but keeping as a safety check
+                        if (!serviceTogglesConfig.isSpanUserDefinedMetricPythonEnabled()) {
+                            log.warn(
+                                    "Span Python evaluator is disabled. This should not happen as evaluators are filtered before fetching.");
+                            return;
+                        }
+                        var samples = spans.stream()
+                                .filter(span -> shouldSampleSpan(rule, spansBatch.workspaceId(), span))
+                                .toList();
+                        var messages = samples.stream()
+                                .map(span -> toUserDefinedMetricPythonMessage(spansBatch, rule, span))
+                                .toList();
+                        if (!messages.isEmpty()) {
+                            logSampledSpan(spansBatch, evaluator, messages);
+                            onlineScorePublisher.enqueueMessage(messages,
+                                    AutomationRuleEvaluatorType.SPAN_USER_DEFINED_METRIC_PYTHON);
+                        }
+                    }
                 }
             });
         });
@@ -181,6 +216,19 @@ public class OnlineScoringSpanSampler {
                 .ruleId(evaluator.getId())
                 .ruleName(evaluator.getName())
                 .llmAsJudgeCode(evaluator.getCode())
+                .workspaceId(spansBatch.workspaceId())
+                .userName(spansBatch.userName())
+                .build();
+    }
+
+    private SpanToScoreUserDefinedMetricPython toUserDefinedMetricPythonMessage(SpansCreated spansBatch,
+            AutomationRuleEvaluatorSpanUserDefinedMetricPython evaluator,
+            Span span) {
+        return SpanToScoreUserDefinedMetricPython.builder()
+                .span(span)
+                .ruleId(evaluator.getId())
+                .ruleName(evaluator.getName())
+                .code(evaluator.getCode())
                 .workspaceId(spansBatch.workspaceId())
                 .userName(spansBatch.userName())
                 .build();

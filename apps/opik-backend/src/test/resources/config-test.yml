@@ -307,6 +307,16 @@ onlineScoring:
       claimIntervalRatio: # Empty - will use global default
       pendingMessageDuration: # Empty - will use global default
       maxRetries: # Empty - will use global default
+    - scorer: span_user_defined_metric_python
+      streamName: stream_scoring_span_user_defined_metric_python
+      codec: java
+      # Optional per stream configuration (falls back to global if not specified)
+      poolingInterval: # Empty - will use global default
+      longPollingDuration: # Empty - will use global default
+      consumerBatchSize: # Empty - will use global default
+      claimIntervalRatio: # Empty - will use global default
+      pendingMessageDuration: # Empty - will use global default
+      maxRetries: # Empty - will use global default
 
 # LLM providers client configuration
 llmProviderClient:
@@ -407,6 +417,9 @@ serviceToggles:
   # Default: true
   # Description: Whether or not to enable the span LLM as Judge evaluator
   spanLlmAsJudgeEnabled: "false"
+  # Default: false
+  # Description: Whether or not to enable the span user-defined metric Python evaluator
+  spanUserDefinedMetricPythonEnabled: "false"
   # Default: false
   # Description: Whether or not OpikAI feature is enabled
   opikAIEnabled: "false"

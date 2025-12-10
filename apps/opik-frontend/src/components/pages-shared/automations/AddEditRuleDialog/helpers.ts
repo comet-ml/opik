@@ -16,6 +16,8 @@ export const getUIRuleType = (ruleType: EVALUATORS_RULE_TYPE) =>
     [EVALUATORS_RULE_TYPE.thread_python_code]:
       UI_EVALUATORS_RULE_TYPE.python_code,
     [EVALUATORS_RULE_TYPE.span_llm_judge]: UI_EVALUATORS_RULE_TYPE.llm_judge,
+    [EVALUATORS_RULE_TYPE.span_python_code]:
+      UI_EVALUATORS_RULE_TYPE.python_code,
   })[ruleType];
 
 export const getUIRuleScope = (ruleType: EVALUATORS_RULE_TYPE) =>
@@ -25,6 +27,7 @@ export const getUIRuleScope = (ruleType: EVALUATORS_RULE_TYPE) =>
     [EVALUATORS_RULE_TYPE.thread_llm_judge]: EVALUATORS_RULE_SCOPE.thread,
     [EVALUATORS_RULE_TYPE.thread_python_code]: EVALUATORS_RULE_SCOPE.thread,
     [EVALUATORS_RULE_TYPE.span_llm_judge]: EVALUATORS_RULE_SCOPE.span,
+    [EVALUATORS_RULE_TYPE.span_python_code]: EVALUATORS_RULE_SCOPE.span,
   })[ruleType];
 
 export const getBackendRuleType = (
@@ -44,9 +47,8 @@ export const getBackendRuleType = (
     },
     [EVALUATORS_RULE_SCOPE.span]: {
       [UI_EVALUATORS_RULE_TYPE.llm_judge]: EVALUATORS_RULE_TYPE.span_llm_judge,
-      // Python code is not supported for span scope
       [UI_EVALUATORS_RULE_TYPE.python_code]:
-        EVALUATORS_RULE_TYPE.span_llm_judge,
+        EVALUATORS_RULE_TYPE.span_python_code,
     },
   })[scope][uiType];
 

@@ -17,6 +17,7 @@ export enum EXPLAINER_ID {
   whats_that_prompt_select = "whats_that_prompt_select",
   i_added_edited_a_new_online_evaluation_rule_now_what = "i_added_edited_a_new_online_evaluation_rule_now_what",
   i_added_edited_a_new_online_evaluation_thread_level_rule_now_what = "i_added_edited_a_new_online_evaluation_thread_level_rule_now_what",
+  i_added_edited_a_new_online_evaluation_span_level_rule_now_what = "i_added_edited_a_new_online_evaluation_span_level_rule_now_what",
   what_are_these_elements_in_the_tree = "what_are_these_elements_in_the_tree",
   what_is_human_review = "what_is_human_review",
   whats_an_experiment = "whats_an_experiment",
@@ -192,6 +193,13 @@ export const EXPLAINERS_MAP: Record<EXPLAINER_ID, Explainer> = {
       title: "Evaluation rule set",
       description:
         "All new threads will now be automatically scored using this rule. You can view the results in the Threads table, the Metrics tab, and in each thread's detail view.",
+    },
+  [EXPLAINER_ID.i_added_edited_a_new_online_evaluation_span_level_rule_now_what]:
+    {
+      id: EXPLAINER_ID.i_added_edited_a_new_online_evaluation_span_level_rule_now_what,
+      title: "Evaluation rule set",
+      description:
+        "All new spans will now be automatically scored using this rule. You can view the results in the Spans table, the Metrics tab, and in each span's detail view.",
     },
   [EXPLAINER_ID.what_are_these_elements_in_the_tree]: {
     id: EXPLAINER_ID.what_are_these_elements_in_the_tree,

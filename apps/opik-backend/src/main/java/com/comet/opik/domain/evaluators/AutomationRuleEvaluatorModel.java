@@ -8,7 +8,8 @@ public sealed interface AutomationRuleEvaluatorModel<T> extends AutomationRuleMo
         LlmAsJudgeAutomationRuleEvaluatorModel, TraceThreadLlmAsJudgeAutomationRuleEvaluatorModel,
         TraceThreadUserDefinedMetricPythonAutomationRuleEvaluatorModel,
         UserDefinedMetricPythonAutomationRuleEvaluatorModel,
-        SpanLlmAsJudgeAutomationRuleEvaluatorModel {
+        SpanLlmAsJudgeAutomationRuleEvaluatorModel,
+        SpanUserDefinedMetricPythonAutomationRuleEvaluatorModel {
 
     @Json
     T code();
