@@ -54,6 +54,8 @@ class AttachmentsExtractionProcessor(message_processors.BaseMessageProcessor):
         self.messages_streamer = messages_streamer
         self._url_override = url_override
 
+        self.attachment_attributes = ["input", "output", "metadata"]
+
     def is_active(self) -> bool:
         return self._is_active
 
@@ -86,35 +88,16 @@ class AttachmentsExtractionProcessor(message_processors.BaseMessageProcessor):
 
         attachments = []
 
-        if hasattr(original, "input") and original.input:
-            results = self.extractor.extract_and_replace(
-                data=original.input,
-                entity_type=entity_details.entity_type,
-                entity_id=entity_details.entity_id,
-                project_name=entity_details.project_name,
-                context="input",
-            )
-            attachments.extend(results)
-
-        if hasattr(original, "output") and original.output:
-            results = self.extractor.extract_and_replace(
-                data=original.output,
-                entity_type=entity_details.entity_type,
-                entity_id=entity_details.entity_id,
-                project_name=entity_details.project_name,
-                context="output",
-            )
-            attachments.extend(results)
-
-        if hasattr(original, "metadata") and original.metadata:
-            results = self.extractor.extract_and_replace(
-                data=original.metadata,
-                entity_type=entity_details.entity_type,
-                entity_id=entity_details.entity_id,
-                project_name=entity_details.project_name,
-                context="metadata",
-            )
-            attachments.extend(results)
+        for attribute in self.attachment_attributes:
+            if getattr(original, attribute, None):
+                results = self.extractor.extract_and_replace(
+                    data=getattr(original, attribute),
+                    entity_type=entity_details.entity_type,
+                    entity_id=entity_details.entity_id,
+                    project_name=entity_details.project_name,
+                    context=attribute,
+                )
+                attachments.extend(results)
 
         if len(attachments) > 0:
             LOGGER.debug(
