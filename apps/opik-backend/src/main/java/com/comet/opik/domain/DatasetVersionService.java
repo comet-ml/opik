@@ -136,20 +136,6 @@ public interface DatasetVersionService {
     UUID resolveVersionId(String workspaceId, UUID datasetId, String hashOrTag);
 
     /**
-     * Resolves a version identifier (hash or tag) to a version ID with explicit workspace ID.
-     * <p>
-     * This method tries to find a version by hash first, then by tag if not found by hash.
-     * This variant is useful when calling from reactive contexts where RequestContext is not available.
-     *
-     * @param datasetId the unique identifier of the dataset
-     * @param hashOrTag either a version hash or a tag name
-     * @param workspaceId the workspace ID
-     * @return the UUID of the matching version
-     * @throws NotFoundException if no version is found with the given hash or tag
-     */
-    UUID resolveVersionId(UUID datasetId, String hashOrTag, String workspaceId);
-
-    /**
      * Gets the latest version of a dataset with explicit workspace ID.
      * <p>
      * This variant is useful when calling from reactive contexts where RequestContext is not available.
@@ -448,11 +434,6 @@ class DatasetVersionServiceImpl implements DatasetVersionService {
 
             throw new NotFoundException(ERROR_VERSION_NOT_FOUND.formatted(hashOrTag, datasetId));
         });
-    }
-
-    @Override
-    public UUID resolveVersionId(@NonNull UUID datasetId, @NonNull String hashOrTag, @NonNull String workspaceId) {
-        return resolveVersionId(workspaceId, datasetId, hashOrTag);
     }
 
     @Override
