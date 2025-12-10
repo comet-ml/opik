@@ -8,6 +8,7 @@ import {
   EVALUATORS_RULE_SCOPE,
   PythonCodeDetailsThreadForm,
   PythonCodeDetailsTraceForm,
+  PythonCodeDetailsSpanForm,
 } from "@/types/automations";
 import { PROVIDER_MODEL_TYPE } from "@/types/providers";
 
@@ -788,4 +789,27 @@ export const DEFAULT_PYTHON_CODE_THREAD_DATA: PythonCodeDetailsThreadForm = {
     "            name=self.name,\n" +
     '            reason="Optional reason for the score"\n' +
     "        )",
+};
+
+export const DEFAULT_PYTHON_CODE_SPAN_DATA: PythonCodeDetailsSpanForm = {
+  metric:
+    "from typing import Any\n" +
+    "from opik.evaluation.metrics import base_metric, score_result\n" +
+    "\n" +
+    "class MyCustomMetric(base_metric.BaseMetric):\n" +
+    '    def __init__(self, name: str = "my_custom_metric"):\n' +
+    "        self.name = name\n" +
+    "\n" +
+    "    def score(self, input: str, output: str, **ignored_kwargs: Any):\n" +
+    "        # Add you logic here\n" +
+    "\n" +
+    "        return score_result.ScoreResult(\n" +
+    "            value=0,\n" +
+    "            name=self.name,\n" +
+    '            reason="Optional reason for the score"\n' +
+    "        )",
+  arguments: {
+    input: "",
+    output: "",
+  },
 };

@@ -32,6 +32,7 @@ import java.util.UUID;
         @JsonSubTypes.Type(value = AutomationRuleEvaluatorTraceThreadLlmAsJudge.class, name = AutomationRuleEvaluatorType.Constants.TRACE_THREAD_LLM_AS_JUDGE),
         @JsonSubTypes.Type(value = AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython.class, name = AutomationRuleEvaluatorType.Constants.TRACE_THREAD_USER_DEFINED_METRIC_PYTHON),
         @JsonSubTypes.Type(value = AutomationRuleEvaluatorSpanLlmAsJudge.class, name = AutomationRuleEvaluatorType.Constants.SPAN_LLM_AS_JUDGE),
+        @JsonSubTypes.Type(value = AutomationRuleEvaluatorSpanUserDefinedMetricPython.class, name = AutomationRuleEvaluatorType.Constants.SPAN_USER_DEFINED_METRIC_PYTHON),
 })
 @Schema(name = "AutomationRuleEvaluator", discriminatorProperty = "type", discriminatorMapping = {
         @DiscriminatorMapping(value = AutomationRuleEvaluatorType.Constants.LLM_AS_JUDGE, schema = AutomationRuleEvaluatorLlmAsJudge.class),
@@ -39,6 +40,7 @@ import java.util.UUID;
         @DiscriminatorMapping(value = AutomationRuleEvaluatorType.Constants.TRACE_THREAD_LLM_AS_JUDGE, schema = AutomationRuleEvaluatorTraceThreadLlmAsJudge.class),
         @DiscriminatorMapping(value = AutomationRuleEvaluatorType.Constants.TRACE_THREAD_USER_DEFINED_METRIC_PYTHON, schema = AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython.class),
         @DiscriminatorMapping(value = AutomationRuleEvaluatorType.Constants.SPAN_LLM_AS_JUDGE, schema = AutomationRuleEvaluatorSpanLlmAsJudge.class),
+        @DiscriminatorMapping(value = AutomationRuleEvaluatorType.Constants.SPAN_USER_DEFINED_METRIC_PYTHON, schema = AutomationRuleEvaluatorSpanUserDefinedMetricPython.class),
 })
 @AllArgsConstructor
 @JsonIgnoreProperties(ignoreUnknown = true)
@@ -46,7 +48,7 @@ import java.util.UUID;
 public abstract sealed class AutomationRuleEvaluator<T, E extends Filter> implements AutomationRule
         permits AutomationRuleEvaluatorLlmAsJudge, AutomationRuleEvaluatorUserDefinedMetricPython,
         AutomationRuleEvaluatorTraceThreadLlmAsJudge, AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython,
-        AutomationRuleEvaluatorSpanLlmAsJudge {
+        AutomationRuleEvaluatorSpanLlmAsJudge, AutomationRuleEvaluatorSpanUserDefinedMetricPython {
 
     @JsonView({View.Public.class})
     @Schema(accessMode = Schema.AccessMode.READ_ONLY)
