@@ -186,8 +186,8 @@ const RunEvaluationDialog: React.FunctionComponent<
             No online evaluation rules assigned to this project
           </p>
           <p className="comet-body-s text-center text-muted-foreground">
-            Create a new rule, or assign an existing rule from the Online
-            Evaluation page.
+            Create a new rule, or assign to an existing rule in the Online
+            evaluation page
           </p>
           <Button
             variant="link"
