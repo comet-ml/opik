@@ -8,6 +8,7 @@ from .aggregation_data import AggregationData
 
 
 class GroupContentWithAggregations(UniversalBaseModel):
+    label: typing.Optional[str] = None
     aggregations: typing.Optional[AggregationData] = None
 
     if IS_PYDANTIC_V2:

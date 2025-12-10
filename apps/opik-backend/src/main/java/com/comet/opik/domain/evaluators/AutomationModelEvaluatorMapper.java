@@ -2,6 +2,7 @@ package com.comet.opik.domain.evaluators;
 
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorLlmAsJudge;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorSpanLlmAsJudge;
+import com.comet.opik.api.evaluators.AutomationRuleEvaluatorSpanUserDefinedMetricPython;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorTraceThreadLlmAsJudge;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorUserDefinedMetricPython;
@@ -20,6 +21,7 @@ import org.mapstruct.Mapping;
 import org.mapstruct.factory.Mappers;
 
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 @Mapper
@@ -48,6 +50,11 @@ interface AutomationModelEvaluatorMapper {
     @Mapping(target = "filters", expression = "java(mapFilters(model))")
     AutomationRuleEvaluatorSpanLlmAsJudge map(SpanLlmAsJudgeAutomationRuleEvaluatorModel model);
 
+    @Mapping(target = "code", expression = "java(map(model.code()))")
+    @Mapping(target = "filters", expression = "java(mapFilters(model))")
+    AutomationRuleEvaluatorSpanUserDefinedMetricPython map(
+            SpanUserDefinedMetricPythonAutomationRuleEvaluatorModel model);
+
     @Mapping(target = "filters", expression = "java(map(dto.getFilters()))")
     LlmAsJudgeAutomationRuleEvaluatorModel map(AutomationRuleEvaluatorLlmAsJudge dto);
 
@@ -64,6 +71,9 @@ interface AutomationModelEvaluatorMapper {
     @Mapping(target = "filters", expression = "java(map(dto.getFilters()))")
     SpanLlmAsJudgeAutomationRuleEvaluatorModel map(AutomationRuleEvaluatorSpanLlmAsJudge dto);
 
+    @Mapping(target = "filters", expression = "java(map(dto.getFilters()))")
+    SpanUserDefinedMetricPythonAutomationRuleEvaluatorModel map(AutomationRuleEvaluatorSpanUserDefinedMetricPython dto);
+
     AutomationRuleEvaluatorLlmAsJudge.LlmAsJudgeCode map(LlmAsJudgeAutomationRuleEvaluatorModel.LlmAsJudgeCode detail);
 
     AutomationRuleEvaluatorTraceThreadLlmAsJudge.TraceThreadLlmAsJudgeCode map(
@@ -78,6 +88,9 @@ interface AutomationModelEvaluatorMapper {
     AutomationRuleEvaluatorSpanLlmAsJudge.SpanLlmAsJudgeCode map(
             SpanLlmAsJudgeAutomationRuleEvaluatorModel.SpanLlmAsJudgeCode code);
 
+    AutomationRuleEvaluatorSpanUserDefinedMetricPython.SpanUserDefinedMetricPythonCode map(
+            SpanUserDefinedMetricPythonAutomationRuleEvaluatorModel.SpanUserDefinedMetricPythonCode code);
+
     LlmAsJudgeAutomationRuleEvaluatorModel.LlmAsJudgeCode map(AutomationRuleEvaluatorLlmAsJudge.LlmAsJudgeCode code);
 
     TraceThreadLlmAsJudgeAutomationRuleEvaluatorModel.TraceThreadLlmAsJudgeCode map(
@@ -91,6 +104,9 @@ interface AutomationModelEvaluatorMapper {
 
     SpanLlmAsJudgeAutomationRuleEvaluatorModel.SpanLlmAsJudgeCode map(
             AutomationRuleEvaluatorSpanLlmAsJudge.SpanLlmAsJudgeCode code);
+
+    SpanUserDefinedMetricPythonAutomationRuleEvaluatorModel.SpanUserDefinedMetricPythonCode map(
+            AutomationRuleEvaluatorSpanUserDefinedMetricPython.SpanUserDefinedMetricPythonCode code);
 
     default <T extends Filter> List<T> mapFilters(AutomationRuleEvaluatorModel<?> model) {
         if (StringUtils.isBlank(model.filters())) {
@@ -107,6 +123,8 @@ interface AutomationModelEvaluatorMapper {
             case TraceThreadUserDefinedMetricPythonAutomationRuleEvaluatorModel ignored ->
                 (List<T>) JsonUtils.readValue(model.filters(), TraceThreadFilter.LIST_TYPE_REFERENCE);
             case SpanLlmAsJudgeAutomationRuleEvaluatorModel ignored ->
+                (List<T>) JsonUtils.readValue(model.filters(), SpanFilter.LIST_TYPE_REFERENCE);
+            case SpanUserDefinedMetricPythonAutomationRuleEvaluatorModel ignored ->
                 (List<T>) JsonUtils.readValue(model.filters(), SpanFilter.LIST_TYPE_REFERENCE);
         };
     }
@@ -210,7 +228,7 @@ interface AutomationModelEvaluatorMapper {
             return content;
         }
 
-        if (obj instanceof java.util.Map<?, ?> map) {
+        if (obj instanceof Map<?, ?> map) {
             return LlmAsJudgeMessageContent.builder()
                     .type((String) map.get("type"))
                     .text((String) map.get("text"))
@@ -219,6 +237,9 @@ interface AutomationModelEvaluatorMapper {
                             : null)
                     .videoUrl(map.get("video_url") != null
                             ? convertToVideoUrl(map.get("video_url"))
+                            : null)
+                    .audioUrl(map.get("audio_url") != null
+                            ? convertToAudioUrl(map.get("audio_url"))
                             : null)
                     .build();
         }
@@ -231,7 +252,7 @@ interface AutomationModelEvaluatorMapper {
             return imageUrl;
         }
 
-        if (obj instanceof java.util.Map<?, ?> map) {
+        if (obj instanceof Map<?, ?> map) {
             return LlmAsJudgeMessageContent.ImageUrl.builder()
                     .url((String) map.get("url"))
                     .detail((String) map.get("detail"))
@@ -246,13 +267,27 @@ interface AutomationModelEvaluatorMapper {
             return videoUrl;
         }
 
-        if (obj instanceof java.util.Map<?, ?> map) {
+        if (obj instanceof Map<?, ?> map) {
             return LlmAsJudgeMessageContent.VideoUrl.builder()
                     .url((String) map.get("url"))
                     .build();
         }
 
         throw new IllegalStateException("Unexpected video_url type: " + obj.getClass());
+    }
+
+    private LlmAsJudgeMessageContent.AudioUrl convertToAudioUrl(Object obj) {
+        if (obj instanceof LlmAsJudgeMessageContent.AudioUrl audioUrl) {
+            return audioUrl;
+        }
+
+        if (obj instanceof Map<?, ?> map) {
+            return LlmAsJudgeMessageContent.AudioUrl.builder()
+                    .url((String) map.get("url"))
+                    .build();
+        }
+
+        throw new IllegalStateException("Unexpected audio_url type: " + obj.getClass());
     }
 
     /**

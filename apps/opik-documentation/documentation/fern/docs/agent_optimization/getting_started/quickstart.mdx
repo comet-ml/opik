@@ -56,10 +56,10 @@ prompt = ChatPrompt(
         {"role": "system", "content": "You are a precise assistant."},
         {"role": "user", "content": "{question}"},
     ],
-    model="openai/gpt-4o-mini"
+    model="openai/gpt-4o-mini"  # The model your prompt runs on
 )
 
-optimizer = MetaPromptOptimizer(model="openai/gpt-4o")
+optimizer = MetaPromptOptimizer(model="openai/gpt-4o")  # The model that improves your prompt
 result = optimizer.optimize_prompt(
     prompt=prompt,
     dataset=dataset,
@@ -70,6 +70,10 @@ result = optimizer.optimize_prompt(
 
 result.display()
 ```
+
+<Tip>
+  **Using a different LLM provider?** The optimizer supports OpenAI, Anthropic, Gemini, Azure, Ollama, and 100+ other providers via LiteLLM. See the [Configure LLM Providers](/agent_optimization/optimization/configure_models) guide for setup instructions.
+</Tip>
 
 ## 4. Inspect results
 

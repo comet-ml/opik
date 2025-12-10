@@ -2,6 +2,8 @@ package com.comet.opik.infrastructure.llm.antropic;
 
 import com.comet.opik.api.ChunkedResponseHandler;
 import com.comet.opik.domain.llm.LlmProviderService;
+import com.comet.opik.infrastructure.llm.LoggingChunkedResponseHandler;
+import com.comet.opik.infrastructure.llm.StreamingResponseLogger;
 import dev.langchain4j.exception.AuthenticationException;
 import dev.langchain4j.exception.InternalServerException;
 import dev.langchain4j.exception.InvalidRequestException;
@@ -46,8 +48,18 @@ class LlmProviderAnthropic implements LlmProviderService {
             @NonNull Runnable handleClose,
             @NonNull Consumer<Throwable> handleError) {
         validateRequest(request);
+
+        // Create a simple summary of the request for logging
+        String requestSummary = String.format("model=%s, messages=%d",
+                request.model(),
+                request.messages() != null ? request.messages().size() : 0);
+
+        // Create dependencies following IoC principle
+        var delegate = new ChunkedResponseHandler(handleMessage, handleClose, handleError, request.model());
+        var logger = new StreamingResponseLogger(requestSummary, request.model());
+
         anthropicClient.createMessage(LlmProviderAnthropicMapper.INSTANCE.toCreateMessageRequest(request),
-                new ChunkedResponseHandler(handleMessage, handleClose, handleError, request.model()));
+                new LoggingChunkedResponseHandler(delegate, logger));
     }
 
     @Override

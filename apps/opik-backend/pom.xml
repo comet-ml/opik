@@ -28,11 +28,11 @@
         <google-protobuf.version>4.33.1</google-protobuf.version>
         <org.mapstruct.version>1.6.3</org.mapstruct.version>
         <testcontainers.version>2.0.2</testcontainers.version>
-        <uuid.java.generator.version>5.1.0</uuid.java.generator.version>
+        <uuid.java.generator.version>5.2.0</uuid.java.generator.version>
         <wiremock.version>3.13.1</wiremock.version>
         <redisson.version>3.52.0</redisson.version>
         <opentelmetry.version>2.22.0</opentelmetry.version>
-        <aws.java.sdk.version>2.39.2</aws.java.sdk.version>
+        <aws.java.sdk.version>2.40.3</aws.java.sdk.version>
         <json-path.version>2.10.0</json-path.version>
         <mainClass>com.comet.opik.OpikApplication</mainClass>
     </properties>
@@ -312,6 +312,11 @@
             <groupId>org.apache.tika</groupId>
             <artifactId>tika-core</artifactId>
             <version>3.2.0</version>
+        </dependency>
+        <dependency>
+            <groupId>io.vavr</groupId>
+            <artifactId>vavr</artifactId>
+            <version>0.10.7</version>
         </dependency>
 
         <!-- Test -->

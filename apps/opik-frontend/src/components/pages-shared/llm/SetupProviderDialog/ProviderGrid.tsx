@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useMemo } from "react";
 import { Label } from "@/components/ui/label";
 import { PROVIDER_TYPE } from "@/types/providers";
 import { PROVIDERS_OPTIONS } from "@/constants/providers";
@@ -13,11 +13,17 @@ const ProviderGrid: React.FC<ProviderGridProps> = ({
   selectedProvider,
   onSelectProvider,
 }) => {
+  // Filter out read-only providers - they are system-managed and users don't configure them
+  const configurableProviders = useMemo(
+    () => PROVIDERS_OPTIONS.filter((provider) => !provider.readOnly),
+    [],
+  );
+
   return (
     <div className="flex flex-col gap-2">
       <Label>Provider</Label>
       <div className="grid grid-cols-3 gap-3">
-        {PROVIDERS_OPTIONS.map((provider) => {
+        {configurableProviders.map((provider) => {
           const Icon = provider.icon;
           const isSelected = selectedProvider === provider.value;
 

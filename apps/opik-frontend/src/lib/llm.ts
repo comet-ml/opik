@@ -1,4 +1,5 @@
 import {
+  AudioPart,
   ImagePart,
   VideoPart,
   LLM_MESSAGE_ROLE,
@@ -61,6 +62,18 @@ export const getVideosFromMessageContent = (
     .map((c) => c.video_url.url);
 };
 
+export const getAudiosFromMessageContent = (
+  content: MessageContent,
+): string[] => {
+  if (typeof content === "string") {
+    return [];
+  }
+
+  return content
+    .filter((c): c is AudioPart => c.type === "audio_url")
+    .map((c) => c.audio_url.url);
+};
+
 export const hasImagesInContent = (content: MessageContent): boolean => {
   if (typeof content === "string") {
     return false;
@@ -77,14 +90,22 @@ export const isMediaAllowedForRole = (
 
 export const hasVideosInContent = (
   content: MessageContent,
-): content is Array<TextPart | ImagePart | VideoPart> => {
+): content is Array<TextPart | ImagePart | VideoPart | AudioPart> => {
   if (typeof content === "string") return false;
 
   return content.some((c): c is VideoPart => c.type === "video_url");
 };
 
+export const hasAudiosInContent = (
+  content: MessageContent,
+): content is Array<TextPart | ImagePart | VideoPart | AudioPart> => {
+  if (typeof content === "string") return false;
+
+  return content.some((c): c is AudioPart => c.type === "audio_url");
+};
+
 /**
- * Get all template strings from message content (text, image URLs, and video URLs)
+ * Get all template strings from message content (text, image URLs, video URLs, and audio URLs)
  * Used for extracting mustache variables from all parts of a message
  */
 export const getAllTemplateStringsFromContent = (
@@ -99,19 +120,22 @@ export const getAllTemplateStringsFromContent = (
       return part.text;
     } else if (part.type === "image_url") {
       return part.image_url.url;
-    } else {
+    } else if (part.type === "video_url") {
       return part.video_url.url;
+    } else {
+      return part.audio_url.url;
     }
   });
 };
 
 export const parseLLMMessageContent = (
   content: MessageContent,
-): { text: string; images: string[]; videos: string[] } => {
+): { text: string; images: string[]; videos: string[]; audios: string[] } => {
   return {
     text: getTextFromMessageContent(content),
     images: getImagesFromMessageContent(content),
     videos: getVideosFromMessageContent(content),
+    audios: getAudiosFromMessageContent(content),
   };
 };
 
