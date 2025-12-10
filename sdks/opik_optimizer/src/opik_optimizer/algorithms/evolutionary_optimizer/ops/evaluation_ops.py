@@ -58,9 +58,6 @@ def evaluate_bundle(
             model_parameters=metadata.get("model_kwargs"),
         )
 
-    # Use first prompt as reference for experiment config (arbitrary choice)
-    reference_prompt = list(prompts_bundle.values())[0]
-
     configuration_updates = helpers.drop_none(
         {
             "n_samples_for_eval": (
@@ -82,7 +79,7 @@ def evaluate_bundle(
     )
 
     experiment_config = optimizer._prepare_experiment_config(
-        prompt=reference_prompt,
+        prompt=prompts_bundle,
         dataset=dataset,
         metric=metric,
         agent=optimizer.agent,
