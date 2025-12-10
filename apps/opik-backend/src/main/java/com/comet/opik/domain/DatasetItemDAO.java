@@ -457,86 +457,20 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
      *  }
      */
     private static final String SELECT_DATASET_ITEMS_WITH_EXPERIMENT_ITEMS = """
-            WITH experiments_with_versions AS (
+            WITH experiment_items_scope as (
                 SELECT
-                    id AS experiment_id,
-                    dataset_version_id
-                FROM experiments
+                    *
+                FROM experiment_items
                 WHERE workspace_id = :workspace_id
-                AND id IN :experimentIds
-                ORDER BY (workspace_id, dataset_id, id) DESC, last_updated_at DESC
-                LIMIT 1 BY id
-            ), experiment_items_scope as (
-                SELECT
-                    ei.id,
-                    ei.experiment_id,
-                    ei.dataset_item_id,
-                    ei.trace_id,
-                    ei.workspace_id,
-                    ei.created_at,
-                    ei.last_updated_at,
-                    ei.created_by,
-                    ei.last_updated_by,
-                    e.dataset_version_id
-                FROM experiment_items ei
-                INNER JOIN experiments_with_versions e ON ei.experiment_id = e.experiment_id
-                WHERE ei.workspace_id = :workspace_id
-                AND ei.experiment_id IN :experimentIds
-                ORDER BY (ei.workspace_id, ei.experiment_id, ei.dataset_item_id, ei.trace_id, ei.id) DESC, ei.last_updated_at DESC
-            	LIMIT 1 BY ei.id
-            ), dataset_items_from_draft AS (
-            	SELECT
-            	    di.id,
-            	    di.dataset_id,
-            	    di.data,
-            	    di.metadata,
-            	    di.source,
-            	    di.trace_id,
-            	    di.span_id,
-            	    di.tags,
-            	    di.created_at,
-            	    di.last_updated_at,
-            	    di.created_by,
-            	    di.last_updated_by
-            	FROM dataset_items di
-            	WHERE di.workspace_id = :workspace_id
-            	AND di.id IN (
-            	    SELECT ei.dataset_item_id
-            	    FROM experiment_items_scope ei
-            	    WHERE ei.dataset_version_id = ''
-            	)
-            	ORDER BY di.id DESC, di.last_updated_at DESC
-            	LIMIT 1 BY di.id
-            ), dataset_items_from_versions AS (
-            	SELECT
-            	    div.dataset_item_id AS id,
-            	    div.dataset_id,
-            	    div.data,
-            	    div.metadata,
-            	    div.source,
-            	    div.trace_id,
-            	    div.span_id,
-            	    div.tags,
-            	    div.item_created_at AS created_at,
-            	    div.item_last_updated_at AS last_updated_at,
-            	    div.item_created_by AS created_by,
-            	    div.item_last_updated_by AS last_updated_by
-            	FROM dataset_item_versions div
-            	INNER JOIN (
-            	    SELECT DISTINCT
-            	        ei.dataset_item_id,
-            	        ei.dataset_version_id
-            	    FROM experiment_items_scope ei
-            	    WHERE ei.dataset_version_id != ''
-            	) ei_with_version ON div.dataset_item_id = ei_with_version.dataset_item_id
-            	    AND div.dataset_version_id = ei_with_version.dataset_version_id
-            	WHERE div.workspace_id = :workspace_id
-            	ORDER BY div.id DESC, div.last_updated_at DESC
-            	LIMIT 1 BY div.id
+                AND experiment_id IN :experimentIds
+                ORDER BY (workspace_id, experiment_id, dataset_item_id, trace_id, id) DESC, last_updated_at DESC
+            	LIMIT 1 BY id
             ), dataset_items_final AS (
-                SELECT * FROM dataset_items_from_draft
-                UNION ALL
-                SELECT * FROM dataset_items_from_versions
+            	SELECT * FROM dataset_items
+            	WHERE workspace_id = :workspace_id
+            	AND id IN (SELECT dataset_item_id FROM experiment_items_scope)
+            	ORDER BY id DESC, last_updated_at DESC
+            	LIMIT 1 BY id
             ), feedback_scores_combined_raw AS (
                 SELECT
                     workspace_id,
@@ -750,7 +684,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                     tfs.metadata
                 )) AS experiment_items_array
             FROM experiment_items_final AS ei
-            INNER JOIN dataset_items_final AS di ON di.id = ei.dataset_item_id
+            LEFT JOIN dataset_items_final AS di ON di.id = ei.dataset_item_id
             LEFT JOIN (
                 SELECT
                     t.id,
