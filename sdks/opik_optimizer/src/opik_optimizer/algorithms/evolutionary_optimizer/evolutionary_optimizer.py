@@ -214,14 +214,18 @@ class EvolutionaryOptimizer(BaseOptimizer):
         """
         prompts_messages = {name: p.get_messages() for name, p in prompts.items()}
         individual = creator.Individual(prompts_messages)
-        setattr(individual, "prompts_metadata", {
-            name: {
-                "tools": copy.deepcopy(p.tools),
-                "function_map": p.function_map,
-                "name": p.name,
-            }
-            for name, p in prompts.items()
-        })
+        setattr(
+            individual,
+            "prompts_metadata",
+            {
+                name: {
+                    "tools": copy.deepcopy(p.tools),
+                    "function_map": p.function_map,
+                    "name": p.name,
+                }
+                for name, p in prompts.items()
+            },
+        )
         return individual
 
     def _individual_to_prompts(
@@ -429,7 +433,6 @@ class EvolutionaryOptimizer(BaseOptimizer):
             optimizable_prompts = prompt
             is_single_prompt_optimization = False
 
-
         # Logic on which dataset to use for scoring
         if validation_dataset is not None:
             logger.warning(
@@ -575,7 +578,9 @@ class EvolutionaryOptimizer(BaseOptimizer):
             verbose=self.verbose
         ) as report_baseline_performance:
             # Create initial individual from all prompts
-            initial_individual = self._create_individual_from_prompts(optimizable_prompts)
+            initial_individual = self._create_individual_from_prompts(
+                optimizable_prompts
+            )
             initial_eval_result = self._deap_evaluate_individual_fitness(
                 initial_individual
             )
@@ -684,12 +689,16 @@ class EvolutionaryOptimizer(BaseOptimizer):
                     hof, key=lambda ind: ind.fitness.values[0]
                 )
                 best_primary_score_overall = current_best_for_primary.fitness.values[0]
-                best_prompts_overall = self._individual_to_prompts(current_best_for_primary)
+                best_prompts_overall = self._individual_to_prompts(
+                    current_best_for_primary
+                )
             else:
                 # Single-objective
                 current_best_on_front = hof[0]
                 best_primary_score_overall = current_best_on_front.fitness.values[0]
-                best_prompts_overall = self._individual_to_prompts(current_best_on_front)
+                best_prompts_overall = self._individual_to_prompts(
+                    current_best_on_front
+                )
 
             # Use first prompt as representative for logging
             representative_prompt = list(best_prompts_overall.values())[0]
@@ -754,31 +763,12 @@ class EvolutionaryOptimizer(BaseOptimizer):
                     report_evolutionary_algo.restart_population(
                         self.DEFAULT_RESTART_GENERATIONS
                     )
-                    # Use first prompt as seed for restart
-                    first_prompt = list(best_prompts_overall.values())[0]
-                    restarted_single_pop = population_ops.restart_population(
+                    deap_population = population_ops.restart_population(
                         optimizer=self,
                         hof=hof,
                         population=deap_population,
-                        best_prompt_so_far=first_prompt,
+                        best_prompts_so_far=best_prompts_overall,
                     )
-                    # Convert restarted single-prompt individuals to dict-based individuals
-                    deap_population = []
-                    for ind in restarted_single_pop:
-                        # Create a new dict-based individual
-                        first_name = list(optimizable_prompts.keys())[0]
-                        new_prompts = {first_name: chat_prompt.ChatPrompt(messages=list(ind))}
-                        # Keep other prompts from best_prompts_overall
-                        for name, p in best_prompts_overall.items():
-                            if name != first_name:
-                                new_prompts[name] = p
-                        deap_population.append(
-                            self._create_individual_from_prompts(new_prompts)
-                        )
-                    # Re-evaluate the population
-                    for ind in deap_population:
-                        fit = self._deap_evaluate_individual_fitness(ind)
-                        ind.fitness.values = fit
 
                 # ---------- run one generation --------------------------------
                 deap_population, invalid_count = self._run_generation(
@@ -803,7 +793,9 @@ class EvolutionaryOptimizer(BaseOptimizer):
                     updated_best_primary_score = current_best_ind.fitness.values[0]
                     if updated_best_primary_score > best_primary_score_overall:
                         best_primary_score_overall = updated_best_primary_score
-                        best_prompts_overall = self._individual_to_prompts(current_best_ind)
+                        best_prompts_overall = self._individual_to_prompts(
+                            current_best_ind
+                        )
                         self._generations_without_overall_improvement = 0
                     elif (
                         updated_best_primary_score
@@ -920,7 +912,9 @@ class EvolutionaryOptimizer(BaseOptimizer):
             # Single-objective
             final_best_prompts = best_prompts_overall
             final_primary_score = best_primary_score_overall
-            logger.info(f"Final best prompts from Hall of Fame: {len(final_best_prompts)} prompts")
+            logger.info(
+                f"Final best prompts from Hall of Fame: {len(final_best_prompts)} prompts"
+            )
             logger.info(
                 f"Final best score ({metric.__name__}): {final_primary_score:.4f}"
             )
@@ -983,9 +977,9 @@ class EvolutionaryOptimizer(BaseOptimizer):
         # Return the OptimizationResult
         # Display result - show single prompt or all prompts based on optimization type
         if is_single_prompt_optimization:
-            display_prompt: chat_prompt.ChatPrompt | dict[str, chat_prompt.ChatPrompt] = (
-                list(final_best_prompts.values())[0]
-            )
+            display_prompt: (
+                chat_prompt.ChatPrompt | dict[str, chat_prompt.ChatPrompt]
+            ) = list(final_best_prompts.values())[0]
         else:
             display_prompt = final_best_prompts
         reporting.display_result(

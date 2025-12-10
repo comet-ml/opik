@@ -13,6 +13,7 @@ import os
 import pytest
 from typing import Any
 
+import opik
 from opik.evaluation.metrics import LevenshteinRatio
 from opik.evaluation.metrics.score_result import ScoreResult
 
@@ -24,9 +25,11 @@ from opik_optimizer import (
     FewShotBayesianOptimizer,
     GepaOptimizer,
     HierarchicalReflectiveOptimizer,
+    ParameterOptimizer,
+    ParameterSearchSpace,
 )
 
-from ..utils import TestMultiPromptAgent
+from ..utils import MultiPromptTestAgent
 
 
 pytestmark = pytest.mark.integration
@@ -48,7 +51,7 @@ def levenshtein_metric(dataset_item: dict[str, Any], llm_output: str) -> ScoreRe
     )
 
 
-def get_tiny_dataset():
+def get_tiny_dataset() -> opik.Dataset:
     """Get the tiny test dataset for fast testing."""
     return opik_optimizer.datasets.tiny_test()
 
@@ -64,9 +67,10 @@ def create_optimizer_config(optimizer_class: type) -> dict[str, Any]:
             "max_tokens": 5000,
         },
         "seed": 42,
+        "name": f"e2e-multi-prompt-{optimizer_class.__name__}",
     }
-    
-    optimizer_specific = {
+
+    optimizer_specific: dict[type, dict[str, Any]] = {
         EvolutionaryOptimizer: {
             "population_size": 2,
             "num_generations": 1,
@@ -92,9 +96,23 @@ def create_optimizer_config(optimizer_class: type) -> dict[str, Any]:
             "batch_size": 2,
             "convergence_threshold": 0.01,
         },
+        ParameterOptimizer: {
+            "n_threads": 2,
+            "default_n_trials": 2,
+            "local_search_ratio": 0.0,
+        },
     }
-    
+
     return {**base_config, **optimizer_specific.get(optimizer_class, {})}
+
+
+def get_parameter_space() -> ParameterSearchSpace:
+    """Create a simple parameter space for testing."""
+    return ParameterSearchSpace.model_validate(
+        {
+            "temperature": {"type": "float", "min": 0.1, "max": 1.0},
+        }
+    )
 
 
 def create_multi_prompt_dict() -> dict[str, ChatPrompt]:
@@ -126,17 +144,21 @@ def create_multi_prompt_dict() -> dict[str, ChatPrompt]:
 # -----------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize("optimizer_class", [
-    EvolutionaryOptimizer,
-    MetaPromptOptimizer,
-    FewShotBayesianOptimizer,
-    GepaOptimizer,
-    HierarchicalReflectiveOptimizer,
-])
+@pytest.mark.parametrize(
+    "optimizer_class",
+    [
+        EvolutionaryOptimizer,
+        MetaPromptOptimizer,
+        FewShotBayesianOptimizer,
+        GepaOptimizer,
+        HierarchicalReflectiveOptimizer,
+        ParameterOptimizer,
+    ],
+)
 def test_multi_prompt_with_agent(optimizer_class: type) -> None:
     """
     Test that optimizers can optimize multiple prompts using a custom agent.
-    
+
     This test verifies:
     1. Optimization completes with dict of prompts
     2. All prompts in the dict are returned
@@ -146,47 +168,59 @@ def test_multi_prompt_with_agent(optimizer_class: type) -> None:
     # Skip if no API key
     if not os.getenv("OPENAI_API_KEY"):
         pytest.skip("OPENAI_API_KEY environment variable required")
-    
+
     # Skip GEPA if not installed
     if optimizer_class == GepaOptimizer:
         import importlib.util
+
         if importlib.util.find_spec("gepa") is None:
             pytest.skip("gepa package not installed")
-    
+
     # Create multi-prompt dict
     original_prompts = create_multi_prompt_dict()
-    
+
     # Create test agent
-    agent = TestMultiPromptAgent(
+    agent = MultiPromptTestAgent(
         model="openai/gpt-4o-mini",
         model_parameters={"temperature": 0.7},
     )
-    
+
     # Get dataset
     dataset = get_tiny_dataset()
-    
+
     # Create optimizer with minimal config
     config = create_optimizer_config(optimizer_class)
     optimizer = optimizer_class(**config)
-    
-    # Run optimization
-    results = optimizer.optimize_prompt(
-        dataset=dataset,
-        metric=levenshtein_metric,
-        prompt=original_prompts,
-        agent=agent,
-        n_samples=2,
-        max_trials=2,
-    )
-    
+
+    # Run optimization - ParameterOptimizer uses optimize_parameter
+    if optimizer_class == ParameterOptimizer:
+        results = optimizer.optimize_parameter(
+            prompt=original_prompts,
+            dataset=dataset,
+            metric=levenshtein_metric,
+            parameter_space=get_parameter_space(),
+            agent=agent,
+            n_samples=2,
+            max_trials=2,
+        )
+    else:
+        results = optimizer.optimize_prompt(
+            dataset=dataset,
+            metric=levenshtein_metric,
+            prompt=original_prompts,
+            agent=agent,
+            n_samples=2,
+            max_trials=2,
+        )
+
     # Validate results structure
     assert results.optimizer == optimizer_class.__name__, (
         f"Expected {optimizer_class.__name__}, got {results.optimizer}"
     )
-    
+
     # Get optimized prompts
     optimized_prompts = results.prompt
-    
+
     # Handle both single ChatPrompt and dict returns
     if isinstance(optimized_prompts, dict):
         # Verify all original prompt keys are present
@@ -194,18 +228,20 @@ def test_multi_prompt_with_agent(optimizer_class: type) -> None:
             assert name in optimized_prompts, (
                 f"Prompt '{name}' missing from optimized results"
             )
-            
+
             optimized = optimized_prompts[name]
             assert isinstance(optimized, ChatPrompt), (
                 f"Optimized prompt '{name}' should be ChatPrompt, got {type(optimized)}"
             )
-            
+
             # Verify prompt has valid messages
             messages = optimized.get_messages()
             assert len(messages) > 0, f"Optimized prompt '{name}' should have messages"
             for msg in messages:
                 assert "role" in msg, f"Message in '{name}' should have 'role' field"
-                assert "content" in msg, f"Message in '{name}' should have 'content' field"
+                assert "content" in msg, (
+                    f"Message in '{name}' should have 'content' field"
+                )
     else:
         # Single prompt returned (some optimizers may do this)
         assert isinstance(optimized_prompts, ChatPrompt), (
@@ -213,52 +249,5 @@ def test_multi_prompt_with_agent(optimizer_class: type) -> None:
         )
         messages = optimized_prompts.get_messages()
         assert len(messages) > 0, "Optimized prompt should have messages"
-    
+
     print(f"✅ {optimizer_class.__name__}: Multi-prompt with agent - PASSED")
-
-
-# -----------------------------------------------------------------------------
-# Individual Optimizer Tests (for targeted debugging)
-# -----------------------------------------------------------------------------
-
-
-def test_evolutionary_multi_prompt_with_agent() -> None:
-    """Test EvolutionaryOptimizer with multi-prompt agent."""
-    test_multi_prompt_with_agent(EvolutionaryOptimizer)
-
-
-def test_metaprompt_multi_prompt_with_agent() -> None:
-    """Test MetaPromptOptimizer with multi-prompt agent."""
-    test_multi_prompt_with_agent(MetaPromptOptimizer)
-
-
-def test_fewshot_multi_prompt_with_agent() -> None:
-    """Test FewShotBayesianOptimizer with multi-prompt agent."""
-    test_multi_prompt_with_agent(FewShotBayesianOptimizer)
-
-
-def test_gepa_multi_prompt_with_agent() -> None:
-    """Test GepaOptimizer with multi-prompt agent."""
-    test_multi_prompt_with_agent(GepaOptimizer)
-
-
-def test_hierarchical_multi_prompt_with_agent() -> None:
-    """Test HierarchicalReflectiveOptimizer with multi-prompt agent."""
-    test_multi_prompt_with_agent(HierarchicalReflectiveOptimizer)
-
-
-if __name__ == "__main__":
-    # Run tests manually
-    for optimizer_class in [
-        EvolutionaryOptimizer,
-        MetaPromptOptimizer,
-        FewShotBayesianOptimizer,
-        GepaOptimizer,
-        HierarchicalReflectiveOptimizer,
-    ]:
-        try:
-            test_multi_prompt_with_agent(optimizer_class)
-        except Exception as e:
-            print(f"❌ {optimizer_class.__name__}: FAILED - {e}")
-
-

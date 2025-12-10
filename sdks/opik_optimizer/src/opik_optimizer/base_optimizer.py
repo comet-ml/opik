@@ -348,6 +348,10 @@ class BaseOptimizer(ABC):
         project_name = self.project_name
 
         # Handle dict vs single prompt for agent_config
+        prompt_messages: list[dict[str, Any]] | dict[str, list[dict[str, Any]]]
+        prompt_name: str | None | dict[str, str | None]
+        prompt_project_name: str | None | dict[str, str | None]
+
         if isinstance(prompt, dict):
             # For dict prompts, use the first prompt for agent_config
             first_prompt = next(iter(prompt.values()))
@@ -541,9 +545,16 @@ class BaseOptimizer(ABC):
         if agent is None:
             agent = LiteLLMAgent(project_name=self.project_name)
 
-        def llm_task(dataset_item: dict[str, Any]) -> dict[str, str]:
+        def llm_task(dataset_item: dict[str, Any]) -> dict[str, Any]:
+            # Wrap single prompt in dict for invoke_agent
+            prompts_dict: dict[str, chat_prompt.ChatPrompt]
+            if isinstance(prompt, dict):
+                prompts_dict = prompt
+            else:
+                prompts_dict = {prompt.name: prompt}
+
             raw_model_output = agent.invoke_agent(
-                prompts=prompt, dataset_item=dataset_item
+                prompts=prompts_dict, dataset_item=dataset_item
             )
             cleaned_model_output = raw_model_output.strip()
 
@@ -588,6 +599,6 @@ class BaseOptimizer(ABC):
             experiment_config=experiment_config,
             optimization_id=self.current_optimization_id,
             verbose=verbose,
-            return_evaluation_result=return_evaluation_result,
+            return_evaluation_result=return_evaluation_result,  # type: ignore[call-overload]
         )
         return result

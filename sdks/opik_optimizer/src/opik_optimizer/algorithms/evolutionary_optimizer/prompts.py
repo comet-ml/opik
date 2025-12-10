@@ -1,6 +1,8 @@
 # Centralized prompt templates used by EvolutionaryOptimizer. This file contains
 # only string builders and constants; it has no side effects.
 
+from typing import Any
+
 
 INFER_STYLE_SYSTEM_PROMPT = """You are an expert in linguistic analysis and prompt engineering. Your task is to analyze a few input-output examples from a dataset and provide a concise, actionable description of the desired output style. This description will be used to guide other LLMs in generating and refining prompts.
 
@@ -139,8 +141,8 @@ Return only the new prompt string, with no preamble or explanation.
 
 
 def llm_crossover_user_prompt(
-    parent1_messages: list[dict[str, str]],
-    parent2_messages: list[dict[str, str]],
+    parent1_messages: list[dict[str, Any]],
+    parent2_messages: list[dict[str, Any]],
     output_style_guidance: str | None,
 ) -> str:
     style = (

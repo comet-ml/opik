@@ -1,4 +1,4 @@
-from typing import Any, cast
+from typing import Any
 
 import copy
 import json
@@ -238,7 +238,6 @@ def _semantic_mutation(
             model_parameters=model_parameters,
             is_reasoning=True,
         )
-        response = cast(str, response)
 
         try:
             messages = utils.json_to_dict(response.strip())
@@ -338,7 +337,7 @@ def deap_mutation(
     prompt_to_mutate = random.choice(prompt_names)
 
     # Create mutated data dict
-    mutated_data: dict[str, Messages] = {}
+    mutated_data: dict[str, list[dict[str, Any]]] = {}
 
     for prompt_name in prompt_names:
         messages = individual[prompt_name]

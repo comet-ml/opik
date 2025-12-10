@@ -15,7 +15,7 @@ from .mock_tools import (
     SEARCH_TOOL,
     WEATHER_TOOL,
 )
-from .test_agent import TestMultiPromptAgent
+from .test_agent import MultiPromptTestAgent
 from .assertions import (
     assert_tools_preserved,
     assert_prompt_changed,
@@ -32,12 +32,10 @@ __all__ = [
     "SEARCH_TOOL",
     "WEATHER_TOOL",
     # Test agent
-    "TestMultiPromptAgent",
+    "MultiPromptTestAgent",
     # Assertions
     "assert_tools_preserved",
     "assert_prompt_changed",
     "assert_multimodal_structure_preserved",
     "assert_multi_prompt_changed",
 ]
-
-

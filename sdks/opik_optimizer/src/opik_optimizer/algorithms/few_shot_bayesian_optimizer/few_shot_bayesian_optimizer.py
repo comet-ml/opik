@@ -22,8 +22,6 @@ from . import reporting, types
 from . import prompts as few_shot_prompts
 from .columnar_search_space import ColumnarSearchSpace
 
-from typing import cast
-
 _limiter = _throttle.get_rate_limiter_for_current_opik_installation()
 
 logger = logging.getLogger(__name__)
@@ -180,7 +178,6 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             model_parameters=self.model_parameters,
             response_model=DynamicFewShotPromptMessages,
         )
-        response_content = cast(DynamicFewShotPromptMessages, response_content)
         logger.debug(f"fewshot_prompt_template - LLM response: {response_content}")
 
         new_prompts: dict[str, chat_prompt.ChatPrompt] = {}
@@ -632,6 +629,9 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
 
         # Handle single vs. dict of prompts for result
         result_best_prompts: chat_prompt.ChatPrompt | dict[str, chat_prompt.ChatPrompt]
+        result_initial_prompts: (
+            chat_prompt.ChatPrompt | dict[str, chat_prompt.ChatPrompt]
+        )
         if is_single_prompt_optimization:
             result_best_prompts = list(best_prompts.values())[0]
             result_initial_prompts = list(original_prompts.values())[0]

@@ -586,24 +586,30 @@ class MetaPromptOptimizer(BaseOptimizer):
                 # Increment counters
                 round_num += 1
 
+        # Prepare result prompts based on single vs multi-prompt mode
+        result_prompt: chat_prompt.ChatPrompt | dict[str, chat_prompt.ChatPrompt]
+        result_initial_prompt: (
+            chat_prompt.ChatPrompt | dict[str, chat_prompt.ChatPrompt]
+        )
         if is_single_prompt_optimization:
-            optimized_prompt = list(best_prompts.values())[0]
-            initial_prompts = list(initial_prompts.values())[0]
+            result_prompt = list(best_prompts.values())[0]
+            result_initial_prompt = list(initial_prompts.values())[0]
         else:
-            optimized_prompt = best_prompts
+            result_prompt = best_prompts
+            result_initial_prompt = initial_prompts
 
         reporting.display_result(
             initial_score=initial_score,
             best_score=best_score,
-            prompt=optimized_prompt,
+            prompt=result_prompt,
             verbose=self.verbose,
         )
 
         return result_ops.create_result(
             optimizer_class_name=self.__class__.__name__,
             metric=metric,
-            prompt=optimized_prompt,
-            initial_prompt=initial_prompts,
+            prompt=result_prompt,
+            initial_prompt=result_initial_prompt,
             best_score=best_score,
             initial_score=initial_score,
             rounds=rounds,

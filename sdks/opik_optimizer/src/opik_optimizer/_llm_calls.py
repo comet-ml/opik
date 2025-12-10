@@ -1,5 +1,6 @@
-from typing import Any
+from typing import Any, TypeVar, overload
 from pydantic import BaseModel, ValidationError as PydanticValidationError
+
 import json
 import logging
 import sys
@@ -16,6 +17,9 @@ from . import utils as _utils
 logger = logging.getLogger(__name__)
 
 _limiter = _throttle.get_rate_limiter_for_current_opik_installation()
+
+# TypeVar for generic response model typing
+_T = TypeVar("_T", bound=BaseModel)
 
 
 def _increment_llm_counter_if_in_optimizer() -> None:
@@ -238,6 +242,45 @@ def _parse_response(
     return content
 
 
+# Overloads for call_model to provide precise return types
+@overload
+def call_model(
+    messages: list[dict[str, str]],
+    model: str,
+    seed: int | None = None,
+    model_parameters: dict[str, Any] | None = None,
+    response_model: None = None,
+    is_reasoning: bool = False,
+    temperature: float | None = None,
+    max_tokens: int | None = None,
+    max_completion_tokens: int | None = None,
+    top_p: float | None = None,
+    presence_penalty: float | None = None,
+    frequency_penalty: float | None = None,
+    optimization_id: str | None = None,
+    metadata: dict[str, Any] | None = None,
+) -> str: ...
+
+
+@overload
+def call_model(
+    messages: list[dict[str, str]],
+    model: str,
+    seed: int | None = None,
+    model_parameters: dict[str, Any] | None = None,
+    response_model: type[_T] = ...,
+    is_reasoning: bool = False,
+    temperature: float | None = None,
+    max_tokens: int | None = None,
+    max_completion_tokens: int | None = None,
+    top_p: float | None = None,
+    presence_penalty: float | None = None,
+    frequency_penalty: float | None = None,
+    optimization_id: str | None = None,
+    metadata: dict[str, Any] | None = None,
+) -> _T: ...
+
+
 @_throttle.rate_limited(_limiter)
 def call_model(
     messages: list[dict[str, str]],
@@ -312,6 +355,47 @@ def call_model(
     )
 
     return _parse_response(response, response_model)
+
+
+# Overloads for call_model_async to provide precise return types
+@overload
+async def call_model_async(
+    messages: list[dict[str, str]],
+    model: str,
+    seed: int | None = None,
+    model_parameters: dict[str, Any] | None = None,
+    project_name: str | None = None,
+    response_model: None = None,
+    is_reasoning: bool = False,
+    temperature: float | None = None,
+    max_tokens: int | None = None,
+    max_completion_tokens: int | None = None,
+    top_p: float | None = None,
+    presence_penalty: float | None = None,
+    frequency_penalty: float | None = None,
+    optimization_id: str | None = None,
+    metadata: dict[str, Any] | None = None,
+) -> str: ...
+
+
+@overload
+async def call_model_async(
+    messages: list[dict[str, str]],
+    model: str,
+    seed: int | None = None,
+    model_parameters: dict[str, Any] | None = None,
+    project_name: str | None = None,
+    response_model: type[_T] = ...,
+    is_reasoning: bool = False,
+    temperature: float | None = None,
+    max_tokens: int | None = None,
+    max_completion_tokens: int | None = None,
+    top_p: float | None = None,
+    presence_penalty: float | None = None,
+    frequency_penalty: float | None = None,
+    optimization_id: str | None = None,
+    metadata: dict[str, Any] | None = None,
+) -> _T: ...
 
 
 @_throttle.rate_limited_async(_limiter)

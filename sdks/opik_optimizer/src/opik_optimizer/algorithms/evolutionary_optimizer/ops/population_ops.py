@@ -16,14 +16,24 @@ logger = logging.getLogger(__name__)
 creator = _creator
 
 
-# TODO: We should probably remove the "optimizer" parameter
 def restart_population(
     optimizer: "evolutionary_optimizer.EvolutionaryOptimizer",
     hof: tools.HallOfFame,
     population: list[Any],
-    best_prompt_so_far: chat_prompt.ChatPrompt,
+    best_prompts_so_far: dict[str, chat_prompt.ChatPrompt],
 ) -> list[Any]:
-    """Return a fresh, evaluated population seeded by elites."""
+    """Return a fresh, evaluated population seeded by elites.
+
+    Args:
+        optimizer: The evolutionary optimizer instance.
+        hof: Hall of fame containing best individuals.
+        population: Current population.
+        best_prompts_so_far: Dict mapping prompt names to best ChatPrompt objects.
+
+    Returns:
+        A new evaluated population with variations of the seed prompts.
+    """
+    # Get best elite to use as seed
     if optimizer.enable_moo:
         elites = list(hof)
     else:
@@ -31,27 +41,36 @@ def restart_population(
 
     if elites:
         best_elite = max(elites, key=lambda x: x.fitness.values[0])
-        seed_prompt = chat_prompt.ChatPrompt(
-            messages=best_elite,
-            tools=getattr(best_elite, "tools", best_prompt_so_far.tools),
-            function_map=getattr(
-                best_elite, "function_map", best_prompt_so_far.function_map
-            ),
-        )
+        seed_prompts = optimizer._individual_to_prompts(best_elite)
     else:
-        seed_prompt = best_prompt_so_far
+        seed_prompts = best_prompts_so_far
 
-    prompt_variants = initialize_population(
-        prompt=seed_prompt,
-        output_style_guidance=optimizer.output_style_guidance,
-        model=optimizer.model,
-        model_parameters=optimizer.model_parameters,
-        optimization_id=optimizer.current_optimization_id,
-        population_size=optimizer.population_size,
-        verbose=optimizer.verbose,
-    )
-    new_pop = [optimizer._create_individual_from_prompt(p) for p in prompt_variants]
+    # Generate variations per prompt (same pattern as initial population)
+    prompt_variations: dict[str, list[chat_prompt.ChatPrompt]] = {}
+    for prompt_name, prompt_obj in seed_prompts.items():
+        variations = initialize_population(
+            prompt=prompt_obj,
+            output_style_guidance=optimizer.output_style_guidance,
+            model=optimizer.model,
+            model_parameters=optimizer.model_parameters,
+            optimization_id=optimizer.current_optimization_id,
+            population_size=optimizer.population_size,
+            verbose=optimizer.verbose,
+        )
+        prompt_variations[prompt_name] = variations
 
+    # Combine variations into individuals
+    new_pop = []
+    for i in range(optimizer.population_size):
+        prompts_for_individual = {
+            name: variations[i % len(variations)]
+            for name, variations in prompt_variations.items()
+        }
+        new_pop.append(
+            optimizer._create_individual_from_prompts(prompts_for_individual)
+        )
+
+    # Evaluate the new population
     for ind, fit in zip(
         new_pop, map(optimizer._deap_evaluate_individual_fitness, new_pop)
     ):

@@ -73,8 +73,8 @@ def _deap_crossover_word_level(
 
 
 def _crossover_messages(
-    messages_1: Messages, messages_2: Messages
-) -> tuple[Messages, Messages]:
+    messages_1: list[dict[str, Any]], messages_2: list[dict[str, Any]]
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     """Apply crossover to a single prompt's messages.
 
     Handles both string content and content parts (preserving images/video).
@@ -124,15 +124,17 @@ def deap_crossover(ind1: Any, ind2: Any, verbose: int = 1) -> tuple[Any, Any]:
     )
 
     # Individuals are dicts mapping prompt_name -> messages
-    child1_data: dict[str, Messages] = {}
-    child2_data: dict[str, Messages] = {}
+    child1_data: dict[str, list[dict[str, Any]]] = {}
+    child2_data: dict[str, list[dict[str, Any]]] = {}
 
     # Apply crossover to each prompt in the dict
     for prompt_name in ind1.keys():
         if prompt_name in ind2:
             messages_1 = ind1[prompt_name]
             messages_2 = ind2[prompt_name]
-            child1_messages, child2_messages = _crossover_messages(messages_1, messages_2)
+            child1_messages, child2_messages = _crossover_messages(
+                messages_1, messages_2
+            )
             child1_data[prompt_name] = child1_messages
             child2_data[prompt_name] = child2_messages
         else:
@@ -160,12 +162,12 @@ def deap_crossover(ind1: Any, ind2: Any, verbose: int = 1) -> tuple[Any, Any]:
 
 
 def _llm_crossover_messages(
-    messages_1: Messages,
-    messages_2: Messages,
+    messages_1: list[dict[str, Any]],
+    messages_2: list[dict[str, Any]],
     output_style_guidance: str,
     model: str,
     model_parameters: dict[str, Any],
-) -> tuple[Messages, Messages]:
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     """Apply LLM-based crossover to a single prompt's messages."""
     user_prompt_for_llm_crossover = evo_prompts.llm_crossover_user_prompt(
         messages_1, messages_2, output_style_guidance
@@ -186,8 +188,6 @@ def _llm_crossover_messages(
         response_model=CrossoverResponse,
         is_reasoning=True,
     )
-
-    assert isinstance(response, CrossoverResponse)
 
     # Convert Pydantic models to dicts
     first_child_messages = [msg.model_dump() for msg in response.child_1]
@@ -215,8 +215,8 @@ def llm_deap_crossover(
     )
 
     # Individuals are dicts mapping prompt_name -> messages
-    child1_data: dict[str, Messages] = {}
-    child2_data: dict[str, Messages] = {}
+    child1_data: dict[str, list[dict[str, Any]]] = {}
+    child2_data: dict[str, list[dict[str, Any]]] = {}
 
     try:
         # Apply LLM crossover to each prompt in the dict

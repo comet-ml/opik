@@ -14,6 +14,7 @@ support content_parts. These will be updated to support multimodal prompts.
 import pytest
 from typing import Any
 
+import opik
 from opik.evaluation.metrics import LevenshteinRatio
 from opik.evaluation.metrics.score_result import ScoreResult
 
@@ -25,6 +26,8 @@ from opik_optimizer import (
     FewShotBayesianOptimizer,
     GepaOptimizer,
     HierarchicalReflectiveOptimizer,
+    ParameterOptimizer,
+    ParameterSearchSpace,
 )
 
 
@@ -36,7 +39,7 @@ pytestmark = pytest.mark.integration
 # -----------------------------------------------------------------------------
 
 
-def get_driving_hazard_dataset():
+def get_driving_hazard_dataset() -> opik.Dataset:
     """Get the driving hazard dataset for multimodal testing."""
     return opik_optimizer.datasets.driving_hazard(test_mode=True)
 
@@ -64,9 +67,10 @@ def create_optimizer_config(optimizer_class: type) -> dict[str, Any]:
         },
         "verbose": 0,
         "seed": 42,
+        "name": f"e2e-multimodal-{optimizer_class.__name__}",
     }
 
-    optimizer_specific = {
+    optimizer_specific: dict[type, dict[str, Any]] = {
         EvolutionaryOptimizer: {
             "population_size": 2,
             "num_generations": 1,
@@ -92,9 +96,23 @@ def create_optimizer_config(optimizer_class: type) -> dict[str, Any]:
             "batch_size": 2,
             "convergence_threshold": 0.01,
         },
+        ParameterOptimizer: {
+            "n_threads": 2,
+            "default_n_trials": 2,
+            "local_search_ratio": 0.0,
+        },
     }
 
     return {**base_config, **optimizer_specific.get(optimizer_class, {})}
+
+
+def get_parameter_space() -> ParameterSearchSpace:
+    """Create a simple parameter space for testing."""
+    return ParameterSearchSpace.model_validate(
+        {
+            "temperature": {"type": "float", "min": 0.1, "max": 1.0},
+        }
+    )
 
 
 def create_multimodal_prompt() -> ChatPrompt:
@@ -137,6 +155,7 @@ def create_multimodal_prompt() -> ChatPrompt:
         FewShotBayesianOptimizer,
         GepaOptimizer,
         HierarchicalReflectiveOptimizer,
+        ParameterOptimizer,
     ],
 )
 def test_multimodal_prompt(optimizer_class: type) -> None:
@@ -160,14 +179,24 @@ def test_multimodal_prompt(optimizer_class: type) -> None:
     config = create_optimizer_config(optimizer_class)
     optimizer = optimizer_class(**config)
 
-    # Run optimization
-    results = optimizer.optimize_prompt(
-        dataset=dataset,
-        metric=hazard_metric,
-        prompt=original_prompt,
-        n_samples=2,
-        max_trials=2,
-    )
+    # Run optimization - ParameterOptimizer uses optimize_parameter
+    if optimizer_class == ParameterOptimizer:
+        results = optimizer.optimize_parameter(
+            prompt=original_prompt,
+            dataset=dataset,
+            metric=hazard_metric,
+            parameter_space=get_parameter_space(),
+            n_samples=2,
+            max_trials=2,
+        )
+    else:
+        results = optimizer.optimize_prompt(
+            dataset=dataset,
+            metric=hazard_metric,
+            prompt=original_prompt,
+            n_samples=2,
+            max_trials=2,
+        )
 
     # Validate results structure
     assert results.optimizer == optimizer_class.__name__, (

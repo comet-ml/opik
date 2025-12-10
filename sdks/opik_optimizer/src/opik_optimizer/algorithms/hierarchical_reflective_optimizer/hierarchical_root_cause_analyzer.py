@@ -1,6 +1,6 @@
 import logging
 import asyncio
-from typing import Any, cast
+from typing import Any
 
 from rich.progress import Progress, TextColumn, BarColumn, TaskProgressColumn
 from opik.evaluation.evaluation_result import EvaluationResult
@@ -149,7 +149,6 @@ Scores:
             response_model=RootCauseAnalysis,
         )
 
-        root_cause_response = cast(RootCauseAnalysis, root_cause_response)
         return BatchAnalysis(
             batch_number=batch_number,
             start_index=batch_start,
@@ -205,8 +204,6 @@ Scores:
             model_parameters=self.model_parameters,
             response_model=HierarchicalRootCauseAnalysis,
         )
-
-        synthesis_response = cast(HierarchicalRootCauseAnalysis, synthesis_response)
 
         return synthesis_response
 

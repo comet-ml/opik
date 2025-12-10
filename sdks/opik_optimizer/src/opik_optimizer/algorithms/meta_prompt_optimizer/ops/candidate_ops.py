@@ -543,22 +543,21 @@ def generate_agent_bundle_candidates(
             )
 
             # Log summary of candidates
-            if isinstance(response, AgentBundleCandidatesResponse):
+            logger.debug(
+                "Bundle LLM response: %d candidate bundles",
+                len(response.candidates),
+            )
+            for idx, cand in enumerate(response.candidates, start=1):
+                agents = [a.name for a in cand.agents]
+                focus = cand.bundle_improvement_focus
                 logger.debug(
-                    "Bundle LLM response: %d candidate bundles",
-                    len(response.candidates),
+                    "  Candidate %d: agents=%s focus=%s",
+                    idx,
+                    agents,
+                    (focus[:120] + "...")
+                    if isinstance(focus, str) and len(focus) > 120
+                    else focus,
                 )
-                for idx, cand in enumerate(response.candidates, start=1):
-                    agents = [a.name for a in cand.agents]
-                    focus = cand.bundle_improvement_focus
-                    logger.debug(
-                        "  Candidate %d: agents=%s focus=%s",
-                        idx,
-                        agents,
-                        (focus[:120] + "...")
-                        if isinstance(focus, str) and len(focus) > 120
-                        else focus,
-                    )
 
             # Convert Pydantic response to AgentBundleCandidate objects
             candidates: list[AgentBundleCandidate] = []

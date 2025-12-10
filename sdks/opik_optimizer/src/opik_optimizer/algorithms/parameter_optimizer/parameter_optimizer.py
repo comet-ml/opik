@@ -14,7 +14,7 @@ from optuna.trial import Trial, TrialState
 from opik import Dataset
 
 from ...base_optimizer import BaseOptimizer
-from ...agents import OptimizableAgent
+from ...agents import OptimizableAgent, LiteLLMAgent
 from ...api_objects import chat_prompt
 from ...optimization_result import OptimizationResult
 from .parameter_search_space import ParameterSearchSpace
@@ -80,16 +80,17 @@ class ParameterOptimizer(BaseOptimizer):
 
     def optimize_prompt(
         self,
-        prompt: chat_prompt.ChatPrompt,
+        prompt: chat_prompt.ChatPrompt | dict[str, chat_prompt.ChatPrompt],
         dataset: Dataset,
         metric: Callable,
+        agent: OptimizableAgent | None = None,
         experiment_config: dict | None = None,
         n_samples: int | None = None,
         auto_continue: bool = False,
-        agent_class: type[OptimizableAgent] | None = None,
         project_name: str = "Optimization",
         optimization_id: str | None = None,
         validation_dataset: Dataset | None = None,
+        max_trials: int = 10,
         *args: Any,
         **kwargs: Any,
     ) -> OptimizationResult:
@@ -101,7 +102,7 @@ class ParameterOptimizer(BaseOptimizer):
 
     def optimize_parameter(
         self,
-        prompt: chat_prompt.ChatPrompt,
+        prompt: chat_prompt.ChatPrompt | dict[str, chat_prompt.ChatPrompt],
         dataset: Dataset,
         metric: Callable[[Any, Any], float],
         parameter_space: ParameterSearchSpace | Mapping[str, Any],
@@ -109,7 +110,8 @@ class ParameterOptimizer(BaseOptimizer):
         experiment_config: dict | None = None,
         max_trials: int | None = None,
         n_samples: int | None = None,
-        agent_class: type[OptimizableAgent] | None = None,
+        agent: OptimizableAgent | None = None,
+        project_name: str = "Optimization",
         sampler: optuna.samplers.BaseSampler | None = None,
         callbacks: list[Callable[[optuna.study.Study, optuna.trial.FrozenTrial], None]]
         | None = None,
@@ -121,18 +123,26 @@ class ParameterOptimizer(BaseOptimizer):
         """
         Optimize model parameters using Bayesian optimization.
 
+        Supports both single prompts and dictionaries of prompts. When a dict is provided,
+        the parameter space is automatically expanded to create independent parameters for
+        each prompt (e.g., 'temperature' becomes 'prompt_a.temperature', 'prompt_b.temperature').
+
         Args:
-            prompt: The prompt to evaluate with tuned parameters
+            prompt: The prompt or dict of prompts to evaluate with tuned parameters.
+                When a dict is provided, parameters are optimized independently for each prompt.
             dataset: Dataset providing evaluation examples
             metric: Objective function to maximize
-            parameter_space: Definition of the search space for tunable parameters
+            parameter_space: Definition of the search space for tunable parameters.
+                For multi-prompt, params without a prefix are expanded per prompt.
+                Params already prefixed (e.g., 'analyze.temperature') are kept as-is.
             validation_dataset: Optional validation dataset. Note: Due to the internal implementation
                 of ParameterOptimizer, this parameter is currently not fully utilized and we recommend
                 not using it for this optimizer.
             experiment_config: Optional experiment metadata
             max_trials: Total number of trials (if None, uses default_n_trials)
             n_samples: Number of dataset samples to evaluate per trial (None for all)
-            agent_class: Optional custom agent class to execute evaluations
+            agent: Optional custom agent instance to execute evaluations
+            project_name: Opik project name for logging traces (default: "Optimization")
             sampler: Optuna sampler to use (default: TPESampler with seed)
             callbacks: List of callback functions for Optuna study
             timeout: Maximum time in seconds for optimization
@@ -144,13 +154,33 @@ class ParameterOptimizer(BaseOptimizer):
         Returns:
             OptimizationResult: Structured result describing the best parameters found
         """
+        # Set project name
+        self.project_name = project_name
+
+        # Create agent if not provided
+        if agent is None:
+            agent = LiteLLMAgent(project_name=project_name)
+
+        # Normalize prompt to dict format
+        if isinstance(prompt, chat_prompt.ChatPrompt):
+            prompts: dict[str, chat_prompt.ChatPrompt] = {prompt.name: prompt}
+            is_single_prompt_optimization = True
+        else:
+            prompts = prompt
+            is_single_prompt_optimization = False
+
         if not isinstance(parameter_space, ParameterSearchSpace):
             parameter_space = ParameterSearchSpace.model_validate(parameter_space)
 
+        # Validate inputs with multimodal support
+        self._validate_optimization_inputs(
+            prompts, dataset, metric, support_content_parts=True
+        )
+
         if validation_dataset is not None:
             logger.warning(
-                f"Due to the internal implementation of {self.__class__.__name__}, it currently"
-                "fully ignores the `dataset` if `validation_dataset` is provided. We recommend not"
+                f"Due to the internal implementation of {self.__class__.__name__}, it currently "
+                "fully ignores the `dataset` if `validation_dataset` is provided. We recommend not "
                 "using the `validation_dataset` parameter."
             )
 
@@ -166,21 +196,27 @@ class ParameterOptimizer(BaseOptimizer):
         # After validation, parameter_space is guaranteed to be ParameterSearchSpace
         assert isinstance(parameter_space, ParameterSearchSpace)  # for mypy
 
+        # Expand parameter space for all prompts
+        prompt_names = list(prompts.keys())
+        expanded_parameter_space = parameter_space.expand_for_prompts(prompt_names)
+
         local_trials_override = local_trials
         local_search_scale_override = local_search_scale
 
-        self._validate_optimization_inputs(prompt, dataset, metric)
+        # Set model defaults and build base model kwargs
+        base_model_kwargs = copy.deepcopy(self.model_parameters or {})
 
-        # Ensure prompt uses optimizer model defaults
-        prompt.model = self.model
-
-        base_model_kwargs = {
-            **copy.deepcopy(self.model_parameters or {}),
-            **copy.deepcopy(prompt.model_kwargs or {}),
-        }
-        base_prompt = prompt.copy()
-        base_prompt.model = self.model
-        base_prompt.model_kwargs = copy.deepcopy(base_model_kwargs)
+        # Build base prompts dict with model defaults
+        base_prompts: dict[str, chat_prompt.ChatPrompt] = {}
+        for name, p in prompts.items():
+            base_p = p.copy()
+            base_p.model = self.model
+            merged_kwargs = {
+                **base_model_kwargs,
+                **copy.deepcopy(p.model_kwargs or {}),
+            }
+            base_p.model_kwargs = merged_kwargs
+            base_prompts[name] = base_p
 
         metric_name = getattr(metric, "__name__", str(metric))
 
@@ -188,7 +224,7 @@ class ParameterOptimizer(BaseOptimizer):
         optimization = self.opik_client.create_optimization(
             dataset_name=dataset.name,
             objective_name=metric_name,
-            metadata=self._build_optimization_metadata(agent_class=agent_class),
+            metadata=self._build_optimization_metadata(),
             name=self.name,
             optimization_id=optimization_id,
         )
@@ -203,9 +239,14 @@ class ParameterOptimizer(BaseOptimizer):
             verbose=self.verbose,
         )
 
-        # Display configuration
+        # Display configuration - use first prompt for single, dict for multi
+        display_prompt = (
+            list(base_prompts.values())[0]
+            if is_single_prompt_optimization
+            else base_prompts
+        )
         reporting.display_configuration(
-            messages=prompt,
+            messages=display_prompt,
             optimizer_config={
                 "optimizer": self.__class__.__name__,
                 "n_trials": max_trials
@@ -219,30 +260,30 @@ class ParameterOptimizer(BaseOptimizer):
             verbose=self.verbose,
         )
 
-        self.agent_class = self._setup_agent_class(base_prompt, agent_class)
-
         # Evaluate baseline with reporting
         with reporting.display_evaluation(verbose=self.verbose) as baseline_reporter:
             baseline_score = self.evaluate_prompt(
-                prompt=base_prompt,
+                prompt=base_prompts,
+                agent=agent,
                 dataset=evaluation_dataset,
                 metric=metric,
                 n_threads=self.n_threads,
                 verbose=self.verbose,
                 experiment_config=experiment_config,
                 n_samples=n_samples,
-                agent_class=self.agent_class,
             )
             baseline_reporter.set_score(baseline_score)
 
+        # Use first prompt for model info in history
+        first_prompt = list(base_prompts.values())[0]
         history: list[dict[str, Any]] = [
             {
                 "iteration": 0,
                 "timestamp": datetime.now(timezone.utc).isoformat(),
                 "parameters": {},
                 "score": baseline_score,
-                "model_kwargs": copy.deepcopy(base_prompt.model_kwargs or {}),
-                "model": base_prompt.model,
+                "model_kwargs": copy.deepcopy(first_prompt.model_kwargs or {}),
+                "model": first_prompt.model,
                 "type": "baseline",
                 "stage": "baseline",
             }
@@ -273,22 +314,26 @@ class ParameterOptimizer(BaseOptimizer):
             global_trials = 1
             local_trials = max(0, total_trials - global_trials)
 
-        current_space = parameter_space
+        current_space = expanded_parameter_space
         current_stage = "global"
         stage_records: list[dict[str, Any]] = []
         search_ranges: dict[str, dict[str, Any]] = {}
         current_best_score = baseline_score
+        best_tuned_prompts: dict[str, chat_prompt.ChatPrompt] = copy.deepcopy(
+            base_prompts
+        )
 
         def objective(trial: Trial) -> float:
-            nonlocal current_best_score
+            nonlocal current_best_score, best_tuned_prompts
 
             sampled_values = current_space.suggest(trial)
-            tuned_prompt = parameter_space.apply(
-                prompt,
+
+            # Apply parameters to all prompts using the expanded space
+            tuned_prompts = current_space.apply_to_prompts(
+                base_prompts,
                 sampled_values,
                 base_model_kwargs=base_model_kwargs,
             )
-            tuned_agent_class = self._setup_agent_class(tuned_prompt, agent_class)
 
             # Display trial evaluation with parameters
             with reporting.display_trial_evaluation(
@@ -299,32 +344,40 @@ class ParameterOptimizer(BaseOptimizer):
                 verbose=self.verbose,
             ) as trial_reporter:
                 score = self.evaluate_prompt(
-                    prompt=tuned_prompt,
+                    prompt=tuned_prompts,
+                    agent=agent,
                     dataset=evaluation_dataset,
                     metric=metric,
                     n_threads=self.n_threads,
                     verbose=self.verbose,
                     experiment_config=experiment_config,
                     n_samples=n_samples,
-                    agent_class=tuned_agent_class,
                 )
 
                 # Check if this is a new best
                 is_best = score > current_best_score
                 if is_best:
                     current_best_score = score
+                    best_tuned_prompts = copy.deepcopy(tuned_prompts)
 
                 trial_reporter.set_score(score, is_best=is_best)
 
+            # Store per-prompt model_kwargs in trial attrs
             trial.set_user_attr("parameters", sampled_values)
             trial.set_user_attr(
-                "model_kwargs", copy.deepcopy(tuned_prompt.model_kwargs)
+                "model_kwargs",
+                {
+                    name: copy.deepcopy(p.model_kwargs)
+                    for name, p in tuned_prompts.items()
+                },
             )
-            trial.set_user_attr("model", tuned_prompt.model)
+            trial.set_user_attr(
+                "model", {name: p.model for name, p in tuned_prompts.items()}
+            )
             trial.set_user_attr("stage", current_stage)
             return float(score)
 
-        global_range = parameter_space.describe()
+        global_range = expanded_parameter_space.describe()
         stage_records.append(
             {
                 "stage": "global",
@@ -380,8 +433,11 @@ class ParameterOptimizer(BaseOptimizer):
 
         best_score = baseline_score
         best_parameters: dict[str, Any] = {}
-        best_model_kwargs = copy.deepcopy(base_prompt.model_kwargs or {})
-        best_model = base_prompt.model
+        best_model_kwargs: dict[str, Any] = {
+            name: copy.deepcopy(p.model_kwargs or {})
+            for name, p in base_prompts.items()
+        }
+        best_model: dict[str, str] = {name: p.model for name, p in base_prompts.items()}
 
         completed_trials = [
             trial
@@ -394,7 +450,7 @@ class ParameterOptimizer(BaseOptimizer):
                 best_score = float(best_trial.value)
                 best_parameters = best_trial.user_attrs.get("parameters", {})
                 best_model_kwargs = best_trial.user_attrs.get("model_kwargs", {})
-                best_model = best_trial.user_attrs.get("model", prompt.model)
+                best_model = best_trial.user_attrs.get("model", best_model)
 
         local_space: ParameterSearchSpace | None = None
         if (
@@ -402,7 +458,7 @@ class ParameterOptimizer(BaseOptimizer):
             and completed_trials
             and any(
                 spec.distribution in {ParameterType.FLOAT, ParameterType.INT}
-                for spec in parameter_space.parameters
+                for spec in expanded_parameter_space.parameters
             )
         ):
             local_scale = (
@@ -413,14 +469,14 @@ class ParameterOptimizer(BaseOptimizer):
 
             if best_parameters:
                 center_values = best_parameters
-            elif base_model_kwargs:
-                center_values = base_model_kwargs
             else:
                 center_values = {}
 
             if local_scale > 0 and center_values:
                 current_stage = "local"
-                local_space = parameter_space.narrow_around(center_values, local_scale)
+                local_space = expanded_parameter_space.narrow_around(
+                    center_values, local_scale
+                )
                 local_range = local_space.describe()
                 stage_records.append(
                     {
@@ -468,7 +524,7 @@ class ParameterOptimizer(BaseOptimizer):
                         best_score = float(new_best.value)
                         best_parameters = new_best.user_attrs.get("parameters", {})
                         best_model_kwargs = new_best.user_attrs.get("model_kwargs", {})
-                        best_model = new_best.user_attrs.get("model", prompt.model)
+                        best_model = new_best.user_attrs.get("model", best_model)
 
         else:
             local_trials = 0
@@ -515,16 +571,20 @@ class ParameterOptimizer(BaseOptimizer):
 
         if not importance or all(value == 0 for value in importance.values()):
             importance = compute_sensitivity_from_trials(
-                completed_trials, parameter_space.parameters
+                completed_trials, expanded_parameter_space.parameters
             )
 
-        # Display final results
+        # Display final results - use first prompt for single, dict for multi
+        display_prompt = (
+            list(best_tuned_prompts.values())[0]
+            if is_single_prompt_optimization
+            else best_tuned_prompts
+        )
         reporting.display_result(
             initial_score=baseline_score,
             best_score=best_score,
-            best_prompt=prompt.get_messages(),
+            prompt=display_prompt,
             verbose=self.verbose,
-            tools=getattr(prompt, "tools", None),
         )
 
         # Update optimization status to completed
@@ -540,12 +600,11 @@ class ParameterOptimizer(BaseOptimizer):
             "optimized_model_kwargs": best_model_kwargs,
             "optimized_model": best_model,
             "trials": history,
-            "parameter_space": parameter_space.model_dump(by_alias=True),
+            "parameter_space": expanded_parameter_space.model_dump(by_alias=True),
             "n_trials": total_trials,
             "model": best_model,
             "rounds": rounds_summary,
             "baseline_parameters": base_model_kwargs,
-            "temperature": best_model_kwargs.get("temperature"),
             "local_trials": local_trials,
             "global_trials": global_trials,
             "search_stages": stage_records,
@@ -554,12 +613,22 @@ class ParameterOptimizer(BaseOptimizer):
             "parameter_precision": 6,
         }
 
+        # Prepare result prompt based on single vs multi-prompt optimization
+        if is_single_prompt_optimization:
+            result_prompt: (
+                chat_prompt.ChatPrompt | dict[str, chat_prompt.ChatPrompt]
+            ) = list(best_tuned_prompts.values())[0]
+            initial_prompt_result: (
+                chat_prompt.ChatPrompt | dict[str, chat_prompt.ChatPrompt]
+            ) = list(base_prompts.values())[0]
+        else:
+            result_prompt = best_tuned_prompts
+            initial_prompt_result = base_prompts
+
         return OptimizationResult(
             optimizer=self.__class__.__name__,
-            prompt=prompt.get_messages() if hasattr(prompt, "get_messages") else [],
-            initial_prompt=prompt.get_messages()
-            if hasattr(prompt, "get_messages")
-            else [],
+            prompt=result_prompt,
+            initial_prompt=initial_prompt_result,
             initial_score=baseline_score,
             score=best_score,
             metric_name=metric_name,
