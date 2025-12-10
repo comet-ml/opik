@@ -24,7 +24,6 @@ import jakarta.ws.rs.core.Response;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.commons.lang3.StringUtils;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
@@ -270,7 +269,8 @@ class DatasetItemServiceImpl implements DatasetItemService {
 
         return Mono.fromCallable(() -> datasetService.findByName(workspaceId, request.datasetName(), visibility))
                 .subscribeOn(Schedulers.boundedElastic())
-                .flatMapMany(dataset -> resolveVersionId(dataset.id(), request.version(), workspaceId)
+                .flatMapMany(dataset -> versionService.resolveVersionIdFromHashOrTagWithFallback(dataset.id(),
+                        request.version(), workspaceId)
                         .flatMapMany(versionIdOpt -> {
                             if (versionIdOpt.isPresent()) {
                                 // Version specified or latest version exists - stream from version
@@ -399,7 +399,7 @@ class DatasetItemServiceImpl implements DatasetItemService {
         return Mono.deferContextual(ctx -> {
             String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
 
-            return resolveVersionId(datasetItemSearchCriteria.datasetId(),
+            return versionService.resolveVersionIdFromHashOrTagWithFallback(datasetItemSearchCriteria.datasetId(),
                     datasetItemSearchCriteria.versionHashOrTag(), workspaceId)
                     .flatMap(versionIdOpt -> {
                         if (versionIdOpt.isPresent()) {
@@ -437,51 +437,6 @@ class DatasetItemServiceImpl implements DatasetItemService {
         return dao.getItems(datasetItemSearchCriteria, page, size)
                 .flatMap(itemPage -> computeHasDraft(datasetItemSearchCriteria.datasetId(), itemPage))
                 .defaultIfEmpty(DatasetItemPage.empty(page, sortingFactory.getSortableFields()));
-    }
-
-    /**
-     * Resolves a version ID using the 3-tier selection logic:
-     * 1. If version param is set -> resolve and use it
-     * 2. If version param is not set but there is at least one committed version -> use the latest
-     * 3. If version param is not set and no version is committed -> return empty (use draft items)
-     *
-     * @param datasetId the dataset ID
-     * @param versionHashOrTag the version hash or tag (can be null/blank)
-     * @param workspaceId the workspace ID
-     * @return Mono containing Optional of version ID (empty means use draft items)
-     */
-    private Mono<Optional<UUID>> resolveVersionId(UUID datasetId, String versionHashOrTag, String workspaceId) {
-        if (StringUtils.isNotBlank(versionHashOrTag)) {
-            // Case 1: Version param is explicitly specified
-            log.info("Resolving specified version '{}' for dataset '{}'", versionHashOrTag, datasetId);
-
-            return Mono.fromCallable(
-                    () -> versionService.resolveVersionId(workspaceId, datasetId, versionHashOrTag))
-                    .subscribeOn(Schedulers.boundedElastic())
-                    .doOnNext(versionId -> log.info(
-                            "Resolved version '{}' to version ID '{}' for dataset '{}'",
-                            versionHashOrTag, versionId, datasetId))
-                    .map(Optional::of);
-        } else {
-            // Case 2 & 3: Version param not specified - check if latest version exists
-            return Mono.fromCallable(() -> template.inTransaction(READ_ONLY, handle -> {
-                var dao = handle.attach(DatasetVersionDAO.class);
-                return dao.findByTag(datasetId, DatasetVersionService.LATEST_TAG, workspaceId);
-            })).subscribeOn(Schedulers.boundedElastic())
-                    .map(latestVersionOpt -> {
-                        if (latestVersionOpt.isEmpty()) {
-                            // Case 3: No version exists - use draft items
-                            log.info("No version exists for dataset '{}', will use draft items", datasetId);
-                            return Optional.empty();
-                        } else {
-                            // Case 2: Latest version exists - use it
-                            UUID latestVersionId = latestVersionOpt.get().id();
-                            log.info("Latest version '{}' exists for dataset '{}', will use version items",
-                                    latestVersionId, datasetId);
-                            return Optional.of(latestVersionId);
-                        }
-                    });
-        }
     }
 
     private Mono<DatasetItemPage> computeHasDraft(UUID datasetId, DatasetItemPage itemPage) {

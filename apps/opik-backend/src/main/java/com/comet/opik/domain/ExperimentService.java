@@ -405,25 +405,10 @@ public class ExperimentService {
         return Mono.deferContextual(ctx -> {
             String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
 
-            // If version ID is provided, use it
-            if (experiment.datasetVersionId() != null) {
-                log.info("Using provided dataset version ID '{}' for dataset '{}'", experiment.datasetVersionId(),
-                        datasetId);
-                return Mono.just(experiment.datasetVersionId());
-            }
-
-            // If no version ID provided, use latest version if exists, otherwise return empty (draft items)
-            return Mono.fromCallable(() -> {
-                var latestVersion = datasetVersionService.getLatestVersion(datasetId, workspaceId);
-                if (latestVersion.isPresent()) {
-                    log.info("No version specified, using latest version '{}' for dataset '{}'",
-                            latestVersion.get().id(), datasetId);
-                    return latestVersion.get().id();
-                }
-                log.info("No version specified and no latest version found for dataset '{}', using draft items",
-                        datasetId);
-                return null;
-            }).subscribeOn(Schedulers.boundedElastic());
+            // Use the 3-tier version resolution logic from DatasetVersionService
+            return datasetVersionService.resolveVersionIdWithFallback(datasetId, experiment.datasetVersionId(),
+                    workspaceId)
+                    .map(optionalVersionId -> optionalVersionId.orElse(null));
         });
     }
 

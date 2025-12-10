@@ -164,6 +164,42 @@ public interface DatasetVersionService {
      * @throws NotFoundException if the version is not found
      */
     Mono<DatasetVersion> restoreVersion(UUID datasetId, String versionRef);
+
+    /**
+     * Resolves a dataset version ID using 3-tier selection logic.
+     * <p>
+     * This method implements the following priority:
+     * <ol>
+     *   <li>If explicitVersionId is provided, use it</li>
+     *   <li>If not provided but a latest version exists, use the latest version ID</li>
+     *   <li>If no version exists, return empty (indicating draft items should be used)</li>
+     * </ol>
+     *
+     * @param datasetId the unique identifier of the dataset
+     * @param explicitVersionId the explicitly provided version ID (may be null)
+     * @param workspaceId the workspace ID
+     * @return Mono emitting Optional containing the resolved version ID, or empty if draft items should be used
+     */
+    Mono<Optional<UUID>> resolveVersionIdWithFallback(UUID datasetId, UUID explicitVersionId, String workspaceId);
+
+    /**
+     * Resolves a dataset version ID from hash/tag using 3-tier selection logic.
+     * <p>
+     * This method implements the following priority:
+     * <ol>
+     *   <li>If versionHashOrTag is provided, resolve it to a version ID and use it</li>
+     *   <li>If not provided but a latest version exists, use the latest version ID</li>
+     *   <li>If no version exists, return empty (indicating draft items should be used)</li>
+     * </ol>
+     *
+     * @param datasetId the unique identifier of the dataset
+     * @param versionHashOrTag the version hash or tag (may be null or blank)
+     * @param workspaceId the workspace ID
+     * @return Mono emitting Optional containing the resolved version ID, or empty if draft items should be used
+     * @throws NotFoundException if versionHashOrTag is provided but no matching version is found
+     */
+    Mono<Optional<UUID>> resolveVersionIdFromHashOrTagWithFallback(UUID datasetId, String versionHashOrTag,
+            String workspaceId);
 }
 
 @Singleton
@@ -615,6 +651,50 @@ class DatasetVersionServiceImpl implements DatasetVersionService {
                                 }
                             });
                 });
+    }
+
+    @Override
+    public Mono<Optional<UUID>> resolveVersionIdWithFallback(@NonNull UUID datasetId, UUID explicitVersionId,
+            @NonNull String workspaceId) {
+        // Case 1: Version ID is explicitly provided
+        if (explicitVersionId != null) {
+            log.info("Using provided dataset version ID '{}' for dataset '{}'", explicitVersionId, datasetId);
+            return Mono.just(Optional.of(explicitVersionId));
+        }
+
+        // Case 2 & 3: Version ID not provided - check if latest version exists
+        return Mono.fromCallable(() -> {
+            var latestVersion = getLatestVersion(datasetId, workspaceId);
+            if (latestVersion.isPresent()) {
+                // Case 2: Latest version exists - use it
+                log.info("No version specified, using latest version '{}' for dataset '{}'",
+                        latestVersion.get().id(), datasetId);
+                return Optional.of(latestVersion.get().id());
+            }
+            // Case 3: No version exists - use draft items
+            log.info("No version specified and no latest version found for dataset '{}', using draft items",
+                    datasetId);
+            return Optional.<UUID>empty();
+        }).subscribeOn(Schedulers.boundedElastic());
+    }
+
+    @Override
+    public Mono<Optional<UUID>> resolveVersionIdFromHashOrTagWithFallback(@NonNull UUID datasetId,
+            String versionHashOrTag, @NonNull String workspaceId) {
+        if (StringUtils.isNotBlank(versionHashOrTag)) {
+            // Case 1: Version param is explicitly specified - resolve hash/tag to version ID
+            log.info("Resolving specified version '{}' for dataset '{}'", versionHashOrTag, datasetId);
+
+            return Mono.fromCallable(() -> resolveVersionId(workspaceId, datasetId, versionHashOrTag))
+                    .subscribeOn(Schedulers.boundedElastic())
+                    .doOnNext(versionId -> log.info(
+                            "Resolved version '{}' to version ID '{}' for dataset '{}'",
+                            versionHashOrTag, versionId, datasetId))
+                    .flatMap(versionId -> resolveVersionIdWithFallback(datasetId, versionId, workspaceId));
+        } else {
+            // Case 2 & 3: Version param not specified - use 3-tier fallback logic
+            return resolveVersionIdWithFallback(datasetId, null, workspaceId);
+        }
     }
 
     private record RestoreContext(UUID versionId, DatasetVersion versionToRestore, String workspaceId,
