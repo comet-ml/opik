@@ -229,7 +229,7 @@ class OpikConfig(pydantic_settings.BaseSettings):
 
     min_base64_embedded_attachment_size: int = 256_000
     """
-    Minimum size of the attachment in bytes that will be kept embedded in the base64 string. (250KB)
+    Minimum size of the attachment string in bytes that will be kept embedded in the base64 string. (250KB)
     Attachments larger than this size will be extracted input/outputs of spans/traces and uploaded to the Opik backend.
     """
 

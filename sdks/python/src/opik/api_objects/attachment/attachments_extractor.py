@@ -6,7 +6,7 @@ from . import attachment, attachment_context, decoder_base64
 
 class ExtractionResult(NamedTuple):
     attachments: List[attachment.Attachment]
-    sanitized_data: str
+    sanitized_data: Any
 
 
 class AttachmentsExtractor:
@@ -71,9 +71,39 @@ class AttachmentsExtractor:
         return attachments
 
     def _try_extract_attachments(
+        self, data: Any, context: Literal["input", "output", "metadata"]
+    ) -> ExtractionResult:
+        """
+        Recursively extract attachments from data that can be a string, dict, list, or other type.
+
+        Args:
+            data: The data to process (can be str, dict, list, or other types)
+            context: The context where the data is located (input, output, or metadata)
+
+        Returns:
+            ExtractionResult with extracted attachments and sanitized data
+        """
+        # Handle string data - check for base64 attachments
+        if isinstance(data, str):
+            return self._extract_from_string(data, context)
+
+        # Handle dictionary data - recursively process each value
+        elif isinstance(data, dict):
+            return self._extract_from_dict(data, context)
+
+        # Handle list data - recursively process each element
+        elif isinstance(data, list):
+            return self._extract_from_list(data, context)
+
+        # For other types (int, bool, None, etc.), return as-is
+        else:
+            return ExtractionResult(attachments=[], sanitized_data=data)
+
+    def _extract_from_string(
         self, data: str, context: Literal["input", "output", "metadata"]
     ) -> ExtractionResult:
-        if not isinstance(data, str) or len(data) < self._min_attachment_size:
+        """Extract attachments from a string value."""
+        if len(data) < self._min_attachment_size:
             # skip short strings
             return ExtractionResult(attachments=[], sanitized_data=data)
 
@@ -89,3 +119,35 @@ class AttachmentsExtractor:
                 )
 
         return ExtractionResult(attachments=attachments, sanitized_data=sanitized_data)
+
+    def _extract_from_dict(
+        self, data: Dict[str, Any], context: Literal["input", "output", "metadata"]
+    ) -> ExtractionResult:
+        """Recursively extract attachments from a dictionary."""
+        all_attachments: List[attachment.Attachment] = []
+        sanitized_dict = {}
+
+        for key, value in data.items():
+            result = self._try_extract_attachments(value, context)
+            sanitized_dict[key] = result.sanitized_data
+            all_attachments.extend(result.attachments)
+
+        return ExtractionResult(
+            attachments=all_attachments, sanitized_data=sanitized_dict
+        )
+
+    def _extract_from_list(
+        self, data: List[Any], context: Literal["input", "output", "metadata"]
+    ) -> ExtractionResult:
+        """Recursively extract attachments from a list."""
+        all_attachments: List[attachment.Attachment] = []
+        sanitized_list = []
+
+        for item in data:
+            result = self._try_extract_attachments(item, context)
+            sanitized_list.append(result.sanitized_data)
+            all_attachments.extend(result.attachments)
+
+        return ExtractionResult(
+            attachments=all_attachments, sanitized_data=sanitized_list
+        )

@@ -46,10 +46,10 @@ def test_extract_and_replace_single_attachment(extractor):
     assert result[0].context == "input"
     assert result[0].attachment_data.content_type == "image/png"
 
-    # Verify data was sanitized
+    # Verify data was sanitized with a proper placeholder format
     assert constants.PNG_BASE64 not in data["image"]
-    assert "[" in data["image"] and "]" in data["image"]
-    assert data["image"].startswith("[") and data["image"].endswith("]")
+    pattern = re.compile(decoder_helpers.ATTACHMENT_FILE_NAME_PLACEHOLDER_REGEX)
+    assert bool(pattern.fullmatch(data["image"])) is True
 
     # Cleanup
     _cleanup(result[0].attachment_data)
@@ -131,12 +131,10 @@ def test_extract_and_replace_multiple_keys_with_attachments(extractor):
         _cleanup(r.attachment_data)
 
 
-def test_extract_and_replace_non_string_values_ignored(extractor):
-    """Test that non-string values are not processed."""
+def test_extract_and_replace_non_string_primitive_values_ignored(extractor):
+    """Test that non-string primitive values (int, bool, None) are not processed."""
     data = {
         "number": 12345,
-        "list": [1, 2, 3],
-        "dict": {"nested": "value"},
         "none": None,
         "bool": True,
     }
@@ -154,14 +152,12 @@ def test_extract_and_replace_non_string_values_ignored(extractor):
 
     # Data should be unchanged
     assert data["number"] == 12345
-    assert data["list"] == [1, 2, 3]
-    assert data["dict"] == {"nested": "value"}
     assert data["none"] is None
     assert data["bool"] is True
 
 
 def test_extract_and_replace_empty_data(extractor):
-    """Test with empty data dictionary."""
+    """Test with an empty data dictionary."""
     data = {}
 
     result = extractor.extract_and_replace(
@@ -314,7 +310,7 @@ def test_extract_and_replace_entity_info_preservation(extractor):
 
 
 def test_extract_and_replace_empty_string(extractor):
-    """Test with empty string value."""
+    """Test with an empty string value."""
     data = {"empty": ""}
 
     result = extractor.extract_and_replace(
@@ -420,10 +416,11 @@ def test_extract_and_replace_multiple_same_attachment(extractor):
     assert len(result) == 2
     assert all(r.attachment_data.content_type == "image/png" for r in result)
 
-    # Both instances should be replaced
+    # Both instances should be replaced with placeholders
     assert constants.PNG_BASE64 not in data["images"]
-    assert data["images"].count("[") == 2
-    assert data["images"].count("]") == 2
+    pattern = re.compile(decoder_helpers.ATTACHMENT_FILE_NAME_PLACEHOLDER_REGEX)
+    matches = pattern.findall(data["images"])
+    assert len(matches) == 2
 
     # Cleanup
     for r in result:
@@ -583,6 +580,283 @@ def test_extract_and_replace_complex_text_with_base64(extractor):
 
     # Cleanup
     _cleanup(result[0].attachment_data)
+
+
+def test_extract_and_replace_nested_dict_with_attachments(extractor):
+    """Test extraction of attachments from nested dictionaries."""
+    data = {
+        "outer": {
+            "inner_image": constants.PNG_BASE64,
+            "inner_text": "some text",
+            "deeply_nested": {
+                "pdf_doc": constants.PDF_BASE64,
+            },
+        },
+        "regular_field": "no attachment here",
+    }
+
+    result = extractor.extract_and_replace(
+        data=data,
+        entity_type="span",
+        entity_id="span-nested-dict",
+        context="input",
+        project_name="test",
+    )
+
+    # Should extract 2 attachments (PNG and PDF)
+    assert len(result) == 2
+    content_types = [r.attachment_data.content_type for r in result]
+    assert "image/png" in content_types
+    assert "application/pdf" in content_types
+
+    # Verify nested data was sanitized
+    assert constants.PNG_BASE64 not in data["outer"]["inner_image"]
+    assert constants.PDF_BASE64 not in data["outer"]["deeply_nested"]["pdf_doc"]
+    assert data["outer"]["inner_text"] == "some text"
+    assert data["regular_field"] == "no attachment here"
+
+    # check that the attachment placeholders are present and have a correct format
+    pattern = re.compile(decoder_helpers.ATTACHMENT_FILE_NAME_PLACEHOLDER_REGEX)
+    assert bool(pattern.fullmatch(data["outer"]["inner_image"])) is True
+    assert bool(pattern.fullmatch(data["outer"]["deeply_nested"]["pdf_doc"])) is True
+
+    # Cleanup
+    for r in result:
+        _cleanup(r.attachment_data)
+
+
+def test_extract_and_replace_list_with_attachments(extractor):
+    """Test extraction of attachments from lists."""
+    data = {
+        "images": [
+            constants.PNG_BASE64,
+            "regular text",
+            constants.JPEG_BASE64,
+        ],
+        "text_field": "no attachment",
+    }
+
+    result = extractor.extract_and_replace(
+        data=data,
+        entity_type="trace",
+        entity_id="trace-list",
+        context="output",
+        project_name="test",
+    )
+
+    # Should extract 2 attachments (PNG and JPEG)
+    assert len(result) == 2
+    content_types = [r.attachment_data.content_type for r in result]
+    assert "image/png" in content_types
+    assert "image/jpeg" in content_types
+
+    # Verify list data was sanitized
+    assert constants.PNG_BASE64 not in data["images"][0]
+    assert data["images"][1] == "regular text"
+    assert constants.JPEG_BASE64 not in data["images"][2]
+    assert data["text_field"] == "no attachment"
+
+    # check that the attachment placeholders are present and have a correct format
+    pattern = re.compile(decoder_helpers.ATTACHMENT_FILE_NAME_PLACEHOLDER_REGEX)
+    assert bool(pattern.fullmatch(data["images"][0])) is True
+    assert bool(pattern.fullmatch(data["images"][2])) is True
+
+    # Cleanup
+    for r in result:
+        _cleanup(r.attachment_data)
+
+
+def test_extract_and_replace_deeply_nested_structures(extractor):
+    """Test extraction from deeply nested mixed structures (dicts and lists)."""
+    data = {
+        "level1": {
+            "level2": [
+                {
+                    "level3": {
+                        "image": constants.PNG_BASE64,
+                    }
+                },
+                constants.JPEG_BASE64,
+                {
+                    "docs": [constants.PDF_BASE64, "text"],
+                },
+            ],
+        },
+    }
+
+    result = extractor.extract_and_replace(
+        data=data,
+        entity_type="span",
+        entity_id="span-deep-nested",
+        context="metadata",
+        project_name="test",
+    )
+
+    # Should extract 3 attachments (PNG, JPEG, PDF)
+    assert len(result) == 3
+    content_types = [r.attachment_data.content_type for r in result]
+    assert "image/png" in content_types
+    assert "image/jpeg" in content_types
+    assert "application/pdf" in content_types
+
+    # Verify deeply nested data was sanitized
+    assert constants.PNG_BASE64 not in data["level1"]["level2"][0]["level3"]["image"]
+    assert constants.JPEG_BASE64 not in data["level1"]["level2"][1]
+    assert constants.PDF_BASE64 not in data["level1"]["level2"][2]["docs"][0]
+    assert data["level1"]["level2"][2]["docs"][1] == "text"
+
+    # check that the attachment placeholders are present and have a correct format
+    pattern = re.compile(decoder_helpers.ATTACHMENT_FILE_NAME_PLACEHOLDER_REGEX)
+    assert (
+        bool(pattern.fullmatch(data["level1"]["level2"][0]["level3"]["image"])) is True
+    )
+    assert bool(pattern.fullmatch(data["level1"]["level2"][1])) is True
+    assert bool(pattern.fullmatch(data["level1"]["level2"][2]["docs"][0])) is True
+
+    # Cleanup
+    for r in result:
+        _cleanup(r.attachment_data)
+
+
+def test_extract_and_replace_nested_empty_structures(extractor):
+    """Test extraction from nested structures with empty dicts and lists."""
+    data = {
+        "empty_dict": {},
+        "empty_list": [],
+        "nested_empty": {
+            "inner_empty_dict": {},
+            "inner_empty_list": [],
+        },
+        "mixed": {
+            "has_data": [constants.PNG_BASE64],
+            "empty": [],
+        },
+    }
+
+    result = extractor.extract_and_replace(
+        data=data,
+        entity_type="span",
+        entity_id="span-empty-nested",
+        context="input",
+        project_name="test",
+    )
+
+    # Should extract 1 attachment (PNG)
+    assert len(result) == 1
+    assert result[0].attachment_data.content_type == "image/png"
+
+    # Verify the structure is preserved
+    assert data["empty_dict"] == {}
+    assert data["empty_list"] == []
+    assert data["nested_empty"]["inner_empty_dict"] == {}
+    assert data["nested_empty"]["inner_empty_list"] == []
+    assert constants.PNG_BASE64 not in data["mixed"]["has_data"][0]
+    assert data["mixed"]["empty"] == []
+
+    # check that the attachment placeholders are present and have a correct format
+    pattern = re.compile(decoder_helpers.ATTACHMENT_FILE_NAME_PLACEHOLDER_REGEX)
+    assert bool(pattern.fullmatch(data["mixed"]["has_data"][0])) is True
+
+    # Cleanup
+    _cleanup(result[0].attachment_data)
+
+
+def test_extract_and_replace_list_of_dicts_with_attachments(extractor):
+    """Test extraction from a list of dictionaries."""
+    data = {
+        "items": [
+            {"id": 1, "image": constants.PNG_BASE64},
+            {"id": 2, "image": constants.JPEG_BASE64},
+            {"id": 3, "text": "no attachment"},
+            {"id": 4, "pdf": constants.PDF_BASE64},
+        ]
+    }
+
+    result = extractor.extract_and_replace(
+        data=data,
+        entity_type="trace",
+        entity_id="trace-list-dicts",
+        context="input",
+        project_name="test",
+    )
+
+    # Should extract 3 attachments (PNG, JPEG, PDF)
+    assert len(result) == 3
+    content_types = [r.attachment_data.content_type for r in result]
+    assert "image/png" in content_types
+    assert "image/jpeg" in content_types
+    assert "application/pdf" in content_types
+
+    # Verify data was sanitized
+    assert constants.PNG_BASE64 not in data["items"][0]["image"]
+    assert constants.JPEG_BASE64 not in data["items"][1]["image"]
+    assert data["items"][2]["text"] == "no attachment"
+    assert constants.PDF_BASE64 not in data["items"][3]["pdf"]
+
+    # check that the attachment placeholders are present and have a correct format
+    pattern = re.compile(decoder_helpers.ATTACHMENT_FILE_NAME_PLACEHOLDER_REGEX)
+    assert bool(pattern.fullmatch(data["items"][0]["image"])) is True
+    assert bool(pattern.fullmatch(data["items"][1]["image"])) is True
+    assert bool(pattern.fullmatch(data["items"][3]["pdf"])) is True
+
+    # Cleanup
+    for r in result:
+        _cleanup(r.attachment_data)
+
+
+def test_extract_and_replace_nested_mixed_types(extractor):
+    """Test extraction with nested structures containing various data types."""
+    data = {
+        "mixed": {
+            "number": 42,
+            "bool": True,
+            "none": None,
+            "string": "text",
+            "image": constants.PNG_BASE64,
+            "list": [1, 2, constants.JPEG_BASE64, None],
+            "dict": {"nested_pdf": constants.PDF_BASE64, "nested_num": 123},
+        }
+    }
+
+    result = extractor.extract_and_replace(
+        data=data,
+        entity_type="span",
+        entity_id="span-mixed-types",
+        context="output",
+        project_name="test",
+    )
+
+    # Should extract 3 attachments (PNG, JPEG, PDF)
+    assert len(result) == 3
+    content_types = [r.attachment_data.content_type for r in result]
+    assert "image/png" in content_types
+    assert "image/jpeg" in content_types
+    assert "application/pdf" in content_types
+
+    # Verify primitive types are preserved
+    assert data["mixed"]["number"] == 42
+    assert data["mixed"]["bool"] is True
+    assert data["mixed"]["none"] is None
+    assert data["mixed"]["string"] == "text"
+    assert data["mixed"]["list"][0] == 1
+    assert data["mixed"]["list"][1] == 2
+    assert data["mixed"]["list"][3] is None
+    assert data["mixed"]["dict"]["nested_num"] == 123
+
+    # Verify attachments were sanitized
+    assert constants.PNG_BASE64 not in data["mixed"]["image"]
+    assert constants.JPEG_BASE64 not in data["mixed"]["list"][2]
+    assert constants.PDF_BASE64 not in data["mixed"]["dict"]["nested_pdf"]
+
+    # check that the attachment placeholders are present and have a correct format
+    pattern = re.compile(decoder_helpers.ATTACHMENT_FILE_NAME_PLACEHOLDER_REGEX)
+    assert bool(pattern.fullmatch(data["mixed"]["image"])) is True
+    assert bool(pattern.fullmatch(data["mixed"]["list"][2])) is True
+    assert bool(pattern.fullmatch(data["mixed"]["dict"]["nested_pdf"])) is True
+
+    # Cleanup
+    for r in result:
+        _cleanup(r.attachment_data)
 
 
 def _cleanup(attachment_: Optional[attachment.Attachment]):

@@ -13,7 +13,7 @@ from opik.api_objects.attachment import decoder_helpers
 
 @pytest.fixture
 def decoder():
-    """Create a Base44AttachmentDecoder instance."""
+    """Create a Base64AttachmentDecoder instance."""
     return decoder_base64.Base64AttachmentDecoder()
 
 
