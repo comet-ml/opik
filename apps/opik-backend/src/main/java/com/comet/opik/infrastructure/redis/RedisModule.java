@@ -11,16 +11,28 @@ import com.comet.opik.infrastructure.ratelimit.RateLimitService;
 import com.google.inject.Provides;
 import jakarta.inject.Singleton;
 import org.redisson.Redisson;
+import org.redisson.api.RedissonClient;
 import org.redisson.api.RedissonReactiveClient;
 import ru.vyarus.dropwizard.guice.module.support.DropwizardAwareModule;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
 public class RedisModule extends DropwizardAwareModule<OpikConfiguration> {
 
+    /**
+     * Provides a reactive Redis client that wraps the same underlying Redisson instance.
+     * This approach reuses all connectivity resources (connection pool, configuration, etc.)
+     * from the synchronous client, avoiding resource duplication.
+     */
     @Provides
     @Singleton
-    public RedissonReactiveClient redisClient(@Config("redis") RedisConfig config) {
-        return Redisson.create(config.build()).reactive();
+    public RedissonReactiveClient redisClient(RedissonClient redisClient) {
+        return redisClient.reactive();
+    }
+
+    @Provides
+    @Singleton
+    public RedissonClient redisNonReactiveClient(@Config("redis") RedisConfig config) {
+        return Redisson.create(config.build());
     }
 
     @Provides
@@ -38,8 +50,8 @@ public class RedisModule extends DropwizardAwareModule<OpikConfiguration> {
 
     @Provides
     @Singleton
-    public CacheManager cacheManager(RedissonReactiveClient redisClient) {
-        return new RedisCacheManager(redisClient);
+    public CacheManager cacheManager(RedissonReactiveClient redisClient, RedissonClient redisNonReactiveClient) {
+        return new RedisCacheManager(redisClient, redisNonReactiveClient);
     }
 
     @Provides
@@ -47,5 +59,4 @@ public class RedisModule extends DropwizardAwareModule<OpikConfiguration> {
     public QueueProducer rqPublisher(RedissonReactiveClient redisClient, IdGenerator idGenerator) {
         return new RqPublisher(redisClient, configuration(), idGenerator);
     }
-
 }
