@@ -101,6 +101,23 @@ class TestCLIImportExport:
         )
         return prompt_name
 
+    def _create_test_chat_prompt(self, opik_client: opik.Opik) -> str:
+        """Create a test chat prompt."""
+        prompt_name = f"cli-test-chat-prompt-{random_chars()}"
+        messages = [
+            {"role": "system", "content": "You are a helpful assistant."},
+            {
+                "role": "user",
+                "content": "Hello, {{name}}! How can I help you with {{topic}}?",
+            },
+        ]
+        opik_client.create_chat_prompt(
+            name=prompt_name,
+            messages=messages,
+            metadata={"version": "1.0", "test": "chat_import_export"},
+        )
+        return prompt_name
+
     def _create_test_experiment(
         self, opik_client: opik.Opik, project_name: str, dataset_name: str
     ) -> str:
@@ -732,6 +749,70 @@ class TestCLIImportExport:
         
         assert exp_data["experiment"]["dataset_name"] == dataset1_name, \
             f"Expected dataset_name to be {dataset1_name}, got {exp_data['experiment']['dataset_name']}"
+
+    def test_export_import_chat_prompts_happy_flow(
+        self,
+        opik_client: opik.Opik,
+        source_project_name: str,
+        test_data_dir: Path,
+    ) -> None:
+        """Test the complete export/import flow for chat prompts."""
+        # Step 1: Create a test chat prompt
+        prompt_name = self._create_test_chat_prompt(opik_client)
+
+        # Verify chat prompt was created
+        prompts = opik_client.search_prompts()
+        prompt_names = [p.name for p in prompts]
+        assert (
+            prompt_name in prompt_names
+        ), f"Expected chat prompt {prompt_name} to be created"
+
+        # Step 2: Export chat prompt using direct function call
+        export_prompt_by_name(
+            name=prompt_name,
+            workspace="default",
+            output_path=str(test_data_dir),
+            max_results=None,
+            force=False,
+            debug=False,
+            format="json",
+            api_key=None,
+        )
+
+        # Verify export files were created
+        prompts_dir = test_data_dir / "default" / "prompts"
+        assert prompts_dir.exists(), f"Export directory not found: {prompts_dir}"
+
+        prompt_files = list(prompts_dir.glob("prompt_*.json"))
+        assert len(prompt_files) >= 1, f"Expected at least 1 chat prompt file, found: {len(prompt_files)}"
+
+        # Verify chat-specific structure in exported file
+        with open(prompt_files[0], "r") as f:
+            prompt_data = json.load(f)
+
+        assert "name" in prompt_data
+        assert prompt_data["name"] == prompt_name
+        assert "current_version" in prompt_data
+        current_version = prompt_data["current_version"]
+        
+        # Verify it's a chat prompt (messages should be a list)
+        assert "prompt" in current_version
+        assert isinstance(current_version["prompt"], list), "Chat prompt should have messages as a list"
+        assert "template_structure" in current_version
+        assert current_version["template_structure"] == "chat"
+
+        # Step 3: Import chat prompt using direct function call
+        source_dir = test_data_dir / "default" / "prompts"
+        stats = import_prompts_from_directory(
+            client=opik_client,
+            source_dir=source_dir,
+            dry_run=False,
+            name_pattern=None,
+            debug=False,
+        )
+
+        # Verify import succeeded
+        assert stats.get("prompts", 0) >= 1, "Expected at least 1 chat prompt to be imported"
 
     def test_import_projects_automatically_recreates_experiments(
         self,
