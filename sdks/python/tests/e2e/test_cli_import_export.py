@@ -10,8 +10,10 @@ import pytest
 
 import opik
 from opik import opik_context
-from opik.cli.exports.project import export_project_by_name
+from opik.api_objects.experiment.experiment_item import ExperimentItemReferences
 from opik.cli.exports.dataset import export_dataset_by_name
+from opik.cli.exports.experiment import export_experiment_by_name
+from opik.cli.exports.project import export_project_by_name
 from opik.cli.exports.prompt import export_prompt_by_name
 from opik.cli.imports.project import import_projects_from_directory
 from opik.cli.imports.dataset import import_datasets_from_directory
@@ -630,6 +632,106 @@ class TestCLIImportExport:
         except (FileNotFoundError, SystemExit):
             # Expected - function may raise error or exit
             pass
+
+    def test_export_experiment_with_dataset_filter(
+        self,
+        opik_client: opik.Opik,
+        source_project_name: str,
+        test_data_dir: Path,
+    ) -> None:
+        """Test export experiment filtered by dataset name."""
+        # Step 1: Create two datasets
+        dataset1_name = f"cli-test-dataset1-{random_chars()}"
+        dataset2_name = f"cli-test-dataset2-{random_chars()}"
+        
+        dataset1 = opik_client.create_dataset(
+            dataset1_name, description="CLI test dataset 1"
+        )
+        dataset2 = opik_client.create_dataset(
+            dataset2_name, description="CLI test dataset 2"
+        )
+
+        # Add items to datasets
+        for i in range(3):
+            dataset1.insert([{"input": f"test input 1-{i}", "expected_output": f"test output 1-{i}"}])
+            dataset2.insert([{"input": f"test input 2-{i}", "expected_output": f"test output 2-{i}"}])
+
+        # Step 2: Create two experiments with different datasets
+        exp1_name = f"cli-test-exp1-{random_chars()}"
+        exp2_name = f"cli-test-exp2-{random_chars()}"
+        
+        experiment1 = opik_client.create_experiment(
+            name=exp1_name,
+            dataset_name=dataset1_name,
+        )
+        experiment2 = opik_client.create_experiment(
+            name=exp2_name,
+            dataset_name=dataset2_name,
+        )
+
+        # Add items to experiments
+        dataset1_items = dataset1.get_items()
+        dataset2_items = dataset2.get_items()
+        
+        for i in range(3):
+            trace1 = opik_client.trace(
+                name=f"test-trace-exp1-{i}",
+                input={"prompt": f"test prompt 1-{i}"},
+                output={"response": f"test response 1-{i}"},
+                project_name=source_project_name,
+            )
+            experiment1.insert([
+                ExperimentItemReferences(
+                    dataset_item_id=dataset1_items[i]["id"],
+                    trace_id=trace1.id,
+                )
+            ])
+            
+            trace2 = opik_client.trace(
+                name=f"test-trace-exp2-{i}",
+                input={"prompt": f"test prompt 2-{i}"},
+                output={"response": f"test response 2-{i}"},
+                project_name=source_project_name,
+            )
+            experiment2.insert([
+                ExperimentItemReferences(
+                    dataset_item_id=dataset2_items[i]["id"],
+                    trace_id=trace2.id,
+                )
+            ])
+
+        opik_client.flush()
+
+        # Step 3: Export experiments filtered by dataset1
+        export_experiment_by_name(
+            name=exp1_name,
+            workspace="default",
+            output_path=str(test_data_dir),
+            dataset=dataset1_name,  # Filter by dataset1
+            max_traces=None,
+            force=False,
+            debug=False,
+            format="json",
+            api_key=None,
+        )
+
+        # Step 4: Verify only experiment1 was exported
+        experiments_dir = test_data_dir / "default" / "experiments"
+        assert experiments_dir.exists(), f"Export directory not found: {experiments_dir}"
+
+        experiment_files = list(experiments_dir.glob(f"experiment_{exp1_name}_*.json"))
+        assert len(experiment_files) == 1, f"Expected 1 experiment file for {exp1_name}, found: {len(experiment_files)}"
+
+        # Verify exp2 was NOT exported
+        exp2_files = list(experiments_dir.glob(f"experiment_{exp2_name}_*.json"))
+        assert len(exp2_files) == 0, f"Expected 0 experiment files for {exp2_name}, found: {len(exp2_files)}"
+
+        # Step 5: Verify the exported experiment has the correct dataset
+        with open(experiment_files[0], "r") as f:
+            exp_data = json.load(f)
+        
+        assert exp_data["experiment"]["dataset_name"] == dataset1_name, \
+            f"Expected dataset_name to be {dataset1_name}, got {exp_data['experiment']['dataset_name']}"
 
     def test_import_projects_automatically_recreates_experiments(
         self,

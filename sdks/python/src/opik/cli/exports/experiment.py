@@ -386,6 +386,7 @@ def export_experiment_by_name(
     name: str,
     workspace: str,
     output_path: str,
+    dataset: Optional[str],
     max_traces: Optional[int],
     force: bool,
     debug: bool,
@@ -431,6 +432,20 @@ def export_experiment_by_name(
         except Exception as e:
             console.print(f"[red]Experiment '{name}' not found: {e}[/red]")
             return
+
+        # Filter experiments by dataset if specified (client-side filtering)
+        if dataset:
+            experiments = [exp for exp in experiments if exp.dataset_name == dataset]
+            if not experiments:
+                console.print(
+                    f"[yellow]No experiments found with name '{name}' using dataset '{dataset}'[/yellow]"
+                )
+                return
+            if debug:
+                debug_print(
+                    f"Filtered to {len(experiments)} experiment(s) using dataset '{dataset}'",
+                    debug,
+                )
 
         # Collect all unique resources from all experiments first
         unique_datasets = set()
@@ -571,6 +586,7 @@ def export_experiment_by_name_or_id(
     name_or_id: str,
     workspace: str,
     output_path: str,
+    dataset: Optional[str],
     max_traces: Optional[int],
     force: bool,
     debug: bool,
@@ -697,6 +713,7 @@ def export_experiment_by_name_or_id(
             name_or_id,
             workspace,
             output_path,
+            dataset,
             max_traces,
             force,
             debug,
@@ -711,6 +728,11 @@ def export_experiment_by_name_or_id(
 
 @click.command(name="experiment")
 @click.argument("name_or_id", type=str)
+@click.option(
+    "--dataset",
+    type=str,
+    help="Filter experiments by dataset name. Only experiments using this dataset will be exported.",
+)
 @click.option(
     "--max-traces",
     type=int,
@@ -743,6 +765,7 @@ def export_experiment_by_name_or_id(
 def export_experiment_command(
     ctx: click.Context,
     name_or_id: str,
+    dataset: Optional[str],
     max_traces: Optional[int],
     path: str,
     force: bool,
@@ -757,5 +780,5 @@ def export_experiment_command(
     workspace = ctx.obj["workspace"]
     api_key = ctx.obj.get("api_key") if ctx.obj else None
     export_experiment_by_name_or_id(
-        name_or_id, workspace, path, max_traces, force, debug, format, api_key
+        name_or_id, workspace, path, dataset, max_traces, force, debug, format, api_key
     )

@@ -27,7 +27,7 @@ Exports specific data types from the specified workspace to local files.
 - `--debug`: Enable debug output to show detailed information about the export process
 
 **Experiment-specific options:**
-- `--dataset NAME`: Filter experiments by exact dataset name (server-side filtering for efficiency)
+- `--dataset NAME`: Filter experiments by dataset name (only experiments using this dataset will be exported)
 - `--max-traces INTEGER`: Maximum number of traces to export (limits total traces downloaded)
 
 **Examples:**
@@ -369,7 +369,7 @@ opik import my-workspace prompt "production" --path ./prompt_backup
 # Export specific experiment from source workspace
 opik export my-workspace experiment "my-experiment" --path ./experiment_data
 
-# Export experiment with dataset filtering (server-side filtering for efficiency)
+# Export experiment with dataset filtering
 opik export my-workspace experiment "evaluation-exp" --dataset "test-dataset"
 
 # Export experiment with trace limit (useful for large experiments)
