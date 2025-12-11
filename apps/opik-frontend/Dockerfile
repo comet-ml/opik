@@ -1,5 +1,5 @@
 # Build stage
-FROM node:20.19.5-alpine3.22 AS builder
+FROM node:20.19.6-alpine3.23 AS builder
 
 WORKDIR /opt/frontend
 
@@ -23,14 +23,11 @@ RUN npm run build -- --mode $BUILD_MODE
 
 # Production stage
 # Using nginx alpine image with OpenTelemetry support
-FROM nginx:1.29.3-alpine-otel AS nginx
+FROM nginx:1.29.4-alpine-otel AS nginx
 
 # Add label for later inspection
 ARG BUILD_MODE=production
 LABEL build.mode="${BUILD_MODE}"
-
-# Upgrade system packages to fix vulnerabilities
-RUN apk add --no-cache busybox=1.37.0-r20 libpng=1.6.51-r0 curl=8.14.1-r2 
 
 # Copy custom Nginx configuration
 COPY --chown=nginx:nginx nginx /etc/nginx
@@ -45,6 +42,6 @@ RUN chown -R nginx:nginx /var/log/nginx /var/cache/nginx /run /etc/nginx/conf.d 
 # Copy the built files from the builder stage
 COPY --from=builder /opt/frontend/dist /usr/share/nginx/html
 
-EXPOSE 8080
+EXPOSE 5173
 
 USER nginx:nginx
