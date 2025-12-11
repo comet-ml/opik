@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import { keepPreviousData } from "@tanstack/react-query";
 import useAppStore from "@/store/AppStore";
 import { DropdownOption } from "@/types/shared";
@@ -157,7 +157,6 @@ const LLM_JUDGES_MODELS_OPTIONS: MetricOption[] = [
 ];
 
 const DEFAULT_LOADED_DATASET_ITEMS = 25;
-const DEMO_DATASET_NAME = "Opik Demo Questions";
 
 type AddExperimentDialogProps = {
   open: boolean;
@@ -221,27 +220,6 @@ const AddExperimentDialog: React.FunctionComponent<
   scoring_metrics=metrics`
       : "";
 
-  const isDemoDataset = datasetName === DEMO_DATASET_NAME;
-
-  const evaluationTaskCode = isDemoDataset
-    ? `def evaluation_task(dataset_item):
-    # Your LLM application is called here
-    question = dataset_item["question"]
-
-    # Replace with your LLM call
-    llm_response = "your LLM response"
-
-    return {
-        "input": question,
-        "output": llm_response
-    }`
-    : `def evaluation_task(dataset_item):
-    # your LLM application is called here
-
-    result = ${evaluation_task_output}
-
-    return result`;
-
   const section3 =
     "" +
     `import os
@@ -258,7 +236,12 @@ dataset = client.get_dataset(name="${
       datasetName || "dataset name placeholder"
     }")
 
-${evaluationTaskCode}
+def evaluation_task(dataset_item):
+    # your LLM application is called here
+
+    result = ${evaluation_task_output}
+
+    return result
 ${metricsString}
 eval_results = evaluate(
   experiment_name="my_evaluation",
@@ -287,13 +270,6 @@ eval_results = evaluate(
       label: dataset.name,
     }));
   }, [data?.content]);
-
-  // Auto-select first dataset when data loads and no dataset is selected
-  useEffect(() => {
-    if (!datasetName && options.length > 0) {
-      setDatasetName(options[0].value);
-    }
-  }, [options, datasetName]);
 
   const openChangeHandler = useCallback(
     (open: boolean) => {

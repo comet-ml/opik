@@ -52,7 +52,13 @@ const StartPreference: React.FC = () => {
         <Link
           to="/$workspaceName/experiments"
           params={{ workspaceName }}
-          search={showEnhancedOnboarding ? { create_experiment: 1 } : undefined}
+          search={
+            showEnhancedOnboarding
+              ? {
+                  new: { experiment: true, datasetName: "Opik Demo Questions" },
+                }
+              : undefined
+          }
           className="w-full"
         >
           <OnboardingStep.AnswerCard option={OPTIONS.RUN_EVALUATIONS} />

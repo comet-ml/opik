@@ -77,7 +77,6 @@ import { ChartData } from "@/components/pages-shared/experiments/FeedbackScoresC
 import GroupsButton from "@/components/shared/GroupsButton/GroupsButton";
 import useQueryParamAndLocalStorageState from "@/hooks/useQueryParamAndLocalStorageState";
 import TextCell from "@/components/shared/DataTableCells/TextCell";
-import { useOpenCreateExperimentDialog } from "@/hooks/useOpenCreateExperimentDialog";
 
 const STORAGE_KEY_PREFIX = "experiments";
 const PAGINATION_SIZE_KEY = "experiments-pagination-size";
@@ -238,12 +237,8 @@ const ExperimentsPage: React.FC = () => {
   const resetDialogKeyRef = useRef(0);
   const [query] = useQueryParam("new", JsonParam);
 
-  // Support both ?create_experiment=1 (new) and ?new={"experiment":true} (legacy)
-  const { isOpen: isCreateExperimentOpen, setOpen: setCreateExperimentOpen } =
-    useOpenCreateExperimentDialog();
-
   const [openDialog, setOpenDialog] = useState<boolean>(
-    Boolean(query ? query.experiment : false) || isCreateExperimentOpen,
+    Boolean(query ? query.experiment : false),
   );
 
   const [search = "", setSearch] = useQueryParam("search", StringParam, {
@@ -392,18 +387,8 @@ const ExperimentsPage: React.FC = () => {
 
   const handleNewExperimentClick = useCallback(() => {
     setOpenDialog(true);
-    setCreateExperimentOpen(true);
     resetDialogKeyRef.current = resetDialogKeyRef.current + 1;
-  }, [setCreateExperimentOpen]);
-
-  // Wrapper to sync dialog state with URL param
-  const handleSetOpenDialog = useCallback(
-    (open: boolean) => {
-      setOpenDialog(open);
-      setCreateExperimentOpen(open);
-    },
-    [setCreateExperimentOpen],
-  );
+  }, []);
 
   const renderCustomRowCallback = useCallback(
     (row: Row<GroupedExperiment>) => {
@@ -716,7 +701,7 @@ const ExperimentsPage: React.FC = () => {
       <AddExperimentDialog
         key={resetDialogKeyRef.current}
         open={openDialog}
-        setOpen={handleSetOpenDialog}
+        setOpen={setOpenDialog}
         datasetName={query?.datasetName}
       />
     </PageBodyScrollContainer>
