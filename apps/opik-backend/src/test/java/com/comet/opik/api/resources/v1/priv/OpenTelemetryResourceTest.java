@@ -197,7 +197,7 @@ class OpenTelemetryResourceTest {
                     .setEndTimeUnixNano(System.currentTimeMillis() * 1_000_000L)
                     .build());
 
-            var batchSize = RandomUtils.insecure().nextInt(4, 9);
+            var batchSize = RandomUtils.insecure().randomInt(4, 9);
             IntStream.range(0, batchSize)
                     .mapToObj(i -> Span.newBuilder()
                             .setName("span " + i)
@@ -357,7 +357,16 @@ class OpenTelemetryResourceTest {
                     KeyValue.newBuilder().setKey(randomKeyJson)
                             .setValue(AnyValue.newBuilder().setStringValue("{\"key\": \"value\"}")).build(),
                     KeyValue.newBuilder().setKey(randomKeyInt)
-                            .setValue(AnyValue.newBuilder().setIntValue(3)).build());
+                            .setValue(AnyValue.newBuilder().setIntValue(3)).build(),
+
+                    KeyValue.newBuilder().setKey("opik.tags")
+                            .setValue(AnyValue.newBuilder()
+                                    .setStringValue("[\"machine-learning\", \"nlp\", \"chatbot\"]").build())
+                            .build(),
+                    KeyValue.newBuilder().setKey("opik.metadata")
+                            .setValue(AnyValue.newBuilder().setStringValue("{\"foo\": \"bar\"}").build()).build(),
+                    KeyValue.newBuilder().setKey("opik.metadata.inline")
+                            .setValue(AnyValue.newBuilder().setStringValue("inline_value").build()).build());
 
             var spanBuilder = com.comet.opik.api.Span.builder()
                     .id(UUID.randomUUID())
@@ -365,11 +374,11 @@ class OpenTelemetryResourceTest {
                     .projectId(UUID.randomUUID())
                     .startTime(Instant.now());
 
-            OpenTelemetryMapper.enrichSpanWithAttributes(spanBuilder, attributes, null);
+            OpenTelemetryMapper.enrichSpanWithAttributes(spanBuilder, attributes, null, null);
 
             var span = spanBuilder.build();
 
-            // checks key-values we know there are not rule associated with
+            // checks key-values - we know there are no rules associated with
             assertThat(span.input().get(randomKeyArray)).size().isEqualTo(2);
             assertThat(span.input().get(randomKeyJson).get("key").asText()).isEqualTo("value");
             assertThat(span.input().get(randomKeyInt).asInt()).isEqualTo(3);
@@ -389,6 +398,15 @@ class OpenTelemetryResourceTest {
             assertThat(span.input().get("all_messages").isArray()).isEqualTo(Boolean.TRUE);
 
             assertThat(span.output().get("tool_responses").isArray()).isEqualTo(Boolean.TRUE);
+
+            // checks key-values for tags
+            assertThat(span.tags()).isNotEmpty();
+            assertThat(span.tags()).contains("machine-learning", "nlp", "chatbot");
+
+            // check metadata
+            assertThat(span.metadata()).isNotEmpty();
+            assertThat(span.metadata().get("opik.metadata").get("foo").asText()).isEqualTo("bar");
+            assertThat(span.metadata().get("opik.metadata.inline").asText()).isEqualTo("inline_value");
         }
 
         @Test

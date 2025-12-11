@@ -6,18 +6,23 @@ from .api_objects.experiment.experiment_item import (
     ExperimentItemReferences,
 )
 from .api_objects.opik_client import Opik
-from .api_objects.prompt import Prompt
+from .api_objects.prompt import Prompt, ChatPrompt
 from .api_objects.prompt.types import PromptType
 from .api_objects.span import Span
 from .api_objects.trace import Trace
 from .configurator.configure import configure
 from .decorator.tracker import flush_tracker, track
-from .evaluation import evaluate, evaluate_experiment, evaluate_prompt
+from .evaluation import (
+    evaluate,
+    evaluate_experiment,
+    evaluate_on_dict_items,
+    evaluate_prompt,
+)
 from .integrations.sagemaker import auth as sagemaker_auth
 from .plugins.pytest.decorator import llm_unit
 from .types import LLMProvider
 from . import opik_context
-from .decorator.tracing_runtime_config import (
+from .tracing_runtime_config import (
     is_tracing_active,
     reset_tracing_to_config_default,
     set_tracing_active,
@@ -37,6 +42,7 @@ __all__ = [
     "evaluate",
     "evaluate_prompt",
     "evaluate_experiment",
+    "evaluate_on_dict_items",
     "ExperimentItemContent",
     "ExperimentItemReferences",
     "track",
@@ -49,6 +55,7 @@ __all__ = [
     "llm_unit",
     "configure",
     "Prompt",
+    "ChatPrompt",
     "PromptType",
     "LLMProvider",
     "reset_tracing_to_config_default",

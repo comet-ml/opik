@@ -7,10 +7,6 @@ LiveKit Agents is an open-source Python framework for building production-grade 
 
 LiveKit Agents' primary advantage is its built-in OpenTelemetry support for comprehensive observability, making it easy to monitor agent sessions, LLM calls, function tools, and TTS operations in real-time applications.
 
-<Frame>
-  <img src="/img/tracing/livekit_integration.png" alt="LiveKit Agents tracing" />
-</Frame>
-
 ## Getting started
 
 To use the LiveKit Agents integration with Opik, you will need to have LiveKit Agents and the required OpenTelemetry packages installed:
@@ -94,26 +90,30 @@ Configure your environment variables based on your Opik deployment:
 
 LiveKit Agents includes built-in OpenTelemetry support. To enable telemetry, configure a tracer provider using `set_tracer_provider` in your entrypoint function:
 
-```python
+```python title="main.py"
 import logging
+
+from dotenv import load_dotenv
+
+load_dotenv()
 
 from livekit.agents import (
     Agent,
     AgentSession,
     JobContext,
     RunContext,
-    WorkerOptions,
     cli,
-    metrics,
+    metrics, AgentServer,
 )
 from livekit.agents.llm import function_tool
 from livekit.agents.telemetry import set_tracer_provider
 from livekit.agents.voice import MetricsCollectedEvent
 from livekit.plugins import deepgram, openai, silero
-from livekit.plugins.turn_detector.multilingual import MultilingualModel
 from opentelemetry.util.types import AttributeValue
 
 logger = logging.getLogger("basic-agent")
+
+server = AgentServer()
 
 
 def setup_opik_tracing(metadata: dict[str, AttributeValue] | None = None):
@@ -130,9 +130,9 @@ def setup_opik_tracing(metadata: dict[str, AttributeValue] | None = None):
     return trace_provider
 
 
-@function_tool
+@function_tool(None)
 async def lookup_weather(context: RunContext, location: str) -> str:
-    """Called when the user asks for weather related information.
+    """Called when the user asks for information related to weather.
 
     Args:
         location: The location they are asking for
@@ -150,15 +150,15 @@ class Kelly(Agent):
             llm=openai.LLM(model="gpt-4o-mini"),
             stt=deepgram.STT(model="nova-3", language="multi"),
             tts=openai.TTS(voice="ash"),
-            turn_detection=MultilingualModel(),
+            turn_detection="realtime_llm",
             tools=[lookup_weather],
         )
 
     async def on_enter(self):
         logger.info("Kelly is entering the session")
-        self.session.generate_reply()
+        await self.session.generate_reply()
 
-    @function_tool
+    @function_tool(None)
     async def transfer_to_alloy(self) -> Agent:
         """Transfer the call to Alloy."""
         logger.info("Transferring the call to Alloy")
@@ -175,9 +175,9 @@ class Alloy(Agent):
 
     async def on_enter(self):
         logger.info("Alloy is entering the session")
-        self.session.generate_reply()
+        await self.session.generate_reply()
 
-    @function_tool
+    @function_tool(None)
     async def transfer_to_kelly(self) -> Agent:
         """Transfer the call to Kelly."""
 
@@ -185,6 +185,7 @@ class Alloy(Agent):
         return Kelly()
 
 
+@server.rtc_session(agent_name="LK_test")
 async def entrypoint(ctx: JobContext):
     # set up the langfuse tracer
     trace_provider = setup_opik_tracing(
@@ -209,9 +210,45 @@ async def entrypoint(ctx: JobContext):
     await session.start(agent=Kelly(), room=ctx.room)
 
 
+
 if __name__ == "__main__":
-    cli.run_app(WorkerOptions(entrypoint_fnc=entrypoint))
+    cli.run_app(server)
 ```
+
+Make sure to create a `.env` file with the environment variables you configured above as well as LiveKit,
+DeepGram and OpenAI API keys and credentials. It should look something like this:
+
+```md title=".env"
+# LiveKit credentials
+# For local development, you can use these placeholder values
+# or get real credentials from https://cloud.livekit.io
+LIVEKIT_URL=wss://[your-livekit-project-url]
+LIVEKIT_API_KEY=[your-livekit-api-key]
+LIVEKIT_API_SECRET=[your-livekit-api-secret]
+
+# Deepgram API
+DEEPGRAM_API_KEY=[your-deepgram-api-key]
+
+# You'll also need OpenAI API key for the LLM and TTS
+OPENAI_API_KEY=[your-openai-api-key]
+
+# The OTEl endpoint configuration
+#OTEL_EXPORTER_OTLP_ENDPOINT=https://www.comet.com/opik/api/v1/private/otel
+#OTEL_EXPORTER_OTLP_HEADERS='Authorization=[your-api-key],Comet-Workspace=default'
+```
+
+
+Then, run the application with following command:
+
+```bash
+python main.py console
+```
+
+After a few seconds, you should see traces in Comet ML:
+
+<Frame>
+  <img src="/img/tracing/livekit_integration.png" alt="LiveKit Agents tracing" />
+</Frame>
 
 ## What gets traced
 

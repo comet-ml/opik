@@ -23,6 +23,8 @@ export interface Trace {
     createdBy?: string;
     lastUpdatedBy?: string;
     feedbackScores?: OpikApi.FeedbackScore[];
+    /** Aggregated feedback scores from all spans in this trace, averaged by score name */
+    spanFeedbackScores?: OpikApi.FeedbackScore[];
     comments?: OpikApi.Comment[];
     guardrailsValidations?: OpikApi.GuardrailsValidation[];
     totalEstimatedCost?: number;
@@ -32,6 +34,7 @@ export interface Trace {
     threadId?: string;
     visibilityMode?: OpikApi.TraceVisibilityMode;
     llmSpanCount?: number;
+    hasToolSpans?: boolean;
     /** List of unique provider names from all spans in this trace, sorted alphabetically */
     providers?: string[];
 }

@@ -6,6 +6,8 @@ import * as serializers from "../index";
 import * as OpikApi from "../../api/index";
 import * as core from "../../core";
 import { DatasetPublicVisibility } from "./DatasetPublicVisibility";
+import { DatasetPublicStatus } from "./DatasetPublicStatus";
+import { DatasetVersionSummaryPublic } from "./DatasetVersionSummaryPublic";
 
 export const DatasetPublic: core.serialization.ObjectSchema<serializers.DatasetPublic.Raw, OpikApi.DatasetPublic> =
     core.serialization.object({
@@ -37,6 +39,8 @@ export const DatasetPublic: core.serialization.ObjectSchema<serializers.DatasetP
             "last_created_optimization_at",
             core.serialization.date().optional(),
         ),
+        status: DatasetPublicStatus.optional(),
+        latestVersion: core.serialization.property("latest_version", DatasetVersionSummaryPublic.optional()),
     });
 
 export declare namespace DatasetPublic {
@@ -57,5 +61,7 @@ export declare namespace DatasetPublic {
         last_created_experiment_at?: string | null;
         most_recent_optimization_at?: string | null;
         last_created_optimization_at?: string | null;
+        status?: DatasetPublicStatus.Raw | null;
+        latest_version?: DatasetVersionSummaryPublic.Raw | null;
     }
 }

@@ -22,6 +22,7 @@ export type MenuItem = {
   icon: LucideIcon;
   label: string;
   count?: string;
+  showIndicator?: string;
   featureFlag?: FeatureToggleKeys;
   onClick?: MouseEventHandler<HTMLButtonElement>;
 };
@@ -36,6 +37,8 @@ interface SidebarMenuItemProps {
   item: MenuItem;
   expanded: boolean;
   count?: number;
+  hasIndicator?: boolean;
+  compact?: boolean;
 }
 
 interface GetItemElementProps {
@@ -93,9 +96,12 @@ const SidebarMenuItem: React.FunctionComponent<SidebarMenuItemProps> = ({
   item,
   expanded,
   count,
+  hasIndicator,
+  compact = false,
 }) => {
   const { activeWorkspaceName: workspaceName } = useAppStore();
   const hasCount = item.count && isNumber(count);
+  const showIndicatorBadge = item.showIndicator && hasIndicator;
   const isFeatureEnabled = useIsFeatureEnabled(item.featureFlag!);
 
   if (item.featureFlag && !isFeatureEnabled) {
@@ -107,16 +113,31 @@ const SidebarMenuItem: React.FunctionComponent<SidebarMenuItemProps> = ({
       <item.icon className="size-4 shrink-0" />
       {expanded && (
         <>
-          <div className="ml-1 grow truncate">{item.label}</div>
+          <div className="grow truncate">{item.label}</div>
           {hasCount && <div className="h-6 shrink-0 leading-6">{count}</div>}
+          {showIndicatorBadge && (
+            <div className="size-2 shrink-0 rounded-full bg-[var(--color-green)]" />
+          )}
         </>
+      )}
+      {!expanded && showIndicatorBadge && (
+        <div className="absolute right-1 top-1 size-2 rounded-full bg-[var(--color-green)]" />
       )}
     </>
   );
 
   const linkClasses = cn(
-    "comet-body-s flex h-9 w-full items-center gap-2 text-foreground rounded-md hover:bg-primary-foreground data-[status=active]:bg-primary-100 data-[status=active]:text-primary",
-    expanded ? "pl-[10px] pr-3" : "w-9 justify-center",
+    "comet-body-s relative flex w-full items-center gap-2 rounded-md hover:bg-primary-foreground data-[status=active]:bg-primary-100 data-[status=active]:text-primary",
+    compact
+      ? "h-8 text-muted-slate data-[status=active]:text-muted-slate data-[status=active]:bg-muted"
+      : "h-9 text-foreground",
+    compact
+      ? expanded
+        ? "px-2.5"
+        : "w-8 justify-center"
+      : expanded
+        ? "pl-[10px] pr-3"
+        : "w-9 justify-center",
   );
 
   const itemElement = getItemElementByType({

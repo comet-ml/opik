@@ -3,5 +3,5 @@
 import typing
 
 ProviderApiKeyPublicProvider = typing.Union[
-    typing.Literal["openai", "anthropic", "gemini", "openrouter", "vertex-ai", "custom-llm"], typing.Any
+    typing.Literal["openai", "anthropic", "gemini", "openrouter", "vertex-ai", "custom-llm", "opik-builtin"], typing.Any
 ]

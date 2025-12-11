@@ -14,6 +14,7 @@ import {
   TextPart,
   ImagePart,
   VideoPart,
+  AudioPart,
   ProviderMessageType,
 } from "@/types/llm";
 import { getPromptMustacheTags } from "@/lib/prompt";
@@ -74,7 +75,7 @@ const transformMessageIntoProviderMessage = (
       { escape: (val: string) => val },
     );
   } else {
-    // Array with images/videos: render mustache in text, image URLs, and video URLs
+    // Array with images/videos/audios: render mustache in text and media URLs
     processedContent = message.content.map((part) => {
       if (part.type === "text") {
         return {
@@ -99,7 +100,7 @@ const transformMessageIntoProviderMessage = (
             ),
           },
         } as ImagePart;
-      } else {
+      } else if (part.type === "video_url") {
         // Render mustache variables in video URLs
         return {
           type: "video_url",
@@ -112,6 +113,19 @@ const transformMessageIntoProviderMessage = (
             ),
           },
         } as VideoPart;
+      } else {
+        // Render mustache variables in audio URLs
+        return {
+          type: "audio_url",
+          audio_url: {
+            url: mustache.render(
+              part.audio_url.url,
+              serializedDatasetItem,
+              {},
+              { escape: (val: string) => val },
+            ),
+          },
+        } as AudioPart;
       }
     });
   }
@@ -131,6 +145,7 @@ interface UsePromptDatasetItemCombinationArgs {
   selectedRuleIds: string[] | null;
   addAbortController: (key: string, value: AbortController) => void;
   deleteAbortController: (key: string) => void;
+  throttlingSeconds: number;
 }
 
 const usePromptDatasetItemCombination = ({
@@ -141,6 +156,7 @@ const usePromptDatasetItemCombination = ({
   selectedRuleIds,
   addAbortController,
   deleteAbortController,
+  throttlingSeconds,
 }: UsePromptDatasetItemCombinationArgs) => {
   const updateOutput = useUpdateOutput();
   const hydrateDatasetItemData = useHydrateDatasetItemData();
@@ -248,6 +264,13 @@ const usePromptDatasetItemCombination = ({
         });
       } finally {
         deleteAbortController(key);
+
+        // Apply throttling delay if configured
+        if (throttlingSeconds > 0 && !isToStopRef.current) {
+          await new Promise((resolve) =>
+            setTimeout(resolve, throttlingSeconds * 1000),
+          );
+        }
       }
     },
 
@@ -260,6 +283,7 @@ const usePromptDatasetItemCombination = ({
       datasetName,
       deleteAbortController,
       selectedRuleIds,
+      throttlingSeconds,
     ],
   );
 

@@ -52,6 +52,10 @@ def _is_hf_offline_error(exc: Exception) -> bool:
     return any(marker in msg for marker in markers)
 
 
+def _is_disk_full_error(exc: Exception) -> bool:
+    return "No space left on device" in str(exc)
+
+
 def _default_cache_dir() -> Path:
     cache_env = os.getenv("HF_DATASETS_CACHE")
     if cache_env:
@@ -97,6 +101,9 @@ def test_hf_sources_resolve_one_record(
     We bypass the Opik client entirely so this test exercises the HF integration only,
     preventing accidental dataset creation in shared environments.
     """
+    # Fixture used for side effects (env + cache); keep lint happy
+    assert ensured_hf_cache.exists()
+
     handle = DatasetHandle(spec)
     slice_request = resolve_slice_request(
         base_name=spec.name,
@@ -118,6 +125,8 @@ def test_hf_sources_resolve_one_record(
     except Exception as exc:  # pragma: no cover - exercised in offline environments
         if _is_hf_offline_error(exc):
             pytest.skip(f"Hugging Face hub unavailable: {exc}")
+        if _is_disk_full_error(exc):
+            pytest.skip(f"HF cache volume is full: {exc}")
         raise
     assert len(records) == 1
     assert isinstance(records[0], dict)

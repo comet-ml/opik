@@ -120,14 +120,26 @@ public interface FeedbackScoreMapper {
             String author = entry.getKey();
             List<Object> tuple = entry.getValue();
 
-            // tuple contains: (value, reason, category_name, source, last_updated_at)
-            ValueEntry valueEntry = ValueEntry.builder()
+            // tuple contains: (value, reason, category_name, source, last_updated_at, span_type, span_id)
+            // span_type and span_id are optional and only present for span feedback scores
+            ValueEntry.ValueEntryBuilder builder = ValueEntry.builder()
                     .value((BigDecimal) tuple.get(0))
                     .reason(getIfNotEmpty(tuple.get(1)))
                     .categoryName(getIfNotEmpty(tuple.get(2)))
                     .source(ScoreSource.fromString((String) tuple.get(3)))
-                    .lastUpdatedAt(((OffsetDateTime) tuple.get(4)).toInstant())
-                    .build();
+                    .lastUpdatedAt(((OffsetDateTime) tuple.get(4)).toInstant());
+
+            // span_type is the 6th element (index 5), span_id is the 7th element (index 6)
+            // only present for span feedback scores
+            if (tuple.size() > 5 && tuple.get(5) != null) {
+                builder.spanType((String) tuple.get(5));
+            }
+            // span_id is the 7th element (index 6)
+            if (tuple.size() > 6 && tuple.get(6) != null) {
+                builder.spanId((String) tuple.get(6));
+            }
+
+            ValueEntry valueEntry = builder.build();
 
             result.put(author, valueEntry);
         }

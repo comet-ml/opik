@@ -2,6 +2,7 @@ package com.comet.opik.domain;
 
 import com.comet.opik.api.DatasetItem;
 import com.comet.opik.api.DatasetItemSource;
+import com.comet.opik.api.DatasetStatus;
 import com.comet.opik.api.Visibility;
 import com.comet.opik.infrastructure.BatchOperationsConfig;
 import com.comet.opik.utils.JsonUtils;
@@ -62,14 +63,14 @@ public class CsvDatasetItemProcessor {
     /**
      * Processes uploaded CSV file by buffering to temp storage and processing asynchronously.
      * This method buffers the stream synchronously (to avoid connection timeout issues),
-     * then processes the file asynchronously with automatic cleanup.
+     * validates the CSV headers, then processes the file asynchronously with automatic cleanup.
      *
      * @param inputStream CSV file input stream from upload
      * @param datasetId Dataset ID
      * @param workspaceId Workspace UUID
      * @param userName User name
      * @param visibility Visibility setting
-     * @throws BadRequestException if buffering fails
+     * @throws BadRequestException if buffering fails or CSV validation fails
      */
     public void processUploadedCsv(InputStream inputStream, UUID datasetId, String workspaceId,
             String userName, Visibility visibility) {
@@ -82,19 +83,33 @@ public class CsvDatasetItemProcessor {
             tempFile = bufferToTempFile(inputStream);
         } catch (IOException e) {
             log.error("Failed to buffer CSV file to temp storage for dataset '{}'", datasetId, e);
-            throw new InternalServerErrorException("Failed to process CSV file: " + e.getMessage());
+            throw new InternalServerErrorException("Failed to process CSV file");
         }
+
+        // Validate CSV headers synchronously BEFORE starting async processing
+        // This ensures validation errors are returned to the client immediately
+        try {
+            validateCsvHeaders(tempFile);
+        } catch (Exception e) {
+            deleteTempFile(tempFile);
+            throw e;
+        }
+
+        // Set status to PROCESSING before starting async processing
+        datasetService.updateStatus(datasetId, workspaceId, DatasetStatus.PROCESSING);
 
         // Now process asynchronously with automatic cleanup
         log.info("Starting asynchronous CSV processing for dataset '{}' on workspaceId '{}'", datasetId, workspaceId);
         validateAndProcessCsvFromFile(tempFile, datasetId, workspaceId, userName, visibility)
                 .doOnError(error -> {
                     log.error("CSV processing failed for dataset '{}'", datasetId, error);
+                    datasetService.updateStatus(datasetId, workspaceId, DatasetStatus.FAILED);
                     deleteTempFile(tempFile);
                 })
                 .doOnSuccess(totalItems -> {
                     log.info("CSV processing completed for dataset '{}', total items: '{}'",
                             datasetId, totalItems);
+                    datasetService.updateStatus(datasetId, workspaceId, DatasetStatus.COMPLETED);
                     deleteTempFile(tempFile);
                 })
                 .subscribe(null, error -> log.error("Subscription error during CSV processing for dataset '{}'",
@@ -118,6 +133,49 @@ public class CsvDatasetItemProcessor {
         } catch (IOException e) {
             deleteTempFile(tempFile);
             throw e;
+        }
+    }
+
+    /**
+     * Validates CSV headers synchronously to catch errors before async processing.
+     * This ensures validation errors are returned to the client immediately.
+     *
+     * @param tempFile Temporary file containing CSV data
+     * @throws BadRequestException if CSV headers are invalid
+     */
+    private void validateCsvHeaders(Path tempFile) {
+        try (InputStreamReader reader = new InputStreamReader(
+                Files.newInputStream(tempFile), StandardCharsets.UTF_8);
+                CSVParser parser = createCsvParser(reader)) {
+
+            List<String> headers = parser.getHeaderNames();
+
+            if (headers.isEmpty()) {
+                throw new BadRequestException("CSV file must contain headers");
+            }
+
+            // Check for empty or blank headers
+            for (int i = 0; i < headers.size(); i++) {
+                String header = headers.get(i);
+                if (StringUtils.isBlank(header)) {
+                    throw new BadRequestException(
+                            String.format("CSV header at position %d is empty or blank. All headers must have a name.",
+                                    i + 1));
+                }
+            }
+
+            log.debug("CSV headers validated successfully: {}", headers);
+        } catch (IllegalArgumentException e) {
+            // Apache Commons CSV throws IllegalArgumentException for empty headers
+            log.error("Invalid CSV headers", e);
+            String message = e.getMessage();
+            if (message != null && message.contains("header name is missing")) {
+                throw new BadRequestException("CSV contains empty header names. All column headers must have a name.");
+            }
+            throw new BadRequestException("Invalid CSV format");
+        } catch (IOException e) {
+            log.error("Failed to validate CSV headers", e);
+            throw new BadRequestException("Failed to read CSV file");
         }
     }
 
@@ -239,7 +297,7 @@ public class CsvDatasetItemProcessor {
                 return totalProcessed;
             } catch (IOException e) {
                 log.warn("Failed to process CSV file for dataset '{}'", datasetId, e);
-                throw new BadRequestException("Failed to read CSV file: " + e.getMessage());
+                throw new BadRequestException("Failed to read CSV file");
             }
         }).subscribeOn(Schedulers.boundedElastic());
     }

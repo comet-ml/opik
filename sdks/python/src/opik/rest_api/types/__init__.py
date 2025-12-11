@@ -37,10 +37,15 @@ from .assistant_message import AssistantMessage
 from .assistant_message_role import AssistantMessageRole
 from .attachment import Attachment
 from .attachment_page import AttachmentPage
+from .audio_url import AudioUrl
+from .audio_url_public import AudioUrlPublic
+from .audio_url_write import AudioUrlWrite
 from .auth_details_holder import AuthDetailsHolder
 from .automation_rule_evaluator import (
     AutomationRuleEvaluator,
     AutomationRuleEvaluator_LlmAsJudge,
+    AutomationRuleEvaluator_SpanLlmAsJudge,
+    AutomationRuleEvaluator_SpanUserDefinedMetricPython,
     AutomationRuleEvaluator_TraceThreadLlmAsJudge,
     AutomationRuleEvaluator_TraceThreadUserDefinedMetricPython,
     AutomationRuleEvaluator_UserDefinedMetricPython,
@@ -48,20 +53,36 @@ from .automation_rule_evaluator import (
 from .automation_rule_evaluator_llm_as_judge import AutomationRuleEvaluatorLlmAsJudge
 from .automation_rule_evaluator_llm_as_judge_public import AutomationRuleEvaluatorLlmAsJudgePublic
 from .automation_rule_evaluator_llm_as_judge_write import AutomationRuleEvaluatorLlmAsJudgeWrite
-from .automation_rule_evaluator_object_public import (
-    AutomationRuleEvaluatorObjectPublic,
-    AutomationRuleEvaluatorObjectPublic_LlmAsJudge,
-    AutomationRuleEvaluatorObjectPublic_TraceThreadLlmAsJudge,
-    AutomationRuleEvaluatorObjectPublic_TraceThreadUserDefinedMetricPython,
-    AutomationRuleEvaluatorObjectPublic_UserDefinedMetricPython,
+from .automation_rule_evaluator_object_object_public import (
+    AutomationRuleEvaluatorObjectObjectPublic,
+    AutomationRuleEvaluatorObjectObjectPublic_LlmAsJudge,
+    AutomationRuleEvaluatorObjectObjectPublic_SpanLlmAsJudge,
+    AutomationRuleEvaluatorObjectObjectPublic_SpanUserDefinedMetricPython,
+    AutomationRuleEvaluatorObjectObjectPublic_TraceThreadLlmAsJudge,
+    AutomationRuleEvaluatorObjectObjectPublic_TraceThreadUserDefinedMetricPython,
+    AutomationRuleEvaluatorObjectObjectPublic_UserDefinedMetricPython,
 )
 from .automation_rule_evaluator_page_public import AutomationRuleEvaluatorPagePublic
 from .automation_rule_evaluator_public import (
     AutomationRuleEvaluatorPublic,
     AutomationRuleEvaluatorPublic_LlmAsJudge,
+    AutomationRuleEvaluatorPublic_SpanLlmAsJudge,
+    AutomationRuleEvaluatorPublic_SpanUserDefinedMetricPython,
     AutomationRuleEvaluatorPublic_TraceThreadLlmAsJudge,
     AutomationRuleEvaluatorPublic_TraceThreadUserDefinedMetricPython,
     AutomationRuleEvaluatorPublic_UserDefinedMetricPython,
+)
+from .automation_rule_evaluator_span_llm_as_judge import AutomationRuleEvaluatorSpanLlmAsJudge
+from .automation_rule_evaluator_span_llm_as_judge_public import AutomationRuleEvaluatorSpanLlmAsJudgePublic
+from .automation_rule_evaluator_span_llm_as_judge_write import AutomationRuleEvaluatorSpanLlmAsJudgeWrite
+from .automation_rule_evaluator_span_user_defined_metric_python import (
+    AutomationRuleEvaluatorSpanUserDefinedMetricPython,
+)
+from .automation_rule_evaluator_span_user_defined_metric_python_public import (
+    AutomationRuleEvaluatorSpanUserDefinedMetricPythonPublic,
+)
+from .automation_rule_evaluator_span_user_defined_metric_python_write import (
+    AutomationRuleEvaluatorSpanUserDefinedMetricPythonWrite,
 )
 from .automation_rule_evaluator_trace_thread_llm_as_judge import AutomationRuleEvaluatorTraceThreadLlmAsJudge
 from .automation_rule_evaluator_trace_thread_llm_as_judge_public import (
@@ -80,11 +101,17 @@ from .automation_rule_evaluator_trace_thread_user_defined_metric_python_write im
 from .automation_rule_evaluator_update import (
     AutomationRuleEvaluatorUpdate,
     AutomationRuleEvaluatorUpdate_LlmAsJudge,
+    AutomationRuleEvaluatorUpdate_SpanLlmAsJudge,
+    AutomationRuleEvaluatorUpdate_SpanUserDefinedMetricPython,
     AutomationRuleEvaluatorUpdate_TraceThreadLlmAsJudge,
     AutomationRuleEvaluatorUpdate_TraceThreadUserDefinedMetricPython,
     AutomationRuleEvaluatorUpdate_UserDefinedMetricPython,
 )
 from .automation_rule_evaluator_update_llm_as_judge import AutomationRuleEvaluatorUpdateLlmAsJudge
+from .automation_rule_evaluator_update_span_llm_as_judge import AutomationRuleEvaluatorUpdateSpanLlmAsJudge
+from .automation_rule_evaluator_update_span_user_defined_metric_python import (
+    AutomationRuleEvaluatorUpdateSpanUserDefinedMetricPython,
+)
 from .automation_rule_evaluator_update_trace_thread_llm_as_judge import (
     AutomationRuleEvaluatorUpdateTraceThreadLlmAsJudge,
 )
@@ -104,6 +131,8 @@ from .automation_rule_evaluator_user_defined_metric_python_write import (
 from .automation_rule_evaluator_write import (
     AutomationRuleEvaluatorWrite,
     AutomationRuleEvaluatorWrite_LlmAsJudge,
+    AutomationRuleEvaluatorWrite_SpanLlmAsJudge,
+    AutomationRuleEvaluatorWrite_SpanUserDefinedMetricPython,
     AutomationRuleEvaluatorWrite_TraceThreadLlmAsJudge,
     AutomationRuleEvaluatorWrite_TraceThreadUserDefinedMetricPython,
     AutomationRuleEvaluatorWrite_UserDefinedMetricPython,
@@ -177,7 +206,15 @@ from .dataset_item_write import DatasetItemWrite
 from .dataset_item_write_source import DatasetItemWriteSource
 from .dataset_page_public import DatasetPagePublic
 from .dataset_public import DatasetPublic
+from .dataset_public_status import DatasetPublicStatus
 from .dataset_public_visibility import DatasetPublicVisibility
+from .dataset_status import DatasetStatus
+from .dataset_version_diff import DatasetVersionDiff
+from .dataset_version_diff_stats import DatasetVersionDiffStats
+from .dataset_version_page_public import DatasetVersionPagePublic
+from .dataset_version_public import DatasetVersionPublic
+from .dataset_version_summary import DatasetVersionSummary
+from .dataset_version_summary_public import DatasetVersionSummaryPublic
 from .dataset_visibility import DatasetVisibility
 from .delete_attachments_request import DeleteAttachmentsRequest
 from .delete_attachments_request_entity_type import DeleteAttachmentsRequestEntityType
@@ -212,6 +249,9 @@ from .experiment_page_public import ExperimentPagePublic
 from .experiment_public import ExperimentPublic
 from .experiment_public_status import ExperimentPublicStatus
 from .experiment_public_type import ExperimentPublicType
+from .experiment_score import ExperimentScore
+from .experiment_score_public import ExperimentScorePublic
+from .experiment_score_write import ExperimentScoreWrite
 from .experiment_status import ExperimentStatus
 from .experiment_type import ExperimentType
 from .export_trace_service_request import ExportTraceServiceRequest
@@ -329,6 +369,10 @@ from .optimization_page_public import OptimizationPagePublic
 from .optimization_public import OptimizationPublic
 from .optimization_public_status import OptimizationPublicStatus
 from .optimization_status import OptimizationStatus
+from .optimization_studio_config import OptimizationStudioConfig
+from .optimization_studio_config_public import OptimizationStudioConfigPublic
+from .optimization_studio_config_write import OptimizationStudioConfigWrite
+from .optimization_studio_log import OptimizationStudioLog
 from .optimization_write import OptimizationWrite
 from .optimization_write_status import OptimizationWriteStatus
 from .page_columns import PageColumns
@@ -357,19 +401,25 @@ from .project_stats_summary_item import ProjectStatsSummaryItem
 from .project_visibility import ProjectVisibility
 from .prompt import Prompt
 from .prompt_detail import PromptDetail
+from .prompt_detail_template_structure import PromptDetailTemplateStructure
 from .prompt_page_public import PromptPagePublic
 from .prompt_public import PromptPublic
+from .prompt_public_template_structure import PromptPublicTemplateStructure
+from .prompt_template_structure import PromptTemplateStructure
 from .prompt_tokens_details import PromptTokensDetails
 from .prompt_type import PromptType
 from .prompt_version import PromptVersion
 from .prompt_version_detail import PromptVersionDetail
+from .prompt_version_detail_template_structure import PromptVersionDetailTemplateStructure
 from .prompt_version_detail_type import PromptVersionDetailType
 from .prompt_version_link import PromptVersionLink
 from .prompt_version_link_public import PromptVersionLinkPublic
 from .prompt_version_link_write import PromptVersionLinkWrite
 from .prompt_version_page_public import PromptVersionPagePublic
 from .prompt_version_public import PromptVersionPublic
+from .prompt_version_public_template_structure import PromptVersionPublicTemplateStructure
 from .prompt_version_public_type import PromptVersionPublicType
+from .prompt_version_template_structure import PromptVersionTemplateStructure
 from .prompt_version_type import PromptVersionType
 from .provider_api_key import ProviderApiKey
 from .provider_api_key_page_public import ProviderApiKeyPagePublic
@@ -387,19 +437,47 @@ from .span_batch import SpanBatch
 from .span_enrichment_options import SpanEnrichmentOptions
 from .span_experiment_item_bulk_write_view import SpanExperimentItemBulkWriteView
 from .span_experiment_item_bulk_write_view_type import SpanExperimentItemBulkWriteViewType
+from .span_filter import SpanFilter
+from .span_filter_operator import SpanFilterOperator
 from .span_filter_public import SpanFilterPublic
 from .span_filter_public_operator import SpanFilterPublicOperator
+from .span_filter_write import SpanFilterWrite
+from .span_filter_write_operator import SpanFilterWriteOperator
+from .span_llm_as_judge_code import SpanLlmAsJudgeCode
+from .span_llm_as_judge_code_public import SpanLlmAsJudgeCodePublic
+from .span_llm_as_judge_code_write import SpanLlmAsJudgeCodeWrite
 from .span_page_public import SpanPagePublic
 from .span_public import SpanPublic
 from .span_public_type import SpanPublicType
 from .span_type import SpanType
 from .span_update import SpanUpdate
 from .span_update_type import SpanUpdateType
+from .span_user_defined_metric_python_code import SpanUserDefinedMetricPythonCode
+from .span_user_defined_metric_python_code_public import SpanUserDefinedMetricPythonCodePublic
+from .span_user_defined_metric_python_code_write import SpanUserDefinedMetricPythonCodeWrite
 from .span_write import SpanWrite
 from .span_write_type import SpanWriteType
 from .spans_count_response import SpansCountResponse
 from .start_multipart_upload_response import StartMultipartUploadResponse
 from .stream_options import StreamOptions
+from .studio_evaluation import StudioEvaluation
+from .studio_evaluation_public import StudioEvaluationPublic
+from .studio_evaluation_write import StudioEvaluationWrite
+from .studio_llm_model import StudioLlmModel
+from .studio_llm_model_public import StudioLlmModelPublic
+from .studio_llm_model_write import StudioLlmModelWrite
+from .studio_message import StudioMessage
+from .studio_message_public import StudioMessagePublic
+from .studio_message_write import StudioMessageWrite
+from .studio_metric import StudioMetric
+from .studio_metric_public import StudioMetricPublic
+from .studio_metric_write import StudioMetricWrite
+from .studio_optimizer import StudioOptimizer
+from .studio_optimizer_public import StudioOptimizerPublic
+from .studio_optimizer_write import StudioOptimizerWrite
+from .studio_prompt import StudioPrompt
+from .studio_prompt_public import StudioPromptPublic
+from .studio_prompt_write import StudioPromptWrite
 from .tool import Tool
 from .tool_call import ToolCall
 from .trace import Trace
@@ -421,6 +499,8 @@ from .trace_thread_filter import TraceThreadFilter
 from .trace_thread_filter_operator import TraceThreadFilterOperator
 from .trace_thread_filter_public import TraceThreadFilterPublic
 from .trace_thread_filter_public_operator import TraceThreadFilterPublicOperator
+from .trace_thread_filter_write import TraceThreadFilterWrite
+from .trace_thread_filter_write_operator import TraceThreadFilterWriteOperator
 from .trace_thread_identifier import TraceThreadIdentifier
 from .trace_thread_llm_as_judge_code import TraceThreadLlmAsJudgeCode
 from .trace_thread_llm_as_judge_code_public import TraceThreadLlmAsJudgeCodePublic
@@ -501,22 +581,35 @@ __all__ = [
     "AssistantMessageRole",
     "Attachment",
     "AttachmentPage",
+    "AudioUrl",
+    "AudioUrlPublic",
+    "AudioUrlWrite",
     "AuthDetailsHolder",
     "AutomationRuleEvaluator",
     "AutomationRuleEvaluatorLlmAsJudge",
     "AutomationRuleEvaluatorLlmAsJudgePublic",
     "AutomationRuleEvaluatorLlmAsJudgeWrite",
-    "AutomationRuleEvaluatorObjectPublic",
-    "AutomationRuleEvaluatorObjectPublic_LlmAsJudge",
-    "AutomationRuleEvaluatorObjectPublic_TraceThreadLlmAsJudge",
-    "AutomationRuleEvaluatorObjectPublic_TraceThreadUserDefinedMetricPython",
-    "AutomationRuleEvaluatorObjectPublic_UserDefinedMetricPython",
+    "AutomationRuleEvaluatorObjectObjectPublic",
+    "AutomationRuleEvaluatorObjectObjectPublic_LlmAsJudge",
+    "AutomationRuleEvaluatorObjectObjectPublic_SpanLlmAsJudge",
+    "AutomationRuleEvaluatorObjectObjectPublic_SpanUserDefinedMetricPython",
+    "AutomationRuleEvaluatorObjectObjectPublic_TraceThreadLlmAsJudge",
+    "AutomationRuleEvaluatorObjectObjectPublic_TraceThreadUserDefinedMetricPython",
+    "AutomationRuleEvaluatorObjectObjectPublic_UserDefinedMetricPython",
     "AutomationRuleEvaluatorPagePublic",
     "AutomationRuleEvaluatorPublic",
     "AutomationRuleEvaluatorPublic_LlmAsJudge",
+    "AutomationRuleEvaluatorPublic_SpanLlmAsJudge",
+    "AutomationRuleEvaluatorPublic_SpanUserDefinedMetricPython",
     "AutomationRuleEvaluatorPublic_TraceThreadLlmAsJudge",
     "AutomationRuleEvaluatorPublic_TraceThreadUserDefinedMetricPython",
     "AutomationRuleEvaluatorPublic_UserDefinedMetricPython",
+    "AutomationRuleEvaluatorSpanLlmAsJudge",
+    "AutomationRuleEvaluatorSpanLlmAsJudgePublic",
+    "AutomationRuleEvaluatorSpanLlmAsJudgeWrite",
+    "AutomationRuleEvaluatorSpanUserDefinedMetricPython",
+    "AutomationRuleEvaluatorSpanUserDefinedMetricPythonPublic",
+    "AutomationRuleEvaluatorSpanUserDefinedMetricPythonWrite",
     "AutomationRuleEvaluatorTraceThreadLlmAsJudge",
     "AutomationRuleEvaluatorTraceThreadLlmAsJudgePublic",
     "AutomationRuleEvaluatorTraceThreadLlmAsJudgeWrite",
@@ -525,10 +618,14 @@ __all__ = [
     "AutomationRuleEvaluatorTraceThreadUserDefinedMetricPythonWrite",
     "AutomationRuleEvaluatorUpdate",
     "AutomationRuleEvaluatorUpdateLlmAsJudge",
+    "AutomationRuleEvaluatorUpdateSpanLlmAsJudge",
+    "AutomationRuleEvaluatorUpdateSpanUserDefinedMetricPython",
     "AutomationRuleEvaluatorUpdateTraceThreadLlmAsJudge",
     "AutomationRuleEvaluatorUpdateTraceThreadUserDefinedMetricPython",
     "AutomationRuleEvaluatorUpdateUserDefinedMetricPython",
     "AutomationRuleEvaluatorUpdate_LlmAsJudge",
+    "AutomationRuleEvaluatorUpdate_SpanLlmAsJudge",
+    "AutomationRuleEvaluatorUpdate_SpanUserDefinedMetricPython",
     "AutomationRuleEvaluatorUpdate_TraceThreadLlmAsJudge",
     "AutomationRuleEvaluatorUpdate_TraceThreadUserDefinedMetricPython",
     "AutomationRuleEvaluatorUpdate_UserDefinedMetricPython",
@@ -537,10 +634,14 @@ __all__ = [
     "AutomationRuleEvaluatorUserDefinedMetricPythonWrite",
     "AutomationRuleEvaluatorWrite",
     "AutomationRuleEvaluatorWrite_LlmAsJudge",
+    "AutomationRuleEvaluatorWrite_SpanLlmAsJudge",
+    "AutomationRuleEvaluatorWrite_SpanUserDefinedMetricPython",
     "AutomationRuleEvaluatorWrite_TraceThreadLlmAsJudge",
     "AutomationRuleEvaluatorWrite_TraceThreadUserDefinedMetricPython",
     "AutomationRuleEvaluatorWrite_UserDefinedMetricPython",
     "AutomationRuleEvaluator_LlmAsJudge",
+    "AutomationRuleEvaluator_SpanLlmAsJudge",
+    "AutomationRuleEvaluator_SpanUserDefinedMetricPython",
     "AutomationRuleEvaluator_TraceThreadLlmAsJudge",
     "AutomationRuleEvaluator_TraceThreadUserDefinedMetricPython",
     "AutomationRuleEvaluator_UserDefinedMetricPython",
@@ -613,7 +714,15 @@ __all__ = [
     "DatasetItemWriteSource",
     "DatasetPagePublic",
     "DatasetPublic",
+    "DatasetPublicStatus",
     "DatasetPublicVisibility",
+    "DatasetStatus",
+    "DatasetVersionDiff",
+    "DatasetVersionDiffStats",
+    "DatasetVersionPagePublic",
+    "DatasetVersionPublic",
+    "DatasetVersionSummary",
+    "DatasetVersionSummaryPublic",
     "DatasetVisibility",
     "DeleteAttachmentsRequest",
     "DeleteAttachmentsRequestEntityType",
@@ -646,6 +755,9 @@ __all__ = [
     "ExperimentPublic",
     "ExperimentPublicStatus",
     "ExperimentPublicType",
+    "ExperimentScore",
+    "ExperimentScorePublic",
+    "ExperimentScoreWrite",
     "ExperimentStatus",
     "ExperimentType",
     "ExportTraceServiceRequest",
@@ -758,6 +870,10 @@ __all__ = [
     "OptimizationPublic",
     "OptimizationPublicStatus",
     "OptimizationStatus",
+    "OptimizationStudioConfig",
+    "OptimizationStudioConfigPublic",
+    "OptimizationStudioConfigWrite",
+    "OptimizationStudioLog",
     "OptimizationWrite",
     "OptimizationWriteStatus",
     "PageColumns",
@@ -784,19 +900,25 @@ __all__ = [
     "ProjectVisibility",
     "Prompt",
     "PromptDetail",
+    "PromptDetailTemplateStructure",
     "PromptPagePublic",
     "PromptPublic",
+    "PromptPublicTemplateStructure",
+    "PromptTemplateStructure",
     "PromptTokensDetails",
     "PromptType",
     "PromptVersion",
     "PromptVersionDetail",
+    "PromptVersionDetailTemplateStructure",
     "PromptVersionDetailType",
     "PromptVersionLink",
     "PromptVersionLinkPublic",
     "PromptVersionLinkWrite",
     "PromptVersionPagePublic",
     "PromptVersionPublic",
+    "PromptVersionPublicTemplateStructure",
     "PromptVersionPublicType",
+    "PromptVersionTemplateStructure",
     "PromptVersionType",
     "ProviderApiKey",
     "ProviderApiKeyPagePublic",
@@ -814,19 +936,47 @@ __all__ = [
     "SpanEnrichmentOptions",
     "SpanExperimentItemBulkWriteView",
     "SpanExperimentItemBulkWriteViewType",
+    "SpanFilter",
+    "SpanFilterOperator",
     "SpanFilterPublic",
     "SpanFilterPublicOperator",
+    "SpanFilterWrite",
+    "SpanFilterWriteOperator",
+    "SpanLlmAsJudgeCode",
+    "SpanLlmAsJudgeCodePublic",
+    "SpanLlmAsJudgeCodeWrite",
     "SpanPagePublic",
     "SpanPublic",
     "SpanPublicType",
     "SpanType",
     "SpanUpdate",
     "SpanUpdateType",
+    "SpanUserDefinedMetricPythonCode",
+    "SpanUserDefinedMetricPythonCodePublic",
+    "SpanUserDefinedMetricPythonCodeWrite",
     "SpanWrite",
     "SpanWriteType",
     "SpansCountResponse",
     "StartMultipartUploadResponse",
     "StreamOptions",
+    "StudioEvaluation",
+    "StudioEvaluationPublic",
+    "StudioEvaluationWrite",
+    "StudioLlmModel",
+    "StudioLlmModelPublic",
+    "StudioLlmModelWrite",
+    "StudioMessage",
+    "StudioMessagePublic",
+    "StudioMessageWrite",
+    "StudioMetric",
+    "StudioMetricPublic",
+    "StudioMetricWrite",
+    "StudioOptimizer",
+    "StudioOptimizerPublic",
+    "StudioOptimizerWrite",
+    "StudioPrompt",
+    "StudioPromptPublic",
+    "StudioPromptWrite",
     "Tool",
     "ToolCall",
     "Trace",
@@ -848,6 +998,8 @@ __all__ = [
     "TraceThreadFilterOperator",
     "TraceThreadFilterPublic",
     "TraceThreadFilterPublicOperator",
+    "TraceThreadFilterWrite",
+    "TraceThreadFilterWriteOperator",
     "TraceThreadIdentifier",
     "TraceThreadLlmAsJudgeCode",
     "TraceThreadLlmAsJudgeCodePublic",

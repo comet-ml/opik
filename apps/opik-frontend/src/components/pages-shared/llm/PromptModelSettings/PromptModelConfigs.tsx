@@ -38,6 +38,7 @@ interface PromptModelConfigsProps {
   size?: ButtonProps["size"];
   configs: Partial<LLMPromptConfigsType>;
   onChange: (configs: Partial<LLMPromptConfigsType>) => void;
+  disabled?: boolean;
 }
 
 const PromptModelConfigs = ({
@@ -46,6 +47,7 @@ const PromptModelConfigs = ({
   size = "icon-sm",
   configs,
   onChange,
+  disabled: disabledProp = false,
 }: PromptModelConfigsProps) => {
   const provider: PROVIDER_TYPE =
     parseComposedProviderType(composedProviderType);
@@ -84,6 +86,7 @@ const PromptModelConfigs = ({
       return (
         <GeminiModelConfigs
           configs={configs as LLMGeminiConfigsType}
+          model={model}
           onChange={onChange}
         />
       );
@@ -93,6 +96,7 @@ const PromptModelConfigs = ({
       return (
         <VertexAIModelConfigs
           configs={configs as LLMVertexAIConfigsType}
+          model={model}
           onChange={onChange}
         />
       );
@@ -110,7 +114,7 @@ const PromptModelConfigs = ({
     return;
   };
 
-  const disabled = !composedProviderType || isEmpty(configs);
+  const disabled = disabledProp || !composedProviderType || isEmpty(configs);
 
   return (
     <DropdownMenu>

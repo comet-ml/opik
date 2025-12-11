@@ -98,7 +98,6 @@ import jakarta.ws.rs.core.Response;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.collections4.ListUtils;
 import org.apache.commons.lang3.RandomStringUtils;
-import org.apache.commons.lang3.StringUtils;
 import org.apache.hc.core5.http.HttpStatus;
 import org.awaitility.Awaitility;
 import org.glassfish.jersey.client.ChunkedInput;
@@ -207,7 +206,8 @@ class DatasetsResourceTest {
             "createdBy", "lastUpdatedBy", "datasetId", "tags"};
     public static final String[] DATASET_IGNORED_FIELDS = {"id", "createdAt", "lastUpdatedAt", "createdBy",
             "lastUpdatedBy", "experimentCount", "mostRecentExperimentAt", "lastCreatedExperimentAt",
-            "datasetItemsCount", "lastCreatedOptimizationAt", "mostRecentOptimizationAt", "optimizationCount"};
+            "datasetItemsCount", "lastCreatedOptimizationAt", "mostRecentOptimizationAt", "optimizationCount",
+            "status", "latestVersion"};
 
     public static final String API_KEY = UUID.randomUUID().toString();
     private static final String USER = UUID.randomUUID().toString();
@@ -1421,7 +1421,7 @@ class DatasetsResourceTest {
 
             createAndAssert(dataset);
 
-            createAndAssertConflict(dataset, "Dataset already exists");
+            createAndAssertConflict(dataset, "Dataset already exists with name '%s'".formatted(dataset.name()));
         }
 
         @Test
@@ -1435,7 +1435,7 @@ class DatasetsResourceTest {
 
             createAndAssert(dataset);
 
-            createAndAssertConflict(dataset2, "Dataset already exists");
+            createAndAssertConflict(dataset2, "Dataset already exists with name '%s'".formatted(dataset2.name()));
         }
 
         private void createAndAssertConflict(Dataset dataset, String conflictMessage) {
@@ -4721,30 +4721,91 @@ class DatasetsResourceTest {
             assertDatasetItemPage(actualEntity, expectedDatasetItems, columns, 1);
         }
 
-        @Test
-        @DisplayName("when searching with valid search term, then return matching items")
-        void getDatasetItemsByDatasetId__whenSearchingWithValidSearchTerm__thenReturnMatchingItems() {
+        Stream<Arguments> dataFieldFilterOperators() {
+            return Stream.of(
+                    // CONTAINS - matches when value contains the search term
+                    Arguments.of(
+                            Named.of("CONTAINS operator", Operator.CONTAINS),
+                            (Function<String, Map<String, JsonNode>>) searchKey -> Map.of(
+                                    "query", new TextNode("search for " + searchKey + " model"),
+                                    "type", new TextNode("question")),
+                            (Function<String, Map<String, JsonNode>>) searchKey -> Map.of(
+                                    "query", new TextNode("completely different content"),
+                                    "type", new TextNode("recipe"))),
+
+                    // NOT_CONTAINS - matches when value does NOT contain the search term
+                    Arguments.of(
+                            Named.of("NOT_CONTAINS operator", Operator.NOT_CONTAINS),
+                            (Function<String, Map<String, JsonNode>>) searchKey -> Map.of(
+                                    "query", new TextNode("completely different content"),
+                                    "type", new TextNode("recipe")),
+                            (Function<String, Map<String, JsonNode>>) searchKey -> Map.of(
+                                    "query", new TextNode("search for " + searchKey + " model"),
+                                    "type", new TextNode("question"))),
+
+                    // STARTS_WITH - matches when value starts with the search term
+                    Arguments.of(
+                            Named.of("STARTS_WITH operator", Operator.STARTS_WITH),
+                            (Function<String, Map<String, JsonNode>>) searchKey -> Map.of(
+                                    "query", new TextNode(searchKey + " is the beginning"),
+                                    "type", new TextNode("question")),
+                            (Function<String, Map<String, JsonNode>>) searchKey -> Map.of(
+                                    "query", new TextNode("this does not start with " + searchKey),
+                                    "type", new TextNode("recipe"))),
+
+                    // ENDS_WITH - matches when value ends with the search term
+                    Arguments.of(
+                            Named.of("ENDS_WITH operator", Operator.ENDS_WITH),
+                            (Function<String, Map<String, JsonNode>>) searchKey -> Map.of(
+                                    "query", new TextNode("this ends with " + searchKey),
+                                    "type", new TextNode("question")),
+                            (Function<String, Map<String, JsonNode>>) searchKey -> Map.of(
+                                    "query", new TextNode(searchKey + " is at the start not end"),
+                                    "type", new TextNode("recipe"))),
+
+                    // EQUAL - matches when value equals the search term (case insensitive)
+                    Arguments.of(
+                            Named.of("EQUAL operator", Operator.EQUAL),
+                            (Function<String, Map<String, JsonNode>>) searchKey -> Map.of(
+                                    "query", new TextNode(searchKey),
+                                    "type", new TextNode("question")),
+                            (Function<String, Map<String, JsonNode>>) searchKey -> Map.of(
+                                    "query", new TextNode(searchKey + " extra text"),
+                                    "type", new TextNode("recipe"))),
+
+                    // NOT_EQUAL - matches when value does NOT equal the search term
+                    Arguments.of(
+                            Named.of("NOT_EQUAL operator", Operator.NOT_EQUAL),
+                            (Function<String, Map<String, JsonNode>>) searchKey -> Map.of(
+                                    "query", new TextNode(searchKey + " extra text"),
+                                    "type", new TextNode("question")),
+                            (Function<String, Map<String, JsonNode>>) searchKey -> Map.of(
+                                    "query", new TextNode(searchKey),
+                                    "type", new TextNode("recipe"))));
+        }
+
+        @ParameterizedTest
+        @MethodSource("dataFieldFilterOperators")
+        @DisplayName("when filtering data field with operator, then return matching items")
+        void getDatasetItemsByDatasetId__whenFilteringDataFieldWithOperator__thenReturnMatchingItems(
+                Operator operator,
+                Function<String, Map<String, JsonNode>> matchingDataSupplier,
+                Function<String, Map<String, JsonNode>> nonMatchingDataSupplier) {
 
             UUID datasetId = createAndAssert(factory.manufacturePojo(Dataset.class).toBuilder()
                     .id(null)
                     .build());
 
             var searchKey = RandomStringUtils.secure().nextAlphabetic(8);
-            var searchableItem = factory.manufacturePojo(DatasetItem.class).toBuilder()
-                    .data(Map.of(
-                            "query", new TextNode("search for " + searchKey + " model"),
-                            "type", new TextNode("question"),
-                            "category", new TextNode(searchKey + " intelligence")))
+            var matchingItem = factory.manufacturePojo(DatasetItem.class).toBuilder()
+                    .data(matchingDataSupplier.apply(searchKey))
                     .build();
 
-            var nonSearchableItem = factory.manufacturePojo(DatasetItem.class).toBuilder()
-                    .data(Map.of(
-                            "query", new TextNode("how to cook " + RandomStringUtils.secure().nextAlphabetic(8)),
-                            "type", new TextNode("recipe"),
-                            "category", new TextNode(RandomStringUtils.secure().nextAlphabetic(8))))
+            var nonMatchingItem = factory.manufacturePojo(DatasetItem.class).toBuilder()
+                    .data(nonMatchingDataSupplier.apply(searchKey))
                     .build();
 
-            var items = List.of(searchableItem, nonSearchableItem);
+            var items = List.of(matchingItem, nonMatchingItem);
             var batch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
                     .items(items)
                     .datasetId(datasetId)
@@ -4759,126 +4820,65 @@ class DatasetsResourceTest {
 
             putAndAssert(batch, TEST_WORKSPACE, API_KEY);
 
-            // Create filter for the new filter API
-            var filter = new DatasetItemFilter(DatasetItemField.DATA, Operator.CONTAINS, null, searchKey);
+            var filter = new DatasetItemFilter(DatasetItemField.DATA, operator, "query", searchKey);
 
             var actualEntity = datasetResourceClient.getDatasetItems(datasetId,
                     Map.of("filters", toURLEncodedQueryParam(List.of(filter))), API_KEY, TEST_WORKSPACE);
 
-            List<DatasetItem> expectedContent = List.of(searchableItem);
-
-            assertDatasetItemPage(actualEntity, expectedContent, columns, 1);
+            assertDatasetItemPage(actualEntity, List.of(matchingItem), columns, 1);
         }
 
-        // Parameterized test scenarios for search functionality
-        Stream<Arguments> searchTestScenarios() {
+        Stream<Arguments> fullDataFieldFilterOperators() {
             return Stream.of(
+                    // CONTAINS - matches when entire data contains the search term
                     Arguments.of(
-                            "Case insensitive search",
-                            (Function<String, SearchTestScenario>) baseSearchTerm -> {
-                                var searchTerm = baseSearchTerm + "UNIQUE";
-                                var items = List.of(
-                                        createDatasetItem("This is a " + searchTerm.toUpperCase() + " document"),
-                                        createDatasetItem("Another " + searchTerm.toLowerCase() + " file"),
-                                        createDatasetItem(searchTerm.toLowerCase() + " Results Analysis"),
-                                        createDatasetItem("Completely unrelated cooking recipe content DIFFERENT"));
-                                return new SearchTestScenario(
-                                        items,
-                                        searchTerm.toLowerCase(),
-                                        1, 10, // page, size
-                                        3, // expected count
-                                        items.subList(0, 3).reversed() // expected items in reverse order (database order)
-                                );
-                            }),
+                            Named.of("CONTAINS operator", Operator.CONTAINS),
+                            (Function<String, Map<String, JsonNode>>) searchKey -> Map.of(
+                                    "query", new TextNode("search for " + searchKey + " model"),
+                                    "type", new TextNode("question"),
+                                    "priority", new TextNode("high")),
+                            (Function<String, Map<String, JsonNode>>) searchKey -> Map.of(
+                                    "query", new TextNode("completely different content"),
+                                    "type", new TextNode("recipe"),
+                                    "priority", new TextNode("low"))),
+
+                    // NOT_CONTAINS - matches when entire data does NOT contain the search term
                     Arguments.of(
-                            "Empty search returns all items",
-                            (Function<String, SearchTestScenario>) baseSearchTerm -> {
-                                var items = List.of(
-                                        createDatasetItem("First test item " + baseSearchTerm + "EMPTY1"),
-                                        createDatasetItem("Second test item " + baseSearchTerm + "EMPTY2"),
-                                        createDatasetItem("Third test item " + baseSearchTerm + "EMPTY3"),
-                                        createDatasetItem("Fourth test item " + baseSearchTerm + "EMPTY4"),
-                                        createDatasetItem("Fifth test item " + baseSearchTerm + "EMPTY5"));
-                                return new SearchTestScenario(
-                                        items,
-                                        "", // empty search
-                                        1, 10,
-                                        items.size(),
-                                        items.reversed() // items are returned in reverse order
-                                );
-                            }),
-                    Arguments.of(
-                            "No matches returns empty result",
-                            (Function<String, SearchTestScenario>) baseSearchTerm -> {
-                                var items = List.of(
-                                        createDatasetItem("apple fruit content " + baseSearchTerm + "NOMATCH1"),
-                                        createDatasetItem("banana yellow fruit " + baseSearchTerm + "NOMATCH2"),
-                                        createDatasetItem("cherry red berry " + baseSearchTerm + "NOMATCH3"));
-                                // For this scenario, we still create the items but search for something that won't match
-                                return new SearchTestScenario(
-                                        items,
-                                        "COMPLETELYDIFFERENTSTRING", // guaranteed non-matching search
-                                        1, 10,
-                                        0,
-                                        List.of() // no expected items
-                                );
-                            }),
-                    Arguments.of(
-                            "Pagination works correctly",
-                            (Function<String, SearchTestScenario>) baseSearchTerm -> {
-                                var searchTerm = baseSearchTerm + "PAGINATION";
-                                var items = IntStream.range(0, 10)
-                                        .<DatasetItem>mapToObj(
-                                                i -> factory.manufacturePojo(DatasetItem.class).toBuilder()
-                                                        .data(Map.of(
-                                                                "content",
-                                                                new TextNode(searchTerm + " item " + i + " UNIQUE"),
-                                                                "index", new IntNode(i)))
-                                                        .build())
-                                        .toList();
-                                return new SearchTestScenario(
-                                        items,
-                                        searchTerm,
-                                        2, 3, // page 2, size 3
-                                        10, // total count
-                                        items.reversed().subList(3, 6) // expected items for page 2
-                                );
-                            }),
-                    Arguments.of(
-                            "Special characters handled correctly",
-                            (Function<String, SearchTestScenario>) baseSearchTerm -> {
-                                var searchTerm = baseSearchTerm + "SPECIAL";
-                                var items = List.of(
-                                        createDatasetItem("Email: user@" + searchTerm + ".com (test)! SPECIAL1"),
-                                        createDatasetItem("Normal plain text without special chars " + baseSearchTerm
-                                                + "DIFFERENT"));
-                                return new SearchTestScenario(
-                                        items,
-                                        "@" + searchTerm, // search with special character
-                                        1, 10,
-                                        1,
-                                        items.subList(0, 1) // only first item should match
-                                );
-                            }));
+                            Named.of("NOT_CONTAINS operator", Operator.NOT_CONTAINS),
+                            (Function<String, Map<String, JsonNode>>) searchKey -> Map.of(
+                                    "query", new TextNode("completely different content"),
+                                    "type", new TextNode("recipe"),
+                                    "priority", new TextNode("low")),
+                            (Function<String, Map<String, JsonNode>>) searchKey -> Map.of(
+                                    "query", new TextNode("search for " + searchKey + " model"),
+                                    "type", new TextNode("question"),
+                                    "priority", new TextNode("high"))));
         }
 
-        @ParameterizedTest(name = "{0}")
-        @MethodSource("searchTestScenarios")
-        @DisplayName("Search functionality")
-        void getDatasetItemsByDatasetId__searchFunctionality(
-                String testName,
-                Function<String, SearchTestScenario> scenarioBuilder) {
+        @ParameterizedTest
+        @MethodSource("fullDataFieldFilterOperators")
+        @DisplayName("when filtering full data field with operator, then return matching items")
+        void getDatasetItemsByDatasetId__whenFilteringFullDataFieldWithOperator__thenReturnMatchingItems(
+                Operator operator,
+                Function<String, Map<String, JsonNode>> matchingDataSupplier,
+                Function<String, Map<String, JsonNode>> nonMatchingDataSupplier) {
 
             UUID datasetId = createAndAssert(factory.manufacturePojo(Dataset.class).toBuilder()
                     .id(null)
                     .build());
 
-            // Generate a unique base search term for each scenario to avoid cross-contamination
-            var baseSearchTerm = "TEST" + testName.replaceAll("\\s+", "").toUpperCase();
-            var scenario = scenarioBuilder.apply(baseSearchTerm);
+            var searchKey = RandomStringUtils.secure().nextAlphabetic(8);
+            var matchingItem = factory.manufacturePojo(DatasetItem.class).toBuilder()
+                    .data(matchingDataSupplier.apply(searchKey))
+                    .build();
 
+            var nonMatchingItem = factory.manufacturePojo(DatasetItem.class).toBuilder()
+                    .data(nonMatchingDataSupplier.apply(searchKey))
+                    .build();
+
+            var items = List.of(matchingItem, nonMatchingItem);
             var batch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
-                    .items(scenario.items())
+                    .items(items)
                     .datasetId(datasetId)
                     .build();
 
@@ -4891,37 +4891,13 @@ class DatasetsResourceTest {
 
             putAndAssert(batch, TEST_WORKSPACE, API_KEY);
 
-            var requestBuilder = client.target(BASE_RESOURCE_URI.formatted(baseURI))
-                    .path(datasetId.toString())
-                    .path("items")
-                    .queryParam("page", scenario.page())
-                    .queryParam("size", scenario.size());
+            // FULL_DATA doesn't need a key - it filters by the entire data column (toString(data))
+            var filter = new DatasetItemFilter(DatasetItemField.FULL_DATA, operator, null, searchKey);
 
-            // Add filters parameter only if search term is not empty
-            if (StringUtils.isNotEmpty(scenario.searchTerm())) {
-                var filter = new DatasetItemFilter(DatasetItemField.DATA, Operator.CONTAINS, null,
-                        scenario.searchTerm());
-                requestBuilder = requestBuilder.queryParam("filters", toURLEncodedQueryParam(List.of(filter)));
-            }
+            var actualEntity = datasetResourceClient.getDatasetItems(datasetId,
+                    Map.of("filters", toURLEncodedQueryParam(List.of(filter))), API_KEY, TEST_WORKSPACE);
 
-            try (var actualResponse = requestBuilder
-                    .request()
-                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
-                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
-                    .get()) {
-
-                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
-                var actualEntity = actualResponse.readEntity(DatasetItemPage.class);
-
-                if (scenario.page() == 1) {
-                    // For "No matches" scenario, use empty columns since no results are returned
-                    assertDatasetItemPage(actualEntity, scenario.expectedItems(), columns, scenario.page());
-                } else {
-                    // For pagination tests, include total count
-                    assertDatasetItemPage(actualEntity, scenario.expectedItems(), scenario.expectedTotalCount(),
-                            columns, scenario.page());
-                }
-            }
+            assertDatasetItemPage(actualEntity, List.of(matchingItem), columns, 1);
         }
 
         // Helper method to create dataset items with content
@@ -7331,16 +7307,40 @@ class DatasetsResourceTest {
 
             DatasetsResourceTest.this.createAndAssert(experimentItemsBatch, apiKey, workspaceName);
 
-            // Generate random feedback scores using PODAM
+            // Create spans with usage (tokens) and cost data for trace1
+            var span1Cost = new BigDecimal("10.50");
+            var span1TotalTokens = 150;
+            var span1 = factory.manufacturePojo(Span.class).toBuilder()
+                    .projectName(experiment1.name())
+                    .traceId(trace1.id())
+                    .usage(Map.of("completion_tokens", 50, "prompt_tokens", 100, "total_tokens", span1TotalTokens))
+                    .totalEstimatedCost(span1Cost)
+                    .build();
+            spanResourceClient.createSpan(span1, apiKey, workspaceName);
+
+            // Create spans with usage (tokens) and cost data for trace2
+            var span2Cost = new BigDecimal("25.75");
+            var span2TotalTokens = 300;
+            var span2 = factory.manufacturePojo(Span.class).toBuilder()
+                    .projectName(experiment2.name())
+                    .traceId(trace2.id())
+                    .usage(Map.of("completion_tokens", 100, "prompt_tokens", 200, "total_tokens", span2TotalTokens))
+                    .totalEstimatedCost(span2Cost)
+                    .build();
+            spanResourceClient.createSpan(span2, apiKey, workspaceName);
+
+            // Generate fixed feedback scores for predictable percentile testing
             var feedbackScore1 = factory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
                     .id(trace1.id())
                     .name("accuracy")
+                    .value(new BigDecimal("0.75"))
                     .source(ScoreSource.SDK)
                     .build();
 
             var feedbackScore2 = factory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
                     .id(trace2.id())
                     .name("accuracy")
+                    .value(new BigDecimal("0.95"))
                     .source(ScoreSource.SDK)
                     .build();
 
@@ -7358,13 +7358,35 @@ class DatasetsResourceTest {
             // Calculate expected values from test data
             var experimentItemsCount = (long) experimentItemsBatch.experimentItems().size();
             var traceCount = (long) feedbackScores.size(); // One trace per feedback score
-            var expectedAvgValue = feedbackScores.stream()
+
+            // Calculate expected feedback score avg
+            var expectedFeedbackScoreAvg = feedbackScores.stream()
                     .map(FeedbackScoreItem::value)
                     .reduce(BigDecimal.ZERO, BigDecimal::add)
                     .divide(BigDecimal.valueOf(feedbackScores.size()), java.math.RoundingMode.HALF_UP);
 
+            // Calculate expected cost avg: (10.50 + 25.75) / 2 = 18.125
+            var expectedCostAvg = span1Cost.add(span2Cost)
+                    .divide(BigDecimal.valueOf(2), 12, java.math.RoundingMode.HALF_UP);
+
             // Calculate duration percentiles from actual trace durations
             var durationPercentiles = StatsUtils.calculateQuantiles(traceDurations, List.of(0.50, 0.90, 0.99));
+
+            // Calculate feedback score percentiles from test data (0.75, 0.95)
+            var feedbackScoreValues = feedbackScores.stream()
+                    .map(FeedbackScoreItem::value)
+                    .map(BigDecimal::doubleValue)
+                    .toList();
+            var feedbackScorePercentiles = StatsUtils.calculateQuantiles(feedbackScoreValues,
+                    List.of(0.50, 0.90, 0.99));
+
+            // Calculate cost percentiles from test data (10.50, 25.75)
+            var costValues = List.of(span1Cost.doubleValue(), span2Cost.doubleValue());
+            var costPercentiles = StatsUtils.calculateQuantiles(costValues, List.of(0.50, 0.90, 0.99));
+
+            // Calculate total_tokens percentiles from test data (150, 300)
+            var totalTokensValues = List.of((double) span1TotalTokens, (double) span2TotalTokens);
+            var totalTokensPercentiles = StatsUtils.calculateQuantiles(totalTokensValues, List.of(0.50, 0.90, 0.99));
 
             var stats = datasetResourceClient.getDatasetExperimentItemsStats(
                     datasetId,
@@ -7373,17 +7395,32 @@ class DatasetsResourceTest {
                     workspaceName,
                     null);
 
+            // Calculate expected usage averages
+            var expectedCompletionTokensAvg = (50 + 100) / 2.0; // 75.0
+            var expectedPromptTokensAvg = (100 + 200) / 2.0; // 150.0
+            var expectedTotalTokensAvg = (span1TotalTokens + span2TotalTokens) / 2.0; // 225.0
+
             // Build complete expected stats list from calculated values
             List<ProjectStatItem<?>> expectedStats = List.of(
                     new CountValueStat(StatsMapper.EXPERIMENT_ITEMS_COUNT, experimentItemsCount),
                     new CountValueStat(StatsMapper.TRACE_COUNT, traceCount),
-                    new AvgValueStat(StatsMapper.TOTAL_ESTIMATED_COST, 0.0), // No costs in test data
+                    new AvgValueStat(StatsMapper.TOTAL_ESTIMATED_COST, expectedCostAvg.doubleValue()),
+                    new PercentageValueStat(StatsMapper.TOTAL_ESTIMATED_COST,
+                            PercentageValues.builder().p50(costPercentiles.get(0)).p90(costPercentiles.get(1))
+                                    .p99(costPercentiles.get(2)).build()),
                     new PercentageValueStat(StatsMapper.DURATION,
-                            new PercentageValues(
-                                    durationPercentiles.get(0), // p50
-                                    durationPercentiles.get(1), // p90
-                                    durationPercentiles.get(2))), // p99
-                    new AvgValueStat("feedback_scores.accuracy", expectedAvgValue.doubleValue()));
+                            PercentageValues.builder().p50(durationPercentiles.get(0)).p90(durationPercentiles.get(1))
+                                    .p99(durationPercentiles.get(2)).build()),
+                    new AvgValueStat("feedback_scores.accuracy", expectedFeedbackScoreAvg.doubleValue()),
+                    new AvgValueStat("usage.completion_tokens", expectedCompletionTokensAvg),
+                    new AvgValueStat("usage.prompt_tokens", expectedPromptTokensAvg),
+                    new AvgValueStat("usage.total_tokens", expectedTotalTokensAvg),
+                    new PercentageValueStat("feedback_scores.accuracy",
+                            PercentageValues.builder().p50(feedbackScorePercentiles.get(0))
+                                    .p90(feedbackScorePercentiles.get(1)).p99(feedbackScorePercentiles.get(2)).build()),
+                    new PercentageValueStat("usage.total_tokens",
+                            PercentageValues.builder().p50(totalTokensPercentiles.get(0))
+                                    .p90(totalTokensPercentiles.get(1)).p99(totalTokensPercentiles.get(2)).build())); // p99
 
             // Assert the whole ProjectStats object using TraceAssertions
             TraceAssertions.assertStats(stats.stats(), expectedStats);
@@ -7506,17 +7543,32 @@ class DatasetsResourceTest {
                     .contains(StatsMapper.EXPERIMENT_ITEMS_COUNT, StatsMapper.TRACE_COUNT,
                             StatsMapper.TOTAL_ESTIMATED_COST, StatsMapper.DURATION, "feedback_scores.accuracy");
 
+            // Calculate feedback score percentiles from matching feedback scores only
+            var feedbackScoreValues = matchingFeedbackScores.stream()
+                    .map(FeedbackScoreItem::value)
+                    .map(BigDecimal::doubleValue)
+                    .toList();
+            var feedbackScorePercentiles = StatsUtils.calculateQuantiles(feedbackScoreValues,
+                    List.of(0.50, 0.90, 0.99));
+
             // Build complete expected stats list from calculated values
             List<ProjectStatItem<?>> expectedStats = List.of(
                     new CountValueStat(StatsMapper.EXPERIMENT_ITEMS_COUNT, experimentItemsCount),
                     new CountValueStat(StatsMapper.TRACE_COUNT, traceCount),
                     new AvgValueStat(StatsMapper.TOTAL_ESTIMATED_COST, 0.0), // No costs in test data
+                    new PercentageValueStat(StatsMapper.TOTAL_ESTIMATED_COST,
+                            PercentageValues.builder().p50(BigDecimal.ZERO).p90(BigDecimal.ZERO).p99(BigDecimal.ZERO)
+                                    .build()),
                     new PercentageValueStat(StatsMapper.DURATION,
-                            new PercentageValues(
-                                    durationPercentiles.get(0), // p50
-                                    durationPercentiles.get(1), // p90
-                                    durationPercentiles.get(2))), // p99
-                    new AvgValueStat("feedback_scores.accuracy", expectedAvgValue.doubleValue()));
+                            PercentageValues.builder().p50(durationPercentiles.get(0)).p90(durationPercentiles.get(1))
+                                    .p99(durationPercentiles.get(2)).build()),
+                    new AvgValueStat("feedback_scores.accuracy", expectedAvgValue.doubleValue()),
+                    new PercentageValueStat("feedback_scores.accuracy",
+                            PercentageValues.builder().p50(feedbackScorePercentiles.get(0))
+                                    .p90(feedbackScorePercentiles.get(1)).p99(feedbackScorePercentiles.get(2)).build()),
+                    new PercentageValueStat("usage.total_tokens",
+                            PercentageValues.builder().p50(BigDecimal.ZERO).p90(BigDecimal.ZERO).p99(BigDecimal.ZERO)
+                                    .build()));
 
             // Assert the whole ProjectStats object using TraceAssertions
             TraceAssertions.assertStats(stats.stats(), expectedStats);
@@ -7646,6 +7698,14 @@ class DatasetsResourceTest {
                     .toList();
             var durationPercentiles = StatsUtils.calculateQuantiles(traceDurations, List.of(0.50, 0.90, 0.99));
 
+            // Calculate feedback score percentiles from test data
+            var feedbackScoreValues = feedbackScores.stream()
+                    .map(FeedbackScoreItem::value)
+                    .map(BigDecimal::doubleValue)
+                    .toList();
+            var feedbackScorePercentiles = StatsUtils.calculateQuantiles(feedbackScoreValues,
+                    List.of(0.50, 0.90, 0.99));
+
             var stats = datasetResourceClient.getDatasetExperimentItemsStats(
                     datasetId,
                     List.of(experiment1.id(), experiment2.id(), experiment3.id()),
@@ -7658,12 +7718,31 @@ class DatasetsResourceTest {
                     new CountValueStat(StatsMapper.EXPERIMENT_ITEMS_COUNT, experimentItemsCount),
                     new CountValueStat(StatsMapper.TRACE_COUNT, traceCount),
                     new AvgValueStat(StatsMapper.TOTAL_ESTIMATED_COST, 0.0), // No costs in test data
+                    new PercentageValueStat(StatsMapper.TOTAL_ESTIMATED_COST,
+                            PercentageValues.builder()
+                                    .p50(BigDecimal.ZERO) // p50 - no cost data
+                                    .p90(BigDecimal.ZERO) // p90
+                                    .p99(BigDecimal.ZERO) // p99
+                                    .build()),
                     new PercentageValueStat(StatsMapper.DURATION,
-                            new PercentageValues(
-                                    durationPercentiles.get(0), // p50
-                                    durationPercentiles.get(1), // p90
-                                    durationPercentiles.get(2))), // p99
-                    new AvgValueStat("feedback_scores.quality", expectedAvgValue.doubleValue()));
+                            PercentageValues.builder()
+                                    .p50(durationPercentiles.get(0)) // p50
+                                    .p90(durationPercentiles.get(1)) // p90
+                                    .p99(durationPercentiles.get(2)) // p99
+                                    .build()),
+                    new AvgValueStat("feedback_scores.quality", expectedAvgValue.doubleValue()),
+                    new PercentageValueStat("feedback_scores.quality",
+                            PercentageValues.builder()
+                                    .p50(feedbackScorePercentiles.get(0)) // p50
+                                    .p90(feedbackScorePercentiles.get(1)) // p90
+                                    .p99(feedbackScorePercentiles.get(2)) // p99
+                                    .build()),
+                    new PercentageValueStat("usage.total_tokens",
+                            PercentageValues.builder()
+                                    .p50(BigDecimal.ZERO) // p50 - no usage data
+                                    .p90(BigDecimal.ZERO) // p90
+                                    .p99(BigDecimal.ZERO) // p99
+                                    .build()));
 
             // Assert the whole ProjectStats object using TraceAssertions
             TraceAssertions.assertStats(stats.stats(), expectedStats);
@@ -7763,18 +7842,42 @@ class DatasetsResourceTest {
                     List.of(createdTrace1.duration()),
                     List.of(0.50, 0.90, 0.99));
 
+            // Calculate feedback score percentiles from test data (single value)
+            var feedbackScorePercentiles = StatsUtils.calculateQuantiles(
+                    List.of(feedbackScore1.value().doubleValue()),
+                    List.of(0.50, 0.90, 0.99));
+
             // Build complete expected stats list
             List<ProjectStatItem<?>> expectedStats = List.of(
                     new CountValueStat(StatsMapper.EXPERIMENT_ITEMS_COUNT, experimentItemsCount),
                     new CountValueStat(StatsMapper.TRACE_COUNT, traceCount),
                     new AvgValueStat(StatsMapper.TOTAL_ESTIMATED_COST, 0.0), // No costs in test data
+                    new PercentageValueStat(StatsMapper.TOTAL_ESTIMATED_COST,
+                            PercentageValues.builder()
+                                    .p50(BigDecimal.ZERO) // p50 - no cost data
+                                    .p90(BigDecimal.ZERO) // p90
+                                    .p99(BigDecimal.ZERO) // p99
+                                    .build()),
                     new PercentageValueStat(StatsMapper.DURATION,
-                            new PercentageValues(
-                                    durationPercentiles.get(0), // p50
-                                    durationPercentiles.get(1), // p90
-                                    durationPercentiles.get(2))), // p99
+                            PercentageValues.builder()
+                                    .p50(durationPercentiles.get(0)) // p50
+                                    .p90(durationPercentiles.get(1)) // p90
+                                    .p99(durationPercentiles.get(2)) // p99
+                                    .build()),
                     new AvgValueStat("feedback_scores.%s".formatted(feedbackScoreName),
-                            expectedAvgValue.doubleValue()));
+                            expectedAvgValue.doubleValue()),
+                    new PercentageValueStat("feedback_scores.%s".formatted(feedbackScoreName),
+                            PercentageValues.builder()
+                                    .p50(feedbackScorePercentiles.get(0)) // p50
+                                    .p90(feedbackScorePercentiles.get(1)) // p90
+                                    .p99(feedbackScorePercentiles.get(2)) // p99
+                                    .build()),
+                    new PercentageValueStat("usage.total_tokens",
+                            PercentageValues.builder()
+                                    .p50(BigDecimal.ZERO) // p50 - no usage data
+                                    .p90(BigDecimal.ZERO) // p90
+                                    .p99(BigDecimal.ZERO) // p99
+                                    .build()));
 
             // Assert the whole ProjectStats object using TraceAssertions
             TraceAssertions.assertStats(stats.stats(), expectedStats);

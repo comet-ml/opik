@@ -10,10 +10,10 @@ import CellTooltipWrapper from "@/components/shared/DataTableCells/CellTooltipWr
 const MediaCell = <TData,>(context: CellContext<TData, unknown>) => {
   const value = context.getValue() as string;
 
-  const rowHeight =
-    context.column.columnDef.meta?.overrideRowHeight ??
-    context.table.options.meta?.rowHeight ??
-    ROW_HEIGHT.small;
+  // Use only the user's row height setting, not overrideRowHeight
+  // overrideRowHeight is for layout purposes only (e.g., split cells in experiment comparison)
+  // The user's row height selection should determine whether images or links are displayed
+  const rowHeight = context.table.options.meta?.rowHeight ?? ROW_HEIGHT.small;
 
   const isBig = rowHeight === ROW_HEIGHT.large;
 

@@ -3,14 +3,15 @@ package com.comet.opik.api.resources.utils;
 import com.comet.opik.api.AggregationData;
 import com.comet.opik.api.Dataset;
 import com.comet.opik.api.Experiment;
+import com.comet.opik.api.ExperimentGroupAggregationItem;
 import com.comet.opik.api.ExperimentGroupAggregationsResponse;
 import com.comet.opik.api.ExperimentGroupEnrichInfoHolder;
 import com.comet.opik.api.ExperimentGroupItem;
 import com.comet.opik.api.ExperimentGroupResponse;
 import com.comet.opik.api.ExperimentItem;
+import com.comet.opik.api.ExperimentScore;
 import com.comet.opik.api.FeedbackScore;
 import com.comet.opik.api.FeedbackScoreAverage;
-import com.comet.opik.api.GroupContentWithAggregations;
 import com.comet.opik.api.PercentageValues;
 import com.comet.opik.api.Span;
 import com.comet.opik.api.Trace;
@@ -33,6 +34,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -85,6 +87,7 @@ public class ExperimentsTestUtils {
     /**
      * Build expected ExperimentGroupAggregationsResponse for testing.
      * This function groups experiments and calculates aggregations based on the provided criteria.
+     * Uses the actual production ExperimentResponseBuilder class to ensure consistency between test and production code.
      */
     public static ExperimentGroupAggregationsResponse buildExpectedGroupAggregationsResponse(
             List<GroupBy> groups,
@@ -97,24 +100,32 @@ public class ExperimentsTestUtils {
         Map<List<String>, List<Experiment>> experimentGroups = experiments.stream()
                 .collect(Collectors.groupingBy(experiment -> extractGroupValues(experiment, groups)));
 
-        // Build the nested response structure with aggregations
-        var contentMap = new HashMap<String, GroupContentWithAggregations>();
+        // Convert to ExperimentGroupAggregationItem format (similar to what comes from database)
+        List<ExperimentGroupAggregationItem> groupItems = experimentGroups.entrySet().stream()
+                .map(entry -> {
+                    AggregationData aggregations = calculateAggregations(
+                            entry.getValue(), experimentToItems, traceToSpans, traces);
+                    return ExperimentGroupAggregationItem.builder()
+                            .groupValues(entry.getKey())
+                            .experimentCount(aggregations.experimentCount())
+                            .traceCount(aggregations.traceCount())
+                            .totalEstimatedCost(aggregations.totalEstimatedCost())
+                            .totalEstimatedCostAvg(aggregations.totalEstimatedCostAvg())
+                            .duration(aggregations.duration())
+                            .feedbackScores(aggregations.feedbackScores())
+                            .experimentScores(aggregations.experimentScores())
+                            .build();
+                })
+                .toList();
 
-        for (Map.Entry<List<String>, List<Experiment>> entry : experimentGroups.entrySet()) {
-            buildNestedGroupsWithAggregations(contentMap, entry.getKey(), 0, entry.getValue(),
-                    experimentToItems, traceToSpans, traces);
-        }
-
-        // Calculate recursive aggregations for parent levels
-        var updatedContentMap = new HashMap<String, GroupContentWithAggregations>();
-        for (Map.Entry<String, GroupContentWithAggregations> entry : contentMap.entrySet()) {
-            updatedContentMap.put(entry.getKey(),
-                    experimentResponseBuilder.calculateRecursiveAggregations(entry.getValue()));
-        }
-
-        return ExperimentGroupAggregationsResponse.builder()
-                .content(updatedContentMap)
+        // Build enrichment info (dataset mapping)
+        Map<UUID, Dataset> datasetMap = getDatasetMapFromExperiments(experiments);
+        var enrichInfoHolder = ExperimentGroupEnrichInfoHolder.builder()
+                .datasetMap(datasetMap)
                 .build();
+
+        // Build the nested response structure using the production builder
+        return experimentResponseBuilder.buildGroupAggregationsResponse(groupItems, enrichInfoHolder, groups);
     }
 
     public static List<BigDecimal> getQuantities(Stream<Trace> traces) {
@@ -124,52 +135,6 @@ public class ExperimentsTestUtils {
                         .map(duration -> duration / 1_000.0)
                         .toList(),
                 List.of(0.50, 0.90, 0.99));
-    }
-
-    /**
-     * Recursively build nested groups structure with aggregations.
-     */
-    private void buildNestedGroupsWithAggregations(
-            Map<String, GroupContentWithAggregations> parentLevel,
-            List<String> groupValues,
-            int depth,
-            List<Experiment> experimentsInGroup,
-            Map<UUID, List<ExperimentItem>> experimentToItems,
-            Map<UUID, List<Span>> traceToSpans,
-            List<Trace> traces) {
-
-        if (depth >= groupValues.size()) {
-            return;
-        }
-
-        String groupingValue = groupValues.get(depth);
-        if (groupingValue == null) {
-            return;
-        }
-
-        GroupContentWithAggregations currentLevel = parentLevel.computeIfAbsent(
-                groupingValue,
-                k -> {
-                    if (depth == groupValues.size() - 1) {
-                        // Leaf level - calculate aggregations
-                        return GroupContentWithAggregations.builder()
-                                .aggregations(calculateAggregations(experimentsInGroup, experimentToItems,
-                                        traceToSpans, traces))
-                                .groups(Map.of())
-                                .build();
-                    } else {
-                        // Intermediate level
-                        return GroupContentWithAggregations.builder()
-                                .aggregations(null)
-                                .groups(new HashMap<>())
-                                .build();
-                    }
-                });
-
-        if (depth < groupValues.size() - 1) {
-            buildNestedGroupsWithAggregations(currentLevel.groups(), groupValues, depth + 1,
-                    experimentsInGroup, experimentToItems, traceToSpans, traces);
-        }
     }
 
     /**
@@ -217,6 +182,9 @@ public class ExperimentsTestUtils {
                 .toList();
         List<FeedbackScoreAverage> feedbackScores = calculateFeedbackScoreAverages(allItems);
 
+        // Calculate experiment score averages across all experiments
+        List<FeedbackScoreAverage> experimentScores = calculateExperimentScoreAverages(experiments);
+
         return AggregationData.builder()
                 .experimentCount(experimentCount)
                 .traceCount(totalTraceCount)
@@ -224,6 +192,7 @@ public class ExperimentsTestUtils {
                 .totalEstimatedCostAvg(avgCost)
                 .duration(avgDurationPercentiles)
                 .feedbackScores(feedbackScores)
+                .experimentScores(experimentScores)
                 .build();
     }
 
@@ -307,15 +276,34 @@ public class ExperimentsTestUtils {
         return new PercentageValues(avgP50, avgP90, avgP99);
     }
 
-    private List<FeedbackScoreAverage> calculateFeedbackScoreAverages(List<ExperimentItem> items) {
+    /**
+     * Generic method to calculate score averages from a list of score objects.
+     *
+     * @param items List of items to extract scores from
+     * @param scoreListExtractor Function to extract list of score objects from each item
+     * @param nameExtractor Function to extract name from a score object
+     * @param valueExtractor Function to extract value from a score object
+     * @param <T> Type of items to process
+     * @param <S> Type of score objects
+     * @return List of FeedbackScoreAverage with calculated averages
+     */
+    private <T, S> List<FeedbackScoreAverage> calculateScoreAverages(
+            List<T> items,
+            Function<T, List<S>> scoreListExtractor,
+            Function<S, String> nameExtractor,
+            Function<S, BigDecimal> valueExtractor) {
+
         Map<String, List<BigDecimal>> scoresByName = new HashMap<>();
 
-        for (ExperimentItem item : items) {
-            if (item.feedbackScores() != null) {
-                for (FeedbackScore score : item.feedbackScores()) {
-                    scoresByName.computeIfAbsent(score.name(), k -> new ArrayList<>())
-                            .add(score.value());
-                }
+        for (T item : items) {
+            List<S> scores = scoreListExtractor.apply(item);
+            if (scores != null) {
+                scores.stream()
+                        .filter(score -> nameExtractor.apply(score) != null
+                                && valueExtractor.apply(score) != null)
+                        .forEach(score -> scoresByName
+                                .computeIfAbsent(nameExtractor.apply(score), k -> new ArrayList<>())
+                                .add(valueExtractor.apply(score)));
             }
         }
 
@@ -330,7 +318,28 @@ public class ExperimentsTestUtils {
                             .value(average)
                             .build();
                 })
+                .sorted((a, b) -> a.name().compareTo(b.name()))
                 .toList();
+    }
+
+    private List<FeedbackScoreAverage> calculateFeedbackScoreAverages(List<ExperimentItem> items) {
+        return calculateScoreAverages(
+                items,
+                ExperimentItem::feedbackScores,
+                FeedbackScore::name,
+                FeedbackScore::value);
+    }
+
+    /**
+     * Calculate experiment score averages across all experiments.
+     * Extracts experiment scores from each experiment and calculates the average value for each score name.
+     */
+    private List<FeedbackScoreAverage> calculateExperimentScoreAverages(List<Experiment> experiments) {
+        return calculateScoreAverages(
+                experiments,
+                Experiment::experimentScores,
+                ExperimentScore::name,
+                ExperimentScore::value);
     }
 
     /**

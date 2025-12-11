@@ -10,14 +10,15 @@ import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import lombok.Data;
+import lombok.extern.slf4j.Slf4j;
 import org.redisson.codec.JsonJacksonCodec;
 import org.redisson.config.Config;
-import org.redisson.config.SingleServerConfig;
 
 import java.util.Objects;
 import java.util.concurrent.TimeUnit;
 
 @Data
+@Slf4j
 public class RedisConfig {
 
     @Valid @JsonProperty
@@ -28,24 +29,22 @@ public class RedisConfig {
 
     public Config build() {
         Objects.requireNonNull(singleNodeUrl, "singleNodeUrl must not be null");
-        RedisUrl redisUrl = RedisUrl.parse(singleNodeUrl);
-
-        Config config = new Config();
-
-        SingleServerConfig singleServerConfig = config.useSingleServer()
-                .setAddress(singleNodeUrl);
-
+        var redisUrl = RedisUrl.parse(singleNodeUrl);
+        var config = new Config();
+        var singleServerConfig = config.useSingleServer()
+                .setAddress(redisUrl.address())
+                .setDatabase(redisUrl.database());
         if (awsIamAuth.isEnabled()) {
             // Configure Redis with AWS IAM authentication using DefaultCredentialsProvider
             // This will read from environment variables, system properties, IAM roles, etc.
-            singleServerConfig
-                    .setCredentialsResolver(new AwsIamCredentialsResolver(awsIamAuth));
+            singleServerConfig.setCredentialsResolver(new AwsIamCredentialsResolver(awsIamAuth));
+        } else {
+            // Set username and password from URL if present
+            redisUrl.username().ifPresent(singleServerConfig::setUsername);
+            redisUrl.password().ifPresent(singleServerConfig::setPassword);
         }
-
-        singleServerConfig
-                .setDatabase(redisUrl.database());
-
         config.setCodec(new JsonJacksonCodec(JsonUtils.getMapper()));
+        log.info("Built redis config with address '{}', database '{}'", redisUrl.address(), redisUrl.database());
         return config;
     }
 
@@ -78,5 +77,4 @@ public class RedisConfig {
         @NotNull @MinDuration(value = 3, unit = TimeUnit.SECONDS)
         private Duration tokenExpiryDuration = Duration.minutes(15);
     }
-
 }

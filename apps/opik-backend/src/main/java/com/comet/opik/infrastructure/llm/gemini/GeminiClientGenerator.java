@@ -1,6 +1,7 @@
 package com.comet.opik.infrastructure.llm.gemini;
 
 import com.comet.opik.api.evaluators.LlmAsJudgeModelParameters;
+import com.comet.opik.domain.llm.langchain4j.OpikGeminiChatModel;
 import com.comet.opik.infrastructure.LlmProviderClientConfig;
 import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
 import com.comet.opik.infrastructure.llm.LlmProviderClientGenerator;
@@ -25,13 +26,17 @@ public class GeminiClientGenerator implements LlmProviderClientGenerator<GoogleA
 
     public GoogleAiGeminiChatModel newGeminiClient(@NonNull String apiKey, @NonNull ChatCompletionRequest request) {
         return GeminiChatModelMapper.INSTANCE.toGeminiChatModel(apiKey, request,
-                llmProviderClientConfig.getCallTimeout().toJavaDuration(), MAX_RETRIES);
+                llmProviderClientConfig.getCallTimeout().toJavaDuration(), MAX_RETRIES,
+                llmProviderClientConfig.getLogRequests(),
+                llmProviderClientConfig.getLogResponses());
     }
 
     public GoogleAiGeminiStreamingChatModel newGeminiStreamingClient(
             @NonNull String apiKey, @NonNull ChatCompletionRequest request) {
         return GeminiChatModelMapper.INSTANCE.toGeminiStreamingChatModel(apiKey, request,
-                llmProviderClientConfig.getCallTimeout().toJavaDuration(), MAX_RETRIES);
+                llmProviderClientConfig.getCallTimeout().toJavaDuration(), MAX_RETRIES,
+                llmProviderClientConfig.getLogRequests(),
+                llmProviderClientConfig.getLogResponses());
     }
 
     @Override
@@ -47,7 +52,9 @@ public class GeminiClientGenerator implements LlmProviderClientGenerator<GoogleA
             LlmAsJudgeModelParameters modelParameters) {
         GoogleAiGeminiChatModelBuilder modelBuilder = GoogleAiGeminiChatModel.builder()
                 .modelName(modelParameters.name())
-                .apiKey(config.apiKey());
+                .apiKey(config.apiKey())
+                .logRequests(llmProviderClientConfig.getLogRequests())
+                .logResponses(llmProviderClientConfig.getLogResponses());
 
         Optional.ofNullable(llmProviderClientConfig.getConnectTimeout())
                 .ifPresent(connectTimeout -> modelBuilder.timeout(connectTimeout.toJavaDuration()));
@@ -55,6 +62,9 @@ public class GeminiClientGenerator implements LlmProviderClientGenerator<GoogleA
         Optional.ofNullable(modelParameters.temperature()).ifPresent(modelBuilder::temperature);
         Optional.ofNullable(modelParameters.seed()).ifPresent(modelBuilder::seed);
 
-        return modelBuilder.build();
+        GoogleAiGeminiChatModel geminiModel = modelBuilder.build();
+
+        // Wrap in OpikGeminiChatModel to convert VideoContent -> ImageContent
+        return new OpikGeminiChatModel(geminiModel);
     }
 }

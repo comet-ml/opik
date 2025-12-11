@@ -29,6 +29,7 @@ describe("processInputData", () => {
       formattedData: undefined,
       videos: [],
       media: [],
+      audios: [],
     });
   });
 
@@ -328,5 +329,253 @@ describe("Helper functions", () => {
     expect(isImageBase64String("")).toBe(false);
     expect(isImageBase64String(undefined)).toBe(false);
     expect(isImageBase64String(123)).toBe(false);
+  });
+});
+
+describe("Duplicate media detection", () => {
+  it("should skip video URL in image_url field", () => {
+    const input = {
+      messages: [
+        {
+          content: [
+            {
+              type: "image_url",
+              image_url: {
+                url: "https://cdn.pixabay.com/video/2024/01/15/video.mp4",
+              },
+            },
+          ],
+        },
+      ],
+    };
+
+    const result = processInputData(input);
+
+    // Video URL should not be added as image
+    expect(result.images).toHaveLength(0);
+    // Video URL should be extracted by regex as video
+    expect(result.videos).toHaveLength(1);
+    expect(result.videos[0].url).toBe(
+      "https://cdn.pixabay.com/video/2024/01/15/video.mp4",
+    );
+  });
+
+  it("should skip image URL in video_url field", () => {
+    const input = {
+      messages: [
+        {
+          content: [
+            {
+              type: "video_url",
+              video_url: {
+                url: "https://example.com/image.jpg",
+              },
+            },
+          ],
+        },
+      ],
+    };
+
+    const result = processInputData(input);
+
+    // Image URL should not be added as video
+    expect(result.videos).toHaveLength(0);
+    // Image URL should be extracted by regex as image
+    expect(result.images).toHaveLength(1);
+    expect(result.images[0].url).toBe("https://example.com/image.jpg");
+  });
+
+  it("should keep extensionless URLs in image_url as images", () => {
+    const input = {
+      messages: [
+        {
+          content: [
+            {
+              type: "image_url",
+              image_url: {
+                url: "https://api.example.com/media/12345",
+              },
+            },
+          ],
+        },
+      ],
+    };
+
+    const result = processInputData(input);
+
+    // Extensionless URL should be kept as image based on field type
+    expect(result.images).toHaveLength(1);
+    expect(result.images[0].url).toBe("https://api.example.com/media/12345");
+    expect(result.videos).toHaveLength(0);
+  });
+
+  it("should keep extensionless URLs in video_url as videos", () => {
+    const input = {
+      messages: [
+        {
+          content: [
+            {
+              type: "video_url",
+              video_url: {
+                url: "https://api.example.com/media/12345",
+              },
+            },
+          ],
+        },
+      ],
+    };
+
+    const result = processInputData(input);
+
+    // Extensionless URL should be kept as video based on field type
+    expect(result.videos).toHaveLength(1);
+    expect(result.videos[0].url).toBe("https://api.example.com/media/12345");
+    expect(result.images).toHaveLength(0);
+  });
+
+  it("should handle mix of correct and incorrect extension types", () => {
+    const input = {
+      messages: [
+        {
+          content: [
+            {
+              type: "image_url",
+              image_url: { url: "https://example.com/photo.jpg" }, // correct
+            },
+            {
+              type: "image_url",
+              image_url: { url: "https://example.com/video.mp4" }, // wrong ext
+            },
+            {
+              type: "video_url",
+              video_url: { url: "https://example.com/clip.webm" }, // correct
+            },
+            {
+              type: "video_url",
+              video_url: { url: "https://example.com/image.png" }, // wrong ext
+            },
+          ],
+        },
+      ],
+    };
+
+    const result = processInputData(input);
+
+    // Only correct types should be kept
+    expect(result.images).toHaveLength(2);
+    expect(result.images[0].url).toBe("https://example.com/photo.jpg");
+    expect(result.images[1].url).toBe("https://example.com/image.png");
+
+    expect(result.videos).toHaveLength(2);
+    expect(result.videos[0].url).toBe("https://example.com/clip.webm");
+    expect(result.videos[1].url).toBe("https://example.com/video.mp4");
+  });
+
+  it("should remove cross-duplicates and prioritize video type", () => {
+    const input = {
+      messages: [
+        {
+          content: [
+            {
+              type: "image_url",
+              image_url: { url: "https://example.com/media.mp4" },
+            },
+          ],
+        },
+      ],
+      text: 'Check this video: "https://example.com/media.mp4"',
+    };
+
+    const result = processInputData(input);
+
+    // URL with .mp4 should only appear in videos, not images
+    expect(result.images).toHaveLength(0);
+    expect(result.videos).toHaveLength(1);
+    expect(result.videos[0].url).toBe("https://example.com/media.mp4");
+
+    // Media array should contain only video
+    expect(result.media).toHaveLength(1);
+    expect(result.media[0].type).toBe("video");
+  });
+
+  it("should handle video URLs with query parameters in image_url field", () => {
+    const input = {
+      messages: [
+        {
+          content: [
+            {
+              type: "image_url",
+              image_url: {
+                url: "https://cdn.example.com/video.mp4?quality=high&size=large",
+              },
+            },
+          ],
+        },
+      ],
+    };
+
+    const result = processInputData(input);
+
+    // Video URL with query params should not be added as image
+    expect(result.images).toHaveLength(0);
+    expect(result.videos).toHaveLength(1);
+    expect(result.videos[0].url).toBe(
+      "https://cdn.example.com/video.mp4?quality=high&size=large",
+    );
+  });
+
+  it("should handle base64 videos correctly in video_url field", () => {
+    const base64Video = "data:video/mp4;base64,AAAAIGZ0eXBpc29t";
+    const input = {
+      messages: [
+        {
+          content: [
+            {
+              type: "video_url",
+              video_url: {
+                url: base64Video,
+              },
+            },
+          ],
+        },
+      ],
+    };
+
+    const result = processInputData(input);
+
+    expect(result.videos).toHaveLength(1);
+    expect(result.videos[0].url).toBe(base64Video);
+    // Base64 videos get extracted and named by the regex extraction
+    expect(result.videos[0].name).toContain("Base64 Video");
+    expect(result.images).toHaveLength(0);
+  });
+
+  it("should extract base64 images even from video_url field", () => {
+    // Base64 URLs don't have extensions to check, so they bypass validation
+    // and get extracted by both video and image regex patterns
+    const base64Image = "data:image/png;base64,iVBORw0KGgoAAAA";
+    const input = {
+      messages: [
+        {
+          content: [
+            {
+              type: "video_url",
+              video_url: {
+                url: base64Image,
+              },
+            },
+          ],
+        },
+      ],
+    };
+
+    const result = processInputData(input);
+
+    // Base64 URLs don't start with http, so extension check is skipped
+    // The image regex will extract it from the stringified JSON
+    expect(result.videos).toHaveLength(1);
+    expect(result.images).toHaveLength(1);
+    expect(result.videos[0].url).toBe(base64Image);
+    expect(result.images[0].url).toBe(base64Image);
   });
 });

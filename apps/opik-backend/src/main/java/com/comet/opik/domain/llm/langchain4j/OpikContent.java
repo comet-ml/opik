@@ -29,6 +29,8 @@ public final class OpikContent {
     @JsonProperty
     private final VideoUrl videoUrl;
     @JsonProperty
+    private final AudioUrl audioUrl;
+    @JsonProperty
     private final InputAudio inputAudio;
     @JsonProperty
     private final PdfFile file;
@@ -38,6 +40,7 @@ public final class OpikContent {
         this.text = builder.text;
         this.imageUrl = builder.imageUrl;
         this.videoUrl = builder.videoUrl;
+        this.audioUrl = builder.audioUrl;
         this.inputAudio = builder.inputAudio;
         this.file = builder.file;
     }
@@ -56,6 +59,10 @@ public final class OpikContent {
 
     public VideoUrl videoUrl() {
         return videoUrl;
+    }
+
+    public AudioUrl audioUrl() {
+        return audioUrl;
     }
 
     public InputAudio inputAudio() {
@@ -79,6 +86,7 @@ public final class OpikContent {
         private String text;
         private ImageUrl imageUrl;
         private VideoUrl videoUrl;
+        private AudioUrl audioUrl;
         private InputAudio inputAudio;
         private PdfFile file;
 
@@ -99,6 +107,11 @@ public final class OpikContent {
 
         public Builder videoUrl(VideoUrl videoUrl) {
             this.videoUrl = videoUrl;
+            return this;
+        }
+
+        public Builder audioUrl(AudioUrl audioUrl) {
+            this.audioUrl = audioUrl;
             return this;
         }
 

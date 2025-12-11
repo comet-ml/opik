@@ -14,4 +14,5 @@ export interface ExperimentUpdate {
     type?: OpikApi.ExperimentUpdateType;
     /** The status of the experiment */
     status?: OpikApi.ExperimentUpdateStatus;
+    experimentScores?: OpikApi.ExperimentScore[];
 }

@@ -3,6 +3,7 @@ import { JsonParam, useQueryParam } from "use-query-params";
 
 import {
   COLUMN_FEEDBACK_SCORES_ID,
+  COLUMN_SPAN_FEEDBACK_SCORES_ID,
   COLUMN_GUARDRAILS_ID,
   COLUMN_ID_ID,
   COLUMN_CUSTOM_ID,
@@ -26,11 +27,13 @@ import FiltersButton from "@/components/shared/FiltersButton/FiltersButton";
 import TracesOrSpansPathsAutocomplete from "@/components/pages-shared/traces/TracesOrSpansPathsAutocomplete/TracesOrSpansPathsAutocomplete";
 import TracesOrSpansFeedbackScoresSelect from "@/components/pages-shared/traces/TracesOrSpansFeedbackScoresSelect/TracesOrSpansFeedbackScoresSelect";
 import MetricContainerChart from "./MetricChart/MetricChartContainer";
+import { CHART_TYPE } from "@/constants/chart";
 import {
   DURATION_LABELS_MAP,
   INTERVAL_DESCRIPTIONS,
   renderDurationTooltipValue,
   durationYTickFormatter,
+  tokenYTickFormatter,
 } from "./utils";
 
 const TRACE_FILTER_COLUMNS: ColumnData<BaseTraceData>[] = [
@@ -93,6 +96,11 @@ const TRACE_FILTER_COLUMNS: ColumnData<BaseTraceData>[] = [
   {
     id: COLUMN_FEEDBACK_SCORES_ID,
     label: "Feedback scores",
+    type: COLUMN_TYPE.numberDictionary,
+  },
+  {
+    id: COLUMN_SPAN_FEEDBACK_SCORES_ID,
+    label: "Span feedback scores",
     type: COLUMN_TYPE.numberDictionary,
   },
   {
@@ -186,6 +194,19 @@ const TraceMetricsSection: React.FC<TraceMetricsSectionProps> = ({
             placeholder: "Select score",
           },
         },
+        [COLUMN_SPAN_FEEDBACK_SCORES_ID]: {
+          keyComponent:
+            TracesOrSpansFeedbackScoresSelect as React.FC<unknown> & {
+              placeholder: string;
+              value: string;
+              onValueChange: (value: string) => void;
+            },
+          keyComponentProps: {
+            projectId,
+            type: TRACE_DATA_TYPE.spans,
+            placeholder: "Select span score",
+          },
+        },
         [COLUMN_GUARDRAILS_ID]: {
           keyComponentProps: {
             options: [
@@ -244,7 +265,7 @@ const TraceMetricsSection: React.FC<TraceMetricsSectionProps> = ({
             intervalStart={intervalStart}
             intervalEnd={intervalEnd}
             projectId={projectId}
-            chartType="line"
+            chartType={CHART_TYPE.line}
             traceFilters={processedTracesFilters}
           />
         </div>
@@ -259,7 +280,8 @@ const TraceMetricsSection: React.FC<TraceMetricsSectionProps> = ({
             intervalStart={intervalStart}
             intervalEnd={intervalEnd}
             projectId={projectId}
-            chartType="line"
+            customYTickFormatter={tokenYTickFormatter}
+            chartType={CHART_TYPE.line}
             traceFilters={processedTracesFilters}
           />
         </div>
@@ -277,7 +299,7 @@ const TraceMetricsSection: React.FC<TraceMetricsSectionProps> = ({
             renderValue={renderDurationTooltipValue}
             labelsMap={DURATION_LABELS_MAP}
             customYTickFormatter={durationYTickFormatter}
-            chartType="line"
+            chartType={CHART_TYPE.line}
             traceFilters={processedTracesFilters}
           />
         </div>
@@ -293,7 +315,7 @@ const TraceMetricsSection: React.FC<TraceMetricsSectionProps> = ({
               intervalStart={intervalStart}
               intervalEnd={intervalEnd}
               projectId={projectId}
-              chartType="bar"
+              chartType={CHART_TYPE.bar}
               traceFilters={processedTracesFilters}
             />
           </div>

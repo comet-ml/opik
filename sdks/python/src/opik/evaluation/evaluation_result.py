@@ -1,10 +1,14 @@
-from typing import List, Optional, Dict
+from typing import List, Optional, Dict, TYPE_CHECKING
 from collections import defaultdict
 import logging
 
 import dataclasses
 
 from . import score_statistics, test_result
+from .metrics import score_result
+
+if TYPE_CHECKING:
+    pass
 
 LOGGER = logging.getLogger(__name__)
 
@@ -68,6 +72,9 @@ class EvaluationResult:
     test_results: List[test_result.TestResult]
     experiment_url: Optional[str]
     trial_count: int
+    experiment_scores: List[score_result.ScoreResult] = dataclasses.field(
+        default_factory=list
+    )
 
     def aggregate_evaluation_scores(self) -> EvaluationResultAggregatedScoresView:
         """
@@ -143,3 +150,30 @@ class EvaluationResult:
             )
 
         return dataset_items_results
+
+
+@dataclasses.dataclass
+class EvaluationResultOnDictItems:
+    """
+    Evaluation result for dict items evaluation without experiment tracking.
+
+    This class provides a similar interface to EvaluationResult but is designed
+    for lightweight evaluations that don't require experiment or dataset management.
+    It can aggregate scores across test results just like the regular evaluation.
+
+    Attributes:
+        test_results: Collection of test results from the evaluation.
+    """
+
+    test_results: List[test_result.TestResult]
+
+    def aggregate_evaluation_scores(
+        self,
+    ) -> Dict[str, score_statistics.ScoreStatistics]:
+        """
+        Aggregates evaluation scores from test results.
+
+        Returns:
+            Dictionary mapping score names to their aggregated statistics.
+        """
+        return score_statistics.calculate_aggregated_statistics(self.test_results)

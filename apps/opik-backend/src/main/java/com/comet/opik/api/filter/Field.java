@@ -23,6 +23,7 @@ public interface Field {
     String USAGE_PROMPT_TOKENS_QUERY_PARAM = "usage.prompt_tokens";
     String USAGE_TOTAL_TOKEN_QUERY_PARAMS = "usage.total_tokens";
     String FEEDBACK_SCORES_QUERY_PARAM = "feedback_scores";
+    String SPAN_FEEDBACK_SCORES_QUERY_PARAM = "span_feedback_scores";
     String DURATION_QUERY_PARAM = "duration";
     String THREAD_ID_QUERY_PARAM = "thread_id";
     String DATASET_ID_QUERY_PARAM = "dataset_id";
@@ -43,8 +44,10 @@ public interface Field {
     String TYPE_QUERY_PARAM = "type";
     String LLM_SPAN_COUNT_QUERY_PARAM = "llm_span_count";
     String VERSION_COUNT_QUERY_PARAM = "version_count";
+    String TEMPLATE_STRUCTURE_QUERY_PARAM = "template_structure";
     String CUSTOM_QUERY_PARAM = "custom";
     String DATA_QUERY_PARAM = "data";
+    String FULL_DATA_QUERY_PARAM = "full_data";
     String SOURCE_QUERY_PARAM = "source";
     String TRACE_ID_QUERY_PARAM = "trace_id";
     String SPAN_ID_QUERY_PARAM = "span_id";

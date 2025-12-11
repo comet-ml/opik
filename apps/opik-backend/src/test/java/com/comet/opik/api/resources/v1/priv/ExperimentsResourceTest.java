@@ -12,6 +12,7 @@ import com.comet.opik.api.ExperimentItemBulkUpload;
 import com.comet.opik.api.ExperimentItemStreamRequest;
 import com.comet.opik.api.ExperimentItemsBatch;
 import com.comet.opik.api.ExperimentItemsDelete;
+import com.comet.opik.api.ExperimentScore;
 import com.comet.opik.api.ExperimentStatus;
 import com.comet.opik.api.ExperimentStreamRequest;
 import com.comet.opik.api.ExperimentType;
@@ -176,6 +177,7 @@ import static java.util.stream.Collectors.toMap;
 import static java.util.stream.Collectors.toSet;
 import static java.util.stream.Collectors.toUnmodifiableSet;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.tuple;
 import static org.assertj.core.api.Assertions.within;
 import static org.junit.jupiter.api.Named.named;
 import static org.junit.jupiter.params.provider.Arguments.arguments;
@@ -345,6 +347,40 @@ class ExperimentsResourceTest {
             }
         }
 
+        @Test
+        @DisplayName("when getting experiment with experiment_scores, then scores are returned")
+        void getExperimentById_whenExperimentHasScores_thenScoresReturned() {
+            var workspaceName = UUID.randomUUID().toString();
+            mockTargetWorkspace(okApikey, workspaceName, WORKSPACE_ID);
+
+            var experimentScores = List.of(
+                    ExperimentScore.builder()
+                            .name("accuracy")
+                            .value(new BigDecimal("0.95"))
+                            .build(),
+                    ExperimentScore.builder()
+                            .name("latency")
+                            .value(new BigDecimal("120.5"))
+                            .build());
+
+            var expectedExperiment = generateExperiment().toBuilder()
+                    .optimizationId(null)
+                    .experimentScores(experimentScores)
+                    .build();
+
+            var experimentId = createAndAssert(expectedExperiment, okApikey, workspaceName);
+
+            var retrievedExperiment = getExperiment(experimentId, workspaceName, okApikey);
+            assertThat(retrievedExperiment).isNotNull();
+            assertThat(retrievedExperiment.experimentScores())
+                    .isNotNull()
+                    .hasSize(2)
+                    .extracting(ExperimentScore::name, ExperimentScore::value)
+                    .containsExactlyInAnyOrder(
+                            tuple("accuracy", new BigDecimal("0.95")),
+                            tuple("latency", new BigDecimal("120.5")));
+        }
+
         @ParameterizedTest
         @MethodSource("credentials")
         void create__whenApiKeyIsPresent__thenReturnProperResponse(String apiKey, boolean success,
@@ -368,6 +404,38 @@ class ExperimentsResourceTest {
                     assertThat(actualResponse.readEntity(ErrorMessage.class)).isEqualTo(errorMessage);
                 }
             }
+        }
+
+        @Test
+        @DisplayName("when creating experiment with experiment_scores, then scores are saved and retrieved correctly")
+        void createExperiment_whenExperimentScoresProvided_thenScoresSavedAndRetrieved() {
+            var workspaceName = UUID.randomUUID().toString();
+            mockTargetWorkspace(okApikey, workspaceName, WORKSPACE_ID);
+
+            var experimentScores = List.of(
+                    ExperimentScore.builder()
+                            .name("accuracy")
+                            .value(new BigDecimal("0.95"))
+                            .build(),
+                    ExperimentScore.builder()
+                            .name("latency")
+                            .value(new BigDecimal("120.5"))
+                            .build());
+
+            var expectedExperiment = generateExperiment().toBuilder()
+                    .experimentScores(experimentScores)
+                    .build();
+
+            var experimentId = createAndAssert(expectedExperiment, okApikey, workspaceName);
+
+            var retrievedExperiment = getAndAssert(experimentId, expectedExperiment, workspaceName, okApikey);
+            assertThat(retrievedExperiment.experimentScores())
+                    .isNotNull()
+                    .hasSize(2)
+                    .extracting(ExperimentScore::name, ExperimentScore::value)
+                    .containsExactlyInAnyOrder(
+                            tuple("accuracy", new BigDecimal("0.95")),
+                            tuple("latency", new BigDecimal("120.5")));
         }
 
         @ParameterizedTest
@@ -2017,6 +2085,90 @@ class ExperimentsResourceTest {
         @ValueSource(strings = {"feedback_scores", "feedback_score.dsfsdfd", "feedback_scores."})
         void whenSortingByInvalidFeedbackScoresPattern__thenIgnoreAndReturnPage(String field) {
 
+            var workspaceName = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            try (Response response = findExperiment(
+                    workspaceName,
+                    apiKey,
+                    1,
+                    10,
+                    UUID.randomUUID(),
+                    null,
+                    false,
+                    UUID.randomUUID(),
+                    List.of(new SortingField(field, Direction.ASC)),
+                    null,
+                    null,
+                    null)) {
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
+            }
+        }
+
+        @ParameterizedTest
+        @EnumSource(Direction.class)
+        @DisplayName("when sorting by experiment scores, then return page")
+        void whenSortingByExperimentScores__thenReturnPage(Direction direction) {
+            var workspaceName = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var scoreName = "accuracy";
+            var experiments = IntStream.range(0, 5)
+                    .mapToObj(i -> {
+                        var experiment = experimentResourceClient.createPartialExperiment()
+                                .lastUpdatedBy(USER)
+                                .createdBy(USER)
+                                .build();
+                        var experimentId = experimentResourceClient.create(experiment, apiKey, workspaceName);
+                        // Set different experiment_scores values for each experiment
+                        var scoreValue = new BigDecimal(String.valueOf(0.90 + i * 0.01)); // 0.90, 0.91, 0.92, 0.93, 0.94
+                        var experimentScores = List.of(
+                                ExperimentScore.builder()
+                                        .name(scoreName)
+                                        .value(scoreValue)
+                                        .build());
+                        experimentResourceClient.updateExperiment(experimentId,
+                                ExperimentUpdate.builder().experimentScores(experimentScores).build(),
+                                apiKey, workspaceName, HttpStatus.SC_NO_CONTENT);
+                        return getExperiment(experimentId, workspaceName, apiKey);
+                    })
+                    .toList();
+
+            var sortingField = new SortingField(
+                    "experiment_scores.%s".formatted(scoreName),
+                    direction);
+
+            Comparator<Experiment> comparing = Comparator.comparing(
+                    (Experiment experiment) -> experiment.experimentScores()
+                            .stream()
+                            .filter(score -> score.name().equals(scoreName))
+                            .findFirst()
+                            .map(ExperimentScore::value)
+                            .orElse(null),
+                    direction == Direction.ASC
+                            ? Comparator.nullsFirst(Comparator.naturalOrder())
+                            : Comparator.nullsLast(Comparator.reverseOrder()))
+                    .thenComparing(Comparator.comparing(Experiment::id).reversed());
+
+            var expectedExperiments = experiments
+                    .stream()
+                    .sorted(comparing)
+                    .toList();
+
+            findAndAssert(workspaceName, 1, expectedExperiments.size(), null, null, expectedExperiments,
+                    expectedExperiments.size(), List.of(), apiKey, false, Map.of(), null, List.of(sortingField),
+                    null, null, null);
+        }
+
+        @ParameterizedTest
+        @ValueSource(strings = {"experiment_scores", "experiment_score.invalid", "experiment_scores."})
+        @DisplayName("when sorting by experiment scores with invalid field, then ignore and return success")
+        void whenSortingByExperimentScoresWithInvalidField_thenIgnoreAndReturnSuccess(String field) {
             var workspaceName = UUID.randomUUID().toString();
             var workspaceId = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();
@@ -5345,6 +5497,22 @@ class ExperimentsResourceTest {
                             (Function<Experiment, Experiment>) initialExperiment -> initialExperiment.toBuilder()
                                     .status(ExperimentStatus.COMPLETED)
                                     .build()),
+                    // Update only experiment_scores
+                    arguments(
+                            ExperimentUpdate.builder()
+                                    .experimentScores(List.of(
+                                            ExperimentScore.builder()
+                                                    .name("accuracy")
+                                                    .value(new BigDecimal("0.95"))
+                                                    .build()))
+                                    .build(),
+                            (Function<Experiment, Experiment>) initialExperiment -> initialExperiment.toBuilder()
+                                    .experimentScores(List.of(
+                                            ExperimentScore.builder()
+                                                    .name("accuracy")
+                                                    .value(new BigDecimal("0.95"))
+                                                    .build()))
+                                    .build()),
                     // Empty update
                     arguments(ExperimentUpdate.builder().build(),
                             (Function<Experiment, Experiment>) initialExperiment -> initialExperiment));
@@ -5362,6 +5530,118 @@ class ExperimentsResourceTest {
             // when & then
             experimentResourceClient.updateExperiment(nonExistentId, experimentUpdate, API_KEY, TEST_WORKSPACE,
                     HttpStatus.SC_NOT_FOUND);
+        }
+
+        @Test
+        @DisplayName("when updating experiment with experiment_scores, then scores are saved and retrieved correctly")
+        void updateExperiment_whenExperimentScoresProvided_thenScoresSavedAndRetrieved() {
+            // given
+            var experiment = experimentResourceClient.createPartialExperiment()
+                    .name("Test Experiment")
+                    .build();
+            var experimentId = experimentResourceClient.create(experiment, API_KEY, TEST_WORKSPACE);
+
+            var experimentScores = List.of(
+                    ExperimentScore.builder()
+                            .name("accuracy")
+                            .value(new BigDecimal("0.95"))
+                            .build(),
+                    ExperimentScore.builder()
+                            .name("latency")
+                            .value(new BigDecimal("120.5"))
+                            .build());
+
+            var updateRequest = ExperimentUpdate.builder()
+                    .experimentScores(experimentScores)
+                    .build();
+
+            // when
+            experimentResourceClient.updateExperiment(experimentId, updateRequest, API_KEY, TEST_WORKSPACE,
+                    HttpStatus.SC_NO_CONTENT);
+
+            // then
+            var updatedExperiment = getExperiment(experimentId, TEST_WORKSPACE, API_KEY);
+            assertThat(updatedExperiment.experimentScores())
+                    .isNotNull()
+                    .hasSize(2)
+                    .extracting(ExperimentScore::name, ExperimentScore::value)
+                    .containsExactlyInAnyOrder(
+                            tuple("accuracy", new BigDecimal("0.95")),
+                            tuple("latency", new BigDecimal("120.5")));
+        }
+
+        @Test
+        @DisplayName("when overriding experiment_scores, then new scores replace old ones")
+        void updateExperiment_whenOverridingExperimentScores_thenNewScoresReplaceOld() {
+            // given
+            var experiment = experimentResourceClient.createPartialExperiment()
+                    .name("Test Experiment")
+                    .build();
+            var experimentId = experimentResourceClient.create(experiment, API_KEY, TEST_WORKSPACE);
+
+            var initialScores = List.of(
+                    ExperimentScore.builder()
+                            .name("accuracy")
+                            .value(new BigDecimal("0.90"))
+                            .build());
+
+            experimentResourceClient.updateExperiment(experimentId,
+                    ExperimentUpdate.builder().experimentScores(initialScores).build(),
+                    API_KEY, TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
+
+            // when - update with new scores
+            var newScores = List.of(
+                    ExperimentScore.builder()
+                            .name("accuracy")
+                            .value(new BigDecimal("0.95"))
+                            .build(),
+                    ExperimentScore.builder()
+                            .name("f1_score")
+                            .value(new BigDecimal("0.88"))
+                            .build());
+
+            experimentResourceClient.updateExperiment(experimentId,
+                    ExperimentUpdate.builder().experimentScores(newScores).build(),
+                    API_KEY, TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
+
+            // then
+            var updatedExperiment = getExperiment(experimentId, TEST_WORKSPACE, API_KEY);
+            assertThat(updatedExperiment.experimentScores())
+                    .isNotNull()
+                    .hasSize(2)
+                    .extracting(ExperimentScore::name, ExperimentScore::value)
+                    .containsExactlyInAnyOrder(
+                            tuple("accuracy", new BigDecimal("0.95")),
+                            tuple("f1_score", new BigDecimal("0.88")));
+        }
+
+        @Test
+        @DisplayName("when updating experiment with empty experiment_scores, then scores are cleared")
+        void updateExperiment_whenEmptyExperimentScores_thenScoresCleared() {
+            // given
+            var experiment = experimentResourceClient.createPartialExperiment()
+                    .name("Test Experiment")
+                    .build();
+            var experimentId = experimentResourceClient.create(experiment, API_KEY, TEST_WORKSPACE);
+
+            var initialScores = List.of(
+                    ExperimentScore.builder()
+                            .name("accuracy")
+                            .value(new BigDecimal("0.95"))
+                            .build());
+
+            experimentResourceClient.updateExperiment(experimentId,
+                    ExperimentUpdate.builder().experimentScores(initialScores).build(),
+                    API_KEY, TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
+
+            // when - update with empty list
+            experimentResourceClient.updateExperiment(experimentId,
+                    ExperimentUpdate.builder().experimentScores(List.of()).build(),
+                    API_KEY, TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
+
+            // then
+            var updatedExperiment = getExperiment(experimentId, TEST_WORKSPACE, API_KEY);
+            assertThat(updatedExperiment.experimentScores()).isNull();
         }
 
         @ParameterizedTest
@@ -5382,6 +5662,89 @@ class ExperimentsResourceTest {
         private Stream<Arguments> updateExperiment_whenInvalidUpdate_thenReturn400() {
             return Stream.of(
                     arguments(named("blank name", ExperimentUpdate.builder().name("   ").build())));
+        }
+
+        @ParameterizedTest
+        @MethodSource
+        @DisplayName("when updating experiment with invalid experiment_scores, then return 400")
+        void updateExperiment_whenInvalidExperimentScores_thenReturn400(List<ExperimentScore> invalidScores) {
+            // given
+            var experiment = experimentResourceClient.createPartialExperiment()
+                    .name("Test Experiment")
+                    .build();
+            var experimentId = experimentResourceClient.create(experiment, API_KEY, TEST_WORKSPACE);
+
+            var updateRequest = ExperimentUpdate.builder()
+                    .experimentScores(invalidScores)
+                    .build();
+
+            // when & then
+            experimentResourceClient.updateExperiment(experimentId, updateRequest, API_KEY, TEST_WORKSPACE,
+                    HttpStatus.SC_UNPROCESSABLE_ENTITY);
+        }
+
+        private Stream<Arguments> updateExperiment_whenInvalidExperimentScores_thenReturn400() {
+            return Stream.of(
+                    arguments(named("blank name", List.of(ExperimentScore.builder()
+                            .name("") // blank name
+                            .value(new BigDecimal("0.95"))
+                            .build()))),
+                    arguments(named("null value", List.of(ExperimentScore.builder()
+                            .name("accuracy")
+                            .value(null) // null value
+                            .build()))));
+        }
+
+        @Test
+        @DisplayName("when updating experiment multiple times with partial updates, then latest values are preserved")
+        void updateExperiment_whenMultiplePartialUpdates_thenLatestValuesPreserved() {
+            var originalName = "original-" + RandomStringUtils.secure().nextAlphanumeric(32);
+            var originalMetadata = podamFactory.manufacturePojo(JsonNode.class);
+            var initialExperiment = experimentResourceClient.createPartialExperiment()
+                    .name(originalName)
+                    .metadata(originalMetadata)
+                    .build();
+            var experimentId = experimentResourceClient.create(initialExperiment, API_KEY, TEST_WORKSPACE);
+
+            // First update: Change both name and metadata with random values
+            var firstUpdateName = "first-update-" + RandomStringUtils.secure().nextAlphanumeric(32);
+            var firstUpdateMetadata = podamFactory.manufacturePojo(JsonNode.class);
+            var firstUpdate = ExperimentUpdate.builder()
+                    .name(firstUpdateName)
+                    .metadata(firstUpdateMetadata)
+                    .build();
+            experimentResourceClient.updateExperiment(
+                    experimentId, firstUpdate, API_KEY, TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
+
+            // Second update: Change only the name with random value
+            var secondUpdateName = "second-update-" + RandomStringUtils.secure().nextAlphanumeric(32);
+            var secondUpdate = ExperimentUpdate.builder()
+                    .name(secondUpdateName)
+                    .build();
+            experimentResourceClient.updateExperiment(
+                    experimentId, secondUpdate, API_KEY, TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
+
+            // Verify that metadata from first update is preserved (not from original)
+            var expectedExperiment = initialExperiment.toBuilder()
+                    .name(secondUpdateName)
+                    .metadata(firstUpdateMetadata)
+                    .build();
+            getAndAssert(experimentId, expectedExperiment, TEST_WORKSPACE, API_KEY);
+
+            // Third update: Change only the metadata with random value
+            var thirdUpdateMetadata = podamFactory.manufacturePojo(JsonNode.class);
+            var thirdUpdate = ExperimentUpdate.builder()
+                    .metadata(thirdUpdateMetadata)
+                    .build();
+            experimentResourceClient.updateExperiment(
+                    experimentId, thirdUpdate, API_KEY, TEST_WORKSPACE, HttpStatus.SC_NO_CONTENT);
+
+            // Verify that name from second update is preserved (not from first or original)
+            var finalExpectedExperiment = initialExperiment.toBuilder()
+                    .name(secondUpdateName)
+                    .metadata(thirdUpdateMetadata)
+                    .build();
+            getAndAssert(experimentId, finalExpectedExperiment, TEST_WORKSPACE, API_KEY);
         }
     }
 }

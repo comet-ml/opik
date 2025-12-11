@@ -179,14 +179,15 @@ export const processFilters = (
   }
 
   if (processedFilters.length > 0) {
-    // Only send fields that the backend expects: field, type, operator, value, and key (for dictionary types)
+    // Only send fields that the backend expects: field, type, operator, value, and key (when present)
     const backendFilters = processedFilters.map(
       ({ field, operator, value, key, type }) => {
-        // Include key only for dictionary types
+        // Include key for dictionary types or when explicitly set (e.g., for MAP field filtering)
         const isDictionary =
           type === COLUMN_TYPE.dictionary ||
           type === COLUMN_TYPE.numberDictionary;
-        return isDictionary
+        const hasKey = key !== undefined && key !== "";
+        return isDictionary || hasKey
           ? { field, type, operator, value, key }
           : { field, type, operator, value };
       },

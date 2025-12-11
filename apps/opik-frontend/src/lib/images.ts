@@ -6,6 +6,7 @@ import {
   ParsedImageData,
   ParsedMediaData,
   ParsedVideoData,
+  ParsedAudioData,
   ATTACHMENT_TYPE,
 } from "@/types/attachments";
 import { safelyParseJSON } from "@/lib/utils";
@@ -115,12 +116,80 @@ export const VIDEO_URL_EXTENSIONS = [
   "ogv",
 ] as const;
 
+export const AUDIO_URL_EXTENSIONS = [
+  "mp3",
+  "wav",
+  "ogg",
+  "flac",
+  "aac",
+  "m4a",
+  "wma",
+  "aiff",
+  "opus",
+  "webm",
+] as const;
+
 export const SUPPORTED_VIDEO_FORMATS = VIDEO_URL_EXTENSIONS.map(
   (ext) => `.${ext}`,
 ).join(",");
 export const SUPPORTED_IMAGE_FORMATS = IMAGE_URL_EXTENSIONS.map(
   (ext) => `.${ext}`,
 ).join(",");
+export const SUPPORTED_AUDIO_FORMATS = AUDIO_URL_EXTENSIONS.map(
+  (ext) => `.${ext}`,
+).join(",");
+
+/**
+ * Extract the file extension from a URL
+ * @param url - The URL to extract extension from
+ * @returns The lowercase extension without the dot, or null if no extension found
+ */
+export const getUrlExtension = (url: string): string | null => {
+  try {
+    // Remove query params and hash fragments
+    const cleanUrl = url.split(/[?#]/)[0];
+    const lastDot = cleanUrl.lastIndexOf(".");
+    const lastSlash = cleanUrl.lastIndexOf("/");
+
+    // Extension must come after the last slash
+    if (lastDot === -1 || lastDot < lastSlash) {
+      return null;
+    }
+
+    const extension = cleanUrl.slice(lastDot + 1).toLowerCase();
+    return extension || null;
+  } catch {
+    return null;
+  }
+};
+
+/**
+ * Check if a URL has an image file extension
+ * @param url - The URL to check
+ * @returns True if the URL has a recognized image extension
+ */
+export const hasImageExtension = (url: string): boolean => {
+  const ext = getUrlExtension(url);
+  if (!ext) return false;
+  return (IMAGE_URL_EXTENSIONS as readonly string[]).includes(ext);
+};
+
+/**
+ * Check if a URL has a video file extension
+ * @param url - The URL to check
+ * @returns True if the URL has a recognized video extension
+ */
+export const hasVideoExtension = (url: string): boolean => {
+  const ext = getUrlExtension(url);
+  if (!ext) return false;
+  return (VIDEO_URL_EXTENSIONS as readonly string[]).includes(ext);
+};
+
+export const hasAudioExtension = (url: string): boolean => {
+  const ext = getUrlExtension(url);
+  if (!ext) return false;
+  return (AUDIO_URL_EXTENSIONS as readonly string[]).includes(ext);
+};
 
 const IMAGE_CHARS_REGEX = "[A-Za-z0-9+/]+={0,2}";
 export const DATA_IMAGE_REGEX = new RegExp(
@@ -147,9 +216,22 @@ export const VIDEO_URL_REGEX = new RegExp(
   "gi",
 );
 
+export const DATA_AUDIO_REGEX = new RegExp(
+  `data:audio/[^;]+;base64,${IMAGE_CHARS_REGEX}`,
+  "gi",
+);
+
+export const AUDIO_URL_REGEX = new RegExp(
+  `https?:\\/\\/[^\\s"'<>{}\\\\|\\^\`]+\\.(${AUDIO_URL_EXTENSIONS.join(
+    "|",
+  )})\\b(\\?[^"'<>{}\\\\|\\^\`]*(?<!\\\\))?(#[^"'<>{}\\\\|\\^\`]*(?<!\\\\))?`,
+  "gi",
+);
+
 export type ProcessedInput = {
   images: ParsedImageData[];
   videos: ParsedVideoData[];
+  audios: ParsedAudioData[];
   media: ParsedMediaData[];
   formattedData: object | undefined;
 };
@@ -241,6 +323,56 @@ export const isVideoBase64String = (value?: unknown): boolean => {
   return false;
 };
 
+export const isAudioBase64String = (value?: unknown): boolean => {
+  if (!isString(value)) {
+    return false;
+  }
+
+  if (value.startsWith("data:audio/") && value.includes(";base64,")) {
+    return true;
+  }
+
+  return false;
+};
+
+type AudioUrlValue = {
+  url?: string;
+};
+
+export type AudioContent =
+  | {
+      type: "audio_url";
+      audio_url?: AudioUrlValue | string;
+      file?: FileValue;
+    }
+  | {
+      type: "file";
+      file?: FileValue;
+    };
+
+export const isAudioContent = (content?: Partial<AudioContent>) => {
+  if (!content || !content.type) {
+    return false;
+  }
+
+  if (content.type === "audio_url") {
+    if (typeof content.audio_url === "string") {
+      return true;
+    }
+    return isString(content.audio_url?.url);
+  }
+
+  if (content.type === "file") {
+    return Boolean(
+      content.file?.file_id ||
+        content.file?.file_data ||
+        (content.file?.format && content.file.format.startsWith("audio/")),
+    );
+  }
+
+  return false;
+};
+
 export const extractFilename = (url: string): string => {
   const match = url.match(/[^/\\?#]+(?=[?#"]|$)/);
   return match ? match[0] : url;
@@ -315,6 +447,50 @@ export const parseVideoValue = (
   return undefined;
 };
 
+const ensureAudioDataUrl = (value: string, mimeType?: string): string => {
+  if (!value) {
+    return value;
+  }
+
+  if (value.startsWith("data:")) {
+    return value;
+  }
+
+  if (value.includes(";base64,")) {
+    return value;
+  }
+
+  const safeMime =
+    mimeType && mimeType.startsWith("audio/") ? mimeType : "audio/mpeg";
+  return `data:${safeMime};base64,${value}`;
+};
+
+export const parseAudioValue = (
+  value: unknown,
+): ParsedAudioData | undefined => {
+  if (!isString(value)) {
+    return undefined;
+  }
+
+  if (isAudioBase64String(value)) {
+    return {
+      url: value,
+      name: "Base64 Audio",
+      mimeType: value.slice(5, value.indexOf(";base64")),
+    };
+  }
+
+  const audioUrlMatch = value.match(AUDIO_URL_REGEX);
+  if (audioUrlMatch) {
+    return {
+      url: audioUrlMatch[0],
+      name: extractFilename(audioUrlMatch[0]),
+    };
+  }
+
+  return undefined;
+};
+
 // here we extracting only URL base images that can have no extension that can be skipped with general regex
 const extractOpenAIURLImages = (input: object, images: ParsedImageData[]) => {
   if (isObject(input) && "messages" in input && isArray(input.messages)) {
@@ -325,6 +501,9 @@ const extractOpenAIURLImages = (input: object, images: ParsedImageData[]) => {
 
           const url = content.image_url!.url;
           if (!isImageBase64String(url)) {
+            // Skip if URL has a video extension
+            if (hasVideoExtension(url)) return;
+
             images.push({
               url,
               name: extractFilename(url),
@@ -353,6 +532,10 @@ const extractOpenAIVideos = (input: object, videos: ParsedVideoData[]) => {
 
       const pushVideo = (source: string | undefined, mimeType?: string) => {
         if (!source) return;
+
+        // Skip if URL has an image extension (only check http URLs)
+        if (source.startsWith("http") && hasImageExtension(source)) return;
+
         const url = source;
         const name = url.startsWith("data:")
           ? "Base64 Video"
@@ -379,6 +562,60 @@ const extractOpenAIVideos = (input: object, videos: ParsedVideoData[]) => {
           pushVideo(file_id, format);
         } else if (file_data) {
           pushVideo(ensureVideoDataUrl(file_data, format), format);
+        }
+      }
+    });
+  });
+};
+
+const extractOpenAIAudios = (input: object, audios: ParsedAudioData[]) => {
+  if (!isObject(input) || !("messages" in input) || !isArray(input.messages)) {
+    return;
+  }
+
+  input.messages.forEach((message) => {
+    if (!isArray(message?.content)) {
+      return;
+    }
+
+    message.content.forEach((content: Partial<AudioContent>) => {
+      if (!isAudioContent(content)) {
+        return;
+      }
+
+      const pushAudio = (source: string | undefined, mimeType?: string) => {
+        if (!source) return;
+
+        // Skip if URL has an image or video extension (only check http URLs)
+        if (source.startsWith("http") && hasImageExtension(source)) return;
+        if (source.startsWith("http") && hasVideoExtension(source)) return;
+
+        const url = source;
+        const name = url.startsWith("data:")
+          ? "Base64 Audio"
+          : extractFilename(url);
+        audios.push({
+          url,
+          name,
+          mimeType,
+        });
+      };
+
+      if (content.type === "audio_url") {
+        if (typeof content.audio_url === "string") {
+          pushAudio(content.audio_url);
+        } else if (content.audio_url?.url) {
+          pushAudio(content.audio_url.url);
+        }
+      }
+
+      if (content.type === "file" || content.file) {
+        const fileValue = content.file ?? {};
+        const { file_id, file_data, format } = fileValue;
+        if (file_id) {
+          pushAudio(file_id, format);
+        } else if (file_data) {
+          pushAudio(ensureAudioDataUrl(file_data, format), format);
         }
       }
     });
@@ -458,6 +695,29 @@ const extractDataURIVideos = (
   };
 };
 
+const extractDataURIAudios = (
+  input: string,
+  audios: ParsedAudioData[],
+  startIndex: number,
+) => {
+  let index = startIndex;
+  const updatedInput = input.replace(DATA_AUDIO_REGEX, (match) => {
+    const name = `[audio_${index}]`;
+    audios.push({
+      url: match,
+      name: `Base64 Audio: ${name}`,
+      mimeType: match.slice(5, match.indexOf(";base64")),
+    });
+    index++;
+    return name;
+  });
+
+  return {
+    updatedInput,
+    nextIndex: index,
+  };
+};
+
 const addUniqueMediaUrls = <T extends { url: string; name: string }>(
   input: string,
   regex: RegExp,
@@ -506,19 +766,35 @@ const extractVideoURLs = (input: string, videos: ParsedVideoData[]) => {
   }));
 };
 
+const extractAudioURLs = (input: string, audios: ParsedAudioData[]) => {
+  addUniqueMediaUrls(input, AUDIO_URL_REGEX, audios, (url) => ({
+    url,
+    name: extractFilename(url),
+  }));
+};
+
 export const processInputData = (input?: object): ProcessedInput => {
   if (!input) {
-    return { images: [], videos: [], media: [], formattedData: input };
+    return {
+      images: [],
+      videos: [],
+      audios: [],
+      media: [],
+      formattedData: input,
+    };
   }
 
   let inputString = JSON.stringify(input);
   const images: ParsedImageData[] = [];
   const videos: ParsedVideoData[] = [];
+  const audios: ParsedAudioData[] = [];
   let imageIndex = 0;
   let videoIndex = 0;
+  let audioIndex = 0;
 
   extractOpenAIURLImages(input, images);
   extractOpenAIVideos(input, videos);
+  extractOpenAIAudios(input, audios);
 
   ({ updatedInput: inputString, nextIndex: imageIndex } = extractDataURIImages(
     inputString,
@@ -530,13 +806,20 @@ export const processInputData = (input?: object): ProcessedInput => {
     videos,
     videoIndex,
   ));
+  ({ updatedInput: inputString, nextIndex: audioIndex } = extractDataURIAudios(
+    inputString,
+    audios,
+    audioIndex,
+  ));
   ({ updatedInput: inputString, nextIndex: imageIndex } =
     extractPrefixedBase64Images(inputString, images, imageIndex));
   extractImageURLs(inputString, images);
   extractVideoURLs(inputString, videos);
+  extractAudioURLs(inputString, audios);
 
   const uniqueImages = uniqBy(images, "url");
   const uniqueVideos = uniqBy(videos, "url");
+  const uniqueAudios = uniqBy(audios, "url");
   const media: ParsedMediaData[] = [
     ...uniqueImages.map((image) => ({
       ...image,
@@ -546,11 +829,16 @@ export const processInputData = (input?: object): ProcessedInput => {
       ...video,
       type: ATTACHMENT_TYPE.VIDEO as const,
     })),
+    ...uniqueAudios.map((audio) => ({
+      ...audio,
+      type: ATTACHMENT_TYPE.AUDIO as const,
+    })),
   ];
 
   return {
     images: uniqueImages,
     videos: uniqueVideos,
+    audios: uniqueAudios,
     media,
     formattedData: safelyParseJSON(inputString),
   };

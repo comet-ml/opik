@@ -7,28 +7,37 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import isNil from "lodash/isNil";
+import isNumber from "lodash/isNumber";
+import { formatNumericData } from "@/lib/utils";
 
-import { ProjectMetricValue, TransformedData } from "@/types/projects";
+import { TransformedData } from "@/types/projects";
 import { getDefaultHashedColorsChartConfig } from "@/lib/charts";
 import useProjectMetric, {
   INTERVAL_TYPE,
   METRIC_NAME_TYPE,
 } from "@/api/projects/useProjectMetric";
-import { ChartTooltipRenderValueArguments } from "@/components/shared/ChartTooltipContent/ChartTooltipContent";
+import { ChartTooltipRenderValueArguments } from "@/components/shared/Charts/ChartTooltipContent/ChartTooltipContent";
 import NoData from "@/components/shared/NoData/NoData";
 import { ValueType } from "recharts/types/component/DefaultTooltipContent";
 import { TAG_VARIANTS_COLOR_MAP } from "@/components/ui/tag";
 import { Filter } from "@/types/filters";
+import { CHART_TYPE } from "@/constants/chart";
 import MetricLineChart from "./MetricLineChart";
 import MetricBarChart from "./MetricBarChart";
 
-const renderTooltipValue = ({ value }: ChartTooltipRenderValueArguments) =>
-  value;
+const MAX_DECIMAL_PLACES = 4;
+
+const renderTooltipValue = ({ value }: ChartTooltipRenderValueArguments) => {
+  if (isNumber(value)) {
+    return formatNumericData(value, MAX_DECIMAL_PLACES);
+  }
+  return value;
+};
 
 interface MetricContainerChartProps {
   name: string;
   description: string;
-  chartType: "bar" | "line";
+  chartType: CHART_TYPE.line | CHART_TYPE.bar;
   projectId: string;
   interval: INTERVAL_TYPE;
   intervalStart: string | undefined;
@@ -40,6 +49,7 @@ interface MetricContainerChartProps {
   chartId: string;
   traceFilters?: Filter[];
   threadFilters?: Filter[];
+  chartOnly?: boolean;
 }
 
 const predefinedColorMap = {
@@ -55,8 +65,8 @@ const predefinedColorMap = {
 };
 
 const METRIC_CHART_TYPE = {
-  line: MetricLineChart,
-  bar: MetricBarChart,
+  [CHART_TYPE.line]: MetricLineChart,
+  [CHART_TYPE.bar]: MetricBarChart,
 };
 
 const MetricContainerChart = ({
@@ -71,9 +81,10 @@ const MetricContainerChart = ({
   labelsMap,
   customYTickFormatter,
   chartId,
-  chartType = "line",
+  chartType = CHART_TYPE.line,
   traceFilters,
   threadFilters,
+  chartOnly = false,
 }: MetricContainerChartProps) => {
   const { data: traces, isPending } = useProjectMetric(
     {
@@ -91,13 +102,12 @@ const MetricContainerChart = ({
     },
   );
 
-  const [data, lines, values] = useMemo(() => {
+  const [data, lines] = useMemo(() => {
     if (!traces?.filter((trace) => !!trace.name).length) {
-      return [[], [], []];
+      return [[], []];
     }
 
     const lines: string[] = [];
-    const values: ProjectMetricValue[] = [];
     const timeValues = traces[0].data?.map((entry) => entry.time);
     const transformedData: TransformedData[] = timeValues.map((time) => ({
       time,
@@ -107,14 +117,13 @@ const MetricContainerChart = ({
       lines.push(trace.name);
 
       trace.data.forEach((d, dataIndex) => {
-        values.push(d.value);
         if (transformedData[dataIndex]) {
           transformedData[dataIndex][trace.name] = d.value;
         }
       });
     });
 
-    return [transformedData, lines.sort(), values];
+    return [transformedData, lines.sort()];
   }, [traces]);
 
   const noData = useMemo(() => {
@@ -134,6 +143,25 @@ const MetricContainerChart = ({
 
   const CHART = METRIC_CHART_TYPE[chartType];
 
+  const chartContent = noData ? (
+    <NoData
+      className="h-[var(--chart-height)] min-h-32 text-light-slate"
+      message="No data to show"
+    />
+  ) : (
+    <CHART
+      config={config}
+      interval={interval}
+      renderValue={renderValue}
+      customYTickFormatter={customYTickFormatter}
+      chartId={chartId}
+      isPending={isPending}
+      data={data}
+    />
+  );
+
+  if (chartOnly) return chartContent;
+
   return (
     <Card>
       <CardHeader className="space-y-0.5 p-5">
@@ -142,26 +170,7 @@ const MetricContainerChart = ({
           {description}
         </CardDescription>
       </CardHeader>
-      <CardContent className="p-5">
-        {noData ? (
-          <NoData
-            className="h-[var(--chart-height)] min-h-32 text-light-slate"
-            message="No data to show"
-          />
-        ) : (
-          <CHART
-            config={config}
-            interval={interval}
-            renderValue={renderValue}
-            customYTickFormatter={customYTickFormatter}
-            chartId={chartId}
-            isPending={isPending}
-            data={data}
-            lines={lines}
-            values={values}
-          />
-        )}
-      </CardContent>
+      <CardContent className="p-5">{chartContent}</CardContent>
     </Card>
   );
 };

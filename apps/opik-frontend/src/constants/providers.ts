@@ -4,6 +4,7 @@ import OpenRouterIcon from "@/icons/integrations/open_router.svg?react";
 import GeminiIcon from "@/icons/integrations/gemini.svg?react";
 import VertexAIIcon from "@/icons/integrations/vertex_ai.svg?react";
 import CustomIcon from "@/icons/integrations/custom.svg?react";
+import OpikIcon from "@/icons/integrations/opik.svg?react";
 
 import { PROVIDER_MODEL_TYPE, PROVIDER_TYPE } from "@/types/providers";
 
@@ -17,6 +18,8 @@ export type PROVIDER_OPTION_TYPE = {
   defaultModel: PROVIDER_MODEL_TYPE | "";
   description?: string;
   apiKeyURL?: string;
+  /** If true, this provider is system-managed and users cannot configure it */
+  readOnly?: boolean;
 };
 
 type PROVIDERS_TYPE = {
@@ -24,13 +27,22 @@ type PROVIDERS_TYPE = {
 };
 
 export const PROVIDERS: PROVIDERS_TYPE = {
+  [PROVIDER_TYPE.OPIK_BUILTIN]: {
+    label: "Opik Built-in",
+    value: PROVIDER_TYPE.OPIK_BUILTIN,
+    icon: OpikIcon,
+    apiKeyName: "Opik Built-in",
+    defaultModel: PROVIDER_MODEL_TYPE.OPIK_BUILTIN_MODEL,
+    description: "Built-in model provided by Opik - no API key required",
+    readOnly: true,
+  },
   [PROVIDER_TYPE.OPEN_AI]: {
     label: "OpenAI",
     value: PROVIDER_TYPE.OPEN_AI,
     icon: OpenAIIcon,
     apiKeyName: "OPENAI_API_KEY",
     apiKeyURL: "https://platform.openai.com/account/api-keys",
-    defaultModel: PROVIDER_MODEL_TYPE.GPT_5,
+    defaultModel: PROVIDER_MODEL_TYPE.GPT_5_1,
   },
   [PROVIDER_TYPE.ANTHROPIC]: {
     label: "Anthropic",
@@ -54,7 +66,7 @@ export const PROVIDERS: PROVIDERS_TYPE = {
     icon: GeminiIcon,
     apiKeyName: "GEMINI_API_KEY",
     apiKeyURL: "https://aistudio.google.com/apikey",
-    defaultModel: PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH,
+    defaultModel: PROVIDER_MODEL_TYPE.GEMINI_3_PRO,
   },
   [PROVIDER_TYPE.VERTEX_AI]: {
     label: "Vertex AI",

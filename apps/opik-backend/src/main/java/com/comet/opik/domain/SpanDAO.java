@@ -735,6 +735,8 @@ class SpanDAO {
                 FROM comments
                 WHERE workspace_id = :workspace_id
                 AND project_id = :project_id
+                <if(uuid_from_time)> AND entity_id >= :uuid_from_time <endif>
+                <if(uuid_to_time)> AND entity_id \\<= :uuid_to_time <endif>
                 ORDER BY (workspace_id, project_id, entity_id, id) DESC, last_updated_at DESC
                 LIMIT 1 BY id
               )
@@ -757,6 +759,8 @@ class SpanDAO {
                 WHERE entity_type = 'span'
                   AND workspace_id = :workspace_id
                   AND project_id = :project_id
+                  <if(uuid_from_time)> AND entity_id >= :uuid_from_time <endif>
+                  <if(uuid_to_time)> AND entity_id \\<= :uuid_to_time <endif>
                 UNION ALL
                 SELECT workspace_id,
                        project_id,
@@ -775,6 +779,8 @@ class SpanDAO {
                 WHERE entity_type = 'span'
                   AND workspace_id = :workspace_id
                   AND project_id = :project_id
+                  <if(uuid_from_time)> AND entity_id >= :uuid_from_time <endif>
+                  <if(uuid_to_time)> AND entity_id \\<= :uuid_to_time <endif>
             ), feedback_scores_with_ranking AS (
                 SELECT workspace_id,
                        project_id,

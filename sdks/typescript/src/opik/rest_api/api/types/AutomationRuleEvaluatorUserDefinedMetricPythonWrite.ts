@@ -5,5 +5,6 @@
 import * as OpikApi from "../index";
 
 export interface AutomationRuleEvaluatorUserDefinedMetricPythonWrite {
+    filters?: OpikApi.TraceFilterWrite[];
     code?: OpikApi.UserDefinedMetricPythonCodeWrite;
 }

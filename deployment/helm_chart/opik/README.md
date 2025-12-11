@@ -11,6 +11,7 @@ A Helm chart for Comet Opik
 - kubectl - https://kubernetes.io/docs/tasks/tools/#kubectl
 
 - Helm - https://helm.sh/docs/intro/install/
+requires Helm 3.10+
 
 - minikube - https://minikube.sigs.k8s.io/docs/start
 
@@ -335,6 +336,7 @@ Call opik api on http://localhost:5173/api
 | component.python-backend.networkPolicy.engineEgress.except[5] | string | `"192.168.0.0/16"` |  |
 | component.python-backend.networkPolicy.engineEgress.ipBlock | string | `"0.0.0.0/0"` |  |
 | component.python-backend.replicaCount | int | `1` |  |
+| component.python-backend.secretRefs | list | `[]` |  |
 | component.python-backend.securityContext.privileged | bool | `true` |  |
 | component.python-backend.service.ports[0].name | string | `"http"` |  |
 | component.python-backend.service.ports[0].port | int | `8000` |  |

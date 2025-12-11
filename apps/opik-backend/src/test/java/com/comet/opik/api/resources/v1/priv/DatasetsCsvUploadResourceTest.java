@@ -3,6 +3,7 @@ package com.comet.opik.api.resources.v1.priv;
 import com.comet.opik.api.Dataset;
 import com.comet.opik.api.DatasetItem;
 import com.comet.opik.api.DatasetItemSource;
+import com.comet.opik.api.DatasetStatus;
 import com.comet.opik.api.Visibility;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
@@ -39,6 +40,9 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.lifecycle.Startables;
@@ -53,6 +57,7 @@ import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.List;
 import java.util.UUID;
+import java.util.stream.Stream;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.api.resources.utils.WireMockUtils.WireMockRuntime;
@@ -166,6 +171,10 @@ class DatasetsCsvUploadResourceTest {
             assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_ACCEPTED);
         }
 
+        // Verify dataset status is set to PROCESSING immediately after upload
+        Dataset datasetAfterUpload = datasetResourceClient.getDatasetById(createdDatasetId, API_KEY, TEST_WORKSPACE);
+        assertThat(datasetAfterUpload.status()).isEqualTo(DatasetStatus.PROCESSING);
+
         // Wait for async processing to complete
         Awaitility.await()
                 .atMost(Duration.ofSeconds(10))
@@ -198,6 +207,11 @@ class DatasetsCsvUploadResourceTest {
                             .orElseThrow();
                     assertThat(item3.data().get("output").asText()).isEqualTo("Jupiter");
                     assertThat(item3.source()).isEqualTo(DatasetItemSource.MANUAL);
+
+                    // Verify dataset status is set to COMPLETED after processing
+                    Dataset datasetAfterProcessing = datasetResourceClient.getDatasetById(createdDatasetId, API_KEY,
+                            TEST_WORKSPACE);
+                    assertThat(datasetAfterProcessing.status()).isEqualTo(DatasetStatus.COMPLETED);
                 });
     }
 
@@ -225,6 +239,10 @@ class DatasetsCsvUploadResourceTest {
             assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_ACCEPTED);
         }
 
+        // Verify dataset status is set to PROCESSING immediately after upload
+        Dataset datasetAfterUpload = datasetResourceClient.getDatasetById(createdDatasetId, API_KEY, TEST_WORKSPACE);
+        assertThat(datasetAfterUpload.status()).isEqualTo(DatasetStatus.PROCESSING);
+
         // Wait for async processing to complete
         Awaitility.await()
                 .atMost(Duration.ofSeconds(30))
@@ -232,6 +250,11 @@ class DatasetsCsvUploadResourceTest {
                 .untilAsserted(() -> {
                     var items = getDatasetItems(createdDatasetId);
                     assertThat(items).hasSize(2500);
+
+                    // Verify dataset status is set to COMPLETED after processing
+                    Dataset datasetAfterProcessing = datasetResourceClient.getDatasetById(createdDatasetId, API_KEY,
+                            TEST_WORKSPACE);
+                    assertThat(datasetAfterProcessing.status()).isEqualTo(DatasetStatus.COMPLETED);
                 });
     }
 
@@ -259,6 +282,10 @@ class DatasetsCsvUploadResourceTest {
             assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_ACCEPTED);
         }
 
+        // Verify dataset status is set to PROCESSING immediately after upload
+        Dataset datasetAfterUpload = datasetResourceClient.getDatasetById(createdDatasetId, API_KEY, TEST_WORKSPACE);
+        assertThat(datasetAfterUpload.status()).isEqualTo(DatasetStatus.PROCESSING);
+
         // Wait for async processing to complete
         Awaitility.await()
                 .atMost(Duration.ofSeconds(10))
@@ -279,7 +306,72 @@ class DatasetsCsvUploadResourceTest {
                             .findFirst()
                             .orElseThrow();
                     assertThat(item2.data().get("output").asText()).isEqualTo("Response: \"Hi\"");
+
+                    // Verify dataset status is set to COMPLETED after processing
+                    Dataset datasetAfterProcessing = datasetResourceClient.getDatasetById(createdDatasetId, API_KEY,
+                            TEST_WORKSPACE);
+                    assertThat(datasetAfterProcessing.status()).isEqualTo(DatasetStatus.COMPLETED);
                 });
+    }
+
+    @ParameterizedTest
+    @DisplayName("Upload CSV file with invalid headers - should return 400 Bad Request")
+    @MethodSource("provideInvalidCsvHeaders")
+    void uploadCsvFile__invalidHeaders(String csvContent, String testDescription) {
+        // Given: Create a dataset
+        Dataset dataset = factory.manufacturePojo(Dataset.class).toBuilder()
+                .id(null)
+                .createdBy(null)
+                .lastUpdatedBy(null)
+                .build();
+
+        UUID createdDatasetId = datasetResourceClient.createDataset(dataset, API_KEY, TEST_WORKSPACE);
+
+        // When: Upload CSV file with invalid header
+        try (var response = uploadCsvFile(createdDatasetId, csvContent)) {
+            // Then: Should return 400 Bad Request
+            assertThat(response.getStatus())
+                    .as("Test case: %s", testDescription)
+                    .isEqualTo(HttpStatus.SC_BAD_REQUEST);
+
+            // Verify error response contains message with appropriate error description
+            String errorResponse = response.readEntity(String.class);
+            assertThat(errorResponse)
+                    .as("Test case: %s - should contain message field", testDescription)
+                    .contains("\"message\"");
+            assertThat(errorResponse)
+                    .as("Test case: %s - should mention empty header names", testDescription)
+                    .contains("empty header names");
+        }
+
+        // Verify no items were created
+        var items = getDatasetItems(createdDatasetId);
+        assertThat(items)
+                .as("Test case: %s - no items should be created", testDescription)
+                .isEmpty();
+    }
+
+    private static Stream<Arguments> provideInvalidCsvHeaders() {
+        return Stream.of(
+                Arguments.of(
+                        """
+                                input,,expected_output
+                                "What is 2+2?","4","4"
+                                "What is the capital of France?","Paris","Paris"
+                                """,
+                        "Empty header in middle position"),
+                Arguments.of(
+                        """
+                                input,   ,expected_output
+                                "What is 2+2?","4","4"
+                                """,
+                        "Blank header with spaces"),
+                Arguments.of(
+                        """
+                                ,output,expected_output
+                                "What is 2+2?","4","4"
+                                """,
+                        "Empty first header"));
     }
 
     private Response uploadCsvFile(UUID datasetId, String csvContent) {

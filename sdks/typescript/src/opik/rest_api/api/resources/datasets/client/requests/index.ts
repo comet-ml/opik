@@ -15,3 +15,8 @@ export { type GetDatasetExperimentItemsStatsRequest } from "./GetDatasetExperime
 export { type GetDatasetItemsRequest } from "./GetDatasetItemsRequest";
 export { type GetDatasetItemsOutputColumnsRequest } from "./GetDatasetItemsOutputColumnsRequest";
 export { type DatasetItemStreamRequest } from "./DatasetItemStreamRequest";
+export { type DatasetVersionTag } from "./DatasetVersionTag";
+export { type ListDatasetVersionsRequest } from "./ListDatasetVersionsRequest";
+export { type DatasetVersionCreatePublic } from "./DatasetVersionCreatePublic";
+export { type DatasetVersionRestorePublic } from "./DatasetVersionRestorePublic";
+export { type DatasetVersionUpdatePublic } from "./DatasetVersionUpdatePublic";

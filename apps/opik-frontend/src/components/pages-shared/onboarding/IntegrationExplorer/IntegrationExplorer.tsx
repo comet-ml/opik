@@ -6,6 +6,7 @@ import IntegrationQuickInstall from "./IntegrationQuickInstall";
 import IntegrationTypeScriptSDK from "./IntegrationTypeScriptSDK";
 import IntegrationGetHelp from "./IntegrationGetHelp";
 import IntegrationCopyApiKey from "./IntegrationCopyApiKey";
+import IntegrationSkip from "./IntegrationSkip";
 import IntegrationTabs from "./IntegrationTabs";
 import IntegrationGrid from "./IntegrationGrid";
 
@@ -20,6 +21,7 @@ const IntegrationExplorer: React.FunctionComponent<IntegrationExplorerProps> & {
   TypeScriptSDK: typeof IntegrationTypeScriptSDK;
   GetHelp: typeof IntegrationGetHelp;
   CopyApiKey: typeof IntegrationCopyApiKey;
+  Skip: typeof IntegrationSkip;
   Tabs: typeof IntegrationTabs;
   Grid: typeof IntegrationGrid;
 } = ({ children, source }) => {
@@ -35,6 +37,7 @@ IntegrationExplorer.QuickInstall = IntegrationQuickInstall;
 IntegrationExplorer.TypeScriptSDK = IntegrationTypeScriptSDK;
 IntegrationExplorer.GetHelp = IntegrationGetHelp;
 IntegrationExplorer.CopyApiKey = IntegrationCopyApiKey;
+IntegrationExplorer.Skip = IntegrationSkip;
 IntegrationExplorer.Tabs = IntegrationTabs;
 IntegrationExplorer.Grid = IntegrationGrid;
 

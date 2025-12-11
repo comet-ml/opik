@@ -1,35 +1,36 @@
 package com.comet.opik.domain;
 
 import com.comet.opik.api.Span.SpanBuilder;
+import com.comet.opik.domain.mapping.OpenTelemetryMappingRuleFactory;
 import com.comet.opik.utils.JsonUtils;
-import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
-import io.opentelemetry.proto.common.v1.AnyValue;
 import io.opentelemetry.proto.common.v1.KeyValue;
 import io.opentelemetry.proto.trace.v1.Span;
-import jakarta.ws.rs.BadRequestException;
 import lombok.experimental.UtilityClass;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.codec.digest.DigestUtils;
+import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 
-import java.io.UncheckedIOException;
 import java.nio.ByteBuffer;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
+
+import static com.comet.opik.domain.mapping.OpenTelemetryEventsMapper.processEvents;
+import static com.comet.opik.domain.mapping.OpenTelemetryMappingUtils.extractTags;
+import static com.comet.opik.domain.mapping.OpenTelemetryMappingUtils.extractToJsonColumn;
+import static com.comet.opik.domain.mapping.OpenTelemetryMappingUtils.extractUsageField;
 
 @UtilityClass
 @Slf4j
 public class OpenTelemetryMapper {
-
-    private static Map<String, String> USAGE_KEYS_MAPPING = Map.of(
-            "input_tokens", "prompt_tokens",
-            "output_tokens", "completion_tokens");
 
     /**
      * Converts an OpenTelemetry Span into an Opik Span. Despite similar conceptually, but require some translation
@@ -67,7 +68,8 @@ public class OpenTelemetryMapper {
                 .startTime(Instant.ofEpochMilli(startTimeMs))
                 .endTime(Instant.ofEpochMilli(endTimeMs));
 
-        enrichSpanWithAttributes(spanBuilder, otelSpan.getAttributesList(), integrationName);
+        List<Span.Event> events = otelSpan.getEventsList();
+        enrichSpanWithAttributes(spanBuilder, otelSpan.getAttributesList(), integrationName, events);
 
         return spanBuilder.build();
     }
@@ -78,13 +80,15 @@ public class OpenTelemetryMapper {
      * @param spanBuilder the span builder where we will be injecting the extracted values
      * @param attributes the list of span attributes extracted from the otel payload
      * @param integrationName the name of the integration sending the spans (can be empty)
+     * @param events the list of events extracted from the otel payload
      */
     public static void enrichSpanWithAttributes(SpanBuilder spanBuilder, List<KeyValue> attributes,
-            String integrationName) {
+            String integrationName, List<Span.Event> events) {
         Map<String, Integer> usage = new HashMap<>();
         ObjectNode input = JsonUtils.createObjectNode();
         ObjectNode output = JsonUtils.createObjectNode();
         ObjectNode metadata = JsonUtils.createObjectNode();
+        Set<String> tags = new HashSet<>();
 
         if (StringUtils.isNotEmpty(integrationName)) {
             metadata.put("integration", integrationName);
@@ -95,7 +99,7 @@ public class OpenTelemetryMapper {
             var key = attribute.getKey();
             var value = attribute.getValue();
 
-            OpenTelemetryMappingRule.findRule(key).ifPresentOrElse(rule -> {
+            OpenTelemetryMappingRuleFactory.findRule(key).ifPresentOrElse(rule -> {
                 Optional.ofNullable(rule.getSpanType()).ifPresent(spanBuilder::type);
 
                 switch (rule.getOutcome()) {
@@ -122,6 +126,18 @@ public class OpenTelemetryMapper {
                         };
 
                         extractToJsonColumn(node, key, value);
+                        break;
+
+                    case TAGS :
+                        List<String> span_tags = extractTags(value);
+                        if (CollectionUtils.isNotEmpty(span_tags)) {
+                            tags.addAll(span_tags);
+                        }
+                        break;
+
+                    case DROP :
+                        // Explicitly drop this attribute
+                        break;
                 }
             }, () -> {
                 // if it's not explicitly request to drop, we keep it in input
@@ -129,6 +145,9 @@ public class OpenTelemetryMapper {
                 extractToJsonColumn(input, key, value);
             });
         });
+
+        // Process events and add them to metadata
+        processEvents(events, metadata);
 
         if (!metadata.isEmpty()) {
             spanBuilder.metadata(metadata);
@@ -142,84 +161,8 @@ public class OpenTelemetryMapper {
         if (!usage.isEmpty()) {
             spanBuilder.usage(usage);
         }
-    }
-
-    static void extractToJsonColumn(ObjectNode node, String key, AnyValue value) {
-        switch (value.getValueCase()) {
-            case STRING_VALUE -> {
-                var stringValue = value.getStringValue();
-                // check if string value is actually a string or a stringfied json
-                if (stringValue.startsWith("\"") || stringValue.startsWith("[")
-                        || stringValue.startsWith("{")) {
-                    try {
-                        var jsonNode = JsonUtils.getJsonNodeFromString(stringValue);
-                        if (jsonNode.isTextual()) {
-                            try {
-                                jsonNode = JsonUtils.getJsonNodeFromString(jsonNode.asText());
-                            } catch (UncheckedIOException e) {
-                                log.warn("Failed to parse nested JSON string for key {}: {}. Using as plain text.",
-                                        key, e.getMessage());
-                                node.put(key, jsonNode.asText());
-                                return;
-                            }
-                        }
-                        node.set(key, jsonNode);
-                    } catch (UncheckedIOException e) {
-                        log.warn("Failed to parse JSON string for key {}: {}. Using as plain text.", key,
-                                e.getMessage());
-                        node.put(key, stringValue);
-                    }
-                } else {
-                    node.put(key, stringValue);
-                }
-            }
-            case INT_VALUE -> node.put(key, value.getIntValue());
-            case DOUBLE_VALUE -> node.put(key, value.getDoubleValue());
-            case BOOL_VALUE -> node.put(key, value.getBoolValue());
-            case ARRAY_VALUE -> {
-                var array = JsonUtils.createArrayNode();
-                value.getArrayValue().getValuesList().forEach(val -> array.add(val.getStringValue()));
-                node.set(key, array);
-            }
-            default -> log.warn("Unsupported attribute: {} -> {}", key, value);
-        }
-    }
-
-    private static void extractUsageField(Map<String, Integer> usage, OpenTelemetryMappingRule rule, String key,
-            AnyValue value) {
-        // usage might appear as single int values or an json object
-        if (value.hasIntValue()) {
-            var actualKey = key.substring(rule.getRule().length());
-            usage.put(USAGE_KEYS_MAPPING.getOrDefault(actualKey, actualKey), (int) value.getIntValue());
-        } else {
-            try {
-                JsonNode usageNode = JsonUtils.getJsonNodeFromString(value.getStringValue());
-                if (usageNode.isTextual()) {
-                    try {
-                        usageNode = JsonUtils.getJsonNodeFromString(usageNode.asText());
-                    } catch (UncheckedIOException e) {
-                        log.warn(
-                                "Failed to parse nested JSON string for usage field {}: {}. Skipping usage extraction.",
-                                key, e.getMessage());
-                        return;
-                    }
-                }
-
-                // we expect only integers for usage fields
-                usageNode.properties().forEach(entry -> {
-                    if (entry.getValue().isNumber()) {
-                        usage.put(USAGE_KEYS_MAPPING.getOrDefault(entry.getKey(), entry.getKey()),
-                                entry.getValue().intValue());
-                    } else {
-                        log.warn("Unrecognized usage attribute {} -> {}", entry.getKey(), entry.getValue());
-                    }
-                });
-            } catch (UncheckedIOException ex) {
-                log.warn("Failed to parse JSON string for usage field {}: {}. Skipping usage extraction.", key,
-                        ex.getMessage());
-                throw new BadRequestException(
-                        "Failed to parse JSON string for usage field " + key + " ->" + ex.getMessage());
-            }
+        if (!tags.isEmpty()) {
+            spanBuilder.tags(tags);
         }
     }
 

@@ -5,9 +5,15 @@
 export interface ServiceTogglesConfig {
     pythonEvaluatorEnabled: boolean;
     traceThreadPythonEvaluatorEnabled: boolean;
+    spanLlmAsJudgeEnabled: boolean;
+    spanUserDefinedMetricPythonEnabled: boolean;
     guardrailsEnabled: boolean;
     opikAiEnabled: boolean;
     alertsEnabled: boolean;
     welcomeWizardEnabled: boolean;
     csvUploadEnabled: boolean;
+    exportEnabled: boolean;
+    optimizationStudioEnabled: boolean;
+    dashboardsEnabled: boolean;
+    datasetVersioningEnabled: boolean;
 }

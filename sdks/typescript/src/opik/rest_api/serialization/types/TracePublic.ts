@@ -33,6 +33,10 @@ export const TracePublic: core.serialization.ObjectSchema<serializers.TracePubli
             "feedback_scores",
             core.serialization.list(FeedbackScorePublic).optional(),
         ),
+        spanFeedbackScores: core.serialization.property(
+            "span_feedback_scores",
+            core.serialization.list(FeedbackScorePublic).optional(),
+        ),
         comments: core.serialization.list(CommentPublic).optional(),
         guardrailsValidations: core.serialization.property(
             "guardrails_validations",
@@ -44,6 +48,7 @@ export const TracePublic: core.serialization.ObjectSchema<serializers.TracePubli
         threadId: core.serialization.property("thread_id", core.serialization.string().optional()),
         visibilityMode: core.serialization.property("visibility_mode", TracePublicVisibilityMode.optional()),
         llmSpanCount: core.serialization.property("llm_span_count", core.serialization.number().optional()),
+        hasToolSpans: core.serialization.property("has_tool_spans", core.serialization.boolean().optional()),
         providers: core.serialization.list(core.serialization.string()).optional(),
     });
 
@@ -65,6 +70,7 @@ export declare namespace TracePublic {
         created_by?: string | null;
         last_updated_by?: string | null;
         feedback_scores?: FeedbackScorePublic.Raw[] | null;
+        span_feedback_scores?: FeedbackScorePublic.Raw[] | null;
         comments?: CommentPublic.Raw[] | null;
         guardrails_validations?: GuardrailsValidationPublic.Raw[] | null;
         total_estimated_cost?: number | null;
@@ -73,6 +79,7 @@ export declare namespace TracePublic {
         thread_id?: string | null;
         visibility_mode?: TracePublicVisibilityMode.Raw | null;
         llm_span_count?: number | null;
+        has_tool_spans?: boolean | null;
         providers?: string[] | null;
     }
 }

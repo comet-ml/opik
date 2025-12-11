@@ -2,12 +2,12 @@ package com.comet.opik.api.resources.v1.events.webhooks.slack;
 
 import com.comet.opik.api.AlertEventType;
 import com.comet.opik.api.Experiment;
-import com.comet.opik.api.FeedbackScoreItem;
 import com.comet.opik.api.Guardrail;
 import com.comet.opik.api.Prompt;
 import com.comet.opik.api.PromptVersion;
 import com.comet.opik.api.events.webhooks.MetricsAlertPayload;
 import com.comet.opik.api.events.webhooks.WebhookEvent;
+import com.comet.opik.utils.template.TemplateUtils;
 import lombok.NonNull;
 import lombok.experimental.UtilityClass;
 import lombok.extern.slf4j.Slf4j;
@@ -36,6 +36,14 @@ public class SlackWebhookPayloadMapper {
     private static final int SLACK_TEXT_BLOCK_LIMIT = 3000;
     public static final String BASE_URL_METADATA_KEY = "base_url";
     private static final String DEFAULT_BASE_URL = "http://localhost:5173";
+
+    private static final String METRICS_ALERT_DETAILS_TEMPLATE = "• *Current <type>:* <valuePrefix><metricValue><valueSuffix>\n"
+            +
+            "  *Threshold:* <valuePrefix><threshold><valueSuffix>\n" +
+            "  *Time Window:* <windowDuration>\n" +
+            "<if(feedbackScoreName)>  *Feedback Score:* `<feedbackScoreName>`\n<endif>" +
+            "  *Scope:* <scope>";
+    private static final String PROJECTS_TEMPLATE = "*Projects:* `<projectNames>`";
 
     /**
      * Converts a webhook event to Slack webhook payload.
@@ -173,42 +181,14 @@ public class SlackWebhookPayloadMapper {
 
     private static DetailsBuildResult buildTraceFeedbackScoreDetails(List<?> metadata,
             String baseUrl) {
-        if (metadata.isEmpty()) {
-            return new DetailsBuildResult("No feedback scores");
-        }
-
-        List<String> scoreLinks = metadata.stream()
-                .map(item -> (List<FeedbackScoreItem.FeedbackScoreBatchItem>) item)
-                .flatMap(List::stream)
-                .map(fs -> buildTraceFeedbackScoreLink(fs, baseUrl))
-                .toList();
-
-        String mainText = "*Traces Feedback Scores:*\n" + String.join("\n", scoreLinks);
-        String fallbackText = String.format(
-                "Overall %d Traces Feedback Scores created, you could check them here: <%s|View All>",
-                scoreLinks.size(), baseUrl + "/projects");
-
-        return checkSlackTextLimit(mainText, "*Traces Feedback Scores:*\n", scoreLinks, fallbackText);
+        return buildMetricsAlertDetails(metadata, baseUrl, "Trace Feedback Score",
+                "No trace feedback score alerts triggered");
     }
 
     private static DetailsBuildResult buildTraceThreadFeedbackScoreDetails(List<?> metadata,
             String baseUrl) {
-        if (metadata.isEmpty()) {
-            return new DetailsBuildResult("No thread feedback scores");
-        }
-
-        List<String> scoreLinks = metadata.stream()
-                .map(item -> (List<FeedbackScoreItem.FeedbackScoreBatchItemThread>) item)
-                .flatMap(List::stream)
-                .map(fs -> buildThreadFeedbackScoreLink(fs, baseUrl))
-                .toList();
-
-        String mainText = "*Threads Feedback Scores:*\n" + String.join("\n", scoreLinks);
-        String fallbackText = String.format(
-                "Overall %d Threads Feedback Scores created, you could check them here: <%s|View All>",
-                scoreLinks.size(), baseUrl + "/projects");
-
-        return checkSlackTextLimit(mainText, "*Threads Feedback Scores:*\n", scoreLinks, fallbackText);
+        return buildMetricsAlertDetails(metadata, baseUrl, "Thread Feedback Score",
+                "No thread feedback score alerts triggered", "threads");
     }
 
     private static DetailsBuildResult buildGuardrailsTriggeredDetails(List<?> metadata,
@@ -274,6 +254,11 @@ public class SlackWebhookPayloadMapper {
                 "No latency alerts triggered");
     }
 
+    private static DetailsBuildResult buildMetricsAlertDetails(List<?> metadata,
+            String baseUrl, String metricType, String emptyMessage) {
+        return buildMetricsAlertDetails(metadata, baseUrl, metricType, emptyMessage, "traces");
+    }
+
     /**
      * Builds metrics alert details for Slack notification.
      *
@@ -284,7 +269,7 @@ public class SlackWebhookPayloadMapper {
      * @return the formatted details result
      */
     private static DetailsBuildResult buildMetricsAlertDetails(List<?> metadata,
-            String baseUrl, String metricType, String emptyMessage) {
+            String baseUrl, String metricType, String emptyMessage, String feTabType) {
         if (metadata.isEmpty()) {
             return new DetailsBuildResult(emptyMessage);
         }
@@ -302,7 +287,8 @@ public class SlackWebhookPayloadMapper {
 
         String mainText = String.format("*%s Alert Triggered:*\n%s", metricType, String.join("\n", alertDetails));
         String projectsLink = projectIds.size() == 1
-                ? String.format("\n\n<%s/projects/%s/traces|View Project>", baseUrl, projectIds.getFirst())
+                ? String.format("\n\n<%s/projects/%s/traces?type=%s|View Project>", baseUrl, projectIds.getFirst(),
+                        feTabType)
                 : String.format("\n\n<%s/projects|View All Projects>", baseUrl);
 
         return new DetailsBuildResult(mainText + projectsLink);
@@ -319,25 +305,29 @@ public class SlackWebhookPayloadMapper {
             // Build scope description
             String scope = (payload.projectIds() == null || payload.projectIds().isEmpty())
                     ? "*Workspace-wide*"
-                    : String.format("*Projects:* `%s`", payload.projectNames());
+                    : TemplateUtils.newST(PROJECTS_TEMPLATE)
+                            .add("projectNames", payload.projectNames())
+                            .render();
 
             // Format based on metric type
             String valuePrefix = type.equals("Cost") ? "$" : "";
             String valueSuffix = type.equals("Latency") ? " s" : "";
 
-            return String.format("• *Current %s:* %s%s%s\n" +
-                    "  *Threshold:* %s%s%s\n" +
-                    "  *Time Window:* %s\n" +
-                    "  *Scope:* %s",
-                    type,
-                    valuePrefix,
-                    payload.metricValue(),
-                    valueSuffix,
-                    valuePrefix,
-                    payload.threshold(),
-                    valueSuffix,
-                    windowDuration,
-                    scope);
+            var st = TemplateUtils.newST(METRICS_ALERT_DETAILS_TEMPLATE);
+            st.add("type", type);
+            st.add("valuePrefix", valuePrefix);
+            st.add("metricValue", payload.metricValue());
+            st.add("valueSuffix", valueSuffix);
+            st.add("threshold", payload.threshold());
+            st.add("windowDuration", windowDuration);
+            st.add("scope", scope);
+
+            // Only add feedback score name if it's not null
+            if (payload.feedbackScoreName() != null) {
+                st.add("feedbackScoreName", payload.feedbackScoreName());
+            }
+
+            return st.render();
         } catch (Exception e) {
             log.error("Failed to format metrics alert payload: '{}'", payload, e);
             return "• %s alert (unable to parse details)".formatted(type);
@@ -430,29 +420,6 @@ public class SlackWebhookPayloadMapper {
         String url = String.format("%s/projects/%s/traces?trace=%s",
                 baseUrl, projectId, traceId);
         return String.format("Trace `%s` | <%s|View>", traceId, url);
-    }
-
-    /**
-     * Builds a Slack-formatted link to a trace feedback score in the UI.
-     */
-    private static String buildTraceFeedbackScoreLink(@NonNull FeedbackScoreItem.FeedbackScoreBatchItem fs,
-            @NonNull String baseUrl) {
-
-        String url = String.format("%s/projects/%s/traces?trace=%s&traceTab=feedback_scores",
-                baseUrl, fs.projectId(), fs.id());
-        return String.format("Trace Score  *%s* = %.2f, reason: %s | <%s|View>",
-                fs.name(), fs.value(), fs.reason() != null ? fs.reason() : "N/A", url);
-    }
-
-    /**
-     * Builds a Slack-formatted link to a thread feedback score in the UI.
-     */
-    private static String buildThreadFeedbackScoreLink(@NonNull FeedbackScoreItem.FeedbackScoreBatchItemThread fs,
-            @NonNull String baseUrl) {
-        String url = String.format("%s/projects/%s/traces?type=threads&thread=%s&threadTab=feedback_scores",
-                baseUrl, fs.projectId(), fs.threadId());
-        return String.format("Thread Score  *%s* = %.2f, reason: %s | <%s|View>",
-                fs.name(), fs.value(), fs.reason() != null ? fs.reason() : "N/A", url);
     }
 
     /**

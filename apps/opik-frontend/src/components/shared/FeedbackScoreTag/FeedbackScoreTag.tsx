@@ -12,6 +12,7 @@ import { FeedbackScoreValueByAuthorMap } from "@/types/traces";
 import {
   extractReasonsFromValueByAuthor,
   getIsMultiValueFeedbackScore,
+  categoryOptionLabelRenderer,
 } from "@/lib/feedback-scores";
 
 type FeedbackScoreTagProps = {
@@ -70,7 +71,11 @@ const FeedbackScoreTag: React.FunctionComponent<FeedbackScoreTagProps> = ({
   ) : null;
 
   // Determine what to display as the value
-  const displayValue = category || value;
+  // For categorical scores, use categoryOptionLabelRenderer to show "CategoryName (value)"
+  // For regular scores, show the value directly
+  const displayValue = category
+    ? categoryOptionLabelRenderer(category, value)
+    : value;
 
   // Content that will be wrapped in hover card for multi-value or rendered directly for single value
   const tagContent = (

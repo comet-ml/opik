@@ -29,10 +29,11 @@ import { LLM_MESSAGE_ROLE_NAME_MAP } from "@/constants/llm";
 import LLMPromptMessageActions, {
   ImprovePromptConfig,
 } from "@/components/pages-shared/llm/LLMPromptMessages/LLMPromptMessageActions";
-import PromptMessageMediaTags from "@/components/pages-shared/llm/PromptMessageMediaTags/PromptMessageMediaTags";
+import PromptMessageMediaSection from "@/components/pages-shared/llm/PromptMessageMediaTags/PromptMessageMediaSection";
 import { useMessageContent } from "@/hooks/useMessageContent";
 import {
   getTextFromMessageContent,
+  hasAudiosInContent,
   hasImagesInContent,
   hasVideosInContent,
   isMediaAllowedForRole,
@@ -64,8 +65,15 @@ interface LLMPromptMessageProps {
   errorText?: string;
   possibleTypes?: DropdownOption<LLM_MESSAGE_ROLE>[];
   onChangeMessage: (changes: Partial<LLMMessage>) => void;
+  onReplaceWithChatPrompt?: (
+    messages: LLMMessage[],
+    promptId: string,
+    promptVersionId: string,
+  ) => void;
+  onClearOtherPromptLinks?: () => void;
   disableMedia?: boolean;
   improvePromptConfig?: ImprovePromptConfig;
+  disabled?: boolean;
 }
 
 const LLMPromptMessage = ({
@@ -77,10 +85,13 @@ const LLMPromptMessage = ({
   errorText,
   possibleTypes = MESSAGE_TYPE_OPTIONS,
   onChangeMessage,
+  onReplaceWithChatPrompt,
+  onClearOtherPromptLinks,
   onDuplicateMessage,
   onRemoveMessage,
   disableMedia = true,
   improvePromptConfig,
+  disabled = false,
 }: LLMPromptMessageProps) => {
   const [isHoldActionsVisible, setIsHoldActionsVisible] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -99,8 +110,10 @@ const LLMPromptMessage = ({
     localText,
     images,
     videos,
+    audios,
     setImages,
     setVideos,
+    setAudios,
     handleContentChange,
   } = useMessageContent({
     content,
@@ -110,7 +123,9 @@ const LLMPromptMessage = ({
   const handleRoleChange = (newRole: LLM_MESSAGE_ROLE) => {
     if (
       !isMediaAllowedForRole(newRole) &&
-      (hasImagesInContent(content) || hasVideosInContent(content))
+      (hasImagesInContent(content) ||
+        hasVideosInContent(content) ||
+        hasAudiosInContent(content))
     ) {
       const textOnlyContent = getTextFromMessageContent(content);
       onChangeMessage({ role: newRole, content: textOnlyContent });
@@ -138,7 +153,12 @@ const LLMPromptMessage = ({
           <div className="sticky top-0 z-10 flex items-center justify-between gap-2 bg-background shadow-[0_6px_6px_-1px_hsl(var(--background))] dark:bg-accent-background dark:shadow-none">
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="minimal" size="sm" className="min-w-4 p-0">
+                <Button
+                  variant="minimal"
+                  size="sm"
+                  className="min-w-4 p-0"
+                  disabled={disabled}
+                >
                   {LLM_MESSAGE_ROLE_NAME_MAP[role] || role}
                   <ChevronDown className="ml-1 w-4" />
                 </Button>
@@ -169,9 +189,12 @@ const LLMPromptMessage = ({
                 <LLMPromptMessageActions
                   message={message}
                   onChangeMessage={onChangeMessage}
+                  onReplaceWithChatPrompt={onReplaceWithChatPrompt}
+                  onClearOtherPromptLinks={onClearOtherPromptLinks}
                   setIsLoading={setIsLoading}
                   setIsHoldActionsVisible={setIsHoldActionsVisible}
                   improvePromptConfig={improvePromptConfig}
+                  disabled={disabled}
                 />
               )}
               {!hideRemoveButton && (
@@ -181,6 +204,7 @@ const LLMPromptMessage = ({
                     size="icon-sm"
                     onClick={onRemoveMessage}
                     type="button"
+                    disabled={disabled}
                   >
                     <Trash />
                   </Button>
@@ -192,6 +216,7 @@ const LLMPromptMessage = ({
                   size="icon-sm"
                   onClick={onDuplicateMessage}
                   type="button"
+                  disabled={disabled}
                 >
                   <CopyPlus />
                 </Button>
@@ -202,6 +227,7 @@ const LLMPromptMessage = ({
                   className="cursor-move"
                   size="icon-sm"
                   type="button"
+                  disabled={disabled}
                   {...listeners}
                 >
                   <GripHorizontal />
@@ -222,6 +248,7 @@ const LLMPromptMessage = ({
                 value={localText}
                 onChange={handleContentChange}
                 placeholder="Type your message"
+                editable={!disabled}
                 basicSetup={{
                   foldGutter: false,
                   allowMultipleSelections: false,
@@ -231,24 +258,15 @@ const LLMPromptMessage = ({
                 extensions={[EditorView.lineWrapping, mustachePlugin]}
               />
               {!disableMedia && role === LLM_MESSAGE_ROLE.user && (
-                <div className="mt-3 flex gap-2">
-                  <div className="comet-body-s-accented pt-1">Images</div>
-                  <PromptMessageMediaTags
-                    type="image"
-                    items={images}
-                    setItems={setImages}
-                  />
-                </div>
-              )}
-              {!disableMedia && role === LLM_MESSAGE_ROLE.user && (
-                <div className="mt-3 flex gap-2">
-                  <div className="comet-body-s-accented pt-1">Videos</div>
-                  <PromptMessageMediaTags
-                    type="video"
-                    items={videos}
-                    setItems={setVideos}
-                  />
-                </div>
+                <PromptMessageMediaSection
+                  images={images}
+                  videos={videos}
+                  audios={audios}
+                  setImages={setImages}
+                  setVideos={setVideos}
+                  setAudios={setAudios}
+                  disabled={disabled}
+                />
               )}
             </>
           )}

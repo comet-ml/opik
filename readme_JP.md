@@ -13,9 +13,9 @@
         Opik
     </div>
 </h1>
-<h2 align="center" style="border-bottom: none">オープンソースLLM評価プラットフォーム</h2>
+<h2 align="center" style="border-bottom: none">AI向けオープンソースのオブザーバビリティ、評価、最適化プラットフォーム</h2>
 <p align="center">
-Opikは、LLMシステムをより良く、より高速に、より低コストで実行するための構築、評価、最適化を支援します。RAGチャットボットからコードアシスタント、複雑なエージェンシーパイプラインまで、Opikは包括的なトレーシング、評価、ダッシュボード、そして <b>Opik Agent Optimizer</b> や <b>Opik Guardrails</b> といった強力な機能を提供し、本番環境のLLM搭載アプリケーションの改善とセキュリティを支えます。
+Opikは、プロトタイプから本番まで、より良く動作する生成AIアプリケーションの構築、テスト、最適化を支援します。RAGチャットボットやコードアシスタント、複雑なエージェンティックシステムに至るまで、Opikは包括的なトレース、評価、そしてプロンプトやツールの自動最適化を提供し、AI開発における試行錯誤を取り除きます。
 </p>
 
 <div align="center">
@@ -226,6 +226,7 @@ opik configure
 | **Microsoft Agent Framework (Python)** | Microsoft Agent Framework 呼び出しのトレースを記録 | [ドキュメント](https://www.comet.com/docs/opik/integrations/microsoft-agent-framework?utm_source=opik&utm_medium=github&utm_content=agent_framework_link&utm_campaign=opik)              |
 | **Microsoft Agent Framework (.NET)** | Microsoft Agent Framework .NET 呼び出しのトレースを記録 | [ドキュメント](https://www.comet.com/docs/opik/integrations/microsoft-agent-framework-dotnet?utm_source=opik&utm_medium=github&utm_content=agent_framework_dotnet_link&utm_campaign=opik) |
 | **Mistral AI**            | Mistral AI LLM 呼び出しのトレースを記録                                     | [ドキュメント](https://www.comet.com/docs/opik/integrations/mistral?utm_source=opik&utm_medium=github&utm_content=mistral_link&utm_campaign=opik)                             |
+| **n8n**                   | n8n ワークフロー実行のトレースを記録                                        | [ドキュメント](https://www.comet.com/docs/opik/integrations/n8n?utm_source=opik&utm_medium=github&utm_content=n8n_link&utm_campaign=opik)                                     |
 | **LlamaIndex**            | LlamaIndex LLM 呼び出しのトレースを記録                                     | [ドキュメント](https://www.comet.com/docs/opik/integrations/llama_index?utm_source=opik&utm_medium=github&utm_content=llama_index_link&utm_campaign=opik)                     |
 | **Ollama**                | Ollama LLM 呼び出しのトレースを記録                                         | [ドキュメント](https://www.comet.com/docs/opik/integrations/ollama?utm_source=opik&utm_medium=github&utm_content=ollama_link&utm_campaign=opik)                               |
 | **OpenAI (Python)**       | OpenAI LLM 呼び出しのトレースを記録                                         | [ドキュメント](https://www.comet.com/docs/opik/integrations/openai?utm_source=opik&utm_medium=github&utm_content=openai_link&utm_campaign=opik)                               |

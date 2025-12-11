@@ -1,12 +1,17 @@
 package com.comet.opik.domain.evaluators;
 
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorLlmAsJudge;
+import com.comet.opik.api.evaluators.AutomationRuleEvaluatorSpanLlmAsJudge;
+import com.comet.opik.api.evaluators.AutomationRuleEvaluatorSpanUserDefinedMetricPython;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorTraceThreadLlmAsJudge;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorUserDefinedMetricPython;
 import com.comet.opik.api.evaluators.LlmAsJudgeMessage;
 import com.comet.opik.api.evaluators.LlmAsJudgeMessageContent;
+import com.comet.opik.api.filter.Filter;
+import com.comet.opik.api.filter.SpanFilter;
 import com.comet.opik.api.filter.TraceFilter;
+import com.comet.opik.api.filter.TraceThreadFilter;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import dev.langchain4j.data.message.ChatMessageType;
@@ -16,6 +21,7 @@ import org.mapstruct.Mapping;
 import org.mapstruct.factory.Mappers;
 
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 @Mapper
@@ -24,26 +30,49 @@ interface AutomationModelEvaluatorMapper {
     AutomationModelEvaluatorMapper INSTANCE = Mappers.getMapper(AutomationModelEvaluatorMapper.class);
 
     @Mapping(target = "code", expression = "java(map(model.code()))")
+    @Mapping(target = "filters", expression = "java(mapFilters(model))")
     AutomationRuleEvaluatorLlmAsJudge map(LlmAsJudgeAutomationRuleEvaluatorModel model);
 
     @Mapping(target = "code", expression = "java(map(model.code()))")
+    @Mapping(target = "filters", expression = "java(mapFilters(model))")
     AutomationRuleEvaluatorTraceThreadLlmAsJudge map(TraceThreadLlmAsJudgeAutomationRuleEvaluatorModel model);
 
     @Mapping(target = "code", expression = "java(map(model.code()))")
+    @Mapping(target = "filters", expression = "java(mapFilters(model))")
     AutomationRuleEvaluatorUserDefinedMetricPython map(UserDefinedMetricPythonAutomationRuleEvaluatorModel model);
 
     @Mapping(target = "code", expression = "java(map(model.code()))")
+    @Mapping(target = "filters", expression = "java(mapFilters(model))")
     AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython map(
             TraceThreadUserDefinedMetricPythonAutomationRuleEvaluatorModel model);
 
+    @Mapping(target = "code", expression = "java(map(model.code()))")
+    @Mapping(target = "filters", expression = "java(mapFilters(model))")
+    AutomationRuleEvaluatorSpanLlmAsJudge map(SpanLlmAsJudgeAutomationRuleEvaluatorModel model);
+
+    @Mapping(target = "code", expression = "java(map(model.code()))")
+    @Mapping(target = "filters", expression = "java(mapFilters(model))")
+    AutomationRuleEvaluatorSpanUserDefinedMetricPython map(
+            SpanUserDefinedMetricPythonAutomationRuleEvaluatorModel model);
+
+    @Mapping(target = "filters", expression = "java(map(dto.getFilters()))")
     LlmAsJudgeAutomationRuleEvaluatorModel map(AutomationRuleEvaluatorLlmAsJudge dto);
 
+    @Mapping(target = "filters", expression = "java(map(dto.getFilters()))")
     TraceThreadLlmAsJudgeAutomationRuleEvaluatorModel map(AutomationRuleEvaluatorTraceThreadLlmAsJudge dto);
 
+    @Mapping(target = "filters", expression = "java(map(dto.getFilters()))")
     UserDefinedMetricPythonAutomationRuleEvaluatorModel map(AutomationRuleEvaluatorUserDefinedMetricPython dto);
 
+    @Mapping(target = "filters", expression = "java(map(dto.getFilters()))")
     TraceThreadUserDefinedMetricPythonAutomationRuleEvaluatorModel map(
             AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython dto);
+
+    @Mapping(target = "filters", expression = "java(map(dto.getFilters()))")
+    SpanLlmAsJudgeAutomationRuleEvaluatorModel map(AutomationRuleEvaluatorSpanLlmAsJudge dto);
+
+    @Mapping(target = "filters", expression = "java(map(dto.getFilters()))")
+    SpanUserDefinedMetricPythonAutomationRuleEvaluatorModel map(AutomationRuleEvaluatorSpanUserDefinedMetricPython dto);
 
     AutomationRuleEvaluatorLlmAsJudge.LlmAsJudgeCode map(LlmAsJudgeAutomationRuleEvaluatorModel.LlmAsJudgeCode detail);
 
@@ -56,6 +85,12 @@ interface AutomationModelEvaluatorMapper {
     AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython.TraceThreadUserDefinedMetricPythonCode map(
             TraceThreadUserDefinedMetricPythonAutomationRuleEvaluatorModel.TraceThreadUserDefinedMetricPythonCode code);
 
+    AutomationRuleEvaluatorSpanLlmAsJudge.SpanLlmAsJudgeCode map(
+            SpanLlmAsJudgeAutomationRuleEvaluatorModel.SpanLlmAsJudgeCode code);
+
+    AutomationRuleEvaluatorSpanUserDefinedMetricPython.SpanUserDefinedMetricPythonCode map(
+            SpanUserDefinedMetricPythonAutomationRuleEvaluatorModel.SpanUserDefinedMetricPythonCode code);
+
     LlmAsJudgeAutomationRuleEvaluatorModel.LlmAsJudgeCode map(AutomationRuleEvaluatorLlmAsJudge.LlmAsJudgeCode code);
 
     TraceThreadLlmAsJudgeAutomationRuleEvaluatorModel.TraceThreadLlmAsJudgeCode map(
@@ -67,26 +102,38 @@ interface AutomationModelEvaluatorMapper {
     TraceThreadUserDefinedMetricPythonAutomationRuleEvaluatorModel.TraceThreadUserDefinedMetricPythonCode map(
             AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython.TraceThreadUserDefinedMetricPythonCode code);
 
-    default List<TraceFilter> map(String filtersJson) {
-        if (StringUtils.isBlank(filtersJson)) {
+    SpanLlmAsJudgeAutomationRuleEvaluatorModel.SpanLlmAsJudgeCode map(
+            AutomationRuleEvaluatorSpanLlmAsJudge.SpanLlmAsJudgeCode code);
+
+    SpanUserDefinedMetricPythonAutomationRuleEvaluatorModel.SpanUserDefinedMetricPythonCode map(
+            AutomationRuleEvaluatorSpanUserDefinedMetricPython.SpanUserDefinedMetricPythonCode code);
+
+    default <T extends Filter> List<T> mapFilters(AutomationRuleEvaluatorModel<?> model) {
+        if (StringUtils.isBlank(model.filters())) {
             return List.of();
         }
-        try {
-            return JsonUtils.getMapper().readValue(filtersJson, TraceFilter.LIST_TYPE_REFERENCE);
-        } catch (JsonProcessingException e) {
-            throw new RuntimeException("Failed to parse filters JSON", e);
-        }
+
+        return switch (model) {
+            case LlmAsJudgeAutomationRuleEvaluatorModel ignored ->
+                (List<T>) JsonUtils.readValue(model.filters(), TraceFilter.LIST_TYPE_REFERENCE);
+            case UserDefinedMetricPythonAutomationRuleEvaluatorModel ignored ->
+                (List<T>) JsonUtils.readValue(model.filters(), TraceFilter.LIST_TYPE_REFERENCE);
+            case TraceThreadLlmAsJudgeAutomationRuleEvaluatorModel ignored ->
+                (List<T>) JsonUtils.readValue(model.filters(), TraceThreadFilter.LIST_TYPE_REFERENCE);
+            case TraceThreadUserDefinedMetricPythonAutomationRuleEvaluatorModel ignored ->
+                (List<T>) JsonUtils.readValue(model.filters(), TraceThreadFilter.LIST_TYPE_REFERENCE);
+            case SpanLlmAsJudgeAutomationRuleEvaluatorModel ignored ->
+                (List<T>) JsonUtils.readValue(model.filters(), SpanFilter.LIST_TYPE_REFERENCE);
+            case SpanUserDefinedMetricPythonAutomationRuleEvaluatorModel ignored ->
+                (List<T>) JsonUtils.readValue(model.filters(), SpanFilter.LIST_TYPE_REFERENCE);
+        };
     }
 
-    default String map(List<TraceFilter> filters) {
+    default String map(List<? extends Filter> filters) {
         if (filters == null || filters.isEmpty()) {
             return null;
         }
-        try {
-            return JsonUtils.getMapper().writeValueAsString(filters);
-        } catch (JsonProcessingException e) {
-            throw new RuntimeException("Failed to serialize filters to JSON", e);
-        }
+        return JsonUtils.writeValueAsString(filters);
     }
 
     /**
@@ -104,11 +151,7 @@ interface AutomationModelEvaluatorMapper {
             contentString = message.content();
         } else if (message.isStructuredContent()) {
             // Structured content (array), serialize to JSON
-            try {
-                contentString = JsonUtils.getMapper().writeValueAsString(message.contentArray());
-            } catch (JsonProcessingException e) {
-                throw new RuntimeException("Failed to serialize message content to JSON", e);
-            }
+            contentString = JsonUtils.writeValueAsString(message.contentArray());
         } else {
             // Both are null
             contentString = null;
@@ -185,7 +228,7 @@ interface AutomationModelEvaluatorMapper {
             return content;
         }
 
-        if (obj instanceof java.util.Map<?, ?> map) {
+        if (obj instanceof Map<?, ?> map) {
             return LlmAsJudgeMessageContent.builder()
                     .type((String) map.get("type"))
                     .text((String) map.get("text"))
@@ -194,6 +237,9 @@ interface AutomationModelEvaluatorMapper {
                             : null)
                     .videoUrl(map.get("video_url") != null
                             ? convertToVideoUrl(map.get("video_url"))
+                            : null)
+                    .audioUrl(map.get("audio_url") != null
+                            ? convertToAudioUrl(map.get("audio_url"))
                             : null)
                     .build();
         }
@@ -206,7 +252,7 @@ interface AutomationModelEvaluatorMapper {
             return imageUrl;
         }
 
-        if (obj instanceof java.util.Map<?, ?> map) {
+        if (obj instanceof Map<?, ?> map) {
             return LlmAsJudgeMessageContent.ImageUrl.builder()
                     .url((String) map.get("url"))
                     .detail((String) map.get("detail"))
@@ -221,13 +267,27 @@ interface AutomationModelEvaluatorMapper {
             return videoUrl;
         }
 
-        if (obj instanceof java.util.Map<?, ?> map) {
+        if (obj instanceof Map<?, ?> map) {
             return LlmAsJudgeMessageContent.VideoUrl.builder()
                     .url((String) map.get("url"))
                     .build();
         }
 
         throw new IllegalStateException("Unexpected video_url type: " + obj.getClass());
+    }
+
+    private LlmAsJudgeMessageContent.AudioUrl convertToAudioUrl(Object obj) {
+        if (obj instanceof LlmAsJudgeMessageContent.AudioUrl audioUrl) {
+            return audioUrl;
+        }
+
+        if (obj instanceof Map<?, ?> map) {
+            return LlmAsJudgeMessageContent.AudioUrl.builder()
+                    .url((String) map.get("url"))
+                    .build();
+        }
+
+        throw new IllegalStateException("Unexpected audio_url type: " + obj.getClass());
     }
 
     /**

@@ -5,7 +5,10 @@ import com.comet.opik.api.Dataset;
 import com.comet.opik.api.DatasetIdentifier;
 import com.comet.opik.api.DatasetLastExperimentCreated;
 import com.comet.opik.api.DatasetLastOptimizationCreated;
+import com.comet.opik.api.DatasetStatus;
 import com.comet.opik.api.DatasetUpdate;
+import com.comet.opik.api.DatasetVersion;
+import com.comet.opik.api.DatasetVersionSummary;
 import com.comet.opik.api.ExperimentType;
 import com.comet.opik.api.Visibility;
 import com.comet.opik.api.error.EntityAlreadyExistsException;
@@ -94,14 +97,14 @@ public interface DatasetService {
     Set<UUID> exists(Set<UUID> datasetIds, String workspaceId);
 
     long getDailyCreatedCount();
+
+    void updateStatus(UUID id, String workspaceId, DatasetStatus status);
 }
 
 @Singleton
 @RequiredArgsConstructor(onConstructor_ = @Inject)
 @Slf4j
 class DatasetServiceImpl implements DatasetService {
-
-    private static final String DATASET_ALREADY_EXISTS = "Dataset already exists";
 
     private final @NonNull IdGenerator idGenerator;
     private final @NonNull TransactionTemplate template;
@@ -115,6 +118,10 @@ class DatasetServiceImpl implements DatasetService {
     private final @NonNull @Config BatchOperationsConfig batchOperationsConfig;
     private final @NonNull OptimizationDAO optimizationDAO;
     private final @NonNull EventBus eventBus;
+
+    private static String formatDatasetAlreadyExistsMessage(String datasetName) {
+        return "Dataset already exists with name '%s'".formatted(datasetName);
+    }
 
     @Override
     public Dataset save(@NonNull Dataset dataset) {
@@ -142,8 +149,9 @@ class DatasetServiceImpl implements DatasetService {
                 return dao.findById(newDataset.id(), workspaceId).orElseThrow();
             } catch (UnableToExecuteStatementException e) {
                 if (e.getCause() instanceof SQLIntegrityConstraintViolationException) {
-                    log.info(DATASET_ALREADY_EXISTS);
-                    throw new EntityAlreadyExistsException(new ErrorMessage(List.of(DATASET_ALREADY_EXISTS)));
+                    String message = formatDatasetAlreadyExistsMessage(dataset.name());
+                    log.info(message);
+                    throw new EntityAlreadyExistsException(new ErrorMessage(List.of(message)));
                 } else {
                     throw e;
                 }
@@ -222,8 +230,9 @@ class DatasetServiceImpl implements DatasetService {
                 }
             } catch (UnableToExecuteStatementException e) {
                 if (e.getCause() instanceof SQLIntegrityConstraintViolationException) {
-                    log.info(DATASET_ALREADY_EXISTS);
-                    throw new EntityAlreadyExistsException(new ErrorMessage(List.of(DATASET_ALREADY_EXISTS)));
+                    String message = formatDatasetAlreadyExistsMessage(dataset.name());
+                    log.info(message);
+                    throw new EntityAlreadyExistsException(new ErrorMessage(List.of(message)));
                 } else {
                     throw e;
                 }
@@ -573,6 +582,8 @@ class DatasetServiceImpl implements DatasetService {
                 .toStream()
                 .collect(toMap(OptimizationDAO.OptimizationSummary::datasetId, Function.identity()));
 
+        Map<UUID, DatasetVersionSummary> latestVersionsByDatasetId = fetchLatestVersionsByDatasetIds(ids);
+
         return datasets.stream()
                 .map(dataset -> {
                     var resume = experimentSummary.computeIfAbsent(dataset.id(), ExperimentSummary::empty);
@@ -580,6 +591,7 @@ class DatasetServiceImpl implements DatasetService {
                             DatasetItemSummary::empty);
                     var optimizationSummary = optimizationSummaryMap.computeIfAbsent(dataset.id(),
                             OptimizationDAO.OptimizationSummary::empty);
+                    var latestVersion = latestVersionsByDatasetId.get(dataset.id());
 
                     return dataset.toBuilder()
                             .experimentCount(resume.experimentCount())
@@ -587,9 +599,25 @@ class DatasetServiceImpl implements DatasetService {
                             .optimizationCount(optimizationSummary.optimizationCount())
                             .mostRecentExperimentAt(resume.mostRecentExperimentAt())
                             .mostRecentOptimizationAt(optimizationSummary.mostRecentOptimizationAt())
+                            .latestVersion(latestVersion)
                             .build();
                 })
                 .toList();
+    }
+
+    private Map<UUID, DatasetVersionSummary> fetchLatestVersionsByDatasetIds(Set<UUID> datasetIds) {
+        if (datasetIds.isEmpty()) {
+            return Map.of();
+        }
+
+        String workspaceId = requestContext.get().getWorkspaceId();
+
+        return template.inTransaction(READ_ONLY, handle -> {
+            var dao = handle.attach(DatasetVersionDAO.class);
+            List<DatasetVersion> latestVersions = dao.findLatestVersionsByDatasetIds(datasetIds, workspaceId);
+            return latestVersions.stream()
+                    .collect(toMap(DatasetVersion::datasetId, DatasetVersionSummary::from));
+        });
     }
 
     @Override
@@ -647,6 +675,26 @@ class DatasetServiceImpl implements DatasetService {
                     .stream()
                     .mapToLong(BiInformationResponse.BiInformation::count)
                     .sum();
+        });
+    }
+
+    @Override
+    @WithSpan
+    public void updateStatus(@NonNull UUID id, @NonNull String workspaceId,
+            @NonNull DatasetStatus status) {
+        log.info("Updating status for dataset '{}' on workspaceId '{}' to '{}'", id, workspaceId, status);
+        template.inTransaction(WRITE, handle -> {
+            var dao = handle.attach(DatasetDAO.class);
+            int result = dao.updateStatus(workspaceId, id, status);
+
+            if (result == 0) {
+                log.warn("Dataset '{}' not found on workspaceId '{}' - status update skipped", id, workspaceId);
+                return null;
+            }
+
+            log.info("Successfully updated status for dataset '{}' on workspaceId '{}' to '{}'", id,
+                    workspaceId, status);
+            return null;
         });
     }
 

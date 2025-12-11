@@ -1,12 +1,8 @@
 import React, { useState, useRef, useCallback } from "react";
 import { Tag, Trash, Brain } from "lucide-react";
-import first from "lodash/first";
-import get from "lodash/get";
-import slugify from "slugify";
 
 import { Button } from "@/components/ui/button";
 import { Span, Trace } from "@/types/traces";
-import { COLUMN_FEEDBACK_SCORES_ID } from "@/types/shared";
 import { TRACE_DATA_TYPE } from "@/hooks/useTracesOrSpansList";
 import AddToDropdown from "@/components/pages-shared/traces/AddToDropdown/AddToDropdown";
 import ConfirmDialog from "@/components/shared/ConfirmDialog/ConfirmDialog";
@@ -15,6 +11,10 @@ import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import ExportToButton from "@/components/shared/ExportToButton/ExportToButton";
 import AddTagDialog from "@/components/pages-shared/traces/AddTagDialog/AddTagDialog";
 import RunEvaluationDialog from "@/components/pages-shared/automations/RunEvaluationDialog/RunEvaluationDialog";
+import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
+import { FeatureToggleKeys } from "@/types/feature-toggles";
+import { mapRowDataForExport } from "@/lib/traces/exportUtils";
+import slugify from "slugify";
 
 type TracesActionsPanelProps = {
   type: TRACE_DATA_TYPE;
@@ -38,6 +38,7 @@ const TracesActionsPanel: React.FunctionComponent<TracesActionsPanelProps> = ({
 
   const { mutate } = useTracesBatchDeleteMutation();
   const disabled = !selectedRows?.length;
+  const isExportEnabled = useIsFeatureEnabled(FeatureToggleKeys.EXPORT_ENABLED);
 
   const deleteTracesHandler = useCallback(() => {
     mutate({
@@ -48,29 +49,7 @@ const TracesActionsPanel: React.FunctionComponent<TracesActionsPanelProps> = ({
 
   const mapRowData = useCallback(async () => {
     const rows = await getDataForExport();
-    return rows.map((row) => {
-      return columnsToExport.reduce<Record<string, unknown>>((acc, column) => {
-        // we need split by dot to parse feedback_scores into correct structure
-        const keys = column.split(".");
-        const keyPrefix = first(keys) as string;
-
-        if (keyPrefix === COLUMN_FEEDBACK_SCORES_ID) {
-          const scoreName = column.replace(`${COLUMN_FEEDBACK_SCORES_ID}.`, "");
-          const scoreObject = row.feedback_scores?.find(
-            (f) => f.name === scoreName,
-          );
-          acc[column] = get(scoreObject, "value", "-");
-
-          if (scoreObject && scoreObject.reason) {
-            acc[`${column}_reason`] = scoreObject.reason;
-          }
-        } else {
-          acc[column] = get(row, keys, "");
-        }
-
-        return acc;
-      }, {});
-    });
+    return mapRowDataForExport(rows, columnsToExport);
   }, [getDataForExport, columnsToExport]);
 
   const generateFileName = useCallback(
@@ -112,6 +91,16 @@ const TracesActionsPanel: React.FunctionComponent<TracesActionsPanelProps> = ({
           entityType="trace"
         />
       )}
+      {type === TRACE_DATA_TYPE.spans && (
+        <RunEvaluationDialog
+          key={`evaluation-${resetKeyRef.current}`}
+          open={open === 4}
+          setOpen={setOpen}
+          projectId={projectId}
+          entityIds={selectedRows.map((row) => row.id)}
+          entityType="span"
+        />
+      )}
       <AddToDropdown
         getDataForExport={getDataForExport}
         selectedRows={selectedRows}
@@ -132,7 +121,7 @@ const TracesActionsPanel: React.FunctionComponent<TracesActionsPanelProps> = ({
           Add tags
         </Button>
       </TooltipWrapper>
-      {type === TRACE_DATA_TYPE.traces && (
+      {(type === TRACE_DATA_TYPE.traces || type === TRACE_DATA_TYPE.spans) && (
         <TooltipWrapper content="Evaluate">
           <Button
             variant="outline"
@@ -149,9 +138,14 @@ const TracesActionsPanel: React.FunctionComponent<TracesActionsPanelProps> = ({
         </TooltipWrapper>
       )}
       <ExportToButton
-        disabled={disabled || columnsToExport.length === 0}
+        disabled={disabled || columnsToExport.length === 0 || !isExportEnabled}
         getData={mapRowData}
         generateFileName={generateFileName}
+        tooltipContent={
+          !isExportEnabled
+            ? "Export functionality is disabled for this installation"
+            : undefined
+        }
       />
       {type === TRACE_DATA_TYPE.traces && (
         <TooltipWrapper content="Delete">
