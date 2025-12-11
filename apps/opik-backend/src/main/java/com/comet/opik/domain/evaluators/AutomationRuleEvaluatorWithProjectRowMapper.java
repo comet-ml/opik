@@ -4,6 +4,7 @@ import com.comet.opik.api.evaluators.AutomationRuleEvaluatorType;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.jdbi.v3.core.mapper.RowMapper;
 import org.jdbi.v3.core.statement.StatementContext;
 
@@ -18,6 +19,7 @@ import java.util.UUID;
  * Row mapper that handles rows from the join query with automation_rule_projects.
  * Each row contains one project_id, multiple rows with the same rule_id are aggregated in Java.
  */
+@Slf4j
 @RequiredArgsConstructor
 public class AutomationRuleEvaluatorWithProjectRowMapper implements RowMapper<AutomationRuleEvaluatorModel<?>> {
 
@@ -35,10 +37,19 @@ public class AutomationRuleEvaluatorWithProjectRowMapper implements RowMapper<Au
         Instant lastUpdatedAt = rs.getTimestamp("last_updated_at").toInstant();
         String lastUpdatedBy = rs.getString("last_updated_by");
 
-        // Note: project_id is NOT in the SELECT clause - it's fetched separately via junction table
-        // The two-query approach fetches rules first, then project associations separately
-        // projectId and projectIds will be populated by the DAO's merge logic and Service enrichment
-        Set<UUID> projectIds = new HashSet<>(); // Will be populated by DAO after fetching from junction table
+        // Legacy fallback: If rule was created before multi-project support,
+        // it will have project_id set but no entries in automation_rule_projects junction table.
+        // We initialize projectIds with the legacy value as a fallback.
+        // The service layer will replace this with junction table data if available.
+        Set<UUID> projectIds = new HashSet<>();
+
+        String legacyProjectIdStr = rs.getString("legacy_project_id");
+        if (legacyProjectIdStr != null) {
+            UUID legacyProjectId = UUID.fromString(legacyProjectIdStr);
+            projectIds.add(legacyProjectId); // Initialize with legacy value as fallback
+            log.debug("Initialized rule '{}' with legacy project_id '{}'", id, legacyProjectId);
+        }
+
         UUID projectId = null; // Will be enriched by Service layer from projectIds
 
         AutomationRuleEvaluatorType type = AutomationRuleEvaluatorType.fromString(rs.getString("type"));

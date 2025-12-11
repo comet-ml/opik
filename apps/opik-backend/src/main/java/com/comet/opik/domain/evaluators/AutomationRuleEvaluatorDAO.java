@@ -58,6 +58,7 @@ public interface AutomationRuleEvaluatorDAO extends AutomationRuleDAO {
      */
     @SqlQuery("""
             SELECT rule.id, rule.action, rule.name AS name, rule.sampling_rate, rule.enabled, rule.filters,
+                   rule.project_id AS legacy_project_id,
                    evaluator.type, evaluator.code,
                    evaluator.created_at, evaluator.created_by, evaluator.last_updated_at, evaluator.last_updated_by
             FROM automation_rules rule
@@ -155,11 +156,20 @@ public interface AutomationRuleEvaluatorDAO extends AutomationRuleDAO {
         var ruleIds = rules.stream().map(AutomationRuleEvaluatorModel::id).toList();
         var projectMappings = findProjectMappings(ruleIds, workspaceId);
 
-        // Merge project IDs into rules
+        // Merge project IDs into rules with legacy fallback
         return rules.stream()
                 .<AutomationRuleEvaluatorModel<?>>map(rule -> {
-                    var projects = projectMappings.getOrDefault(rule.id(), Set.of());
-                    return rebuildWithProjectIds(rule, projects);
+                    var projectsFromJunction = projectMappings.getOrDefault(rule.id(), Set.of());
+
+                    // Legacy fallback: If junction table is empty but rule has legacy project_id,
+                    // keep the legacy value (set by row mapper)
+                    if (projectsFromJunction.isEmpty() && !rule.projectIds().isEmpty()) {
+                        // Rule was created before multi-project support, use legacy value
+                        return rule;
+                    }
+
+                    // Use junction table data (new/updated rules)
+                    return rebuildWithProjectIds(rule, projectsFromJunction);
                 })
                 .toList();
     }
