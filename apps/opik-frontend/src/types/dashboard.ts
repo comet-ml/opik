@@ -17,6 +17,16 @@ export enum WIDGET_CATEGORY {
   GENERAL = "general",
 }
 
+export enum DASHBOARD_CREATION_TYPE {
+  EMPTY = "empty",
+  TEMPLATE = "template",
+}
+
+export enum TEMPLATE_ID {
+  PROJECT_METRICS = "project-metrics",
+  PERFORMANCE = "performance",
+}
+
 // Widget-specific type definitions with discriminator
 export interface ProjectMetricsWidget {
   type: WIDGET_TYPE.PROJECT_METRICS;
@@ -218,4 +228,11 @@ export interface WidgetConfigDialogProps {
   sectionId: string;
   widgetId?: string;
   onSave: (widgetData: Partial<DashboardWidget>) => void;
+}
+
+export interface DashboardTemplate {
+  id: string;
+  title: string;
+  description: string;
+  config: DashboardState;
 }
