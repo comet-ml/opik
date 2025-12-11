@@ -1,1 +1,1 @@
-export { default as BestPrompt } from "./BestPrompt";
+export { BestPrompt } from "./BestPrompt";
