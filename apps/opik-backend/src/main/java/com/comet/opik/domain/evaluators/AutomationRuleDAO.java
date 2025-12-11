@@ -45,6 +45,13 @@ interface AutomationRuleDAO {
             @Bind("enabled") boolean enabled,
             @Bind("filters") String filters);
 
+    /**
+     * Clears the legacy project_id field to prevent stale data.
+     * Should be called when projects are removed from the junction table.
+     */
+    @SqlUpdate("UPDATE automation_rules SET project_id = NULL WHERE id = :id AND workspace_id = :workspaceId")
+    int clearLegacyProjectId(@Bind("id") UUID id, @Bind("workspaceId") String workspaceId);
+
     @SqlUpdate("""
             DELETE FROM automation_rules
             WHERE workspace_id = :workspaceId

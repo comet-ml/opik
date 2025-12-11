@@ -248,6 +248,9 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
                     projectsDAO.saveRuleProject(id, projectId, workspaceId);
                 }
 
+                // Clear legacy project_id field to prevent stale data
+                dao.clearLegacyProjectId(id, workspaceId);
+
                 AutomationRuleEvaluatorModel<?> modelUpdate = switch (evaluatorUpdate) {
                     case AutomationRuleEvaluatorUpdateLlmAsJudge evaluatorUpdateLlmAsJudge ->
                         LlmAsJudgeAutomationRuleEvaluatorModel.builder()
