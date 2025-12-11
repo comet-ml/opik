@@ -1,10 +1,21 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { AxiosError } from "axios";
 import get from "lodash/get";
 import { useToast } from "@/components/ui/use-toast";
 import api, { DATASETS_REST_ENDPOINT } from "@/api/api";
+import { Filters } from "@/types/filters";
+import {
+  createFilter,
+  generateSearchByFieldFilters,
+  processFiltersArray,
+} from "@/lib/filters";
 
 type UseDatasetItemBatchDeleteMutationParams = {
+  datasetId: string;
   ids: string[];
+  isAllItemsSelected?: boolean;
+  filters?: Filters;
+  search?: string;
 };
 
 const useDatasetItemBatchDeleteMutation = () => {
@@ -12,13 +23,50 @@ const useDatasetItemBatchDeleteMutation = () => {
   const { toast } = useToast();
 
   return useMutation({
-    mutationFn: async ({ ids }: UseDatasetItemBatchDeleteMutationParams) => {
-      const { data } = await api.post(`${DATASETS_REST_ENDPOINT}items/delete`, {
-        item_ids: ids,
-      });
+    mutationFn: async ({
+      datasetId,
+      ids,
+      isAllItemsSelected,
+      filters = [],
+      search,
+    }: UseDatasetItemBatchDeleteMutationParams) => {
+      let payload;
+
+      if (isAllItemsSelected) {
+        // CRITICAL SECURITY: Always include dataset_id filter to scope deletion to a specific dataset
+        const combinedFilters = [
+          createFilter({
+            field: "dataset_id",
+            operator: "=",
+            value: datasetId,
+          }),
+          ...filters,
+          ...generateSearchByFieldFilters("data", search),
+        ];
+
+        payload = {
+          filters: processFiltersArray(combinedFilters),
+        };
+      } else {
+        payload = { item_ids: ids };
+      }
+
+      const { data } = await api.post(
+        `${DATASETS_REST_ENDPOINT}items/delete`,
+        payload,
+      );
       return data;
     },
-    onError: (error) => {
+    onSuccess: (_, { ids, isAllItemsSelected }) => {
+      const isSingle = !isAllItemsSelected && ids.length === 1;
+      toast({
+        title: isSingle ? "Dataset item removed" : "Dataset items removed",
+        description: isSingle
+          ? "The dataset item has been removed. Don't forget to save your changes to create a new version."
+          : "The dataset items have been removed. Don't forget to save your changes to create a new version.",
+      });
+    },
+    onError: (error: AxiosError) => {
       const message = get(
         error,
         ["response", "data", "message"],
