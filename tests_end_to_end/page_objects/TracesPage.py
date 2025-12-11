@@ -125,7 +125,7 @@ class TracesPage:
 
     def delete_all_traces_that_match_name_contains_filter(self, name: str):
         """Delete all traces that match a name contains filter.
-        
+
         Args:
             name: The name substring to filter traces by
         """
@@ -134,7 +134,7 @@ class TracesPage:
 
     def _apply_name_contains_filter(self, name: str):
         """Apply a filter for traces where name contains the given value.
-        
+
         Args:
             name: The name substring to filter by
         """
