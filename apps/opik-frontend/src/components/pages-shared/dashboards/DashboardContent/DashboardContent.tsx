@@ -78,12 +78,10 @@ const DashboardContent: React.FunctionComponent<DashboardContentProps> = ({
 
   return (
     <>
-      <div className="flex-1 overflow-auto">
-        <DashboardSectionsContainer />
+      <DashboardSectionsContainer />
 
-        <div className="text-clip rounded-md">
-          <AddSectionButton onAddSection={addSection} />
-        </div>
+      <div className="text-clip rounded-md">
+        <AddSectionButton onAddSection={addSection} />
       </div>
 
       <WidgetConfigDialog

@@ -496,7 +496,6 @@ export const useDashboardStore = create<DashboardStore<BaseDashboardConfig>>()(
               version: emptyDashboard.version,
               lastModified: Date.now(),
               config: emptyDashboard.config,
-              runtimeConfig: {},
             },
             false,
             "clearDashboard",

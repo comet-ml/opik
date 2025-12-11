@@ -69,8 +69,8 @@ const DashboardPage: React.FunctionComponent = () => {
   }
 
   return (
-    <div className="flex h-full flex-col">
-      <div className="flex items-center justify-between gap-4 pb-4 pt-6">
+    <>
+      <div className="sticky top-0 z-10 -mx-6 flex items-center justify-between gap-4 bg-soft-background px-6 pb-3 pt-6">
         <div className="flex min-w-0 flex-1 flex-col gap-1">
           <h1 className="comet-title-l truncate break-words">
             {dashboard.name}
@@ -103,9 +103,10 @@ const DashboardPage: React.FunctionComponent = () => {
           <DashboardProjectSettingsButton />
         </div>
       </div>
-
-      <DashboardContent hasUnsavedChanges={hasUnsavedChanges} />
-    </div>
+      <div className="pb-4 pt-1">
+        <DashboardContent hasUnsavedChanges={hasUnsavedChanges} />
+      </div>
+    </>
   );
 };
 
