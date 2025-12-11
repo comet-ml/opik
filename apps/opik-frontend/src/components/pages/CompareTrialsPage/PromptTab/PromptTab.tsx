@@ -6,7 +6,9 @@ import isObject from "lodash/isObject";
 import toLower from "lodash/toLower";
 import find from "lodash/find";
 import get from "lodash/get";
+import isEqual from "lodash/isEqual";
 
+import { CellContext } from "@tanstack/react-table";
 import { COLUMN_TYPE, ColumnData } from "@/types/shared";
 import DataTable from "@/components/shared/DataTable/DataTable";
 import DataTableNoData from "@/components/shared/DataTableNoData/DataTableNoData";
@@ -15,6 +17,10 @@ import CompareExperimentsConfigCell, {
   CompareConfig,
   CompareFiledValue,
 } from "@/components/pages-shared/experiments/CompareExperimentsConfigCell/CompareExperimentsConfigCell";
+import ComparePromptCell, {
+  ComparePromptConfig,
+  ComparePromptData,
+} from "./ComparePromptCell";
 import PageBodyStickyContainer from "@/components/layout/PageBodyStickyContainer/PageBodyStickyContainer";
 import PageBodyStickyTableWrapper from "@/components/layout/PageBodyStickyTableWrapper/PageBodyStickyTableWrapper";
 import Loader from "@/components/shared/Loader/Loader";
@@ -29,18 +35,46 @@ import {
   OPTIMIZATION_PROMPT_KEY,
 } from "@/constants/experiments";
 import { toString } from "@/lib/utils";
+import { extractPromptData, OpenAIMessage } from "@/lib/prompt";
 
 const COLUMNS_WIDTH_KEY = "compare-trials-prompt-columns-width";
 
-const PROMPT_KEY = "Prompt";
+const PROMPT_KEY_PREFIX = "Prompt";
 const EXAMPLES_KEY = "Examples";
+
+type PromptDisplayResult =
+  | Record<string, OpenAIMessage[]>
+  | { [key: string]: unknown };
+
+const extractPromptForDisplay = (promptData: unknown): PromptDisplayResult => {
+  const extracted = extractPromptData(promptData);
+
+  if (!extracted) {
+    return { [PROMPT_KEY_PREFIX]: promptData };
+  }
+
+  if (extracted.type === "single") {
+    return { [PROMPT_KEY_PREFIX]: extracted.data };
+  }
+
+  const result: Record<string, OpenAIMessage[]> = {};
+  for (const [name, messages] of Object.entries(extracted.data)) {
+    result[`${PROMPT_KEY_PREFIX}: ${name}`] = messages;
+  }
+  return result;
+};
 
 export const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
   left: ["name"],
   right: [],
 };
 
-export const DEFAULT_COLUMNS: ColumnData<CompareConfig>[] = [
+// Union type for rows - can be prompt or config
+type PromptTabRow = (CompareConfig | ComparePromptConfig) & {
+  rowType: "prompt" | "config";
+};
+
+export const DEFAULT_COLUMNS: ColumnData<PromptTabRow>[] = [
   {
     id: "name",
     label: "Name",
@@ -76,7 +110,7 @@ const PromptTab: React.FunctionComponent<PromptTabProps> = ({
   });
 
   const columns = useMemo(() => {
-    const retVal = convertColumnDataToColumn<CompareConfig, CompareConfig>(
+    const retVal = convertColumnDataToColumn<PromptTabRow, PromptTabRow>(
       DEFAULT_COLUMNS,
       {},
     );
@@ -85,7 +119,27 @@ const PromptTab: React.FunctionComponent<PromptTabProps> = ({
       retVal.push({
         accessorKey: id,
         header: CompareExperimentsHeader as never,
-        cell: CompareExperimentsConfigCell as never,
+        cell: (context) => {
+          const row = context.row.original;
+          // Type assertion is necessary here because TanStack Table's CellContext
+          // cannot be narrowed based on the row's discriminant field (rowType).
+          // The rowType check ensures type safety at runtime.
+          if (row.rowType === "prompt") {
+            return (
+              <ComparePromptCell
+                {...(context as unknown as CellContext<
+                  ComparePromptConfig,
+                  unknown
+                >)}
+              />
+            );
+          }
+          return (
+            <CompareExperimentsConfigCell
+              {...(context as unknown as CellContext<CompareConfig, unknown>)}
+            />
+          );
+        },
         meta: {
           custom: {
             onlyDiff,
@@ -102,16 +156,14 @@ const PromptTab: React.FunctionComponent<PromptTabProps> = ({
 
   const flattenExperimentMetadataMap = useMemo(() => {
     return experiments.reduce<
-      Record<string, Record<string, CompareFiledValue>>
+      Record<string, Record<string, CompareFiledValue | ComparePromptData>>
     >((acc, experiment) => {
       const promptData = get(
         experiment.metadata ?? {},
         OPTIMIZATION_PROMPT_KEY,
         "-",
       );
-      const prompt = isObject(promptData)
-        ? JSON.stringify(promptData, null, 2)
-        : toString(promptData);
+      const promptFormatted = extractPromptForDisplay(promptData);
 
       const examplesData = get(
         experiment.metadata ?? {},
@@ -123,7 +175,7 @@ const PromptTab: React.FunctionComponent<PromptTabProps> = ({
         : toString(examplesData);
 
       acc[experiment.id] = {
-        [PROMPT_KEY]: prompt,
+        ...promptFormatted,
         [EXAMPLES_KEY]: examples,
       };
 
@@ -131,27 +183,43 @@ const PromptTab: React.FunctionComponent<PromptTabProps> = ({
     }, {});
   }, [experiments]);
 
-  const rows = useMemo(() => {
-    const keys = [PROMPT_KEY, EXAMPLES_KEY];
+  const allKeys = useMemo(() => {
+    const keysSet = new Set<string>();
+    Object.values(flattenExperimentMetadataMap).forEach((map) => {
+      Object.keys(map).forEach((key) => keysSet.add(key));
+    });
+    const keys = Array.from(keysSet);
+    const promptKeys = keys
+      .filter((k) => k.startsWith(PROMPT_KEY_PREFIX))
+      .sort();
+    const otherKeys = keys.filter((k) => !k.startsWith(PROMPT_KEY_PREFIX));
+    return [...promptKeys, ...otherKeys];
+  }, [flattenExperimentMetadataMap]);
 
-    return keys.map((key) => {
-      const data = experimentsIds.reduce<Record<string, CompareFiledValue>>(
-        (acc, id: string) => {
-          acc[id] = flattenExperimentMetadataMap[id]?.[key] ?? undefined;
-          return acc;
-        },
-        {},
-      );
+  const rows = useMemo(() => {
+    return allKeys.map((key) => {
+      const isPromptRow = key.startsWith(PROMPT_KEY_PREFIX);
+      const data = experimentsIds.reduce<
+        Record<string, CompareFiledValue | ComparePromptData>
+      >((acc, id: string) => {
+        acc[id] = flattenExperimentMetadataMap[id]?.[key] ?? undefined;
+        return acc;
+      }, {});
       const values = Object.values(data);
+
+      const different = isPromptRow
+        ? !values.every((v) => isEqual(values[0], v))
+        : !values.every((v) => values[0] === v);
 
       return {
         name: key,
         base: experimentsIds[0],
         data,
-        different: !values.every((v) => values[0] === v),
-      } as CompareConfig;
+        different,
+        rowType: isPromptRow ? "prompt" : "config",
+      } as PromptTabRow;
     });
-  }, [flattenExperimentMetadataMap, experimentsIds]);
+  }, [flattenExperimentMetadataMap, experimentsIds, allKeys]);
 
   const filteredRows = useMemo(() => {
     return rows.filter((row) => {

@@ -32,6 +32,14 @@ export type OpenAIMessage = {
     | Array<{ type: string; text?: string; [key: string]: unknown }>;
 };
 
+export type NamedPrompts = Record<string, OpenAIMessage[]>;
+
+export type PromptData = OpenAIMessage[] | NamedPrompts;
+
+export type ExtractedPromptData =
+  | { type: "single"; data: OpenAIMessage[] }
+  | { type: "multi"; data: NamedPrompts };
+
 /**
  * Extracts text content from OpenAI message format.
  * Handles both string content and array content (extracts text from {type: "text", text: "..."} items).
@@ -120,4 +128,72 @@ export const formatMessagesAsText = (messages: OpenAIMessage[]): string => {
       return `${roleName}: ${content}`;
     })
     .join("\n\n");
+};
+
+/**
+ * Type guard that validates if the given data is a NamedPrompts structure.
+ *
+ * A valid NamedPrompts is a non-empty object where:
+ * - All keys are strings (prompt names)
+ * - All values are arrays of valid OpenAI messages (with role and content)
+ *
+ * This differs from a single prompt array (OpenAIMessage[]) in that it's
+ * an object with named keys, allowing multiple prompts to be organized
+ * by name (e.g., for multi-agent optimization scenarios).
+ *
+ * @example
+ * // Valid NamedPrompts:
+ * { "agent1": [{ role: "system", content: "..." }], "agent2": [...] }
+ *
+ * // Not NamedPrompts (single prompt array):
+ * [{ role: "system", content: "..." }]
+ */
+export const isNamedPrompts = (data: unknown): data is NamedPrompts => {
+  if (!isObject(data) || isArray(data)) {
+    return false;
+  }
+
+  const entries = Object.entries(data as Record<string, unknown>);
+  if (entries.length === 0) {
+    return false;
+  }
+
+  return entries.every(
+    ([, value]) => isArray(value) && isValidOpenAIMessages(value),
+  );
+};
+
+export const extractNamedPrompts = (data: unknown): NamedPrompts | null => {
+  return isNamedPrompts(data) ? data : null;
+};
+
+export const extractPromptData = (
+  data: unknown,
+): ExtractedPromptData | null => {
+  const singlePrompt = extractOpenAIMessages(data);
+  if (singlePrompt) {
+    return { type: "single", data: singlePrompt };
+  }
+
+  const namedPrompts = extractNamedPrompts(data);
+  if (namedPrompts) {
+    return { type: "multi", data: namedPrompts };
+  }
+
+  return null;
+};
+
+export const formatNamedPromptsAsText = (prompts: NamedPrompts): string => {
+  return Object.entries(prompts)
+    .map(([name, messages]) => `[${name}]\n${formatMessagesAsText(messages)}`)
+    .join("\n\n---\n\n");
+};
+
+export const formatPromptDataAsText = (
+  extracted: ExtractedPromptData,
+): string => {
+  if (extracted.type === "single") {
+    return formatMessagesAsText(extracted.data);
+  }
+  return formatNamedPromptsAsText(extracted.data);
 };
