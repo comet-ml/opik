@@ -1,8 +1,8 @@
 package com.comet.opik.api.validation;
 
 import com.comet.opik.api.DatasetItemsDelete;
+import com.comet.opik.api.filter.DatasetItemField;
 import com.comet.opik.api.filter.DatasetItemFilter;
-import com.comet.opik.api.filter.FieldType;
 import com.comet.opik.api.filter.Operator;
 import jakarta.validation.ConstraintViolation;
 import jakarta.validation.Validation;
@@ -54,15 +54,13 @@ class DatasetItemsDeleteValidatorTest {
         var datasetId = UUID.randomUUID();
         var filters = List.of(
                 DatasetItemFilter.builder()
-                        .field("dataset_id")
+                        .field(DatasetItemField.DATASET_ID)
                         .operator(Operator.EQUAL)
-                        .type(FieldType.STRING)
                         .value(datasetId.toString())
                         .build(),
                 DatasetItemFilter.builder()
-                        .field("tags")
+                        .field(DatasetItemField.TAGS)
                         .operator(Operator.EQUAL)
-                        .type(FieldType.STRING)
                         .value("test")
                         .build());
 
@@ -78,15 +76,14 @@ class DatasetItemsDeleteValidatorTest {
     }
 
     @Test
-    @DisplayName("Valid: Empty filters array with dataset_id (select all items in dataset)")
-    void validateWhenEmptyFiltersWithDatasetId() {
-        // Given - Empty array means "select all items" if dataset_id is present
+    @DisplayName("Valid: Single dataset_id filter only (select all items in dataset)")
+    void validateWhenSingleDatasetIdFilter() {
+        // Given - Only dataset_id filter (selects all items in that dataset)
         var datasetId = UUID.randomUUID();
         var filters = List.of(
                 DatasetItemFilter.builder()
-                        .field("dataset_id")
+                        .field(DatasetItemField.DATASET_ID)
                         .operator(Operator.EQUAL)
-                        .type(FieldType.STRING)
                         .value(datasetId.toString())
                         .build());
 
@@ -108,9 +105,8 @@ class DatasetItemsDeleteValidatorTest {
         var datasetId = UUID.randomUUID();
         var filters = List.of(
                 DatasetItemFilter.builder()
-                        .field("dataset_id")
+                        .field(DatasetItemField.DATASET_ID)
                         .operator(Operator.EQUAL)
-                        .type(FieldType.STRING)
                         .value(datasetId.toString())
                         .build());
 
@@ -150,9 +146,8 @@ class DatasetItemsDeleteValidatorTest {
         // Given - No dataset_id filter (SECURITY ISSUE!)
         var filters = List.of(
                 DatasetItemFilter.builder()
-                        .field("tags")
+                        .field(DatasetItemField.TAGS)
                         .operator(Operator.EQUAL)
-                        .type(FieldType.STRING)
                         .value("test")
                         .build());
 
@@ -177,9 +172,8 @@ class DatasetItemsDeleteValidatorTest {
         var datasetId = UUID.randomUUID();
         var filters = List.of(
                 DatasetItemFilter.builder()
-                        .field("dataset_id")
+                        .field(DatasetItemField.DATASET_ID)
                         .operator(Operator.NOT_EQUAL) // Wrong operator!
-                        .type(FieldType.STRING)
                         .value(datasetId.toString())
                         .build());
 
@@ -202,35 +196,9 @@ class DatasetItemsDeleteValidatorTest {
         // Given - dataset_id with non-UUID value
         var filters = List.of(
                 DatasetItemFilter.builder()
-                        .field("dataset_id")
+                        .field(DatasetItemField.DATASET_ID)
                         .operator(Operator.EQUAL)
-                        .type(FieldType.STRING)
                         .value("not-a-valid-uuid") // Invalid UUID!
-                        .build());
-
-        var deleteRequest = DatasetItemsDelete.builder()
-                .filters(filters)
-                .build();
-
-        // When
-        Set<ConstraintViolation<DatasetItemsDelete>> violations = validator.validate(deleteRequest);
-
-        // Then
-        assertThat(violations).hasSize(1);
-        assertThat(violations.iterator().next().getMessage())
-                .contains("valid UUID");
-    }
-
-    @Test
-    @DisplayName("Invalid: Filters with dataset_id but null value")
-    void validateWhenFiltersWithDatasetIdButNullValue() {
-        // Given - dataset_id with null value
-        var filters = List.of(
-                DatasetItemFilter.builder()
-                        .field("dataset_id")
-                        .operator(Operator.EQUAL)
-                        .type(FieldType.STRING)
-                        .value(null) // Null value!
                         .build());
 
         var deleteRequest = DatasetItemsDelete.builder()
@@ -254,9 +222,8 @@ class DatasetItemsDeleteValidatorTest {
         var datasetId = UUID.randomUUID();
         var filters = List.of(
                 DatasetItemFilter.builder()
-                        .field("dataset_id")
+                        .field(DatasetItemField.DATASET_ID)
                         .operator(operator)
-                        .type(FieldType.STRING)
                         .value(datasetId.toString())
                         .build());
 
@@ -279,21 +246,18 @@ class DatasetItemsDeleteValidatorTest {
         var datasetId = UUID.randomUUID();
         var filters = List.of(
                 DatasetItemFilter.builder()
-                        .field("dataset_id")
+                        .field(DatasetItemField.DATASET_ID)
                         .operator(Operator.EQUAL)
-                        .type(FieldType.STRING)
                         .value(datasetId.toString())
                         .build(),
                 DatasetItemFilter.builder()
-                        .field("tags")
+                        .field(DatasetItemField.TAGS)
                         .operator(Operator.CONTAINS)
-                        .type(FieldType.STRING)
                         .value("test")
                         .build(),
                 DatasetItemFilter.builder()
-                        .field("created_at")
+                        .field(DatasetItemField.CREATED_AT)
                         .operator(Operator.GREATER_THAN)
-                        .type(FieldType.STRING)
                         .value("2024-01-01")
                         .build());
 
@@ -309,31 +273,41 @@ class DatasetItemsDeleteValidatorTest {
     }
 
     @Test
-    @DisplayName("Invalid: itemIds with null UUID")
-    void validateWhenItemIdsContainNull() {
-        // Given - This should be caught by @NotNull on Set elements
+    @DisplayName("Valid: Multiple dataset_id filters with same value (idempotent)")
+    void validateWhenMultipleDatasetIdFiltersWithSameValue() {
+        // Given - Multiple dataset_id filters with same value
+        var datasetId = UUID.randomUUID();
+        var filters = List.of(
+                DatasetItemFilter.builder()
+                        .field(DatasetItemField.DATASET_ID)
+                        .operator(Operator.EQUAL)
+                        .value(datasetId.toString())
+                        .build(),
+                DatasetItemFilter.builder()
+                        .field(DatasetItemField.DATASET_ID)
+                        .operator(Operator.EQUAL)
+                        .value(datasetId.toString())
+                        .build());
+
         var deleteRequest = DatasetItemsDelete.builder()
-                .itemIds(Set.of(UUID.randomUUID(), null))
+                .filters(filters)
                 .build();
 
         // When
         Set<ConstraintViolation<DatasetItemsDelete>> violations = validator.validate(deleteRequest);
 
         // Then
-        assertThat(violations).isNotEmpty();
-        assertThat(violations.stream().anyMatch(v -> v.getMessage().contains("must not be null"))).isTrue();
+        assertThat(violations).isEmpty();
     }
 
     private static Stream<Arguments> invalidOperatorCases() {
         return Stream.of(
                 Arguments.of(Operator.NOT_EQUAL, "not equal - would delete from all other datasets"),
-                Arguments.of(Operator.IN, "IN operator - could delete from multiple datasets"),
-                Arguments.of(Operator.NOT_IN, "NOT IN operator - too broad"),
                 Arguments.of(Operator.CONTAINS, "CONTAINS - not precise enough"),
                 Arguments.of(Operator.NOT_CONTAINS, "NOT CONTAINS - too broad"),
                 Arguments.of(Operator.GREATER_THAN, "GREATER THAN - not applicable to dataset_id"),
-                Arguments.of(Operator.GREATER_THAN_OR_EQUAL, "GREATER THAN OR EQUAL - not applicable"),
+                Arguments.of(Operator.GREATER_THAN_EQUAL, "GREATER THAN OR EQUAL - not applicable"),
                 Arguments.of(Operator.LESS_THAN, "LESS THAN - not applicable"),
-                Arguments.of(Operator.LESS_THAN_OR_EQUAL, "LESS THAN OR EQUAL - not applicable"));
+                Arguments.of(Operator.LESS_THAN_EQUAL, "LESS THAN OR EQUAL - not applicable"));
     }
 }

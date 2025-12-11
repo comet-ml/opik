@@ -1,7 +1,6 @@
 package com.comet.opik.api.validation;
 
 import com.comet.opik.api.DatasetItemsDelete;
-import com.comet.opik.api.filter.DatasetItemFilter;
 import com.comet.opik.api.filter.Operator;
 import jakarta.validation.ConstraintValidator;
 import jakarta.validation.ConstraintValidatorContext;
