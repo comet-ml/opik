@@ -5889,8 +5889,15 @@ class ExperimentsResourceTest {
         var createdExperiment = getExperiment(experimentId, TEST_WORKSPACE, API_KEY);
         assertThat(createdExperiment.datasetVersionId()).isEqualTo(version.id());
 
-        // Step 6: Create experiment items for BOTH dataset items (simulating SDK behavior)
-        // The SDK doesn't know about versions, it just creates experiment items for all items it processes
+        // Step 6: Get the version item IDs (not draft item IDs!)
+        // When an experiment is linked to a version, experiment items must reference version item IDs
+        var versionItems = datasetResourceClient.getDatasetItems(
+                datasetId, 1, 10, version.versionHash(), API_KEY, TEST_WORKSPACE);
+        assertThat(versionItems.content()).hasSize(1);
+        var versionItemIdFromVersion = versionItems.content().getFirst().id();
+
+        // Step 7: Create experiment items for BOTH dataset items (simulating SDK behavior)
+        // The SDK creates experiment items with version item IDs when experiment is linked to a version
         String projectName = RandomStringUtils.randomAlphanumeric(10);
         var trace1 = podamFactory.manufacturePojo(Trace.class).toBuilder()
                 .projectName(projectName)
@@ -5901,11 +5908,13 @@ class ExperimentsResourceTest {
         traceResourceClient.createTrace(trace1, API_KEY, TEST_WORKSPACE);
         traceResourceClient.createTrace(trace2, API_KEY, TEST_WORKSPACE);
 
+        // Create experiment item with version item ID (this should be included in results)
         var experimentItemForVersionItem = podamFactory.manufacturePojo(ExperimentItem.class).toBuilder()
                 .experimentId(experimentId)
-                .datasetItemId(versionItemId)
+                .datasetItemId(versionItemIdFromVersion)
                 .traceId(trace1.id())
                 .build();
+        // Create experiment item with draft item ID (this should be filtered out)
         var experimentItemForDraftItem = podamFactory.manufacturePojo(ExperimentItem.class).toBuilder()
                 .experimentId(experimentId)
                 .datasetItemId(draftItemId)
@@ -5916,7 +5925,7 @@ class ExperimentsResourceTest {
                 Set.of(experimentItemForVersionItem, experimentItemForDraftItem),
                 API_KEY, TEST_WORKSPACE);
 
-        // Step 7: Query dataset items with experiment items
+        // Step 8: Query dataset items with experiment items
         // Should only return the item from the version, NOT the draft item
         var datasetItemsWithExperimentItems = datasetResourceClient.getDatasetItemsWithExperimentItems(
                 datasetId, List.of(experimentId), API_KEY, TEST_WORKSPACE);
@@ -5924,15 +5933,23 @@ class ExperimentsResourceTest {
         // ASSERTION: Should only return 1 item (the one from the version)
         // The draft item should be filtered out because it's not part of the version
         assertThat(datasetItemsWithExperimentItems.content()).hasSize(1);
-        assertThat(datasetItemsWithExperimentItems.content().getFirst().id()).isEqualTo(versionItemId);
+        // The returned ID should be the version item ID (for immutability)
+        assertThat(datasetItemsWithExperimentItems.content().getFirst().id()).isEqualTo(versionItemIdFromVersion);
 
-        // Verify the experiment item is properly associated
+        // Verify the experiment item is properly associated with the version item ID
+        assertThat(datasetItemsWithExperimentItems.content()).hasSize(1);
         assertThat(datasetItemsWithExperimentItems.content().getFirst().experimentItems()).hasSize(1);
         assertThat(datasetItemsWithExperimentItems.content().getFirst().experimentItems().getFirst().datasetItemId())
-                .isEqualTo(versionItemId);
+                .isEqualTo(versionItemIdFromVersion);
 
         // Verify getDatasetItems returns the correct datasetVersionId
         assertThat(datasetItemsWithExperimentItems.datasetVersionId()).isEqualTo(version.id());
+
+        // CRITICAL: Verify that the dataset item has actual data (not empty)
+        // This assertion would have caught the bug where the join was using wrong IDs
+        var returnedItem = datasetItemsWithExperimentItems.content().getFirst();
+        assertThat(returnedItem.data()).isNotNull();
+        assertThat(returnedItem.data()).isNotEmpty();
     }
 
     @Test

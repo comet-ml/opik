@@ -2789,6 +2789,7 @@ class DatasetsResourceTest {
                                                 .commit(promptVersion.commit())
                                                 .build())
                                 .promptVersions(null)
+                                .datasetVersionId(null)
                                 .build();
 
                         createAndAssert(
@@ -2804,6 +2805,7 @@ class DatasetsResourceTest {
                                 .type(ExperimentType.TRIAL)
                                 .promptVersion(null)
                                 .promptVersions(null)
+                                .datasetVersionId(null)
                                 .build();
 
                         createAndAssert(
@@ -2866,6 +2868,7 @@ class DatasetsResourceTest {
                                                 .id(promptVersion.id())
                                                 .commit(promptVersion.commit())
                                                 .build()))
+                                .datasetVersionId(null)
                                 .build();
 
                         createAndAssert(
@@ -5697,6 +5700,7 @@ class DatasetsResourceTest {
                     .datasetName(dataset.name())
                     .promptVersion(null)
                     .promptVersions(null)
+                    .datasetVersionId(null)
                     .build();
 
             createAndAssert(experiment, apiKey, workspaceName);
@@ -6682,6 +6686,7 @@ class DatasetsResourceTest {
                     .datasetName(dataset.name())
                     .promptVersion(null)
                     .promptVersions(null)
+                    .datasetVersionId(null)
                     .build();
 
             createAndAssert(experiment, apiKey, workspaceName);
@@ -6845,6 +6850,7 @@ class DatasetsResourceTest {
                     .datasetName(dataset.name())
                     .promptVersion(null)
                     .promptVersions(null)
+                    .datasetVersionId(null)
                     .build();
 
             createAndAssert(experiment, apiKey, workspaceName);
@@ -6926,6 +6932,7 @@ class DatasetsResourceTest {
                     .datasetName(dataset.name())
                     .promptVersion(null)
                     .promptVersions(null)
+                    .datasetVersionId(null)
                     .build();
 
             createAndAssert(experiment, apiKey, workspaceName);
@@ -6996,6 +7003,7 @@ class DatasetsResourceTest {
                     .datasetName(dataset.name())
                     .promptVersion(null)
                     .promptVersions(null)
+                    .datasetVersionId(null)
                     .build();
 
             createAndAssert(experiment, apiKey, workspaceName);
@@ -7127,6 +7135,7 @@ class DatasetsResourceTest {
                     .datasetName(dataset.name())
                     .promptVersion(null)
                     .promptVersions(null)
+                    .datasetVersionId(null)
                     .build();
 
             createAndAssert(experiment, apiKey, workspaceName);
@@ -8489,6 +8498,170 @@ class DatasetsResourceTest {
                         .as("Experiment item '%s' should appear exactly once, but appears '%d' times", id, count)
                         .isEqualTo(1);
             });
+        }
+    }
+
+    @Nested
+    @DisplayName("Dataset Versioning: Experiment Items with Versioned Datasets")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class VersionedDatasetExperimentItems {
+
+        @Test
+        @DisplayName("Should return items from correct dataset version when experiment uses versioned dataset")
+        void findDatasetItemsWithExperimentItems__whenExperimentUsesVersionedDataset__thenReturnVersionedItems() {
+            String workspaceName = UUID.randomUUID().toString();
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceId = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            // Create dataset
+            var dataset = factory.manufacturePojo(Dataset.class).toBuilder().id(null).build();
+            var datasetId = createAndAssert(dataset, apiKey, workspaceName);
+
+            // Create trace and dataset item
+            String projectName = GENERATOR.generate().toString();
+            var trace = factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(projectName)
+                    .build();
+            createAndAssert(trace, workspaceName, apiKey);
+
+            var datasetItem = factory.manufacturePojo(DatasetItem.class).toBuilder()
+                    .datasetId(datasetId)
+                    .traceId(trace.id())
+                    .spanId(null)
+                    .source(DatasetItemSource.TRACE)
+                    .build();
+
+            var datasetItemBatch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+                    .datasetId(datasetId)
+                    .items(List.of(datasetItem))
+                    .build();
+
+            putAndAssert(datasetItemBatch, workspaceName, apiKey);
+
+            // Create a dataset version
+            var versionCreate = DatasetVersionCreate.builder()
+                    .tags(List.of("v1"))
+                    .build();
+            var version = datasetResourceClient.commitVersion(datasetId, versionCreate, apiKey, workspaceName);
+
+            // Create experiment with dataset version
+            var experiment = factory.manufacturePojo(Experiment.class).toBuilder()
+                    .datasetName(dataset.name())
+                    .promptVersion(null)
+                    .promptVersions(null)
+                    .datasetVersionId(version.id())
+                    .build();
+
+            createAndAssert(experiment, apiKey, workspaceName);
+
+            var experimentItem = factory.manufacturePojo(ExperimentItem.class).toBuilder()
+                    .experimentId(experiment.id())
+                    .datasetItemId(datasetItem.id())
+                    .traceId(trace.id())
+                    .build();
+
+            createAndAssert(new ExperimentItemsBatch(Set.of(experimentItem)), apiKey, workspaceName);
+
+            // Fetch experiment items
+            var experimentIdsParam = JsonUtils.writeValueAsString(List.of(experiment.id()));
+
+            try (var actualResponse = client.target(BASE_RESOURCE_URI.formatted(baseURI))
+                    .path(datasetId.toString())
+                    .path(DATASET_ITEMS_WITH_EXPERIMENT_ITEMS_PATH)
+                    .queryParam("page", 1)
+                    .queryParam("size", 10)
+                    .queryParam("experiment_ids", experimentIdsParam)
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, apiKey)
+                    .header(WORKSPACE_HEADER, workspaceName)
+                    .get()) {
+
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
+                assertThat(actualResponse.hasEntity()).isTrue();
+
+                var actualPage = actualResponse.readEntity(DatasetItemPage.class);
+                assertThat(actualPage.content()).isNotEmpty();
+                assertThat(actualPage.content()).hasSize(1);
+                assertThat(actualPage.content().get(0).id()).isEqualTo(datasetItem.id());
+            }
+        }
+
+        @Test
+        @DisplayName("Should return items from draft when experiment uses no dataset version")
+        void findDatasetItemsWithExperimentItems__whenExperimentUsesNoVersion__thenReturnDraftItems() {
+            String workspaceName = UUID.randomUUID().toString();
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceId = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            // Create dataset
+            var dataset = factory.manufacturePojo(Dataset.class).toBuilder().id(null).build();
+            var datasetId = createAndAssert(dataset, apiKey, workspaceName);
+
+            // Create trace and dataset item
+            String projectName = GENERATOR.generate().toString();
+            var trace = factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(projectName)
+                    .build();
+            createAndAssert(trace, workspaceName, apiKey);
+
+            var datasetItem = factory.manufacturePojo(DatasetItem.class).toBuilder()
+                    .datasetId(datasetId)
+                    .traceId(trace.id())
+                    .spanId(null)
+                    .source(DatasetItemSource.TRACE)
+                    .build();
+
+            var datasetItemBatch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+                    .datasetId(datasetId)
+                    .items(List.of(datasetItem))
+                    .build();
+
+            putAndAssert(datasetItemBatch, workspaceName, apiKey);
+
+            // Create experiment WITHOUT dataset version (draft)
+            var experiment = factory.manufacturePojo(Experiment.class).toBuilder()
+                    .datasetName(dataset.name())
+                    .promptVersion(null)
+                    .promptVersions(null)
+                    .datasetVersionId(null)
+                    .build();
+
+            createAndAssert(experiment, apiKey, workspaceName);
+
+            var experimentItem = factory.manufacturePojo(ExperimentItem.class).toBuilder()
+                    .experimentId(experiment.id())
+                    .datasetItemId(datasetItem.id())
+                    .traceId(trace.id())
+                    .build();
+
+            createAndAssert(new ExperimentItemsBatch(Set.of(experimentItem)), apiKey, workspaceName);
+
+            // Fetch experiment items
+            var experimentIdsParam = JsonUtils.writeValueAsString(List.of(experiment.id()));
+
+            try (var actualResponse = client.target(BASE_RESOURCE_URI.formatted(baseURI))
+                    .path(datasetId.toString())
+                    .path(DATASET_ITEMS_WITH_EXPERIMENT_ITEMS_PATH)
+                    .queryParam("page", 1)
+                    .queryParam("size", 10)
+                    .queryParam("experiment_ids", experimentIdsParam)
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, apiKey)
+                    .header(WORKSPACE_HEADER, workspaceName)
+                    .get()) {
+
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
+                assertThat(actualResponse.hasEntity()).isTrue();
+
+                var actualPage = actualResponse.readEntity(DatasetItemPage.class);
+                assertThat(actualPage.content()).isNotEmpty();
+                assertThat(actualPage.content()).hasSize(1);
+                assertThat(actualPage.content().get(0).id()).isEqualTo(datasetItem.id());
+            }
         }
     }
 

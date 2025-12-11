@@ -200,6 +200,16 @@ public interface DatasetVersionService {
      */
     Mono<Optional<UUID>> resolveVersionIdFromHashOrTagWithFallback(UUID datasetId, String versionHashOrTag,
             String workspaceId);
+
+    /**
+     * Gets a dataset version by its ID.
+     *
+     * @param versionId the unique identifier of the version
+     * @param workspaceId the workspace ID
+     * @return the dataset version
+     * @throws NotFoundException if the version is not found
+     */
+    DatasetVersion getVersionById(UUID versionId, String workspaceId);
 }
 
 @Singleton
@@ -695,6 +705,18 @@ class DatasetVersionServiceImpl implements DatasetVersionService {
             // Case 2 & 3: Version param not specified - use 3-tier fallback logic
             return resolveVersionIdWithFallback(datasetId, null, workspaceId);
         }
+    }
+
+    @Override
+    public DatasetVersion getVersionById(@NonNull UUID versionId, @NonNull String workspaceId) {
+        log.info("Getting dataset version by id '{}' on workspaceId '{}'", versionId, workspaceId);
+
+        return template.inTransaction(READ_ONLY, handle -> {
+            var versionDAO = handle.attach(DatasetVersionDAO.class);
+            return versionDAO.findById(versionId, workspaceId)
+                    .orElseThrow(() -> new NotFoundException(
+                            "Dataset version not found with id='" + versionId + "'"));
+        });
     }
 
     private record RestoreContext(UUID versionId, DatasetVersion versionToRestore, String workspaceId,
