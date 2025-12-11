@@ -1,4 +1,7 @@
 import uniqid from "uniqid";
+import cloneDeep from "lodash/cloneDeep";
+import map from "lodash/map";
+import get from "lodash/get";
 import {
   BaseDashboardConfig,
   DashboardSection,
@@ -137,4 +140,60 @@ export const createDefaultWidgetConfig = (
     subtitle: "",
     config: defaultConfig,
   } as AddWidgetConfig;
+};
+
+export const regenerateAllIds = (
+  dashboardState: DashboardState,
+): DashboardState => {
+  const clonedConfig: BaseDashboardConfig = cloneDeep(
+    get(dashboardState, "config"),
+  );
+
+  const newSections: DashboardSections = map(
+    get(dashboardState, "sections", []),
+    (section) => {
+      const newSectionId = uniqid();
+
+      const widgetIdMap = new Map<string, string>();
+
+      const newWidgets: DashboardWidget[] = map(
+        get(section, "widgets", []),
+        (widget) => {
+          const newWidgetId = uniqid();
+          const oldWidgetId = get(widget, "id");
+          widgetIdMap.set(oldWidgetId, newWidgetId);
+
+          return {
+            ...widget,
+            id: newWidgetId,
+            config: cloneDeep(get(widget, "config", {})),
+          };
+        },
+      );
+
+      const newLayout = map(get(section, "layout", []), (layoutItem) => {
+        const oldWidgetId = get(layoutItem, "i");
+        const newWidgetId = widgetIdMap.get(oldWidgetId);
+
+        return {
+          ...cloneDeep(layoutItem),
+          i: newWidgetId || oldWidgetId,
+        };
+      });
+
+      return {
+        id: newSectionId,
+        title: get(section, "title", ""),
+        widgets: newWidgets,
+        layout: newLayout,
+      };
+    },
+  );
+
+  return {
+    version: get(dashboardState, "version", DASHBOARD_VERSION),
+    sections: newSections,
+    lastModified: Date.now(),
+    config: clonedConfig,
+  };
 };

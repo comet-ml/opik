@@ -69,7 +69,7 @@ const ProjectStatsCardWidget: React.FunctionComponent<
   const widgetProjectId = widget?.config?.projectId as string | undefined;
 
   const { projectId, intervalStart, intervalEnd } = useMemo(() => {
-    const finalProjectId = widgetProjectId || globalConfig.projectId;
+    const finalProjectId = globalConfig.projectId || widgetProjectId;
 
     const { intervalStart, intervalEnd } = calculateIntervalConfig(
       globalConfig.dateRange,
@@ -127,7 +127,18 @@ const ProjectStatsCardWidget: React.FunctionComponent<
   }
 
   const renderCardContent = () => {
-    if (!source || !metric || !projectId) {
+    if (!projectId) {
+      return (
+        <DashboardWidget.EmptyState
+          title="Project not configured"
+          message="This widget requires a project ID. Configure it in the widget settings or set a default project for the dashboard."
+          onAction={!preview ? handleEdit : undefined}
+          actionLabel="Configure widget"
+        />
+      );
+    }
+
+    if (!source || !metric) {
       return (
         <DashboardWidget.EmptyState
           title="No metric selected"
