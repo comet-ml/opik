@@ -109,6 +109,9 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
         UUID id = idGenerator.generateId();
         IdGenerator.validateVersion(id, "AutomationRuleEvaluator");
 
+        // Dual-field sync: First projectId becomes the legacy project_id field
+        UUID primaryProjectId = projectIds.isEmpty() ? null : projectIds.iterator().next();
+
         var savedEvaluator = template.inTransaction(WRITE, handle -> {
             var evaluatorsDAO = handle.attach(AutomationRuleEvaluatorDAO.class);
             var projectsDAO = handle.attach(AutomationRuleProjectsDAO.class);
@@ -117,6 +120,7 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
                 case AutomationRuleEvaluatorLlmAsJudge llmAsJudge -> {
                     var definition = llmAsJudge.toBuilder()
                             .id(id)
+                            .projectId(primaryProjectId)
                             .projectIds(projectIds)
                             .createdBy(userName)
                             .lastUpdatedBy(userName)
@@ -130,6 +134,7 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
                     }
                     var definition = userDefinedMetricPython.toBuilder()
                             .id(id)
+                            .projectId(primaryProjectId)
                             .projectIds(projectIds)
                             .createdBy(userName)
                             .lastUpdatedBy(userName)
@@ -140,6 +145,7 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
                 case AutomationRuleEvaluatorTraceThreadLlmAsJudge traceThreadLlmAsJudge -> {
                     var definition = traceThreadLlmAsJudge.toBuilder()
                             .id(id)
+                            .projectId(primaryProjectId)
                             .projectIds(projectIds)
                             .createdBy(userName)
                             .lastUpdatedBy(userName)
@@ -153,6 +159,7 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
                     }
                     var definition = userDefinedMetricPython.toBuilder()
                             .id(id)
+                            .projectId(primaryProjectId)
                             .projectIds(projectIds)
                             .createdBy(userName)
                             .lastUpdatedBy(userName)
@@ -163,6 +170,7 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
                 case AutomationRuleEvaluatorSpanLlmAsJudge spanLlmAsJudge -> {
                     var definition = spanLlmAsJudge.toBuilder()
                             .id(id)
+                            .projectId(primaryProjectId)
                             .projectIds(projectIds)
                             .createdBy(userName)
                             .lastUpdatedBy(userName)
@@ -176,6 +184,7 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
                     }
                     var definition = spanUserDefinedMetricPython.toBuilder()
                             .id(id)
+                            .projectId(primaryProjectId)
                             .projectIds(projectIds)
                             .createdBy(userName)
                             .lastUpdatedBy(userName)
