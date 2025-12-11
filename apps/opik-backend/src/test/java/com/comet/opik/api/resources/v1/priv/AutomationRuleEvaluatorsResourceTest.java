@@ -664,8 +664,11 @@ class AutomationRuleEvaluatorsResourceTest {
         @MethodSource
         void createAndGet(AutomationRuleEvaluator<?, ?> automationRuleEvaluator, boolean withProjectId) {
             var id = evaluatorsResourceClient.createEvaluator(automationRuleEvaluator, WORKSPACE_NAME, API_KEY);
+            // Set projectId (singular, legacy field) to first element from projectIds for backward compatibility
+            var primaryProjectId = automationRuleEvaluator.getProjectIds().stream().findFirst().orElse(null);
             var expectedAutomationRuleEvaluator = automationRuleEvaluator.toBuilder()
                     .id(id)
+                    .projectId(primaryProjectId)
                     .createdBy(USER)
                     .lastUpdatedBy(USER)
                     .build();
@@ -719,6 +722,7 @@ class AutomationRuleEvaluatorsResourceTest {
                         var id = evaluatorsResourceClient.createEvaluator(evaluator, WORKSPACE_NAME, API_KEY);
                         return (AutomationRuleEvaluator<?, ?>) evaluator.toBuilder()
                                 .id(id)
+                                .projectId(projectId) // Set legacy projectId field for backward compatibility
                                 .createdBy(USER)
                                 .lastUpdatedBy(USER)
                                 .build();
@@ -853,9 +857,10 @@ class AutomationRuleEvaluatorsResourceTest {
                 assertThat(actualResponse.hasEntity()).isFalse();
             }
 
-            // Build expected result from the evaluator with correct projectIds
+            // Build expected result from the evaluator with correct projectIds and projectId
             var expectedAutomationRuleEvaluator = evaluatorWithProject.toBuilder()
                     .id(id)
+                    .projectId(projectId) // Set legacy projectId field for backward compatibility
                     .createdBy(USER)
                     .lastUpdatedBy(USER)
                     .name(updatedEvaluator.getName())
