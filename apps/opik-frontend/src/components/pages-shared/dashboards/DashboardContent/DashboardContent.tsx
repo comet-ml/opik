@@ -4,6 +4,7 @@ import {
   useDashboardStore,
   selectAddWidget,
   selectUpdateWidget,
+  selectHasUnsavedChanges,
 } from "@/store/DashboardStore";
 import DashboardSectionsContainer from "@/components/shared/Dashboard/Dashboard";
 import AddSectionButton from "@/components/shared/Dashboard/DashboardSection/AddSectionButton";
@@ -16,13 +17,8 @@ import {
   UpdateWidgetConfig,
 } from "@/types/dashboard";
 
-interface DashboardContentProps {
-  hasUnsavedChanges: boolean;
-}
-
-const DashboardContent: React.FunctionComponent<DashboardContentProps> = ({
-  hasUnsavedChanges,
-}) => {
+const DashboardContent: React.FunctionComponent = () => {
+  const hasUnsavedChanges = useDashboardStore(selectHasUnsavedChanges);
   const [widgetDialogOpen, setWidgetDialogOpen] = useState(false);
   const [targetSectionId, setTargetSectionId] = useState<string | null>(null);
   const [targetWidgetId, setTargetWidgetId] = useState<string | null>(null);
@@ -78,12 +74,10 @@ const DashboardContent: React.FunctionComponent<DashboardContentProps> = ({
 
   return (
     <>
-      <div className="flex-1 overflow-auto">
-        <DashboardSectionsContainer />
+      <DashboardSectionsContainer />
 
-        <div className="text-clip rounded-md">
-          <AddSectionButton onAddSection={addSection} />
-        </div>
+      <div className="text-clip rounded-md">
+        <AddSectionButton onAddSection={addSection} />
       </div>
 
       <WidgetConfigDialog

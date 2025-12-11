@@ -1,7 +1,6 @@
 import React, { useCallback, useEffect } from "react";
 import { StringParam } from "use-query-params";
 
-import { Separator } from "@/components/ui/separator";
 import Loader from "@/components/shared/Loader/Loader";
 import { DateRangeSerializedValue } from "@/components/shared/DateRangeSelect";
 import MetricDateRangeSelect from "@/components/pages-shared/traces/MetricDateRangeSelect/MetricDateRangeSelect";
@@ -16,8 +15,12 @@ import {
   selectSetConfig,
   selectConfig,
   selectSetRuntimeConfig,
+  selectHasUnsavedChanges,
 } from "@/store/DashboardStore";
 import { DEFAULT_DATE_PRESET } from "@/components/pages-shared/traces/MetricDateRangeSelect/constants";
+import PageBodyStickyContainer from "@/components/layout/PageBodyStickyContainer/PageBodyStickyContainer";
+import { TEMPLATE_LIST } from "@/lib/dashboard/templates";
+import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 
 const DASHBOARD_QUERY_PARAM_KEY = "dashboardId";
 const DASHBOARD_LOCAL_STORAGE_KEY_PREFIX = "opik-project-dashboard";
@@ -37,11 +40,19 @@ const DashboardsTab: React.FunctionComponent<DashboardsTabProps> = ({
     syncQueryWithLocalStorageOnInit: true,
   });
 
-  const { dashboard, isPending, hasUnsavedChanges, save, discard } =
+  useEffect(() => {
+    if (!dashboardId && TEMPLATE_LIST.length > 0) {
+      setDashboardId(TEMPLATE_LIST[0].id);
+    }
+  }, [dashboardId, setDashboardId]);
+
+  const { dashboard, isPending, save, discard, isTemplate } =
     useDashboardLifecycle({
       dashboardId: dashboardId || null,
       enabled: Boolean(dashboardId),
     });
+
+  const hasUnsavedChanges = useDashboardStore(selectHasUnsavedChanges);
 
   const config = useDashboardStore(selectConfig);
   const setConfig = useDashboardStore(selectSetConfig);
@@ -49,6 +60,10 @@ const DashboardsTab: React.FunctionComponent<DashboardsTabProps> = ({
 
   useEffect(() => {
     setRuntimeConfig({ projectIds: [projectId] });
+
+    return () => {
+      setRuntimeConfig({});
+    };
   }, [projectId, setRuntimeConfig]);
 
   const dateRangeValue = config?.dateRange || DEFAULT_DATE_PRESET;
@@ -67,26 +82,59 @@ const DashboardsTab: React.FunctionComponent<DashboardsTabProps> = ({
       setValue: handleDateRangeValueChange,
     });
 
+  const handleDashboardCreated = useCallback(
+    (newDashboardId: string) => {
+      setDashboardId(newDashboardId);
+    },
+    [setDashboardId],
+  );
+
+  const handleDashboardDeleted = useCallback(
+    (deletedDashboardId: string) => {
+      if (dashboardId === deletedDashboardId) {
+        setDashboardId(TEMPLATE_LIST[0]?.id || null);
+      }
+    },
+    [dashboardId, setDashboardId],
+  );
+
+  const dashboardSelectBox = (
+    <DashboardSelectBox
+      value={dashboardId || null}
+      onChange={setDashboardId}
+      buttonClassName="w-[300px]"
+      onDashboardCreated={handleDashboardCreated}
+      onDashboardDeleted={handleDashboardDeleted}
+      defaultProjectId={projectId}
+      disabled={hasUnsavedChanges}
+    />
+  );
+
   return (
-    <div className="flex h-full flex-col px-6 pb-6">
-      <div className="flex items-center justify-between gap-4 pb-6">
-        <DashboardSelectBox
-          value={dashboardId || null}
-          onChange={setDashboardId}
-          buttonClassName="w-[300px]"
-        />
+    <>
+      <PageBodyStickyContainer
+        className="flex items-center justify-between gap-4 pb-3 pt-2"
+        direction="bidirectional"
+        limitWidth
+      >
+        {hasUnsavedChanges ? (
+          <TooltipWrapper content="Save or discard your changes before switching">
+            <div>{dashboardSelectBox}</div>
+          </TooltipWrapper>
+        ) : (
+          dashboardSelectBox
+        )}
 
         <div className="flex shrink-0 items-center gap-2">
           {dashboard && (
             <DashboardSaveActions
-              hasUnsavedChanges={hasUnsavedChanges}
               onSave={save}
               onDiscard={discard}
               dashboard={dashboard}
+              isTemplate={isTemplate}
+              navigateOnCreate={false}
+              onDashboardCreated={handleDashboardCreated}
             />
-          )}
-          {hasUnsavedChanges && (
-            <Separator orientation="vertical" className="mx-2 h-4" />
           )}
           <MetricDateRangeSelect
             value={dateRange}
@@ -96,28 +144,31 @@ const DashboardsTab: React.FunctionComponent<DashboardsTabProps> = ({
             hideAlltime
           />
         </div>
+      </PageBodyStickyContainer>
+
+      <div className="px-6 pb-4 pt-1">
+        {isPending && <Loader />}
+
+        {!isPending && !dashboardId && (
+          <div className="flex h-full items-center justify-center">
+            <p className="text-muted-foreground">
+              No dashboard selected. Please select or create a dashboard.
+            </p>
+          </div>
+        )}
+
+        {!isPending && dashboardId && !dashboard && (
+          <div className="flex h-full items-center justify-center">
+            <p className="text-muted-foreground">
+              Dashboard could not be loaded. Please select another dashboard
+              from the dropdown.
+            </p>
+          </div>
+        )}
+
+        {!isPending && dashboard && <DashboardContent />}
       </div>
-
-      {isPending && <Loader />}
-
-      {!isPending && !dashboardId && (
-        <div className="flex h-full items-center justify-center">
-          <p className="text-muted-foreground">
-            No dashboard selected. Please select or create a dashboard.
-          </p>
-        </div>
-      )}
-
-      {!isPending && dashboardId && !dashboard && (
-        <div className="flex h-full items-center justify-center">
-          <p className="text-muted-foreground">Dashboard not found</p>
-        </div>
-      )}
-
-      {!isPending && dashboard && (
-        <DashboardContent hasUnsavedChanges={hasUnsavedChanges} />
-      )}
-    </div>
+    </>
   );
 };
 

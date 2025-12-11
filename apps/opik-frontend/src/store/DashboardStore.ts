@@ -42,6 +42,7 @@ interface DashboardStoreState<TConfig = BaseDashboardConfig> {
     | null;
   widgetResolver: WidgetResolver | null;
   previewWidget: DashboardWidget | null;
+  hasUnsavedChanges: boolean;
 }
 
 /**
@@ -92,6 +93,9 @@ interface DashboardActions<TConfig = BaseDashboardConfig> {
   // Preview widget operations
   setPreviewWidget: (widget: DashboardWidget | null) => void;
 
+  // Unsaved changes operations
+  setHasUnsavedChanges: (hasChanges: boolean) => void;
+
   // Utility operations
   clearDashboard: () => void;
 
@@ -137,6 +141,7 @@ export const useDashboardStore = create<DashboardStore<BaseDashboardConfig>>()(
         onAddEditWidgetCallback: null,
         widgetResolver: null,
         previewWidget: null,
+        hasUnsavedChanges: false,
 
         // Section Actions
         addSection: (title?: string) => {
@@ -487,6 +492,11 @@ export const useDashboardStore = create<DashboardStore<BaseDashboardConfig>>()(
           set({ previewWidget: widget }, false, "setPreviewWidget");
         },
 
+        // Unsaved Changes Actions
+        setHasUnsavedChanges: (hasChanges) => {
+          set({ hasUnsavedChanges: hasChanges }, false, "setHasUnsavedChanges");
+        },
+
         // Utility Actions
         clearDashboard: () => {
           const emptyDashboard = generateEmptyDashboard();
@@ -496,7 +506,6 @@ export const useDashboardStore = create<DashboardStore<BaseDashboardConfig>>()(
               version: emptyDashboard.version,
               lastModified: Date.now(),
               config: emptyDashboard.config,
-              runtimeConfig: {},
             },
             false,
             "clearDashboard",
@@ -636,3 +645,11 @@ export const selectPreviewWidget = (
 export const selectSetPreviewWidget = (
   state: DashboardStore<BaseDashboardConfig>,
 ) => state.setPreviewWidget;
+
+// Unsaved changes selectors
+export const selectHasUnsavedChanges = (
+  state: DashboardStore<BaseDashboardConfig>,
+) => state.hasUnsavedChanges;
+export const selectSetHasUnsavedChanges = (
+  state: DashboardStore<BaseDashboardConfig>,
+) => state.setHasUnsavedChanges;
