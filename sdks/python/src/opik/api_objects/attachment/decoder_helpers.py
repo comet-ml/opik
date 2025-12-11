@@ -5,9 +5,9 @@ from typing import Optional
 
 
 # The attachment file name regex
-ATTACHMENT_FILE_NAME_REGEX = r"(?:input|output|metadata)-attachment-\d+-\d+\.\w+"
+ATTACHMENT_FILE_NAME_REGEX = r"(?:input|output|metadata)-attachment-\d+-\d+-sdk\.\w+"
 ATTACHMENT_FILE_NAME_PLACEHOLDER_REGEX = (
-    r"\[((?:input|output|metadata)-attachment-\d+-\d+\.\w+)\]"
+    r"\[((?:input|output|metadata)-attachment-\d+-\d+-sdk\.\w+)\]"
 )
 
 
@@ -134,4 +134,4 @@ def create_attachment_filename(context: str, extension: str) -> str:
     timestamp = int(round(time.time() * 1000))
     # we need to generate a large enough random prefix to avoid collisions
     random_prefix = random.randint(1, 99999999)
-    return f"{context}-attachment-{random_prefix}-{timestamp}.{extension}"
+    return f"{context}-attachment-{random_prefix}-{timestamp}-sdk.{extension}"
