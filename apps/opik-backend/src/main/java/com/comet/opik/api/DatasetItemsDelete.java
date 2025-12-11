@@ -21,6 +21,6 @@ import java.util.UUID;
 @DatasetItemsDeleteValidation
 @Schema(description = "Request to delete multiple dataset items")
 public record DatasetItemsDelete(
-        @Size(min = 1, max = 1000) @Schema(description = "List of dataset item IDs to delete (max 1000). Mutually exclusive with 'filters'.") Set<UUID> itemIds,
+        @Size(min = 1, max = 1000) @Schema(description = "List of dataset item IDs to delete (max 1000). Mutually exclusive with 'filters'.") Set<@NotNull UUID> itemIds,
         @Valid @Schema(description = "Filters to select dataset items to delete. Mutually exclusive with 'item_ids'. Empty array means 'select all items'.") List<@NotNull @Valid DatasetItemFilter> filters) {
 }

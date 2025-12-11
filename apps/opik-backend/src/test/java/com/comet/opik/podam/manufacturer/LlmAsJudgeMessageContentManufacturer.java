@@ -10,7 +10,7 @@ import java.util.random.RandomGenerator;
 
 /**
  * Custom PODAM manufacturer for LlmAsJudgeMessageContent that generates valid content
- * based on the content type (text, image_url, or video_url).
+ * based on the content type (text, image_url, video_url, or audio_url).
  */
 public class LlmAsJudgeMessageContentManufacturer extends AbstractTypeManufacturer<LlmAsJudgeMessageContent> {
 
@@ -21,7 +21,7 @@ public class LlmAsJudgeMessageContentManufacturer extends AbstractTypeManufactur
     public LlmAsJudgeMessageContent getType(DataProviderStrategy strategy, AttributeMetadata metadata,
             ManufacturingContext context) {
 
-        int typeChoice = random.nextInt(3);
+        int typeChoice = random.nextInt(4);
 
         return switch (typeChoice) {
             case 0 -> // text content
@@ -37,10 +37,17 @@ public class LlmAsJudgeMessageContentManufacturer extends AbstractTypeManufactur
                                 .detail("auto")
                                 .build())
                         .build();
-            default -> // video_url content
+            case 2 -> // video_url content
                 LlmAsJudgeMessageContent.builder()
                         .type("video_url")
                         .videoUrl(LlmAsJudgeMessageContent.VideoUrl.builder()
+                                .url(strategy.getTypeValue(metadata, context, String.class))
+                                .build())
+                        .build();
+            default -> // audio_url content
+                LlmAsJudgeMessageContent.builder()
+                        .type("audio_url")
+                        .audioUrl(LlmAsJudgeMessageContent.AudioUrl.builder()
                                 .url(strategy.getTypeValue(metadata, context, String.class))
                                 .build())
                         .build();

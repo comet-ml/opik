@@ -111,8 +111,8 @@ const PlaygroundOutputs = ({
     },
     {
       enabled: !!datasetId,
-      placeholderData: keepPreviousData,
       refetchInterval: isProcessing ? POLLING_INTERVAL_MS : false,
+      placeholderData: datasetId ? keepPreviousData : undefined,
     },
   );
 

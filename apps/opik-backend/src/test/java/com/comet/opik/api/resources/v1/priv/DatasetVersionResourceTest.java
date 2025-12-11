@@ -3,6 +3,7 @@ package com.comet.opik.api.resources.v1.priv;
 import com.comet.opik.api.Dataset;
 import com.comet.opik.api.DatasetItem;
 import com.comet.opik.api.DatasetItemBatch;
+import com.comet.opik.api.DatasetItemsDelete;
 import com.comet.opik.api.DatasetVersionCreate;
 import com.comet.opik.api.DatasetVersionTag;
 import com.comet.opik.api.DatasetVersionUpdate;
@@ -175,7 +176,9 @@ class DatasetVersionResourceTest {
                 .request()
                 .header(HttpHeaders.AUTHORIZATION, API_KEY)
                 .header(WORKSPACE_HEADER, TEST_WORKSPACE)
-                .post(Entity.json(new com.comet.opik.api.DatasetItemsDelete(Set.of(itemId), null)))) {
+                .post(Entity.json(DatasetItemsDelete.builder()
+                        .itemIds(Set.of(itemId))
+                        .build()))) {
 
             assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(204);
         }

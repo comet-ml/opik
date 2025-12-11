@@ -5037,6 +5037,78 @@ class DatasetsResourceTest {
             assertDatasetItemPage(actualEntity, List.of(matchingItem), columns, 1);
         }
 
+        Stream<Arguments> fullDataFieldFilterOperators() {
+            return Stream.of(
+                    // CONTAINS - matches when entire data contains the search term
+                    Arguments.of(
+                            Named.of("CONTAINS operator", Operator.CONTAINS),
+                            (Function<String, Map<String, JsonNode>>) searchKey -> Map.of(
+                                    "query", new TextNode("search for " + searchKey + " model"),
+                                    "type", new TextNode("question"),
+                                    "priority", new TextNode("high")),
+                            (Function<String, Map<String, JsonNode>>) searchKey -> Map.of(
+                                    "query", new TextNode("completely different content"),
+                                    "type", new TextNode("recipe"),
+                                    "priority", new TextNode("low"))),
+
+                    // NOT_CONTAINS - matches when entire data does NOT contain the search term
+                    Arguments.of(
+                            Named.of("NOT_CONTAINS operator", Operator.NOT_CONTAINS),
+                            (Function<String, Map<String, JsonNode>>) searchKey -> Map.of(
+                                    "query", new TextNode("completely different content"),
+                                    "type", new TextNode("recipe"),
+                                    "priority", new TextNode("low")),
+                            (Function<String, Map<String, JsonNode>>) searchKey -> Map.of(
+                                    "query", new TextNode("search for " + searchKey + " model"),
+                                    "type", new TextNode("question"),
+                                    "priority", new TextNode("high"))));
+        }
+
+        @ParameterizedTest
+        @MethodSource("fullDataFieldFilterOperators")
+        @DisplayName("when filtering full data field with operator, then return matching items")
+        void getDatasetItemsByDatasetId__whenFilteringFullDataFieldWithOperator__thenReturnMatchingItems(
+                Operator operator,
+                Function<String, Map<String, JsonNode>> matchingDataSupplier,
+                Function<String, Map<String, JsonNode>> nonMatchingDataSupplier) {
+
+            UUID datasetId = createAndAssert(factory.manufacturePojo(Dataset.class).toBuilder()
+                    .id(null)
+                    .build());
+
+            var searchKey = RandomStringUtils.secure().nextAlphabetic(8);
+            var matchingItem = factory.manufacturePojo(DatasetItem.class).toBuilder()
+                    .data(matchingDataSupplier.apply(searchKey))
+                    .build();
+
+            var nonMatchingItem = factory.manufacturePojo(DatasetItem.class).toBuilder()
+                    .data(nonMatchingDataSupplier.apply(searchKey))
+                    .build();
+
+            var items = List.of(matchingItem, nonMatchingItem);
+            var batch = factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+                    .items(items)
+                    .datasetId(datasetId)
+                    .build();
+
+            List<Map<String, JsonNode>> data = batch.items()
+                    .stream()
+                    .map(DatasetItem::data)
+                    .toList();
+
+            Set<Column> columns = getColumns(data);
+
+            putAndAssert(batch, TEST_WORKSPACE, API_KEY);
+
+            // FULL_DATA doesn't need a key - it filters by the entire data column (toString(data))
+            var filter = new DatasetItemFilter(DatasetItemField.FULL_DATA, operator, null, searchKey);
+
+            var actualEntity = datasetResourceClient.getDatasetItems(datasetId,
+                    Map.of("filters", toURLEncodedQueryParam(List.of(filter))), API_KEY, TEST_WORKSPACE);
+
+            assertDatasetItemPage(actualEntity, List.of(matchingItem), columns, 1);
+        }
+
         // Helper method to create dataset items with content
         private DatasetItem createDatasetItem(String content) {
             return factory.manufacturePojo(DatasetItem.class).toBuilder()
@@ -7446,16 +7518,40 @@ class DatasetsResourceTest {
 
             DatasetsResourceTest.this.createAndAssert(experimentItemsBatch, apiKey, workspaceName);
 
-            // Generate random feedback scores using PODAM
+            // Create spans with usage (tokens) and cost data for trace1
+            var span1Cost = new BigDecimal("10.50");
+            var span1TotalTokens = 150;
+            var span1 = factory.manufacturePojo(Span.class).toBuilder()
+                    .projectName(experiment1.name())
+                    .traceId(trace1.id())
+                    .usage(Map.of("completion_tokens", 50, "prompt_tokens", 100, "total_tokens", span1TotalTokens))
+                    .totalEstimatedCost(span1Cost)
+                    .build();
+            spanResourceClient.createSpan(span1, apiKey, workspaceName);
+
+            // Create spans with usage (tokens) and cost data for trace2
+            var span2Cost = new BigDecimal("25.75");
+            var span2TotalTokens = 300;
+            var span2 = factory.manufacturePojo(Span.class).toBuilder()
+                    .projectName(experiment2.name())
+                    .traceId(trace2.id())
+                    .usage(Map.of("completion_tokens", 100, "prompt_tokens", 200, "total_tokens", span2TotalTokens))
+                    .totalEstimatedCost(span2Cost)
+                    .build();
+            spanResourceClient.createSpan(span2, apiKey, workspaceName);
+
+            // Generate fixed feedback scores for predictable percentile testing
             var feedbackScore1 = factory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
                     .id(trace1.id())
                     .name("accuracy")
+                    .value(new BigDecimal("0.75"))
                     .source(ScoreSource.SDK)
                     .build();
 
             var feedbackScore2 = factory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
                     .id(trace2.id())
                     .name("accuracy")
+                    .value(new BigDecimal("0.95"))
                     .source(ScoreSource.SDK)
                     .build();
 
@@ -7473,13 +7569,35 @@ class DatasetsResourceTest {
             // Calculate expected values from test data
             var experimentItemsCount = (long) experimentItemsBatch.experimentItems().size();
             var traceCount = (long) feedbackScores.size(); // One trace per feedback score
-            var expectedAvgValue = feedbackScores.stream()
+
+            // Calculate expected feedback score avg
+            var expectedFeedbackScoreAvg = feedbackScores.stream()
                     .map(FeedbackScoreItem::value)
                     .reduce(BigDecimal.ZERO, BigDecimal::add)
                     .divide(BigDecimal.valueOf(feedbackScores.size()), java.math.RoundingMode.HALF_UP);
 
+            // Calculate expected cost avg: (10.50 + 25.75) / 2 = 18.125
+            var expectedCostAvg = span1Cost.add(span2Cost)
+                    .divide(BigDecimal.valueOf(2), 12, java.math.RoundingMode.HALF_UP);
+
             // Calculate duration percentiles from actual trace durations
             var durationPercentiles = StatsUtils.calculateQuantiles(traceDurations, List.of(0.50, 0.90, 0.99));
+
+            // Calculate feedback score percentiles from test data (0.75, 0.95)
+            var feedbackScoreValues = feedbackScores.stream()
+                    .map(FeedbackScoreItem::value)
+                    .map(BigDecimal::doubleValue)
+                    .toList();
+            var feedbackScorePercentiles = StatsUtils.calculateQuantiles(feedbackScoreValues,
+                    List.of(0.50, 0.90, 0.99));
+
+            // Calculate cost percentiles from test data (10.50, 25.75)
+            var costValues = List.of(span1Cost.doubleValue(), span2Cost.doubleValue());
+            var costPercentiles = StatsUtils.calculateQuantiles(costValues, List.of(0.50, 0.90, 0.99));
+
+            // Calculate total_tokens percentiles from test data (150, 300)
+            var totalTokensValues = List.of((double) span1TotalTokens, (double) span2TotalTokens);
+            var totalTokensPercentiles = StatsUtils.calculateQuantiles(totalTokensValues, List.of(0.50, 0.90, 0.99));
 
             var stats = datasetResourceClient.getDatasetExperimentItemsStats(
                     datasetId,
@@ -7488,17 +7606,32 @@ class DatasetsResourceTest {
                     workspaceName,
                     null);
 
+            // Calculate expected usage averages
+            var expectedCompletionTokensAvg = (50 + 100) / 2.0; // 75.0
+            var expectedPromptTokensAvg = (100 + 200) / 2.0; // 150.0
+            var expectedTotalTokensAvg = (span1TotalTokens + span2TotalTokens) / 2.0; // 225.0
+
             // Build complete expected stats list from calculated values
             List<ProjectStatItem<?>> expectedStats = List.of(
                     new CountValueStat(StatsMapper.EXPERIMENT_ITEMS_COUNT, experimentItemsCount),
                     new CountValueStat(StatsMapper.TRACE_COUNT, traceCount),
-                    new AvgValueStat(StatsMapper.TOTAL_ESTIMATED_COST, 0.0), // No costs in test data
+                    new AvgValueStat(StatsMapper.TOTAL_ESTIMATED_COST, expectedCostAvg.doubleValue()),
+                    new PercentageValueStat(StatsMapper.TOTAL_ESTIMATED_COST,
+                            PercentageValues.builder().p50(costPercentiles.get(0)).p90(costPercentiles.get(1))
+                                    .p99(costPercentiles.get(2)).build()),
                     new PercentageValueStat(StatsMapper.DURATION,
-                            new PercentageValues(
-                                    durationPercentiles.get(0), // p50
-                                    durationPercentiles.get(1), // p90
-                                    durationPercentiles.get(2))), // p99
-                    new AvgValueStat("feedback_scores.accuracy", expectedAvgValue.doubleValue()));
+                            PercentageValues.builder().p50(durationPercentiles.get(0)).p90(durationPercentiles.get(1))
+                                    .p99(durationPercentiles.get(2)).build()),
+                    new AvgValueStat("feedback_scores.accuracy", expectedFeedbackScoreAvg.doubleValue()),
+                    new AvgValueStat("usage.completion_tokens", expectedCompletionTokensAvg),
+                    new AvgValueStat("usage.prompt_tokens", expectedPromptTokensAvg),
+                    new AvgValueStat("usage.total_tokens", expectedTotalTokensAvg),
+                    new PercentageValueStat("feedback_scores.accuracy",
+                            PercentageValues.builder().p50(feedbackScorePercentiles.get(0))
+                                    .p90(feedbackScorePercentiles.get(1)).p99(feedbackScorePercentiles.get(2)).build()),
+                    new PercentageValueStat("usage.total_tokens",
+                            PercentageValues.builder().p50(totalTokensPercentiles.get(0))
+                                    .p90(totalTokensPercentiles.get(1)).p99(totalTokensPercentiles.get(2)).build())); // p99
 
             // Assert the whole ProjectStats object using TraceAssertions
             TraceAssertions.assertStats(stats.stats(), expectedStats);
@@ -7621,17 +7754,32 @@ class DatasetsResourceTest {
                     .contains(StatsMapper.EXPERIMENT_ITEMS_COUNT, StatsMapper.TRACE_COUNT,
                             StatsMapper.TOTAL_ESTIMATED_COST, StatsMapper.DURATION, "feedback_scores.accuracy");
 
+            // Calculate feedback score percentiles from matching feedback scores only
+            var feedbackScoreValues = matchingFeedbackScores.stream()
+                    .map(FeedbackScoreItem::value)
+                    .map(BigDecimal::doubleValue)
+                    .toList();
+            var feedbackScorePercentiles = StatsUtils.calculateQuantiles(feedbackScoreValues,
+                    List.of(0.50, 0.90, 0.99));
+
             // Build complete expected stats list from calculated values
             List<ProjectStatItem<?>> expectedStats = List.of(
                     new CountValueStat(StatsMapper.EXPERIMENT_ITEMS_COUNT, experimentItemsCount),
                     new CountValueStat(StatsMapper.TRACE_COUNT, traceCount),
                     new AvgValueStat(StatsMapper.TOTAL_ESTIMATED_COST, 0.0), // No costs in test data
+                    new PercentageValueStat(StatsMapper.TOTAL_ESTIMATED_COST,
+                            PercentageValues.builder().p50(BigDecimal.ZERO).p90(BigDecimal.ZERO).p99(BigDecimal.ZERO)
+                                    .build()),
                     new PercentageValueStat(StatsMapper.DURATION,
-                            new PercentageValues(
-                                    durationPercentiles.get(0), // p50
-                                    durationPercentiles.get(1), // p90
-                                    durationPercentiles.get(2))), // p99
-                    new AvgValueStat("feedback_scores.accuracy", expectedAvgValue.doubleValue()));
+                            PercentageValues.builder().p50(durationPercentiles.get(0)).p90(durationPercentiles.get(1))
+                                    .p99(durationPercentiles.get(2)).build()),
+                    new AvgValueStat("feedback_scores.accuracy", expectedAvgValue.doubleValue()),
+                    new PercentageValueStat("feedback_scores.accuracy",
+                            PercentageValues.builder().p50(feedbackScorePercentiles.get(0))
+                                    .p90(feedbackScorePercentiles.get(1)).p99(feedbackScorePercentiles.get(2)).build()),
+                    new PercentageValueStat("usage.total_tokens",
+                            PercentageValues.builder().p50(BigDecimal.ZERO).p90(BigDecimal.ZERO).p99(BigDecimal.ZERO)
+                                    .build()));
 
             // Assert the whole ProjectStats object using TraceAssertions
             TraceAssertions.assertStats(stats.stats(), expectedStats);
@@ -7761,6 +7909,14 @@ class DatasetsResourceTest {
                     .toList();
             var durationPercentiles = StatsUtils.calculateQuantiles(traceDurations, List.of(0.50, 0.90, 0.99));
 
+            // Calculate feedback score percentiles from test data
+            var feedbackScoreValues = feedbackScores.stream()
+                    .map(FeedbackScoreItem::value)
+                    .map(BigDecimal::doubleValue)
+                    .toList();
+            var feedbackScorePercentiles = StatsUtils.calculateQuantiles(feedbackScoreValues,
+                    List.of(0.50, 0.90, 0.99));
+
             var stats = datasetResourceClient.getDatasetExperimentItemsStats(
                     datasetId,
                     List.of(experiment1.id(), experiment2.id(), experiment3.id()),
@@ -7773,12 +7929,31 @@ class DatasetsResourceTest {
                     new CountValueStat(StatsMapper.EXPERIMENT_ITEMS_COUNT, experimentItemsCount),
                     new CountValueStat(StatsMapper.TRACE_COUNT, traceCount),
                     new AvgValueStat(StatsMapper.TOTAL_ESTIMATED_COST, 0.0), // No costs in test data
+                    new PercentageValueStat(StatsMapper.TOTAL_ESTIMATED_COST,
+                            PercentageValues.builder()
+                                    .p50(BigDecimal.ZERO) // p50 - no cost data
+                                    .p90(BigDecimal.ZERO) // p90
+                                    .p99(BigDecimal.ZERO) // p99
+                                    .build()),
                     new PercentageValueStat(StatsMapper.DURATION,
-                            new PercentageValues(
-                                    durationPercentiles.get(0), // p50
-                                    durationPercentiles.get(1), // p90
-                                    durationPercentiles.get(2))), // p99
-                    new AvgValueStat("feedback_scores.quality", expectedAvgValue.doubleValue()));
+                            PercentageValues.builder()
+                                    .p50(durationPercentiles.get(0)) // p50
+                                    .p90(durationPercentiles.get(1)) // p90
+                                    .p99(durationPercentiles.get(2)) // p99
+                                    .build()),
+                    new AvgValueStat("feedback_scores.quality", expectedAvgValue.doubleValue()),
+                    new PercentageValueStat("feedback_scores.quality",
+                            PercentageValues.builder()
+                                    .p50(feedbackScorePercentiles.get(0)) // p50
+                                    .p90(feedbackScorePercentiles.get(1)) // p90
+                                    .p99(feedbackScorePercentiles.get(2)) // p99
+                                    .build()),
+                    new PercentageValueStat("usage.total_tokens",
+                            PercentageValues.builder()
+                                    .p50(BigDecimal.ZERO) // p50 - no usage data
+                                    .p90(BigDecimal.ZERO) // p90
+                                    .p99(BigDecimal.ZERO) // p99
+                                    .build()));
 
             // Assert the whole ProjectStats object using TraceAssertions
             TraceAssertions.assertStats(stats.stats(), expectedStats);
@@ -7878,18 +8053,42 @@ class DatasetsResourceTest {
                     List.of(createdTrace1.duration()),
                     List.of(0.50, 0.90, 0.99));
 
+            // Calculate feedback score percentiles from test data (single value)
+            var feedbackScorePercentiles = StatsUtils.calculateQuantiles(
+                    List.of(feedbackScore1.value().doubleValue()),
+                    List.of(0.50, 0.90, 0.99));
+
             // Build complete expected stats list
             List<ProjectStatItem<?>> expectedStats = List.of(
                     new CountValueStat(StatsMapper.EXPERIMENT_ITEMS_COUNT, experimentItemsCount),
                     new CountValueStat(StatsMapper.TRACE_COUNT, traceCount),
                     new AvgValueStat(StatsMapper.TOTAL_ESTIMATED_COST, 0.0), // No costs in test data
+                    new PercentageValueStat(StatsMapper.TOTAL_ESTIMATED_COST,
+                            PercentageValues.builder()
+                                    .p50(BigDecimal.ZERO) // p50 - no cost data
+                                    .p90(BigDecimal.ZERO) // p90
+                                    .p99(BigDecimal.ZERO) // p99
+                                    .build()),
                     new PercentageValueStat(StatsMapper.DURATION,
-                            new PercentageValues(
-                                    durationPercentiles.get(0), // p50
-                                    durationPercentiles.get(1), // p90
-                                    durationPercentiles.get(2))), // p99
+                            PercentageValues.builder()
+                                    .p50(durationPercentiles.get(0)) // p50
+                                    .p90(durationPercentiles.get(1)) // p90
+                                    .p99(durationPercentiles.get(2)) // p99
+                                    .build()),
                     new AvgValueStat("feedback_scores.%s".formatted(feedbackScoreName),
-                            expectedAvgValue.doubleValue()));
+                            expectedAvgValue.doubleValue()),
+                    new PercentageValueStat("feedback_scores.%s".formatted(feedbackScoreName),
+                            PercentageValues.builder()
+                                    .p50(feedbackScorePercentiles.get(0)) // p50
+                                    .p90(feedbackScorePercentiles.get(1)) // p90
+                                    .p99(feedbackScorePercentiles.get(2)) // p99
+                                    .build()),
+                    new PercentageValueStat("usage.total_tokens",
+                            PercentageValues.builder()
+                                    .p50(BigDecimal.ZERO) // p50 - no usage data
+                                    .p90(BigDecimal.ZERO) // p90
+                                    .p99(BigDecimal.ZERO) // p99
+                                    .build()));
 
             // Assert the whole ProjectStats object using TraceAssertions
             TraceAssertions.assertStats(stats.stats(), expectedStats);

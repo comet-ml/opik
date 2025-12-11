@@ -7,6 +7,7 @@ import com.comet.opik.api.Dataset;
 import com.comet.opik.api.DatasetIdentifier;
 import com.comet.opik.api.DatasetItem;
 import com.comet.opik.api.DatasetItemBatch;
+import com.comet.opik.api.DatasetItemsDelete;
 import com.comet.opik.api.DatasetVersion;
 import com.comet.opik.api.DatasetVersionCreate;
 import com.comet.opik.api.DatasetVersionDiff;
@@ -24,6 +25,7 @@ import org.apache.commons.collections4.CollectionUtils;
 import org.apache.http.HttpStatus;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -587,7 +589,9 @@ public class DatasetResourceClient {
     }
 
     public Response callDeleteDatasetItems(List<UUID> itemIds, String apiKey, String workspaceName) {
-        var deleteRequest = new com.comet.opik.api.DatasetItemsDelete(new java.util.HashSet<>(itemIds), null);
+        var deleteRequest = DatasetItemsDelete.builder()
+                .itemIds(new HashSet<>(itemIds))
+                .build();
         return client.target(RESOURCE_PATH.formatted(baseURI))
                 .path("items")
                 .path("delete")

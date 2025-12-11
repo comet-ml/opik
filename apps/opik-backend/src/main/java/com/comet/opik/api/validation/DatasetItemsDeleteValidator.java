@@ -1,13 +1,19 @@
 package com.comet.opik.api.validation;
 
 import com.comet.opik.api.DatasetItemsDelete;
+import com.comet.opik.api.filter.DatasetItemFilter;
+import com.comet.opik.api.filter.Operator;
 import jakarta.validation.ConstraintValidator;
 import jakarta.validation.ConstraintValidatorContext;
 import org.apache.commons.collections4.CollectionUtils;
 
+import java.util.UUID;
+
 public class DatasetItemsDeleteValidator
         implements
             ConstraintValidator<DatasetItemsDeleteValidation, DatasetItemsDelete> {
+
+    private static final String DATASET_ID_FIELD = "dataset_id";
 
     @Override
     public boolean isValid(DatasetItemsDelete deleteRequest, ConstraintValidatorContext context) {
@@ -37,6 +43,36 @@ public class DatasetItemsDeleteValidator
             return false;
         }
 
+        // CRITICAL SECURITY CHECK: When using filters, dataset_id must be present
+        if (hasFilters) {
+            boolean hasDatasetIdFilter = deleteRequest.filters().stream()
+                    .anyMatch(filter -> DATASET_ID_FIELD.equals(filter.field())
+                            && Operator.EQUAL.equals(filter.operator())
+                            && isValidUUID(filter.value()));
+
+            if (!hasDatasetIdFilter) {
+                context.buildConstraintViolationWithTemplate(
+                        "When using 'filters', a dataset_id filter with operator '=' and a valid UUID value must be provided to scope the deletion to a specific dataset.")
+                        .addConstraintViolation();
+                return false;
+            }
+        }
+
         return true;
+    }
+
+    /**
+     * Validates if the given value is a valid UUID string.
+     */
+    private boolean isValidUUID(Object value) {
+        if (value == null) {
+            return false;
+        }
+        try {
+            UUID.fromString(value.toString());
+            return true;
+        } catch (IllegalArgumentException e) {
+            return false;
+        }
     }
 }

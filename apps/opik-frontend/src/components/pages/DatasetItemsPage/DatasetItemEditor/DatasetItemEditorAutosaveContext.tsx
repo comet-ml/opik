@@ -131,13 +131,13 @@ export const DatasetItemEditorAutosaveProvider: React.FC<
       // Cancel any pending autosave before deleting
       cancelPendingSave();
       deleteMutation.mutate(
-        { ids: [datasetItemId] },
+        { datasetId, ids: [datasetItemId] },
         {
           onSuccess,
         },
       );
     },
-    [deleteMutation, datasetItemId, cancelPendingSave],
+    [deleteMutation, datasetId, datasetItemId, cancelPendingSave],
   );
 
   // Navigation - no unsaved changes confirmation needed for autosave

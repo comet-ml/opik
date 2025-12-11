@@ -60,12 +60,20 @@ const DatasetItemsActionsPanel: React.FunctionComponent<
 
   const deleteDatasetItemsHandler = useCallback(() => {
     mutate({
+      datasetId,
       ids: selectedDatasetItems.map((i) => i.id),
       isAllItemsSelected,
       filters,
       search,
     });
-  }, [selectedDatasetItems, mutate, isAllItemsSelected, filters, search]);
+  }, [
+    datasetId,
+    selectedDatasetItems,
+    mutate,
+    isAllItemsSelected,
+    filters,
+    search,
+  ]);
 
   const handleSamplesGenerated = useCallback((samples: DatasetItem[]) => {
     setGeneratedSamples(samples);

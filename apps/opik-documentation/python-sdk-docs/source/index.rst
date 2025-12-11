@@ -139,13 +139,27 @@ Evaluations are run using the `evaluate` function, this function takes a dataset
 Storing prompts
 ---------------
 
-You can store prompts in the Opik library using the `Prompt` object:
+You can store prompts in the Opik library using the `Prompt` and `ChatPrompt` objects:
+
+**Text Prompts:**
 
 .. code-block:: python
    
    import opik
 
    prompt = opik.Prompt(name="my-prompt", prompt="Write a summary of the following text: {{text}}")
+
+**Chat Prompts:**
+
+.. code-block:: python
+   
+   import opik
+
+   messages = [
+       {"role": "system", "content": "You are a helpful assistant."},
+       {"role": "user", "content": "Hello, {{name}}!"}
+   ]
+   chat_prompt = opik.ChatPrompt(name="my-chat-prompt", messages=messages)
 
 =========
 Reference
@@ -194,6 +208,7 @@ You can learn more about the `opik` python SDK in the following sections:
    :maxdepth: 1
    
    library/Prompt
+   library/ChatPrompt
 
 .. toctree::
    :caption: Guardrails
@@ -243,6 +258,7 @@ You can learn more about the `opik` python SDK in the following sections:
    Objects/EvaluationResult.rst
    Objects/TestResult.rst
    Objects/Prompt.rst
+   Objects/ChatPrompt.rst
    Objects/ScoreResult.rst
    Objects/OpikBaseModel.rst
    Objects/LiteLLMChatModel.rst

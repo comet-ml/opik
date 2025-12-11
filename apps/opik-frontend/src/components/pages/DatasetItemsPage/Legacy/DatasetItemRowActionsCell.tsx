@@ -75,4 +75,3 @@ export const DatasetItemRowActionsCell: React.FunctionComponent<
     </CellWrapper>
   );
 };
-

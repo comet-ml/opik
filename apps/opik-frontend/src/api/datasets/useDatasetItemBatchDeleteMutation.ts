@@ -5,11 +5,13 @@ import { useToast } from "@/components/ui/use-toast";
 import api, { DATASETS_REST_ENDPOINT } from "@/api/api";
 import { Filters } from "@/types/filters";
 import {
+  createFilter,
   generateSearchByFieldFilters,
   processFiltersArray,
 } from "@/lib/filters";
 
 type UseDatasetItemBatchDeleteMutationParams = {
+  datasetId: string;
   ids: string[];
   isAllItemsSelected?: boolean;
   filters?: Filters;
@@ -22,6 +24,7 @@ const useDatasetItemBatchDeleteMutation = () => {
 
   return useMutation({
     mutationFn: async ({
+      datasetId,
       ids,
       isAllItemsSelected,
       filters = [],
@@ -30,7 +33,13 @@ const useDatasetItemBatchDeleteMutation = () => {
       let payload;
 
       if (isAllItemsSelected) {
+        // CRITICAL SECURITY: Always include dataset_id filter to scope deletion to a specific dataset
         const combinedFilters = [
+          createFilter({
+            field: "dataset_id",
+            operator: "=",
+            value: datasetId,
+          }),
           ...filters,
           ...generateSearchByFieldFilters("data", search),
         ];

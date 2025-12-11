@@ -408,6 +408,16 @@ onlineScoring:
       claimIntervalRatio: ${REDIS_SCORING_SPAN_LLM_AS_JUDGE_CLAIM_INTERVAL_RATIO:-}
       pendingMessageDuration: ${REDIS_SCORING_SPAN_LLM_AS_JUDGE_PENDING_MESSAGE_DURATION:-}
       maxRetries: ${REDIS_SCORING_SPAN_LLM_AS_JUDGE_MAX_RETRIES:-}
+    - scorer: span_user_defined_metric_python
+      streamName: stream_scoring_span_user_defined_metric_python
+      codec: java
+      # Optional per stream configuration (falls back to global if not specified)
+      poolingInterval: ${REDIS_SCORING_SPAN_USER_DEFINED_METRIC_PYTHON_CONSUMER_POOL_INTERVAL:-}
+      longPollingDuration: ${REDIS_SCORING_SPAN_USER_DEFINED_METRIC_PYTHON_LONG_POLLING_DURATION:-}
+      consumerBatchSize: ${REDIS_SCORING_SPAN_USER_DEFINED_METRIC_PYTHON_CONSUMER_BATCH_SIZE:-}
+      claimIntervalRatio: ${REDIS_SCORING_SPAN_USER_DEFINED_METRIC_PYTHON_CLAIM_INTERVAL_RATIO:-}
+      pendingMessageDuration: ${REDIS_SCORING_SPAN_USER_DEFINED_METRIC_PYTHON_PENDING_MESSAGE_DURATION:-}
+      maxRetries: ${REDIS_SCORING_SPAN_USER_DEFINED_METRIC_PYTHON_MAX_RETRIES:-}
 
 # LLM providers client configuration
 llmProviderClient:
@@ -544,7 +554,10 @@ serviceToggles:
   traceThreadPythonEvaluatorEnabled: ${TOGGLE_TRACE_THREAD_PYTHON_EVALUATOR_ENABLED:-"true"}
   # Default: false
   # Description: Whether or not to enable the span LLM as Judge evaluator
-  spanLlmAsJudgeEnabled: ${TOGGLE_SPAN_LLM_AS_JUDGE_ENABLED:-"false"}
+  spanLlmAsJudgeEnabled: ${TOGGLE_SPAN_LLM_AS_JUDGE_ENABLED:-"true"}
+  # Default: true
+  # Description: Whether or not to enable the span user-defined metric Python evaluator
+  spanUserDefinedMetricPythonEnabled: ${TOGGLE_SPAN_USER_DEFINED_METRIC_PYTHON_ENABLED:-"true"}
   # Default: false
   # Description: Whether or not OpikAI feature is enabled
   opikAIEnabled: ${TOGGLE_OPIK_AI_ENABLED:-"false"}
@@ -569,6 +582,27 @@ serviceToggles:
   # Default: false
   # Description: Whether or not Optimization Studio feature is enabled
   optimizationStudioEnabled: ${TOGGLE_OPTIMIZATION_STUDIO_ENABLED:-"false"}
+  # Default: true
+  # Description: Whether or not OpenAI provider is enabled
+  openaiProviderEnabled: ${TOGGLE_OPENAI_PROVIDER_ENABLED:-"true"}
+  # Default: true
+  # Description: Whether or not Anthropic provider is enabled
+  anthropicProviderEnabled: ${TOGGLE_ANTHROPIC_PROVIDER_ENABLED:-"true"}
+  # Default: true
+  # Description: Whether or not Gemini provider is enabled
+  geminiProviderEnabled: ${TOGGLE_GEMINI_PROVIDER_ENABLED:-"true"}
+  # Default: true
+  # Description: Whether or not OpenRouter provider is enabled
+  openrouterProviderEnabled: ${TOGGLE_OPENROUTER_PROVIDER_ENABLED:-"true"}
+  # Default: true
+  # Description: Whether or not Vertex AI provider is enabled
+  vertexaiProviderEnabled: ${TOGGLE_VERTEXAI_PROVIDER_ENABLED:-"true"}
+  # Default: true
+  # Description: Whether or not Custom LLM provider is enabled
+  customllmProviderEnabled: ${TOGGLE_CUSTOMLLM_PROVIDER_ENABLED:-"true"}
+  # Default: true
+  # Description: Whether or not Opik Built-in provider is enabled
+  opikbuiltinProviderEnabled: ${TOGGLE_OPIKBUILTIN_PROVIDER_ENABLED:-"true"}
 
 # Trace Thread configuration
 traceThreadConfig:

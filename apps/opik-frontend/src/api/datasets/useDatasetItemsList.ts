@@ -38,7 +38,7 @@ const getDatasetItemsList = async (
       params: {
         ...processFilters(
           filters,
-          generateSearchByFieldFilters("data", search),
+          generateSearchByFieldFilters("full_data", search),
         ),
         size,
         page,

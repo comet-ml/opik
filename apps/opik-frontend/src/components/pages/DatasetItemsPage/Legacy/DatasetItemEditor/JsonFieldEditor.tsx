@@ -56,4 +56,3 @@ const JsonFieldEditor: React.FC<JsonFieldEditorProps> = ({
 };
 
 export default JsonFieldEditor;
-

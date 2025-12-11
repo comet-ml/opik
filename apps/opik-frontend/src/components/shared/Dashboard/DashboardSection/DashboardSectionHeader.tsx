@@ -7,6 +7,7 @@ import {
   ArrowDown,
   ChevronDown,
   ChevronRight,
+  Plus,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -97,8 +98,10 @@ const DashboardSectionHeader: React.FunctionComponent<
             e.stopPropagation();
             handleAddWidget(e);
           }}
+          className="gap-1.5"
         >
-          + Add widget
+          <Plus className="size-3.5" />
+          Add widget
         </Button>
 
         <DropdownMenu onOpenChange={setMenuOpen}>

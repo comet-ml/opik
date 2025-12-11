@@ -57,7 +57,7 @@ const ProjectMetricsWidget: React.FunctionComponent<
   const widgetProjectId = widget?.config?.projectId as string | undefined;
 
   const { projectId, interval, intervalStart, intervalEnd } = useMemo(() => {
-    const finalProjectId = widgetProjectId || globalConfig.projectId;
+    const finalProjectId = globalConfig.projectId || widgetProjectId;
 
     const { interval, intervalStart, intervalEnd } = calculateIntervalConfig(
       globalConfig.dateRange,
@@ -93,7 +93,18 @@ const ProjectMetricsWidget: React.FunctionComponent<
     const traceFilters = widget.config?.traceFilters as Filter[] | undefined;
     const threadFilters = widget.config?.threadFilters as Filter[] | undefined;
 
-    if (!metricType || !projectId || !interval) {
+    if (!projectId) {
+      return (
+        <DashboardWidget.EmptyState
+          title="Project not configured"
+          message="This widget requires a project ID. Configure it in the widget settings or set a default project for the dashboard."
+          onAction={!preview ? handleEdit : undefined}
+          actionLabel="Configure widget"
+        />
+      );
+    }
+
+    if (!metricType || !interval) {
       return (
         <DashboardWidget.EmptyState
           title="No metric selected"
