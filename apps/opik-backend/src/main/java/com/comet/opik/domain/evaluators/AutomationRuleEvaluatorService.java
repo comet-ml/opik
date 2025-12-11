@@ -590,11 +590,16 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
         }
 
         // Bulk fetch projects directly via SQL (ProjectDAO is package-private, so we query directly)
-        String sql = "SELECT id, name FROM projects WHERE workspace_id = :workspaceId AND id IN (<ids>)";
+        // Note: Convert UUIDs to strings for binding to avoid binary conversion errors
+        String sql = "SELECT CAST(id AS CHAR) as id, name FROM projects WHERE workspace_id = :workspaceId AND id IN (<ids>)";
+
+        List<String> projectIdStrings = allProjectIds.stream()
+                .map(UUID::toString)
+                .toList();
 
         Map<UUID, String> projectNameMap = handle.createQuery(sql)
                 .bind("workspaceId", workspaceId)
-                .bindList("ids", allProjectIds)
+                .bindList("ids", projectIdStrings)
                 .map((rs, ctx) -> Map.entry(
                         UUID.fromString(rs.getString("id")),
                         rs.getString("name")))
@@ -602,6 +607,9 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
                 .collect(java.util.stream.Collectors.toMap(
                         Map.Entry::getKey,
                         Map.Entry::getValue));
+
+        // Log enrichment details
+        log.debug("Fetched {} project names for {} project IDs", projectNameMap.size(), allProjectIds.size());
 
         // Enrich each model with its project name
         List<AutomationRuleEvaluatorModel<?>> enrichedModels = models.stream()
@@ -629,7 +637,12 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
 
         // For backward compatibility: derive projectId from first element of projectIds set
         UUID projectId = model.projectIds().stream().findFirst().orElse(null);
+
+        log.debug("Enriching model - ruleId: '{}', projectIds count: '{}', derived projectId: '{}'",
+                model.id(), model.projectIds().size(), projectId);
+
         if (projectId == null) {
+            log.debug("Skipping enrichment for rule '{}' - no projects assigned", model.id());
             return model; // No projects assigned
         }
 
