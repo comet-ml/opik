@@ -319,14 +319,14 @@ services:
       # otel-collector:
       #   condition: service_healthy
     healthcheck:
-      test: [ "CMD-SHELL", "curl --fail --fail-early http://localhost:${NGINX_PORT:-8080}/health" ]
+      test: [ "CMD-SHELL", "curl --fail --fail-early http://localhost:${NGINX_PORT:-5173}/health" ]
       interval: 1s
       timeout: 30s
       retries: 10
       start_period: 1s
     environment:
       OPIK_VERSION: ${OPIK_VERSION:-latest}
-      NGINX_PORT: ${NGINX_PORT:-8080}
+      NGINX_PORT: ${NGINX_PORT:-5173}
       NGINX_CONF_SUFFIX: ${NGINX_CONF_SUFFIX:-local}
       OTEL_TRACE: ${OTEL_TRACE:-off}
       OTEL_COLLECTOR_HOST: ${OTEL_COLLECTOR_HOST:-otel-collector}
