@@ -1362,8 +1362,13 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
         if (hasIds) {
             template.add("ids", true);
         } else {
-            filterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.DATASET_ITEM)
-                    .ifPresent(datasetItemFilters -> template.add("dataset_item_filters", datasetItemFilters));
+            validateDatasetIdFilterPresent(filters);
+
+            Optional<String> datasetItemFiltersOpt = filterQueryBuilder.toAnalyticsDbFilters(filters,
+                    FilterStrategy.DATASET_ITEM);
+
+            datasetItemFiltersOpt.ifPresent(datasetItemFilters -> template.add("dataset_item_filters",
+                    datasetItemFilters));
         }
 
         var query = template.render();
@@ -1847,5 +1852,26 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                         .doFinally(signalType -> endSegment(segment));
             });
         });
+    }
+
+    /**
+     * Validates that the filters contain a required dataset_id equality filter.
+     * This prevents accidental workspace-wide deletion operations.
+     *
+     * @param filters the list of filters to validate
+     * @throws IllegalArgumentException if no valid dataset_id filter is present
+     */
+    private void validateDatasetIdFilterPresent(List<DatasetItemFilter> filters) {
+        boolean hasDatasetIdFilter = filters.stream()
+                .anyMatch(filter -> com.comet.opik.api.filter.Field.DATASET_ID_QUERY_PARAM
+                        .equals(filter.field().getQueryParamField())
+                        && com.comet.opik.api.filter.Operator.EQUAL.equals(filter.operator())
+                        && filter.value() != null);
+
+        if (!hasDatasetIdFilter) {
+            log.error("Filter-based deletion requires dataset_id filter with operator '='");
+            throw new IllegalArgumentException(
+                    "Filter-based deletion requires a dataset_id filter with operator '=' to scope deletion to a specific dataset");
+        }
     }
 }

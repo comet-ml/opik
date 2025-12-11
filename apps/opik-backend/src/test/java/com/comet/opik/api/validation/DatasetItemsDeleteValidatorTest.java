@@ -141,6 +141,23 @@ class DatasetItemsDeleteValidatorTest {
     }
 
     @Test
+    @DisplayName("Invalid: Empty filters array (treated as no filters)")
+    void validateWhenEmptyFiltersArray() {
+        // Given - Empty filters array (should be treated same as null)
+        var deleteRequest = DatasetItemsDelete.builder()
+                .filters(List.of())
+                .build();
+
+        // When
+        Set<ConstraintViolation<DatasetItemsDelete>> violations = validator.validate(deleteRequest);
+
+        // Then
+        assertThat(violations).hasSize(1);
+        assertThat(violations.iterator().next().getMessage())
+                .isEqualTo("Either 'item_ids' or 'filters' must be provided.");
+    }
+
+    @Test
     @DisplayName("Invalid: Filters without dataset_id")
     void validateWhenFiltersWithoutDatasetId() {
         // Given - No dataset_id filter (SECURITY ISSUE!)

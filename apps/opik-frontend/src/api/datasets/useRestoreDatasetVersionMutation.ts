@@ -67,6 +67,10 @@ const useRestoreDatasetVersionMutation = () => {
         queryKey: ["dataset-versions", { datasetId }],
         exact: false,
       });
+
+      queryClient.removeQueries({
+        queryKey: ["dataset-item"],
+      });
     },
   });
 };

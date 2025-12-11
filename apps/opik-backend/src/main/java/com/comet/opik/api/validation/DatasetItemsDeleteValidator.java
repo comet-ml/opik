@@ -24,8 +24,8 @@ public class DatasetItemsDeleteValidator
 
         // Check if `item_ids` is provided
         boolean hasItemIds = CollectionUtils.isNotEmpty(deleteRequest.itemIds());
-        // Check if filters are provided (empty array means "select all items", null means not provided)
-        boolean hasFilters = deleteRequest.filters() != null;
+        // Check if filters are provided (must contain at least one filter)
+        boolean hasFilters = CollectionUtils.isNotEmpty(deleteRequest.filters());
 
         // Validate that at least one of item_ids or filters is provided
         if (!hasItemIds && !hasFilters) {
