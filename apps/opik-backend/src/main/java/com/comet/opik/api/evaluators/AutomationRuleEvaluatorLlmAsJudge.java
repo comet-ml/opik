@@ -39,18 +39,20 @@ public final class AutomationRuleEvaluatorLlmAsJudge extends AutomationRuleEvalu
             @JsonView({View.Public.class, View.Write.class}) @NotNull List<LlmAsJudgeOutputSchema> schema){
     }
 
-    @ConstructorProperties({"id", "projectId", "projectIds", "name", "samplingRate", "enabled", "filters", "code",
+    @ConstructorProperties({"id", "projectId", "projectName", "projectIds", "name", "samplingRate",
+            "enabled", "filters", "code",
             "createdAt",
             "createdBy",
             "lastUpdatedAt", "lastUpdatedBy"})
-    public AutomationRuleEvaluatorLlmAsJudge(UUID id, UUID projectId, Set<UUID> projectIds,
+    public AutomationRuleEvaluatorLlmAsJudge(UUID id, UUID projectId, String projectName, Set<UUID> projectIds,
             @NotBlank String name,
             float samplingRate,
             boolean enabled,
             List<TraceFilter> filters,
             @NotNull LlmAsJudgeCode code, Instant createdAt, String createdBy, Instant lastUpdatedAt,
             String lastUpdatedBy) {
-        super(id, projectId, projectIds, name, samplingRate, enabled, filters, code, createdAt, createdBy,
+        super(id, projectId, projectName, projectIds, name, samplingRate, enabled, filters, code,
+                createdAt, createdBy,
                 lastUpdatedAt,
                 lastUpdatedBy);
     }

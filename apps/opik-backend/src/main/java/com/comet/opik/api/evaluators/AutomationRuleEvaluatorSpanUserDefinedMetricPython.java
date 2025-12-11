@@ -40,16 +40,19 @@ public final class AutomationRuleEvaluatorSpanUserDefinedMetricPython
             @JsonView({View.Public.class, View.Write.class}) @NotEmpty Map<String, String> arguments){
     }
 
-    @ConstructorProperties({"id", "projectId", "projectIds", "name", "samplingRate", "enabled", "filters", "code",
+    @ConstructorProperties({"id", "projectId", "projectName", "projectIds", "name", "samplingRate",
+            "enabled", "filters", "code",
             "createdAt",
             "createdBy",
             "lastUpdatedAt", "lastUpdatedBy"})
-    public AutomationRuleEvaluatorSpanUserDefinedMetricPython(UUID id, UUID projectId, Set<UUID> projectIds,
+    public AutomationRuleEvaluatorSpanUserDefinedMetricPython(UUID id, UUID projectId, String projectName,
+            Set<UUID> projectIds,
             @NotBlank String name, float samplingRate, boolean enabled, List<SpanFilter> filters,
             @NotNull SpanUserDefinedMetricPythonCode code,
             Instant createdAt,
             String createdBy, Instant lastUpdatedAt, String lastUpdatedBy) {
-        super(id, projectId, projectIds, name, samplingRate, enabled, filters, code, createdAt, createdBy,
+        super(id, projectId, projectName, projectIds, name, samplingRate, enabled, filters, code,
+                createdAt, createdBy,
                 lastUpdatedAt,
                 lastUpdatedBy);
     }

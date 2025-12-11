@@ -39,15 +39,18 @@ public final class AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython
         public static final String CONTEXT_ARG_NAME = "context";
     }
 
-    @ConstructorProperties({"id", "projectId", "projectIds", "name", "samplingRate", "enabled", "filters", "code",
+    @ConstructorProperties({"id", "projectId", "projectName", "projectIds", "name", "samplingRate",
+            "enabled", "filters", "code",
             "createdAt",
             "createdBy",
             "lastUpdatedAt", "lastUpdatedBy"})
-    public AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython(UUID id, UUID projectId, Set<UUID> projectIds,
+    public AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython(UUID id, UUID projectId, String projectName,
+            Set<UUID> projectIds,
             @NotBlank String name, float samplingRate, boolean enabled, List<TraceThreadFilter> filters,
             @NotNull TraceThreadUserDefinedMetricPythonCode code,
             Instant createdAt, String createdBy, Instant lastUpdatedAt, String lastUpdatedBy) {
-        super(id, projectId, projectIds, name, samplingRate, enabled, filters, code, createdAt, createdBy,
+        super(id, projectId, projectName, projectIds, name, samplingRate, enabled, filters, code,
+                createdAt, createdBy,
                 lastUpdatedAt,
                 lastUpdatedBy);
     }

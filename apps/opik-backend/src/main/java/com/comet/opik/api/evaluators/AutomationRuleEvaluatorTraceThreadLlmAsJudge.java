@@ -42,18 +42,21 @@ public final class AutomationRuleEvaluatorTraceThreadLlmAsJudge
 
     }
 
-    @ConstructorProperties({"id", "projectId", "projectIds", "name", "samplingRate", "enabled", "filters", "code",
+    @ConstructorProperties({"id", "projectId", "projectName", "projectIds", "name", "samplingRate",
+            "enabled", "filters", "code",
             "createdAt",
             "createdBy",
             "lastUpdatedAt", "lastUpdatedBy"})
-    public AutomationRuleEvaluatorTraceThreadLlmAsJudge(UUID id, UUID projectId, Set<UUID> projectIds,
+    public AutomationRuleEvaluatorTraceThreadLlmAsJudge(UUID id, UUID projectId, String projectName,
+            Set<UUID> projectIds,
             @NotBlank String name,
             float samplingRate, boolean enabled, List<TraceThreadFilter> filters,
             @NotNull TraceThreadLlmAsJudgeCode code,
             Instant createdAt,
             String createdBy,
             Instant lastUpdatedAt, String lastUpdatedBy) {
-        super(id, projectId, projectIds, name, samplingRate, enabled, filters, code, createdAt, createdBy,
+        super(id, projectId, projectName, projectIds, name, samplingRate, enabled, filters, code,
+                createdAt, createdBy,
                 lastUpdatedAt,
                 lastUpdatedBy);
     }
