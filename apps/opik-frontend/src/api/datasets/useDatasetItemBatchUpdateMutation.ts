@@ -5,12 +5,20 @@ import get from "lodash/get";
 import api, { DATASETS_REST_ENDPOINT } from "@/api/api";
 import { DatasetItem } from "@/types/datasets";
 import { useToast } from "@/components/ui/use-toast";
+import { Filters } from "@/types/filters";
+import {
+  generateSearchByFieldFilters,
+  processFiltersArray,
+} from "@/lib/filters";
 
 type UseDatasetItemBatchUpdateMutationParams = {
   datasetId: string;
   itemIds: string[];
   item: Partial<DatasetItem>;
   mergeTags?: boolean;
+  isAllItemsSelected?: boolean;
+  filters?: Filters;
+  search?: string;
 };
 
 const useDatasetItemBatchUpdateMutation = () => {
@@ -22,12 +30,31 @@ const useDatasetItemBatchUpdateMutation = () => {
       itemIds,
       item,
       mergeTags,
+      isAllItemsSelected,
+      filters = [],
+      search,
     }: UseDatasetItemBatchUpdateMutationParams) => {
-      const { data } = await api.patch(DATASETS_REST_ENDPOINT + "items/batch", {
-        ids: itemIds,
-        update: item,
-        merge_tags: mergeTags,
-      });
+      let payload;
+
+      if (isAllItemsSelected) {
+        const combinedFilters = [
+          ...filters,
+          ...generateSearchByFieldFilters("data", search),
+        ];
+
+        payload = {
+          filters: processFiltersArray(combinedFilters),
+          update: item,
+          merge_tags: mergeTags,
+        };
+      } else {
+        payload = { ids: itemIds, update: item, merge_tags: mergeTags };
+      }
+
+      const { data } = await api.patch(
+        DATASETS_REST_ENDPOINT + "items/batch",
+        payload,
+      );
 
       return data;
     },
