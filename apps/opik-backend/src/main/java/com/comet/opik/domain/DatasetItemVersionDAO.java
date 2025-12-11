@@ -225,6 +225,16 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
             ;
             """;
 
+    private static final String SELECT_EXPERIMENT_VERSION_ID = """
+            SELECT dataset_version_id
+            FROM experiments
+            WHERE workspace_id = :workspace_id
+            AND id IN :experimentIds
+            ORDER BY (workspace_id, dataset_id, id) DESC, last_updated_at DESC
+            LIMIT 1 BY id
+            LIMIT 1
+            """;
+
     private static final String SELECT_DATASET_ITEM_VERSIONS_WITH_EXPERIMENT_ITEMS = """
             WITH experiments_with_versions AS (
                 SELECT
@@ -905,18 +915,8 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
         return makeMonoContextAware((userName, workspaceId) -> {
             // First, get the version ID from the experiments
             return asyncTemplate.nonTransaction(connection -> {
-                var experimentQuery = """
-                        SELECT dataset_version_id
-                        FROM experiments
-                        WHERE workspace_id = :workspace_id
-                        AND id IN :experimentIds
-                        ORDER BY (workspace_id, dataset_id, id) DESC, last_updated_at DESC
-                        LIMIT 1 BY id
-                        LIMIT 1
-                        """;
-
                 return makeFluxContextAware(bindWorkspaceIdToFlux(
-                        connection.createStatement(experimentQuery)
+                        connection.createStatement(SELECT_EXPERIMENT_VERSION_ID)
                                 .bind("experimentIds", searchCriteria.experimentIds().toArray(UUID[]::new))))
                         .flatMap(result -> result.map(
                                 (row, rowMetadata) -> Optional.ofNullable(row.get("dataset_version_id", String.class))

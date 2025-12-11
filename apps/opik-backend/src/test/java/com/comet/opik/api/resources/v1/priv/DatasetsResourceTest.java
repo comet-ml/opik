@@ -8560,12 +8560,6 @@ class DatasetsResourceTest {
 
             createAndAssert(experiment, apiKey, workspaceName);
 
-            // When creating experiment items for a versioned dataset, we need to use the versioned item IDs
-            // The versioned items are created in dataset_item_versions table with new IDs
-            // We need to query those IDs and use them in experiment items
-            // For now, let's just verify that columns are populated even if content is empty
-            // This is a known limitation of the test setup
-
             // Fetch experiment items - even without experiment items, columns should be populated
             var experimentIdsParam = JsonUtils.writeValueAsString(List.of(experiment.id()));
 
