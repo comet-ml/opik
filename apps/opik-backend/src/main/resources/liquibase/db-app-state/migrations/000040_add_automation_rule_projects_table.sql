@@ -16,10 +16,15 @@ CREATE TABLE IF NOT EXISTS automation_rule_projects (
     INDEX `automation_rule_projects_rule_idx` (rule_id)
 );
 
--- Note: No data migration performed - using lazy migration strategy
--- Existing rules will continue using project_id field (legacy)
--- New rules will use both project_id (primary) and junction table (multi-project support)
--- When a rule is updated, it will be migrated from project_id to junction table automatically
+-- Make project_id nullable since we're no longer writing to it (single source of truth is junction table)
+-- Existing legacy data will keep their project_id values, new rules will have NULL
+ALTER TABLE automation_rules MODIFY COLUMN project_id CHAR(36) NULL;
 
+-- Note: No data migration performed - using lazy migration strategy
+-- Existing rules will continue having their project_id field populated (legacy data)
+-- New rules will have project_id = NULL and use junction table exclusively
+-- The Service layer will populate projectId from projectIds for backward compatibility
+
+--rollback ALTER TABLE automation_rules MODIFY COLUMN project_id CHAR(36) NOT NULL;
 --rollback DROP TABLE IF EXISTS automation_rule_projects;
 

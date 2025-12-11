@@ -576,16 +576,16 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
         }
 
         // Log incoming models for debugging
-        models.forEach(model -> log.debug("Model before enrichment - id: '{}', projectId: '{}', projectName: '{}'",
-                model.id(), model.projectId(), model.projectName()));
+        models.forEach(model -> log.debug(
+                "Model before enrichment - id: '{}', projectId: '{}', projectIds: '{}', projectName: '{}'",
+                model.id(), model.projectId(), model.projectIds(), model.projectName()));
 
-        // Extract unique project IDs from all models
-        Set<UUID> projectIds = models.stream()
-                .map(AutomationRuleEvaluatorModel::projectId)
-                .filter(java.util.Objects::nonNull)
+        // Extract unique project IDs from all models' projectIds sets
+        Set<UUID> allProjectIds = models.stream()
+                .flatMap(model -> model.projectIds().stream())
                 .collect(java.util.stream.Collectors.toSet());
 
-        if (projectIds.isEmpty()) {
+        if (allProjectIds.isEmpty()) {
             return models;
         }
 
@@ -594,7 +594,7 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
 
         Map<UUID, String> projectNameMap = handle.createQuery(sql)
                 .bind("workspaceId", workspaceId)
-                .bindList("ids", projectIds)
+                .bindList("ids", allProjectIds)
                 .map((rs, ctx) -> Map.entry(
                         UUID.fromString(rs.getString("id")),
                         rs.getString("name")))
@@ -627,29 +627,32 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
             AutomationRuleEvaluatorModel<?> model,
             Map<UUID, String> projectNameMap) {
 
-        UUID projectId = model.projectId();
+        // For backward compatibility: derive projectId from first element of projectIds set
+        UUID projectId = model.projectIds().stream().findFirst().orElse(null);
         if (projectId == null) {
-            return model;
+            return model; // No projects assigned
         }
 
         String projectName = projectNameMap.get(projectId);
         if (projectName == null) {
             log.warn("Project name not found for projectId '{}' in rule '{}'", projectId, model.id());
-            return model;
+            // Continue with projectId even if name is missing
         }
 
-        // Use builder pattern to update the model with project name
+        // Use builder pattern to update the model with projectId (for backward compatibility) and projectName
         return switch (model) {
-            case LlmAsJudgeAutomationRuleEvaluatorModel m -> m.toBuilder().projectName(projectName).build();
+            case LlmAsJudgeAutomationRuleEvaluatorModel m ->
+                m.toBuilder().projectId(projectId).projectName(projectName).build();
             case UserDefinedMetricPythonAutomationRuleEvaluatorModel m ->
-                m.toBuilder().projectName(projectName).build();
+                m.toBuilder().projectId(projectId).projectName(projectName).build();
             case TraceThreadLlmAsJudgeAutomationRuleEvaluatorModel m ->
-                m.toBuilder().projectName(projectName).build();
+                m.toBuilder().projectId(projectId).projectName(projectName).build();
             case TraceThreadUserDefinedMetricPythonAutomationRuleEvaluatorModel m ->
-                m.toBuilder().projectName(projectName).build();
-            case SpanLlmAsJudgeAutomationRuleEvaluatorModel m -> m.toBuilder().projectName(projectName).build();
+                m.toBuilder().projectId(projectId).projectName(projectName).build();
+            case SpanLlmAsJudgeAutomationRuleEvaluatorModel m ->
+                m.toBuilder().projectId(projectId).projectName(projectName).build();
             case SpanUserDefinedMetricPythonAutomationRuleEvaluatorModel m ->
-                m.toBuilder().projectName(projectName).build();
+                m.toBuilder().projectId(projectId).projectName(projectName).build();
         };
     }
 }
