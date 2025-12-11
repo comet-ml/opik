@@ -294,8 +294,8 @@ services:
     depends_on:
       backend:
         condition: service_healthy
-      # The following dependency on otel-collector is required only when distributed tracing is enabled (OTEL_TRACE=on).  
-      # Uncomment to ensure frontend waits for otel-collector to be healthy before starting. 
+      # The following dependency on otel-collector is required only when distributed tracing is enabled (OTEL_TRACE=on).
+      # Uncomment to ensure frontend waits for otel-collector to be healthy before starting.
       # otel-collector:
       #   condition: service_healthy
     healthcheck:
