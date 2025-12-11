@@ -15,7 +15,8 @@ import static com.comet.opik.domain.evaluators.LlmAsJudgeAutomationRuleEvaluator
 @Builder(toBuilder = true)
 public record LlmAsJudgeAutomationRuleEvaluatorModel(
         UUID id,
-        Set<UUID> projectIds,
+        UUID projectId, // Legacy single project field for backwards compatibility
+        Set<UUID> projectIds, // New multi-project field
         String name,
         Float samplingRate,
         boolean enabled,

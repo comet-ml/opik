@@ -14,7 +14,8 @@ import static com.comet.opik.domain.evaluators.TraceThreadLlmAsJudgeAutomationRu
 @Builder(toBuilder = true)
 public record TraceThreadLlmAsJudgeAutomationRuleEvaluatorModel(
         UUID id,
-        Set<UUID> projectIds,
+        UUID projectId, // Legacy single project field for backwards compatibility
+        Set<UUID> projectIds, // New multi-project field
         String name,
         Float samplingRate,
         boolean enabled,
