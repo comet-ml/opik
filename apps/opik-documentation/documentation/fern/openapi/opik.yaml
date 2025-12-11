@@ -61,7 +61,7 @@ tags:
 - name: LlmProviderKey
   description: LLM Provider Key
 - name: Manual Evaluation
-  description: Manual evaluation resources for traces and threads
+  description: "Manual evaluation resources for traces, threads, and spans"
 - name: OpenTelemetry Ingestion
   description: Resource to ingest Traces and Spans via OpenTelemetry
 - name: Optimizations
@@ -2843,6 +2843,38 @@ paths:
                 $ref: "#/components/schemas/ErrorMessage"
         "404":
           description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+  /v1/private/manual-evaluation/spans:
+    post:
+      tags:
+      - Manual Evaluation
+      summary: Manually evaluate spans
+      description: Manually trigger evaluation rules on selected spans. Bypasses sampling
+        and enqueues all specified spans for evaluation.
+      operationId: evaluateSpans
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ManualEvaluationRequest"
+      responses:
+        "202":
+          description: Accepted - Evaluation request queued successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ManualEvaluationResponse"
+        "400":
+          description: Bad Request - Invalid request or missing automation rules
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "404":
+          description: Not Found - Project not found
           content:
             application/json:
               schema:
@@ -6578,6 +6610,13 @@ components:
       properties:
         workspace_name:
           type: string
+    AudioUrl:
+      required:
+      - url
+      type: object
+      properties:
+        url:
+          type: string
     AutomationRuleEvaluator:
       required:
       - action
@@ -6626,6 +6665,7 @@ components:
           - trace_thread_llm_as_judge
           - trace_thread_user_defined_metric_python
           - span_llm_as_judge
+          - span_user_defined_metric_python
         action:
           type: string
           enum:
@@ -6638,6 +6678,7 @@ components:
           trace_thread_llm_as_judge: "#/components/schemas/AutomationRuleEvaluatorTraceThreadLlmAsJudge"
           trace_thread_user_defined_metric_python: "#/components/schemas/AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython"
           span_llm_as_judge: "#/components/schemas/AutomationRuleEvaluatorSpanLlmAsJudge"
+          span_user_defined_metric_python: "#/components/schemas/AutomationRuleEvaluatorSpanUserDefinedMetricPython"
     AutomationRuleEvaluatorLlmAsJudge:
       required:
       - action
@@ -6674,6 +6715,24 @@ components:
               $ref: "#/components/schemas/SpanFilter"
           code:
             $ref: "#/components/schemas/SpanLlmAsJudgeCode"
+    AutomationRuleEvaluatorSpanUserDefinedMetricPython:
+      required:
+      - action
+      - code
+      - name
+      - project_id
+      - type
+      type: object
+      allOf:
+      - $ref: "#/components/schemas/AutomationRuleEvaluator"
+      - type: object
+        properties:
+          filters:
+            type: array
+            items:
+              $ref: "#/components/schemas/SpanFilter"
+          code:
+            $ref: "#/components/schemas/SpanUserDefinedMetricPythonCode"
     AutomationRuleEvaluatorTraceThreadLlmAsJudge:
       required:
       - action
@@ -6797,6 +6856,8 @@ components:
           $ref: "#/components/schemas/ImageUrl"
         video_url:
           $ref: "#/components/schemas/VideoUrl"
+        audio_url:
+          $ref: "#/components/schemas/AudioUrl"
     LlmAsJudgeModelParameters:
       required:
       - name
@@ -6876,6 +6937,19 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/LlmAsJudgeOutputSchema"
+    SpanUserDefinedMetricPythonCode:
+      required:
+      - arguments
+      - metric
+      type: object
+      properties:
+        metric:
+          type: string
+        arguments:
+          minProperties: 1
+          type: object
+          additionalProperties:
+            type: string
     TraceFilter:
       type: object
       properties:
@@ -6968,6 +7042,13 @@ components:
       properties:
         url:
           type: string
+    AudioUrl_Write:
+      required:
+      - url
+      type: object
+      properties:
+        url:
+          type: string
     AutomationRuleEvaluatorLlmAsJudge_Write:
       required:
       - action
@@ -7004,6 +7085,24 @@ components:
               $ref: "#/components/schemas/SpanFilter_Write"
           code:
             $ref: "#/components/schemas/SpanLlmAsJudgeCode_Write"
+    AutomationRuleEvaluatorSpanUserDefinedMetricPython_Write:
+      required:
+      - action
+      - code
+      - name
+      - project_id
+      - type
+      type: object
+      allOf:
+      - $ref: "#/components/schemas/AutomationRuleEvaluator_Write"
+      - type: object
+        properties:
+          filters:
+            type: array
+            items:
+              $ref: "#/components/schemas/SpanFilter_Write"
+          code:
+            $ref: "#/components/schemas/SpanUserDefinedMetricPythonCode_Write"
     AutomationRuleEvaluatorTraceThreadLlmAsJudge_Write:
       required:
       - action
@@ -7085,6 +7184,7 @@ components:
           - trace_thread_llm_as_judge
           - trace_thread_user_defined_metric_python
           - span_llm_as_judge
+          - span_user_defined_metric_python
         action:
           type: string
           enum:
@@ -7097,6 +7197,7 @@ components:
           trace_thread_llm_as_judge: "#/components/schemas/AutomationRuleEvaluatorTraceThreadLlmAsJudge_Write"
           trace_thread_user_defined_metric_python: "#/components/schemas/AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython_Write"
           span_llm_as_judge: "#/components/schemas/AutomationRuleEvaluatorSpanLlmAsJudge_Write"
+          span_user_defined_metric_python: "#/components/schemas/AutomationRuleEvaluatorSpanUserDefinedMetricPython_Write"
     ImageUrl_Write:
       required:
       - url
@@ -7143,6 +7244,8 @@ components:
           $ref: "#/components/schemas/ImageUrl_Write"
         video_url:
           $ref: "#/components/schemas/VideoUrl_Write"
+        audio_url:
+          $ref: "#/components/schemas/AudioUrl_Write"
     LlmAsJudgeMessage_Write:
       required:
       - role
@@ -7245,6 +7348,19 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/LlmAsJudgeOutputSchema_Write"
+    SpanUserDefinedMetricPythonCode_Write:
+      required:
+      - arguments
+      - metric
+      type: object
+      properties:
+        metric:
+          type: string
+        arguments:
+          minProperties: 1
+          type: object
+          additionalProperties:
+            type: string
     TraceFilter_Write:
       type: object
       properties:
@@ -7337,6 +7453,13 @@ components:
       properties:
         url:
           type: string
+    AudioUrl_Public:
+      required:
+      - url
+      type: object
+      properties:
+        url:
+          type: string
     AutomationRuleEvaluatorLlmAsJudge_Public:
       required:
       - action
@@ -7403,6 +7526,7 @@ components:
           - trace_thread_llm_as_judge
           - trace_thread_user_defined_metric_python
           - span_llm_as_judge
+          - span_user_defined_metric_python
         action:
           type: string
           enum:
@@ -7415,6 +7539,7 @@ components:
           trace_thread_llm_as_judge: "#/components/schemas/AutomationRuleEvaluatorTraceThreadLlmAsJudge_Public"
           trace_thread_user_defined_metric_python: "#/components/schemas/AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython_Public"
           span_llm_as_judge: "#/components/schemas/AutomationRuleEvaluatorSpanLlmAsJudge_Public"
+          span_user_defined_metric_python: "#/components/schemas/AutomationRuleEvaluatorSpanUserDefinedMetricPython_Public"
     AutomationRuleEvaluatorPage_Public:
       type: object
       properties:
@@ -7453,6 +7578,24 @@ components:
               $ref: "#/components/schemas/SpanFilter_Public"
           code:
             $ref: "#/components/schemas/SpanLlmAsJudgeCode_Public"
+    AutomationRuleEvaluatorSpanUserDefinedMetricPython_Public:
+      required:
+      - action
+      - code
+      - name
+      - project_id
+      - type
+      type: object
+      allOf:
+      - $ref: "#/components/schemas/AutomationRuleEvaluator_Public"
+      - type: object
+        properties:
+          filters:
+            type: array
+            items:
+              $ref: "#/components/schemas/SpanFilter_Public"
+          code:
+            $ref: "#/components/schemas/SpanUserDefinedMetricPythonCode_Public"
     AutomationRuleEvaluatorTraceThreadLlmAsJudge_Public:
       required:
       - action
@@ -7553,6 +7696,8 @@ components:
           $ref: "#/components/schemas/ImageUrl_Public"
         video_url:
           $ref: "#/components/schemas/VideoUrl_Public"
+        audio_url:
+          $ref: "#/components/schemas/AudioUrl_Public"
     LlmAsJudgeMessage_Public:
       required:
       - role
@@ -7655,6 +7800,19 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/LlmAsJudgeOutputSchema_Public"
+    SpanUserDefinedMetricPythonCode_Public:
+      required:
+      - arguments
+      - metric
+      type: object
+      properties:
+        metric:
+          type: string
+        arguments:
+          minProperties: 1
+          type: object
+          additionalProperties:
+            type: string
     TraceFilter_Public:
       type: object
       properties:
@@ -7795,6 +7953,7 @@ components:
           - trace_thread_llm_as_judge
           - trace_thread_user_defined_metric_python
           - span_llm_as_judge
+          - span_user_defined_metric_python
         action:
           type: string
           enum:
@@ -7807,6 +7966,7 @@ components:
           trace_thread_llm_as_judge: "#/components/schemas/AutomationRuleEvaluatorTraceThreadLlmAsJudge_Public"
           trace_thread_user_defined_metric_python: "#/components/schemas/AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython_Public"
           span_llm_as_judge: "#/components/schemas/AutomationRuleEvaluatorSpanLlmAsJudge_Public"
+          span_user_defined_metric_python: "#/components/schemas/AutomationRuleEvaluatorSpanUserDefinedMetricPython_Public"
     LogItem:
       type: object
       properties:
@@ -7878,6 +8038,7 @@ components:
           - trace_thread_llm_as_judge
           - trace_thread_user_defined_metric_python
           - span_llm_as_judge
+          - span_user_defined_metric_python
         action:
           type: string
           enum:
@@ -7890,6 +8051,7 @@ components:
           trace_thread_llm_as_judge: "#/components/schemas/AutomationRuleEvaluatorUpdateTraceThreadLlmAsJudge"
           trace_thread_user_defined_metric_python: "#/components/schemas/AutomationRuleEvaluatorUpdateTraceThreadUserDefinedMetricPython"
           span_llm_as_judge: "#/components/schemas/AutomationRuleEvaluatorUpdateSpanLlmAsJudge"
+          span_user_defined_metric_python: "#/components/schemas/AutomationRuleEvaluatorUpdateSpanUserDefinedMetricPython"
     AutomationRuleEvaluatorUpdateLlmAsJudge:
       required:
       - action
@@ -7924,6 +8086,23 @@ components:
               $ref: "#/components/schemas/SpanFilter"
           code:
             $ref: "#/components/schemas/SpanLlmAsJudgeCode"
+    AutomationRuleEvaluatorUpdateSpanUserDefinedMetricPython:
+      required:
+      - action
+      - code
+      - name
+      - project_id
+      type: object
+      allOf:
+      - $ref: "#/components/schemas/AutomationRuleEvaluatorUpdate"
+      - type: object
+        properties:
+          filters:
+            type: array
+            items:
+              $ref: "#/components/schemas/SpanFilter"
+          code:
+            $ref: "#/components/schemas/SpanUserDefinedMetricPythonCode"
     AutomationRuleEvaluatorUpdateTraceThreadLlmAsJudge:
       required:
       - action
@@ -11649,6 +11828,7 @@ components:
           - openrouter
           - vertex-ai
           - custom-llm
+          - opik-builtin
         api_key:
           type: string
         name:
@@ -11688,6 +11868,11 @@ components:
           readOnly: true
         last_updated_by:
           type: string
+          readOnly: true
+        read_only:
+          type: boolean
+          description: "If true, this provider is system-managed and cannot be edited\
+            \ or deleted"
           readOnly: true
     ProviderApiKey:
       required:
@@ -11707,6 +11892,7 @@ components:
           - openrouter
           - vertex-ai
           - custom-llm
+          - opik-builtin
         api_key:
           type: string
         name:
@@ -11747,6 +11933,11 @@ components:
         last_updated_by:
           type: string
           readOnly: true
+        read_only:
+          type: boolean
+          description: "If true, this provider is system-managed and cannot be edited\
+            \ or deleted"
+          readOnly: true
     ProviderApiKey_Write:
       required:
       - provider
@@ -11761,6 +11952,7 @@ components:
           - openrouter
           - vertex-ai
           - custom-llm
+          - opik-builtin
         api_key:
           type: string
         name:
@@ -11868,6 +12060,7 @@ components:
           enum:
           - trace
           - thread
+          - span
     ExportTraceServiceRequest:
       $ref: "#/components/schemas/JsonNode"
     Optimization:
@@ -13186,6 +13379,7 @@ components:
       - optimizationStudioEnabled
       - pythonEvaluatorEnabled
       - spanLlmAsJudgeEnabled
+      - spanUserDefinedMetricPythonEnabled
       - traceThreadPythonEvaluatorEnabled
       - welcomeWizardEnabled
       type: object
@@ -13195,6 +13389,8 @@ components:
         traceThreadPythonEvaluatorEnabled:
           type: boolean
         spanLlmAsJudgeEnabled:
+          type: boolean
+        spanUserDefinedMetricPythonEnabled:
           type: boolean
         guardrailsEnabled:
           type: boolean

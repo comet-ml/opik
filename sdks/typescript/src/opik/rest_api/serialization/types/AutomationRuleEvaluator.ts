@@ -10,6 +10,7 @@ import { AutomationRuleEvaluatorUserDefinedMetricPython } from "./AutomationRule
 import { AutomationRuleEvaluatorTraceThreadLlmAsJudge } from "./AutomationRuleEvaluatorTraceThreadLlmAsJudge";
 import { AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython } from "./AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython";
 import { AutomationRuleEvaluatorSpanLlmAsJudge } from "./AutomationRuleEvaluatorSpanLlmAsJudge";
+import { AutomationRuleEvaluatorSpanUserDefinedMetricPython } from "./AutomationRuleEvaluatorSpanUserDefinedMetricPython";
 
 const _Base = core.serialization.object({
     id: core.serialization.string().optional(),
@@ -35,6 +36,7 @@ export const AutomationRuleEvaluator: core.serialization.Schema<
         trace_thread_user_defined_metric_python:
             AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython.extend(_Base),
         span_llm_as_judge: AutomationRuleEvaluatorSpanLlmAsJudge.extend(_Base),
+        span_user_defined_metric_python: AutomationRuleEvaluatorSpanUserDefinedMetricPython.extend(_Base),
     })
     .transform<OpikApi.AutomationRuleEvaluator>({
         transform: (value) => value,
@@ -47,7 +49,8 @@ export declare namespace AutomationRuleEvaluator {
         | AutomationRuleEvaluator.UserDefinedMetricPython
         | AutomationRuleEvaluator.TraceThreadLlmAsJudge
         | AutomationRuleEvaluator.TraceThreadUserDefinedMetricPython
-        | AutomationRuleEvaluator.SpanLlmAsJudge;
+        | AutomationRuleEvaluator.SpanLlmAsJudge
+        | AutomationRuleEvaluator.SpanUserDefinedMetricPython;
 
     export interface LlmAsJudge extends _Base, AutomationRuleEvaluatorLlmAsJudge.Raw {
         type: "llm_as_judge";
@@ -68,6 +71,10 @@ export declare namespace AutomationRuleEvaluator {
 
     export interface SpanLlmAsJudge extends _Base, AutomationRuleEvaluatorSpanLlmAsJudge.Raw {
         type: "span_llm_as_judge";
+    }
+
+    export interface SpanUserDefinedMetricPython extends _Base, AutomationRuleEvaluatorSpanUserDefinedMetricPython.Raw {
+        type: "span_user_defined_metric_python";
     }
 
     export interface _Base {

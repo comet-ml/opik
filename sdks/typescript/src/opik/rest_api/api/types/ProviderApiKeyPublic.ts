@@ -18,4 +18,6 @@ export interface ProviderApiKeyPublic {
     createdBy?: string;
     lastUpdatedAt?: Date;
     lastUpdatedBy?: string;
+    /** If true, this provider is system-managed and cannot be edited or deleted */
+    readOnly?: boolean;
 }

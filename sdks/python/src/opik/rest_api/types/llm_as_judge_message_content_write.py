@@ -4,6 +4,7 @@ import typing
 
 import pydantic
 from ..core.pydantic_utilities import IS_PYDANTIC_V2, UniversalBaseModel
+from .audio_url_write import AudioUrlWrite
 from .image_url_write import ImageUrlWrite
 from .video_url_write import VideoUrlWrite
 
@@ -13,6 +14,7 @@ class LlmAsJudgeMessageContentWrite(UniversalBaseModel):
     text: typing.Optional[str] = None
     image_url: typing.Optional[ImageUrlWrite] = None
     video_url: typing.Optional[VideoUrlWrite] = None
+    audio_url: typing.Optional[AudioUrlWrite] = None
 
     if IS_PYDANTIC_V2:
         model_config: typing.ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(extra="allow", frozen=True)  # type: ignore # Pydantic v2

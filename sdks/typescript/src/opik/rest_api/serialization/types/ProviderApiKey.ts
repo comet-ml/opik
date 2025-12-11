@@ -21,6 +21,7 @@ export const ProviderApiKey: core.serialization.ObjectSchema<serializers.Provide
         createdBy: core.serialization.property("created_by", core.serialization.string().optional()),
         lastUpdatedAt: core.serialization.property("last_updated_at", core.serialization.date().optional()),
         lastUpdatedBy: core.serialization.property("last_updated_by", core.serialization.string().optional()),
+        readOnly: core.serialization.property("read_only", core.serialization.boolean().optional()),
     });
 
 export declare namespace ProviderApiKey {
@@ -37,5 +38,6 @@ export declare namespace ProviderApiKey {
         created_by?: string | null;
         last_updated_at?: string | null;
         last_updated_by?: string | null;
+        read_only?: boolean | null;
     }
 }

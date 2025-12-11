@@ -14,6 +14,9 @@ class ServiceTogglesConfig(UniversalBaseModel):
         bool, FieldMetadata(alias="traceThreadPythonEvaluatorEnabled")
     ]
     span_llm_as_judge_enabled: typing_extensions.Annotated[bool, FieldMetadata(alias="spanLlmAsJudgeEnabled")]
+    span_user_defined_metric_python_enabled: typing_extensions.Annotated[
+        bool, FieldMetadata(alias="spanUserDefinedMetricPythonEnabled")
+    ]
     guardrails_enabled: typing_extensions.Annotated[bool, FieldMetadata(alias="guardrailsEnabled")]
     opik_ai_enabled: typing_extensions.Annotated[bool, FieldMetadata(alias="opikAIEnabled")]
     alerts_enabled: typing_extensions.Annotated[bool, FieldMetadata(alias="alertsEnabled")]
