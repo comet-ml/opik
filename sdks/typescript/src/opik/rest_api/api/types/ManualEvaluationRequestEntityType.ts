@@ -5,8 +5,9 @@
 /**
  * Type of entity to evaluate (trace or thread)
  */
-export type ManualEvaluationRequestEntityType = "trace" | "thread";
+export type ManualEvaluationRequestEntityType = "trace" | "thread" | "span";
 export const ManualEvaluationRequestEntityType = {
     Trace: "trace",
     Thread: "thread",
+    Span: "span",
 } as const;

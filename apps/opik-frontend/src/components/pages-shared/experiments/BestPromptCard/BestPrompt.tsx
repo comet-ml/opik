@@ -3,7 +3,6 @@ import { Link } from "@tanstack/react-router";
 import { ArrowRight, Split } from "lucide-react";
 import isUndefined from "lodash/isUndefined";
 import isObject from "lodash/isObject";
-import isArray from "lodash/isArray";
 import get from "lodash/get";
 
 import { OPTIMIZATION_PROMPT_KEY } from "@/constants/experiments";
@@ -21,14 +20,11 @@ import { Button } from "@/components/ui/button";
 import { formatNumericData, toString } from "@/lib/utils";
 import ColoredTagNew from "@/components/shared/ColoredTag/ColoredTagNew";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
-import { LLM_MESSAGE_ROLE_NAME_MAP } from "@/constants/llm";
-import MarkdownPreview from "@/components/shared/MarkdownPreview/MarkdownPreview";
 import { cn } from "@/lib/utils";
 import {
-  extractOpenAIMessages,
-  formatMessagesAsText,
-  extractMessageContent,
-  OpenAIMessage,
+  extractPromptData,
+  formatPromptDataAsText,
+  ExtractedPromptData,
 } from "@/lib/prompt";
 import {
   Dialog,
@@ -37,6 +33,10 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import TextDiff from "@/components/shared/CodeDiff/TextDiff";
+import {
+  MessagesList,
+  NamedPromptsList,
+} from "@/components/pages-shared/prompts/PromptMessageDisplay";
 
 type BestPromptProps = {
   optimization: Optimization;
@@ -45,34 +45,7 @@ type BestPromptProps = {
   baselineExperiment?: Experiment | null;
 };
 
-/**
- * Read-only message component similar to LLMPromptMessage but simplified.
- */
-const ReadOnlyMessage: React.FC<{ message: OpenAIMessage; index: number }> = ({
-  message,
-  index,
-}) => {
-  const roleName =
-    LLM_MESSAGE_ROLE_NAME_MAP[
-      message.role as keyof typeof LLM_MESSAGE_ROLE_NAME_MAP
-    ] || message.role;
-  const content = extractMessageContent(message.content);
-
-  return (
-    <Card className={cn("py-2 px-3", index > 0 && "mt-2")}>
-      <CardContent className="p-0">
-        <div className="mb-2 flex items-center gap-2">
-          <span className="comet-body-s-accented">{roleName}</span>
-        </div>
-        <div className="mt-1">
-          <MarkdownPreview>{content || ""}</MarkdownPreview>
-        </div>
-      </CardContent>
-    </Card>
-  );
-};
-
-const BestPrompt: React.FC<BestPromptProps> = ({
+export const BestPrompt: React.FC<BestPromptProps> = ({
   optimization,
   experiment,
   scoreMap,
@@ -103,22 +76,18 @@ const BestPrompt: React.FC<BestPromptProps> = ({
     return get(experiment.metadata ?? {}, OPTIMIZATION_PROMPT_KEY, "-");
   }, [experiment]);
 
-  const messages = useMemo((): OpenAIMessage[] | null => {
-    if (!isObject(promptData) && !isArray(promptData)) {
-      return null;
-    }
-
-    return extractOpenAIMessages(promptData);
+  const extractedPrompt = useMemo((): ExtractedPromptData | null => {
+    return extractPromptData(promptData);
   }, [promptData]);
 
   const fallbackPrompt = useMemo(() => {
-    if (messages) {
+    if (extractedPrompt) {
       return null;
     }
     return isObject(promptData)
       ? JSON.stringify(promptData, null, 2)
       : toString(promptData);
-  }, [promptData, messages]);
+  }, [promptData, extractedPrompt]);
 
   const baselinePrompt = useMemo(() => {
     if (!baselineExperiment) return null;
@@ -129,20 +98,20 @@ const BestPrompt: React.FC<BestPromptProps> = ({
     );
     if (!val) return null;
 
-    const extractedMessages = extractOpenAIMessages(val);
-    if (extractedMessages) {
-      return formatMessagesAsText(extractedMessages);
+    const extracted = extractPromptData(val);
+    if (extracted) {
+      return formatPromptDataAsText(extracted);
     }
 
     return isObject(val) ? JSON.stringify(val, null, 2) : toString(val);
   }, [baselineExperiment]);
 
   const currentPromptText = useMemo(() => {
-    if (messages) {
-      return formatMessagesAsText(messages);
+    if (extractedPrompt) {
+      return formatPromptDataAsText(extractedPrompt);
     }
     return fallbackPrompt || "";
-  }, [messages, fallbackPrompt]);
+  }, [extractedPrompt, fallbackPrompt]);
 
   return (
     <Card className="size-full">
@@ -238,12 +207,12 @@ const BestPrompt: React.FC<BestPromptProps> = ({
           )}
         </div>
         <div>
-          {messages ? (
-            <div className="overflow-y-auto pb-2">
-              {messages.map((message, index) => (
-                <ReadOnlyMessage key={index} message={message} index={index} />
-              ))}
-            </div>
+          {extractedPrompt ? (
+            extractedPrompt.type === "single" ? (
+              <MessagesList messages={extractedPrompt.data} />
+            ) : (
+              <NamedPromptsList prompts={extractedPrompt.data} />
+            )
           ) : (
             <TooltipWrapper content={fallbackPrompt || ""}>
               <div className="comet-body-s line-clamp-2 h-11 text-light-slate">
@@ -256,5 +225,3 @@ const BestPrompt: React.FC<BestPromptProps> = ({
     </Card>
   );
 };
-
-export default BestPrompt;

@@ -9,8 +9,8 @@ import * as core from "../../core";
 export const ManualEvaluationRequestEntityType: core.serialization.Schema<
     serializers.ManualEvaluationRequestEntityType.Raw,
     OpikApi.ManualEvaluationRequestEntityType
-> = core.serialization.enum_(["trace", "thread"]);
+> = core.serialization.enum_(["trace", "thread", "span"]);
 
 export declare namespace ManualEvaluationRequestEntityType {
-    export type Raw = "trace" | "thread";
+    export type Raw = "trace" | "thread" | "span";
 }
