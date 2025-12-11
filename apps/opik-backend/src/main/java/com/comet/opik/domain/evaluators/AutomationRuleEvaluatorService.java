@@ -332,7 +332,11 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
             var criteria = AutomationRuleEvaluatorCriteria.builder().ids(singleIdSet).build();
             List<AutomationRuleEvaluatorModel<?>> models = dao.find(workspaceId, projectIds, criteria, null, null,
                     Map.of(), null, null);
-            return models.stream()
+
+            // Enrich models with project names for backward compatibility
+            List<AutomationRuleEvaluatorModel<?>> enrichedModels = enrichWithProjectNames(models, workspaceId, handle);
+
+            return enrichedModels.stream()
                     .findFirst()
                     .map(ruleEvaluator -> (AutomationRuleEvaluator<?, ?>) switch (ruleEvaluator) {
                         case LlmAsJudgeAutomationRuleEvaluatorModel llmAsJudge ->
@@ -365,7 +369,11 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
             var criteria = AutomationRuleEvaluatorCriteria.builder().ids(ids).build();
             List<AutomationRuleEvaluatorModel<?>> models = dao.find(workspaceId, projectIds, criteria, null, null,
                     Map.of(), null, null);
-            return models.stream()
+
+            // Enrich models with project names for backward compatibility
+            List<AutomationRuleEvaluatorModel<?>> enrichedModels = enrichWithProjectNames(models, workspaceId, handle);
+
+            return enrichedModels.stream()
                     .map(ruleEvaluator -> (AutomationRuleEvaluator<?, ?>) switch (ruleEvaluator) {
                         case LlmAsJudgeAutomationRuleEvaluatorModel llmAsJudge ->
                             AutomationModelEvaluatorMapper.INSTANCE.map(llmAsJudge);
@@ -444,10 +452,14 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
             var total = dao.findCount(workspaceId, searchCriteria.projectId(), criteria);
             var offset = (pageNum - 1) * size;
 
+            List<AutomationRuleEvaluatorModel<?>> models = dao.find(workspaceId, searchCriteria.projectId(), criteria,
+                    sortingFieldsSql, filtersSQL, filterMapping, offset, size);
+
+            // Enrich models with project names for backward compatibility
+            List<AutomationRuleEvaluatorModel<?>> enrichedModels = enrichWithProjectNames(models, workspaceId, handle);
+
             List<AutomationRuleEvaluator<?, ?>> automationRuleEvaluators = List.copyOf(
-                    dao.find(workspaceId, searchCriteria.projectId(), criteria, sortingFieldsSql, filtersSQL,
-                            filterMapping, offset, size)
-                            .stream()
+                    enrichedModels.stream()
                             .map(evaluator -> switch (evaluator) {
                                 case LlmAsJudgeAutomationRuleEvaluatorModel llmAsJudge ->
                                     AutomationModelEvaluatorMapper.INSTANCE.map(llmAsJudge);
@@ -511,7 +523,11 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
             var results = dao.find(workspaceId, projectId, criteria);
             log.debug("Found {} evaluators for projectId '{}', workspaceId '{}', type '{}'",
                     results.size(), projectId, workspaceId, type);
-            return results
+
+            // Enrich models with project names for backward compatibility
+            List<AutomationRuleEvaluatorModel<?>> enrichedModels = enrichWithProjectNames(results, workspaceId, handle);
+
+            return enrichedModels
                     .stream()
                     .map(evaluator -> switch (evaluator) {
                         case LlmAsJudgeAutomationRuleEvaluatorModel llmAsJudge ->
@@ -541,5 +557,90 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
                         .total(logs.size())
                         .size(logs.size())
                         .build());
+    }
+
+    /**
+     * Enriches a list of AutomationRuleEvaluatorModel with project names resolved from their projectId.
+     * This supports backwards compatibility by populating the legacy projectName field.
+     *
+     * @param models the models to enrich
+     * @param workspaceId the workspace ID for fetching projects
+     * @param handle the JDBI handle to use for database queries
+     * @return the enriched models with projectName populated
+     */
+    private List<AutomationRuleEvaluatorModel<?>> enrichWithProjectNames(
+            List<AutomationRuleEvaluatorModel<?>> models,
+            String workspaceId,
+            org.jdbi.v3.core.Handle handle) {
+
+        if (models.isEmpty()) {
+            return models;
+        }
+
+        // Extract unique project IDs from all models
+        Set<UUID> projectIds = models.stream()
+                .map(AutomationRuleEvaluatorModel::projectId)
+                .filter(java.util.Objects::nonNull)
+                .collect(java.util.stream.Collectors.toSet());
+
+        if (projectIds.isEmpty()) {
+            return models;
+        }
+
+        // Bulk fetch projects directly via SQL (ProjectDAO is package-private, so we query directly)
+        String sql = "SELECT id, name FROM projects WHERE workspace_id = :workspaceId AND id IN (<ids>)";
+
+        Map<UUID, String> projectNameMap = handle.createQuery(sql)
+                .bind("workspaceId", workspaceId)
+                .bindList("ids", projectIds)
+                .map((rs, ctx) -> Map.entry(
+                        UUID.fromString(rs.getString("id")),
+                        rs.getString("name")))
+                .stream()
+                .collect(java.util.stream.Collectors.toMap(
+                        Map.Entry::getKey,
+                        Map.Entry::getValue));
+
+        // Enrich each model with its project name
+        return models.stream()
+                .<AutomationRuleEvaluatorModel<?>>map(model -> enrichModelWithProjectName(model, projectNameMap))
+                .toList();
+    }
+
+    /**
+     * Enriches a single AutomationRuleEvaluatorModel with the project name.
+     *
+     * @param model the model to enrich
+     * @param projectNameMap map of projectId to projectName
+     * @return the enriched model
+     */
+    private AutomationRuleEvaluatorModel<?> enrichModelWithProjectName(
+            AutomationRuleEvaluatorModel<?> model,
+            Map<UUID, String> projectNameMap) {
+
+        UUID projectId = model.projectId();
+        if (projectId == null) {
+            return model;
+        }
+
+        String projectName = projectNameMap.get(projectId);
+        if (projectName == null) {
+            log.warn("Project name not found for projectId '{}' in rule '{}'", projectId, model.id());
+            return model;
+        }
+
+        // Use builder pattern to update the model with project name
+        return switch (model) {
+            case LlmAsJudgeAutomationRuleEvaluatorModel m -> m.toBuilder().projectName(projectName).build();
+            case UserDefinedMetricPythonAutomationRuleEvaluatorModel m ->
+                m.toBuilder().projectName(projectName).build();
+            case TraceThreadLlmAsJudgeAutomationRuleEvaluatorModel m ->
+                m.toBuilder().projectName(projectName).build();
+            case TraceThreadUserDefinedMetricPythonAutomationRuleEvaluatorModel m ->
+                m.toBuilder().projectName(projectName).build();
+            case SpanLlmAsJudgeAutomationRuleEvaluatorModel m -> m.toBuilder().projectName(projectName).build();
+            case SpanUserDefinedMetricPythonAutomationRuleEvaluatorModel m ->
+                m.toBuilder().projectName(projectName).build();
+        };
     }
 }

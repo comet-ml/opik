@@ -29,33 +29,27 @@ interface AutomationModelEvaluatorMapper {
 
     AutomationModelEvaluatorMapper INSTANCE = Mappers.getMapper(AutomationModelEvaluatorMapper.class);
 
-    @Mapping(target = "projectName", ignore = true) // Resolved by Service layer from projectId
     @Mapping(target = "code", expression = "java(map(model.code()))")
     @Mapping(target = "filters", expression = "java(mapFilters(model))")
     AutomationRuleEvaluatorLlmAsJudge map(LlmAsJudgeAutomationRuleEvaluatorModel model);
 
-    @Mapping(target = "projectName", ignore = true) // Resolved by Service layer from projectId
     @Mapping(target = "code", expression = "java(map(model.code()))")
     @Mapping(target = "filters", expression = "java(mapFilters(model))")
     AutomationRuleEvaluatorTraceThreadLlmAsJudge map(TraceThreadLlmAsJudgeAutomationRuleEvaluatorModel model);
 
-    @Mapping(target = "projectName", ignore = true) // Resolved by Service layer from projectId
     @Mapping(target = "code", expression = "java(map(model.code()))")
     @Mapping(target = "filters", expression = "java(mapFilters(model))")
     AutomationRuleEvaluatorUserDefinedMetricPython map(UserDefinedMetricPythonAutomationRuleEvaluatorModel model);
 
-    @Mapping(target = "projectName", ignore = true) // Resolved by Service layer from projectId
     @Mapping(target = "code", expression = "java(map(model.code()))")
     @Mapping(target = "filters", expression = "java(mapFilters(model))")
     AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython map(
             TraceThreadUserDefinedMetricPythonAutomationRuleEvaluatorModel model);
 
-    @Mapping(target = "projectName", ignore = true) // Resolved by Service layer from projectId
     @Mapping(target = "code", expression = "java(map(model.code()))")
     @Mapping(target = "filters", expression = "java(mapFilters(model))")
     AutomationRuleEvaluatorSpanLlmAsJudge map(SpanLlmAsJudgeAutomationRuleEvaluatorModel model);
 
-    @Mapping(target = "projectName", ignore = true) // Resolved by Service layer from projectId
     @Mapping(target = "code", expression = "java(map(model.code()))")
     @Mapping(target = "filters", expression = "java(mapFilters(model))")
     AutomationRuleEvaluatorSpanUserDefinedMetricPython map(

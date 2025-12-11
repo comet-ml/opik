@@ -15,6 +15,7 @@ import static com.comet.opik.domain.evaluators.SpanLlmAsJudgeAutomationRuleEvalu
 @Builder(toBuilder = true)
 public record SpanLlmAsJudgeAutomationRuleEvaluatorModel(
         UUID id,
+        String workspaceId, // Workspace ID for project lookups
         UUID projectId, // Legacy single project field for backwards compatibility
         String projectName, // Legacy project name field (resolved from projectId)
         Set<UUID> projectIds, // New multi-project field
