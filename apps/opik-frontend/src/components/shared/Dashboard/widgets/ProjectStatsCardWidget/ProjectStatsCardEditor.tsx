@@ -233,7 +233,7 @@ const ProjectStatsCardEditor = forwardRef<
               const validationErrors = get(formState.errors, ["projectId"]);
               return (
                 <FormItem>
-                  <FormLabel>Project</FormLabel>
+                  <FormLabel>Project (optional)</FormLabel>
                   <FormControl>
                     <ProjectsSelectBox
                       className={cn({
@@ -249,8 +249,8 @@ const ProjectStatsCardEditor = forwardRef<
                     />
                   </FormControl>
                   <Description>
-                    Pick the project that contains the data you want to
-                    visualize.
+                    Pick the project for this widget. If not set, the
+                    dashboard&apos;s default project will be used.
                   </Description>
                   <FormMessage />
                 </FormItem>

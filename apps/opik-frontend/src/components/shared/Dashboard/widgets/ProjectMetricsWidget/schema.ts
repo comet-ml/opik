@@ -14,11 +14,7 @@ export const ProjectMetricsWidgetSchema = z.object({
     })
     .min(1, { message: "Metric is required" }),
   chartType: z.enum(["line", "bar"]),
-  projectId: z
-    .string({
-      required_error: "Project is required",
-    })
-    .min(1, { message: "Project is required" }),
+  projectId: z.string().optional(),
   traceFilters: FiltersArraySchema.optional(),
   threadFilters: FiltersArraySchema.optional(),
 });

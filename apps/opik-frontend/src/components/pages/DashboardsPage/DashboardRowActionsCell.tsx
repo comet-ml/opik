@@ -12,7 +12,7 @@ import {
 import ConfirmDialog from "@/components/shared/ConfirmDialog/ConfirmDialog";
 import { Dashboard } from "@/types/dashboard";
 import useDashboardBatchDeleteMutation from "@/api/dashboards/useDashboardBatchDeleteMutation";
-import AddEditCloneDashboardDialog from "@/components/pages/DashboardsPage/AddEditCloneDashboardDialog";
+import AddEditCloneDashboardDialog from "@/components/pages-shared/dashboards/AddEditCloneDashboardDialog/AddEditCloneDashboardDialog";
 
 export const DashboardRowActionsCell: React.FunctionComponent<
   CellContext<Dashboard, unknown>

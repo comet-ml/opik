@@ -101,12 +101,11 @@ const ExperimentWidgetDataSection = <T extends FieldValues>({
           keyComponentProps: {
             placeholder: "key",
             excludeRoot: true,
-            filters,
           },
         },
       },
     }),
-    [filters],
+    [],
   );
 
   const setFilters = useCallback(

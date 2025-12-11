@@ -19,7 +19,7 @@ import useDashboardsList from "@/api/dashboards/useDashboardsList";
 import useQueryParamAndLocalStorageState from "@/hooks/useQueryParamAndLocalStorageState";
 import { Dashboard } from "@/types/dashboard";
 import Loader from "@/components/shared/Loader/Loader";
-import AddEditCloneDashboardDialog from "@/components/pages/DashboardsPage/AddEditCloneDashboardDialog";
+import AddEditCloneDashboardDialog from "@/components/pages-shared/dashboards/AddEditCloneDashboardDialog/AddEditCloneDashboardDialog";
 import { DashboardRowActionsCell } from "@/components/pages/DashboardsPage/DashboardRowActionsCell";
 import DashboardsActionsPanel from "@/components/pages/DashboardsPage/DashboardsActionsPanel";
 import { Button } from "@/components/ui/button";
