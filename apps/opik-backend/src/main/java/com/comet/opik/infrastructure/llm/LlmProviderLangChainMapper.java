@@ -8,11 +8,13 @@ import com.comet.opik.infrastructure.llm.openai.OpenAiErrorMessage;
 import com.comet.opik.infrastructure.llm.openrouter.OpenRouterErrorMessage;
 import com.comet.opik.utils.JsonUtils;
 import dev.langchain4j.data.message.AiMessage;
+import dev.langchain4j.data.message.AudioContent;
 import dev.langchain4j.data.message.ChatMessage;
 import dev.langchain4j.data.message.Content;
 import dev.langchain4j.data.message.ImageContent;
 import dev.langchain4j.data.message.TextContent;
 import dev.langchain4j.data.message.VideoContent;
+import dev.langchain4j.data.video.Video;
 import dev.langchain4j.model.chat.response.ChatResponse;
 import dev.langchain4j.model.chat.response.ChatResponseMetadata;
 import dev.langchain4j.model.openai.internal.chat.AssistantMessage;
@@ -34,13 +36,17 @@ import org.mapstruct.Mapping;
 import org.mapstruct.Named;
 import org.mapstruct.factory.Mappers;
 import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.UncheckedIOException;
+import java.net.URI;
 import java.util.List;
 import java.util.Optional;
 
 @Mapper
 public interface LlmProviderLangChainMapper {
+    Logger log = LoggerFactory.getLogger(LlmProviderLangChainMapper.class);
+
     String ERR_UNEXPECTED_ROLE = "unexpected role '%s'";
     String ERR_ROLE_MSG_TYPE_MISMATCH = "role and message instance are not matching, role: '%s', instance: '%s'";
 
@@ -121,9 +127,33 @@ public interface LlmProviderLangChainMapper {
             }
             case VIDEO_URL -> {
                 if (opikContent.videoUrl() != null) {
-                    yield VideoContent.from(opikContent.videoUrl().url());
+                    String videoUrl = opikContent.videoUrl().url();
+                    var videoBuilder = Video.builder()
+                            .url(URI.create(videoUrl));
+
+                    // Use explicit mimeType if provided
+                    String mimeType = opikContent.videoUrl().mimeType();
+
+                    // Only detect MIME type if not provided AND URL has no file extension
+                    // (LangChain4j can detect MIME type from extensions automatically)
+                    if (mimeType == null && !VideoMimeTypeUtils.hasVideoFileExtension(videoUrl)) {
+                        mimeType = VideoMimeTypeUtils.detectMimeTypeFromHttpHead(videoUrl);
+                    }
+
+                    if (mimeType != null) {
+                        videoBuilder.mimeType(mimeType);
+                        log.debug("Set mimeType '{}' for video URL: '{}'", mimeType,
+                                videoUrl.substring(0, Math.min(60, videoUrl.length())));
+                    }
+                    yield new VideoContent(videoBuilder.build());
                 }
                 throw new BadRequestException("Video URL is null");
+            }
+            case AUDIO_URL -> {
+                if (opikContent.audioUrl() != null) {
+                    yield AudioContent.from(opikContent.audioUrl().url());
+                }
+                throw new BadRequestException("Audio URL is null");
             }
             case AUDIO -> throw new BadRequestException("Audio content not yet supported in conversion");
             case FILE -> throw new BadRequestException("File content not yet supported in conversion");

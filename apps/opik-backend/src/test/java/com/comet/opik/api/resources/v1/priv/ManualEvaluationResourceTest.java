@@ -4,8 +4,11 @@ import com.comet.opik.api.FeedbackScore;
 import com.comet.opik.api.ManualEvaluationEntityType;
 import com.comet.opik.api.ManualEvaluationRequest;
 import com.comet.opik.api.ManualEvaluationResponse;
+import com.comet.opik.api.Span;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorLlmAsJudge;
+import com.comet.opik.api.evaluators.AutomationRuleEvaluatorSpanLlmAsJudge;
+import com.comet.opik.api.evaluators.AutomationRuleEvaluatorSpanUserDefinedMetricPython;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorTraceThreadLlmAsJudge;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython.TraceThreadUserDefinedMetricPythonCode;
@@ -22,6 +25,7 @@ import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.api.resources.utils.resources.AutomationRuleEvaluatorResourceClient;
 import com.comet.opik.api.resources.utils.resources.ManualEvaluationResourceClient;
 import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
+import com.comet.opik.api.resources.utils.resources.SpanResourceClient;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
 import com.comet.opik.domain.llm.LlmProviderFactory;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
@@ -120,7 +124,9 @@ class ManualEvaluationResourceTest {
                                 new CustomConfig("pythonEvaluator.url",
                                         wireMock.runtimeInfo().getHttpBaseUrl() + "/pythonBackendMock"),
                                 new CustomConfig("serviceToggles.pythonEvaluatorEnabled", "true"),
-                                new CustomConfig("serviceToggles.traceThreadPythonEvaluatorEnabled", "true")))
+                                new CustomConfig("serviceToggles.traceThreadPythonEvaluatorEnabled", "true"),
+                                new CustomConfig("serviceToggles.spanLlmAsJudgeEnabled", "true"),
+                                new CustomConfig("serviceToggles.spanUserDefinedMetricPythonEnabled", "true")))
                         .build());
     }
 
@@ -130,6 +136,7 @@ class ManualEvaluationResourceTest {
     private ClientSupport client;
     private ProjectResourceClient projectResourceClient;
     private TraceResourceClient traceResourceClient;
+    private SpanResourceClient spanResourceClient;
     private AutomationRuleEvaluatorResourceClient evaluatorResourceClient;
     private ManualEvaluationResourceClient manualEvaluationResourceClient;
 
@@ -144,6 +151,7 @@ class ManualEvaluationResourceTest {
 
         this.projectResourceClient = new ProjectResourceClient(client, baseURI, factory);
         this.traceResourceClient = new TraceResourceClient(client, baseURI);
+        this.spanResourceClient = new SpanResourceClient(client, baseURI);
         this.evaluatorResourceClient = new AutomationRuleEvaluatorResourceClient(client, baseURI);
         this.manualEvaluationResourceClient = new ManualEvaluationResourceClient(client, baseURI);
     }
@@ -156,7 +164,8 @@ class ManualEvaluationResourceTest {
     private static Stream<Arguments> entityTypeProvider() {
         return Stream.of(
                 arguments("traces", ManualEvaluationEntityType.TRACE),
-                arguments("threads", ManualEvaluationEntityType.THREAD));
+                arguments("threads", ManualEvaluationEntityType.THREAD),
+                arguments("spans", ManualEvaluationEntityType.SPAN));
     }
 
     @Nested
@@ -178,7 +187,7 @@ class ManualEvaluationResourceTest {
             var projectName = "project-" + RandomStringUtils.randomAlphanumeric(10);
             var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
 
-            // Create entity (trace or thread) based on endpoint
+            // Create entity (trace, thread, or span) based on endpoint
             UUID entityId;
             if ("traces".equals(endpoint)) {
                 var trace = factory.manufacturePojo(Trace.class).toBuilder()
@@ -187,18 +196,43 @@ class ManualEvaluationResourceTest {
                         .usage(null)
                         .build();
                 entityId = traceResourceClient.createTrace(trace, API_KEY, WORKSPACE_NAME);
-            } else {
+            } else if ("threads".equals(endpoint)) {
                 entityId = createThreadAndGetModelId(projectName);
+            } else {
+                // Create span
+                var trace = factory.manufacturePojo(Trace.class).toBuilder()
+                        .projectName(projectName)
+                        .feedbackScores(null)
+                        .usage(null)
+                        .build();
+                var traceId = traceResourceClient.createTrace(trace, API_KEY, WORKSPACE_NAME);
+                var span = factory.manufacturePojo(Span.class).toBuilder()
+                        .projectName(projectName)
+                        .traceId(traceId)
+                        .feedbackScores(null)
+                        .build();
+                entityId = spanResourceClient.createSpan(span, API_KEY, WORKSPACE_NAME);
             }
 
-            // Create rule
-            var rule = factory.manufacturePojo(AutomationRuleEvaluatorTraceThreadLlmAsJudge.class).toBuilder()
-                    .projectIds(Set.of(projectId))
-                    .samplingRate(1f)
-                    .enabled(true)
-                    .filters(List.of())
-                    .build();
-            var ruleId = evaluatorResourceClient.createEvaluator(rule, WORKSPACE_NAME, API_KEY);
+            // Create rule - use span-level rule for spans, trace-thread rule otherwise
+            UUID ruleId;
+            if ("spans".equals(endpoint)) {
+                var spanRule = factory.manufacturePojo(AutomationRuleEvaluatorSpanLlmAsJudge.class).toBuilder()
+                        .projectIds(Set.of(projectId))
+                        .samplingRate(1f)
+                        .enabled(true)
+                        .filters(List.of())
+                        .build();
+                ruleId = evaluatorResourceClient.createEvaluator(spanRule, WORKSPACE_NAME, API_KEY);
+            } else {
+                var rule = factory.manufacturePojo(AutomationRuleEvaluatorTraceThreadLlmAsJudge.class).toBuilder()
+                        .projectIds(Set.of(projectId))
+                        .samplingRate(1f)
+                        .enabled(true)
+                        .filters(List.of())
+                        .build();
+                ruleId = evaluatorResourceClient.createEvaluator(rule, WORKSPACE_NAME, API_KEY);
+            }
 
             var request = ManualEvaluationRequest.builder()
                     .projectId(projectId)
@@ -212,8 +246,11 @@ class ManualEvaluationResourceTest {
             if ("traces".equals(endpoint)) {
                 evaluationResponse = manualEvaluationResourceClient.evaluateTraces(projectId, request, API_KEY,
                         WORKSPACE_NAME);
-            } else {
+            } else if ("threads".equals(endpoint)) {
                 evaluationResponse = manualEvaluationResourceClient.evaluateThreads(projectId, request, API_KEY,
+                        WORKSPACE_NAME);
+            } else {
+                evaluationResponse = manualEvaluationResourceClient.evaluateSpans(projectId, request, API_KEY,
                         WORKSPACE_NAME);
             }
 
@@ -236,7 +273,7 @@ class ManualEvaluationResourceTest {
             var projectName = "project-" + RandomStringUtils.randomAlphanumeric(10);
             var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
 
-            // Create multiple entities (traces or threads) based on endpoint
+            // Create multiple entities (traces, threads, or spans) based on endpoint
             UUID entityId1;
             UUID entityId2;
             if ("traces".equals(endpoint)) {
@@ -252,30 +289,74 @@ class ManualEvaluationResourceTest {
                         .build();
                 entityId1 = traceResourceClient.createTrace(trace1, API_KEY, WORKSPACE_NAME);
                 entityId2 = traceResourceClient.createTrace(trace2, API_KEY, WORKSPACE_NAME);
-            } else {
+            } else if ("threads".equals(endpoint)) {
                 entityId1 = createThreadAndGetModelId(projectName);
                 entityId2 = createThreadAndGetModelId(projectName);
+            } else {
+                // Create spans
+                var trace = factory.manufacturePojo(Trace.class).toBuilder()
+                        .projectName(projectName)
+                        .feedbackScores(null)
+                        .usage(null)
+                        .build();
+                var traceId = traceResourceClient.createTrace(trace, API_KEY, WORKSPACE_NAME);
+                var span1 = factory.manufacturePojo(Span.class).toBuilder()
+                        .projectName(projectName)
+                        .traceId(traceId)
+                        .feedbackScores(null)
+                        .build();
+                var span2 = factory.manufacturePojo(Span.class).toBuilder()
+                        .projectName(projectName)
+                        .traceId(traceId)
+                        .feedbackScores(null)
+                        .build();
+                entityId1 = spanResourceClient.createSpan(span1, API_KEY, WORKSPACE_NAME);
+                entityId2 = spanResourceClient.createSpan(span2, API_KEY, WORKSPACE_NAME);
             }
 
-            // Create multiple rules
-            var rule1 = factory.manufacturePojo(AutomationRuleEvaluatorTraceThreadLlmAsJudge.class).toBuilder()
-                    .projectIds(Set.of(projectId))
-                    .samplingRate(1f)
-                    .enabled(true)
-                    .filters(List.of())
-                    .build();
-            var rule2 = factory.manufacturePojo(AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython.class)
-                    .toBuilder()
-                    .projectIds(Set.of(projectId))
-                    .samplingRate(1f)
-                    .enabled(true)
-                    .filters(List.of())
-                    .code(TraceThreadUserDefinedMetricPythonCode.builder()
-                            .metric("def score(): return 1.0")
-                            .build())
-                    .build();
-            var ruleId1 = evaluatorResourceClient.createEvaluator(rule1, WORKSPACE_NAME, API_KEY);
-            var ruleId2 = evaluatorResourceClient.createEvaluator(rule2, WORKSPACE_NAME, API_KEY);
+            // Create multiple rules - use span-level rules for spans, trace-thread rules otherwise
+            UUID ruleId1;
+            UUID ruleId2;
+            if ("spans".equals(endpoint)) {
+                var spanRule1 = factory.manufacturePojo(AutomationRuleEvaluatorSpanLlmAsJudge.class).toBuilder()
+                        .projectIds(Set.of(projectId))
+                        .samplingRate(1f)
+                        .enabled(true)
+                        .filters(List.of())
+                        .build();
+                var spanRule2 = factory.manufacturePojo(AutomationRuleEvaluatorSpanUserDefinedMetricPython.class)
+                        .toBuilder()
+                        .projectIds(Set.of(projectId))
+                        .samplingRate(1f)
+                        .enabled(true)
+                        .filters(List.of())
+                        .code(AutomationRuleEvaluatorSpanUserDefinedMetricPython.SpanUserDefinedMetricPythonCode
+                                .builder()
+                                .metric("def score(): return 1.0")
+                                .build())
+                        .build();
+                ruleId1 = evaluatorResourceClient.createEvaluator(spanRule1, WORKSPACE_NAME, API_KEY);
+                ruleId2 = evaluatorResourceClient.createEvaluator(spanRule2, WORKSPACE_NAME, API_KEY);
+            } else {
+                var rule1 = factory.manufacturePojo(AutomationRuleEvaluatorTraceThreadLlmAsJudge.class).toBuilder()
+                        .projectIds(Set.of(projectId))
+                        .samplingRate(1f)
+                        .enabled(true)
+                        .filters(List.of())
+                        .build();
+                var rule2 = factory.manufacturePojo(AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython.class)
+                        .toBuilder()
+                        .projectIds(Set.of(projectId))
+                        .samplingRate(1f)
+                        .enabled(true)
+                        .filters(List.of())
+                        .code(TraceThreadUserDefinedMetricPythonCode.builder()
+                                .metric("def score(): return 1.0")
+                                .build())
+                        .build();
+                ruleId1 = evaluatorResourceClient.createEvaluator(rule1, WORKSPACE_NAME, API_KEY);
+                ruleId2 = evaluatorResourceClient.createEvaluator(rule2, WORKSPACE_NAME, API_KEY);
+            }
 
             var request = ManualEvaluationRequest.builder()
                     .projectId(projectId)
@@ -289,8 +370,11 @@ class ManualEvaluationResourceTest {
             if ("traces".equals(endpoint)) {
                 evaluationResponse = manualEvaluationResourceClient.evaluateTraces(projectId, request, API_KEY,
                         WORKSPACE_NAME);
-            } else {
+            } else if ("threads".equals(endpoint)) {
                 evaluationResponse = manualEvaluationResourceClient.evaluateThreads(projectId, request, API_KEY,
+                        WORKSPACE_NAME);
+            } else {
+                evaluationResponse = manualEvaluationResourceClient.evaluateSpans(projectId, request, API_KEY,
                         WORKSPACE_NAME);
             }
 
@@ -327,8 +411,12 @@ class ManualEvaluationResourceTest {
             try (var response = "traces".equals(endpoint)
                     ? manualEvaluationResourceClient.evaluateTraces(projectId, request, API_KEY, WORKSPACE_NAME,
                             HttpStatus.SC_BAD_REQUEST)
-                    : manualEvaluationResourceClient.evaluateThreads(projectId, request, API_KEY, WORKSPACE_NAME,
-                            HttpStatus.SC_BAD_REQUEST)) {
+                    : "threads".equals(endpoint)
+                            ? manualEvaluationResourceClient.evaluateThreads(projectId, request, API_KEY,
+                                    WORKSPACE_NAME,
+                                    HttpStatus.SC_BAD_REQUEST)
+                            : manualEvaluationResourceClient.evaluateSpans(projectId, request, API_KEY, WORKSPACE_NAME,
+                                    HttpStatus.SC_BAD_REQUEST)) {
 
                 // Then
                 var errorMessage = response.readEntity(ErrorMessage.class);
@@ -357,8 +445,12 @@ class ManualEvaluationResourceTest {
             try (var response = "traces".equals(endpoint)
                     ? manualEvaluationResourceClient.evaluateTraces(projectId, request, API_KEY, WORKSPACE_NAME,
                             HttpStatus.SC_UNPROCESSABLE_ENTITY)
-                    : manualEvaluationResourceClient.evaluateThreads(projectId, request, API_KEY, WORKSPACE_NAME,
-                            HttpStatus.SC_UNPROCESSABLE_ENTITY)) {
+                    : "threads".equals(endpoint)
+                            ? manualEvaluationResourceClient.evaluateThreads(projectId, request, API_KEY,
+                                    WORKSPACE_NAME,
+                                    HttpStatus.SC_UNPROCESSABLE_ENTITY)
+                            : manualEvaluationResourceClient.evaluateSpans(projectId, request, API_KEY, WORKSPACE_NAME,
+                                    HttpStatus.SC_UNPROCESSABLE_ENTITY)) {
                 // Just verify the response status was asserted in the client
             }
         }
@@ -381,8 +473,11 @@ class ManualEvaluationResourceTest {
             try (var response = "traces".equals(endpoint)
                     ? manualEvaluationResourceClient.callEvaluateTraces(nonExistentProjectId, request, API_KEY,
                             WORKSPACE_NAME)
-                    : manualEvaluationResourceClient.callEvaluateThreads(nonExistentProjectId, request, API_KEY,
-                            WORKSPACE_NAME)) {
+                    : "threads".equals(endpoint)
+                            ? manualEvaluationResourceClient.callEvaluateThreads(nonExistentProjectId, request, API_KEY,
+                                    WORKSPACE_NAME)
+                            : manualEvaluationResourceClient.callEvaluateSpans(nonExistentProjectId, request, API_KEY,
+                                    WORKSPACE_NAME)) {
 
                 // Then - Either 404 or 400 depending on whether rules are validated first
                 assertThat(response.getStatus()).isIn(HttpStatus.SC_BAD_REQUEST, HttpStatus.SC_NOT_FOUND);

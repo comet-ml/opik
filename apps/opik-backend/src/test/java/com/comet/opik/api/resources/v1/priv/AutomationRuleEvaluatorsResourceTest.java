@@ -7,12 +7,14 @@ import com.comet.opik.api.TraceThread;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluator;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorLlmAsJudge;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorSpanLlmAsJudge;
+import com.comet.opik.api.evaluators.AutomationRuleEvaluatorSpanUserDefinedMetricPython;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorTraceThreadLlmAsJudge;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython.TraceThreadUserDefinedMetricPythonCode;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorUpdate;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorUpdateLlmAsJudge;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorUpdateSpanLlmAsJudge;
+import com.comet.opik.api.evaluators.AutomationRuleEvaluatorUpdateSpanUserDefinedMetricPython;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorUpdateTraceThreadLlmAsJudge;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorUpdateTraceThreadUserDefinedMetricPython;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorUpdateUserDefinedMetricPython;
@@ -653,7 +655,9 @@ class AutomationRuleEvaluatorsResourceTest {
                     arguments(factory.manufacturePojo(AutomationRuleEvaluatorTraceThreadLlmAsJudge.class), true),
                     arguments(factory.manufacturePojo(AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython.class),
                             false),
-                    arguments(factory.manufacturePojo(AutomationRuleEvaluatorSpanLlmAsJudge.class), true));
+                    arguments(factory.manufacturePojo(AutomationRuleEvaluatorSpanLlmAsJudge.class), true),
+                    arguments(factory.manufacturePojo(AutomationRuleEvaluatorSpanUserDefinedMetricPython.class),
+                            false));
         }
 
         @ParameterizedTest
@@ -695,7 +699,8 @@ class AutomationRuleEvaluatorsResourceTest {
                     AutomationRuleEvaluatorUserDefinedMetricPython.class,
                     AutomationRuleEvaluatorTraceThreadLlmAsJudge.class,
                     AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython.class,
-                    AutomationRuleEvaluatorSpanLlmAsJudge.class);
+                    AutomationRuleEvaluatorSpanLlmAsJudge.class,
+                    AutomationRuleEvaluatorSpanUserDefinedMetricPython.class);
         }
 
         @ParameterizedTest
@@ -761,7 +766,8 @@ class AutomationRuleEvaluatorsResourceTest {
                     arguments(AutomationRuleEvaluatorUserDefinedMetricPython.class, false),
                     arguments(AutomationRuleEvaluatorTraceThreadLlmAsJudge.class, true),
                     arguments(AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython.class, false),
-                    arguments(AutomationRuleEvaluatorSpanLlmAsJudge.class, true));
+                    arguments(AutomationRuleEvaluatorSpanLlmAsJudge.class, true),
+                    arguments(AutomationRuleEvaluatorSpanUserDefinedMetricPython.class, false));
         }
 
         @ParameterizedTest
@@ -821,7 +827,10 @@ class AutomationRuleEvaluatorsResourceTest {
                                     AutomationRuleEvaluatorUpdateTraceThreadUserDefinedMetricPython.class)),
                     arguments(
                             factory.manufacturePojo(AutomationRuleEvaluatorSpanLlmAsJudge.class),
-                            factory.manufacturePojo(AutomationRuleEvaluatorUpdateSpanLlmAsJudge.class)));
+                            factory.manufacturePojo(AutomationRuleEvaluatorUpdateSpanLlmAsJudge.class)),
+                    arguments(
+                            factory.manufacturePojo(AutomationRuleEvaluatorSpanUserDefinedMetricPython.class),
+                            factory.manufacturePojo(AutomationRuleEvaluatorUpdateSpanUserDefinedMetricPython.class)));
         }
 
         @ParameterizedTest
@@ -921,8 +930,9 @@ class AutomationRuleEvaluatorsResourceTest {
             var id3 = createGetAndAssertId(AutomationRuleEvaluatorTraceThreadLlmAsJudge.class, projectId);
             var id4 = createGetAndAssertId(AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython.class, projectId);
             var id5 = createGetAndAssertId(AutomationRuleEvaluatorSpanLlmAsJudge.class, projectId);
-            var id6 = createGetAndAssertId(AutomationRuleEvaluatorLlmAsJudge.class, projectId);
-            var id7 = createGetAndAssertId(AutomationRuleEvaluatorUserDefinedMetricPython.class, projectId);
+            var id6 = createGetAndAssertId(AutomationRuleEvaluatorSpanUserDefinedMetricPython.class, projectId);
+            var id7 = createGetAndAssertId(AutomationRuleEvaluatorLlmAsJudge.class, projectId);
+            var id8 = createGetAndAssertId(AutomationRuleEvaluatorUserDefinedMetricPython.class, projectId);
 
             var batchDelete = BatchDelete.builder().ids(Set.of(id1, id2)).build();
             try (var actualResponse = evaluatorsResourceClient.delete(
@@ -945,15 +955,15 @@ class AutomationRuleEvaluatorsResourceTest {
 
                 var actualEntity = actualResponse.readEntity(AutomationRuleEvaluator.AutomationRuleEvaluatorPage.class);
                 assertThat(actualEntity.page()).isEqualTo(1);
-                assertThat(actualEntity.size()).isEqualTo(5);
-                assertThat(actualEntity.total()).isEqualTo(5);
+                assertThat(actualEntity.size()).isEqualTo(6);
+                assertThat(actualEntity.total()).isEqualTo(6);
 
                 var actualAutomationRuleEvaluators = actualEntity.content();
-                assertThat(actualAutomationRuleEvaluators).hasSize(5);
+                assertThat(actualAutomationRuleEvaluators).hasSize(6);
                 var actualIds = actualAutomationRuleEvaluators.stream()
                         .map(AutomationRuleEvaluator::getId)
                         .collect(Collectors.toSet());
-                assertThat(actualIds).containsExactlyInAnyOrder(id3, id4, id5, id6, id7);
+                assertThat(actualIds).containsExactlyInAnyOrder(id3, id4, id5, id6, id7, id8);
             }
         }
     }

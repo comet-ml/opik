@@ -72,7 +72,7 @@ const RunEvaluationDialog: React.FunctionComponent<
   // Filter rules based on entity type
   // Trace rules: llm_as_judge, user_defined_metric_python
   // Thread rules: trace_thread_llm_as_judge, trace_thread_user_defined_metric_python
-  // Span rules: span_llm_as_judge (Python code not supported for spans)
+  // Span rules: span_llm_as_judge, span_user_defined_metric_python
   const rules = useMemo(() => {
     const allRules = data?.content || [];
 
@@ -90,7 +90,9 @@ const RunEvaluationDialog: React.FunctionComponent<
       );
     } else if (entityType === "span") {
       return allRules.filter(
-        (rule) => rule.type === EVALUATORS_RULE_TYPE.span_llm_judge,
+        (rule) =>
+          rule.type === EVALUATORS_RULE_TYPE.span_llm_judge ||
+          rule.type === EVALUATORS_RULE_TYPE.span_python_code,
       );
     } else {
       throw new Error(`Unknown entity type: ${entityType}`);
@@ -291,8 +293,18 @@ const RunEvaluationDialog: React.FunctionComponent<
     );
   };
 
-  const entityLabel = entityType === "trace" ? "traces" : "threads";
-  const capitalizedEntityLabel = entityType === "trace" ? "Traces" : "Threads";
+  const entityLabel =
+    entityType === "trace"
+      ? "traces"
+      : entityType === "thread"
+        ? "threads"
+        : "spans";
+  const capitalizedEntityLabel =
+    entityType === "trace"
+      ? "Traces"
+      : entityType === "thread"
+        ? "Threads"
+        : "Spans";
   const isRunDisabled =
     selectedRuleIds.size === 0 || manualEvaluationMutation.isPending;
 

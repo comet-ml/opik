@@ -35,6 +35,7 @@ import java.util.stream.Collectors;
 @RegisterConstructorMapper(TraceThreadLlmAsJudgeAutomationRuleEvaluatorModel.class)
 @RegisterConstructorMapper(TraceThreadUserDefinedMetricPythonAutomationRuleEvaluatorModel.class)
 @RegisterConstructorMapper(SpanLlmAsJudgeAutomationRuleEvaluatorModel.class)
+@RegisterConstructorMapper(SpanUserDefinedMetricPythonAutomationRuleEvaluatorModel.class)
 @RegisterRowMapper(AutomationRuleEvaluatorRowMapper.class)
 @RegisterRowMapper(AutomationRuleEvaluatorWithProjectRowMapper.class)
 public interface AutomationRuleEvaluatorDAO extends AutomationRuleDAO {
@@ -189,6 +190,8 @@ public interface AutomationRuleEvaluatorDAO extends AutomationRuleDAO {
             case TraceThreadUserDefinedMetricPythonAutomationRuleEvaluatorModel m ->
                 m.toBuilder().projectIds(projectIds).build();
             case SpanLlmAsJudgeAutomationRuleEvaluatorModel m -> m.toBuilder().projectIds(projectIds).build();
+            case SpanUserDefinedMetricPythonAutomationRuleEvaluatorModel m ->
+                m.toBuilder().projectIds(projectIds).build();
         };
     }
 

@@ -4,6 +4,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.commons.lang3.RandomUtils;
 import org.awaitility.Awaitility;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -172,6 +173,7 @@ class TemplateUtilsTest {
 
         @ParameterizedTest(name = "{0}")
         @MethodSource
+        @Disabled("This is a non functional test for template memory leak investigation, no need to run in CI")
         void verifyMemory(
                 String testName,
                 Function<String, ST> templateFactory,

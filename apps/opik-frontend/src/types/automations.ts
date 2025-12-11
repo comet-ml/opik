@@ -8,6 +8,7 @@ export enum EVALUATORS_RULE_TYPE {
   thread_llm_judge = "trace_thread_llm_as_judge",
   thread_python_code = "trace_thread_user_defined_metric_python",
   span_llm_judge = "span_llm_as_judge",
+  span_python_code = "span_user_defined_metric_python",
 }
 
 export enum EVALUATORS_RULE_SCOPE {
@@ -53,14 +54,22 @@ export interface PythonCodeDetailsThreadForm {
   metric: string;
 }
 
+export interface PythonCodeDetailsSpanForm {
+  metric: string;
+  arguments: Record<string, string>;
+  parsingArgumentsError?: boolean;
+}
+
 export type PythonCodeObject =
   | PythonCodeDetailsTraceForm
-  | PythonCodeDetailsThreadForm;
+  | PythonCodeDetailsThreadForm
+  | PythonCodeDetailsSpanForm;
 
 export interface PythonCodeDetails {
   type:
     | EVALUATORS_RULE_TYPE.python_code
-    | EVALUATORS_RULE_TYPE.thread_python_code;
+    | EVALUATORS_RULE_TYPE.thread_python_code
+    | EVALUATORS_RULE_TYPE.span_python_code;
   code: PythonCodeObject;
 }
 

@@ -159,6 +159,10 @@ const LLMJudgeBaseSchema = z.object({
                 type: z.literal("video_url"),
                 video_url: z.object({ url: z.string() }),
               }),
+              z.object({
+                type: z.literal("audio_url"),
+                audio_url: z.object({ url: z.string() }),
+              }),
             ]),
           )
           .min(1, { message: "Message is required" }),
@@ -362,6 +366,19 @@ export const PythonCodeDetailsTraceFormSchema = BasePythonCodeFormSchema.extend(
 
 export const PythonCodeDetailsThreadFormSchema = BasePythonCodeFormSchema;
 
+export const PythonCodeDetailsSpanFormSchema = BasePythonCodeFormSchema.extend({
+  arguments: z.record(
+    z.string(),
+    z
+      .string()
+      .min(1, { message: "Key is required" })
+      .regex(/^(input|output|metadata)/, {
+        message: `Key is invalid, it should begin with "input", "output", or "metadata" and follow this format: "input.[PATH]" For example: "input.message"`,
+      }),
+  ),
+  parsingArgumentsError: z.boolean().optional(),
+});
+
 export const BaseEvaluationRuleFormSchema = z.object({
   ruleName: RuleNameSchema,
   projectIds: ProjectIdsSchema,
@@ -402,12 +419,19 @@ export const PythonCodeThreadEvaluationRuleFormSchema =
     pythonCodeDetails: PythonCodeDetailsThreadFormSchema,
   });
 
+export const PythonCodeSpanEvaluationRuleFormSchema =
+  BaseEvaluationRuleFormSchema.extend({
+    type: z.literal(EVALUATORS_RULE_TYPE.span_python_code),
+    pythonCodeDetails: PythonCodeDetailsSpanFormSchema,
+  });
+
 export const EvaluationRuleFormSchema = z.discriminatedUnion("type", [
   LLMJudgeTraceEvaluationRuleFormSchema,
   LLMJudgeThreadEvaluationRuleFormSchema,
   LLMJudgeSpanEvaluationRuleFormSchema,
   PythonCodeTraceEvaluationRuleFormSchema,
   PythonCodeThreadEvaluationRuleFormSchema,
+  PythonCodeSpanEvaluationRuleFormSchema,
 ]);
 
 export type LLMJudgeDetailsTraceFormType = z.infer<
