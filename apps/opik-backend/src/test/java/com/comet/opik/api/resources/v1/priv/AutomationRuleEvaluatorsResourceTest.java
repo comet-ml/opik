@@ -737,6 +737,7 @@ class AutomationRuleEvaluatorsResourceTest {
                         var id = evaluatorsResourceClient.createEvaluator(evaluator, WORKSPACE_NAME, API_KEY);
                         return (AutomationRuleEvaluator<?, ?>) evaluator.toBuilder()
                                 .id(id)
+                                .projectId(unexpectedProjectId) // Set legacy projectId field for backward compatibility
                                 .createdBy(USER)
                                 .lastUpdatedBy(USER)
                                 .build();
@@ -789,6 +790,7 @@ class AutomationRuleEvaluatorsResourceTest {
                         var id = evaluatorsResourceClient.createEvaluator(evaluator, WORKSPACE_NAME, API_KEY);
                         return (AutomationRuleEvaluator<?, ?>) evaluator.toBuilder()
                                 .id(id)
+                                .projectId(projectId) // Set legacy projectId field for backward compatibility
                                 .createdBy(USER)
                                 .lastUpdatedBy(USER)
                                 .build();
