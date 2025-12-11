@@ -27,12 +27,13 @@ public final class AutomationRuleEvaluatorUpdateTraceThreadUserDefinedMetricPyth
         extends
             AutomationRuleEvaluatorUpdate<TraceThreadUserDefinedMetricPythonCode, TraceThreadFilter> {
 
-    @ConstructorProperties({"name", "samplingRate", "enabled", "filters", "code", "projectIds"})
+    @ConstructorProperties({"name", "samplingRate", "enabled", "filters", "code", "projectId", "projectIds"})
     public AutomationRuleEvaluatorUpdateTraceThreadUserDefinedMetricPython(
             @NotBlank String name, float samplingRate, boolean enabled, List<TraceThreadFilter> filters,
             @NotNull TraceThreadUserDefinedMetricPythonCode code,
-            @NotNull Set<UUID> projectIds) {
-        super(name, samplingRate, enabled, filters, code, projectIds);
+            UUID projectId,
+            Set<UUID> projectIds) {
+        super(name, samplingRate, enabled, filters, code, projectId, projectIds);
     }
 
     /**

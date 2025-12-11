@@ -62,7 +62,16 @@ public abstract sealed class AutomationRuleEvaluatorUpdate<T, E extends Filter> 
     @JsonIgnore
     @NotNull private final T code;
 
-    @NotNull private final Set<UUID> projectIds;
+    // Dual-field backwards compatible architecture:
+    // - project_id: Legacy single project field (nullable for backwards compatibility)
+    // - project_ids: New multi-project field (required for new rules)
+    // Service layer keeps both fields in sync for seamless migration
+
+    @Schema(description = "Primary project ID (legacy field, maintained for backwards compatibility)")
+    private final UUID projectId;
+
+    @Schema(description = "Multiple project IDs (new field for multi-project support)")
+    private final Set<UUID> projectIds;
 
     public abstract AutomationRuleEvaluatorType getType();
 

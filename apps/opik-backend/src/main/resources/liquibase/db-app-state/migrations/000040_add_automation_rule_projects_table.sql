@@ -1,10 +1,10 @@
 --liquibase formatted sql
---changeset JetoPistola:000038_add_automation_rule_projects_table
---comment: Add automation_rule_projects junction table to support multiple projects per automation rule
+--changeset JetoPistola:000040_add_automation_rule_projects_table
+--comment: Add automation_rule_projects junction table for multi-project support (dual-field backwards compatible architecture)
 
 -- Create junction table for many-to-many relationship between automation rules and projects
--- Note: Foreign key constraints removed for test flexibility
--- TODO: Consider adding back FK constraints for production data integrity
+-- This table enables assigning a single rule to multiple projects
+-- The existing project_id column in automation_rules is kept for backwards compatibility
 CREATE TABLE IF NOT EXISTS automation_rule_projects (
     rule_id CHAR(36) NOT NULL,
     project_id CHAR(36) NOT NULL,
@@ -16,22 +16,10 @@ CREATE TABLE IF NOT EXISTS automation_rule_projects (
     INDEX `automation_rule_projects_rule_idx` (rule_id)
 );
 
--- Migrate existing data from automation_rules.project_id to junction table
-INSERT INTO automation_rule_projects (rule_id, project_id, workspace_id)
-SELECT id, project_id, workspace_id 
-FROM automation_rules;
-
--- Drop old index that included project_id
-DROP INDEX `automation_rules_idx` ON automation_rules;
-
--- Drop project_id column from automation_rules
-ALTER TABLE automation_rules DROP COLUMN project_id;
-
--- Create new index without project_id
-CREATE INDEX `automation_rules_workspace_idx` ON automation_rules(workspace_id, id);
+-- Note: No data migration performed - using lazy migration strategy
+-- Existing rules will continue using project_id field (legacy)
+-- New rules will use both project_id (primary) and junction table (multi-project support)
+-- When a rule is updated, it will be migrated from project_id to junction table automatically
 
 --rollback DROP TABLE IF EXISTS automation_rule_projects;
---rollback ALTER TABLE automation_rules ADD COLUMN project_id CHAR(36) NOT NULL AFTER id;
---rollback CREATE INDEX `automation_rules_idx` ON automation_rules(workspace_id, project_id, id);
---rollback DROP INDEX `automation_rules_workspace_idx` ON automation_rules;
 

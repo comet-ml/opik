@@ -27,12 +27,13 @@ public final class AutomationRuleEvaluatorUpdateSpanLlmAsJudge
         extends
             AutomationRuleEvaluatorUpdate<SpanLlmAsJudgeCode, SpanFilter> {
 
-    @ConstructorProperties({"name", "samplingRate", "enabled", "filters", "code", "projectIds"})
+    @ConstructorProperties({"name", "samplingRate", "enabled", "filters", "code", "projectId", "projectIds"})
     public AutomationRuleEvaluatorUpdateSpanLlmAsJudge(
             @NotBlank String name, float samplingRate, boolean enabled, List<SpanFilter> filters,
             @NotNull SpanLlmAsJudgeCode code,
-            @NotNull Set<UUID> projectIds) {
-        super(name, samplingRate, enabled, filters, code, projectIds);
+            UUID projectId,
+            Set<UUID> projectIds) {
+        super(name, samplingRate, enabled, filters, code, projectId, projectIds);
     }
 
     /**

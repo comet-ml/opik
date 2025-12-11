@@ -27,12 +27,13 @@ public final class AutomationRuleEvaluatorUpdateSpanUserDefinedMetricPython
         extends
             AutomationRuleEvaluatorUpdate<SpanUserDefinedMetricPythonCode, SpanFilter> {
 
-    @ConstructorProperties({"name", "samplingRate", "enabled", "filters", "code", "projectIds"})
+    @ConstructorProperties({"name", "samplingRate", "enabled", "filters", "code", "projectId", "projectIds"})
     public AutomationRuleEvaluatorUpdateSpanUserDefinedMetricPython(
             @NotBlank String name, float samplingRate, boolean enabled, List<SpanFilter> filters,
             @NotNull SpanUserDefinedMetricPythonCode code,
-            @NotNull Set<UUID> projectIds) {
-        super(name, samplingRate, enabled, filters, code, projectIds);
+            UUID projectId,
+            Set<UUID> projectIds) {
+        super(name, samplingRate, enabled, filters, code, projectId, projectIds);
     }
 
     /**
