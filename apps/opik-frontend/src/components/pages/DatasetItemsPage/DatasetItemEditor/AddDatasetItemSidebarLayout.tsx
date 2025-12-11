@@ -2,7 +2,7 @@ import React, { useCallback } from "react";
 import ResizableSidePanel from "@/components/shared/ResizableSidePanel/ResizableSidePanel";
 import { Button } from "@/components/ui/button";
 import Loader from "@/components/shared/Loader/Loader";
-import { useDatasetItemEditorContext } from "./DatasetItemEditorContext";
+import { useAddDatasetItemContext } from "./AddDatasetItemContext";
 import DatasetItemEditorForm from "./DatasetItemEditorForm";
 
 interface AddDatasetItemSidebarLayoutProps {
@@ -15,16 +15,14 @@ const AddDatasetItemSidebarLayout: React.FC<
 > = ({ isOpen, onClose }) => {
   const {
     isPending,
-    isEditing,
     isSubmitting,
     handleDiscard,
     requestConfirmIfNeeded,
     fields,
     handleSave,
     setHasUnsavedChanges,
-    resetKey,
     formId,
-  } = useDatasetItemEditorContext();
+  } = useAddDatasetItemContext();
 
   const handleCloseWithConfirm = useCallback(() => {
     requestConfirmIfNeeded(onClose);
@@ -66,10 +64,8 @@ const AddDatasetItemSidebarLayout: React.FC<
           <DatasetItemEditorForm
             formId={formId}
             fields={fields}
-            isEditing={isEditing}
             onSubmit={handleSave}
             setHasUnsavedChanges={setHasUnsavedChanges}
-            resetKey={resetKey}
           />
         </div>
       )}

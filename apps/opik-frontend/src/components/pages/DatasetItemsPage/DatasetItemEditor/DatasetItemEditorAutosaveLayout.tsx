@@ -1,5 +1,5 @@
 import React, { useCallback, useMemo } from "react";
-import { Copy, MoreHorizontal, Pencil, Share, Trash } from "lucide-react";
+import { Copy, MoreHorizontal, Share, Trash, Loader2 } from "lucide-react";
 import copy from "clipboard-copy";
 import ResizableSidePanel from "@/components/shared/ResizableSidePanel/ResizableSidePanel";
 import { Button } from "@/components/ui/button";
@@ -16,10 +16,10 @@ import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import TagListRenderer from "@/components/shared/TagListRenderer/TagListRenderer";
 import { processInputData } from "@/lib/images";
 import ImagesListWrapper from "@/components/pages-shared/attachments/ImagesListWrapper/ImagesListWrapper";
-import { useDatasetItemEditorContext } from "./DatasetItemEditorContext";
+import { useDatasetItemEditorAutosaveContext } from "./DatasetItemEditorAutosaveContext";
 import DatasetItemEditorForm from "./DatasetItemEditorForm";
 
-interface DatasetItemEditorLayoutProps {
+interface DatasetItemEditorAutosaveLayoutProps {
   datasetItemId: string;
   isOpen: boolean;
   onClose: () => void;
@@ -71,31 +71,51 @@ const DatasetItemEditorActionsPanel: React.FC<
   );
 };
 
-const DatasetItemEditorLayout: React.FC<DatasetItemEditorLayoutProps> = ({
-  datasetItemId,
-  isOpen,
-  onClose,
-}) => {
+const AutosaveIndicator: React.FC<{
+  isAutoSaving: boolean;
+  lastSavedAt: Date | null;
+  hasError: boolean;
+}> = ({ isAutoSaving, lastSavedAt, hasError }) => {
+  if (hasError) {
+    return <div className="text-xs text-destructive">Failed to save</div>;
+  }
+
+  if (isAutoSaving) {
+    return (
+      <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+        <Loader2 className="size-3 animate-spin" />
+        <span>Saving...</span>
+      </div>
+    );
+  }
+
+  if (lastSavedAt) {
+    return <div className="text-xs text-muted-foreground">Saved</div>;
+  }
+
+  return null;
+};
+
+const DatasetItemEditorAutosaveLayout: React.FC<
+  DatasetItemEditorAutosaveLayoutProps
+> = ({ datasetItemId, isOpen, onClose }) => {
   const {
     isPending,
-    isEditing,
-    hasUnsavedChanges,
-    isSubmitting,
-    handleEdit,
-    handleDiscard,
+    isAutoSaving,
+    lastSavedAt,
+    hasError,
+    handleFieldChange,
     handleDelete,
-    requestConfirmIfNeeded,
-    horizontalNavigation,
     tags,
     handleAddTag,
     handleDeleteTag,
     fields,
-    handleSave,
     formId,
-    setHasUnsavedChanges,
-    resetKey,
+    horizontalNavigation,
     datasetItem,
-  } = useDatasetItemEditorContext();
+    flushPendingSave,
+    resetSaveState,
+  } = useDatasetItemEditorAutosaveContext();
 
   const { toast } = useToast();
 
@@ -105,10 +125,6 @@ const DatasetItemEditorLayout: React.FC<DatasetItemEditorLayoutProps> = ({
   );
 
   const hasMedia = media.length > 0;
-
-  const handleCloseWithConfirm = useCallback(() => {
-    requestConfirmIfNeeded(onClose);
-  }, [requestConfirmIfNeeded, onClose]);
 
   const handleShare = useCallback(() => {
     toast({
@@ -128,6 +144,12 @@ const DatasetItemEditorLayout: React.FC<DatasetItemEditorLayoutProps> = ({
     handleDelete(onClose);
   }, [handleDelete, onClose]);
 
+  const handleClose = useCallback(() => {
+    flushPendingSave();
+    resetSaveState();
+    onClose();
+  }, [flushPendingSave, resetSaveState, onClose]);
+
   return (
     <ResizableSidePanel
       panelId="dataset-item-editor"
@@ -141,7 +163,7 @@ const DatasetItemEditorLayout: React.FC<DatasetItemEditorLayoutProps> = ({
           onDelete={handleDeleteItemConfirm}
         />
       }
-      onClose={handleCloseWithConfirm}
+      onClose={handleClose}
       horizontalNavigation={horizontalNavigation}
     >
       {isPending ? (
@@ -154,36 +176,17 @@ const DatasetItemEditorLayout: React.FC<DatasetItemEditorLayoutProps> = ({
             <div className="flex items-center justify-between gap-2">
               <TooltipWrapper content={datasetItemId}>
                 <div className="comet-body-accented">
-                  {isEditing ? "Edit dataset item" : "Dataset item"}{" "}
+                  Dataset item{" "}
                   <span className="comet-body-s text-muted-slate">
                     {truncateId(datasetItemId)}
                   </span>
                 </div>
               </TooltipWrapper>
-              <div className="flex items-center gap-2">
-                {!isEditing && (
-                  <Button variant="outline" size="sm" onClick={handleEdit}>
-                    <Pencil className="mr-2 size-4" />
-                    Edit
-                  </Button>
-                )}
-                {isEditing && (
-                  <>
-                    <Button
-                      type="submit"
-                      form={formId}
-                      variant="default"
-                      size="sm"
-                      disabled={!hasUnsavedChanges || isSubmitting}
-                    >
-                      {isSubmitting ? "Saving..." : "Save changes"}
-                    </Button>
-                    <Button variant="outline" size="sm" onClick={handleDiscard}>
-                      Cancel
-                    </Button>
-                  </>
-                )}
-              </div>
+              <AutosaveIndicator
+                isAutoSaving={isAutoSaving}
+                lastSavedAt={lastSavedAt}
+                hasError={hasError}
+              />
             </div>
             <TagListRenderer
               tags={tags}
@@ -193,7 +196,7 @@ const DatasetItemEditorLayout: React.FC<DatasetItemEditorLayoutProps> = ({
               align="start"
             />
           </div>
-          {!isEditing && hasMedia && (
+          {hasMedia && (
             <div className="border-b px-6 py-4">
               <div className="mb-2 text-sm font-medium">Media</div>
               <ImagesListWrapper media={media} />
@@ -204,10 +207,7 @@ const DatasetItemEditorLayout: React.FC<DatasetItemEditorLayoutProps> = ({
               key={datasetItemId}
               formId={formId}
               fields={fields}
-              isEditing={isEditing}
-              onSubmit={handleSave}
-              setHasUnsavedChanges={setHasUnsavedChanges}
-              resetKey={resetKey}
+              onFieldChange={handleFieldChange}
             />
           </div>
         </div>
@@ -216,4 +216,4 @@ const DatasetItemEditorLayout: React.FC<DatasetItemEditorLayoutProps> = ({
   );
 };
 
-export default DatasetItemEditorLayout;
+export default DatasetItemEditorAutosaveLayout;

@@ -7,6 +7,7 @@ interface UseDatasetItemNavigationParams {
   rows: DatasetItem[];
   setActiveRowId: (id: string) => void;
   checkUnsavedChanges?: (action: () => void) => void;
+  onBeforeNavigate?: () => void;
 }
 
 interface HorizontalNavigationConfig {
@@ -24,6 +25,7 @@ export const useDatasetItemNavigation = ({
   rows,
   setActiveRowId,
   checkUnsavedChanges,
+  onBeforeNavigate,
 }: UseDatasetItemNavigationParams): UseDatasetItemNavigationReturn => {
   const rowIndex = useMemo(
     () => findIndex(rows, (row) => activeRowId === row.id),
@@ -42,15 +44,15 @@ export const useDatasetItemNavigation = ({
 
   const handleNavigate = useCallback(
     (shift: 1 | -1) => {
+      onBeforeNavigate?.();
+
       if (checkUnsavedChanges) {
-        // For modes with confirmation (create mode), check before navigating
         checkUnsavedChanges(() => handleRowChange(shift));
       } else {
-        // For auto-save mode, navigate immediately (auto-save happens in background)
         handleRowChange(shift);
       }
     },
-    [checkUnsavedChanges, handleRowChange],
+    [checkUnsavedChanges, handleRowChange, onBeforeNavigate],
   );
 
   const horizontalNavigation: HorizontalNavigationConfig = useMemo(
