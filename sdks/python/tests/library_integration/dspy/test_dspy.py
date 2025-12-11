@@ -12,6 +12,7 @@ from opik.api_objects import opik_client, span, trace
 from opik.config import OPIK_PROJECT_DEFAULT_NAME
 from opik.integrations.dspy.callback import OpikCallback
 from ...testlib import (
+    ANY,
     ANY_BUT_NONE,
     ANY_DICT,
     ANY_STRING,
@@ -98,6 +99,7 @@ def test_dspy__happyflow(
                         input=ANY_DICT,
                         output=ANY_DICT,
                         usage=ANY_USAGE_DICT,
+                        total_cost=ANY,  # Cost is extracted from DSPy history when available
                         metadata=ANY_METADATA_WITH_CREATED_FROM,
                         start_time=ANY_BUT_NONE,
                         end_time=ANY_BUT_NONE,
@@ -337,6 +339,7 @@ def test_dspy_callback__used_inside_another_track_function__data_attached_to_exi
                                         input=ANY_DICT,
                                         output=ANY_DICT,
                                         usage=ANY_USAGE_DICT,
+                                        total_cost=ANY,  # Cost is extracted from DSPy history when available
                                         metadata=ANY_METADATA_WITH_CREATED_FROM,
                                         start_time=ANY_BUT_NONE,
                                         end_time=ANY_BUT_NONE,
@@ -443,6 +446,7 @@ def test_dspy_callback__used_when_there_was_already_existing_trace_without_span_
                                 input=ANY_DICT,
                                 output=ANY_DICT,
                                 usage=ANY_USAGE_DICT,
+                                total_cost=ANY,  # Cost is extracted from DSPy history when available
                                 metadata=ANY_METADATA_WITH_CREATED_FROM,
                                 start_time=ANY_BUT_NONE,
                                 end_time=ANY_BUT_NONE,
@@ -542,6 +546,7 @@ def test_dspy_callback__used_when_there_was_already_existing_span_without_trace_
                                 input=ANY_DICT,
                                 output=ANY_DICT,
                                 usage=ANY_USAGE_DICT,
+                                total_cost=ANY,  # Cost is extracted from DSPy history when available
                                 metadata=ANY_METADATA_WITH_CREATED_FROM,
                                 start_time=ANY_BUT_NONE,
                                 end_time=ANY_BUT_NONE,
