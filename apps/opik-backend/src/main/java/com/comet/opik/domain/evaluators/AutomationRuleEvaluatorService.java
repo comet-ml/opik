@@ -176,7 +176,7 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
                     }
                     var definition = spanUserDefinedMetricPython.toBuilder()
                             .id(id)
-                            .projectId(projectId)
+                            .projectIds(projectIds)
                             .createdBy(userName)
                             .lastUpdatedBy(userName)
                             .build();

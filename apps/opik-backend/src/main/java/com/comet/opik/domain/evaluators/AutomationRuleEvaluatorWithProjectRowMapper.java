@@ -129,6 +129,22 @@ public class AutomationRuleEvaluatorWithProjectRowMapper implements RowMapper<Au
                         .lastUpdatedAt(lastUpdatedAt)
                         .lastUpdatedBy(lastUpdatedBy)
                         .build();
+
+                case SPAN_USER_DEFINED_METRIC_PYTHON -> SpanUserDefinedMetricPythonAutomationRuleEvaluatorModel
+                        .builder()
+                        .id(id)
+                        .projectIds(projectIds)
+                        .name(name)
+                        .samplingRate(samplingRate)
+                        .enabled(enabled)
+                        .filters(filters)
+                        .code(OBJECT_MAPPER.treeToValue(codeNode,
+                                SpanUserDefinedMetricPythonAutomationRuleEvaluatorModel.SpanUserDefinedMetricPythonCode.class))
+                        .createdAt(createdAt)
+                        .createdBy(createdBy)
+                        .lastUpdatedAt(lastUpdatedAt)
+                        .lastUpdatedBy(lastUpdatedBy)
+                        .build();
             };
         } catch (Exception e) {
             throw new SQLException("Failed to parse automation rule evaluator code", e);
