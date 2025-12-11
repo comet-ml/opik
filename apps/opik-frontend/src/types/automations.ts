@@ -76,8 +76,10 @@ export interface PythonCodeDetails {
 export type EvaluatorsRule = {
   id: string;
   name: string;
-  project_id: string;
-  project_name?: string;
+  project_ids: string[];
+  project_id?: string; // Legacy field for backward compatibility (first element of project_ids)
+  project_name?: string; // Legacy field for backward compatibility (name of project_id)
+  project_names?: string[];
   sampling_rate: number;
   enabled?: boolean;
   filters?: Filters;

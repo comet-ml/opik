@@ -6,6 +6,7 @@ import org.jdbi.v3.json.Json;
 
 import java.time.Instant;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 import static com.comet.opik.domain.evaluators.SpanUserDefinedMetricPythonAutomationRuleEvaluatorModel.SpanUserDefinedMetricPythonCode;
@@ -13,8 +14,9 @@ import static com.comet.opik.domain.evaluators.SpanUserDefinedMetricPythonAutoma
 @Builder(toBuilder = true)
 public record SpanUserDefinedMetricPythonAutomationRuleEvaluatorModel(
         UUID id,
-        UUID projectId,
-        String projectName,
+        UUID projectId, // Legacy single project field for backwards compatibility
+        String projectName, // Legacy project name field (resolved from projectId)
+        Set<UUID> projectIds, // New multi-project field
         String name,
         Float samplingRate,
         boolean enabled,

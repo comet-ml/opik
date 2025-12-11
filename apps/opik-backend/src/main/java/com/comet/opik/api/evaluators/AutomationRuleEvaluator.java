@@ -21,6 +21,7 @@ import lombok.experimental.UtilityClass;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 @Data
@@ -54,12 +55,24 @@ public abstract sealed class AutomationRuleEvaluator<T, E extends Filter> implem
     @Schema(accessMode = Schema.AccessMode.READ_ONLY)
     private final UUID id;
 
+    // Dual-field backwards compatible architecture:
+    // - project_id: Legacy single project field (nullable for backwards compatibility)
+    // - project_name: Legacy project name field (for display, corresponds to project_id)
+    // - project_ids: New multi-project field (required for new rules)
+    // Frontend can resolve project names from project_ids using projects API
+    // Service layer keeps all fields in sync for seamless migration
+
     @JsonView({View.Public.class, View.Write.class})
-    @NotNull private final UUID projectId;
+    @Schema(description = "Primary project ID (legacy field, maintained for backwards compatibility)")
+    private final UUID projectId;
 
     @JsonView({View.Public.class})
-    @Schema(accessMode = Schema.AccessMode.READ_ONLY)
+    @Schema(description = "Primary project name (legacy field, maintained for backwards compatibility)", accessMode = Schema.AccessMode.READ_ONLY)
     private final String projectName;
+
+    @JsonView({View.Public.class, View.Write.class})
+    @Schema(description = "Multiple project IDs (new field for multi-project support)")
+    private final Set<UUID> projectIds;
 
     @JsonView({View.Public.class, View.Write.class})
     @NotBlank private final String name;

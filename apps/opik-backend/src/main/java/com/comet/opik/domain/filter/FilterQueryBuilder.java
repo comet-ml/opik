@@ -118,7 +118,6 @@ public class FilterQueryBuilder {
     // Table alias prefixes for AutomationRuleEvaluator queries
     private static final String AUTOMATION_RULE_TABLE_ALIAS = "rule.%s";
     private static final String AUTOMATION_EVALUATOR_TABLE_ALIAS = "evaluator.%s";
-    private static final String AUTOMATION_PROJECT_TABLE_ALIAS = "p.%s";
 
     private static final Map<Operator, Map<FieldType, String>> ANALYTICS_DB_OPERATOR_MAP = new EnumMap<>(
             ImmutableMap.<Operator, Map<FieldType, String>>builder()
@@ -399,10 +398,6 @@ public class FilterQueryBuilder {
                     .put(AutomationRuleEvaluatorField.ENABLED, String.format(AUTOMATION_RULE_TABLE_ALIAS, ENABLED_DB))
                     .put(AutomationRuleEvaluatorField.SAMPLING_RATE,
                             String.format(AUTOMATION_RULE_TABLE_ALIAS, SAMPLING_RATE_DB))
-                    .put(AutomationRuleEvaluatorField.PROJECT_ID,
-                            String.format(AUTOMATION_RULE_TABLE_ALIAS, PROJECT_ID_DB))
-                    .put(AutomationRuleEvaluatorField.PROJECT_NAME,
-                            String.format(AUTOMATION_PROJECT_TABLE_ALIAS, NAME_DB))
                     .put(AutomationRuleEvaluatorField.CREATED_AT,
                             String.format(AUTOMATION_EVALUATOR_TABLE_ALIAS, CREATED_AT_DB))
                     .put(AutomationRuleEvaluatorField.LAST_UPDATED_AT,
@@ -589,8 +584,6 @@ public class FilterQueryBuilder {
                 AutomationRuleEvaluatorField.TYPE,
                 AutomationRuleEvaluatorField.ENABLED,
                 AutomationRuleEvaluatorField.SAMPLING_RATE,
-                AutomationRuleEvaluatorField.PROJECT_ID,
-                AutomationRuleEvaluatorField.PROJECT_NAME,
                 AutomationRuleEvaluatorField.CREATED_AT,
                 AutomationRuleEvaluatorField.LAST_UPDATED_AT,
                 AutomationRuleEvaluatorField.CREATED_BY,
