@@ -45,6 +45,7 @@ def test_attachment_to_message():
         entity_id=entity_id,
         project_name=project_name,
         encoded_url_override="aHR0cHM6Ly9leGFtcGxlLmNvbQ==",
+        delete_after_upload=False,
     )
 
 
@@ -70,6 +71,7 @@ def test_attachment_to_message__file_name():
         entity_id=entity_id,
         project_name=project_name,
         encoded_url_override="aHR0cHM6Ly9leGFtcGxlLmNvbQ==",
+        delete_after_upload=False,
     )
 
 
@@ -95,4 +97,5 @@ def test_attachment_to_message__content_type():
         entity_id=entity_id,
         project_name=project_name,
         encoded_url_override="aHR0cHM6Ly9leGFtcGxlLmNvbQ==",
+        delete_after_upload=False,
     )

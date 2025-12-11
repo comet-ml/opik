@@ -32,6 +32,7 @@ def attachment_to_message(
         entity_id=entity_id,
         project_name=project_name,
         encoded_url_override=base_url_path,
+        delete_after_upload=attachment_data.delete_after_upload,
     )
 
 
