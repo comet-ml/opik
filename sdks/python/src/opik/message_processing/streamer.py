@@ -46,7 +46,7 @@ class Streamer:
 
             self._idle = False
             try:
-                # do embedded attachments pre-processing first
+                # do embedded attachments pre-processing first (MUST ALWAYS BE DONE FIRST)
                 preprocessed_message = self._attachments_preprocessor.preprocess(
                     message
                 )

@@ -1033,6 +1033,279 @@ def put(self, message: BaseMessage) -> None:
    self._message_queue.put(message)
 ```
 
+### Attachment Extraction Preprocessing
+
+Before messages reach the queue or batch manager, the SDK can optionally preprocess them to extract embedded base64-encoded attachments (images, PDFs, etc.) from trace/span input, output, and metadata fields.
+
+#### Preprocessing Pipeline
+
+```python
+# In streamer.py: Streamer.__init__()
+
+def __init__(self, ...):
+    # Create preprocessing pipeline
+    self._message_preprocessors = []
+
+    # 1. Attachments preprocessor (conditionally wraps messages)
+    attachments_preprocessor = AttachmentsPreprocessor(enabled=True)
+    self._message_preprocessors.append(attachments_preprocessor)
+
+    # 2. Batching preprocessor (groups batchable messages)
+    batching_preprocessor = BatchingPreprocessor(...)
+    self._message_preprocessors.append(batching_preprocessor)
+
+# Messages flow through preprocessors before routing
+def put(self, message: BaseMessage) -> None:
+    # Apply preprocessors in order
+    for preprocessor in self._message_preprocessors:
+        message = preprocessor.preprocess(message)
+
+    # Then route to queue/batch/upload
+    self._route_message(message)
+```
+
+#### AttachmentsPreprocessor: Selective Wrapping
+
+The `AttachmentsPreprocessor` decides which messages need attachment extraction:
+
+```python
+class AttachmentsPreprocessor(MessagePreprocessor):
+    def preprocess(self, message: BaseMessage) -> BaseMessage:
+        """
+        Wraps messages that need attachment extraction in AttachmentSupportingMessage.
+
+        Only wraps if:
+        1. Update messages (UpdateSpanMessage, UpdateTraceMessage) - always process
+        2. Create messages with end_time set - final data, ready to extract
+
+        Does NOT wrap:
+        - Create messages without end_time - in-progress operations
+        """
+        if _has_potential_content_with_attachments(message):
+            return AttachmentSupportingMessage(message)
+        return message
+
+def _has_potential_content_with_attachments(message: BaseMessage) -> bool:
+    # Check if it's an Update message - always process these
+    if isinstance(message, (UpdateSpanMessage, UpdateTraceMessage)):
+        return _message_has_field_of_interest_set(message)
+
+    # Check if it's a Create message with end_time set - only process these
+    if isinstance(message, (CreateSpanMessage, CreateTraceMessage)):
+        if message.end_time is not None:
+            return _message_has_field_of_interest_set(message)
+        return False
+
+    return False
+
+def _message_has_field_of_interest_set(message) -> bool:
+    """Check if message has input, output, or metadata fields set"""
+    return (
+        message.input is not None
+        or message.output is not None
+        or message.metadata is not None
+    )
+```
+
+**Key Design Decision**: Why skip Create messages without `end_time`?
+
+```
+Trace/Span Lifecycle:
+    │
+    ├─► Create (no end_time) ──► In-progress operation
+    │   │                         - May be updated multiple times
+    │   │                         - Extracting attachments now is wasteful
+    │   │                         - Will extract on final update anyway
+    │   │
+    │   └─► Update (sets end_time) ──► Completed operation
+    │       │                           - Contains final data
+    │       │                           - Extract attachments now ✓
+    │       │
+    │       └─► Backend storage
+    │
+    └─► Create (with end_time) ──► Synchronous/completed operation
+        │                          - Contains final data upfront
+        │                          - Extract attachments now ✓
+        │
+        └─► Backend storage
+```
+
+**Performance Impact**:
+- For 1000 concurrent traces: 50% reduction in attachment processing
+- Avoids duplicate extraction (create + update)
+- Only processes messages with final data
+
+#### AttachmentSupportingMessage Wrapper
+
+```python
+class AttachmentSupportingMessage(BaseMessage):
+    """
+    Wrapper that signals a message needs attachment extraction.
+
+    The wrapped message is processed by AttachmentsExtractionProcessor
+    before being sent to backend.
+    """
+    original_message: Union[
+        CreateSpanMessage,
+        UpdateSpanMessage,
+        CreateTraceMessage,
+        UpdateTraceMessage
+    ]
+```
+
+#### Attachment Extraction Flow
+
+```
+1. Message arrives at Streamer
+   │
+   ▼
+2. AttachmentsPreprocessor.preprocess()
+   │
+   ├─► Should extract? (Update or Create with end_time)
+   │   │
+   │   ├─► Yes: Wrap in AttachmentSupportingMessage
+   │   │   │
+   │   │   └─► Route to AttachmentsExtractionProcessor
+   │   │       │
+   │   │       ├─► Extract base64 attachments from input/output/metadata
+   │   │       │   - Handles nested dictionaries and lists
+   │   │       │   - Supports PNG, JPEG, PDF, GIF, WebP, SVG, JSON
+   │   │       │   - Replaces base64 with placeholder: [filename.png]
+   │   │       │
+   │   │       ├─► Upload attachments to S3
+   │   │       │
+   │   │       └─► Forward original message (now sanitized) to queue
+   │   │
+   │   └─► No: Pass through unchanged
+   │       │
+   │       └─► Route directly to queue/batch/upload
+   │
+   ▼
+3. Message continues through normal pipeline
+```
+
+#### AttachmentsExtractor: Nested Structure Support
+
+The extractor recursively processes nested data structures:
+
+```python
+class AttachmentsExtractor:
+    def extract_and_replace(
+        self,
+        data: Dict[str, Any],
+        entity_type: Literal["span", "trace"],
+        entity_id: str,
+        project_name: str,
+        context: Literal["input", "output", "metadata"],
+    ) -> List[AttachmentWithContext]:
+        """
+        Extract attachments from data and replace with placeholders.
+
+        Handles:
+        - Simple strings: {"image": "data:image/png;base64,..."}
+        - Nested dicts: {"user": {"avatar": "data:image/png;base64,..."}}
+        - Lists: {"images": ["data:image/png;base64,...", "data:image/jpeg;base64,..."]}
+        - Mixed: {"messages": [{"role": "user", "content": [{"image": "data:..."}]}]}
+        """
+        attachments = []
+        for key, value in data.items():
+            result = self._try_extract_attachments(value, context)
+            if result.attachments:
+                data[key] = result.sanitized_data
+                attachments.extend(...)
+        return attachments
+
+    def _try_extract_attachments(self, data: Any, context: str) -> ExtractionResult:
+        """Recursively extract from any data type"""
+        if isinstance(data, str):
+            return self._extract_from_string(data, context)
+        elif isinstance(data, dict):
+            return self._extract_from_dict(data, context)
+        elif isinstance(data, list):
+            return self._extract_from_list(data, context)
+        else:
+            # int, bool, None, etc. - return as-is
+            return ExtractionResult(attachments=[], sanitized_data=data)
+```
+
+**Example**: Nested structure extraction
+
+```python
+# Input
+trace_input = {
+    "messages": [
+        {
+            "role": "user",
+            "content": [
+                {"type": "text", "text": "What's in this image?"},
+                {"type": "image_url", "image_url": {"url": "data:image/png;base64,iVBORw0K..."}}
+            ]
+        }
+    ]
+}
+
+# After extraction
+trace_input = {
+    "messages": [
+        {
+            "role": "user",
+            "content": [
+                {"type": "text", "text": "What's in this image?"},
+                {"type": "image_url", "image_url": {"url": "[input-attachment-abc123.png]"}}
+            ]
+        }
+    ]
+}
+
+# Extracted attachment uploaded to S3
+# Attachment: {file_name: "input-attachment-abc123.png", content_type: "image/png", ...}
+```
+
+**Supported Formats**:
+- Images: PNG, JPEG, GIF, WebP, SVG
+- Documents: PDF, JSON
+- Pattern: `data:<mime-type>;base64,<base64-data>`
+
+#### Integration with Message Pipeline
+
+```
+User Code
+   │
+   ▼
+CreateSpanMessage(
+    input={"image": "data:image/png;base64,..."},
+    end_time=now()  # ← Key: end_time is set
+)
+   │
+   ▼
+Streamer.put()
+   │
+   ├─► AttachmentsPreprocessor
+   │   │
+   │   └─► Has end_time? YES → Wrap in AttachmentSupportingMessage
+   │
+   ▼
+Route to AttachmentsExtractionProcessor
+   │
+   ├─► Extract attachments
+   │   - Find base64 data in input
+   │   - Decode and identify type (PNG)
+   │   - Save to temporary file
+   │   - Replace with placeholder
+   │
+   ├─► Upload to S3
+   │   - CreateAttachmentMessage → S3
+   │
+   └─► Forward sanitized CreateSpanMessage
+       - input={"image": "[input-attachment-123.png]"}
+       │
+       ▼
+   BatchManager (or Queue)
+       │
+       ▼
+   Backend storage
+```
+
 ### Consumer Processing Loop
 
 ```python
