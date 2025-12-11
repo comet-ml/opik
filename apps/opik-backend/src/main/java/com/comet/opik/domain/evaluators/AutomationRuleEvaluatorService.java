@@ -238,11 +238,9 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
             try {
                 String filtersJson = AutomationModelEvaluatorMapper.INSTANCE.map(evaluatorUpdate.getFilters());
 
-                // Dual-field sync: First projectId becomes the legacy project_id field
-                UUID primaryProjectId = projectIds.isEmpty() ? null : projectIds.iterator().next();
-
+                // Update base rule (project associations handled separately in junction table)
                 int resultBase = dao.updateBaseRule(id, workspaceId, evaluatorUpdate.getName(),
-                        evaluatorUpdate.getSamplingRate(), evaluatorUpdate.isEnabled(), filtersJson, primaryProjectId);
+                        evaluatorUpdate.getSamplingRate(), evaluatorUpdate.isEnabled(), filtersJson);
 
                 // Update project associations in junction table
                 projectsDAO.deleteByRuleId(id, workspaceId);
