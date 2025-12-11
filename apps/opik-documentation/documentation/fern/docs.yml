@@ -450,6 +450,9 @@ navigation:
               - page: Haystack
                 path: docs/tracing/integrations/haystack.mdx
                 slug: haystack
+              - page: Harbor
+                path: docs/tracing/integrations/harbor.mdx
+                slug: harbor
               - page: Instructor
                 path: docs/tracing/integrations/instructor.mdx
                 slug: instructor

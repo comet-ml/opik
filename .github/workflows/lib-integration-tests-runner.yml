@@ -31,6 +31,7 @@ on:
           - metrics
           - bedrock
           - litellm
+          - harbor
   schedule:
     - cron: "0 0 */1 * *"
   pull_request:
@@ -184,4 +185,10 @@ jobs:
     needs: [init_environment]
     if: contains(fromJSON('["litellm", "all"]'), needs.init_environment.outputs.LIBS)
     uses: ./.github/workflows/lib-litellm-tests.yml
+    secrets: inherit
+
+  harbor_tests:
+    needs: [init_environment]
+    if: contains(fromJSON('["harbor", "all"]'), needs.init_environment.outputs.LIBS)
+    uses: ./.github/workflows/lib-harbor-tests.yml
     secrets: inherit

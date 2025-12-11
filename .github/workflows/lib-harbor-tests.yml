@@ -1,0 +1,57 @@
+# Workflow to run Harbor tests
+#
+# Please read inputs to provide correct values.
+#
+name: SDK Lib Harbor Tests
+run-name: "SDK Lib Harbor Tests ${{ github.ref_name }} by @${{ github.actor }}"
+permissions:
+  contents: read
+env:
+  OPIK_ENABLE_LITELLM_MODELS_MONITORING: False
+  OPIK_SENTRY_ENABLE: False
+on:
+  workflow_call:
+
+jobs:
+  tests:
+    name: Harbor Python ${{matrix.python_version}}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: sdks/python
+
+    strategy:
+      fail-fast: true
+      matrix:
+        python_version: [
+          "3.12",
+          "3.13"
+        ]
+
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+
+      - name: Setup Python ${{matrix.python_version}}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{matrix.python_version}}
+
+      - name: Install opik
+        run: pip install .
+
+      - name: Install test tools
+        run: |
+          cd ./tests
+          pip install --no-cache-dir --disable-pip-version-check -r test_requirements.txt
+
+      - name: Install lib
+        run: |
+          cd ./tests
+          pip install --no-cache-dir --disable-pip-version-check -r library_integration/harbor/requirements.txt
+
+      - name: Run tests
+        run: |
+          cd ./tests/library_integration/harbor/
+          python -m pytest  -vv .
