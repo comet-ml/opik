@@ -14,9 +14,9 @@
         Opik
     </div>
 </h1>
-<h2 align="center" style="border-bottom: none">Plataforma de avaliação de LLM de código aberto</h2>
+<h2 align="center" style="border-bottom: none">Plataforma de observabilidade, avaliação e otimização de IA de código aberto</h2>
 <p align="center">
-Opik ajuda você a construir, avaliar e otimizar sistemas LLM que funcionam melhor, mais rápido e com menor custo. De chatbots RAG a assistentes de código e pipelines agentes complexos, o Opik fornece rastreamento completo, avaliações, painéis e recursos poderosos como <b>Opik Agent Optimizer</b> e <b>Opik Guardrails</b> para melhorar e proteger suas aplicações LLM em produção.
+O Opik ajuda você a construir, testar e otimizar aplicações de IA generativa que funcionam melhor, do protótipo à produção. De chatbots RAG a assistentes de código e pipelines agentes complexos, o Opik fornece rastreamento abrangente, avaliação e otimização automática de prompts e ferramentas para eliminar as suposições no desenvolvimento de IA.
 </p>
 
 <div align="center">
@@ -216,6 +216,7 @@ A maneira mais fácil de registrar traces é usar uma de nossas integrações di
 | Groq                  | Registra traces para chamadas LLM do Groq                              | [Documentação](https://www.comet.com/docs/opik/integrations/groq?utm_source=opik&utm_medium=github&utm_content=groq_link&utm_campaign=opik)                                   |
 | Guardrails            | Registra traces para validações do Guardrails AI                       | [Documentação](https://www.comet.com/docs/opik/integrations/guardrails-ai?utm_source=opik&utm_medium=github&utm_content=guardrails_link&utm_campaign=opik)                    |
 | Haystack              | Registra traces para chamadas do Haystack                              | [Documentação](https://www.comet.com/docs/opik/integrations/haystack?utm_source=opik&utm_medium=github&utm_content=haystack_link&utm_campaign=opik)                           |
+| Harbor                | Registra traces para avaliações de benchmark do Harbor                  | [Documentação](https://www.comet.com/docs/opik/integrations/harbor?utm_source=opik&utm_medium=github&utm_content=harbor_link&utm_campaign=opik)                               |
 | Instructor            | Registra traces para chamadas LLM feitas com Instructor                 | [Documentação](https://www.comet.com/docs/opik/integrations/instructor?utm_source=opik&utm_medium=github&utm_content=instructor_link&utm_campaign=opik)                       |
 | LangChain (Python)    | Registra traces para chamadas LLM do LangChain                         | [Documentação](https://www.comet.com/docs/opik/integrations/langchain?utm_source=opik&utm_medium=github&utm_content=langchain_link&utm_campaign=opik)                         |
 | LangChain (JS/TS)     | Registra traces para chamadas do LangChain em JavaScript/TypeScript    | [Documentação](https://www.comet.com/docs/opik/integrations/langchainjs?utm_source=opik&utm_medium=github&utm_content=langchainjs_link&utm_campaign=opik)                     |
@@ -228,6 +229,7 @@ A maneira mais fácil de registrar traces é usar uma de nossas integrações di
 | Microsoft Agent Framework (Python) | Registra traces para chamadas do Microsoft Agent Framework | [Documentação](https://www.comet.com/docs/opik/integrations/microsoft-agent-framework?utm_source=opik&utm_medium=github&utm_content=agent_framework_link&utm_campaign=opik)   |
 | Microsoft Agent Framework (.NET)   | Registra traces para chamadas .NET do Microsoft Agent Framework | [Documentação](https://www.comet.com/docs/opik/integrations/microsoft-agent-framework-dotnet?utm_source=opik&utm_medium=github&utm_content=agent_framework_dotnet_link&utm_campaign=opik) |
 | Mistral AI            | Registra traces para chamadas LLM do Mistral AI                        | [Documentação](https://www.comet.com/docs/opik/integrations/mistral?utm_source=opik&utm_medium=github&utm_content=mistral_link&utm_campaign=opik)                             |
+| n8n                   | Registra traces para execuções de workflows n8n                        | [Documentação](https://www.comet.com/docs/opik/integrations/n8n?utm_source=opik&utm_medium=github&utm_content=n8n_link&utm_campaign=opik)                                     |
 | Novita AI             | Registra traces para chamadas LLM do Novita AI                         | [Documentação](https://www.comet.com/docs/opik/integrations/novita-ai?utm_source=opik&utm_medium=github&utm_content=novita_ai_link&utm_campaign=opik)                         |
 | Ollama                | Registra traces para chamadas LLM do Ollama                            | [Documentação](https://www.comet.com/docs/opik/integrations/ollama?utm_source=opik&utm_medium=github&utm_content=ollama_link&utm_campaign=opik)                               |
 | OpenAI (Python)       | Registra traces para chamadas LLM da OpenAI                            | [Documentação](https://www.comet.com/docs/opik/integrations/openai?utm_source=opik&utm_medium=github&utm_content=openai_link&utm_campaign=opik)                               |

@@ -9,3 +9,9 @@ export const DEFAULT_CHART_TICK = {
 export const DEFAULT_CHART_GRID_PROPS = {
   stroke: "var(--chart-grid-stroke)",
 };
+
+export enum CHART_TYPE {
+  line = "line",
+  bar = "bar",
+  radar = "radar",
+}

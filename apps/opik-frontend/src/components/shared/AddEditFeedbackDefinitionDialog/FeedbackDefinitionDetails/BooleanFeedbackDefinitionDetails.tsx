@@ -36,10 +36,7 @@ const BooleanFeedbackDefinitionDetails: React.FunctionComponent<
   return (
     <>
       <div className="flex flex-col gap-2 pb-4">
-        <Label htmlFor="feedbackDefinitionBooleanTrueLabel">
-          True label (e.g., &ldquo;Pass&rdquo;, &ldquo;Good&rdquo;,
-          &ldquo;Yes&rdquo;)
-        </Label>
+        <Label htmlFor="feedbackDefinitionBooleanTrueLabel">True label</Label>
         <Input
           id="feedbackDefinitionBooleanTrueLabel"
           placeholder="Pass"
@@ -54,10 +51,7 @@ const BooleanFeedbackDefinitionDetails: React.FunctionComponent<
       </div>
 
       <div className="flex flex-col gap-2 pb-4">
-        <Label htmlFor="feedbackDefinitionBooleanFalseLabel">
-          False label (e.g., &ldquo;Fail&rdquo;, &ldquo;Bad&rdquo;,
-          &ldquo;No&rdquo;)
-        </Label>
+        <Label htmlFor="feedbackDefinitionBooleanFalseLabel">False label</Label>
         <Input
           id="feedbackDefinitionBooleanFalseLabel"
           placeholder="Fail"

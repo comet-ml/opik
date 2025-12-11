@@ -12,6 +12,8 @@ import com.comet.opik.api.FeedbackScoreAverage;
 import com.comet.opik.api.GroupContentWithAggregations;
 import com.comet.opik.api.PercentageValues;
 import com.comet.opik.api.grouping.GroupBy;
+import lombok.NonNull;
+import org.apache.commons.collections4.CollectionUtils;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -46,11 +48,19 @@ public class ExperimentResponseBuilder {
     }
 
     public ExperimentGroupAggregationsResponse buildGroupAggregationsResponse(
-            List<ExperimentGroupAggregationItem> groupItems) {
+            List<ExperimentGroupAggregationItem> groupItems,
+            @NonNull ExperimentGroupEnrichInfoHolder enrichInfoHolder,
+            List<GroupBy> groups) {
         var contentMap = new HashMap<String, GroupContentWithAggregations>();
 
+        if (CollectionUtils.isEmpty(groupItems) || CollectionUtils.isEmpty(groups)) {
+            return ExperimentGroupAggregationsResponse.builder()
+                    .content(contentMap)
+                    .build();
+        }
+
         for (ExperimentGroupAggregationItem item : groupItems) {
-            buildNestedGroupsWithAggregations(contentMap, item, 0);
+            buildNestedGroupsWithAggregations(contentMap, item, 0, enrichInfoHolder, groups);
         }
 
         // Calculate recursive aggregations for parent levels
@@ -65,7 +75,8 @@ public class ExperimentResponseBuilder {
     }
 
     private void buildNestedGroupsWithAggregations(Map<String, GroupContentWithAggregations> parentLevel,
-            ExperimentGroupAggregationItem item, int depth) {
+            ExperimentGroupAggregationItem item, int depth,
+            ExperimentGroupEnrichInfoHolder enrichInfoHolder, List<GroupBy> groups) {
         if (depth >= item.groupValues().size()) {
             return;
         }
@@ -75,18 +86,23 @@ public class ExperimentResponseBuilder {
             return;
         }
 
+        GroupBy currentGroup = groups.get(depth);
+        String label = resolveLabel(groupingValue, currentGroup, enrichInfoHolder);
+
         GroupContentWithAggregations currentLevel = parentLevel.computeIfAbsent(
                 groupingValue,
                 key -> {
                     // For leaf nodes (last level), include actual aggregation data
                     if (depth == item.groupValues().size() - 1) {
                         return GroupContentWithAggregations.builder()
+                                .label(label)
                                 .aggregations(buildAggregationData(item))
                                 .groups(Map.of())
                                 .build();
                     } else {
                         // For intermediate nodes, initialize with empty aggregations
                         return GroupContentWithAggregations.builder()
+                                .label(label)
                                 .aggregations(AggregationData.builder()
                                         .experimentCount(0L)
                                         .traceCount(0L)
@@ -94,6 +110,7 @@ public class ExperimentResponseBuilder {
                                         .totalEstimatedCostAvg(BigDecimal.ZERO)
                                         .duration(null)
                                         .feedbackScores(List.of())
+                                        .experimentScores(List.of())
                                         .build())
                                 .groups(new HashMap<>())
                                 .build();
@@ -101,10 +118,26 @@ public class ExperimentResponseBuilder {
                 });
 
         // Recursively build nested groups
-        buildNestedGroupsWithAggregations(currentLevel.groups(), item, depth + 1);
+        buildNestedGroupsWithAggregations(currentLevel.groups(), item, depth + 1, enrichInfoHolder, groups);
     }
 
-    public GroupContentWithAggregations calculateRecursiveAggregations(GroupContentWithAggregations content) {
+    private String resolveLabel(String groupingValue, GroupBy group,
+            ExperimentGroupEnrichInfoHolder enrichInfoHolder) {
+        return switch (group.field()) {
+            case DATASET_ID -> {
+                Map<UUID, Dataset> datasetMap = enrichInfoHolder.datasetMap();
+                if (datasetMap == null) {
+                    yield DELETED_DATASET;
+                }
+                yield Optional.ofNullable(datasetMap.get(UUID.fromString(groupingValue)))
+                        .map(Dataset::name)
+                        .orElse(DELETED_DATASET);
+            }
+            default -> groupingValue;
+        };
+    }
+
+    public GroupContentWithAggregations calculateRecursiveAggregations(@NonNull GroupContentWithAggregations content) {
         if (content.groups().isEmpty()) {
             // Leaf node - return as-is
             return content;
@@ -118,6 +151,7 @@ public class ExperimentResponseBuilder {
 
         // Return new GroupContentWithAggregations with calculated aggregations
         return GroupContentWithAggregations.builder()
+                .label(content.label())
                 .aggregations(calculateAggregatedChildrenValues(updatedChildGroups))
                 .groups(updatedChildGroups)
                 .build();
@@ -139,6 +173,10 @@ public class ExperimentResponseBuilder {
         // For feedback scores - group by name and calculate weighted averages
         Map<String, BigDecimal> feedbackScoreSums = new HashMap<>();
         Map<String, Long> feedbackScoreCounts = new HashMap<>();
+
+        // For experiment scores - group by name and calculate weighted averages
+        Map<String, BigDecimal> experimentScoreSums = new HashMap<>();
+        Map<String, Long> experimentScoreCounts = new HashMap<>();
 
         for (GroupContentWithAggregations child : childGroups.values()) {
             AggregationData childAgg = child.aggregations();
@@ -169,18 +207,11 @@ public class ExperimentResponseBuilder {
                 }
             }
 
-            // For feedback scores (weighted average per name)
-            if (childAgg.feedbackScores() != null) {
-                for (FeedbackScoreAverage score : childAgg.feedbackScores()) {
-                    String name = score.name();
-                    BigDecimal value = score.value();
+            // Accumulate feedback scores
+            accumulateScores(childAgg.feedbackScores(), expCount, feedbackScoreSums, feedbackScoreCounts);
 
-                    if (value != null && name != null) {
-                        feedbackScoreSums.merge(name, value.multiply(BigDecimal.valueOf(expCount)), BigDecimal::add);
-                        feedbackScoreCounts.merge(name, expCount, Long::sum);
-                    }
-                }
-            }
+            // Accumulate experiment scores
+            accumulateScores(childAgg.experimentScores(), expCount, experimentScoreSums, experimentScoreCounts);
         }
 
         // Calculate averages
@@ -196,6 +227,8 @@ public class ExperimentResponseBuilder {
                 : null;
 
         List<FeedbackScoreAverage> avgFeedbackScores = buildAvgFeedbackScores(feedbackScoreSums, feedbackScoreCounts);
+        List<FeedbackScoreAverage> avgExperimentScores = buildAvgFeedbackScores(experimentScoreSums,
+                experimentScoreCounts);
 
         // Build updated aggregation data
         return AggregationData.builder()
@@ -205,7 +238,37 @@ public class ExperimentResponseBuilder {
                 .totalEstimatedCostAvg(avgCost)
                 .duration(avgDuration)
                 .feedbackScores(avgFeedbackScores)
+                .experimentScores(avgExperimentScores)
                 .build();
+    }
+
+    /**
+     * Accumulate scores for weighted average calculation.
+     *
+     * @param scores List of scores to accumulate
+     * @param experimentCount Number of experiments contributing to these scores
+     * @param scoreSums Map to accumulate weighted sums
+     * @param scoreCounts Map to track total experiment counts per score name
+     */
+    private void accumulateScores(
+            List<FeedbackScoreAverage> scores,
+            long experimentCount,
+            Map<String, BigDecimal> scoreSums,
+            Map<String, Long> scoreCounts) {
+
+        if (scores == null) {
+            return;
+        }
+
+        for (FeedbackScoreAverage score : scores) {
+            String name = score.name();
+            BigDecimal value = score.value();
+
+            if (value != null && name != null) {
+                scoreSums.merge(name, value.multiply(BigDecimal.valueOf(experimentCount)), BigDecimal::add);
+                scoreCounts.merge(name, experimentCount, Long::sum);
+            }
+        }
     }
 
     private List<FeedbackScoreAverage> buildAvgFeedbackScores(Map<String, BigDecimal> feedbackScoreSums,
@@ -231,6 +294,7 @@ public class ExperimentResponseBuilder {
                 .totalEstimatedCostAvg(item.totalEstimatedCostAvg())
                 .duration(item.duration())
                 .feedbackScores(item.feedbackScores())
+                .experimentScores(item.experimentScores())
                 .build();
     }
 

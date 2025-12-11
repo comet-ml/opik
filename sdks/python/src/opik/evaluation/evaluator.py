@@ -2,11 +2,11 @@ import logging
 import time
 from typing import Any, Callable, Dict, List, Optional, Union, cast
 
-from .. import Prompt
+from ..api_objects.prompt import base_prompt
 from ..api_objects import opik_client
 from ..api_objects import dataset, experiment
 from ..api_objects.experiment import helpers as experiment_helpers
-from ..api_objects.prompt import chat_prompt_template
+from ..api_objects.prompt.chat import chat_prompt_template
 from ..api_objects.prompt import types as prompt_types
 from . import (
     asyncio_support,
@@ -16,10 +16,11 @@ from . import (
     rest_operations,
     samplers,
 )
-from .metrics import base_metric
+from .metrics import base_metric, score_result
 from .models import ModelCapabilities, base_model, models_factory
 from .scorers import scorer_function, scorer_wrapper_metric
-from .types import LLMTask, ScoringKeyMappingType
+from . import test_result
+from .types import ExperimentScoreFunction, LLMTask, ScoringKeyMappingType
 from .. import url_helpers
 
 LOGGER = logging.getLogger(__name__)
@@ -41,23 +42,52 @@ def _try_notifying_about_experiment_completion(
         )
 
 
+def _compute_experiment_scores(
+    experiment_scoring_functions: List[ExperimentScoreFunction],
+    test_results: List[test_result.TestResult],
+) -> List[score_result.ScoreResult]:
+    """Compute experiment-level scores from test results."""
+    if not experiment_scoring_functions or not test_results:
+        return []
+
+    all_scores: List[score_result.ScoreResult] = []
+    for score_function in experiment_scoring_functions:
+        try:
+            scores = score_function(test_results)
+            # Handle Union[ScoreResult, List[ScoreResult]]
+            if isinstance(scores, list):
+                all_scores.extend(scores)
+            else:
+                all_scores.append(scores)
+        except Exception as e:
+            LOGGER.warning(
+                "Failed to compute experiment score: %s",
+                e,
+                exc_info=True,
+            )
+
+    return all_scores
+
+
 def evaluate(
     dataset: dataset.Dataset,
     task: LLMTask,
     scoring_metrics: Optional[List[base_metric.BaseMetric]] = None,
     scoring_functions: Optional[List[scorer_function.ScorerFunction]] = None,
+    experiment_name_prefix: Optional[str] = None,
     experiment_name: Optional[str] = None,
     project_name: Optional[str] = None,
     experiment_config: Optional[Dict[str, Any]] = None,
     verbose: int = 1,
     nb_samples: Optional[int] = None,
     task_threads: int = 16,
-    prompt: Optional[Prompt] = None,
-    prompts: Optional[List[Prompt]] = None,
+    prompt: Optional[base_prompt.BasePrompt] = None,
+    prompts: Optional[List[base_prompt.BasePrompt]] = None,
     scoring_key_mapping: Optional[ScoringKeyMappingType] = None,
     dataset_item_ids: Optional[List[str]] = None,
     dataset_sampler: Optional[samplers.BaseDatasetSampler] = None,
     trial_count: int = 1,
+    experiment_scoring_functions: Optional[List[ExperimentScoreFunction]] = None,
 ) -> evaluation_result.EvaluationResult:
     """
     Performs task evaluation on a given dataset. You can use either `scoring_metrics` or `scorer_functions` to calculate
@@ -69,6 +99,10 @@ def evaluate(
 
         task: A callable object that takes dict with dataset item content
             as input and returns dict which will later be used for scoring.
+
+        experiment_name_prefix: The prefix to be added to automatically generated experiment names to make them unique
+            but grouped under the same prefix. For example, if you set `experiment_name_prefix="my-experiment"`,
+            the first experiment created will be named `my-experiment-<unique-random-part>`.
 
         experiment_name: The name of the experiment associated with evaluation run.
             If None, a generated name will be used.
@@ -117,13 +151,27 @@ def evaluate(
             If not provided, all samples in the dataset will be evaluated.
 
         trial_count: number of times to run the task and evaluate the task output for every dataset item.
+
+        experiment_scoring_functions: List of callable functions that compute experiment-level scores.
+            Each function takes a list of TestResult objects and returns a list of ScoreResult objects.
+            These scores are computed after all test results are collected and represent aggregate
+            metrics across the entire experiment.
     """
+    experiment_scoring_functions = (
+        [] if experiment_scoring_functions is None else experiment_scoring_functions
+    )
+
     checked_prompts = experiment_helpers.handle_prompt_args(
         prompt=prompt,
         prompts=prompts,
     )
 
     client = opik_client.get_client_cached()
+
+    experiment_name = _use_or_create_experiment_name(
+        experiment_name=experiment_name,
+        experiment_name_prefix=experiment_name_prefix,
+    )
 
     experiment = client.create_experiment(
         name=experiment_name,
@@ -153,6 +201,7 @@ def evaluate(
         dataset_item_ids=dataset_item_ids,
         dataset_sampler=dataset_sampler,
         trial_count=trial_count,
+        experiment_scoring_functions=experiment_scoring_functions,
     )
 
 
@@ -171,6 +220,7 @@ def _evaluate_task(
     dataset_item_ids: Optional[List[str]],
     dataset_sampler: Optional[samplers.BaseDatasetSampler],
     trial_count: int,
+    experiment_scoring_functions: List[ExperimentScoreFunction],
 ) -> evaluation_result.EvaluationResult:
     start_time = time.time()
 
@@ -195,8 +245,16 @@ def _evaluate_task(
 
     total_time = time.time() - start_time
 
+    # Compute experiment scores
+    computed_experiment_scores = _compute_experiment_scores(
+        experiment_scoring_functions=experiment_scoring_functions,
+        test_results=test_results,
+    )
+
     if verbose >= 1:
-        report.display_experiment_results(dataset.name, total_time, test_results)
+        report.display_experiment_results(
+            dataset.name, total_time, test_results, computed_experiment_scores
+        )
 
     experiment_url = url_helpers.get_experiment_url_by_id(
         experiment_id=experiment.id,
@@ -210,6 +268,10 @@ def _evaluate_task(
 
     _try_notifying_about_experiment_completion(experiment)
 
+    # Log experiment scores to backend
+    if computed_experiment_scores:
+        experiment.log_experiment_scores(score_results=computed_experiment_scores)
+
     evaluation_result_ = evaluation_result.EvaluationResult(
         dataset_id=dataset.id,
         experiment_id=experiment.id,
@@ -217,6 +279,7 @@ def _evaluate_task(
         test_results=test_results,
         experiment_url=experiment_url,
         trial_count=trial_count,
+        experiment_scores=computed_experiment_scores,
     )
 
     if verbose >= 2:
@@ -236,6 +299,7 @@ def evaluate_experiment(
     verbose: int = 1,
     scoring_key_mapping: Optional[ScoringKeyMappingType] = None,
     experiment_id: Optional[str] = None,
+    experiment_scoring_functions: Optional[List[ExperimentScoreFunction]] = None,
 ) -> evaluation_result.EvaluationResult:
     """Update the existing experiment with new evaluation metrics. You can use either `scoring_metrics` or `scorer_functions` to calculate
     evaluation metrics. The scorer functions doesn't require `scoring_key_mapping` and use reserved parameters
@@ -267,7 +331,15 @@ def evaluate_experiment(
             `{"input": "user_question"}` to map the "user_question" key to "input".
 
         experiment_id: The ID of the experiment to evaluate. If not provided, the experiment will be evaluated based on the experiment name.
+
+        experiment_scoring_functions: List of callable functions that compute experiment-level scores.
+            Each function takes a list of TestResult objects and returns a list of ScoreResult objects.
+            These scores are computed after all test results are collected and represent aggregate
+            metrics across the entire experiment.
     """
+    experiment_scoring_functions = (
+        [] if experiment_scoring_functions is None else experiment_scoring_functions
+    )
     start_time = time.time()
 
     client = opik_client.get_client_cached()
@@ -314,8 +386,19 @@ def evaluate_experiment(
 
     total_time = time.time() - start_time
 
+    # Compute experiment scores
+    computed_experiment_scores = _compute_experiment_scores(
+        experiment_scoring_functions=experiment_scoring_functions,
+        test_results=test_results,
+    )
+
     if verbose >= 1:
-        report.display_experiment_results(dataset_.name, total_time, test_results)
+        report.display_experiment_results(
+            dataset_.name,
+            total_time,
+            test_results,
+            computed_experiment_scores,
+        )
 
     experiment_url = url_helpers.get_experiment_url_by_id(
         experiment_id=experiment.id,
@@ -327,6 +410,10 @@ def evaluate_experiment(
 
     _try_notifying_about_experiment_completion(experiment)
 
+    # Log experiment scores to backend
+    if computed_experiment_scores:
+        experiment.log_experiment_scores(score_results=computed_experiment_scores)
+
     evaluation_result_ = evaluation_result.EvaluationResult(
         dataset_id=dataset_.id,
         experiment_id=experiment.id,
@@ -334,6 +421,7 @@ def evaluate_experiment(
         test_results=test_results,
         experiment_url=experiment_url,
         trial_count=1,
+        experiment_scores=computed_experiment_scores,
     )
 
     if verbose >= 2:
@@ -359,9 +447,12 @@ def _build_prompt_evaluation_task(
             ),
         },
     )
-    prompt_template = chat_prompt_template.ChatPromptTemplate(messages=messages)
+    # Disable placeholder validation since we pass all dataset item fields to format()
+    chat_prompt_template_ = chat_prompt_template.ChatPromptTemplate(
+        messages=messages, validate_placeholders=False
+    )
 
-    required_modalities = prompt_template.required_modalities()
+    required_modalities = chat_prompt_template_.required_modalities()
     unsupported_modalities = {
         modality
         for modality in required_modalities
@@ -380,7 +471,7 @@ def _build_prompt_evaluation_task(
 
     def _prompt_evaluation_task(prompt_variables: Dict[str, Any]) -> Dict[str, Any]:
         template_type_override = prompt_variables.get("type")
-        processed_messages = prompt_template.format(
+        processed_messages = chat_prompt_template_.format(
             variables=prompt_variables,
             supported_modalities=supported_modalities,
             template_type=template_type_override,
@@ -403,16 +494,18 @@ def evaluate_prompt(
     model: Optional[Union[str, base_model.OpikBaseModel]] = None,
     scoring_metrics: Optional[List[base_metric.BaseMetric]] = None,
     scoring_functions: Optional[List[scorer_function.ScorerFunction]] = None,
+    experiment_name_prefix: Optional[str] = None,
     experiment_name: Optional[str] = None,
     project_name: Optional[str] = None,
     experiment_config: Optional[Dict[str, Any]] = None,
     verbose: int = 1,
     nb_samples: Optional[int] = None,
     task_threads: int = 16,
-    prompt: Optional[Prompt] = None,
+    prompt: Optional[base_prompt.BasePrompt] = None,
     dataset_item_ids: Optional[List[str]] = None,
     dataset_sampler: Optional[samplers.BaseDatasetSampler] = None,
     trial_count: int = 1,
+    experiment_scoring_functions: Optional[List[ExperimentScoreFunction]] = None,
 ) -> evaluation_result.EvaluationResult:
     """
     Performs prompt evaluation on a given dataset.
@@ -434,6 +527,10 @@ def evaluate_prompt(
                 • task_outputs — a dictionary containing the LLM task output.
                 • task_span - the data collected during the LLM task execution [optional].
 
+        experiment_name_prefix: The prefix to be added to automatically generated experiment names to make them unique
+            but grouped under the same prefix. For example, if you set `experiment_name_prefix="my-experiment"`,
+            the first experiment created will be named `my-experiment-<unique-random-part>`.
+
         experiment_name: name of the experiment.
 
         project_name: The name of the project to log data
@@ -454,7 +551,15 @@ def evaluate_prompt(
             If not provided, all samples in the dataset will be evaluated.
 
         trial_count: number of times to execute the prompt and evaluate the LLM output for every dataset item.
+
+        experiment_scoring_functions: List of callable functions that compute experiment-level scores.
+            Each function takes a list of TestResult objects and returns a list of ScoreResult objects.
+            These scores are computed after all test results are collected and represent aggregate
+            metrics across the entire experiment.
     """
+    experiment_scoring_functions = (
+        [] if experiment_scoring_functions is None else experiment_scoring_functions
+    )
     if isinstance(model, str):
         opik_model = models_factory.get(model_name=model)
     elif not isinstance(model, base_model.OpikBaseModel):
@@ -477,6 +582,11 @@ def evaluate_prompt(
     client = opik_client.get_client_cached()
 
     prompts = [prompt] if prompt else None
+
+    experiment_name = _use_or_create_experiment_name(
+        experiment_name=experiment_name,
+        experiment_name_prefix=experiment_name_prefix,
+    )
 
     experiment = client.create_experiment(
         name=experiment_name,
@@ -515,8 +625,16 @@ def evaluate_prompt(
 
     total_time = time.time() - start_time
 
+    # Compute experiment scores
+    computed_experiment_scores = _compute_experiment_scores(
+        experiment_scoring_functions=experiment_scoring_functions,
+        test_results=test_results,
+    )
+
     if verbose >= 1:
-        report.display_experiment_results(dataset.name, total_time, test_results)
+        report.display_experiment_results(
+            dataset.name, total_time, test_results, computed_experiment_scores
+        )
 
     experiment_url = url_helpers.get_experiment_url_by_id(
         experiment_id=experiment.id,
@@ -530,6 +648,10 @@ def evaluate_prompt(
 
     _try_notifying_about_experiment_completion(experiment)
 
+    # Log experiment scores to backend
+    if computed_experiment_scores:
+        experiment.log_experiment_scores(score_results=computed_experiment_scores)
+
     evaluation_result_ = evaluation_result.EvaluationResult(
         experiment_id=experiment.id,
         dataset_id=dataset.id,
@@ -537,6 +659,7 @@ def evaluate_prompt(
         test_results=test_results,
         experiment_url=experiment_url,
         trial_count=trial_count,
+        experiment_scores=computed_experiment_scores,
     )
 
     if verbose >= 2:
@@ -553,18 +676,21 @@ def evaluate_optimization_trial(
     dataset: dataset.Dataset,
     task: LLMTask,
     scoring_metrics: Optional[List[base_metric.BaseMetric]] = None,
+    scoring_functions: Optional[List[scorer_function.ScorerFunction]] = None,
+    experiment_name_prefix: Optional[str] = None,
     experiment_name: Optional[str] = None,
     project_name: Optional[str] = None,
     experiment_config: Optional[Dict[str, Any]] = None,
     verbose: int = 1,
     nb_samples: Optional[int] = None,
     task_threads: int = 16,
-    prompt: Optional[Prompt] = None,
-    prompts: Optional[List[Prompt]] = None,
+    prompt: Optional[base_prompt.BasePrompt] = None,
+    prompts: Optional[List[base_prompt.BasePrompt]] = None,
     scoring_key_mapping: Optional[ScoringKeyMappingType] = None,
     dataset_item_ids: Optional[List[str]] = None,
     dataset_sampler: Optional[samplers.BaseDatasetSampler] = None,
     trial_count: int = 1,
+    experiment_scoring_functions: Optional[List[ExperimentScoreFunction]] = None,
 ) -> evaluation_result.EvaluationResult:
     """
     Performs task evaluation on a given dataset.
@@ -576,6 +702,17 @@ def evaluate_optimization_trial(
 
         task: A callable object that takes dict with dataset item content
             as input and returns dict which will later be used for scoring.
+
+        scoring_functions: List of scorer functions to be executed during evaluation.
+            Each scorer function includes a scoring method that accepts predefined
+            arguments supplied by the evaluation engine:
+                • dataset_item — a dictionary containing the dataset item content,
+                • task_outputs — a dictionary containing the LLM task output.
+                • task_span - the data collected during the LLM task execution [optional].
+
+        experiment_name_prefix: The prefix to be added to automatically generated experiment names to make them unique
+                    but grouped under the same prefix. For example, if you set `experiment_name_prefix="my-experiment"`,
+                    the first experiment created will be named `my-experiment-<unique-random-part>`.
 
         experiment_name: The name of the experiment associated with evaluation run.
             If None, a generated name will be used.
@@ -616,7 +753,16 @@ def evaluate_optimization_trial(
             If not provided, all samples in the dataset will be evaluated.
 
         trial_count: number of times to execute the prompt and evaluate the LLM output for every dataset item.
+
+        experiment_scoring_functions: List of callable functions that compute experiment-level scores.
+            Each function takes a list of TestResult objects and returns a list of ScoreResult objects.
+            These scores are computed after all test results are collected and represent aggregate
+            metrics across the entire experiment.
     """
+    experiment_scoring_functions = (
+        [] if experiment_scoring_functions is None else experiment_scoring_functions
+    )
+
     if scoring_metrics is None:
         scoring_metrics = []
 
@@ -625,7 +771,19 @@ def evaluate_optimization_trial(
         prompts=prompts,
     )
 
+    # wrap scoring functions if any
+    scoring_metrics = _wrap_scoring_functions(
+        scoring_functions=scoring_functions,
+        scoring_metrics=scoring_metrics,
+        project_name=project_name,
+    )
+
     client = opik_client.get_client_cached()
+
+    experiment_name = _use_or_create_experiment_name(
+        experiment_name=experiment_name,
+        experiment_name_prefix=experiment_name_prefix,
+    )
 
     experiment = client.create_experiment(
         name=experiment_name,
@@ -650,6 +808,7 @@ def evaluate_optimization_trial(
         dataset_item_ids=dataset_item_ids,
         dataset_sampler=dataset_sampler,
         trial_count=trial_count,
+        experiment_scoring_functions=experiment_scoring_functions,
     )
 
 
@@ -782,3 +941,17 @@ def _wrap_scoring_functions(
             scoring_metrics = function_metrics
 
     return scoring_metrics if scoring_metrics else []
+
+
+def _use_or_create_experiment_name(
+    experiment_name: Optional[str], experiment_name_prefix: Optional[str]
+) -> Optional[str]:
+    if experiment_name:
+        return experiment_name
+
+    if experiment_name_prefix:
+        return experiment_helpers.generate_unique_experiment_name(
+            experiment_name_prefix
+        )
+    else:
+        return None

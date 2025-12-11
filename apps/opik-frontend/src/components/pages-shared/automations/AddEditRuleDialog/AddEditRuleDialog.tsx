@@ -56,6 +56,7 @@ import ProjectsSelectBox from "@/components/pages-shared/automations/ProjectsSel
 import RuleFilteringSection, {
   TRACE_FILTER_COLUMNS,
   THREAD_FILTER_COLUMNS,
+  SPAN_FILTER_COLUMNS,
 } from "@/components/pages-shared/automations/AddEditRuleDialog/RuleFilteringSection";
 import {
   convertLLMJudgeDataToLLMJudgeObject,
@@ -68,8 +69,10 @@ import { ColumnData } from "@/types/shared";
 import {
   DEFAULT_PYTHON_CODE_THREAD_DATA,
   DEFAULT_PYTHON_CODE_TRACE_DATA,
+  DEFAULT_PYTHON_CODE_SPAN_DATA,
   LLM_PROMPT_CUSTOM_THREAD_TEMPLATE,
   LLM_PROMPT_CUSTOM_TRACE_TEMPLATE,
+  LLM_PROMPT_CUSTOM_SPAN_TEMPLATE,
 } from "@/constants/llm";
 import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
@@ -112,6 +115,18 @@ export const DEFAULT_LLM_AS_JUDGE_DATA = {
     variables: LLM_PROMPT_CUSTOM_THREAD_TEMPLATE.variables,
     schema: LLM_PROMPT_CUSTOM_THREAD_TEMPLATE.schema,
   },
+  [EVALUATORS_RULE_SCOPE.span]: {
+    model: "",
+    config: {
+      temperature: 0.0,
+      seed: null,
+      custom_parameters: null,
+    },
+    template: LLM_JUDGE.custom,
+    messages: LLM_PROMPT_CUSTOM_SPAN_TEMPLATE.messages,
+    variables: LLM_PROMPT_CUSTOM_SPAN_TEMPLATE.variables,
+    schema: LLM_PROMPT_CUSTOM_SPAN_TEMPLATE.schema,
+  },
 };
 
 const DEFAULT_PYTHON_CODE_DATA: Record<
@@ -120,6 +135,7 @@ const DEFAULT_PYTHON_CODE_DATA: Record<
 > = {
   [EVALUATORS_RULE_SCOPE.trace]: DEFAULT_PYTHON_CODE_TRACE_DATA,
   [EVALUATORS_RULE_SCOPE.thread]: DEFAULT_PYTHON_CODE_THREAD_DATA,
+  [EVALUATORS_RULE_SCOPE.span]: DEFAULT_PYTHON_CODE_SPAN_DATA,
 };
 
 type AddEditRuleDialogProps = {
@@ -135,14 +151,16 @@ type AddEditRuleDialogProps = {
 const isPythonCodeRule = (rule: EvaluatorsRule) => {
   return (
     rule.type === EVALUATORS_RULE_TYPE.python_code ||
-    rule.type === EVALUATORS_RULE_TYPE.thread_python_code
+    rule.type === EVALUATORS_RULE_TYPE.thread_python_code ||
+    rule.type === EVALUATORS_RULE_TYPE.span_python_code
   );
 };
 
 const isLLMJudgeRule = (rule: EvaluatorsRule) => {
   return (
     rule.type === EVALUATORS_RULE_TYPE.llm_judge ||
-    rule.type === EVALUATORS_RULE_TYPE.thread_llm_judge
+    rule.type === EVALUATORS_RULE_TYPE.thread_llm_judge ||
+    rule.type === EVALUATORS_RULE_TYPE.span_llm_judge
   );
 };
 
@@ -157,6 +175,12 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
 }) => {
   const isCodeMetricEnabled = useIsFeatureEnabled(
     FeatureToggleKeys.PYTHON_EVALUATOR_ENABLED,
+  );
+  const isSpanLlmAsJudgeEnabled = useIsFeatureEnabled(
+    FeatureToggleKeys.SPAN_LLM_AS_JUDGE_ENABLED,
+  );
+  const isSpanPythonCodeEnabled = useIsFeatureEnabled(
+    FeatureToggleKeys.SPAN_USER_DEFINED_METRIC_PYTHON_ENABLED,
   );
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const navigate = useNavigate();
@@ -187,7 +211,9 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
         defaultRule?.filters ?? [],
         (formScope === EVALUATORS_RULE_SCOPE.thread
           ? THREAD_FILTER_COLUMNS
-          : TRACE_FILTER_COLUMNS) as ColumnData<unknown>[],
+          : formScope === EVALUATORS_RULE_SCOPE.span
+            ? SPAN_FILTER_COLUMNS
+            : TRACE_FILTER_COLUMNS) as ColumnData<unknown>[],
       ) as Filter[],
       pythonCodeDetails:
         defaultRule && isPythonCodeRule(defaultRule)
@@ -206,6 +232,7 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
     form.getValues("uiType") === UI_EVALUATORS_RULE_TYPE.llm_judge;
   const scope = form.getValues("scope");
   const isThreadScope = scope === EVALUATORS_RULE_SCOPE.thread;
+  const isSpanScope = scope === EVALUATORS_RULE_SCOPE.span;
 
   const formProjectId = form.watch("projectId");
 
@@ -280,6 +307,8 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
         EXPLAINER_ID.i_added_edited_a_new_online_evaluation_rule_now_what,
       [EVALUATORS_RULE_SCOPE.thread]:
         EXPLAINER_ID.i_added_edited_a_new_online_evaluation_thread_level_rule_now_what,
+      [EVALUATORS_RULE_SCOPE.span]:
+        EXPLAINER_ID.i_added_edited_a_new_online_evaluation_span_level_rule_now_what,
     };
     const explainer = EXPLAINERS_MAP[expainerIdMap[scope]];
 
@@ -304,6 +333,7 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
                 type: {
                   [EVALUATORS_RULE_SCOPE.trace]: "traces",
                   [EVALUATORS_RULE_SCOPE.thread]: "threads",
+                  [EVALUATORS_RULE_SCOPE.span]: "spans",
                 }[scope],
               },
             });
@@ -345,6 +375,13 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
           ...convertLLMJudgeDataToLLMJudgeObject(formData.llmJudgeDetails),
           variables: undefined,
         },
+      } as EvaluatorsRule;
+    }
+
+    if (ruleType === EVALUATORS_RULE_TYPE.span_llm_judge) {
+      return {
+        ...ruleData,
+        code: convertLLMJudgeDataToLLMJudgeObject(formData.llmJudgeDetails),
       } as EvaluatorsRule;
     }
 
@@ -491,6 +528,14 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
                                 >
                                   Thread
                                 </SelectItem>
+                                {(isSpanLlmAsJudgeEnabled ||
+                                  isSpanPythonCodeEnabled) && (
+                                  <SelectItem
+                                    value={EVALUATORS_RULE_SCOPE.span}
+                                  >
+                                    Span
+                                  </SelectItem>
+                                )}
                               </SelectContent>
                             </Select>
                           </FormControl>
@@ -572,28 +617,16 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
                               >
                                 LLM-as-judge
                               </ToggleGroupItem>
-                              {isCodeMetricEnabled ? (
-                                <ToggleGroupItem
-                                  value={UI_EVALUATORS_RULE_TYPE.python_code}
-                                  aria-label="Code metric"
-                                >
-                                  Code metric
-                                </ToggleGroupItem>
-                              ) : (
-                                <TooltipWrapper content="This feature is not available for this environment">
-                                  <span>
-                                    <ToggleGroupItem
-                                      value={
-                                        UI_EVALUATORS_RULE_TYPE.python_code
-                                      }
-                                      aria-label="Code metric"
-                                      disabled
-                                    >
-                                      Code metric
-                                    </ToggleGroupItem>
-                                  </span>
-                                </TooltipWrapper>
-                              )}
+                              {isCodeMetricEnabled &&
+                                (!isSpanScope ||
+                                  (isSpanScope && isSpanPythonCodeEnabled)) && (
+                                  <ToggleGroupItem
+                                    value={UI_EVALUATORS_RULE_TYPE.python_code}
+                                    aria-label="Code metric"
+                                  >
+                                    Code metric
+                                  </ToggleGroupItem>
+                                )}
                             </ToggleGroup>
                           </div>
                         </FormControl>

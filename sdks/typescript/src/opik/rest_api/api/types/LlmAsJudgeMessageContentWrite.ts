@@ -9,4 +9,5 @@ export interface LlmAsJudgeMessageContentWrite {
     text?: string;
     imageUrl?: OpikApi.ImageUrlWrite;
     videoUrl?: OpikApi.VideoUrlWrite;
+    audioUrl?: OpikApi.AudioUrlWrite;
 }

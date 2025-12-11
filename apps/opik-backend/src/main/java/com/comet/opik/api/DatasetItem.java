@@ -24,6 +24,7 @@ import java.util.UUID;
 public record DatasetItem(
         @JsonView( {
                 DatasetItem.View.Public.class, DatasetItem.View.Write.class}) UUID id,
+        @JsonView({DatasetItem.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) UUID draftItemId,
         @JsonView({DatasetItem.View.Public.class, DatasetItem.View.Write.class}) UUID traceId,
         @JsonView({DatasetItem.View.Public.class, DatasetItem.View.Write.class}) UUID spanId,
         @JsonView({DatasetItem.View.Public.class, DatasetItem.View.Write.class}) @NotNull DatasetItemSource source,
@@ -48,10 +49,11 @@ public record DatasetItem(
             @JsonView({DatasetItem.View.Public.class}) int size,
             @JsonView({DatasetItem.View.Public.class}) long total,
             @JsonView({DatasetItem.View.Public.class}) Set<Column> columns,
-            @JsonView({DatasetItem.View.Public.class}) List<String> sortableBy) implements Page<DatasetItem>{
+            @JsonView({DatasetItem.View.Public.class}) List<String> sortableBy,
+            @JsonView({DatasetItem.View.Public.class}) boolean hasDraft) implements Page<DatasetItem>{
 
         public static DatasetItemPage empty(int page, List<String> sortableBy) {
-            return new DatasetItemPage(List.of(), page, 0, 0, Set.of(), sortableBy);
+            return new DatasetItemPage(List.of(), page, 0, 0, Set.of(), sortableBy, false);
         }
     }
 

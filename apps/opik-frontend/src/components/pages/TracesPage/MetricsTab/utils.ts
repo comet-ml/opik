@@ -1,6 +1,8 @@
 import { INTERVAL_TYPE } from "@/api/projects/useProjectMetric";
-import { ChartTooltipRenderValueArguments } from "@/components/shared/ChartTooltipContent/ChartTooltipContent";
+import { ChartTooltipRenderValueArguments } from "@/components/shared/Charts/ChartTooltipContent/ChartTooltipContent";
 import { formatDuration } from "@/lib/date";
+import { formatCost } from "@/lib/money";
+import { formatNumberInK } from "@/lib/utils";
 
 /**
  * Duration labels mapping for percentile charts
@@ -49,3 +51,21 @@ export const renderDurationTooltipValue = ({
  */
 export const durationYTickFormatter = (value: number) =>
   formatDuration(value, false);
+
+/**
+ * Renders cost tooltip values in formatted cost string
+ */
+export const renderCostTooltipValue = ({
+  value,
+}: ChartTooltipRenderValueArguments) => formatCost(value as number);
+
+/**
+ * Formats Y-axis tick values for cost charts
+ */
+export const costYTickFormatter = (value: number) =>
+  formatCost(value, { modifier: "kFormat" });
+
+/**
+ * Formats Y-axis tick values for token usage charts
+ */
+export const tokenYTickFormatter = (value: number) => formatNumberInK(value);

@@ -62,7 +62,7 @@ export class Dashboards {
         request: OpikApi.FindDashboardsRequest = {},
         requestOptions?: Dashboards.RequestOptions,
     ): Promise<core.WithRawResponse<OpikApi.DashboardPagePublic>> {
-        const { page, size, name } = request;
+        const { page, size, name, sorting } = request;
         const _queryParams: Record<string, string | string[] | object | object[] | null> = {};
         if (page != null) {
             _queryParams["page"] = page.toString();
@@ -74,6 +74,10 @@ export class Dashboards {
 
         if (name != null) {
             _queryParams["name"] = name;
+        }
+
+        if (sorting != null) {
+            _queryParams["sorting"] = sorting;
         }
 
         const _response = await core.fetcher({
@@ -488,6 +492,86 @@ export class Dashboards {
             case "timeout":
                 throw new errors.OpikApiTimeoutError(
                     "Timeout exceeded when calling PATCH /v1/private/dashboards/{dashboardId}.",
+                );
+            case "unknown":
+                throw new errors.OpikApiError({
+                    message: _response.error.errorMessage,
+                    rawResponse: _response.rawResponse,
+                });
+        }
+    }
+
+    /**
+     * Delete dashboards batch
+     *
+     * @param {OpikApi.BatchDelete} request
+     * @param {Dashboards.RequestOptions} requestOptions - Request-specific configuration.
+     *
+     * @example
+     *     await client.dashboards.deleteDashboardsBatch({
+     *         ids: ["ids"]
+     *     })
+     */
+    public deleteDashboardsBatch(
+        request: OpikApi.BatchDelete,
+        requestOptions?: Dashboards.RequestOptions,
+    ): core.HttpResponsePromise<void> {
+        return core.HttpResponsePromise.fromPromise(this.__deleteDashboardsBatch(request, requestOptions));
+    }
+
+    private async __deleteDashboardsBatch(
+        request: OpikApi.BatchDelete,
+        requestOptions?: Dashboards.RequestOptions,
+    ): Promise<core.WithRawResponse<void>> {
+        const _response = await core.fetcher({
+            url: urlJoin(
+                (await core.Supplier.get(this._options.baseUrl)) ??
+                    (await core.Supplier.get(this._options.environment)) ??
+                    environments.OpikApiEnvironment.Default,
+                "v1/private/dashboards/delete-batch",
+            ),
+            method: "POST",
+            headers: {
+                "Comet-Workspace":
+                    (await core.Supplier.get(this._options.workspaceName)) != null
+                        ? await core.Supplier.get(this._options.workspaceName)
+                        : undefined,
+                "X-Fern-Language": "JavaScript",
+                "X-Fern-Runtime": core.RUNTIME.type,
+                "X-Fern-Runtime-Version": core.RUNTIME.version,
+                ...(await this._getCustomAuthorizationHeaders()),
+                ...requestOptions?.headers,
+            },
+            contentType: "application/json",
+            requestType: "json",
+            body: serializers.BatchDelete.jsonOrThrow(request, { unrecognizedObjectKeys: "strip" }),
+            timeoutMs: requestOptions?.timeoutInSeconds != null ? requestOptions.timeoutInSeconds * 1000 : 60000,
+            maxRetries: requestOptions?.maxRetries,
+            withCredentials: true,
+            abortSignal: requestOptions?.abortSignal,
+        });
+        if (_response.ok) {
+            return { data: undefined, rawResponse: _response.rawResponse };
+        }
+
+        if (_response.error.reason === "status-code") {
+            throw new errors.OpikApiError({
+                statusCode: _response.error.statusCode,
+                body: _response.error.body,
+                rawResponse: _response.rawResponse,
+            });
+        }
+
+        switch (_response.error.reason) {
+            case "non-json":
+                throw new errors.OpikApiError({
+                    statusCode: _response.error.statusCode,
+                    body: _response.error.rawBody,
+                    rawResponse: _response.rawResponse,
+                });
+            case "timeout":
+                throw new errors.OpikApiTimeoutError(
+                    "Timeout exceeded when calling POST /v1/private/dashboards/delete-batch.",
                 );
             case "unknown":
                 throw new errors.OpikApiError({

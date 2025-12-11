@@ -17,11 +17,13 @@ import FiltersButton from "@/components/shared/FiltersButton/FiltersButton";
 import ThreadsFeedbackScoresSelect from "@/components/pages-shared/traces/TracesOrSpansFeedbackScoresSelect/ThreadsFeedbackScoresSelect";
 
 import MetricContainerChart from "./MetricChart/MetricChartContainer";
+import { CHART_TYPE } from "@/constants/chart";
 import {
   DURATION_LABELS_MAP,
   INTERVAL_DESCRIPTIONS,
   renderDurationTooltipValue,
   durationYTickFormatter,
+  tokenYTickFormatter,
 } from "./utils";
 
 const THREAD_FILTER_COLUMNS: ColumnData<Thread>[] = [
@@ -169,7 +171,7 @@ const ThreadMetricsSection: React.FC<ThreadMetricsSectionProps> = ({
             intervalStart={intervalStart}
             intervalEnd={intervalEnd}
             projectId={projectId}
-            chartType="line"
+            chartType={CHART_TYPE.line}
             threadFilters={threadFilters}
           />
         </div>
@@ -184,7 +186,8 @@ const ThreadMetricsSection: React.FC<ThreadMetricsSectionProps> = ({
             intervalStart={intervalStart}
             intervalEnd={intervalEnd}
             projectId={projectId}
-            chartType="line"
+            customYTickFormatter={tokenYTickFormatter}
+            chartType={CHART_TYPE.line}
             threadFilters={threadFilters}
           />
         </div>
@@ -202,7 +205,7 @@ const ThreadMetricsSection: React.FC<ThreadMetricsSectionProps> = ({
             renderValue={renderDurationTooltipValue}
             labelsMap={DURATION_LABELS_MAP}
             customYTickFormatter={durationYTickFormatter}
-            chartType="line"
+            chartType={CHART_TYPE.line}
             threadFilters={threadFilters}
           />
         </div>

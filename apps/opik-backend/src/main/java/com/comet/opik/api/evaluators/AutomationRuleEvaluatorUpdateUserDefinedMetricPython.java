@@ -24,7 +24,7 @@ import static com.comet.opik.api.evaluators.AutomationRuleEvaluatorUserDefinedMe
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
 public final class AutomationRuleEvaluatorUpdateUserDefinedMetricPython
         extends
-            AutomationRuleEvaluatorUpdate<UserDefinedMetricPythonCode> {
+            AutomationRuleEvaluatorUpdate<UserDefinedMetricPythonCode, TraceFilter> {
 
     @ConstructorProperties({"name", "samplingRate", "enabled", "filters", "code", "projectId"})
     public AutomationRuleEvaluatorUpdateUserDefinedMetricPython(
@@ -32,6 +32,17 @@ public final class AutomationRuleEvaluatorUpdateUserDefinedMetricPython
             @NotNull UserDefinedMetricPythonCode code,
             @NotNull UUID projectId) {
         super(name, samplingRate, enabled, filters, code, projectId);
+    }
+
+    /**
+     * Two purposes:
+     * - Makes the polymorphic T code available for serialization.
+     * - Provides the specific type T for Open API and Fern.
+     */
+    @JsonProperty
+    @Override
+    public List<TraceFilter> getFilters() {
+        return super.getFilters();
     }
 
     /**

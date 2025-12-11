@@ -9,7 +9,9 @@ import com.comet.opik.api.DatasetItem;
 import com.comet.opik.api.DatasetItemBatch;
 import com.comet.opik.api.DatasetVersion;
 import com.comet.opik.api.DatasetVersionCreate;
+import com.comet.opik.api.DatasetVersionDiff;
 import com.comet.opik.api.DatasetVersionTag;
+import com.comet.opik.api.DatasetVersionUpdate;
 import com.comet.opik.api.PromptVersion;
 import com.comet.opik.utils.JsonUtils;
 import com.google.common.net.HttpHeaders;
@@ -219,6 +221,50 @@ public class DatasetResourceClient {
             assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
             return actualResponse.readEntity(DatasetItemPage.class);
         }
+    }
+
+    public DatasetItemPage getDatasetItems(UUID datasetId, int page, int size, String version, String apiKey,
+            String workspaceName) {
+        WebTarget target = client.target(RESOURCE_PATH.formatted(baseURI))
+                .path(datasetId.toString())
+                .path("items")
+                .queryParam("page", page)
+                .queryParam("size", size);
+
+        if (version != null && !version.isBlank()) {
+            target = target.queryParam("version", version);
+        }
+
+        try (var actualResponse = target
+                .request()
+                .accept(MediaType.APPLICATION_JSON_TYPE)
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .get()) {
+
+            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
+            return actualResponse.readEntity(DatasetItemPage.class);
+        }
+    }
+
+    public Response callGetDatasetItems(UUID datasetId, int page, int size, String version, String apiKey,
+            String workspaceName) {
+        WebTarget target = client.target(RESOURCE_PATH.formatted(baseURI))
+                .path(datasetId.toString())
+                .path("items")
+                .queryParam("page", page)
+                .queryParam("size", size);
+
+        if (version != null && !version.isBlank()) {
+            target = target.queryParam("version", version);
+        }
+
+        return target
+                .request()
+                .accept(MediaType.APPLICATION_JSON_TYPE)
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .get();
     }
 
     public void deleteDatasets(List<Dataset> datasets, String apiKey, String workspaceName) {
@@ -458,5 +504,96 @@ public class DatasetResourceClient {
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .header(WORKSPACE_HEADER, workspaceName)
                 .delete();
+    }
+
+    public DatasetVersion updateVersion(UUID datasetId, String versionHash, DatasetVersionUpdate update, String apiKey,
+            String workspaceName) {
+        try (var response = callUpdateVersion(datasetId, versionHash, update, apiKey, workspaceName)) {
+            assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
+            return response.readEntity(DatasetVersion.class);
+        }
+    }
+
+    public Response callUpdateVersion(UUID datasetId, String versionHash, DatasetVersionUpdate update, String apiKey,
+            String workspaceName) {
+        return client.target(RESOURCE_PATH.formatted(baseURI))
+                .path(datasetId.toString())
+                .path("versions")
+                .path("hash")
+                .path(versionHash)
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .method("PATCH", Entity.json(update));
+    }
+
+    public DatasetVersionDiff compareVersions(UUID datasetId, String fromHashOrTag,
+            String toHashOrTag, String apiKey, String workspaceName) {
+        try (var response = callCompareVersions(datasetId, fromHashOrTag, toHashOrTag, apiKey, workspaceName)) {
+            assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
+            return response.readEntity(DatasetVersionDiff.class);
+        }
+    }
+
+    public Response callCompareVersions(UUID datasetId, String fromHashOrTag, String toHashOrTag, String apiKey,
+            String workspaceName) {
+        WebTarget target = client.target(RESOURCE_PATH.formatted(baseURI))
+                .path(datasetId.toString())
+                .path("versions")
+                .path("diff");
+
+        // Both parameters are now optional - when null, endpoint compares latest with draft
+        if (fromHashOrTag != null) {
+            target = target.queryParam("from", fromHashOrTag);
+        }
+
+        if (toHashOrTag != null) {
+            target = target.queryParam("to", toHashOrTag);
+        }
+
+        return target
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .get();
+    }
+
+    public DatasetVersion restoreVersion(UUID datasetId, String versionRef, String apiKey, String workspaceName) {
+        try (var response = callRestoreVersion(datasetId, versionRef, apiKey, workspaceName)) {
+            assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
+            return response.readEntity(DatasetVersion.class);
+        }
+    }
+
+    public Response callRestoreVersion(UUID datasetId, String versionRef, String apiKey, String workspaceName) {
+        var restoreRequest = com.comet.opik.api.DatasetVersionRestore.builder()
+                .versionRef(versionRef)
+                .build();
+
+        return client.target(RESOURCE_PATH.formatted(baseURI))
+                .path(datasetId.toString())
+                .path("versions")
+                .path("restore")
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .post(Entity.json(restoreRequest));
+    }
+
+    public void deleteDatasetItems(List<UUID> itemIds, String apiKey, String workspaceName) {
+        try (var response = callDeleteDatasetItems(itemIds, apiKey, workspaceName)) {
+            assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_NO_CONTENT);
+        }
+    }
+
+    public Response callDeleteDatasetItems(List<UUID> itemIds, String apiKey, String workspaceName) {
+        var deleteRequest = new com.comet.opik.api.DatasetItemsDelete(itemIds);
+        return client.target(RESOURCE_PATH.formatted(baseURI))
+                .path("items")
+                .path("delete")
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .post(Entity.json(deleteRequest));
     }
 }

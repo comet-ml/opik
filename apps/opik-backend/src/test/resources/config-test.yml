@@ -8,6 +8,7 @@ logging:
   #  Description: Individual logger configuration
   loggers:
     com.comet: DEBUG
+    com.comet.opik.infrastructure.llm: INFO
 
 # Description: state database configuration
 # https://www.dropwizard.io/en/stable/manual/configuration.html#database
@@ -296,6 +297,26 @@ onlineScoring:
       claimIntervalRatio: # Empty - will use global default
       pendingMessageDuration: # Empty - will use global default
       maxRetries: # Empty - will use global default
+    - scorer: span_llm_as_judge
+      streamName: stream_scoring_span_llm_as_judge
+      codec: java
+      # Optional per stream configuration (falls back to global if not specified)
+      poolingInterval: # Empty - will use global default
+      longPollingDuration: # Empty - will use global default
+      consumerBatchSize: # Empty - will use global default
+      claimIntervalRatio: # Empty - will use global default
+      pendingMessageDuration: # Empty - will use global default
+      maxRetries: # Empty - will use global default
+    - scorer: span_user_defined_metric_python
+      streamName: stream_scoring_span_user_defined_metric_python
+      codec: java
+      # Optional per stream configuration (falls back to global if not specified)
+      poolingInterval: # Empty - will use global default
+      longPollingDuration: # Empty - will use global default
+      consumerBatchSize: # Empty - will use global default
+      claimIntervalRatio: # Empty - will use global default
+      pendingMessageDuration: # Empty - will use global default
+      maxRetries: # Empty - will use global default
 
 # LLM providers client configuration
 llmProviderClient:
@@ -393,6 +414,12 @@ serviceToggles:
   # Default: false
   # Description: Whether or not to enable the trace thread Python evaluator
   traceThreadPythonEvaluatorEnabled: "false"
+  # Default: true
+  # Description: Whether or not to enable the span LLM as Judge evaluator
+  spanLlmAsJudgeEnabled: "false"
+  # Default: false
+  # Description: Whether or not to enable the span user-defined metric Python evaluator
+  spanUserDefinedMetricPythonEnabled: "false"
   # Default: false
   # Description: Whether or not OpikAI feature is enabled
   opikAIEnabled: "false"
@@ -405,6 +432,36 @@ serviceToggles:
   # Default: true
   # Description: Whether or not export/download functionality is enabled
   exportEnabled: "true"
+  # Default: false
+  # Description: Whether or not Dashboards feature is enabled
+  dashboardsEnabled: "false"
+  # Default: true for testing
+  # Description: Whether or not dataset versioning feature is enabled
+  datasetVersioningEnabled: "true"
+  # Default: false
+  # Description: Whether or not Optimization Studio feature is enabled
+  optimizationStudioEnabled: "false"
+  # Default: true
+  # Description: Whether or not OpenAI provider is enabled
+  openaiProviderEnabled: "true"
+  # Default: true
+  # Description: Whether or not Anthropic provider is enabled
+  anthropicProviderEnabled: "true"
+  # Default: true
+  # Description: Whether or not Gemini provider is enabled
+  geminiProviderEnabled: "true"
+  # Default: true
+  # Description: Whether or not OpenRouter provider is enabled
+  openrouterProviderEnabled: "true"
+  # Default: true
+  # Description: Whether or not Vertex AI provider is enabled
+  vertexaiProviderEnabled: "true"
+  # Default: true
+  # Description: Whether or not Custom LLM provider is enabled
+  customllmProviderEnabled: "true"
+  # Default: true
+  # Description: Whether or not Opik Built-in provider is enabled
+  opikbuiltinProviderEnabled: "true"
 
 # Trace Thread configuration
 traceThreadConfig:

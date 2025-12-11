@@ -5,7 +5,11 @@ import useLocalStorageState from "use-local-storage-state";
 import useAppStore from "@/store/AppStore";
 import { usePromptMap, useSetPromptMap } from "@/store/PlaygroundStore";
 import { generateDefaultPrompt } from "@/lib/playground";
-import { generateDefaultLLMPromptMessage } from "@/lib/llm";
+import {
+  generateDefaultLLMPromptMessage,
+  getTextFromMessageContent,
+  parseChatTemplateToLLMMessages,
+} from "@/lib/llm";
 import {
   PLAYGROUND_LAST_PICKED_MODEL,
   PLAYGROUND_SELECTED_DATASET_KEY,
@@ -14,6 +18,7 @@ import useLastPickedModel from "@/hooks/useLastPickedModel";
 import useLLMProviderModelsData from "@/hooks/useLLMProviderModelsData";
 import useProviderKeys from "@/api/provider-keys/useProviderKeys";
 import { MessageContent } from "@/types/llm";
+import { PROMPT_TEMPLATE_STRUCTURE } from "@/types/prompts";
 
 interface LoadPlaygroundOptions {
   promptContent?: MessageContent;
@@ -21,6 +26,7 @@ interface LoadPlaygroundOptions {
   promptVersionId?: string;
   autoImprove?: boolean;
   datasetId?: string;
+  templateStructure?: PROMPT_TEMPLATE_STRUCTURE;
 }
 
 const useLoadPlayground = () => {
@@ -70,6 +76,7 @@ const useLoadPlayground = () => {
         promptVersionId,
         autoImprove = false,
         datasetId,
+        templateStructure,
       } = options;
 
       const newPrompt = generateDefaultPrompt({
@@ -79,14 +86,57 @@ const useLoadPlayground = () => {
         modelResolver: calculateDefaultModel,
       });
 
-      newPrompt.messages = [
-        generateDefaultLLMPromptMessage({
-          content: promptContent,
-          promptId,
-          promptVersionId,
-          autoImprove,
-        }),
-      ];
+      // For chat prompts, parse the JSON and create multiple messages
+      if (templateStructure === PROMPT_TEMPLATE_STRUCTURE.CHAT) {
+        // Set the loaded chat prompt ID for the dropdown to display
+        if (promptId) {
+          newPrompt.loadedChatPromptId = promptId;
+        }
+
+        try {
+          const contentString = getTextFromMessageContent(promptContent);
+          const parsedMessages = parseChatTemplateToLLMMessages(contentString, {
+            promptId,
+            promptVersionId,
+            useTimestamp: true,
+          });
+
+          if (parsedMessages.length > 0) {
+            newPrompt.messages = parsedMessages;
+          } else {
+            // Fallback to single message if parsing fails
+            newPrompt.messages = [
+              generateDefaultLLMPromptMessage({
+                content: promptContent,
+                promptId,
+                promptVersionId,
+                autoImprove,
+              }),
+            ];
+          }
+        } catch (error) {
+          console.error("Failed to parse chat prompt:", error);
+          // Fallback to single message if parsing fails, preserving full content
+          newPrompt.messages = [
+            generateDefaultLLMPromptMessage({
+              content: promptContent,
+              promptId,
+              promptVersionId,
+              autoImprove,
+            }),
+          ];
+        }
+      } else {
+        // For text prompts, create a single message preserving full content (including media)
+        newPrompt.messages = [
+          generateDefaultLLMPromptMessage({
+            content: promptContent,
+            promptId,
+            promptVersionId,
+            autoImprove,
+          }),
+        ];
+      }
 
       setPromptMap([newPrompt.id], { [newPrompt.id]: newPrompt });
 

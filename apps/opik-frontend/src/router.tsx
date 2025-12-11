@@ -30,7 +30,7 @@ import RedirectDatasets from "@/components/redirect/RedirectDatasets";
 import PlaygroundPage from "@/components/pages/PlaygroundPage/PlaygroundPage";
 import useAppStore from "@/store/AppStore";
 import ConfigurationPage from "@/components/pages/ConfigurationPage/ConfigurationPage";
-import NewQuickstartPage from "@/components/pages/NewQuickstartPage/NewQuickstartPage";
+import GetStartedPage from "@/components/pages/GetStartedPage/GetStartedPage";
 import AutomationLogsPage from "@/components/pages/AutomationLogsPage/AutomationLogsPage";
 import OnlineEvaluationPage from "@/components/pages/OnlineEvaluationPage/OnlineEvaluationPage";
 import AnnotationQueuesPage from "@/components/pages/AnnotationQueuesPage/AnnotationQueuesPage";
@@ -39,8 +39,12 @@ import OptimizationsPage from "@/components/pages/OptimizationsPage/Optimization
 import OptimizationPage from "@/components/pages/OptimizationPage/OptimizationPage";
 import CompareOptimizationsPage from "@/components/pages/CompareOptimizationsPage/CompareOptimizationsPage";
 import CompareTrialsPage from "@/components/pages/CompareTrialsPage/CompareTrialsPage";
-import AddEditAlertPage from "@/components/pages/AlertsPage/AddEditAlertPage/AddEditAlertPage";
+import OptimizationStudioPage from "@/components/pages/OptimizationStudioPage/OptimizationStudioPage";
+import OptimizationStudioRunPage from "@/components/pages/OptimizationStudioPage/OptimizationStudioRunPage";
 import AlertsRouteWrapper from "@/components/pages/AlertsPage/AlertsRouteWrapper";
+import AddEditAlertPage from "./components/pages/AlertsPage/AddEditAlertPage/AddEditAlertPage";
+import DashboardPage from "@/components/pages/DashboardPage/DashboardPage";
+import DashboardsPage from "@/components/pages/DashboardsPage/DashboardsPage";
 
 declare module "@tanstack/react-router" {
   interface StaticDataRouteOption {
@@ -128,7 +132,7 @@ const quickstartRoute = createRoute({
 const getStartedRoute = createRoute({
   path: "/$workspaceName/get-started",
   getParentRoute: () => workspaceGuardPartialLayoutRoute,
-  component: NewQuickstartPage,
+  component: GetStartedPage,
   staticData: {
     hideUpgradeButton: true,
   },
@@ -151,6 +155,30 @@ const homeRouteNew = createRoute({
   component: HomePage,
   staticData: {
     title: "Home",
+  },
+});
+
+// ----------- dashboards
+const dashboardsRoute = createRoute({
+  path: "/dashboards",
+  getParentRoute: () => workspaceRoute,
+  staticData: {
+    title: "Dashboards",
+  },
+});
+
+const dashboardsPageRoute = createRoute({
+  path: "/",
+  getParentRoute: () => dashboardsRoute,
+  component: DashboardsPage,
+});
+
+const dashboardDetailRoute = createRoute({
+  path: "/$dashboardId",
+  getParentRoute: () => dashboardsRoute,
+  component: DashboardPage,
+  staticData: {
+    param: "dashboardId",
   },
 });
 
@@ -255,6 +283,32 @@ const compareTrialsRoute = createRoute({
   staticData: {
     param: "trialsCompare",
     paramValue: "trialsCompare",
+  },
+});
+
+// Optimization Studio
+const optimizationStudioRoute = createRoute({
+  path: "/optimization-studio",
+  getParentRoute: () => workspaceRoute,
+  component: () => <Outlet />,
+  staticData: {
+    title: "Optimization studio",
+  },
+});
+
+const optimizationStudioIndexRoute = createRoute({
+  path: "/",
+  getParentRoute: () => optimizationStudioRoute,
+  component: OptimizationStudioPage,
+});
+
+const optimizationStudioRunRoute = createRoute({
+  path: "/run",
+  getParentRoute: () => optimizationStudioRoute,
+  component: OptimizationStudioRunPage,
+  staticData: {
+    param: "optimizationStudioRun",
+    paramValue: "run",
   },
 });
 
@@ -449,6 +503,7 @@ const routeTree = rootRoute.addChildren([
     homeRoute,
     homeRouteNew,
     workspaceRoute.addChildren([
+      dashboardsRoute.addChildren([dashboardsPageRoute, dashboardDetailRoute]),
       projectsRoute.addChildren([
         projectsListRoute,
         projectRoute.addChildren([tracesRoute]),
@@ -464,6 +519,10 @@ const routeTree = rootRoute.addChildren([
           optimizationRoute,
           compareTrialsRoute,
         ]),
+      ]),
+      optimizationStudioRoute.addChildren([
+        optimizationStudioIndexRoute,
+        optimizationStudioRunRoute,
       ]),
       datasetsRoute.addChildren([
         datasetsListRoute,

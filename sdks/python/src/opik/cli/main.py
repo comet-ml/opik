@@ -5,12 +5,13 @@ from typing import Optional
 
 import click
 
-from .configure import configure
-from .export import export
-from .healthcheck import healthcheck
-from .import_command import import_data
-from .proxy import proxy
-from .usage_report import usage_report  # Import from usage_report package
+from . import configure
+from . import exports
+from . import harbor
+from . import healthcheck
+from . import imports
+from . import proxy
+from . import usage_report
 
 __version__: str = "0.0.0+dev"
 try:
@@ -39,9 +40,10 @@ def cli(ctx: click.Context, api_key: Optional[str]) -> None:
 
 
 # Register all commands
-cli.add_command(configure)
-cli.add_command(proxy)
-cli.add_command(healthcheck)
-cli.add_command(export)
-cli.add_command(import_data)
-cli.add_command(usage_report)
+cli.add_command(configure.configure)
+cli.add_command(proxy.proxy)
+cli.add_command(healthcheck.healthcheck)
+cli.add_command(exports.export_group)
+cli.add_command(imports.import_group)
+cli.add_command(usage_report.usage_report)
+cli.add_command(harbor.harbor)

@@ -1,5 +1,5 @@
 import React, { useMemo } from "react";
-import { CellContext } from "@tanstack/react-table";
+import { CellContext, TableMeta } from "@tanstack/react-table";
 import { MessageSquareMore } from "lucide-react";
 import isNumber from "lodash/isNumber";
 import isFunction from "lodash/isFunction";
@@ -17,19 +17,19 @@ import { BaseTraceData } from "@/types/traces";
 import useFeedbackScoreInlineEdit from "@/hooks/useFeedbackScoreInlineEdit";
 import { isObjectSpan, isObjectThread } from "@/lib/traces";
 import { ThreadStatus } from "@/types/thread";
+import { ROW_HEIGHT } from "@/types/shared";
 
 const FeedbackScoreCell = (context: CellContext<unknown, unknown>) => {
   const feedbackScore = context.getValue() as TraceFeedbackScore | undefined;
   const reason = feedbackScore?.reason;
   const row = context.row.original as BaseTraceData | Thread | Span;
 
-  // Get projectId and projectName from table meta
-  const projectId = (
-    context.table.options.meta as { projectId?: string } | undefined
-  )?.projectId;
-  const projectName = (
-    context.table.options.meta as { projectName?: string } | undefined
-  )?.projectName;
+  const {
+    projectId,
+    projectName,
+    rowHeight = ROW_HEIGHT.small,
+    enableUserFeedbackEditing = false,
+  } = (context.table.options.meta ?? {}) as TableMeta<unknown>;
 
   const { handleValueChange } = useFeedbackScoreInlineEdit({
     id: row.id,
@@ -61,19 +61,25 @@ const FeedbackScoreCell = (context: CellContext<unknown, unknown>) => {
     feedbackScore?.last_updated_at,
   ]);
 
-  const enableUserFeedbackEditing =
-    ((!isObjectThread(row) || row.status === ThreadStatus.INACTIVE) &&
-      context.table.options.meta?.enableUserFeedbackEditing) ??
-    false;
+  const isEditingEnabled =
+    (!isObjectThread(row) || row.status === ThreadStatus.INACTIVE) &&
+    enableUserFeedbackEditing;
+
   const isUserFeedbackColumn =
-    enableUserFeedbackEditing &&
-    context.column.id === "feedback_scores_User feedback";
+    isEditingEnabled && context.column.id === "feedback_scores_User feedback";
+  const isSmall = rowHeight === ROW_HEIGHT.small;
 
   return (
     <CellWrapper
       metadata={context.column.columnDef.meta}
       tableMetadata={context.table.options.meta}
-      className={cn("gap-1", isUserFeedbackColumn && "group")}
+      className={cn(
+        "flex w-full justify-end gap-1",
+        isSmall
+          ? "h-4 items-center"
+          : "flex-col items-end justify-start overflow-hidden",
+        isUserFeedbackColumn && "group",
+      )}
     >
       <FeedbackScoreCellValue
         feedbackScore={feedbackScore}
@@ -83,9 +89,21 @@ const FeedbackScoreCell = (context: CellContext<unknown, unknown>) => {
 
       {reasons.length > 0 && (
         <FeedbackScoreReasonTooltip reasons={reasons}>
-          <div className="flex h-[20px] items-center">
-            <MessageSquareMore className="mt-0.5 size-3.5 shrink-0 text-light-slate" />
-          </div>
+          {!isSmall ? (
+            <span
+              className={cn(
+                "break-words text-xs text-muted-foreground",
+                rowHeight === ROW_HEIGHT.medium && "line-clamp-3",
+                rowHeight === ROW_HEIGHT.large && "line-clamp-[16]",
+              )}
+            >
+              {reasons.map((r) => r.reason).join(", ")}
+            </span>
+          ) : (
+            <div className="flex h-[20px] items-center">
+              <MessageSquareMore className="mt-0.5 size-3.5 shrink-0 text-light-slate" />
+            </div>
+          )}
         </FeedbackScoreReasonTooltip>
       )}
     </CellWrapper>

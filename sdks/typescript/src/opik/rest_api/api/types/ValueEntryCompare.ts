@@ -10,4 +10,6 @@ export interface ValueEntryCompare {
     categoryName?: string;
     source?: OpikApi.ValueEntryCompareSource;
     lastUpdatedAt?: Date;
+    spanType?: string;
+    spanId?: string;
 }

@@ -12,23 +12,33 @@ export const ServiceTogglesConfig: core.serialization.ObjectSchema<
 > = core.serialization.object({
     pythonEvaluatorEnabled: core.serialization.boolean(),
     traceThreadPythonEvaluatorEnabled: core.serialization.boolean(),
+    spanLlmAsJudgeEnabled: core.serialization.boolean(),
+    spanUserDefinedMetricPythonEnabled: core.serialization.boolean(),
     guardrailsEnabled: core.serialization.boolean(),
     opikAiEnabled: core.serialization.property("opikAIEnabled", core.serialization.boolean()),
     alertsEnabled: core.serialization.boolean(),
     welcomeWizardEnabled: core.serialization.boolean(),
     csvUploadEnabled: core.serialization.boolean(),
     exportEnabled: core.serialization.boolean(),
+    optimizationStudioEnabled: core.serialization.boolean(),
+    dashboardsEnabled: core.serialization.boolean(),
+    datasetVersioningEnabled: core.serialization.boolean(),
 });
 
 export declare namespace ServiceTogglesConfig {
     export interface Raw {
         pythonEvaluatorEnabled: boolean;
         traceThreadPythonEvaluatorEnabled: boolean;
+        spanLlmAsJudgeEnabled: boolean;
+        spanUserDefinedMetricPythonEnabled: boolean;
         guardrailsEnabled: boolean;
         opikAIEnabled: boolean;
         alertsEnabled: boolean;
         welcomeWizardEnabled: boolean;
         csvUploadEnabled: boolean;
         exportEnabled: boolean;
+        optimizationStudioEnabled: boolean;
+        dashboardsEnabled: boolean;
+        datasetVersioningEnabled: boolean;
     }
 }

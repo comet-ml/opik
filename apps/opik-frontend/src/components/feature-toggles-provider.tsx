@@ -22,6 +22,18 @@ const DEFAULT_STATE: FeatureToggles = {
   [FeatureToggleKeys.WELCOME_WIZARD_ENABLED]: false,
   [FeatureToggleKeys.CSV_UPLOAD_ENABLED]: false,
   [FeatureToggleKeys.EXPORT_ENABLED]: true,
+  [FeatureToggleKeys.OPTIMIZATION_STUDIO_ENABLED]: false,
+  [FeatureToggleKeys.SPAN_LLM_AS_JUDGE_ENABLED]: false,
+  [FeatureToggleKeys.SPAN_USER_DEFINED_METRIC_PYTHON_ENABLED]: false,
+  [FeatureToggleKeys.DASHBOARDS_ENABLED]: false,
+  // LLM Provider feature flags - default enabled
+  [FeatureToggleKeys.OPENAI_PROVIDER_ENABLED]: true,
+  [FeatureToggleKeys.ANTHROPIC_PROVIDER_ENABLED]: true,
+  [FeatureToggleKeys.GEMINI_PROVIDER_ENABLED]: true,
+  [FeatureToggleKeys.OPENROUTER_PROVIDER_ENABLED]: true,
+  [FeatureToggleKeys.VERTEXAI_PROVIDER_ENABLED]: true,
+  [FeatureToggleKeys.CUSTOMLLM_PROVIDER_ENABLED]: true,
+  [FeatureToggleKeys.OPIKBUILTIN_PROVIDER_ENABLED]: true,
 };
 
 const initialState: FeatureTogglesState = {
@@ -41,7 +53,9 @@ export function FeatureTogglesProvider({ children }: FeatureTogglesProps) {
   });
 
   useEffect(() => {
-    if (data) setFeatures(data);
+    if (data) {
+      setFeatures(data);
+    }
   }, [data]);
 
   const value = useMemo(() => {

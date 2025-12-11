@@ -16,8 +16,6 @@ import {
   INTERVAL_TYPE,
 } from "@/api/projects/useProjectMetric";
 import { CUSTOM_FILTER_VALIDATION_REGEXP } from "@/constants/filters";
-import { ChartTooltipRenderValueArguments } from "@/components/shared/ChartTooltipContent/ChartTooltipContent";
-import { formatCost } from "@/lib/money";
 import { generateVisibilityFilters } from "@/lib/filters";
 import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
@@ -28,10 +26,13 @@ import FiltersButton from "@/components/shared/FiltersButton/FiltersButton";
 import TracesOrSpansPathsAutocomplete from "@/components/pages-shared/traces/TracesOrSpansPathsAutocomplete/TracesOrSpansPathsAutocomplete";
 import TracesOrSpansFeedbackScoresSelect from "@/components/pages-shared/traces/TracesOrSpansFeedbackScoresSelect/TracesOrSpansFeedbackScoresSelect";
 import MetricContainerChart from "./MetricChart/MetricChartContainer";
-import { INTERVAL_DESCRIPTIONS } from "./utils";
-
-const renderCostTooltipValue = ({ value }: ChartTooltipRenderValueArguments) =>
-  formatCost(value as number);
+import { CHART_TYPE } from "@/constants/chart";
+import {
+  INTERVAL_DESCRIPTIONS,
+  renderCostTooltipValue,
+  costYTickFormatter,
+  tokenYTickFormatter,
+} from "./utils";
 
 const PROJECT_METRICS_FILTER_COLUMNS: ColumnData<BaseTraceData>[] = [
   {
@@ -244,7 +245,8 @@ const ProjectMetricsSection: React.FC<ProjectMetricsSectionProps> = ({
             intervalStart={intervalStart}
             intervalEnd={intervalEnd}
             projectId={projectId}
-            chartType="line"
+            customYTickFormatter={tokenYTickFormatter}
+            chartType={CHART_TYPE.line}
             traceFilters={processedProjectMetricsFilters}
           />
         </div>
@@ -260,7 +262,8 @@ const ProjectMetricsSection: React.FC<ProjectMetricsSectionProps> = ({
             intervalEnd={intervalEnd}
             projectId={projectId}
             renderValue={renderCostTooltipValue}
-            chartType="line"
+            customYTickFormatter={costYTickFormatter}
+            chartType={CHART_TYPE.line}
             traceFilters={processedProjectMetricsFilters}
           />
         </div>

@@ -8,6 +8,9 @@ logging:
   #  Description: Individual logger configuration
   loggers:
     com.comet: ${OPIK_LOG_LEVEL:-INFO}
+    # Default: INFO
+    # Description: Set to DEBUG to see complete assembled LLM streaming responses (application-level logging)
+    com.comet.opik.infrastructure.llm: ${LLM_PROXY_REQUEST_LOG_LEVEL:-INFO}
 
 # Description: state database configuration
 # https://www.dropwizard.io/en/stable/manual/configuration.html#database
@@ -396,6 +399,26 @@ onlineScoring:
       claimIntervalRatio: ${REDIS_SCORING_TRACE_THREAD_USER_DEFINED_METRIC_PYTHON_CLAIM_INTERVAL_RATIO:-}
       pendingMessageDuration: ${REDIS_SCORING_TRACE_THREAD_USER_DEFINED_METRIC_PYTHON_PENDING_MESSAGE_DURATION:-}
       maxRetries: ${REDIS_SCORING_TRACE_THREAD_USER_DEFINED_METRIC_PYTHON_MAX_RETRIES:-}
+    - scorer: span_llm_as_judge
+      streamName: stream_scoring_span_llm_as_judge
+      codec: java
+      # Optional per stream configuration (falls back to global if not specified)
+      poolingInterval: ${REDIS_SCORING_SPAN_LLM_AS_JUDGE_CONSUMER_POOL_INTERVAL:-}
+      longPollingDuration: ${REDIS_SCORING_SPAN_LLM_AS_JUDGE_LONG_POLLING_DURATION:-}
+      consumerBatchSize: ${REDIS_SCORING_SPAN_LLM_AS_JUDGE_CONSUMER_BATCH_SIZE:-}
+      claimIntervalRatio: ${REDIS_SCORING_SPAN_LLM_AS_JUDGE_CLAIM_INTERVAL_RATIO:-}
+      pendingMessageDuration: ${REDIS_SCORING_SPAN_LLM_AS_JUDGE_PENDING_MESSAGE_DURATION:-}
+      maxRetries: ${REDIS_SCORING_SPAN_LLM_AS_JUDGE_MAX_RETRIES:-}
+    - scorer: span_user_defined_metric_python
+      streamName: stream_scoring_span_user_defined_metric_python
+      codec: java
+      # Optional per stream configuration (falls back to global if not specified)
+      poolingInterval: ${REDIS_SCORING_SPAN_USER_DEFINED_METRIC_PYTHON_CONSUMER_POOL_INTERVAL:-}
+      longPollingDuration: ${REDIS_SCORING_SPAN_USER_DEFINED_METRIC_PYTHON_LONG_POLLING_DURATION:-}
+      consumerBatchSize: ${REDIS_SCORING_SPAN_USER_DEFINED_METRIC_PYTHON_CONSUMER_BATCH_SIZE:-}
+      claimIntervalRatio: ${REDIS_SCORING_SPAN_USER_DEFINED_METRIC_PYTHON_CLAIM_INTERVAL_RATIO:-}
+      pendingMessageDuration: ${REDIS_SCORING_SPAN_USER_DEFINED_METRIC_PYTHON_PENDING_MESSAGE_DURATION:-}
+      maxRetries: ${REDIS_SCORING_SPAN_USER_DEFINED_METRIC_PYTHON_MAX_RETRIES:-}
 
 # LLM providers client configuration
 llmProviderClient:
@@ -424,10 +447,10 @@ llmProviderClient:
   # Description: Write timeout for LLM providers
   writeTimeout: ${LLM_PROVIDER_CLIENT_WRITE_TIMEOUT:-60s}
   # Default: false
-  # Description: Whether or not to log requests
+  # Description: Whether or not to log requests (HTTP-level logging via langchain4j - can be verbose and may contain credentials)
   logRequests: ${LLM_PROVIDER_CLIENT_LOG_REQUESTS:-false}
   # Default: false
-  # Description: Whether or not to log responses
+  # Description: Whether or not to log responses (HTTP-level logging via langchain4j - can be verbose)
   logResponses: ${LLM_PROVIDER_CLIENT_LOG_RESPONSES:-false}
   # Configuration for OpenAI client
   openAiClient:
@@ -532,6 +555,12 @@ serviceToggles:
   # Description: Whether or not to enable the trace thread Python evaluator
   traceThreadPythonEvaluatorEnabled: ${TOGGLE_TRACE_THREAD_PYTHON_EVALUATOR_ENABLED:-"true"}
   # Default: false
+  # Description: Whether or not to enable the span LLM as Judge evaluator
+  spanLlmAsJudgeEnabled: ${TOGGLE_SPAN_LLM_AS_JUDGE_ENABLED:-"true"}
+  # Default: true
+  # Description: Whether or not to enable the span user-defined metric Python evaluator
+  spanUserDefinedMetricPythonEnabled: ${TOGGLE_SPAN_USER_DEFINED_METRIC_PYTHON_ENABLED:-"true"}
+  # Default: false
   # Description: Whether or not OpikAI feature is enabled
   opikAIEnabled: ${TOGGLE_OPIK_AI_ENABLED:-"false"}
   # Default: false
@@ -546,6 +575,36 @@ serviceToggles:
   # Default: true
   # Description: Whether or not export/download functionality is enabled
   exportEnabled: ${TOGGLE_EXPORT_ENABLED:-"true"}
+  # Default: false
+  # Description: Whether or not Dashboards feature is enabled
+  dashboardsEnabled: ${TOGGLE_DASHBOARDS_ENABLED:-"false"}
+  # Default: false
+  # Description: Whether or not dataset versioning feature is enabled
+  datasetVersioningEnabled: ${TOGGLE_DATASET_VERSIONING_ENABLED:-"false"}
+  # Default: false
+  # Description: Whether or not Optimization Studio feature is enabled
+  optimizationStudioEnabled: ${TOGGLE_OPTIMIZATION_STUDIO_ENABLED:-"false"}
+  # Default: true
+  # Description: Whether or not OpenAI provider is enabled
+  openaiProviderEnabled: ${TOGGLE_OPENAI_PROVIDER_ENABLED:-"true"}
+  # Default: true
+  # Description: Whether or not Anthropic provider is enabled
+  anthropicProviderEnabled: ${TOGGLE_ANTHROPIC_PROVIDER_ENABLED:-"true"}
+  # Default: true
+  # Description: Whether or not Gemini provider is enabled
+  geminiProviderEnabled: ${TOGGLE_GEMINI_PROVIDER_ENABLED:-"true"}
+  # Default: true
+  # Description: Whether or not OpenRouter provider is enabled
+  openrouterProviderEnabled: ${TOGGLE_OPENROUTER_PROVIDER_ENABLED:-"true"}
+  # Default: true
+  # Description: Whether or not Vertex AI provider is enabled
+  vertexaiProviderEnabled: ${TOGGLE_VERTEXAI_PROVIDER_ENABLED:-"true"}
+  # Default: true
+  # Description: Whether or not Custom LLM provider is enabled
+  customllmProviderEnabled: ${TOGGLE_CUSTOMLLM_PROVIDER_ENABLED:-"true"}
+  # Default: true
+  # Description: Whether or not Opik Built-in provider is enabled
+  opikbuiltinProviderEnabled: ${TOGGLE_OPIKBUILTIN_PROVIDER_ENABLED:-"true"}
 
 # Trace Thread configuration
 traceThreadConfig:
@@ -692,3 +751,24 @@ webhook:
     # Default: 1s
     # Description: Maximum time to wait for acquiring metrics alert job lock
     metricsAlertJobLockWaitTimeout: ${WEBHOOK_METRICS_ALERT_JOB_LOCK_WAIT_TIMEOUT:-1s}
+
+# Built-in LLM Provider configuration
+# Note: The model name "opik-builtin-model" is hardcoded and cannot be changed.
+# This ensures backward compatibility with automation rules that store the model name.
+builtinLlmProvider:
+  # Default: false
+  # Description: Whether or not to enable the built-in LLM provider
+  enabled: ${BUILTIN_LLM_PROVIDER_ENABLED:-false}
+  # Default: gpt-4o-mini
+  # Description: Actual model name sent to the AI server (the underlying LLM)
+  actualModel: ${BUILTIN_LLM_PROVIDER_ACTUAL_MODEL:-gpt-4o-mini}
+  # Default: openai
+  # Description: Provider name stored in spans for cost tracking
+  spanProvider: ${BUILTIN_LLM_PROVIDER_SPAN_PROVIDER:-openai}
+  # Default: empty
+  # Description: API key for the OpenAI endpoint
+  apiKey: ${BUILTIN_LLM_PROVIDER_API_KEY:-}
+  # Default: empty
+  # Description: Base URL for OpenAI-compatible endpoint (empty for built-in OpenAI)
+  baseUrl: ${BUILTIN_LLM_PROVIDER_BASE_URL:-}
+

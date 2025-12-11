@@ -13,9 +13,9 @@
         Opik
     </div>
 </h1>
-<h2 align="center" style="border-bottom: none">오픈 소스 LLM 평가 플랫폼</h2>
+<h2 align="center" style="border-bottom: none">오픈 소스 AI 관측성, 평가 및 최적화 플랫폼</h2>
 <p align="center">
-Opik은 LLM 시스템을 더 나은 품질로, 더 빠르게, 더 저렴하게 실행하도록 구축(build), 평가(evaluate), 최적화(optimize)하는 것을 지원합니다. RAG 챗봇에서 코드 어시스턴트, 복잡한 에이전트 파이프라인에 이르기까지, Opik은 포괄적인 트레이싱, 평가, 대시보드와 함께 <b>Opik Agent Optimizer</b>, <b>Opik Guardrails</b> 같은 강력한 기능을 제공하여 프로덕션 환경의 LLM 애플리케이션 개선과 보안을 돕습니다.
+Opik은 프로토타입에서 프로덕션까지 더 잘 작동하는 생성형 AI 애플리케이션을 구축, 테스트, 최적화하도록 도와줍니다. RAG 챗봇에서 코드 어시스턴트, 복잡한 에이전트 시스템(agentic systems)에 이르기까지, Opik은 포괄적인 트레이싱(tracing), 평가(evaluation) 및 자동 프롬프트 및 도구 최적화(automatic prompt and tool optimization)를 제공하여 AI 개발에서의 추측을 없애줍니다.
 </p>
 
 <div align="center">
@@ -39,7 +39,7 @@ Opik은 LLM 시스템을 더 나은 품질로, 더 빠르게, 더 저렴하게 �
 
 <div align="center" style="margin-top: 1em; margin-bottom: 1em;">
 <a href="#-opik이란">🚀 Opik이란?</a> • <a href="#-opik-서버-설치">🛠️ Opik 서버 설치</a> • <a href="#-opik-클라이언트-sdk">💻 Opik 클라이언트 SDK</a> • <a href="#-트레이스-로깅-및-통합">📝 트레이스 로깅 및 통합</a><br>
-<a href="#-llm을-심판으로">🧑‍⚖️ LLM을 심판으로</a> • <a href="#-애플리케이션-평가">🔍 애플리케이션 평가</a> • <a href="#-github-스타">⭐ GitHub 스타</a> • <a href="#-기여하기">🤝 기여하기</a>
+<a href="#-판단-역할을-하는-llm">🧑‍⚖️ 판단 역할을 하는 LLM</a> • <a href="#-애플리케이션-평가">🔍 애플리케이션 평가</a> • <a href="#-github-스타">⭐ GitHub 스타</a> • <a href="#-기여하기">🤝 기여하기</a>
 </div>
 
 <br>
@@ -213,6 +213,7 @@ Direct integration 사용이 가장 간편합니다. Opik은 다음 프레임워
 | **Groq**                  | Groq LLM 호출 트레이스                                | [문서](https://www.comet.com/docs/opik/integrations/groq?utm_source=opik&utm_medium=github&utm_content=groq_link&utm_campaign=opik)                                   |
 | **Guardrails**            | Guardrails AI 검증 트레이스                           | [문서](https://www.comet.com/docs/opik/integrations/guardrails-ai?utm_source=opik&utm_medium=github&utm_content=guardrails_link&utm_campaign=opik)                    |
 | **Haystack**              | Haystack 호출 트레이스                                | [문서](https://www.comet.com/docs/opik/integrations/haystack?utm_source=opik&utm_medium=github&utm_content=haystack_link&utm_campaign=opik)                           |
+| **Harbor**                | Harbor 벤치마크 평가 트라이얼 트레이스                  | [문서](https://www.comet.com/docs/opik/integrations/harbor?utm_source=opik&utm_medium=github&utm_content=harbor_link&utm_campaign=opik)                               |
 | **Instructor**            | Instructor LLM 호출 트레이스                          | [문서](https://www.comet.com/docs/opik/integrations/instructor?utm_source=opik&utm_medium=github&utm_content=instructor_link&utm_campaign=opik)                       |
 | **LangChain (Python)**    | LangChain LLM 호출 트레이스                           | [문서](https://www.comet.com/docs/opik/integrations/langchain?utm_source=opik&utm_medium=github&utm_content=langchain_link&utm_campaign=opik)                         |
 | **LangChain (JS/TS)**     | LangChain JavaScript/TypeScript 호출 트레이스         | [문서](https://www.comet.com/docs/opik/integrations/langchainjs?utm_source=opik&utm_medium=github&utm_content=langchainjs_link&utm_campaign=opik)                     |
@@ -224,6 +225,7 @@ Direct integration 사용이 가장 간편합니다. Opik은 다음 프레임워
 | **Microsoft Agent Framework (Python)** | Microsoft Agent Framework 호출 트레이스 | [문서](https://www.comet.com/docs/opik/integrations/microsoft-agent-framework?utm_source=opik&utm_medium=github&utm_content=agent_framework_link&utm_campaign=opik)              |
 | **Microsoft Agent Framework (.NET)** | Microsoft Agent Framework .NET 호출 트레이스 | [문서](https://www.comet.com/docs/opik/integrations/microsoft-agent-framework-dotnet?utm_source=opik&utm_medium=github&utm_content=agent_framework_dotnet_link&utm_campaign=opik) |
 | **Mistral AI**            | Mistral AI LLM 호출 트레이스                          | [문서](https://www.comet.com/docs/opik/integrations/mistral?utm_source=opik&utm_medium=github&utm_content=mistral_link&utm_campaign=opik)                             |
+| **n8n**                   | n8n 워크플로우 실행 트레이스                          | [문서](https://www.comet.com/docs/opik/integrations/n8n?utm_source=opik&utm_medium=github&utm_content=n8n_link&utm_campaign=opik)                                     |
 | **LlamaIndex**            | LlamaIndex LLM 호출 트레이스                          | [문서](https://www.comet.com/docs/opik/integrations/llama_index?utm_source=opik&utm_medium=github&utm_content=llama_index_link&utm_campaign=opik)                     |
 | **Ollama**                | Ollama LLM 호출 트레이스                              | [문서](https://www.comet.com/docs/opik/integrations/ollama?utm_source=opik&utm_medium=github&utm_content=ollama_link&utm_campaign=opik)                               |
 | **OpenAI (Python)**       | OpenAI LLM 호출 트레이스                              | [문서](https://www.comet.com/docs/opik/integrations/openai?utm_source=opik&utm_medium=github&utm_content=openai_link&utm_campaign=opik)                               |

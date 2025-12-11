@@ -1,9 +1,11 @@
 package com.comet.opik.domain;
 
+import com.comet.opik.api.LlmProvider;
 import com.comet.opik.api.ProviderApiKey;
 import com.comet.opik.api.ProviderApiKeyUpdate;
 import com.comet.opik.api.error.EntityAlreadyExistsException;
 import com.comet.opik.api.error.ErrorMessage;
+import com.comet.opik.infrastructure.OpikConfiguration;
 import com.google.inject.ImplementedBy;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
@@ -12,16 +14,18 @@ import jakarta.ws.rs.core.Response;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.commons.collections4.CollectionUtils;
 import org.jdbi.v3.core.statement.UnableToExecuteStatementException;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
 import java.sql.SQLIntegrityConstraintViolationException;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
 import static com.comet.opik.api.LlmProvider.CUSTOM_LLM;
+import static com.comet.opik.infrastructure.BuiltinLlmProviderConfig.BUILTIN_PROVIDER_ID;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONLY;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
 
@@ -47,6 +51,7 @@ class LlmProviderApiKeyServiceImpl implements LlmProviderApiKeyService {
     private static final String PROVIDER_API_KEY_ALREADY_EXISTS = "Api key for this provider already exists";
     private final @NonNull IdGenerator idGenerator;
     private final @NonNull TransactionTemplate template;
+    private final @NonNull OpikConfiguration configuration;
 
     @Override
     public ProviderApiKey find(@NonNull UUID id, @NonNull String workspaceId) {
@@ -66,13 +71,25 @@ class LlmProviderApiKeyServiceImpl implements LlmProviderApiKeyService {
             return repository.find(workspaceId);
         });
 
-        if (CollectionUtils.isEmpty(providerApiKeys)) {
-            return ProviderApiKey.ProviderApiKeyPage.empty(0);
+        var content = new ArrayList<>(providerApiKeys);
+
+        // Inject virtual built-in provider if enabled
+        var builtinConfig = configuration.getBuiltinLlmProvider();
+        if (builtinConfig.isEnabled()) {
+            var virtualProvider = ProviderApiKey.builder()
+                    .id(BUILTIN_PROVIDER_ID)
+                    .provider(LlmProvider.OPIK_BUILTIN)
+                    .configuration(Map.of("models", builtinConfig.getModel()))
+                    .readOnly(true)
+                    .build();
+            // Add at the end so user-configured providers are auto-selected by default in the Playground
+            // (frontend selects the first provider/model when user hasn't made a selection yet)
+            content.add(virtualProvider);
         }
 
         return new ProviderApiKey.ProviderApiKeyPage(
-                0, providerApiKeys.size(), providerApiKeys.size(),
-                providerApiKeys, List.of());
+                0, content.size(), content.size(),
+                content, List.of());
     }
 
     @Override

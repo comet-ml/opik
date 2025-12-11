@@ -34,6 +34,7 @@ import {
   DynamicColumn,
   OnChangeFn,
   ROW_HEIGHT,
+  SCORE_TYPE_EXPERIMENT,
 } from "@/types/shared";
 import {
   EXPERIMENT_ITEM_OUTPUT_PREFIX,
@@ -384,11 +385,13 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
 
   const dynamicScoresColumns = useMemo(() => {
     return (feedbackScoresData?.scores ?? [])
+      .filter((c) => c.type !== SCORE_TYPE_EXPERIMENT)
       .sort((c1, c2) => c1.name.localeCompare(c2.name))
       .map<DynamicColumn>((c) => ({
         id: `${COLUMN_FEEDBACK_SCORES_ID}.${c.name}`,
         label: c.name,
         columnType: COLUMN_TYPE.number,
+        type: c.type,
       }));
   }, [feedbackScoresData?.scores]);
 
@@ -464,6 +467,8 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
         label: "Total tokens",
         type: COLUMN_TYPE.number,
         cell: CostCell.Compare as never,
+        statisticKey: `${COLUMN_USAGE_ID}.total_tokens`,
+        supportsPercentiles: true,
         customMeta: {
           experimentsIds,
           accessor: `${COLUMN_USAGE_ID}.total_tokens`,
@@ -475,6 +480,8 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
         label: "Estimated cost",
         type: COLUMN_TYPE.cost,
         cell: CostCell.Compare as never,
+        statisticKey: "total_estimated_cost",
+        supportsPercentiles: true,
         customMeta: {
           experimentsIds,
           accessor: "total_estimated_cost",
@@ -521,6 +528,7 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
           header: FeedbackScoreHeader as never,
           cell: CompareExperimentsFeedbackScoreCell as never,
           statisticKey: `${COLUMN_FEEDBACK_SCORES_ID}.${label}`,
+          supportsPercentiles: true,
           customMeta: {
             experimentsIds,
             feedbackKey: label,

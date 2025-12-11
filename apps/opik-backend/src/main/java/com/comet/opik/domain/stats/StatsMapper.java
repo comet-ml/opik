@@ -5,6 +5,7 @@ import com.comet.opik.api.FeedbackScoreAverage;
 import com.comet.opik.api.PercentageValues;
 import com.comet.opik.api.ProjectStats;
 import io.r2dbc.spi.Row;
+import org.apache.commons.collections4.MapUtils;
 
 import java.math.BigDecimal;
 import java.util.List;
@@ -21,9 +22,13 @@ public class StatsMapper {
 
     public static final String USAGE = "usage";
     public static final String FEEDBACK_SCORE = "feedback_scores";
+    public static final String SPAN_FEEDBACK_SCORE = "span_feedback_scores";
     public static final String TOTAL_ESTIMATED_COST = "total_estimated_cost";
     public static final String TOTAL_ESTIMATED_COST_AVG = "total_estimated_cost_avg";
     public static final String TOTAL_ESTIMATED_COST_SUM = "total_estimated_cost_sum";
+    public static final String TOTAL_ESTIMATED_COST_PERCENTILES = "total_estimated_cost_percentiles";
+    public static final String FEEDBACK_SCORES_PERCENTILES = "feedback_scores_percentiles";
+    public static final String USAGE_TOTAL_TOKENS_PERCENTILES = "usage_total_tokens_percentiles";
     public static final String DURATION = "duration";
     public static final String INPUT = "input";
     public static final String OUTPUT = "output";
@@ -78,6 +83,10 @@ public class StatsMapper {
 
         addMapStats(row, USAGE, stats);
         addMapStats(row, FEEDBACK_SCORE, stats);
+        // Only add span feedback scores statistics for traces (not spans)
+        if (entityCountLabel.equals("trace_count") && row.getMetadata().contains(SPAN_FEEDBACK_SCORE)) {
+            addMapStats(row, SPAN_FEEDBACK_SCORE, stats);
+        }
 
         // spans cannot accept guardrails and therefore will not have guardrails_failed_count in the result set
         if (row.getMetadata().contains("guardrails_failed_count")) {
@@ -220,6 +229,9 @@ public class StatsMapper {
                     totalEstimatedCostAvg.doubleValue()));
         }
 
+        // Add total_estimated_cost percentiles
+        addPercentilesFromMap(row, TOTAL_ESTIMATED_COST_PERCENTILES, TOTAL_ESTIMATED_COST, stats);
+
         @SuppressWarnings("unchecked")
         Map<String, BigDecimal> durationMap = row.get(DURATION, Map.class);
         if (durationMap != null) {
@@ -233,7 +245,79 @@ public class StatsMapper {
         addMapStats(row, FEEDBACK_SCORE, stats);
         addMapStats(row, USAGE, stats);
 
+        // Add feedback_scores percentiles (map of score_name -> {p50, p90, p99})
+        addFeedbackScoresPercentiles(row, stats);
+
+        // Add usage.total_tokens percentiles
+        addPercentilesFromMap(row, USAGE_TOTAL_TOKENS_PERCENTILES, "usage.total_tokens", stats);
+
         return new ProjectStats(stats.build().toList());
+    }
+
+    /**
+     * Adds percentile stats from a map field containing {p50, p90, p99} values.
+     */
+    @SuppressWarnings("unchecked")
+    private static void addPercentilesFromMap(
+            Row row,
+            String fieldName,
+            String statName,
+            Stream.Builder<ProjectStats.ProjectStatItem<?>> statsBuilder) {
+        Map<String, ?> percentilesMap = row.get(fieldName, Map.class);
+        if (percentilesMap != null && !percentilesMap.isEmpty()) {
+            BigDecimal p50 = toBigDecimal(percentilesMap.get("p50"));
+            BigDecimal p90 = toBigDecimal(percentilesMap.get("p90"));
+            BigDecimal p99 = toBigDecimal(percentilesMap.get("p99"));
+
+            if (p50 != null || p90 != null || p99 != null) {
+                var percentiles = PercentageValues.builder().p50(p50).p90(p90).p99(p99).build();
+                statsBuilder.add(new PercentageValueStat(statName, percentiles));
+            }
+        }
+    }
+
+    /**
+     * Adds feedback scores percentiles from the feedback_scores_percentiles field.
+     * The field contains a map of score_name -> {p50, p90, p99}.
+     */
+    @SuppressWarnings("unchecked")
+    private static void addFeedbackScoresPercentiles(
+            Row row,
+            Stream.Builder<ProjectStats.ProjectStatItem<?>> statsBuilder) {
+        Map<String, Map<String, ?>> feedbackScoresPercentilesMap = row.get(FEEDBACK_SCORES_PERCENTILES, Map.class);
+        if (MapUtils.isNotEmpty(feedbackScoresPercentilesMap)) {
+            feedbackScoresPercentilesMap.entrySet().stream()
+                    .sorted(Map.Entry.comparingByKey())
+                    .forEach(entry -> {
+                        String scoreName = entry.getKey();
+                        Map<String, ?> percentilesMap = entry.getValue();
+                        if (percentilesMap != null && !percentilesMap.isEmpty()) {
+                            BigDecimal p50 = toBigDecimal(percentilesMap.get("p50"));
+                            BigDecimal p90 = toBigDecimal(percentilesMap.get("p90"));
+                            BigDecimal p99 = toBigDecimal(percentilesMap.get("p99"));
+
+                            if (p50 != null || p90 != null || p99 != null) {
+                                var percentiles = PercentageValues.builder().p50(p50).p90(p90).p99(p99).build();
+                                statsBuilder.add(new PercentageValueStat(
+                                        "%s.%s".formatted(FEEDBACK_SCORE, scoreName),
+                                        percentiles));
+                            }
+                        }
+                    });
+        }
+    }
+
+    /**
+     * Converts a value to BigDecimal, handling various numeric types.
+     */
+    private static BigDecimal toBigDecimal(Object value) {
+        if (value instanceof BigDecimal bd) {
+            return bd;
+        }
+        if (value instanceof Number number) {
+            return new BigDecimal(number.toString());
+        }
+        return null;
     }
 
     /**

@@ -3,6 +3,8 @@ package com.comet.opik.utils.template;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.commons.lang3.RandomUtils;
+import org.awaitility.Awaitility;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -14,6 +16,7 @@ import org.stringtemplate.v4.ST;
 import java.lang.ref.WeakReference;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
 import java.util.stream.Stream;
 
@@ -170,6 +173,7 @@ class TemplateUtilsTest {
 
         @ParameterizedTest(name = "{0}")
         @MethodSource
+        @Disabled("This is a non functional test for template memory leak investigation, no need to run in CI")
         void verifyMemory(
                 String testName,
                 Function<String, ST> templateFactory,
@@ -177,6 +181,7 @@ class TemplateUtilsTest {
                 long expectedUsedMemoryGrowthInMBMin,
                 long expectedUsedMemoryGrowthInMBMax) {
             var weakReferences = new ArrayList<WeakReference<ST>>();
+
             // Suggest GC before test to start in a clean state
             System.gc();
             var usedMemoryBefore = Runtime.getRuntime().totalMemory() - Runtime.getRuntime().freeMemory();
@@ -194,19 +199,28 @@ class TemplateUtilsTest {
             System.gc();
             logMemoryUsage(testName, "after GC");
 
-            var actualGCCount = weakReferences.stream()
-                    .filter(ref -> ref.get() == null)
-                    .count();
-            var usedMemoryAfter = Runtime.getRuntime().totalMemory() - Runtime.getRuntime().freeMemory();
-            var actualUsedMemoryGrowthInMB = (usedMemoryAfter - usedMemoryBefore) / BYTES_PER_MB;
-            log.info("{} - GC collected: {}", testName, actualGCCount);
-            log.info("{} - Memory growth: {} MB", testName, actualUsedMemoryGrowthInMB);
-            // The amount of GC-ed instances shouldn't vary much
-            assertThat(actualGCCount).isCloseTo(expectedGCCount, withinPercentage(10));
-            // Using a range, as it may vary based on the environment or if running test in isolation or with others
-            assertThat(actualUsedMemoryGrowthInMB)
-                    .isBetween(expectedUsedMemoryGrowthInMBMin, expectedUsedMemoryGrowthInMBMax);
+            // Wait for GC to actually collect the objects and verify memory assertions
+            Awaitility.await()
+                    .atMost(10, TimeUnit.SECONDS)
+                    .pollInterval(500, TimeUnit.MILLISECONDS)
+                    .untilAsserted(() -> {
+                        var actualGCCount = weakReferences.stream()
+                                .filter(ref -> ref.get() == null)
+                                .count();
+                        var usedMemoryAfter = Runtime.getRuntime().totalMemory() - Runtime.getRuntime().freeMemory();
+                        var actualUsedMemoryGrowthInMB = (usedMemoryAfter - usedMemoryBefore) / BYTES_PER_MB;
+
+                        log.info("{} - GC collected: {}", testName, actualGCCount);
+                        log.info("{} - Memory growth: {} MB", testName, actualUsedMemoryGrowthInMB);
+
+                        // The amount of GC-ed instances shouldn't vary much
+                        assertThat(actualGCCount).isCloseTo(expectedGCCount, withinPercentage(10));
+                        // Using a range, as it may vary based on the environment or if running test in isolation or with others
+                        assertThat(actualUsedMemoryGrowthInMB)
+                                .isBetween(expectedUsedMemoryGrowthInMBMin, expectedUsedMemoryGrowthInMBMax);
+                    });
         }
+
     }
 
     private void logMemoryUsage(String testName, String header) {

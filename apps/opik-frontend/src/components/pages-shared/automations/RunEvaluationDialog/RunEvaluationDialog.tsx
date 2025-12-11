@@ -27,7 +27,7 @@ import { EVALUATORS_RULE_TYPE, EvaluatorsRule } from "@/types/automations";
 import Loader from "@/components/shared/Loader/Loader";
 import AddEditRuleDialog from "@/components/pages-shared/automations/AddEditRuleDialog/AddEditRuleDialog";
 
-type ManualEvaluationEntityType = "trace" | "thread";
+type ManualEvaluationEntityType = "trace" | "thread" | "span";
 
 const STALE_TIME = 5 * 60 * 1000; // 5 minutes - rules don't change frequently
 
@@ -72,6 +72,7 @@ const RunEvaluationDialog: React.FunctionComponent<
   // Filter rules based on entity type
   // Trace rules: llm_as_judge, user_defined_metric_python
   // Thread rules: trace_thread_llm_as_judge, trace_thread_user_defined_metric_python
+  // Span rules: span_llm_as_judge, span_user_defined_metric_python
   const rules = useMemo(() => {
     const allRules = data?.content || [];
 
@@ -86,6 +87,12 @@ const RunEvaluationDialog: React.FunctionComponent<
         (rule) =>
           rule.type === EVALUATORS_RULE_TYPE.thread_llm_judge ||
           rule.type === EVALUATORS_RULE_TYPE.thread_python_code,
+      );
+    } else if (entityType === "span") {
+      return allRules.filter(
+        (rule) =>
+          rule.type === EVALUATORS_RULE_TYPE.span_llm_judge ||
+          rule.type === EVALUATORS_RULE_TYPE.span_python_code,
       );
     } else {
       throw new Error(`Unknown entity type: ${entityType}`);
@@ -216,7 +223,8 @@ const RunEvaluationDialog: React.FunctionComponent<
           const isExpanded = expandedRuleIds.has(rule.id);
           const hasCode =
             rule.type === EVALUATORS_RULE_TYPE.llm_judge ||
-            rule.type === EVALUATORS_RULE_TYPE.thread_llm_judge;
+            rule.type === EVALUATORS_RULE_TYPE.thread_llm_judge ||
+            rule.type === EVALUATORS_RULE_TYPE.span_llm_judge;
 
           // Extract schema names for score tags
           const schemaNames =
@@ -284,8 +292,18 @@ const RunEvaluationDialog: React.FunctionComponent<
     );
   };
 
-  const entityLabel = entityType === "trace" ? "traces" : "threads";
-  const capitalizedEntityLabel = entityType === "trace" ? "Traces" : "Threads";
+  const entityLabel =
+    entityType === "trace"
+      ? "traces"
+      : entityType === "thread"
+        ? "threads"
+        : "spans";
+  const capitalizedEntityLabel =
+    entityType === "trace"
+      ? "Traces"
+      : entityType === "thread"
+        ? "Threads"
+        : "Spans";
   const isRunDisabled =
     selectedRuleIds.size === 0 || manualEvaluationMutation.isPending;
 

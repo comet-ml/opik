@@ -3,8 +3,12 @@ package com.comet.opik.api.resources.v1.priv;
 import com.comet.opik.api.DatasetVersion;
 import com.comet.opik.api.DatasetVersion.DatasetVersionPage;
 import com.comet.opik.api.DatasetVersionCreate;
+import com.comet.opik.api.DatasetVersionDiff;
+import com.comet.opik.api.DatasetVersionRestore;
 import com.comet.opik.api.DatasetVersionTag;
+import com.comet.opik.api.DatasetVersionUpdate;
 import com.comet.opik.domain.DatasetVersionService;
+import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.ratelimit.RateLimited;
 import com.fasterxml.jackson.annotation.JsonView;
@@ -22,7 +26,9 @@ import jakarta.validation.constraints.NotNull;
 import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.DELETE;
 import jakarta.ws.rs.DefaultValue;
+import jakarta.ws.rs.ForbiddenException;
 import jakarta.ws.rs.GET;
+import jakarta.ws.rs.PATCH;
 import jakarta.ws.rs.POST;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.PathParam;
@@ -48,6 +54,7 @@ public class DatasetVersionsResource {
     private final @NonNull UUID datasetId;
     private final @NonNull DatasetVersionService versionService;
     private final @NonNull Provider<RequestContext> requestContext;
+    private final @NonNull OpikConfiguration config;
 
     @POST
     @Operation(operationId = "createDatasetVersion", summary = "Create dataset version", description = "Create a new immutable version of the dataset by snapshotting the current state", responses = {
@@ -61,6 +68,7 @@ public class DatasetVersionsResource {
     public Response createVersion(
             @RequestBody(content = @Content(schema = @Schema(implementation = DatasetVersionCreate.class))) @Valid @NotNull DatasetVersionCreate request) {
 
+        checkFeatureEnabled();
         String workspaceId = requestContext.get().getWorkspaceId();
 
         log.info("Creating version for dataset '{}' on workspace '{}'", datasetId, workspaceId);
@@ -80,6 +88,7 @@ public class DatasetVersionsResource {
             @QueryParam("page") @Min(1) @DefaultValue("1") int page,
             @QueryParam("size") @Min(1) @DefaultValue("10") int size) {
 
+        checkFeatureEnabled();
         String workspaceId = requestContext.get().getWorkspaceId();
 
         log.info("Listing versions for dataset '{}', page '{}', size '{}' on workspace '{}'", datasetId, page, size,
@@ -89,6 +98,29 @@ public class DatasetVersionsResource {
                 workspaceId);
 
         return Response.ok(versionPage).build();
+    }
+
+    @PATCH
+    @Path("/hash/{versionHash}")
+    @Operation(operationId = "updateDatasetVersion", summary = "Update dataset version", description = "Update a dataset version's change_description and/or add new tags", responses = {
+            @ApiResponse(responseCode = "200", description = "Version updated successfully", content = @Content(schema = @Schema(implementation = DatasetVersion.class))),
+            @ApiResponse(responseCode = "400", description = "Bad Request", content = @Content(schema = @Schema(implementation = io.dropwizard.jersey.errors.ErrorMessage.class))),
+            @ApiResponse(responseCode = "404", description = "Not Found - Version not found", content = @Content(schema = @Schema(implementation = io.dropwizard.jersey.errors.ErrorMessage.class))),
+            @ApiResponse(responseCode = "409", description = "Conflict - Tag already exists", content = @Content(schema = @Schema(implementation = io.dropwizard.jersey.errors.ErrorMessage.class)))
+    })
+    @RateLimited
+    @JsonView(DatasetVersion.View.Public.class)
+    public Response updateVersion(
+            @PathParam("versionHash") String versionHash,
+            @RequestBody(content = @Content(schema = @Schema(implementation = DatasetVersionUpdate.class))) @Valid @NotNull DatasetVersionUpdate request) {
+
+        String workspaceId = requestContext.get().getWorkspaceId();
+
+        log.info("Updating version '{}' for dataset '{}' on workspace '{}'", versionHash, datasetId, workspaceId);
+        DatasetVersion version = versionService.updateVersion(datasetId, versionHash, request);
+        log.info("Updated version '{}' for dataset '{}' on workspace '{}'", versionHash, datasetId, workspaceId);
+
+        return Response.ok(version).build();
     }
 
     @POST
@@ -104,6 +136,7 @@ public class DatasetVersionsResource {
             @PathParam("versionHash") String versionHash,
             @RequestBody(content = @Content(schema = @Schema(implementation = DatasetVersionTag.class))) @Valid @NotNull DatasetVersionTag tag) {
 
+        checkFeatureEnabled();
         String workspaceId = requestContext.get().getWorkspaceId();
 
         log.info("Creating tag '{}' for version '{}' of dataset '{}' on workspace '{}'", tag.tag(), versionHash,
@@ -125,6 +158,7 @@ public class DatasetVersionsResource {
             @PathParam("versionHash") String versionHash,
             @PathParam("tag") String tag) {
 
+        checkFeatureEnabled();
         String workspaceId = requestContext.get().getWorkspaceId();
 
         log.info("Deleting tag '{}' for version '{}' from dataset '{}' on workspace '{}'", tag, versionHash, datasetId,
@@ -134,5 +168,61 @@ public class DatasetVersionsResource {
                 workspaceId);
 
         return Response.noContent().build();
+    }
+
+    @GET
+    @Path("/diff")
+    @Operation(operationId = "compareDatasetVersions", summary = "Compare latest version with draft", description = "Compare the latest committed dataset version with the current draft state. This endpoint provides insights into changes made since the last version was committed. The comparison calculates additions, modifications, deletions, and unchanged items between the latest version snapshot and current draft.", responses = {
+            @ApiResponse(responseCode = "200", description = "Diff computed successfully", content = @Content(schema = @Schema(implementation = DatasetVersionDiff.class))),
+            @ApiResponse(responseCode = "404", description = "Version not found")})
+    @RateLimited
+    public Response compareVersions() {
+
+        checkFeatureEnabled();
+        String workspaceId = requestContext.get().getWorkspaceId();
+        log.info("Comparing latest version with draft for dataset='{}', workspace='{}'",
+                datasetId, workspaceId);
+
+        var diff = versionService.compareVersions(datasetId, DatasetVersionService.LATEST_TAG, null);
+
+        log.info(
+                "Computed diff for dataset='{}', from='latest', to='draft': stats='{}'", datasetId,
+                diff.statistics());
+
+        return Response.ok(diff).build();
+    }
+
+    @POST
+    @Path("/restore")
+    @Operation(operationId = "restoreDatasetVersion", summary = "Restore dataset to a previous version", description = "Restores the dataset to a previous version state. All draft items are replaced with items from the specified version. If the version is not the latest, a new version snapshot is created. If the version is the latest, only draft items are replaced (revert functionality).", responses = {
+            @ApiResponse(responseCode = "200", description = "Version restored successfully", content = @Content(schema = @Schema(implementation = DatasetVersion.class))),
+            @ApiResponse(responseCode = "404", description = "Version not found", content = @Content(schema = @Schema(implementation = io.dropwizard.jersey.errors.ErrorMessage.class)))})
+    @RateLimited
+    @JsonView(DatasetVersion.View.Public.class)
+    public Response restoreVersion(
+            @RequestBody(content = @Content(schema = @Schema(implementation = DatasetVersionRestore.class))) @Valid @NotNull DatasetVersionRestore request) {
+
+        checkFeatureEnabled();
+        String workspaceId = requestContext.get().getWorkspaceId();
+        String userName = requestContext.get().getUserName();
+
+        log.info("Restoring dataset '{}' to version '{}' on workspace '{}'", datasetId, request.versionRef(),
+                workspaceId);
+        DatasetVersion version = versionService.restoreVersion(datasetId, request.versionRef())
+                .contextWrite(ctx -> ctx
+                        .put(RequestContext.WORKSPACE_ID, workspaceId)
+                        .put(RequestContext.USER_NAME, userName))
+                .block();
+        log.info("Restored dataset '{}' to version '{}' on workspace '{}'", datasetId, request.versionRef(),
+                workspaceId);
+
+        return Response.ok(version).build();
+    }
+
+    private void checkFeatureEnabled() {
+        if (!config.getServiceToggles().isDatasetVersioningEnabled()) {
+            log.warn("Dataset versioning feature is disabled, returning 403");
+            throw new ForbiddenException("Dataset versioning feature is not enabled");
+        }
     }
 }

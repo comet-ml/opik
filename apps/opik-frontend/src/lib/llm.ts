@@ -1,4 +1,5 @@
 import {
+  AudioPart,
   ImagePart,
   VideoPart,
   LLM_MESSAGE_ROLE,
@@ -61,6 +62,18 @@ export const getVideosFromMessageContent = (
     .map((c) => c.video_url.url);
 };
 
+export const getAudiosFromMessageContent = (
+  content: MessageContent,
+): string[] => {
+  if (typeof content === "string") {
+    return [];
+  }
+
+  return content
+    .filter((c): c is AudioPart => c.type === "audio_url")
+    .map((c) => c.audio_url.url);
+};
+
 export const hasImagesInContent = (content: MessageContent): boolean => {
   if (typeof content === "string") {
     return false;
@@ -77,14 +90,22 @@ export const isMediaAllowedForRole = (
 
 export const hasVideosInContent = (
   content: MessageContent,
-): content is Array<TextPart | ImagePart | VideoPart> => {
+): content is Array<TextPart | ImagePart | VideoPart | AudioPart> => {
   if (typeof content === "string") return false;
 
   return content.some((c): c is VideoPart => c.type === "video_url");
 };
 
+export const hasAudiosInContent = (
+  content: MessageContent,
+): content is Array<TextPart | ImagePart | VideoPart | AudioPart> => {
+  if (typeof content === "string") return false;
+
+  return content.some((c): c is AudioPart => c.type === "audio_url");
+};
+
 /**
- * Get all template strings from message content (text, image URLs, and video URLs)
+ * Get all template strings from message content (text, image URLs, video URLs, and audio URLs)
  * Used for extracting mustache variables from all parts of a message
  */
 export const getAllTemplateStringsFromContent = (
@@ -99,19 +120,22 @@ export const getAllTemplateStringsFromContent = (
       return part.text;
     } else if (part.type === "image_url") {
       return part.image_url.url;
-    } else {
+    } else if (part.type === "video_url") {
       return part.video_url.url;
+    } else {
+      return part.audio_url.url;
     }
   });
 };
 
 export const parseLLMMessageContent = (
   content: MessageContent,
-): { text: string; images: string[]; videos: string[] } => {
+): { text: string; images: string[]; videos: string[]; audios: string[] } => {
   return {
     text: getTextFromMessageContent(content),
     images: getImagesFromMessageContent(content),
     videos: getVideosFromMessageContent(content),
+    audios: getAudiosFromMessageContent(content),
   };
 };
 
@@ -196,4 +220,51 @@ export const parsePromptVersionContent = (promptVersion?: {
   }
   // Backward compatibility: treat as plain text
   return template;
+};
+
+/**
+ * Parse chat template JSON string into LLMMessage array
+ * Factory method that converts chat template to LLMMessage format with optional metadata
+ *
+ * @param template - JSON string containing array of messages with role and content
+ * @param options - Optional configuration for parsed messages
+ * @param options.promptId - Prompt ID to attach to each message
+ * @param options.promptVersionId - Prompt version ID to attach to each message
+ * @param options.useTimestamp - Whether to include timestamp in message IDs for uniqueness (default: false)
+ * @returns Array of LLMMessage objects, or empty array if parsing fails
+ *
+ * Note: Content is kept as-is (string or array format) as per MessageContent type definition
+ */
+export const parseChatTemplateToLLMMessages = (
+  template: string,
+  options: {
+    promptId?: string;
+    promptVersionId?: string;
+    useTimestamp?: boolean;
+  } = {},
+): LLMMessage[] => {
+  const { promptId, promptVersionId, useTimestamp = false } = options;
+
+  try {
+    const parsed = JSON.parse(template);
+
+    if (!Array.isArray(parsed) || parsed.length === 0) {
+      return [];
+    }
+
+    return parsed.map((msg, index) => {
+      // Generate ID with optional timestamp for uniqueness
+      const id = useTimestamp ? `msg-${index}-${Date.now()}` : `msg-${index}`;
+
+      return {
+        id,
+        role: msg.role as LLM_MESSAGE_ROLE,
+        content: msg.content, // Keep as-is: string | Array<TextPart | ImagePart | VideoPart>
+        ...(promptId && { promptId }),
+        ...(promptVersionId && { promptVersionId }),
+      };
+    });
+  } catch {
+    return [];
+  }
 };

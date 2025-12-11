@@ -23,6 +23,7 @@ import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 
 interface BaseLoadableSelectBoxProps {
   placeholder?: ReactElement | string;
+  searchPlaceholder?: string;
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
   options: DropdownOption<string>[];
@@ -35,6 +36,7 @@ interface BaseLoadableSelectBoxProps {
   buttonClassName?: string;
   actionPanel?: ReactElement;
   minWidth?: number;
+  align?: "start" | "end" | "center";
   emptyState?: ReactElement;
   showTooltip?: boolean;
 }
@@ -60,6 +62,7 @@ export type LoadableSelectBoxProps = SingleSelectProps | MultiSelectProps;
 export const LoadableSelectBox = ({
   value = "",
   placeholder = "Select value",
+  searchPlaceholder = "Search",
   onChange,
   open: controlledOpen,
   onOpenChange,
@@ -73,6 +76,7 @@ export const LoadableSelectBox = ({
   renderTitle: parentRenderTitle,
   actionPanel,
   minWidth = 0,
+  align = "end",
   multiselect = false,
   showTooltip = false,
   emptyState,
@@ -131,7 +135,11 @@ export const LoadableSelectBox = ({
 
   const renderTitle = () => {
     if (!selectedOptions.length) {
-      return <div className="truncate text-light-slate">{placeholder}</div>;
+      return (
+        <div className="truncate font-normal text-light-slate">
+          {placeholder}
+        </div>
+      );
     }
 
     if (isFunction(parentRenderTitle)) {
@@ -229,7 +237,7 @@ export const LoadableSelectBox = ({
 
   const buttonElement = (
     <Button
-      className={cn("group justify-between", buttonClassName, {
+      className={cn("group justify-between px-3", buttonClassName, {
         "disabled:cursor-not-allowed disabled:border-input disabled:bg-muted-disabled disabled:text-muted-gray disabled:placeholder:text-muted-gray hover:disabled:shadow-none":
           disabled,
       })}
@@ -255,11 +263,11 @@ export const LoadableSelectBox = ({
         <PopoverTrigger asChild>{buttonElement}</PopoverTrigger>
       )}
       <PopoverContent
-        align="end"
+        align={align}
         style={
-          width
+          width || minWidth
             ? {
-                width: `${Math.max(width, minWidth)}px`,
+                width: `${Math.max(width || 0, minWidth)}px`,
               }
             : {}
         }
@@ -271,7 +279,7 @@ export const LoadableSelectBox = ({
           <SearchInput
             searchText={search}
             setSearchText={setSearch}
-            placeholder="Search"
+            placeholder={searchPlaceholder}
             variant="ghost"
           ></SearchInput>
           <Separator className="mt-1" />
@@ -324,16 +332,18 @@ export const LoadableSelectBox = ({
                       </div>
                     )}
 
-                    <div className="min-w-0 flex-1">
-                      <div className="comet-body-s truncate">
-                        {option.label}
-                      </div>
-                      {option.description && (
-                        <div className="comet-body-xs truncate text-muted-foreground">
-                          {option.description}
+                    <TooltipWrapper content={option.label}>
+                      <div className="min-w-0 flex-1">
+                        <div className="comet-body-s truncate">
+                          {option.label}
                         </div>
-                      )}
-                    </div>
+                        {option.description && (
+                          <div className="comet-body-xs truncate text-muted-foreground">
+                            {option.description}
+                          </div>
+                        )}
+                      </div>
+                    </TooltipWrapper>
 
                     {option.action && (
                       <TooltipWrapper content="Open in a new tab">

@@ -12,6 +12,10 @@ public class ServiceTogglesConfig {
     @JsonProperty
     @NotNull boolean traceThreadPythonEvaluatorEnabled;
     @JsonProperty
+    @NotNull boolean spanLlmAsJudgeEnabled;
+    @JsonProperty
+    @NotNull boolean spanUserDefinedMetricPythonEnabled;
+    @JsonProperty
     @NotNull boolean guardrailsEnabled;
     @JsonProperty
     @NotNull boolean opikAIEnabled;
@@ -23,4 +27,25 @@ public class ServiceTogglesConfig {
     @NotNull boolean csvUploadEnabled;
     @JsonProperty
     @NotNull boolean exportEnabled;
+    @JsonProperty
+    @NotNull boolean optimizationStudioEnabled;
+    @JsonProperty
+    @NotNull boolean dashboardsEnabled;
+    @JsonProperty
+    @NotNull boolean datasetVersioningEnabled;
+    // LLM Provider feature flags
+    @JsonProperty
+    @NotNull boolean openaiProviderEnabled;
+    @JsonProperty
+    @NotNull boolean anthropicProviderEnabled;
+    @JsonProperty
+    @NotNull boolean geminiProviderEnabled;
+    @JsonProperty
+    @NotNull boolean openrouterProviderEnabled;
+    @JsonProperty
+    @NotNull boolean vertexaiProviderEnabled;
+    @JsonProperty
+    @NotNull boolean customllmProviderEnabled;
+    @JsonProperty
+    @NotNull boolean opikbuiltinProviderEnabled;
 }

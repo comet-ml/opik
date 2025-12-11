@@ -6,18 +6,26 @@ import com.comet.opik.api.Trace;
 import com.comet.opik.api.TraceThread;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluator;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorLlmAsJudge;
+import com.comet.opik.api.evaluators.AutomationRuleEvaluatorSpanLlmAsJudge;
+import com.comet.opik.api.evaluators.AutomationRuleEvaluatorSpanUserDefinedMetricPython;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorTraceThreadLlmAsJudge;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython.TraceThreadUserDefinedMetricPythonCode;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorUpdate;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorUpdateLlmAsJudge;
+import com.comet.opik.api.evaluators.AutomationRuleEvaluatorUpdateSpanLlmAsJudge;
+import com.comet.opik.api.evaluators.AutomationRuleEvaluatorUpdateSpanUserDefinedMetricPython;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorUpdateTraceThreadLlmAsJudge;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorUpdateTraceThreadUserDefinedMetricPython;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorUpdateUserDefinedMetricPython;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorUserDefinedMetricPython;
 import com.comet.opik.api.filter.Operator;
+import com.comet.opik.api.filter.SpanField;
+import com.comet.opik.api.filter.SpanFilter;
 import com.comet.opik.api.filter.TraceField;
 import com.comet.opik.api.filter.TraceFilter;
+import com.comet.opik.api.filter.TraceThreadField;
+import com.comet.opik.api.filter.TraceThreadFilter;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
 import com.comet.opik.api.resources.utils.ClientSupportUtils;
@@ -224,10 +232,10 @@ class AutomationRuleEvaluatorsResourceTest {
             +
             "\"Technical Accuracy\":{\"score\":0,\"reason\":\"The summary accurately describes the experimental approach involving data mixtures, proportions, and sources, reflecting the technical details of the study.\"}}";
 
-    private static final String USER = "user-" + RandomStringUtils.randomAlphanumeric(20);
+    private static final String USER = "user-" + RandomStringUtils.secure().nextAlphanumeric(20);
     private static final String API_KEY = UUID.randomUUID().toString();
     private static final String WORKSPACE_ID = UUID.randomUUID().toString();
-    private static final String WORKSPACE_NAME = "workspace-" + RandomStringUtils.randomAlphanumeric(20);
+    private static final String WORKSPACE_NAME = "workspace-" + RandomStringUtils.secure().nextAlphanumeric(20);
 
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
@@ -598,7 +606,7 @@ class AutomationRuleEvaluatorsResourceTest {
             when(llmProviderFactory.getLanguageModel(anyString(), any())
                     .chat(any(ChatRequest.class)))
                     .thenAnswer(invocationOnMock -> chatResponse);
-            var projectName = "project-" + RandomStringUtils.randomAlphanumeric(36);
+            var projectName = "project-" + RandomStringUtils.secure().nextAlphanumeric(36);
             var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
             var evaluator = factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class).toBuilder()
                     .code(OBJECT_MAPPER.readValue(LLM_AS_A_JUDGE_EVALUATOR,
@@ -644,12 +652,15 @@ class AutomationRuleEvaluatorsResourceTest {
                     arguments(factory.manufacturePojo(AutomationRuleEvaluatorUserDefinedMetricPython.class), false),
                     arguments(factory.manufacturePojo(AutomationRuleEvaluatorTraceThreadLlmAsJudge.class), true),
                     arguments(factory.manufacturePojo(AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython.class),
+                            false),
+                    arguments(factory.manufacturePojo(AutomationRuleEvaluatorSpanLlmAsJudge.class), true),
+                    arguments(factory.manufacturePojo(AutomationRuleEvaluatorSpanUserDefinedMetricPython.class),
                             false));
         }
 
         @ParameterizedTest
         @MethodSource
-        void createAndGet(AutomationRuleEvaluator<?> automationRuleEvaluator, boolean withProjectId) {
+        void createAndGet(AutomationRuleEvaluator<?, ?> automationRuleEvaluator, boolean withProjectId) {
             var id = evaluatorsResourceClient.createEvaluator(automationRuleEvaluator, WORKSPACE_NAME, API_KEY);
             var expectedAutomationRuleEvaluator = automationRuleEvaluator.toBuilder()
                     .id(id)
@@ -678,17 +689,19 @@ class AutomationRuleEvaluatorsResourceTest {
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
     class FindEvaluator {
 
-        Stream<Class<? extends AutomationRuleEvaluator<?>>> find() {
+        Stream<Class<? extends AutomationRuleEvaluator<?, ?>>> find() {
             return Stream.of(
                     AutomationRuleEvaluatorLlmAsJudge.class,
                     AutomationRuleEvaluatorUserDefinedMetricPython.class,
                     AutomationRuleEvaluatorTraceThreadLlmAsJudge.class,
-                    AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython.class);
+                    AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython.class,
+                    AutomationRuleEvaluatorSpanLlmAsJudge.class,
+                    AutomationRuleEvaluatorSpanUserDefinedMetricPython.class);
         }
 
         @ParameterizedTest
         @MethodSource
-        void find(Class<? extends AutomationRuleEvaluator<?>> evaluatorClass) {
+        void find(Class<? extends AutomationRuleEvaluator<?, ?>> evaluatorClass) {
             String projectName = factory.manufacturePojo(String.class);
             var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
             var unexpectedProjectId = generator.generate();
@@ -749,12 +762,14 @@ class AutomationRuleEvaluatorsResourceTest {
                     arguments(AutomationRuleEvaluatorLlmAsJudge.class, true),
                     arguments(AutomationRuleEvaluatorUserDefinedMetricPython.class, false),
                     arguments(AutomationRuleEvaluatorTraceThreadLlmAsJudge.class, true),
-                    arguments(AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython.class, false));
+                    arguments(AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython.class, false),
+                    arguments(AutomationRuleEvaluatorSpanLlmAsJudge.class, true),
+                    arguments(AutomationRuleEvaluatorSpanUserDefinedMetricPython.class, false));
         }
 
         @ParameterizedTest
         @MethodSource
-        void findByName(Class<? extends AutomationRuleEvaluator<?>> evaluatorClass, boolean withProjectId) {
+        void findByName(Class<? extends AutomationRuleEvaluator<?, ?>> evaluatorClass, boolean withProjectId) {
             String projectName = factory.manufacturePojo(String.class);
             var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
 
@@ -807,14 +822,19 @@ class AutomationRuleEvaluatorsResourceTest {
                     arguments(
                             factory.manufacturePojo(AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython.class),
                             factory.manufacturePojo(
-                                    AutomationRuleEvaluatorUpdateTraceThreadUserDefinedMetricPython.class)));
+                                    AutomationRuleEvaluatorUpdateTraceThreadUserDefinedMetricPython.class)),
+                    arguments(
+                            factory.manufacturePojo(AutomationRuleEvaluatorSpanLlmAsJudge.class),
+                            factory.manufacturePojo(AutomationRuleEvaluatorUpdateSpanLlmAsJudge.class)),
+                    arguments(
+                            factory.manufacturePojo(AutomationRuleEvaluatorSpanUserDefinedMetricPython.class),
+                            factory.manufacturePojo(AutomationRuleEvaluatorUpdateSpanUserDefinedMetricPython.class)));
         }
 
         @ParameterizedTest
         @MethodSource
-        void update(
-                AutomationRuleEvaluator<Object> automationRuleEvaluator,
-                AutomationRuleEvaluatorUpdate<Object> automationRuleEvaluatorUpdate) {
+        void update(AutomationRuleEvaluator<Object, ?> automationRuleEvaluator,
+                AutomationRuleEvaluatorUpdate<?, ?> automationRuleEvaluatorUpdate) {
             var id = evaluatorsResourceClient.createEvaluator(automationRuleEvaluator, WORKSPACE_NAME, API_KEY);
 
             var updatedEvaluator = automationRuleEvaluatorUpdate.toBuilder()
@@ -832,7 +852,7 @@ class AutomationRuleEvaluatorsResourceTest {
                     .name(updatedEvaluator.getName())
                     .samplingRate(updatedEvaluator.getSamplingRate())
                     .enabled(updatedEvaluator.isEnabled())
-                    .filters(updatedEvaluator.getFilters())
+                    .filters((List) updatedEvaluator.getFilters())
                     .code(updatedEvaluator.getCode())
                     .build();
             try (var actualResponse = evaluatorsResourceClient.getEvaluator(
@@ -898,8 +918,10 @@ class AutomationRuleEvaluatorsResourceTest {
             var id2 = createGetAndAssertId(AutomationRuleEvaluatorUserDefinedMetricPython.class, projectId);
             var id3 = createGetAndAssertId(AutomationRuleEvaluatorTraceThreadLlmAsJudge.class, projectId);
             var id4 = createGetAndAssertId(AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython.class, projectId);
-            var id5 = createGetAndAssertId(AutomationRuleEvaluatorLlmAsJudge.class, projectId);
-            var id6 = createGetAndAssertId(AutomationRuleEvaluatorUserDefinedMetricPython.class, projectId);
+            var id5 = createGetAndAssertId(AutomationRuleEvaluatorSpanLlmAsJudge.class, projectId);
+            var id6 = createGetAndAssertId(AutomationRuleEvaluatorSpanUserDefinedMetricPython.class, projectId);
+            var id7 = createGetAndAssertId(AutomationRuleEvaluatorLlmAsJudge.class, projectId);
+            var id8 = createGetAndAssertId(AutomationRuleEvaluatorUserDefinedMetricPython.class, projectId);
 
             var batchDelete = BatchDelete.builder().ids(Set.of(id1, id2)).build();
             try (var actualResponse = evaluatorsResourceClient.delete(
@@ -922,15 +944,15 @@ class AutomationRuleEvaluatorsResourceTest {
 
                 var actualEntity = actualResponse.readEntity(AutomationRuleEvaluator.AutomationRuleEvaluatorPage.class);
                 assertThat(actualEntity.page()).isEqualTo(1);
-                assertThat(actualEntity.size()).isEqualTo(4);
-                assertThat(actualEntity.total()).isEqualTo(4);
+                assertThat(actualEntity.size()).isEqualTo(6);
+                assertThat(actualEntity.total()).isEqualTo(6);
 
                 var actualAutomationRuleEvaluators = actualEntity.content();
-                assertThat(actualAutomationRuleEvaluators).hasSize(4);
+                assertThat(actualAutomationRuleEvaluators).hasSize(6);
                 var actualIds = actualAutomationRuleEvaluators.stream()
                         .map(AutomationRuleEvaluator::getId)
                         .collect(Collectors.toSet());
-                assertThat(actualIds).containsExactlyInAnyOrder(id3, id4, id5, id6);
+                assertThat(actualIds).containsExactlyInAnyOrder(id3, id4, id5, id6, id7, id8);
             }
         }
     }
@@ -945,7 +967,7 @@ class AutomationRuleEvaluatorsResourceTest {
             when(llmProviderFactory.getLanguageModel(anyString(), any())
                     .chat(any(ChatRequest.class)))
                     .thenAnswer(invocationOnMock -> chatResponse);
-            var projectName = "project-" + RandomStringUtils.randomAlphanumeric(36);
+            var projectName = "project-" + RandomStringUtils.secure().nextAlphanumeric(36);
             var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
             var evaluator = factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class).toBuilder()
                     .code(OBJECT_MAPPER.readValue(LLM_AS_A_JUDGE_EVALUATOR,
@@ -976,7 +998,7 @@ class AutomationRuleEvaluatorsResourceTest {
                     .chat(any(ChatRequest.class)))
                     .thenAnswer(invocationOnMock -> chatResponse);
 
-            var projectName = "project-" + RandomStringUtils.randomAlphanumeric(36);
+            var projectName = "project-" + RandomStringUtils.secure().nextAlphanumeric(36);
             var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
             var evaluator = factory.manufacturePojo(AutomationRuleEvaluatorTraceThreadLlmAsJudge.class).toBuilder()
                     .code(OBJECT_MAPPER.readValue(LLM_AS_A_JUDGE_EVALUATOR,
@@ -990,7 +1012,7 @@ class AutomationRuleEvaluatorsResourceTest {
 
             var trace = factory.manufacturePojo(Trace.class).toBuilder()
                     .projectName(projectName)
-                    .threadId("thread-" + RandomStringUtils.randomAlphanumeric(36))
+                    .threadId("thread-" + RandomStringUtils.secure().nextAlphanumeric(36))
                     .input(OBJECT_MAPPER.readTree(INPUT))
                     .output(OBJECT_MAPPER.readTree(OUTPUT))
                     .build();
@@ -1029,7 +1051,7 @@ class AutomationRuleEvaluatorsResourceTest {
                     post(urlPathEqualTo("/pythonBackendMock/v1/private/evaluators/python"))
                             .withRequestBody(equalToJson(OBJECT_MAPPER.writeValueAsString(pythonEvaluatorRequest)))
                             .willReturn(okJson(OBJECT_MAPPER.writeValueAsString(pythonEvaluatorResponse))));
-            var projectName = "project-" + RandomStringUtils.randomAlphanumeric(36);
+            var projectName = "project-" + RandomStringUtils.secure().nextAlphanumeric(36);
             var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
             var evaluator = factory.manufacturePojo(AutomationRuleEvaluatorUserDefinedMetricPython.class).toBuilder()
                     .code(AutomationRuleEvaluatorUserDefinedMetricPython.UserDefinedMetricPythonCode.builder()
@@ -1084,7 +1106,7 @@ class AutomationRuleEvaluatorsResourceTest {
                             .withRequestBody(equalToJson(OBJECT_MAPPER.writeValueAsString(pythonEvaluatorRequest)))
                             .willReturn(okJson(OBJECT_MAPPER.writeValueAsString(pythonEvaluatorResponse))));
 
-            var projectName = "project-" + RandomStringUtils.randomAlphanumeric(36);
+            var projectName = "project-" + RandomStringUtils.secure().nextAlphanumeric(36);
             var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
             var evaluator = factory.manufacturePojo(AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython.class)
                     .toBuilder()
@@ -1131,7 +1153,7 @@ class AutomationRuleEvaluatorsResourceTest {
         void getLogsTraceSkipped() {
             // Adding 2 rules to a project, as there was a bug in the sampler causing the logs to fail when having
             // multiple rules. This test should have at least 2 rules to ensure that the bug is fixed.
-            var projectName = "project-" + RandomStringUtils.randomAlphanumeric(36);
+            var projectName = "project-" + RandomStringUtils.secure().nextAlphanumeric(36);
             var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
 
             // Added a Python rule with sampling rate 0
@@ -1171,7 +1193,7 @@ class AutomationRuleEvaluatorsResourceTest {
         void getLogsTraceThreadSkipped() {
             // Adding 2 rules to a project, as there was a bug in the sampler causing the logs to fail when having
             // multiple rules. This test should have at least 2 rules to ensure that the bug is fixed.
-            var projectName = "project-" + RandomStringUtils.randomAlphanumeric(36);
+            var projectName = "project-" + RandomStringUtils.secure().nextAlphanumeric(36);
             var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
 
             // Added a Python rule with sampling rate 0
@@ -1268,7 +1290,7 @@ class AutomationRuleEvaluatorsResourceTest {
         @Test
         void getLogsTraceSkippedDueToDisabledRule() {
             // Test that disabled rules generate appropriate log messages (different from sampling rate messages)
-            var projectName = "project-" + RandomStringUtils.randomAlphanumeric(36);
+            var projectName = "project-" + RandomStringUtils.secure().nextAlphanumeric(36);
             var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
 
             // Create a disabled Python rule with high sampling rate (to distinguish from sampling rate issues)
@@ -1307,7 +1329,7 @@ class AutomationRuleEvaluatorsResourceTest {
         @Test
         void getLogsTraceThreadSkippedDueToDisabledRule() {
             // Test trace thread handling for disabled rules
-            var projectName = "project-" + RandomStringUtils.randomAlphanumeric(36);
+            var projectName = "project-" + RandomStringUtils.secure().nextAlphanumeric(36);
             var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
 
             // Create disabled trace thread rules with high sampling rates
@@ -1370,7 +1392,7 @@ class AutomationRuleEvaluatorsResourceTest {
         @Test
         void mixedEnabledAndDisabledRules() {
             // Test scenario with both enabled and disabled rules in same project
-            var projectName = "project-" + RandomStringUtils.randomAlphanumeric(36);
+            var projectName = "project-" + RandomStringUtils.secure().nextAlphanumeric(36);
             var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
 
             // Create one enabled rule
@@ -1414,7 +1436,7 @@ class AutomationRuleEvaluatorsResourceTest {
         @Test
         void disabledRuleDoesNotConsumeResources() {
             // Verify that disabled rules are skipped early and don't go through sampling logic
-            var projectName = "project-" + RandomStringUtils.randomAlphanumeric(36);
+            var projectName = "project-" + RandomStringUtils.secure().nextAlphanumeric(36);
             var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
 
             // Create disabled rule with 100% sampling rate
@@ -1451,7 +1473,7 @@ class AutomationRuleEvaluatorsResourceTest {
         }
     }
 
-    private void assertTraceThreadLogResponse(LogPage logPage, String threadModelId, AutomationRuleEvaluator<?> rule,
+    private void assertTraceThreadLogResponse(LogPage logPage, String threadModelId, AutomationRuleEvaluator<?, ?> rule,
             Map<String, String> markers,
             Instant createdAt, String message) {
         assertLogPage(logPage, 1);
@@ -1484,7 +1506,7 @@ class AutomationRuleEvaluatorsResourceTest {
                 .anyMatch(log -> log.message().matches(message));
     }
 
-    private UUID createGetAndAssertId(Class<? extends AutomationRuleEvaluator<?>> evaluatorClass, UUID projectId) {
+    private UUID createGetAndAssertId(Class<? extends AutomationRuleEvaluator<?, ?>> evaluatorClass, UUID projectId) {
         var automationRuleEvaluator = factory.manufacturePojo(evaluatorClass).toBuilder().projectId(projectId).build();
         var id = evaluatorsResourceClient.createEvaluator(automationRuleEvaluator, WORKSPACE_NAME, API_KEY);
         try (var actualResponse = evaluatorsResourceClient.getEvaluator(
@@ -1501,8 +1523,8 @@ class AutomationRuleEvaluatorsResourceTest {
             int page,
             int size,
             int expectedTotal,
-            List<? extends AutomationRuleEvaluator<?>> expectedAutomationRuleEvaluators,
-            List<? extends AutomationRuleEvaluator<?>> unexpectedAutomationRuleEvaluators) {
+            List<? extends AutomationRuleEvaluator<?, ?>> expectedAutomationRuleEvaluators,
+            List<? extends AutomationRuleEvaluator<?, ?>> unexpectedAutomationRuleEvaluators) {
 
         try (var actualResponse = evaluatorsResourceClient.findEvaluator(
                 projectId, evaluatorName, page, size, WORKSPACE_NAME, API_KEY, HttpStatus.SC_OK)) {
@@ -1533,8 +1555,8 @@ class AutomationRuleEvaluatorsResourceTest {
         }
     }
 
-    private void assertIgnoredFields(AutomationRuleEvaluator<?> actualRuleEvaluator,
-            AutomationRuleEvaluator<?> expectedRuleEvaluator) {
+    private void assertIgnoredFields(AutomationRuleEvaluator<?, ?> actualRuleEvaluator,
+            AutomationRuleEvaluator<?, ?> expectedRuleEvaluator) {
         assertThat(actualRuleEvaluator.getCreatedAt()).isAfter(expectedRuleEvaluator.getCreatedAt());
         assertThat(actualRuleEvaluator.getLastUpdatedAt()).isAfter(expectedRuleEvaluator.getLastUpdatedAt());
     }
@@ -1571,7 +1593,7 @@ class AutomationRuleEvaluatorsResourceTest {
         assertThat(logPage.page()).isEqualTo(1);
     }
 
-    private void assertLogResponse(LogPage logPage, UUID ruleId, AutomationRuleEvaluator<?> rule, Trace trace) {
+    private void assertLogResponse(LogPage logPage, UUID ruleId, AutomationRuleEvaluator<?, ?> rule, Trace trace) {
         assertLogPage(logPage, 1);
 
         assertThat(logPage.content())
@@ -1587,7 +1609,7 @@ class AutomationRuleEvaluatorsResourceTest {
                         trace.id(), rule.getName()));
     }
 
-    private void assertDisabledRuleLogResponse(LogPage logPage, UUID ruleId, AutomationRuleEvaluator<?> rule,
+    private void assertDisabledRuleLogResponse(LogPage logPage, UUID ruleId, AutomationRuleEvaluator<?, ?> rule,
             Trace trace) {
         assertLogPage(logPage, 1);
 
@@ -1606,7 +1628,7 @@ class AutomationRuleEvaluatorsResourceTest {
     }
 
     private void assertTraceThreadDisabledLogResponse(LogPage logPage, String threadModelId,
-            AutomationRuleEvaluator<?> rule,
+            AutomationRuleEvaluator<?, ?> rule,
             Map<String, String> markers, Instant createdAt, String messageTemplate) {
         assertLogPage(logPage, 1);
 
@@ -1631,7 +1653,7 @@ class AutomationRuleEvaluatorsResourceTest {
         @MethodSource("sortingTestCases")
         @DisplayName("Sort evaluators by various fields with ASC/DESC")
         void sortEvaluators(String field, String direction,
-                Function<AutomationRuleEvaluator<?>, Comparable> extractor)
+                Function<AutomationRuleEvaluator<?, ?>, Comparable> extractor)
                 throws JsonProcessingException {
             // Given
             var projectId = projectResourceClient.createProject(UUID.randomUUID().toString(), API_KEY, WORKSPACE_NAME);
@@ -1644,7 +1666,8 @@ class AutomationRuleEvaluatorsResourceTest {
 
                         // Set specific values based on field being tested
                         if (field.equals("name")) {
-                            builder.name("name-" + (char) ('a' + i) + "-" + RandomStringUtils.randomAlphanumeric(5));
+                            builder.name(
+                                    "name-" + (char) ('a' + i) + "-" + RandomStringUtils.secure().nextAlphanumeric(5));
                         } else if (field.equals("sampling_rate")) {
                             builder.samplingRate((float) (i + 1) / 10); // 0.1, 0.2, 0.3, 0.4, 0.5
                         } else if (field.equals("enabled")) {
@@ -1692,111 +1715,111 @@ class AutomationRuleEvaluatorsResourceTest {
                     // Name sorting
                     Arguments.of(
                             "name", "ASC",
-                            (Function<AutomationRuleEvaluator<?>, Comparable>) e -> e.getName()),
+                            (Function<AutomationRuleEvaluator<?, ?>, Comparable>) e -> e.getName()),
                     Arguments.of(
                             "name", "DESC",
-                            (Function<AutomationRuleEvaluator<?>, Comparable>) e -> e.getName()),
+                            (Function<AutomationRuleEvaluator<?, ?>, Comparable>) e -> e.getName()),
 
                     // Type sorting
                     Arguments.of(
                             "type", "ASC",
-                            (Function<AutomationRuleEvaluator<?>, Comparable>) e -> e.getType()
+                            (Function<AutomationRuleEvaluator<?, ?>, Comparable>) e -> e.getType()
                                     .name()),
                     Arguments.of(
                             "type", "DESC",
-                            (Function<AutomationRuleEvaluator<?>, Comparable>) e -> e.getType()
+                            (Function<AutomationRuleEvaluator<?, ?>, Comparable>) e -> e.getType()
                                     .name()),
 
                     // Sampling rate sorting
                     Arguments.of(
                             "sampling_rate", "ASC",
-                            (Function<AutomationRuleEvaluator<?>, Comparable>) e -> e
+                            (Function<AutomationRuleEvaluator<?, ?>, Comparable>) e -> e
                                     .getSamplingRate()),
                     Arguments.of(
                             "sampling_rate", "DESC",
-                            (Function<AutomationRuleEvaluator<?>, Comparable>) e -> e
+                            (Function<AutomationRuleEvaluator<?, ?>, Comparable>) e -> e
                                     .getSamplingRate()),
 
                     // Enabled sorting
                     Arguments.of(
                             "enabled", "ASC",
-                            (Function<AutomationRuleEvaluator<?>, Comparable>) e -> e.isEnabled()
+                            (Function<AutomationRuleEvaluator<?, ?>, Comparable>) e -> e.isEnabled()
                                     ? 1
                                     : 0),
                     Arguments.of(
                             "enabled", "DESC",
-                            (Function<AutomationRuleEvaluator<?>, Comparable>) e -> e.isEnabled()
+                            (Function<AutomationRuleEvaluator<?, ?>, Comparable>) e -> e.isEnabled()
                                     ? 1
                                     : 0),
 
                     // Project name sorting
                     Arguments.of(
                             "project_name", "ASC",
-                            (Function<AutomationRuleEvaluator<?>, Comparable>) e -> e
+                            (Function<AutomationRuleEvaluator<?, ?>, Comparable>) e -> e
                                     .getProjectName()),
                     Arguments.of(
                             "project_name", "DESC",
-                            (Function<AutomationRuleEvaluator<?>, Comparable>) e -> e
+                            (Function<AutomationRuleEvaluator<?, ?>, Comparable>) e -> e
                                     .getProjectName()),
 
                     // Created at sorting
                     Arguments.of(
                             "created_at", "ASC",
-                            (Function<AutomationRuleEvaluator<?>, Comparable>) e -> e.getCreatedAt()
+                            (Function<AutomationRuleEvaluator<?, ?>, Comparable>) e -> e.getCreatedAt()
                                     .toEpochMilli()),
                     Arguments.of(
                             "created_at", "DESC",
-                            (Function<AutomationRuleEvaluator<?>, Comparable>) e -> e.getCreatedAt()
+                            (Function<AutomationRuleEvaluator<?, ?>, Comparable>) e -> e.getCreatedAt()
                                     .toEpochMilli()),
 
                     // Last updated at sorting
                     Arguments.of(
                             "last_updated_at", "ASC",
-                            (Function<AutomationRuleEvaluator<?>, Comparable>) e -> e
+                            (Function<AutomationRuleEvaluator<?, ?>, Comparable>) e -> e
                                     .getLastUpdatedAt().toEpochMilli()),
                     Arguments.of(
                             "last_updated_at", "DESC",
-                            (Function<AutomationRuleEvaluator<?>, Comparable>) e -> e
+                            (Function<AutomationRuleEvaluator<?, ?>, Comparable>) e -> e
                                     .getLastUpdatedAt().toEpochMilli()),
 
                     // ID sorting
                     Arguments.of(
                             "id", "ASC",
-                            (Function<AutomationRuleEvaluator<?>, Comparable>) e -> e.getId()
+                            (Function<AutomationRuleEvaluator<?, ?>, Comparable>) e -> e.getId()
                                     .toString()),
                     Arguments.of(
                             "id", "DESC",
-                            (Function<AutomationRuleEvaluator<?>, Comparable>) e -> e.getId()
+                            (Function<AutomationRuleEvaluator<?, ?>, Comparable>) e -> e.getId()
                                     .toString()),
 
                     // Project ID sorting
                     Arguments.of(
                             "project_id", "ASC",
-                            (Function<AutomationRuleEvaluator<?>, Comparable>) e -> e.getProjectId()
+                            (Function<AutomationRuleEvaluator<?, ?>, Comparable>) e -> e.getProjectId()
                                     .toString()),
                     Arguments.of(
                             "project_id", "DESC",
-                            (Function<AutomationRuleEvaluator<?>, Comparable>) e -> e.getProjectId()
+                            (Function<AutomationRuleEvaluator<?, ?>, Comparable>) e -> e.getProjectId()
                                     .toString()),
 
                     // Created by sorting
                     Arguments.of(
                             "created_by", "ASC",
-                            (Function<AutomationRuleEvaluator<?>, Comparable>) e -> e
+                            (Function<AutomationRuleEvaluator<?, ?>, Comparable>) e -> e
                                     .getCreatedBy()),
                     Arguments.of(
                             "created_by", "DESC",
-                            (Function<AutomationRuleEvaluator<?>, Comparable>) e -> e
+                            (Function<AutomationRuleEvaluator<?, ?>, Comparable>) e -> e
                                     .getCreatedBy()),
 
                     // Last updated by sorting
                     Arguments.of(
                             "last_updated_by", "ASC",
-                            (Function<AutomationRuleEvaluator<?>, Comparable>) e -> e
+                            (Function<AutomationRuleEvaluator<?, ?>, Comparable>) e -> e
                                     .getLastUpdatedBy()),
                     Arguments.of(
                             "last_updated_by", "DESC",
-                            (Function<AutomationRuleEvaluator<?>, Comparable>) e -> e
+                            (Function<AutomationRuleEvaluator<?, ?>, Comparable>) e -> e
                                     .getLastUpdatedBy()));
         }
 
@@ -1850,7 +1873,7 @@ class AutomationRuleEvaluatorsResourceTest {
 
             } else if (fieldName.equals("name")) {
                 // Test Name filtering
-                var uniqueName = "unique-name-" + RandomStringUtils.randomAlphanumeric(10);
+                var uniqueName = "unique-name-" + RandomStringUtils.secure().nextAlphanumeric(10);
                 var evaluator = factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class).toBuilder()
                         .name(uniqueName)
                         .projectId(projectId)
@@ -1942,8 +1965,8 @@ class AutomationRuleEvaluatorsResourceTest {
         void filterByProjectName(String operator, String matchingPrefix, String nonMatchingPrefix,
                 Predicate<String> matchPredicate) throws JsonProcessingException {
             // Given
-            var projectName1 = matchingPrefix + RandomStringUtils.randomAlphanumeric(10);
-            var projectName2 = nonMatchingPrefix + RandomStringUtils.randomAlphanumeric(10);
+            var projectName1 = matchingPrefix + RandomStringUtils.secure().nextAlphanumeric(10);
+            var projectName2 = nonMatchingPrefix + RandomStringUtils.secure().nextAlphanumeric(10);
 
             var projectId1 = projectResourceClient.createProject(projectName1, API_KEY, WORKSPACE_NAME);
             var projectId2 = projectResourceClient.createProject(projectName2, API_KEY, WORKSPACE_NAME);
@@ -2083,11 +2106,11 @@ class AutomationRuleEvaluatorsResourceTest {
             var projectId2 = projectResourceClient.createProject(UUID.randomUUID().toString(), API_KEY, WORKSPACE_NAME);
 
             var evaluator1 = factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class).toBuilder()
-                    .name("unique-eval-1-" + RandomStringUtils.randomAlphanumeric(10))
+                    .name("unique-eval-1-" + RandomStringUtils.secure().nextAlphanumeric(10))
                     .projectId(projectId1)
                     .build();
             var evaluator2 = factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class).toBuilder()
-                    .name("unique-eval-2-" + RandomStringUtils.randomAlphanumeric(10))
+                    .name("unique-eval-2-" + RandomStringUtils.secure().nextAlphanumeric(10))
                     .projectId(projectId2)
                     .build();
 
@@ -2113,12 +2136,12 @@ class AutomationRuleEvaluatorsResourceTest {
         @DisplayName("Filter by project name and sort by name ascending")
         void filterAndSort() throws JsonProcessingException {
             // Given
-            var projectName = "test-project-" + RandomStringUtils.randomAlphanumeric(10);
+            var projectName = "test-project-" + RandomStringUtils.secure().nextAlphanumeric(10);
             var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
 
             var evaluators = IntStream.range(0, 5)
                     .mapToObj(i -> factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class).toBuilder()
-                            .name("eval-" + (char) ('e' - i) + "-" + RandomStringUtils.randomAlphanumeric(5)) // e, d, c, b, a
+                            .name("eval-" + (char) ('e' - i) + "-" + RandomStringUtils.secure().nextAlphanumeric(5)) // e, d, c, b, a
                             .projectId(projectId)
                             .build())
                     .toList();
@@ -2186,7 +2209,8 @@ class AutomationRuleEvaluatorsResourceTest {
             try (var actualResponse = evaluatorsResourceClient.getEvaluator(
                     id, null, WORKSPACE_NAME, API_KEY, HttpStatus.SC_OK)) {
 
-                var actualAutomationRuleEvaluator = actualResponse.readEntity(AutomationRuleEvaluator.class);
+                AutomationRuleEvaluator<AutomationRuleEvaluatorLlmAsJudge, TraceFilter> actualAutomationRuleEvaluator = actualResponse
+                        .readEntity(AutomationRuleEvaluator.class);
                 assertThat(actualAutomationRuleEvaluator.getFilters()).hasSize(2);
                 assertThat(actualAutomationRuleEvaluator.getFilters())
                         .usingRecursiveFieldByFieldElementComparator()
@@ -2198,6 +2222,7 @@ class AutomationRuleEvaluatorsResourceTest {
         void createEvaluatorWithEmptyFilters() {
             // Given
             List<TraceFilter> emptyFilters = List.of();
+            @SuppressWarnings("unchecked")
             var automationRuleEvaluator = factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class)
                     .toBuilder()
                     .filters(emptyFilters)
@@ -2225,6 +2250,7 @@ class AutomationRuleEvaluatorsResourceTest {
                             .value("old_name")
                             .build());
 
+            @SuppressWarnings("unchecked")
             AutomationRuleEvaluatorLlmAsJudge automationRuleEvaluator = factory
                     .manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class)
                     .toBuilder()
@@ -2244,6 +2270,7 @@ class AutomationRuleEvaluatorsResourceTest {
                             .value("production")
                             .build());
 
+            @SuppressWarnings("unchecked")
             AutomationRuleEvaluatorUpdateLlmAsJudge updateRequest = factory
                     .manufacturePojo(AutomationRuleEvaluatorUpdateLlmAsJudge.class)
                     .toBuilder()
@@ -2269,34 +2296,89 @@ class AutomationRuleEvaluatorsResourceTest {
             }
         }
 
-        Stream<Class<? extends AutomationRuleEvaluator<?>>> evaluatorTypesWithFilters() {
+        Stream<Arguments> evaluatorTypesWithFilters() {
             return Stream.of(
-                    AutomationRuleEvaluatorLlmAsJudge.class,
-                    AutomationRuleEvaluatorUserDefinedMetricPython.class,
-                    AutomationRuleEvaluatorTraceThreadLlmAsJudge.class,
-                    AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython.class);
+                    Arguments.of(
+                            AutomationRuleEvaluatorLlmAsJudge.class,
+                            List.of(
+                                    TraceFilter.builder()
+                                            .field(TraceField.NAME)
+                                            .operator(Operator.CONTAINS)
+                                            .value("test")
+                                            .build(),
+                                    TraceFilter.builder()
+                                            .field(TraceField.FEEDBACK_SCORES)
+                                            .key("relevance")
+                                            .operator(Operator.GREATER_THAN)
+                                            .value("0.8")
+                                            .build())),
+                    Arguments.of(
+                            AutomationRuleEvaluatorUserDefinedMetricPython.class,
+                            List.of(
+                                    TraceFilter.builder()
+                                            .field(TraceField.NAME)
+                                            .operator(Operator.CONTAINS)
+                                            .value("test")
+                                            .build(),
+                                    TraceFilter.builder()
+                                            .field(TraceField.FEEDBACK_SCORES)
+                                            .key("relevance")
+                                            .operator(Operator.GREATER_THAN)
+                                            .value("0.8")
+                                            .build())),
+                    Arguments.of(
+                            AutomationRuleEvaluatorTraceThreadLlmAsJudge.class,
+                            List.of(
+                                    TraceThreadFilter.builder()
+                                            .field(TraceThreadField.FIRST_MESSAGE)
+                                            .operator(Operator.CONTAINS)
+                                            .value("test")
+                                            .build(),
+                                    TraceThreadFilter.builder()
+                                            .field(TraceThreadField.FEEDBACK_SCORES)
+                                            .key("relevance")
+                                            .operator(Operator.GREATER_THAN)
+                                            .value("0.8")
+                                            .build())),
+                    Arguments.of(
+                            AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython.class,
+                            List.of(
+                                    TraceThreadFilter.builder()
+                                            .field(TraceThreadField.FIRST_MESSAGE)
+                                            .operator(Operator.CONTAINS)
+                                            .value("test")
+                                            .build(),
+                                    TraceThreadFilter.builder()
+                                            .field(TraceThreadField.FEEDBACK_SCORES)
+                                            .key("relevance")
+                                            .operator(Operator.GREATER_THAN)
+                                            .value("0.8")
+                                            .build())),
+                    Arguments.of(
+                            AutomationRuleEvaluatorSpanLlmAsJudge.class,
+                            List.of(
+                                    SpanFilter.builder()
+                                            .field(SpanField.NAME)
+                                            .operator(Operator.CONTAINS)
+                                            .value("test")
+                                            .build(),
+                                    SpanFilter.builder()
+                                            .field(SpanField.FEEDBACK_SCORES)
+                                            .key("relevance")
+                                            .operator(Operator.GREATER_THAN)
+                                            .value("0.8")
+                                            .build())));
         }
 
         @ParameterizedTest
         @MethodSource("evaluatorTypesWithFilters")
-        void createEvaluatorWithFiltersForAllTypes(Class<? extends AutomationRuleEvaluator<?>> evaluatorClass) {
+        void createEvaluatorWithFiltersForAllTypes(Class<? extends AutomationRuleEvaluator<?, ?>> evaluatorClass,
+                List<?> filters) {
             // Given
-            List<TraceFilter> filters = List.of(
-                    TraceFilter.builder()
-                            .field(TraceField.NAME)
-                            .operator(Operator.CONTAINS)
-                            .value("test")
-                            .build(),
-                    TraceFilter.builder()
-                            .field(TraceField.FEEDBACK_SCORES)
-                            .key("relevance")
-                            .operator(Operator.GREATER_THAN)
-                            .value("0.8")
-                            .build());
-
-            AutomationRuleEvaluator<?> automationRuleEvaluator = factory.manufacturePojo(evaluatorClass)
+            AutomationRuleEvaluator<?, ?> automationRuleEvaluator = factory
+                    .manufacturePojo(evaluatorClass)
                     .toBuilder()
-                    .filters(filters)
+                    .filters((List) filters)
                     .build();
 
             // When
@@ -2336,6 +2418,7 @@ class AutomationRuleEvaluatorsResourceTest {
                             .value("1000")
                             .build());
 
+            @SuppressWarnings("unchecked")
             AutomationRuleEvaluatorLlmAsJudge automationRuleEvaluator = factory
                     .manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class)
                     .toBuilder()
