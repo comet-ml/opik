@@ -25,11 +25,13 @@ export interface WorkspaceMembersTableProps {
     columnSizing?: ColumnSizingState;
     onColumnResize?: OnChangeFn<ColumnSizingState>;
   };
+  search?: string;
 }
 
 const WorkspaceMembersTable: React.FC<WorkspaceMembersTableProps> = ({
   columns,
   resizeConfig,
+  search = "",
 }) => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
 
@@ -52,13 +54,24 @@ const WorkspaceMembersTable: React.FC<WorkspaceMembersTableProps> = ({
   const tableData = useMemo(() => {
     if (!workspaceMembers) return [];
 
-    return workspaceMembers.map(
+    const searchLower = search.toLowerCase();
+
+    const filteredMembers = search
+      ? workspaceMembers.filter((member) => {
+          return (
+            member.userName.toLowerCase().includes(searchLower) ||
+            member.email.toLowerCase().includes(searchLower)
+          );
+        })
+      : workspaceMembers;
+
+    return filteredMembers.map(
       (member): WorkspaceMember => ({
         id: member.userName,
         ...member,
       }),
     );
-  }, [workspaceMembers]);
+  }, [workspaceMembers, search]);
 
   if (isPending) {
     return <Loader />;
