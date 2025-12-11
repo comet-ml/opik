@@ -15,6 +15,7 @@ import static com.comet.opik.domain.evaluators.UserDefinedMetricPythonAutomation
 public record UserDefinedMetricPythonAutomationRuleEvaluatorModel(
         UUID id,
         UUID projectId, // Legacy single project field for backwards compatibility
+        String projectName, // Legacy project name field (resolved from projectId)
         Set<UUID> projectIds, // New multi-project field
         String name,
         Float samplingRate,
