@@ -13,6 +13,7 @@ import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -306,7 +307,7 @@ class AutomationRuleEvaluatorFiltersDeserializerTest {
             // Given: Create an evaluator with SpanFilters
             AutomationRuleEvaluatorSpanLlmAsJudge originalEvaluator = AutomationRuleEvaluatorSpanLlmAsJudge.builder()
                     .id(UUID.randomUUID())
-                    .projectId(UUID.randomUUID())
+                    .projectIds(Set.of(UUID.randomUUID()))
                     .name("Test Rule")
                     .samplingRate(1.0f)
                     .enabled(true)
