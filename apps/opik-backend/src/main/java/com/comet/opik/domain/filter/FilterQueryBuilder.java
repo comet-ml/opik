@@ -564,6 +564,7 @@ public class FilterQueryBuilder {
                 DatasetItemField.LAST_UPDATED_AT,
                 DatasetItemField.CREATED_BY,
                 DatasetItemField.LAST_UPDATED_BY,
+                DatasetItemField.DATASET_ID,
                 // Also include ExperimentsComparisonValidKnownField variants for experiment items
                 ExperimentsComparisonValidKnownField.ID,
                 ExperimentsComparisonValidKnownField.SOURCE,
