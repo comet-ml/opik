@@ -11,12 +11,17 @@ import ThreadsTab from "@/components/pages/TracesPage/ThreadsTab/ThreadsTab";
 import MetricsTab from "@/components/pages/TracesPage/MetricsTab/MetricsTab";
 import RulesTab from "@/components/pages/TracesPage/RulesTab/RulesTab";
 import AnnotationQueuesTab from "@/components/pages/TracesPage/AnnotationQueuesTab/AnnotationQueuesTab";
+import DashboardsTab from "@/components/pages/TracesPage/DashboardsTab/DashboardsTab";
 import { Button } from "@/components/ui/button";
+import { Separator } from "@/components/ui/separator";
 import { Construction } from "lucide-react";
 import { useState } from "react";
 import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
 import SetGuardrailDialog from "../HomePageShared/SetGuardrailDialog";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
+import ViewSelector, {
+  VIEW_TYPE,
+} from "@/components/pages-shared/dashboards/ViewSelector/ViewSelector";
 
 const TracesPage = () => {
   const projectId = useProjectIdFromURL();
@@ -28,6 +33,14 @@ const TracesPage = () => {
 
   const [type = TRACE_DATA_TYPE.traces, setType] = useQueryParam(
     "type",
+    StringParam,
+    {
+      updateType: "replaceIn",
+    },
+  );
+
+  const [view = VIEW_TYPE.OUTPUTS, setView] = useQueryParam(
+    "view",
     StringParam,
     {
       updateType: "replaceIn",
@@ -47,34 +60,9 @@ const TracesPage = () => {
 
   const openGuardrailsDialog = () => setIsGuardrailsDialogOpened(true);
 
-  return (
-    <>
-      <PageBodyScrollContainer>
-        <PageBodyStickyContainer
-          className="mb-4 mt-6 flex items-center justify-between"
-          direction="horizontal"
-        >
-          <h1
-            data-testid="traces-page-title"
-            className="comet-title-l truncate break-words"
-          >
-            {projectName}
-          </h1>
-          {isGuardrailsEnabled && (
-            <Button variant="outline" size="sm" onClick={openGuardrailsDialog}>
-              <Construction className="mr-1.5 size-3.5" />
-              Set a guardrail
-            </Button>
-          )}
-        </PageBodyStickyContainer>
-        {project?.description && (
-          <PageBodyStickyContainer
-            className="-mt-3 mb-4 flex min-h-8 items-center justify-between"
-            direction="horizontal"
-          >
-            <div className="text-muted-slate">{project.description}</div>
-          </PageBodyStickyContainer>
-        )}
+  const renderContent = () => {
+    if (view === VIEW_TYPE.OUTPUTS) {
+      return (
         <Tabs
           defaultValue="traces"
           value={type as string}
@@ -130,6 +118,55 @@ const TracesPage = () => {
             <AnnotationQueuesTab projectId={projectId} />
           </TabsContent>
         </Tabs>
+      );
+    }
+
+    if (view === VIEW_TYPE.DASHBOARDS) {
+      return <DashboardsTab projectId={projectId} />;
+    }
+
+    return null;
+  };
+
+  return (
+    <>
+      <PageBodyScrollContainer>
+        <PageBodyStickyContainer
+          className="mb-4 mt-6 flex items-center justify-between"
+          direction="horizontal"
+        >
+          <h1
+            data-testid="traces-page-title"
+            className="comet-title-l truncate break-words"
+          >
+            {projectName}
+          </h1>
+          <div className="flex shrink-0 items-center gap-2">
+            {isGuardrailsEnabled && (
+              <>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={openGuardrailsDialog}
+                >
+                  <Construction className="mr-1.5 size-3.5" />
+                  Set a guardrail
+                </Button>
+                <Separator orientation="vertical" className="h-4" />
+              </>
+            )}
+            <ViewSelector value={view as VIEW_TYPE} onChange={setView} />
+          </div>
+        </PageBodyStickyContainer>
+        {project?.description && (
+          <PageBodyStickyContainer
+            className="-mt-3 mb-4 flex min-h-8 items-center justify-between"
+            direction="horizontal"
+          >
+            <div className="text-muted-slate">{project.description}</div>
+          </PageBodyStickyContainer>
+        )}
+        {renderContent()}
       </PageBodyScrollContainer>
       {isGuardrailsEnabled && (
         <SetGuardrailDialog

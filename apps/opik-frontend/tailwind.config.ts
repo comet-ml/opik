@@ -115,6 +115,11 @@ module.exports = {
         "warning-box-text": "hsl(var(--warning-box-text))",
         "warning-box-icon-bg": "hsl(var(--warning-box-icon-bg))",
         "warning-box-icon-text": "hsl(var(--warning-box-icon-text))",
+
+        /* Template icon colors */
+        "template-icon-metrics": "var(--template-icon-metrics)",
+        "template-icon-performance": "var(--template-icon-performance)",
+        "template-icon-scratch": "var(--template-icon-scratch)",
       },
       borderRadius: {
         xxl: "calc(var(--radius) + 4px)",
@@ -158,8 +163,5 @@ module.exports = {
       );
     },
   ],
-  safelist: [
-    "playground-table",
-    "comet-compare-optimizations-table",
-  ],
+  safelist: ["playground-table", "comet-compare-optimizations-table"],
 };

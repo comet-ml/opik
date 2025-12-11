@@ -36,6 +36,7 @@ interface DashboardStoreState<TConfig = BaseDashboardConfig> {
   version: number;
   lastModified: number;
   config: TConfig | null;
+  runtimeConfig: Partial<TConfig>;
   onAddEditWidgetCallback:
     | ((params: AddEditWidgetCallbackParams) => void)
     | null;
@@ -78,32 +79,25 @@ interface DashboardActions<TConfig = BaseDashboardConfig> {
 
   // Config operations
   setConfig: (config: TConfig) => void;
-  getConfig: () => TConfig | null;
-  clearConfig: () => void;
+  setRuntimeConfig: (runtimeConfig: Partial<TConfig>) => void;
 
   // Callback operations
   setOnAddEditWidgetCallback: (
     callback: ((params: AddEditWidgetCallbackParams) => void) | null,
   ) => void;
-  getOnAddEditWidgetCallback: () =>
-    | ((params: AddEditWidgetCallbackParams) => void)
-    | null;
 
   // Widget resolver operations
   setWidgetResolver: (resolver: WidgetResolver | null) => void;
-  getWidgetResolver: () => WidgetResolver | null;
 
   // Preview widget operations
   setPreviewWidget: (widget: DashboardWidget | null) => void;
-  getPreviewWidget: () => DashboardWidget | null;
 
   // Utility operations
   clearDashboard: () => void;
-  resetDashboard: () => void;
 
   // Backend sync operations
   loadDashboardFromBackend: (dashboardState: DashboardState) => void;
-  getDashboardConfig: () => DashboardState;
+  getDashboard: () => DashboardState;
 
   // Getters (computed values)
   getSectionById: (sectionId: string) => DashboardSection | undefined;
@@ -139,6 +133,7 @@ export const useDashboardStore = create<DashboardStore<BaseDashboardConfig>>()(
         version: initialDashboard.version,
         lastModified: initialDashboard.lastModified,
         config: initialDashboard.config,
+        runtimeConfig: {},
         onAddEditWidgetCallback: null,
         widgetResolver: null,
         previewWidget: null,
@@ -469,12 +464,8 @@ export const useDashboardStore = create<DashboardStore<BaseDashboardConfig>>()(
           set({ config }, false, "setConfig");
         },
 
-        getConfig: () => {
-          return get().config;
-        },
-
-        clearConfig: () => {
-          set({ config: null }, false, "clearConfig");
+        setRuntimeConfig: (runtimeConfig) => {
+          set({ runtimeConfig }, false, "setRuntimeConfig");
         },
 
         // Callback Actions
@@ -486,26 +477,14 @@ export const useDashboardStore = create<DashboardStore<BaseDashboardConfig>>()(
           );
         },
 
-        getOnAddEditWidgetCallback: () => {
-          return get().onAddEditWidgetCallback;
-        },
-
         // Widget Resolver Actions
         setWidgetResolver: (resolver) => {
           set({ widgetResolver: resolver }, false, "setWidgetResolver");
         },
 
-        getWidgetResolver: () => {
-          return get().widgetResolver;
-        },
-
         // Preview Widget Actions
         setPreviewWidget: (widget) => {
           set({ previewWidget: widget }, false, "setPreviewWidget");
-        },
-
-        getPreviewWidget: () => {
-          return get().previewWidget;
         },
 
         // Utility Actions
@@ -516,22 +495,10 @@ export const useDashboardStore = create<DashboardStore<BaseDashboardConfig>>()(
               sections: emptyDashboard.sections,
               version: emptyDashboard.version,
               lastModified: Date.now(),
+              config: emptyDashboard.config,
             },
             false,
             "clearDashboard",
-          );
-        },
-
-        resetDashboard: () => {
-          const defaultDashboard = generateEmptyDashboard();
-          set(
-            {
-              sections: defaultDashboard.sections,
-              version: defaultDashboard.version,
-              lastModified: defaultDashboard.lastModified,
-            },
-            false,
-            "resetDashboard",
           );
         },
 
@@ -550,7 +517,7 @@ export const useDashboardStore = create<DashboardStore<BaseDashboardConfig>>()(
           );
         },
 
-        getDashboardConfig: () => {
+        getDashboard: () => {
           const state = get();
           return {
             sections: state.sections,
@@ -594,27 +561,7 @@ export const useDashboardStore = create<DashboardStore<BaseDashboardConfig>>()(
 export const selectSectionIds = (state: DashboardStore) =>
   state.sections.map((s) => s.id);
 
-export const selectSectionById =
-  (sectionId: string) => (state: DashboardStore) =>
-    getSectionById(state.sections, sectionId);
-
-export const selectWidgetsBySectionId =
-  (sectionId: string) => (state: DashboardStore) => {
-    const section = getSectionById(state.sections, sectionId);
-    return section?.widgets || [];
-  };
-
-export const selectLayoutBySectionId =
-  (sectionId: string) => (state: DashboardStore) => {
-    const section = getSectionById(state.sections, sectionId);
-    return section?.layout || [];
-  };
-
 export const selectSections = (state: DashboardStore) => state.sections;
-
-export const selectVersion = (state: DashboardStore) => state.version;
-
-export const selectLastModified = (state: DashboardStore) => state.lastModified;
 
 /**
  * Action Selectors (stable references)
@@ -641,13 +588,26 @@ export const selectUpdateWidget = (state: DashboardStore) => state.updateWidget;
 export const selectMoveWidget = (state: DashboardStore) => state.moveWidget;
 export const selectUpdateLayout = (state: DashboardStore) => state.updateLayout;
 
+export const selectMixedConfig = <TConfig = BaseDashboardConfig>(
+  state: DashboardStore<TConfig>,
+) => {
+  if (!state.config) return null;
+  return {
+    ...state.config,
+    ...state.runtimeConfig,
+  } as TConfig;
+};
+
 export const selectConfig = <TConfig = BaseDashboardConfig>(
   state: DashboardStore<TConfig>,
 ) => state.config;
+
 export const selectSetConfig = (state: DashboardStore<BaseDashboardConfig>) =>
   state.setConfig;
-export const selectClearConfig = (state: DashboardStore<BaseDashboardConfig>) =>
-  state.clearConfig;
+
+export const selectSetRuntimeConfig = (
+  state: DashboardStore<BaseDashboardConfig>,
+) => state.setRuntimeConfig;
 export const selectClearDashboard = (
   state: DashboardStore<BaseDashboardConfig>,
 ) => state.clearDashboard;
