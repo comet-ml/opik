@@ -46,7 +46,7 @@ public class DatasetItemsDeleteValidator
         // CRITICAL SECURITY CHECK: When using filters, dataset_id must be present
         if (hasFilters) {
             boolean hasDatasetIdFilter = deleteRequest.filters().stream()
-                    .anyMatch(filter -> DATASET_ID_FIELD.equals(filter.field())
+                    .anyMatch(filter -> DATASET_ID_FIELD.equals(filter.field().getQueryParamField())
                             && Operator.EQUAL.equals(filter.operator())
                             && isValidUUID(filter.value()));
 
