@@ -7,6 +7,7 @@ import CustomIcon from "@/icons/integrations/custom.svg?react";
 import OpikIcon from "@/icons/integrations/opik.svg?react";
 
 import { PROVIDER_MODEL_TYPE, PROVIDER_TYPE } from "@/types/providers";
+import { FeatureToggleKeys } from "@/types/feature-toggles";
 
 export type IconType = typeof OpenAIIcon;
 
@@ -89,5 +90,19 @@ export const PROVIDERS: PROVIDERS_TYPE = {
 export const PROVIDERS_OPTIONS = Object.values(PROVIDERS);
 
 export const CUSTOM_PROVIDER_MODEL_PREFIX = "custom-llm";
+
+// Mapping between provider types and their feature toggle keys
+export const PROVIDER_FEATURE_TOGGLE_MAP: Record<
+  PROVIDER_TYPE,
+  FeatureToggleKeys
+> = {
+  [PROVIDER_TYPE.OPEN_AI]: FeatureToggleKeys.OPENAI_PROVIDER_ENABLED,
+  [PROVIDER_TYPE.ANTHROPIC]: FeatureToggleKeys.ANTHROPIC_PROVIDER_ENABLED,
+  [PROVIDER_TYPE.GEMINI]: FeatureToggleKeys.GEMINI_PROVIDER_ENABLED,
+  [PROVIDER_TYPE.OPEN_ROUTER]: FeatureToggleKeys.OPENROUTER_PROVIDER_ENABLED,
+  [PROVIDER_TYPE.VERTEX_AI]: FeatureToggleKeys.VERTEXAI_PROVIDER_ENABLED,
+  [PROVIDER_TYPE.CUSTOM]: FeatureToggleKeys.CUSTOMLLM_PROVIDER_ENABLED,
+  [PROVIDER_TYPE.OPIK_BUILTIN]: FeatureToggleKeys.OPIKBUILTIN_PROVIDER_ENABLED,
+};
 
 export const LEGACY_CUSTOM_PROVIDER_NAME = "default";
