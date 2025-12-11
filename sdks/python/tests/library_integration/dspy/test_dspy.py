@@ -12,6 +12,7 @@ from opik.api_objects import opik_client, span, trace
 from opik.config import OPIK_PROJECT_DEFAULT_NAME
 from opik.integrations.dspy.callback import OpikCallback
 from ...testlib import (
+    ANY,
     ANY_BUT_NONE,
     ANY_DICT,
     ANY_STRING,
@@ -98,6 +99,7 @@ def test_dspy__happyflow(
                         input=ANY_DICT,
                         output=ANY_DICT,
                         usage=ANY_USAGE_DICT,
+                        total_cost=ANY,  # Cost is extracted from DSPy history when available
                         metadata=ANY_METADATA_WITH_CREATED_FROM,
                         start_time=ANY_BUT_NONE,
                         end_time=ANY_BUT_NONE,
@@ -337,6 +339,7 @@ def test_dspy_callback__used_inside_another_track_function__data_attached_to_exi
                                         input=ANY_DICT,
                                         output=ANY_DICT,
                                         usage=ANY_USAGE_DICT,
+                                        total_cost=ANY,  # Cost is extracted from DSPy history when available
                                         metadata=ANY_METADATA_WITH_CREATED_FROM,
                                         start_time=ANY_BUT_NONE,
                                         end_time=ANY_BUT_NONE,
@@ -443,6 +446,7 @@ def test_dspy_callback__used_when_there_was_already_existing_trace_without_span_
                                 input=ANY_DICT,
                                 output=ANY_DICT,
                                 usage=ANY_USAGE_DICT,
+                                total_cost=ANY,  # Cost is extracted from DSPy history when available
                                 metadata=ANY_METADATA_WITH_CREATED_FROM,
                                 start_time=ANY_BUT_NONE,
                                 end_time=ANY_BUT_NONE,
@@ -542,6 +546,7 @@ def test_dspy_callback__used_when_there_was_already_existing_span_without_trace_
                                 input=ANY_DICT,
                                 output=ANY_DICT,
                                 usage=ANY_USAGE_DICT,
+                                total_cost=ANY,  # Cost is extracted from DSPy history when available
                                 metadata=ANY_METADATA_WITH_CREATED_FROM,
                                 start_time=ANY_BUT_NONE,
                                 end_time=ANY_BUT_NONE,
@@ -755,200 +760,3 @@ def test_dspy__cache_enabled_first_call__has_usage_and_cache_hit_false(
 
     # First call should not be a cache hit
     assert lm_span.metadata.get("cache_hit") is False
-
-
-def test_dspy__actual_provider_extracted_from_response(fake_backend):
-    """
-    When the LM response contains a 'provider' field (e.g., from OpenRouter),
-    it should be used as the actual provider instead of the router name.
-
-    This is important for accurate cost tracking when using LLM routers like
-    OpenRouter that internally route to different providers (e.g., Novita, Together).
-    """
-    from unittest.mock import MagicMock
-
-    # Create a mock response object with a provider attribute
-    mock_response = MagicMock()
-    mock_response.provider = (
-        "ActualProvider"  # The real provider that served the request
-    )
-    mock_response.cache_hit = False
-
-    # Set up the LM with a router-style model name (e.g., openrouter/model-name)
-    lm = dspy.LM(
-        cache=False,
-        model="openai/gpt-4o-mini",  # Use a real model for initialization
-    )
-    dspy.configure(lm=lm)
-
-    opik_callback = OpikCallback(project_name="dspy-provider-test")
-    dspy.settings.configure(callbacks=[opik_callback])
-
-    cot = dspy.ChainOfThought("question -> answer")
-    cot(question="What is 2+2?")
-
-    opik_callback.flush()
-
-    # Verify spans were created
-    assert len(fake_backend.trace_trees) == 1
-
-    # Get the LM span
-    trace_tree = fake_backend.trace_trees[0]
-    predict_span = trace_tree.spans[0]
-    lm_span = predict_span.spans[0]
-
-    # The provider should be "openai" as set in instance.model
-    # (no actual_provider override happens with real openai since the response
-    # doesn't have a different provider field)
-    assert lm_span.provider == "openai"
-    # When provider matches (no override), llm_router should NOT be in metadata
-    assert "llm_router" not in lm_span.metadata
-
-
-def test_dspy__llm_router_metadata_when_provider_differs():
-    """
-    Unit test for the actual provider and cost extraction logic.
-
-    When using an LLM router (like OpenRouter), the response contains the actual
-    provider that served the request and the cost. This test verifies:
-    1. The actual provider is extracted from the response
-    2. The original router name is stored in metadata as 'llm_router'
-    3. The span's provider is updated to the actual provider
-    4. The cost from the provider is extracted
-    """
-    from opik.integrations.dspy.callback import OpikCallback
-    from unittest.mock import MagicMock
-
-    callback = OpikCallback(project_name="test")
-
-    # Create a mock LM instance with history containing an actual provider and cost
-    mock_lm = MagicMock()
-    mock_lm.model = "openrouter/qwen/qwen3-8b"
-
-    mock_response = MagicMock()
-    mock_response.provider = "Novita"  # The actual provider from OpenRouter
-    mock_response.cache_hit = False
-
-    expected_messages = [{"role": "user", "content": "test"}]
-    mock_lm.history = [
-        {
-            "messages": expected_messages,
-            "response": mock_response,
-            "cost": 9.524e-06,  # Cost from OpenRouter
-            "usage": {
-                "prompt_tokens": 10,
-                "completion_tokens": 20,
-                "total_tokens": 30,
-                "cost": 9.524e-06,  # Also in usage dict
-            },
-        }
-    ]
-
-    # Store the mock LM info
-    call_id = "test-call-id"
-    callback._map_call_id_to_lm_info[call_id] = (mock_lm, expected_messages)
-
-    # Extract info from history
-    usage, cache_hit, actual_provider, total_cost = (
-        callback._extract_lm_info_from_history(call_id)
-    )
-
-    # Verify extraction
-    assert actual_provider == "Novita"
-    assert cache_hit is False
-    assert usage is not None
-    assert usage.prompt_tokens == 10
-    assert usage.completion_tokens == 20
-    assert usage.total_tokens == 30
-    assert total_cost == 9.524e-06
-
-
-def test_dspy__no_llm_router_metadata_when_provider_same():
-    """
-    Unit test to verify that 'llm_router' is NOT added to metadata when the
-    actual provider matches the original provider (no router involved).
-    """
-    from opik.integrations.dspy.callback import OpikCallback
-    from unittest.mock import MagicMock
-
-    callback = OpikCallback(project_name="test")
-
-    # Create a mock LM instance where provider matches (direct API, not routed)
-    mock_lm = MagicMock()
-    mock_lm.model = "openai/gpt-4o-mini"
-
-    mock_response = MagicMock()
-    mock_response.provider = "openai"  # Same as the model prefix
-    mock_response.cache_hit = False
-
-    expected_messages = [{"role": "user", "content": "test"}]
-    mock_lm.history = [
-        {
-            "messages": expected_messages,
-            "response": mock_response,
-            "usage": {
-                "prompt_tokens": 10,
-                "completion_tokens": 20,
-                "total_tokens": 30,
-            },
-        }
-    ]
-
-    # Store the mock LM info
-    call_id = "test-call-id"
-    callback._map_call_id_to_lm_info[call_id] = (mock_lm, expected_messages)
-
-    # Extract info from history
-    usage, cache_hit, actual_provider, total_cost = (
-        callback._extract_lm_info_from_history(call_id)
-    )
-
-    # Actual provider should be "openai"
-    assert actual_provider == "openai"
-    # No cost provided in this case
-    assert total_cost is None
-
-
-def test_dspy__actual_provider_none_when_not_in_response():
-    """
-    Unit test to verify that actual_provider is None when the response
-    doesn't have a provider attribute (older versions or some providers).
-    """
-    from opik.integrations.dspy.callback import OpikCallback
-    from unittest.mock import MagicMock
-
-    callback = OpikCallback(project_name="test")
-
-    # Create a mock LM instance where response has no provider attribute
-    mock_lm = MagicMock()
-    mock_lm.model = "openai/gpt-4o-mini"
-
-    mock_response = MagicMock(spec=[])  # No attributes
-    mock_response.cache_hit = False
-
-    expected_messages = [{"role": "user", "content": "test"}]
-    mock_lm.history = [
-        {
-            "messages": expected_messages,
-            "response": mock_response,
-            "usage": {
-                "prompt_tokens": 10,
-                "completion_tokens": 20,
-                "total_tokens": 30,
-            },
-        }
-    ]
-
-    # Store the mock LM info
-    call_id = "test-call-id"
-    callback._map_call_id_to_lm_info[call_id] = (mock_lm, expected_messages)
-
-    # Extract info from history
-    usage, cache_hit, actual_provider, total_cost = (
-        callback._extract_lm_info_from_history(call_id)
-    )
-
-    # Actual provider should be None when not in response
-    assert actual_provider is None
-    # No cost provided in this case either
-    assert total_cost is None

@@ -4,12 +4,13 @@ import logging
 import dspy
 from dspy.utils import callback as dspy_callback
 
-from opik import context_storage, opik_context, tracing_runtime_config, types
+from opik import context_storage, opik_context, tracing_runtime_config
+from opik import llm_usage
 from opik.api_objects import helpers, span, trace, opik_client
 from opik.decorator import error_info_collector
-from opik import llm_usage
 
 from .graph import build_mermaid_graph_from_module
+from .parsers import LMHistoryInfo, extract_lm_info_from_history, get_span_type
 
 LOGGER = logging.getLogger(__name__)
 
@@ -106,7 +107,7 @@ class OpikCallback(dspy_callback.BaseCallback):
             parent_project_name=current_span_data.project_name,
             child_project_name=self._project_name,
         )
-        span_type = self._get_span_type(instance)
+        span_type = get_span_type(instance)
 
         span_data = span.SpanData(
             trace_id=current_span_data.trace_id,
@@ -130,7 +131,7 @@ class OpikCallback(dspy_callback.BaseCallback):
             current_trace_data.project_name,
             self._project_name,
         )
-        span_type = self._get_span_type(instance)
+        span_type = get_span_type(instance)
 
         span_data = span.SpanData(
             trace_id=current_trace_data.id,
@@ -219,7 +220,11 @@ class OpikCallback(dspy_callback.BaseCallback):
             }
 
             # Handle LLM routers like OpenRouter that return the actual serving provider
-            if actual_provider is not None and span_data.provider != actual_provider:
+            if (
+                actual_provider is not None
+                and span_data.provider is not None
+                and span_data.provider.lower() != actual_provider.lower()
+            ):
                 # Store the original provider (e.g., "openrouter") in metadata
                 if extra_metadata is None:
                     extra_metadata = {}
@@ -256,7 +261,7 @@ class OpikCallback(dspy_callback.BaseCallback):
             trace_id = current_callback_context_data.id
             parent_span_id = None
 
-        span_type = self._get_span_type(instance)
+        span_type = get_span_type(instance)
 
         return span.SpanData(
             trace_id=trace_id,
@@ -303,21 +308,21 @@ class OpikCallback(dspy_callback.BaseCallback):
         outputs: Optional[Dict[str, Any]],
         exception: Optional[Exception] = None,
     ) -> None:
-        usage, cache_hit, actual_provider, total_cost = (
-            self._extract_lm_info_from_history(call_id)
-        )
+        lm_info = self._extract_lm_info_from_history(call_id)
 
         # Add cache_hit to span metadata only when we have a definitive value
-        extra_metadata = {"cache_hit": cache_hit} if cache_hit is not None else None
+        extra_metadata = (
+            {"cache_hit": lm_info.cache_hit} if lm_info.cache_hit is not None else None
+        )
 
         self._end_span(
             call_id=call_id,
             exception=exception,
             outputs=outputs,
-            usage=usage,
+            usage=lm_info.usage,
             extra_metadata=extra_metadata,
-            actual_provider=actual_provider,
-            total_cost=total_cost,
+            actual_provider=lm_info.actual_provider,
+            total_cost=lm_info.total_cost,
         )
 
     def on_tool_start(
@@ -359,23 +364,7 @@ class OpikCallback(dspy_callback.BaseCallback):
             return span_data
         return self._context_storage.get_trace_data()
 
-    def _get_span_type(self, instance: Any) -> types.SpanType:
-        if isinstance(instance, dspy.Predict):
-            return "llm"
-        elif isinstance(instance, dspy.LM):
-            return "llm"
-        elif isinstance(instance, dspy.Tool):
-            return "tool"
-        return "general"
-
-    def _extract_lm_info_from_history(
-        self, call_id: str
-    ) -> Tuple[
-        Optional[llm_usage.OpikUsage],
-        Optional[bool],
-        Optional[str],
-        Optional[float],
-    ]:
+    def _extract_lm_info_from_history(self, call_id: str) -> LMHistoryInfo:
         """
         Extract token usage, cache status, actual provider, and cost from the LM's history.
 
@@ -391,68 +380,16 @@ class OpikCallback(dspy_callback.BaseCallback):
         accurate pricing for all token types (reasoning, cache, multimodal).
 
         Returns:
-            Tuple of (usage, cache_hit, actual_provider, total_cost) where:
-            - usage: OpikUsage object if available, None otherwise
-            - cache_hit: True if response was from cache, False if not, None if unknown
-            - actual_provider: The actual provider from the response if available, None otherwise
-            - total_cost: The total cost from the provider if available, None otherwise
+            LMHistoryInfo containing usage, cache_hit, actual_provider, and total_cost.
         """
         lm_info = self._map_call_id_to_lm_info.pop(call_id, None)
         if lm_info is None:
-            return None, None, None, None
+            return LMHistoryInfo(
+                usage=None, cache_hit=None, actual_provider=None, total_cost=None
+            )
 
         lm_instance, expected_messages = lm_info
-
-        if not hasattr(lm_instance, "history") or not lm_instance.history:
-            return None, None, None, None
-
-        try:
-            last_entry = lm_instance.history[-1]
-
-            # Verify we have the correct history entry by checking messages match
-            if last_entry.get("messages") != expected_messages:
-                LOGGER.debug(
-                    "History entry messages don't match expected messages, "
-                    "skipping usage extraction (possibly due to concurrent LM calls)"
-                )
-                return None, None, None, None
-
-            response = last_entry.get("response")
-            usage_dict = last_entry.get("usage")
-
-            # Extract actual provider from response (useful for routers like OpenRouter)
-            actual_provider: Optional[str] = None
-            if response is not None and hasattr(response, "provider"):
-                actual_provider = response.provider
-
-            # Extract cost from history entry or usage dict
-            # OpenRouter and other providers return accurate cost including all token types
-            total_cost: Optional[float] = None
-            if last_entry.get("cost") is not None:
-                total_cost = last_entry.get("cost")
-            elif usage_dict and usage_dict.get("cost") is not None:
-                total_cost = usage_dict.get("cost")
-
-            # Get explicit cache_hit if set, otherwise infer from usage (empty = cached)
-            if response is None:
-                cache_hit = not usage_dict
-            elif hasattr(response, "cache_hit") and response.cache_hit is not None:
-                cache_hit = response.cache_hit
-            else:
-                # Fallback: infer from usage (empty = cached)
-                cache_hit = not usage_dict
-
-            if usage_dict:
-                usage = llm_usage.build_opik_usage_from_unknown_provider(usage_dict)
-                return usage, cache_hit, actual_provider, total_cost
-            else:
-                return None, cache_hit, actual_provider, total_cost
-        except Exception:
-            LOGGER.debug(
-                "Failed to extract info from DSPy LM history",
-                exc_info=True,
-            )
-            return None, None, None, None
+        return extract_lm_info_from_history(lm_instance, expected_messages)
 
     def _get_opik_metadata(self, instance: Any) -> Dict[str, Any]:
         graph = None
