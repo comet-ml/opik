@@ -194,6 +194,36 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
      * Query to fetch dataset items from versions with their associated experiment items.
      * This query is used when experiments are linked to specific dataset versions.
      */
+    private static final String SELECT_DATASET_ITEM_VERSIONS_COLUMNS = """
+            SELECT
+                arrayFold(
+                    (acc, x) -> mapFromArrays(
+                        arrayMap(key -> key, arrayDistinct(arrayConcat(mapKeys(acc), mapKeys(x)))),
+                        arrayMap(key -> arrayDistinct(arrayConcat(acc[key], x[key])), arrayDistinct(arrayConcat(mapKeys(acc), mapKeys(x))))
+                    ),
+                    arrayDistinct(
+                        arrayFlatten(
+                            groupArray(
+                                arrayMap(key -> map(key, [toString(JSONType(data[key]))]), mapKeys(data))
+                            )
+                        )
+                    ),
+                    CAST(map(), 'Map(String, Array(String))')
+                ) AS columns
+            FROM (
+                SELECT
+                    id,
+                    data
+                FROM dataset_item_versions
+                WHERE dataset_id = :datasetId
+                AND dataset_version_id = :versionId
+                AND workspace_id = :workspace_id
+                ORDER BY (workspace_id, dataset_id, dataset_version_id, id) DESC, last_updated_at DESC
+                LIMIT 1 BY id
+            )
+            ;
+            """;
+
     private static final String SELECT_DATASET_ITEM_VERSIONS_WITH_EXPERIMENT_ITEMS = """
             WITH experiments_with_versions AS (
                 SELECT
@@ -756,7 +786,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
         Segment segment = startSegment(DATASET_ITEM_VERSIONS, CLICKHOUSE,
                 "select_dataset_item_versions_with_experiment_items");
 
-        Mono<Set<Column>> columnsMono = Mono.just(Set.of()); // Columns not needed for versioned items
+        Mono<Set<Column>> columnsMono = getColumnsForVersionedItems(searchCriteria);
         Mono<Long> countMono = getCountWithExperimentItems(searchCriteria);
 
         return Mono.zip(countMono, columnsMono)
@@ -855,5 +885,62 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
         // For versioned items with experiments, we need a count query
         // For now, return 0 as a placeholder - we can implement proper counting later if needed
         return Mono.just(0L);
+    }
+
+    /**
+     * Extracts columns from versioned dataset items by determining the version ID from experiments.
+     * This method:
+     * 1. Fetches experiments to get their dataset_version_id
+     * 2. Uses the version ID to query columns from dataset_item_versions table
+     * 3. Returns the extracted columns for filtering and display
+     */
+    private Mono<Set<Column>> getColumnsForVersionedItems(DatasetItemSearchCriteria searchCriteria) {
+        log.info("Extracting columns for versioned dataset items, dataset '{}', experiments '{}'",
+                searchCriteria.datasetId(), searchCriteria.experimentIds());
+
+        Segment segment = startSegment(DATASET_ITEM_VERSIONS, CLICKHOUSE,
+                "select_dataset_item_versions_columns");
+
+        return makeMonoContextAware((userName, workspaceId) -> {
+            // First, get the version ID from the experiments
+            return asyncTemplate.nonTransaction(connection -> {
+                var experimentQuery = """
+                        SELECT dataset_version_id
+                        FROM experiments
+                        WHERE workspace_id = :workspace_id
+                        AND id IN :experimentIds
+                        ORDER BY (workspace_id, dataset_id, id) DESC, last_updated_at DESC
+                        LIMIT 1 BY id
+                        LIMIT 1
+                        """;
+
+                return makeFluxContextAware(bindWorkspaceIdToFlux(
+                        connection.createStatement(experimentQuery)
+                                .bind("experimentIds", searchCriteria.experimentIds().toArray(UUID[]::new))))
+                        .flatMap(result -> result.map((row, rowMetadata) -> row.get("dataset_version_id", UUID.class)))
+                        .next()
+                        .flatMap(versionId -> {
+                            if (versionId == null) {
+                                // No version ID found, return empty columns
+                                log.info("No dataset version found for experiments, returning empty columns");
+                                return Mono.just(Set.<Column>of());
+                            }
+
+                            log.info("Found dataset version '{}', extracting columns from versioned items", versionId);
+
+                            // Query columns from versioned items
+                            var columnsStatement = connection.createStatement(SELECT_DATASET_ITEM_VERSIONS_COLUMNS)
+                                    .bind("datasetId", searchCriteria.datasetId())
+                                    .bind("versionId", versionId);
+
+                            return makeFluxContextAware(bindWorkspaceIdToFlux(columnsStatement))
+                                    .flatMap(result -> DatasetItemResultMapper.mapColumns(result, "data"))
+                                    .next()
+                                    .doOnNext(
+                                            cols -> log.info("Extracted {} columns from versioned items", cols.size()));
+                        })
+                        .switchIfEmpty(Mono.just(Set.of()));
+            });
+        }).doFinally(signalType -> endSegment(segment));
     }
 }
