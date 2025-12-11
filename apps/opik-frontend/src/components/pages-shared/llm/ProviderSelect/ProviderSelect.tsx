@@ -21,6 +21,8 @@ import {
   buildComposedProviderKey,
   getProviderDisplayName,
 } from "@/lib/provider";
+import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
+import { FeatureToggleKeys } from "@/types/feature-toggles";
 
 export const ADD_CUSTOM_PROVIDER_VALUE = buildComposedProviderKey(
   PROVIDER_TYPE.CUSTOM,
@@ -50,12 +52,60 @@ const ProviderSelect: React.FC<ProviderSelectProps> = ({
   configuredProvidersList,
   hasError,
 }) => {
+  // Get feature flags for all providers
+  const isOpenAIEnabled = useIsFeatureEnabled(
+    FeatureToggleKeys.OPENAI_PROVIDER_ENABLED,
+  );
+  const isAnthropicEnabled = useIsFeatureEnabled(
+    FeatureToggleKeys.ANTHROPIC_PROVIDER_ENABLED,
+  );
+  const isGeminiEnabled = useIsFeatureEnabled(
+    FeatureToggleKeys.GEMINI_PROVIDER_ENABLED,
+  );
+  const isOpenRouterEnabled = useIsFeatureEnabled(
+    FeatureToggleKeys.OPENROUTER_PROVIDER_ENABLED,
+  );
+  const isVertexAIEnabled = useIsFeatureEnabled(
+    FeatureToggleKeys.VERTEXAI_PROVIDER_ENABLED,
+  );
+  const isCustomLLMEnabled = useIsFeatureEnabled(
+    FeatureToggleKeys.CUSTOMLLM_PROVIDER_ENABLED,
+  );
+  const isOpikBuiltinEnabled = useIsFeatureEnabled(
+    FeatureToggleKeys.OPIKBUILTIN_PROVIDER_ENABLED,
+  );
+
+  const providerEnabledMap = useMemo(
+    () => ({
+      [PROVIDER_TYPE.OPEN_AI]: isOpenAIEnabled,
+      [PROVIDER_TYPE.ANTHROPIC]: isAnthropicEnabled,
+      [PROVIDER_TYPE.GEMINI]: isGeminiEnabled,
+      [PROVIDER_TYPE.OPEN_ROUTER]: isOpenRouterEnabled,
+      [PROVIDER_TYPE.VERTEX_AI]: isVertexAIEnabled,
+      [PROVIDER_TYPE.CUSTOM]: isCustomLLMEnabled,
+      [PROVIDER_TYPE.OPIK_BUILTIN]: isOpikBuiltinEnabled,
+    }),
+    [
+      isOpenAIEnabled,
+      isAnthropicEnabled,
+      isGeminiEnabled,
+      isOpenRouterEnabled,
+      isVertexAIEnabled,
+      isCustomLLMEnabled,
+      isOpikBuiltinEnabled,
+    ],
+  );
+
   const options = useMemo(() => {
     const providerOptions: ProviderOption[] = [];
 
-    const standardProviders = PROVIDERS_OPTIONS.filter(
-      (option) => option.value !== PROVIDER_TYPE.CUSTOM,
-    );
+    // Filter standard providers based on feature flags
+    const standardProviders = PROVIDERS_OPTIONS.filter((option) => {
+      if (option.value === PROVIDER_TYPE.CUSTOM) {
+        return false;
+      }
+      return providerEnabledMap[option.value];
+    });
 
     standardProviders.forEach((option) => {
       // Skip read-only providers - they are system-managed and users don't configure them
@@ -74,25 +124,28 @@ const ProviderSelect: React.FC<ProviderSelectProps> = ({
       });
     });
 
-    const customProviders =
-      configuredProvidersList?.filter(
-        (key) => key.provider === PROVIDER_TYPE.CUSTOM,
-      ) || [];
+    // Only add custom providers if custom LLM provider is enabled
+    if (isCustomLLMEnabled) {
+      const customProviders =
+        configuredProvidersList?.filter(
+          (key) => key.provider === PROVIDER_TYPE.CUSTOM,
+        ) || [];
 
-    if (customProviders.length > 0) {
-      customProviders.forEach((customProvider) => {
-        providerOptions.push({
-          value: customProvider.ui_composed_provider,
-          label: getProviderDisplayName(customProvider),
-          icon: PROVIDERS[PROVIDER_TYPE.CUSTOM].icon,
-          configuredId: customProvider.id,
-          description: customProvider.base_url,
+      if (customProviders.length > 0) {
+        customProviders.forEach((customProvider) => {
+          providerOptions.push({
+            value: customProvider.ui_composed_provider,
+            label: getProviderDisplayName(customProvider),
+            icon: PROVIDERS[PROVIDER_TYPE.CUSTOM].icon,
+            configuredId: customProvider.id,
+            description: customProvider.base_url,
+          });
         });
-      });
+      }
     }
 
     return providerOptions;
-  }, [configuredProvidersList]);
+  }, [configuredProvidersList, providerEnabledMap, isCustomLLMEnabled]);
 
   const renderTrigger = useCallback(
     (value: string) => {
@@ -181,19 +234,23 @@ const ProviderSelect: React.FC<ProviderSelectProps> = ({
       </SelectTrigger>
       <SelectContent>
         {options.map((option) => renderOption(option))}
-        <SelectSeparator />
-        <SelectItem
-          value={ADD_CUSTOM_PROVIDER_VALUE}
-          withoutCheck
-          wrapperAsChild={true}
-        >
-          <div className="flex w-full items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Plus className="size-4 " />
-              Add custom provider
-            </div>
-          </div>
-        </SelectItem>
+        {isCustomLLMEnabled && (
+          <>
+            <SelectSeparator />
+            <SelectItem
+              value={ADD_CUSTOM_PROVIDER_VALUE}
+              withoutCheck
+              wrapperAsChild={true}
+            >
+              <div className="flex w-full items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Plus className="size-4 " />
+                  Add custom provider
+                </div>
+              </div>
+            </SelectItem>
+          </>
+        )}
       </SelectContent>
     </Select>
   );

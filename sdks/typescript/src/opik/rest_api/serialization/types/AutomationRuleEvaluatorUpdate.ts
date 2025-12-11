@@ -10,6 +10,7 @@ import { AutomationRuleEvaluatorUpdateUserDefinedMetricPython } from "./Automati
 import { AutomationRuleEvaluatorUpdateTraceThreadLlmAsJudge } from "./AutomationRuleEvaluatorUpdateTraceThreadLlmAsJudge";
 import { AutomationRuleEvaluatorUpdateTraceThreadUserDefinedMetricPython } from "./AutomationRuleEvaluatorUpdateTraceThreadUserDefinedMetricPython";
 import { AutomationRuleEvaluatorUpdateSpanLlmAsJudge } from "./AutomationRuleEvaluatorUpdateSpanLlmAsJudge";
+import { AutomationRuleEvaluatorUpdateSpanUserDefinedMetricPython } from "./AutomationRuleEvaluatorUpdateSpanUserDefinedMetricPython";
 
 const _Base = core.serialization.object({
     name: core.serialization.string(),
@@ -29,6 +30,7 @@ export const AutomationRuleEvaluatorUpdate: core.serialization.Schema<
         trace_thread_user_defined_metric_python:
             AutomationRuleEvaluatorUpdateTraceThreadUserDefinedMetricPython.extend(_Base),
         span_llm_as_judge: AutomationRuleEvaluatorUpdateSpanLlmAsJudge.extend(_Base),
+        span_user_defined_metric_python: AutomationRuleEvaluatorUpdateSpanUserDefinedMetricPython.extend(_Base),
     })
     .transform<OpikApi.AutomationRuleEvaluatorUpdate>({
         transform: (value) => value,
@@ -41,7 +43,8 @@ export declare namespace AutomationRuleEvaluatorUpdate {
         | AutomationRuleEvaluatorUpdate.UserDefinedMetricPython
         | AutomationRuleEvaluatorUpdate.TraceThreadLlmAsJudge
         | AutomationRuleEvaluatorUpdate.TraceThreadUserDefinedMetricPython
-        | AutomationRuleEvaluatorUpdate.SpanLlmAsJudge;
+        | AutomationRuleEvaluatorUpdate.SpanLlmAsJudge
+        | AutomationRuleEvaluatorUpdate.SpanUserDefinedMetricPython;
 
     export interface LlmAsJudge extends _Base, AutomationRuleEvaluatorUpdateLlmAsJudge.Raw {
         type: "llm_as_judge";
@@ -62,6 +65,11 @@ export declare namespace AutomationRuleEvaluatorUpdate {
 
     export interface SpanLlmAsJudge extends _Base, AutomationRuleEvaluatorUpdateSpanLlmAsJudge.Raw {
         type: "span_llm_as_judge";
+    }
+
+    export interface SpanUserDefinedMetricPython
+        extends _Base, AutomationRuleEvaluatorUpdateSpanUserDefinedMetricPython.Raw {
+        type: "span_user_defined_metric_python";
     }
 
     export interface _Base {

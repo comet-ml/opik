@@ -7,6 +7,7 @@ import * as OpikApi from "../../api/index";
 import * as core from "../../core";
 import { ImageUrl } from "./ImageUrl";
 import { VideoUrl } from "./VideoUrl";
+import { AudioUrl } from "./AudioUrl";
 
 export const LlmAsJudgeMessageContent: core.serialization.ObjectSchema<
     serializers.LlmAsJudgeMessageContent.Raw,
@@ -16,6 +17,7 @@ export const LlmAsJudgeMessageContent: core.serialization.ObjectSchema<
     text: core.serialization.string().optional(),
     imageUrl: core.serialization.property("image_url", ImageUrl.optional()),
     videoUrl: core.serialization.property("video_url", VideoUrl.optional()),
+    audioUrl: core.serialization.property("audio_url", AudioUrl.optional()),
 });
 
 export declare namespace LlmAsJudgeMessageContent {
@@ -24,5 +26,6 @@ export declare namespace LlmAsJudgeMessageContent {
         text?: string | null;
         image_url?: ImageUrl.Raw | null;
         video_url?: VideoUrl.Raw | null;
+        audio_url?: AudioUrl.Raw | null;
     }
 }

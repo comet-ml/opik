@@ -25,6 +25,10 @@ class ProviderApiKey(UniversalBaseModel):
     created_by: typing.Optional[str] = None
     last_updated_at: typing.Optional[dt.datetime] = None
     last_updated_by: typing.Optional[str] = None
+    read_only: typing.Optional[bool] = pydantic.Field(default=None)
+    """
+    If true, this provider is system-managed and cannot be edited or deleted
+    """
 
     if IS_PYDANTIC_V2:
         model_config: typing.ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(extra="allow", frozen=True)  # type: ignore # Pydantic v2

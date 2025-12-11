@@ -87,12 +87,11 @@ databaseAnalytics:
   #  Description: query parameters that will be added to the connection string
   queryParameters: ${ANALYTICS_DB_QUERY_PARAMETERS:-health_check_interval=2000&compress=1&auto_discovery=true&failover=3&custom_http_params=max_query_size=100000000,async_insert_busy_timeout_max_ms=250,async_insert_busy_timeout_min_ms=100,async_insert=1,wait_for_async_insert=1,async_insert_use_adaptive_busy_timeout=1,async_insert_deduplicate=1}
 
-
 # https://www.dropwizard.io/en/stable/manual/configuration.html#health
 health:
   # Default: ["/health-check"]
   # Description: URLs to expose the app’s health check on.
-  healthCheckUrlPaths: [ "/health-check" ]
+  healthCheckUrlPaths: ["/health-check"]
   # Options around a particular health check which is registered in an Application
   # https://www.dropwizard.io/en/stable/manual/configuration.html#man-configuration-health-checks
   healthChecks:
@@ -205,7 +204,7 @@ server:
 # Controls limits for JSON deserialization to prevent memory exhaustion
 jacksonConfig:
   # Default: 104857600 (100MB)
-  # Description: Maximum size for individual string values during JSON deserialization. 
+  # Description: Maximum size for individual string values during JSON deserialization.
   #   A JSON with 3 fields up to this size will work, but a single larger string will fail.
   #   This configuration is used by both HTTP layer and internal JSON processing for consistency,
   #   preventing memory exhaustion from extremely large base64-encoded attachments before they can be stripped
@@ -273,18 +272,18 @@ rateLimit:
       # Description: Rate limit error message
       errorMessage: "You have exceeded the rate limit for this operation. Please try again later."
     singleTracingOps:
-        # Default: 800
-        # Description: how many events are allowed in the specified time bucket
-        limit: ${RATE_LIMIT_SINGLE_TRACING_OPS_EVENTS_PER_WORKSPACE_LIMIT:-800}
-        # Default: 60
-        # Description: Time bucket size in seconds
-        durationInSeconds: ${RATE_LIMIT_WORKSPACE_EVENTS_DURATION_IN_SEC:-60}
-        # Description: Header name to use for rate limiting
-        headerName: Single-Tracing-Ops
-        # Description: User facing bucket name
-        userFacingBucketName: single_tracing_ops
-        # Description: Rate limit error message
-        errorMessage: "You have exceeded the rate limit for single tracing operations. Please try again later."
+      # Default: 800
+      # Description: how many events are allowed in the specified time bucket
+      limit: ${RATE_LIMIT_SINGLE_TRACING_OPS_EVENTS_PER_WORKSPACE_LIMIT:-800}
+      # Default: 60
+      # Description: Time bucket size in seconds
+      durationInSeconds: ${RATE_LIMIT_WORKSPACE_EVENTS_DURATION_IN_SEC:-60}
+      # Description: Header name to use for rate limiting
+      headerName: Single-Tracing-Ops
+      # Description: User facing bucket name
+      userFacingBucketName: single_tracing_ops
+      # Description: Rate limit error message
+      errorMessage: "You have exceeded the rate limit for single tracing operations. Please try again later."
 
 # Configuration for usage limit. This is not enabled by default for open source installations.
 # In order to support that, the remote authentication server must contain a `quotas` object in its authentication
@@ -409,6 +408,16 @@ onlineScoring:
       claimIntervalRatio: ${REDIS_SCORING_SPAN_LLM_AS_JUDGE_CLAIM_INTERVAL_RATIO:-}
       pendingMessageDuration: ${REDIS_SCORING_SPAN_LLM_AS_JUDGE_PENDING_MESSAGE_DURATION:-}
       maxRetries: ${REDIS_SCORING_SPAN_LLM_AS_JUDGE_MAX_RETRIES:-}
+    - scorer: span_user_defined_metric_python
+      streamName: stream_scoring_span_user_defined_metric_python
+      codec: java
+      # Optional per stream configuration (falls back to global if not specified)
+      poolingInterval: ${REDIS_SCORING_SPAN_USER_DEFINED_METRIC_PYTHON_CONSUMER_POOL_INTERVAL:-}
+      longPollingDuration: ${REDIS_SCORING_SPAN_USER_DEFINED_METRIC_PYTHON_LONG_POLLING_DURATION:-}
+      consumerBatchSize: ${REDIS_SCORING_SPAN_USER_DEFINED_METRIC_PYTHON_CONSUMER_BATCH_SIZE:-}
+      claimIntervalRatio: ${REDIS_SCORING_SPAN_USER_DEFINED_METRIC_PYTHON_CLAIM_INTERVAL_RATIO:-}
+      pendingMessageDuration: ${REDIS_SCORING_SPAN_USER_DEFINED_METRIC_PYTHON_PENDING_MESSAGE_DURATION:-}
+      maxRetries: ${REDIS_SCORING_SPAN_USER_DEFINED_METRIC_PYTHON_MAX_RETRIES:-}
 
 # LLM providers client configuration
 llmProviderClient:
@@ -466,17 +475,17 @@ llmProviderClient:
 
 # Configuration for cache manager
 cacheManager:
-    # Default: true
-    # Description: Whether or not cache manager is enabled
-    enabled: ${CACHE_MANAGER_ENABLED:-true}
-    # Default: PT1S
-    # Description: Time to live for cache entries in using the formats accepted are based on the ISO-8601: https://docs.oracle.com/javase/8/docs/api/java/time/Duration.html#parse-java.lang.CharSequence-
-    defaultDuration: ${CACHE_MANAGER_DEFAULT_DURATION:-PT1S}
-    caches:
-      # Default: {}
-      # Description: Dynamically created caches with their respective time to live in seconds
-      automationRules: ${CACHE_MANAGER_AUTOMATION_RULES_DURATION:-PT1S}
-      workspace_metadata: ${CACHE_MANAGER_WORKSPACE_METADATA_DURATION:-PT1H}
+  # Default: true
+  # Description: Whether or not cache manager is enabled
+  enabled: ${CACHE_MANAGER_ENABLED:-true}
+  # Default: PT1S
+  # Description: Time to live for cache entries in using the formats accepted are based on the ISO-8601: https://docs.oracle.com/javase/8/docs/api/java/time/Duration.html#parse-java.lang.CharSequence-
+  defaultDuration: ${CACHE_MANAGER_DEFAULT_DURATION:-PT1S}
+  caches:
+    # Default: {}
+    # Description: Dynamically created caches with their respective time to live in seconds
+    automationRules: ${CACHE_MANAGER_AUTOMATION_RULES_DURATION:-PT1S}
+    workspace_metadata: ${CACHE_MANAGER_WORKSPACE_METADATA_DURATION:-PT1H}
 
 # Configuration for clickhouse log appender
 clickHouseLogAppender:
@@ -533,7 +542,6 @@ pythonEvaluator:
   # Description: Min delay between retry attempts
   minRetryDelay: ${PYTHON_EVALUATOR_MIN_RETRY_DELAY:-500ms}
 
-
 serviceToggles:
   # Default: true
   # Description: Whether or not Python evaluator is enabled
@@ -546,7 +554,10 @@ serviceToggles:
   traceThreadPythonEvaluatorEnabled: ${TOGGLE_TRACE_THREAD_PYTHON_EVALUATOR_ENABLED:-"true"}
   # Default: false
   # Description: Whether or not to enable the span LLM as Judge evaluator
-  spanLlmAsJudgeEnabled: ${TOGGLE_SPAN_LLM_AS_JUDGE_ENABLED:-"false"}
+  spanLlmAsJudgeEnabled: ${TOGGLE_SPAN_LLM_AS_JUDGE_ENABLED:-"true"}
+  # Default: true
+  # Description: Whether or not to enable the span user-defined metric Python evaluator
+  spanUserDefinedMetricPythonEnabled: ${TOGGLE_SPAN_USER_DEFINED_METRIC_PYTHON_ENABLED:-"true"}
   # Default: false
   # Description: Whether or not OpikAI feature is enabled
   opikAIEnabled: ${TOGGLE_OPIK_AI_ENABLED:-"false"}
@@ -571,6 +582,27 @@ serviceToggles:
   # Default: false
   # Description: Whether or not Optimization Studio feature is enabled
   optimizationStudioEnabled: ${TOGGLE_OPTIMIZATION_STUDIO_ENABLED:-"false"}
+  # Default: true
+  # Description: Whether or not OpenAI provider is enabled
+  openaiProviderEnabled: ${TOGGLE_OPENAI_PROVIDER_ENABLED:-"true"}
+  # Default: true
+  # Description: Whether or not Anthropic provider is enabled
+  anthropicProviderEnabled: ${TOGGLE_ANTHROPIC_PROVIDER_ENABLED:-"true"}
+  # Default: true
+  # Description: Whether or not Gemini provider is enabled
+  geminiProviderEnabled: ${TOGGLE_GEMINI_PROVIDER_ENABLED:-"true"}
+  # Default: true
+  # Description: Whether or not OpenRouter provider is enabled
+  openrouterProviderEnabled: ${TOGGLE_OPENROUTER_PROVIDER_ENABLED:-"true"}
+  # Default: true
+  # Description: Whether or not Vertex AI provider is enabled
+  vertexaiProviderEnabled: ${TOGGLE_VERTEXAI_PROVIDER_ENABLED:-"true"}
+  # Default: true
+  # Description: Whether or not Custom LLM provider is enabled
+  customllmProviderEnabled: ${TOGGLE_CUSTOMLLM_PROVIDER_ENABLED:-"true"}
+  # Default: true
+  # Description: Whether or not Opik Built-in provider is enabled
+  opikbuiltinProviderEnabled: ${TOGGLE_OPIKBUILTIN_PROVIDER_ENABLED:-"true"}
   # Default: false
   # Description: Whether or not Collaborators tab feature is enabled
   collaboratorsTabEnabled: ${TOGGLE_COLLABORATORS_TAB_ENABLED:-"false"}
@@ -639,7 +671,8 @@ responseFormatting:
 queues:
   # Default: true
   # Description: Whether queue functionality is enabled
-  enabled: ${OPIK_QUEUES_ENABLED:-true}
+  enabled:
+    ${OPIK_QUEUES_ENABLED:-true}
     # Default: 14 days
   # Description: Default TTL for jobs in queues (how long job data is kept in Redis)
   defaultJobTtl: ${OPIK_QUEUES_DEFAULT_JOB_TTL:-14 days}
@@ -740,4 +773,3 @@ builtinLlmProvider:
   # Default: empty
   # Description: Base URL for OpenAI-compatible endpoint (empty for built-in OpenAI)
   baseUrl: ${BUILTIN_LLM_PROVIDER_BASE_URL:-}
-
