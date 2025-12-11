@@ -849,6 +849,44 @@ public class TracesResource {
         return Response.noContent().build();
     }
 
+    @GET
+    @Path("/threads/stats")
+    @Operation(operationId = "getTraceThreadStats", summary = "Get trace thread stats", description = "Get trace thread stats", responses = {
+            @ApiResponse(responseCode = "200", description = "Trace thread stats resource", content = @Content(schema = @Schema(implementation = ProjectStats.class)))
+    })
+    @JsonView({ProjectStats.ProjectStatItem.View.Public.class})
+    public Response getThreadStats(@QueryParam("project_id") UUID projectId,
+            @QueryParam("project_name") String projectName,
+            @QueryParam("filters") String filters,
+            @QueryParam("from_time") @Schema(description = "Filter trace threads created from this time (ISO-8601 format).") Instant startTime,
+            @QueryParam("to_time") @Schema(description = "Filter trace threads created up to this time (ISO-8601 format). If not provided, defaults to current time. Must be after 'from_time'.") Instant endTime) {
+
+        validateProjectNameAndProjectId(projectName, projectId);
+        validateTimeRangeParameters(startTime, endTime);
+        var threadFilters = filtersFactory.newFilters(filters, TraceThreadFilter.LIST_TYPE_REFERENCE);
+
+        var searchCriteria = TraceSearchCriteria.builder()
+                .projectName(projectName)
+                .projectId(projectId)
+                .filters(threadFilters)
+                .uuidFromTime(instantToUUIDMapper.toLowerBound(startTime))
+                .uuidToTime(instantToUUIDMapper.toUpperBound(endTime))
+                .build();
+
+        String workspaceId = requestContext.get().getWorkspaceId();
+
+        log.info("Get trace thread stats by '{}' on workspaceId '{}'", searchCriteria, workspaceId);
+
+        ProjectStats projectStats = service.getThreadStats(searchCriteria)
+                .contextWrite(ctx -> setRequestContext(ctx, requestContext))
+                .block();
+
+        log.info("Found trace thread stats by '{}', count '{}' on workspaceId '{}'", searchCriteria,
+                projectStats.stats().size(), workspaceId);
+
+        return Response.ok(projectStats).build();
+    }
+
     @PUT
     @Path("/threads/feedback-scores")
     @Operation(operationId = "scoreBatchOfThreads", summary = "Batch feedback scoring for threads", description = "Batch feedback scoring for threads", responses = {
