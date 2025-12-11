@@ -37,10 +37,111 @@ export declare namespace ManualEvaluation {
 }
 
 /**
- * Manual evaluation resources for traces and threads
+ * Manual evaluation resources for traces, threads, and spans
  */
 export class ManualEvaluation {
     constructor(protected readonly _options: ManualEvaluation.Options = {}) {}
+
+    /**
+     * Manually trigger evaluation rules on selected spans. Bypasses sampling and enqueues all specified spans for evaluation.
+     *
+     * @param {OpikApi.ManualEvaluationRequest} request
+     * @param {ManualEvaluation.RequestOptions} requestOptions - Request-specific configuration.
+     *
+     * @throws {@link OpikApi.BadRequestError}
+     * @throws {@link OpikApi.NotFoundError}
+     *
+     * @example
+     *     await client.manualEvaluation.evaluateSpans({
+     *         projectId: "550e8400-e29b-41d4-a716-446655440000",
+     *         entityIds: ["550e8400-e29b-41d4-a716-446655440000", "550e8400-e29b-41d4-a716-446655440001"],
+     *         ruleIds: ["660e8400-e29b-41d4-a716-446655440000"],
+     *         entityType: "trace"
+     *     })
+     */
+    public evaluateSpans(
+        request: OpikApi.ManualEvaluationRequest,
+        requestOptions?: ManualEvaluation.RequestOptions,
+    ): core.HttpResponsePromise<OpikApi.ManualEvaluationResponse> {
+        return core.HttpResponsePromise.fromPromise(this.__evaluateSpans(request, requestOptions));
+    }
+
+    private async __evaluateSpans(
+        request: OpikApi.ManualEvaluationRequest,
+        requestOptions?: ManualEvaluation.RequestOptions,
+    ): Promise<core.WithRawResponse<OpikApi.ManualEvaluationResponse>> {
+        const _response = await core.fetcher({
+            url: urlJoin(
+                (await core.Supplier.get(this._options.baseUrl)) ??
+                    (await core.Supplier.get(this._options.environment)) ??
+                    environments.OpikApiEnvironment.Default,
+                "v1/private/manual-evaluation/spans",
+            ),
+            method: "POST",
+            headers: {
+                "Comet-Workspace":
+                    (await core.Supplier.get(this._options.workspaceName)) != null
+                        ? await core.Supplier.get(this._options.workspaceName)
+                        : undefined,
+                "X-Fern-Language": "JavaScript",
+                "X-Fern-Runtime": core.RUNTIME.type,
+                "X-Fern-Runtime-Version": core.RUNTIME.version,
+                ...(await this._getCustomAuthorizationHeaders()),
+                ...requestOptions?.headers,
+            },
+            contentType: "application/json",
+            requestType: "json",
+            body: serializers.ManualEvaluationRequest.jsonOrThrow(request, { unrecognizedObjectKeys: "strip" }),
+            timeoutMs: requestOptions?.timeoutInSeconds != null ? requestOptions.timeoutInSeconds * 1000 : 60000,
+            maxRetries: requestOptions?.maxRetries,
+            withCredentials: true,
+            abortSignal: requestOptions?.abortSignal,
+        });
+        if (_response.ok) {
+            return {
+                data: serializers.ManualEvaluationResponse.parseOrThrow(_response.body, {
+                    unrecognizedObjectKeys: "passthrough",
+                    allowUnrecognizedUnionMembers: true,
+                    allowUnrecognizedEnumValues: true,
+                    breadcrumbsPrefix: ["response"],
+                }),
+                rawResponse: _response.rawResponse,
+            };
+        }
+
+        if (_response.error.reason === "status-code") {
+            switch (_response.error.statusCode) {
+                case 400:
+                    throw new OpikApi.BadRequestError(_response.error.body, _response.rawResponse);
+                case 404:
+                    throw new OpikApi.NotFoundError(_response.error.body, _response.rawResponse);
+                default:
+                    throw new errors.OpikApiError({
+                        statusCode: _response.error.statusCode,
+                        body: _response.error.body,
+                        rawResponse: _response.rawResponse,
+                    });
+            }
+        }
+
+        switch (_response.error.reason) {
+            case "non-json":
+                throw new errors.OpikApiError({
+                    statusCode: _response.error.statusCode,
+                    body: _response.error.rawBody,
+                    rawResponse: _response.rawResponse,
+                });
+            case "timeout":
+                throw new errors.OpikApiTimeoutError(
+                    "Timeout exceeded when calling POST /v1/private/manual-evaluation/spans.",
+                );
+            case "unknown":
+                throw new errors.OpikApiError({
+                    message: _response.error.errorMessage,
+                    rawResponse: _response.rawResponse,
+                });
+        }
+    }
 
     /**
      * Manually trigger evaluation rules on selected threads. Bypasses sampling and enqueues all specified threads for evaluation.

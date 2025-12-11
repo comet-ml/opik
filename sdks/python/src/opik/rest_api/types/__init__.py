@@ -37,11 +37,15 @@ from .assistant_message import AssistantMessage
 from .assistant_message_role import AssistantMessageRole
 from .attachment import Attachment
 from .attachment_page import AttachmentPage
+from .audio_url import AudioUrl
+from .audio_url_public import AudioUrlPublic
+from .audio_url_write import AudioUrlWrite
 from .auth_details_holder import AuthDetailsHolder
 from .automation_rule_evaluator import (
     AutomationRuleEvaluator,
     AutomationRuleEvaluator_LlmAsJudge,
     AutomationRuleEvaluator_SpanLlmAsJudge,
+    AutomationRuleEvaluator_SpanUserDefinedMetricPython,
     AutomationRuleEvaluator_TraceThreadLlmAsJudge,
     AutomationRuleEvaluator_TraceThreadUserDefinedMetricPython,
     AutomationRuleEvaluator_UserDefinedMetricPython,
@@ -53,6 +57,7 @@ from .automation_rule_evaluator_object_object_public import (
     AutomationRuleEvaluatorObjectObjectPublic,
     AutomationRuleEvaluatorObjectObjectPublic_LlmAsJudge,
     AutomationRuleEvaluatorObjectObjectPublic_SpanLlmAsJudge,
+    AutomationRuleEvaluatorObjectObjectPublic_SpanUserDefinedMetricPython,
     AutomationRuleEvaluatorObjectObjectPublic_TraceThreadLlmAsJudge,
     AutomationRuleEvaluatorObjectObjectPublic_TraceThreadUserDefinedMetricPython,
     AutomationRuleEvaluatorObjectObjectPublic_UserDefinedMetricPython,
@@ -62,6 +67,7 @@ from .automation_rule_evaluator_public import (
     AutomationRuleEvaluatorPublic,
     AutomationRuleEvaluatorPublic_LlmAsJudge,
     AutomationRuleEvaluatorPublic_SpanLlmAsJudge,
+    AutomationRuleEvaluatorPublic_SpanUserDefinedMetricPython,
     AutomationRuleEvaluatorPublic_TraceThreadLlmAsJudge,
     AutomationRuleEvaluatorPublic_TraceThreadUserDefinedMetricPython,
     AutomationRuleEvaluatorPublic_UserDefinedMetricPython,
@@ -69,6 +75,15 @@ from .automation_rule_evaluator_public import (
 from .automation_rule_evaluator_span_llm_as_judge import AutomationRuleEvaluatorSpanLlmAsJudge
 from .automation_rule_evaluator_span_llm_as_judge_public import AutomationRuleEvaluatorSpanLlmAsJudgePublic
 from .automation_rule_evaluator_span_llm_as_judge_write import AutomationRuleEvaluatorSpanLlmAsJudgeWrite
+from .automation_rule_evaluator_span_user_defined_metric_python import (
+    AutomationRuleEvaluatorSpanUserDefinedMetricPython,
+)
+from .automation_rule_evaluator_span_user_defined_metric_python_public import (
+    AutomationRuleEvaluatorSpanUserDefinedMetricPythonPublic,
+)
+from .automation_rule_evaluator_span_user_defined_metric_python_write import (
+    AutomationRuleEvaluatorSpanUserDefinedMetricPythonWrite,
+)
 from .automation_rule_evaluator_trace_thread_llm_as_judge import AutomationRuleEvaluatorTraceThreadLlmAsJudge
 from .automation_rule_evaluator_trace_thread_llm_as_judge_public import (
     AutomationRuleEvaluatorTraceThreadLlmAsJudgePublic,
@@ -87,12 +102,16 @@ from .automation_rule_evaluator_update import (
     AutomationRuleEvaluatorUpdate,
     AutomationRuleEvaluatorUpdate_LlmAsJudge,
     AutomationRuleEvaluatorUpdate_SpanLlmAsJudge,
+    AutomationRuleEvaluatorUpdate_SpanUserDefinedMetricPython,
     AutomationRuleEvaluatorUpdate_TraceThreadLlmAsJudge,
     AutomationRuleEvaluatorUpdate_TraceThreadUserDefinedMetricPython,
     AutomationRuleEvaluatorUpdate_UserDefinedMetricPython,
 )
 from .automation_rule_evaluator_update_llm_as_judge import AutomationRuleEvaluatorUpdateLlmAsJudge
 from .automation_rule_evaluator_update_span_llm_as_judge import AutomationRuleEvaluatorUpdateSpanLlmAsJudge
+from .automation_rule_evaluator_update_span_user_defined_metric_python import (
+    AutomationRuleEvaluatorUpdateSpanUserDefinedMetricPython,
+)
 from .automation_rule_evaluator_update_trace_thread_llm_as_judge import (
     AutomationRuleEvaluatorUpdateTraceThreadLlmAsJudge,
 )
@@ -113,6 +132,7 @@ from .automation_rule_evaluator_write import (
     AutomationRuleEvaluatorWrite,
     AutomationRuleEvaluatorWrite_LlmAsJudge,
     AutomationRuleEvaluatorWrite_SpanLlmAsJudge,
+    AutomationRuleEvaluatorWrite_SpanUserDefinedMetricPython,
     AutomationRuleEvaluatorWrite_TraceThreadLlmAsJudge,
     AutomationRuleEvaluatorWrite_TraceThreadUserDefinedMetricPython,
     AutomationRuleEvaluatorWrite_UserDefinedMetricPython,
@@ -432,6 +452,9 @@ from .span_public_type import SpanPublicType
 from .span_type import SpanType
 from .span_update import SpanUpdate
 from .span_update_type import SpanUpdateType
+from .span_user_defined_metric_python_code import SpanUserDefinedMetricPythonCode
+from .span_user_defined_metric_python_code_public import SpanUserDefinedMetricPythonCodePublic
+from .span_user_defined_metric_python_code_write import SpanUserDefinedMetricPythonCodeWrite
 from .span_write import SpanWrite
 from .span_write_type import SpanWriteType
 from .spans_count_response import SpansCountResponse
@@ -558,6 +581,9 @@ __all__ = [
     "AssistantMessageRole",
     "Attachment",
     "AttachmentPage",
+    "AudioUrl",
+    "AudioUrlPublic",
+    "AudioUrlWrite",
     "AuthDetailsHolder",
     "AutomationRuleEvaluator",
     "AutomationRuleEvaluatorLlmAsJudge",
@@ -566,6 +592,7 @@ __all__ = [
     "AutomationRuleEvaluatorObjectObjectPublic",
     "AutomationRuleEvaluatorObjectObjectPublic_LlmAsJudge",
     "AutomationRuleEvaluatorObjectObjectPublic_SpanLlmAsJudge",
+    "AutomationRuleEvaluatorObjectObjectPublic_SpanUserDefinedMetricPython",
     "AutomationRuleEvaluatorObjectObjectPublic_TraceThreadLlmAsJudge",
     "AutomationRuleEvaluatorObjectObjectPublic_TraceThreadUserDefinedMetricPython",
     "AutomationRuleEvaluatorObjectObjectPublic_UserDefinedMetricPython",
@@ -573,12 +600,16 @@ __all__ = [
     "AutomationRuleEvaluatorPublic",
     "AutomationRuleEvaluatorPublic_LlmAsJudge",
     "AutomationRuleEvaluatorPublic_SpanLlmAsJudge",
+    "AutomationRuleEvaluatorPublic_SpanUserDefinedMetricPython",
     "AutomationRuleEvaluatorPublic_TraceThreadLlmAsJudge",
     "AutomationRuleEvaluatorPublic_TraceThreadUserDefinedMetricPython",
     "AutomationRuleEvaluatorPublic_UserDefinedMetricPython",
     "AutomationRuleEvaluatorSpanLlmAsJudge",
     "AutomationRuleEvaluatorSpanLlmAsJudgePublic",
     "AutomationRuleEvaluatorSpanLlmAsJudgeWrite",
+    "AutomationRuleEvaluatorSpanUserDefinedMetricPython",
+    "AutomationRuleEvaluatorSpanUserDefinedMetricPythonPublic",
+    "AutomationRuleEvaluatorSpanUserDefinedMetricPythonWrite",
     "AutomationRuleEvaluatorTraceThreadLlmAsJudge",
     "AutomationRuleEvaluatorTraceThreadLlmAsJudgePublic",
     "AutomationRuleEvaluatorTraceThreadLlmAsJudgeWrite",
@@ -588,11 +619,13 @@ __all__ = [
     "AutomationRuleEvaluatorUpdate",
     "AutomationRuleEvaluatorUpdateLlmAsJudge",
     "AutomationRuleEvaluatorUpdateSpanLlmAsJudge",
+    "AutomationRuleEvaluatorUpdateSpanUserDefinedMetricPython",
     "AutomationRuleEvaluatorUpdateTraceThreadLlmAsJudge",
     "AutomationRuleEvaluatorUpdateTraceThreadUserDefinedMetricPython",
     "AutomationRuleEvaluatorUpdateUserDefinedMetricPython",
     "AutomationRuleEvaluatorUpdate_LlmAsJudge",
     "AutomationRuleEvaluatorUpdate_SpanLlmAsJudge",
+    "AutomationRuleEvaluatorUpdate_SpanUserDefinedMetricPython",
     "AutomationRuleEvaluatorUpdate_TraceThreadLlmAsJudge",
     "AutomationRuleEvaluatorUpdate_TraceThreadUserDefinedMetricPython",
     "AutomationRuleEvaluatorUpdate_UserDefinedMetricPython",
@@ -602,11 +635,13 @@ __all__ = [
     "AutomationRuleEvaluatorWrite",
     "AutomationRuleEvaluatorWrite_LlmAsJudge",
     "AutomationRuleEvaluatorWrite_SpanLlmAsJudge",
+    "AutomationRuleEvaluatorWrite_SpanUserDefinedMetricPython",
     "AutomationRuleEvaluatorWrite_TraceThreadLlmAsJudge",
     "AutomationRuleEvaluatorWrite_TraceThreadUserDefinedMetricPython",
     "AutomationRuleEvaluatorWrite_UserDefinedMetricPython",
     "AutomationRuleEvaluator_LlmAsJudge",
     "AutomationRuleEvaluator_SpanLlmAsJudge",
+    "AutomationRuleEvaluator_SpanUserDefinedMetricPython",
     "AutomationRuleEvaluator_TraceThreadLlmAsJudge",
     "AutomationRuleEvaluator_TraceThreadUserDefinedMetricPython",
     "AutomationRuleEvaluator_UserDefinedMetricPython",
@@ -916,6 +951,9 @@ __all__ = [
     "SpanType",
     "SpanUpdate",
     "SpanUpdateType",
+    "SpanUserDefinedMetricPythonCode",
+    "SpanUserDefinedMetricPythonCodePublic",
+    "SpanUserDefinedMetricPythonCodeWrite",
     "SpanWrite",
     "SpanWriteType",
     "SpansCountResponse",
