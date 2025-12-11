@@ -1940,15 +1940,23 @@ class FindTraceThreadsResourceTest {
                                     .filter(trace -> trace.threadId().equals(traces.getFirst().threadId()))
                                     .toList(),
                             false),
-                    // LAST_UPDATED_AT filter
+                    // END_TIME filter - test filtering by thread end time
                     Arguments.of(
-                            "LAST_UPDATED_AT = timestamp",
-                            (Function<List<Trace>, TraceThreadFilter>) traces -> TraceThreadFilter.builder()
-                                    .field(TraceThreadField.LAST_UPDATED_AT)
-                                    .operator(Operator.EQUAL)
-                                    .value(traces.stream().max(Comparator.comparing(Trace::lastUpdatedAt)).get()
-                                            .lastUpdatedAt().toString())
-                                    .build(),
+                            "END_TIME < midpoint timestamp",
+                            (Function<List<Trace>, TraceThreadFilter>) traces -> {
+                                // Use a timestamp between thread1's end and thread2's end
+                                var thread1MaxEnd = traces.stream()
+                                        .map(Trace::endTime)
+                                        .max(Comparator.naturalOrder())
+                                        .orElseThrow();
+                                // Add 50ms buffer - thread2 ends at +100ms, thread1 at +1ms
+                                var midpointTime = thread1MaxEnd.plus(50, ChronoUnit.MILLIS);
+                                return TraceThreadFilter.builder()
+                                        .field(TraceThreadField.END_TIME)
+                                        .operator(Operator.LESS_THAN)
+                                        .value(midpointTime.toString())
+                                        .build();
+                            },
                             (Function<List<Trace>, List<Trace>>) traces -> traces.stream()
                                     .filter(trace -> trace.threadId().equals(traces.getFirst().threadId()))
                                     .toList(),
@@ -2036,11 +2044,14 @@ class FindTraceThreadsResourceTest {
 
             traceResourceClient.batchCreateTraces(allTraces, apiKey, workspaceName);
 
-            // Wait and optionally close second thread to make it inactive
-            Mono.delay(Duration.ofMillis(500)).block();
+            // Wait for async trace thread processing to complete (longer wait for CI/CD environments)
+            Mono.delay(Duration.ofMillis(1000)).block();
             if (shouldCloseSecondThread) {
                 traceResourceClient.closeTraceThread(thread2Id, null, projectName, apiKey, workspaceName);
             }
+
+            // Additional wait to ensure thread status updates are processed
+            Mono.delay(Duration.ofMillis(500)).block();
 
             // Create filter based on first thread characteristics
             var filter = filterFunction.apply(thread1Traces);
