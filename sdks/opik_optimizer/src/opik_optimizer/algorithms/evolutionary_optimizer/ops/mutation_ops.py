@@ -304,6 +304,64 @@ def _radical_innovation_mutation(
         return prompt
 
 
+def _strategy_shift_mutation(
+    prompt: chat_prompt.ChatPrompt,
+    model: str,
+    model_parameters: dict[str, Any],
+) -> chat_prompt.ChatPrompt:
+    """
+    Radical mutation: Re-frame prompt using a different strategy template.
+    This provides macro-level diversity by changing the prompt archetype.
+    """
+    from ..prompt_strategies import sample_strategy
+
+    logger.debug("Applying strategy shift mutation - reframing prompt archetype")
+
+    # Sample a new strategy
+    strategy, var_values = sample_strategy()
+
+    # Use LLM to adapt current prompt content to new strategy format
+    adaptation_prompt = f"""You are reframing a prompt using a different strategic approach.
+
+Current prompt: {json.dumps(prompt.get_messages())}
+
+New strategy template and approach: {strategy.description}
+Template structure:
+{strategy.template[:300]}...
+
+Task: Adapt the key instructions and constraints from the current prompt to fit the new strategy template.
+- Preserve the core task, objectives, and constraints
+- Adopt the structure and style of the new strategy template
+- Ensure the result is coherent and well-structured
+- Keep any existing variables intact
+
+Return the adapted prompt as a JSON array of messages:
+[{{"role": "system", "content": "..."}}, {{"role": "user", "content": "..."}}]
+"""
+
+    try:
+        response = _llm_calls.call_model(
+            messages=[
+                {"role": "system", "content": "You are a prompt restructuring expert."},
+                {"role": "user", "content": adaptation_prompt},
+            ],
+            model=model,
+            model_parameters=model_parameters,
+            is_reasoning=True,
+        )
+
+        adapted_messages = utils.json_to_dict(response)
+        logger.info(f"Strategy shift successful: {strategy.name}")
+        return chat_prompt.ChatPrompt(
+            messages=adapted_messages,
+            tools=prompt.tools,
+            function_map=prompt.function_map,
+        )
+    except Exception as e:
+        logger.warning(f"Strategy shift mutation failed: {e}")
+        return prompt
+
+
 def deap_mutation(
     individual: Any,
     current_population: list[Any] | None,
@@ -341,6 +399,21 @@ def deap_mutation(
 
     # Choose mutation strategy based on current diversity
     diversity = helpers.calculate_population_diversity(current_population)
+
+    # Add strategy shift mutation for very low diversity
+    if diversity < 0.5:
+        mutation_choice = random.random()
+        if mutation_choice < 0.15:  # 15% chance when stuck
+            mutated_prompt = _strategy_shift_mutation(
+                prompt=prompt,
+                model=model,
+                model_parameters=model_parameters,
+            )
+            reporting.display_success(
+                "      Mutation successful, prompt reframed with new strategy archetype (strategy shift).",
+                verbose=verbose,
+            )
+            return helpers.update_individual_with_prompt(individual, mutated_prompt)
 
     # Determine thresholds based on diversity
     if diversity < diversity_threshold:
