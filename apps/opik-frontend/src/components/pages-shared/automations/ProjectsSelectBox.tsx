@@ -92,6 +92,7 @@ interface BaseProjectsSelectBoxProps {
   className?: string;
   disabled?: boolean;
   minWidth?: number;
+  customOptions?: DropdownOption<string>[];
 }
 
 interface SingleSelectProjectsProps extends BaseProjectsSelectBoxProps {
@@ -113,7 +114,7 @@ type ProjectsSelectBoxProps =
   | MultiSelectProjectsProps;
 
 const ProjectsSelectBox: React.FC<ProjectsSelectBoxProps> = (props) => {
-  const { className, disabled, minWidth } = props;
+  const { className, disabled, minWidth, customOptions } = props;
   const [isLoadedMore, setIsLoadedMore] = useState(false);
 
   const { projects, total, isLoading } = useProjectsSelectData({
@@ -123,11 +124,14 @@ const ProjectsSelectBox: React.FC<ProjectsSelectBoxProps> = (props) => {
   const loadMoreHandler = useCallback(() => setIsLoadedMore(true), []);
 
   const options: DropdownOption<string>[] = useMemo(() => {
-    return projects.map((project) => ({
+    const projectOptions = projects.map((project) => ({
       value: project.id,
       label: project.name,
     }));
-  }, [projects]);
+    return customOptions
+      ? [...customOptions, ...projectOptions]
+      : projectOptions;
+  }, [projects, customOptions]);
 
   const loadableSelectBoxProps = props.multiselect
     ? {
