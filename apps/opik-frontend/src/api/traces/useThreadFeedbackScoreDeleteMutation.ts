@@ -56,6 +56,9 @@ const useThreadFeedbackScoreDeleteMutation = () => {
       await queryClient.invalidateQueries({
         queryKey: ["threads-columns", { projectId: variables.projectId }],
       });
+      await queryClient.invalidateQueries({
+        queryKey: ["threads-statistic"],
+      });
     },
   });
 };
