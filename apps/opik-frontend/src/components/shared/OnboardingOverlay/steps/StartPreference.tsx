@@ -20,8 +20,7 @@ const StartPreference: React.FC = () => {
 
   // A/B test: control shows "Skip", test shows "Start exploring Opik"
   // Enhanced flow also opens create experiment dialog when clicking "Run evaluations"
-  // const showEnhancedOnboarding = variant === "test";
-  const showEnhancedOnboarding = true;
+  const showEnhancedOnboarding = variant === "test";
 
   return (
     <OnboardingStep className="max-w-full">
