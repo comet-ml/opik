@@ -12,7 +12,6 @@ import com.comet.opik.domain.DatasetExpansionService;
 import com.comet.opik.domain.DatasetItemService;
 import com.comet.opik.domain.DatasetService;
 import com.comet.opik.domain.DatasetVersionService;
-import com.comet.opik.domain.ExperimentService;
 import com.comet.opik.domain.Streamer;
 import com.comet.opik.domain.filter.FilterQueryBuilder;
 import com.comet.opik.domain.workspaces.WorkspaceMetadataService;
@@ -67,12 +66,11 @@ class DatasetsResourceIntegrationTest {
     private static final WorkspaceMetadataService workspaceMetadataService = mock(WorkspaceMetadataService.class);
     private static final CsvDatasetItemProcessor csvProcessor = mock(CsvDatasetItemProcessor.class);
     private static final OpikConfiguration config = mock(OpikConfiguration.class);
-    private static final ExperimentService experimentService = mock(ExperimentService.class);
     public static final SortingFactoryDatasets sortingFactory = new SortingFactoryDatasets();
 
     private static final ResourceExtension EXT = ResourceExtension.builder()
             .addResource(new DatasetsResource(
-                    service, itemService, expansionService, versionService, experimentService, () -> requestContext,
+                    service, itemService, expansionService, versionService, () -> requestContext,
                     new FiltersFactory(new FilterQueryBuilder()),
                     new IdGeneratorImpl(), new Streamer(), sortingFactory, workspaceMetadataService, csvProcessor,
                     config))

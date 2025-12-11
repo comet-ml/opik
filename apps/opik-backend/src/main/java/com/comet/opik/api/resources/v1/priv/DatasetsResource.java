@@ -32,7 +32,6 @@ import com.comet.opik.domain.DatasetItemService;
 import com.comet.opik.domain.DatasetService;
 import com.comet.opik.domain.DatasetVersionService;
 import com.comet.opik.domain.EntityType;
-import com.comet.opik.domain.ExperimentService;
 import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.domain.Streamer;
 import com.comet.opik.domain.workspaces.WorkspaceMetadataService;
@@ -56,7 +55,6 @@ import jakarta.inject.Provider;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
-import jakarta.ws.rs.ClientErrorException;
 import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.DELETE;
 import jakarta.ws.rs.DefaultValue;
@@ -104,7 +102,6 @@ public class DatasetsResource {
     private final @NonNull DatasetItemService itemService;
     private final @NonNull DatasetExpansionService expansionService;
     private final @NonNull DatasetVersionService versionService;
-    private final @NonNull ExperimentService experimentService;
     private final @NonNull Provider<RequestContext> requestContext;
     private final @NonNull FiltersFactory filtersFactory;
     private final @NonNull IdGenerator idGenerator;
@@ -637,11 +634,6 @@ public class DatasetsResource {
             sortingFields = List.of();
         }
 
-        String workspaceId = requestContext.get().getWorkspaceId();
-
-        // Determine the dataset version to use based on experiments
-        String versionHashOrTag = determineDatasetVersion(experimentIds, datasetId, workspaceId);
-
         var datasetItemSearchCriteria = DatasetItemSearchCriteria.builder()
                 .datasetId(datasetId)
                 .experimentIds(experimentIds)
@@ -650,8 +642,10 @@ public class DatasetsResource {
                 .search(search)
                 .entityType(EntityType.TRACE)
                 .truncate(truncate)
-                .versionHashOrTag(versionHashOrTag)
+                .versionHashOrTag(null) // Let DatasetItemService handle version resolution
                 .build();
+
+        String workspaceId = requestContext.get().getWorkspaceId();
 
         log.info("Finding dataset items with experiment items by '{}', page '{}', size '{}' on workspaceId '{}'",
                 datasetItemSearchCriteria, page, size, workspaceId);
@@ -748,56 +742,5 @@ public class DatasetsResource {
     @Path("/{id}/versions")
     public DatasetVersionsResource versions(@PathParam("id") UUID datasetId) {
         return new DatasetVersionsResource(datasetId, versionService, requestContext, config);
-    }
-
-    /**
-     * Determines the dataset version (hash or tag) to use for fetching dataset items
-     * based on the experiments being compared.
-     * <p>
-     * All experiments must use the same dataset version (or all use draft).
-     * If experiments use different versions, an exception is thrown.
-     *
-     * @param experimentIds the IDs of experiments being compared
-     * @param datasetId the dataset ID
-     * @param workspaceId the workspace ID
-     * @return the version hash to use, or null if all experiments use draft
-     * @throws ClientErrorException if experiments use different dataset versions
-     */
-    private String determineDatasetVersion(Set<UUID> experimentIds, UUID datasetId, String workspaceId) {
-        // Fetch all experiments
-        var experiments = experimentIds.stream()
-                .map(experimentId -> experimentService.getById(experimentId)
-                        .contextWrite(ctx -> setRequestContext(ctx, requestContext))
-                        .block())
-                .toList();
-
-        // Extract unique dataset version IDs
-        var datasetVersionIds = experiments.stream()
-                .map(com.comet.opik.api.Experiment::datasetVersionId)
-                .filter(java.util.Objects::nonNull)
-                .collect(java.util.stream.Collectors.toSet());
-
-        // Check if all experiments use draft (no version ID)
-        if (datasetVersionIds.isEmpty()) {
-            log.info("All experiments use draft dataset items for dataset '{}'", datasetId);
-            return null; // All use draft
-        }
-
-        // Check if all experiments use the same version
-        if (datasetVersionIds.size() > 1) {
-            throw new ClientErrorException(
-                    "Cannot compare experiments using different dataset versions. " +
-                            "All experiments must use the same dataset version or all must use draft.",
-                    Response.Status.BAD_REQUEST);
-        }
-
-        // All experiments use the same version - get the version hash
-        UUID versionId = datasetVersionIds.iterator().next();
-        var version = versionService.getVersionById(versionId, workspaceId);
-
-        log.info("Using dataset version '{}' (hash: '{}') for experiments '{}'",
-                versionId, version.versionHash(), experimentIds);
-
-        return version.versionHash();
     }
 }

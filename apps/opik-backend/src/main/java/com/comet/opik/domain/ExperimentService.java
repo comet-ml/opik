@@ -400,16 +400,13 @@ public class ExperimentService {
     }
 
     private Mono<Optional<UUID>> resolveDatasetVersion(Experiment experiment, UUID datasetId) {
-        // Only use the explicitly provided datasetVersionId
-        // Do NOT apply 3-tier fallback logic when creating/updating experiments
-        // The 3-tier logic is only for fetching dataset items
-        if (experiment.datasetVersionId() != null) {
-            log.info("Using provided dataset version ID '{}' for experiment", experiment.datasetVersionId());
-            return Mono.just(Optional.of(experiment.datasetVersionId()));
-        } else {
-            log.info("No dataset version ID provided for experiment, will use null");
-            return Mono.just(Optional.empty());
-        }
+        return Mono.deferContextual(ctx -> {
+            String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
+
+            // Use the 3-tier version resolution logic from DatasetVersionService
+            return datasetVersionService.resolveVersionIdWithFallback(datasetId, experiment.datasetVersionId(),
+                    workspaceId);
+        });
     }
 
     private Mono<Map<UUID, PromptVersion>> validatePromptVersion(Experiment experiment) {

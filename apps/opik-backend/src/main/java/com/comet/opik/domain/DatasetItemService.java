@@ -24,7 +24,6 @@ import jakarta.ws.rs.core.Response;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.commons.collections4.CollectionUtils;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
@@ -398,52 +397,6 @@ class DatasetItemServiceImpl implements DatasetItemService {
         // Verify dataset visibility
         datasetService.findById(datasetItemSearchCriteria.datasetId());
 
-        // Special handling for experiment items: check if experiments have versions
-        if (CollectionUtils.isNotEmpty(datasetItemSearchCriteria.experimentIds())) {
-            return Mono.deferContextual(ctx -> {
-                String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
-
-                // Fetch experiments to check if they have dataset_version_id
-                return experimentDao.getByIds(datasetItemSearchCriteria.experimentIds())
-                        .collectList()
-                        .flatMap(experiments -> {
-                            // Check if any experiment has a dataset_version_id
-                            boolean hasVersionedExperiments = experiments.stream()
-                                    .anyMatch(exp -> exp.datasetVersionId() != null);
-
-                            if (hasVersionedExperiments) {
-                                // Use versioned query that handles mixed version states
-                                // Get the version ID from the first versioned experiment
-                                UUID versionId = experiments.stream()
-                                        .filter(exp -> exp.datasetVersionId() != null)
-                                        .findFirst()
-                                        .map(exp -> exp.datasetVersionId())
-                                        .orElse(null);
-
-                                log.info(
-                                        "Finding versioned dataset items with experiment items for dataset '{}', experiments '{}', version '{}', page '{}', size '{}'",
-                                        datasetItemSearchCriteria.datasetId(),
-                                        datasetItemSearchCriteria.experimentIds(), versionId, page, size);
-                                return versionDao.getItemsWithExperimentItems(datasetItemSearchCriteria, page, size)
-                                        .map(itemPage -> itemPage.toBuilder().datasetVersionId(versionId).build());
-                            } else {
-                                // All experiments are non-versioned, use draft query
-                                log.info(
-                                        "Finding draft dataset items with experiment items for dataset '{}', experiments '{}', page '{}', size '{}'",
-                                        datasetItemSearchCriteria.datasetId(),
-                                        datasetItemSearchCriteria.experimentIds(), page, size);
-                                return dao.getItems(datasetItemSearchCriteria, page, size)
-                                        .flatMap(itemPage -> computeHasDraft(datasetItemSearchCriteria.datasetId(),
-                                                itemPage))
-                                        .defaultIfEmpty(
-                                                DatasetItemPage.empty(page, sortingFactory.getSortableFields()));
-                            }
-                        })
-                        .contextWrite(context -> context.put(RequestContext.WORKSPACE_ID, workspaceId));
-            });
-        }
-
-        // Regular dataset items (no experiments) - use 3-tier version selection
         return Mono.deferContextual(ctx -> {
             String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
 

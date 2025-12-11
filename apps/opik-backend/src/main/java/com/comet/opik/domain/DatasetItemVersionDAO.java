@@ -19,6 +19,7 @@ import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.stringtemplate.v4.ST;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -917,11 +918,15 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 return makeFluxContextAware(bindWorkspaceIdToFlux(
                         connection.createStatement(experimentQuery)
                                 .bind("experimentIds", searchCriteria.experimentIds().toArray(UUID[]::new))))
-                        .flatMap(result -> result.map((row, rowMetadata) -> row.get("dataset_version_id", UUID.class)))
+                        .flatMap(result -> result.map(
+                                (row, rowMetadata) -> Optional.ofNullable(row.get("dataset_version_id", String.class))
+                                        .filter(StringUtils::isNotBlank)
+                                        .map(UUID::fromString)
+                                        .orElse(null)))
                         .next()
                         .flatMap(versionId -> {
                             if (versionId == null) {
-                                // No version ID found, return empty columns
+                                // No version ID found, return empty columns (draft experiment)
                                 log.info("No dataset version found for experiments, returning empty columns");
                                 return Mono.just(Set.<Column>of());
                             }
