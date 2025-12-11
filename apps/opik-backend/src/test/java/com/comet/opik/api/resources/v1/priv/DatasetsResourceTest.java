@@ -4791,8 +4791,8 @@ class DatasetsResourceTest {
         }
 
         @Test
-        @DisplayName("Success: delete with empty filters deletes all items")
-        void deleteDatasetItems__whenEmptyFilters__thenDeletesAllItems() {
+        @DisplayName("Success: delete all items in dataset using dataset_id filter only")
+        void deleteDatasetItems__whenOnlyDatasetIdFilter__thenDeletesAllItemsInDataset() {
             // Create items
             var item1 = factory.manufacturePojo(DatasetItem.class).toBuilder()
                     .tags(Set.of("tag1"))
@@ -4819,9 +4819,14 @@ class DatasetsResourceTest {
             assertThat(retrieved2).isNotNull();
             assertThat(retrieved3).isNotNull();
 
-            // Delete with empty filters - should delete ALL items
+            // Get dataset ID
+            var datasetId = retrieved1.datasetId();
+
+            // Delete with only dataset_id filter - should delete ALL items in that dataset
+            var datasetFilter = new DatasetItemFilter(DatasetItemField.DATASET_ID, Operator.EQUAL, null,
+                    datasetId.toString());
             var deleteRequest = DatasetItemsDelete.builder()
-                    .filters(List.of())
+                    .filters(List.of(datasetFilter))
                     .build();
 
             try (var actualResponse = client.target(BASE_RESOURCE_URI.formatted(baseURI))
