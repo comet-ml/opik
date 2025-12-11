@@ -76,8 +76,8 @@ export interface PythonCodeDetails {
 export type EvaluatorsRule = {
   id: string;
   name: string;
-  project_id: string;
-  project_name?: string;
+  project_ids: string[];
+  project_names?: string[];
   sampling_rate: number;
   enabled?: boolean;
   filters?: Filters;

@@ -6,6 +6,7 @@ import org.jdbi.v3.json.Json;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 import static com.comet.opik.domain.evaluators.TraceThreadLlmAsJudgeAutomationRuleEvaluatorModel.TraceThreadLlmAsJudgeCode;
@@ -13,8 +14,7 @@ import static com.comet.opik.domain.evaluators.TraceThreadLlmAsJudgeAutomationRu
 @Builder(toBuilder = true)
 public record TraceThreadLlmAsJudgeAutomationRuleEvaluatorModel(
         UUID id,
-        UUID projectId,
-        String projectName,
+        Set<UUID> projectIds,
         String name,
         Float samplingRate,
         boolean enabled,

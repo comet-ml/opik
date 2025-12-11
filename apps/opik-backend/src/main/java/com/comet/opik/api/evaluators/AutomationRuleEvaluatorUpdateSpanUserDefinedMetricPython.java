@@ -13,6 +13,7 @@ import lombok.experimental.SuperBuilder;
 
 import java.beans.ConstructorProperties;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 import static com.comet.opik.api.evaluators.AutomationRuleEvaluatorSpanUserDefinedMetricPython.SpanUserDefinedMetricPythonCode;
@@ -26,12 +27,12 @@ public final class AutomationRuleEvaluatorUpdateSpanUserDefinedMetricPython
         extends
             AutomationRuleEvaluatorUpdate<SpanUserDefinedMetricPythonCode, SpanFilter> {
 
-    @ConstructorProperties({"name", "samplingRate", "enabled", "filters", "code", "projectId"})
+    @ConstructorProperties({"name", "samplingRate", "enabled", "filters", "code", "projectIds"})
     public AutomationRuleEvaluatorUpdateSpanUserDefinedMetricPython(
             @NotBlank String name, float samplingRate, boolean enabled, List<SpanFilter> filters,
             @NotNull SpanUserDefinedMetricPythonCode code,
-            @NotNull UUID projectId) {
-        super(name, samplingRate, enabled, filters, code, projectId);
+            @NotNull Set<UUID> projectIds) {
+        super(name, samplingRate, enabled, filters, code, projectIds);
     }
 
     /**
