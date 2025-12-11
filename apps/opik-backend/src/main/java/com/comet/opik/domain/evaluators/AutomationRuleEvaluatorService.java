@@ -577,6 +577,10 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
             return models;
         }
 
+        // Log incoming models for debugging
+        models.forEach(model -> log.debug("Model before enrichment - id: '{}', projectId: '{}', projectName: '{}'",
+                model.id(), model.projectId(), model.projectName()));
+
         // Extract unique project IDs from all models
         Set<UUID> projectIds = models.stream()
                 .map(AutomationRuleEvaluatorModel::projectId)
@@ -602,9 +606,16 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
                         Map.Entry::getValue));
 
         // Enrich each model with its project name
-        return models.stream()
+        List<AutomationRuleEvaluatorModel<?>> enrichedModels = models.stream()
                 .<AutomationRuleEvaluatorModel<?>>map(model -> enrichModelWithProjectName(model, projectNameMap))
                 .toList();
+
+        // Log enriched models for debugging
+        enrichedModels
+                .forEach(model -> log.debug("Model after enrichment - id: '{}', projectId: '{}', projectName: '{}'",
+                        model.id(), model.projectId(), model.projectName()));
+
+        return enrichedModels;
     }
 
     /**
