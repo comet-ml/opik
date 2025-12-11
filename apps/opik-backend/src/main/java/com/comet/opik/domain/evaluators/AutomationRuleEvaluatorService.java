@@ -41,6 +41,7 @@ import reactor.core.publisher.Mono;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
 import java.sql.SQLIntegrityConstraintViolationException;
+import java.sql.SQLSyntaxErrorException;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -249,7 +250,18 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
                 }
 
                 // Clear legacy project_id field to prevent stale data
-                dao.clearLegacyProjectId(id, workspaceId);
+                // This is safe to fail if the column doesn't exist (pre-migration databases)
+                try {
+                    dao.clearLegacyProjectId(id, workspaceId);
+                } catch (UnableToExecuteStatementException e) {
+                    if (e.getCause() instanceof SQLSyntaxErrorException
+                            && e.getMessage().contains("Unknown column 'project_id'")) {
+                        log.debug("Legacy project_id column not found (pre-migration), skipping cleanup for rule '{}'",
+                                id);
+                    } else {
+                        throw e;
+                    }
+                }
 
                 AutomationRuleEvaluatorModel<?> modelUpdate = switch (evaluatorUpdate) {
                     case AutomationRuleEvaluatorUpdateLlmAsJudge evaluatorUpdateLlmAsJudge ->
