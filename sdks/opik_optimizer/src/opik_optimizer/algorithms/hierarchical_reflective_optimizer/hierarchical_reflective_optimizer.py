@@ -154,6 +154,17 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
             else None,
         )
 
+        sampling_plan = self._prepare_sampling_plan(
+            dataset=dataset,
+            n_samples=n_samples,
+            phase="trial",
+            seed_override=self.seed,
+        )
+        resolved_ids = sampling_plan.dataset_item_ids
+        resolved_n_samples = (
+            None if resolved_ids is not None else sampling_plan.nb_samples
+        )
+
         def llm_task(dataset_item: dict[str, Any]) -> dict[str, str]:
             new_prompt = prompt.copy()
             messages = new_prompt.get_messages(dataset_item)
@@ -190,7 +201,7 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
 
         # Use dataset's get_items with limit for sampling
         logger.debug(
-            f"Starting evaluation with {n_samples if n_samples else 'all'} samples for metric: {getattr(metric, '__name__', str(metric))}"
+            f"Starting evaluation with {resolved_n_samples if resolved_n_samples else 'all'} samples for metric: {getattr(metric, '__name__', str(metric))}"
         )
         result = opik_evaluator.evaluate_optimization_trial(
             optimization_id=optimization_id,
@@ -198,7 +209,8 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
             task=llm_task,
             scoring_metrics=[_create_metric_class(metric)],
             task_threads=self.n_threads,
-            nb_samples=n_samples,
+            dataset_item_ids=resolved_ids,
+            nb_samples=resolved_n_samples,
             experiment_config=experiment_config,
             verbose=self.verbose,
             project_name=self.project_name,
