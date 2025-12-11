@@ -124,7 +124,20 @@ class TracesPage:
         self.page.get_by_role("button", name="Delete traces").click()
 
     def delete_all_traces_that_match_name_contains_filter(self, name: str):
-        # TODO compact this into smaller functions
+        """Delete all traces that match a name contains filter.
+
+        Args:
+            name: The name substring to filter traces by
+        """
+        self._apply_name_contains_filter(name)
+        self._delete_all_filtered_traces()
+
+    def _apply_name_contains_filter(self, name: str):
+        """Apply a filter for traces where name contains the given value.
+
+        Args:
+            name: The name substring to filter by
+        """
         self.page.get_by_role("button", name="Filters").click()
         filter_row = self.page.get_by_role("row").filter(
             has=self.page.get_by_role("cell", name="Where")
@@ -136,6 +149,8 @@ class TracesPage:
         expect(self.page.get_by_role("button", name="Filters (1)")).to_be_visible()
         self.page.keyboard.press(key="Escape")
 
+    def _delete_all_filtered_traces(self):
+        """Delete all traces that match the current filter."""
         total_traces = self.get_total_number_of_traces_in_project()
         while total_traces > 0:
             expect(self.page.get_by_label("Select all")).to_be_visible()
