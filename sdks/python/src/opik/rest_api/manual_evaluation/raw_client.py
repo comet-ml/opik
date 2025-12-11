@@ -21,6 +21,92 @@ class RawManualEvaluationClient:
     def __init__(self, *, client_wrapper: SyncClientWrapper):
         self._client_wrapper = client_wrapper
 
+    def evaluate_spans(
+        self,
+        *,
+        project_id: str,
+        entity_ids: typing.Sequence[str],
+        rule_ids: typing.Sequence[str],
+        entity_type: ManualEvaluationRequestEntityType,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> HttpResponse[ManualEvaluationResponse]:
+        """
+        Manually trigger evaluation rules on selected spans. Bypasses sampling and enqueues all specified spans for evaluation.
+
+        Parameters
+        ----------
+        project_id : str
+            Project ID
+
+        entity_ids : typing.Sequence[str]
+            List of entity IDs (trace IDs or thread IDs) to evaluate
+
+        rule_ids : typing.Sequence[str]
+            List of automation rule IDs to apply
+
+        entity_type : ManualEvaluationRequestEntityType
+            Type of entity to evaluate (trace or thread)
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        HttpResponse[ManualEvaluationResponse]
+            Accepted - Evaluation request queued successfully
+        """
+        _response = self._client_wrapper.httpx_client.request(
+            "v1/private/manual-evaluation/spans",
+            method="POST",
+            json={
+                "project_id": project_id,
+                "entity_ids": entity_ids,
+                "rule_ids": rule_ids,
+                "entity_type": entity_type,
+            },
+            headers={
+                "content-type": "application/json",
+            },
+            request_options=request_options,
+            omit=OMIT,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                _data = typing.cast(
+                    ManualEvaluationResponse,
+                    parse_obj_as(
+                        type_=ManualEvaluationResponse,  # type: ignore
+                        object_=_response.json(),
+                    ),
+                )
+                return HttpResponse(response=_response, data=_data)
+            if _response.status_code == 400:
+                raise BadRequestError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            if _response.status_code == 404:
+                raise NotFoundError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
+        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+
     def evaluate_threads(
         self,
         *,
@@ -197,6 +283,92 @@ class RawManualEvaluationClient:
 class AsyncRawManualEvaluationClient:
     def __init__(self, *, client_wrapper: AsyncClientWrapper):
         self._client_wrapper = client_wrapper
+
+    async def evaluate_spans(
+        self,
+        *,
+        project_id: str,
+        entity_ids: typing.Sequence[str],
+        rule_ids: typing.Sequence[str],
+        entity_type: ManualEvaluationRequestEntityType,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> AsyncHttpResponse[ManualEvaluationResponse]:
+        """
+        Manually trigger evaluation rules on selected spans. Bypasses sampling and enqueues all specified spans for evaluation.
+
+        Parameters
+        ----------
+        project_id : str
+            Project ID
+
+        entity_ids : typing.Sequence[str]
+            List of entity IDs (trace IDs or thread IDs) to evaluate
+
+        rule_ids : typing.Sequence[str]
+            List of automation rule IDs to apply
+
+        entity_type : ManualEvaluationRequestEntityType
+            Type of entity to evaluate (trace or thread)
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        AsyncHttpResponse[ManualEvaluationResponse]
+            Accepted - Evaluation request queued successfully
+        """
+        _response = await self._client_wrapper.httpx_client.request(
+            "v1/private/manual-evaluation/spans",
+            method="POST",
+            json={
+                "project_id": project_id,
+                "entity_ids": entity_ids,
+                "rule_ids": rule_ids,
+                "entity_type": entity_type,
+            },
+            headers={
+                "content-type": "application/json",
+            },
+            request_options=request_options,
+            omit=OMIT,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                _data = typing.cast(
+                    ManualEvaluationResponse,
+                    parse_obj_as(
+                        type_=ManualEvaluationResponse,  # type: ignore
+                        object_=_response.json(),
+                    ),
+                )
+                return AsyncHttpResponse(response=_response, data=_data)
+            if _response.status_code == 400:
+                raise BadRequestError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            if _response.status_code == 404:
+                raise NotFoundError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
+        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
 
     async def evaluate_threads(
         self,

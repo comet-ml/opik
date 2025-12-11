@@ -27,6 +27,55 @@ class ManualEvaluationClient:
         """
         return self._raw_client
 
+    def evaluate_spans(
+        self,
+        *,
+        project_id: str,
+        entity_ids: typing.Sequence[str],
+        rule_ids: typing.Sequence[str],
+        entity_type: ManualEvaluationRequestEntityType,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> ManualEvaluationResponse:
+        """
+        Manually trigger evaluation rules on selected spans. Bypasses sampling and enqueues all specified spans for evaluation.
+
+        Parameters
+        ----------
+        project_id : str
+            Project ID
+
+        entity_ids : typing.Sequence[str]
+            List of entity IDs (trace IDs or thread IDs) to evaluate
+
+        rule_ids : typing.Sequence[str]
+            List of automation rule IDs to apply
+
+        entity_type : ManualEvaluationRequestEntityType
+            Type of entity to evaluate (trace or thread)
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        ManualEvaluationResponse
+            Accepted - Evaluation request queued successfully
+
+        Examples
+        --------
+        from Opik import OpikApi
+        client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        client.manual_evaluation.evaluate_spans(project_id='550e8400-e29b-41d4-a716-446655440000', entity_ids=['550e8400-e29b-41d4-a716-446655440000', '550e8400-e29b-41d4-a716-446655440001'], rule_ids=['660e8400-e29b-41d4-a716-446655440000'], entity_type="trace", )
+        """
+        _response = self._raw_client.evaluate_spans(
+            project_id=project_id,
+            entity_ids=entity_ids,
+            rule_ids=rule_ids,
+            entity_type=entity_type,
+            request_options=request_options,
+        )
+        return _response.data
+
     def evaluate_threads(
         self,
         *,
@@ -140,6 +189,58 @@ class AsyncManualEvaluationClient:
         AsyncRawManualEvaluationClient
         """
         return self._raw_client
+
+    async def evaluate_spans(
+        self,
+        *,
+        project_id: str,
+        entity_ids: typing.Sequence[str],
+        rule_ids: typing.Sequence[str],
+        entity_type: ManualEvaluationRequestEntityType,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> ManualEvaluationResponse:
+        """
+        Manually trigger evaluation rules on selected spans. Bypasses sampling and enqueues all specified spans for evaluation.
+
+        Parameters
+        ----------
+        project_id : str
+            Project ID
+
+        entity_ids : typing.Sequence[str]
+            List of entity IDs (trace IDs or thread IDs) to evaluate
+
+        rule_ids : typing.Sequence[str]
+            List of automation rule IDs to apply
+
+        entity_type : ManualEvaluationRequestEntityType
+            Type of entity to evaluate (trace or thread)
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        ManualEvaluationResponse
+            Accepted - Evaluation request queued successfully
+
+        Examples
+        --------
+        from Opik import AsyncOpikApi
+        import asyncio
+        client = AsyncOpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        async def main() -> None:
+            await client.manual_evaluation.evaluate_spans(project_id='550e8400-e29b-41d4-a716-446655440000', entity_ids=['550e8400-e29b-41d4-a716-446655440000', '550e8400-e29b-41d4-a716-446655440001'], rule_ids=['660e8400-e29b-41d4-a716-446655440000'], entity_type="trace", )
+        asyncio.run(main())
+        """
+        _response = await self._raw_client.evaluate_spans(
+            project_id=project_id,
+            entity_ids=entity_ids,
+            rule_ids=rule_ids,
+            entity_type=entity_type,
+            request_options=request_options,
+        )
+        return _response.data
 
     async def evaluate_threads(
         self,
