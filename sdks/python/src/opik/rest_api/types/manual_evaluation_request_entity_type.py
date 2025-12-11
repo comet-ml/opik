@@ -2,4 +2,4 @@
 
 import typing
 
-ManualEvaluationRequestEntityType = typing.Union[typing.Literal["trace", "thread"], typing.Any]
+ManualEvaluationRequestEntityType = typing.Union[typing.Literal["trace", "thread", "span"], typing.Any]

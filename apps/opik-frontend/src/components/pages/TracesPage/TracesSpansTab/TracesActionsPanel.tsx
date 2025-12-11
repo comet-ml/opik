@@ -91,6 +91,16 @@ const TracesActionsPanel: React.FunctionComponent<TracesActionsPanelProps> = ({
           entityType="trace"
         />
       )}
+      {type === TRACE_DATA_TYPE.spans && (
+        <RunEvaluationDialog
+          key={`evaluation-${resetKeyRef.current}`}
+          open={open === 4}
+          setOpen={setOpen}
+          projectId={projectId}
+          entityIds={selectedRows.map((row) => row.id)}
+          entityType="span"
+        />
+      )}
       <AddToDropdown
         getDataForExport={getDataForExport}
         selectedRows={selectedRows}
@@ -111,7 +121,7 @@ const TracesActionsPanel: React.FunctionComponent<TracesActionsPanelProps> = ({
           Add tags
         </Button>
       </TooltipWrapper>
-      {type === TRACE_DATA_TYPE.traces && (
+      {(type === TRACE_DATA_TYPE.traces || type === TRACE_DATA_TYPE.spans) && (
         <TooltipWrapper content="Evaluate">
           <Button
             variant="outline"

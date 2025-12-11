@@ -28,7 +28,7 @@ import lombok.extern.slf4j.Slf4j;
 import static com.comet.opik.utils.AsyncUtils.setRequestContext;
 
 /**
- * REST resource for manually triggering evaluation rules on traces and threads.
+ * REST resource for manually triggering evaluation rules on traces, threads, and spans.
  * Allows users to run online evaluation metrics on specific entities without sampling,
  * directly from the UI.
  */
@@ -38,7 +38,7 @@ import static com.comet.opik.utils.AsyncUtils.setRequestContext;
 @Timed
 @Slf4j
 @RequiredArgsConstructor(onConstructor_ = @jakarta.inject.Inject)
-@Tag(name = "Manual Evaluation", description = "Manual evaluation resources for traces and threads")
+@Tag(name = "Manual Evaluation", description = "Manual evaluation resources for traces, threads, and spans")
 public class ManualEvaluationResource {
 
     private final @NonNull ManualEvaluationService manualEvaluationService;
@@ -95,6 +95,35 @@ public class ManualEvaluationResource {
                 .block();
 
         log.info("Manual evaluation request accepted for '{}' threads in project '{}', workspace '{}'",
+                request.entityIds().size(), request.projectId(), workspaceId);
+
+        return Response.status(Response.Status.ACCEPTED)
+                .entity(response)
+                .build();
+    }
+
+    @POST
+    @Path("/spans")
+    @Operation(operationId = "evaluateSpans", summary = "Manually evaluate spans", description = "Manually trigger evaluation rules on selected spans. Bypasses sampling and enqueues all specified spans for evaluation.", responses = {
+            @ApiResponse(responseCode = "202", description = "Accepted - Evaluation request queued successfully", content = @Content(schema = @Schema(implementation = ManualEvaluationResponse.class))),
+            @ApiResponse(responseCode = "400", description = "Bad Request - Invalid request or missing automation rules", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
+            @ApiResponse(responseCode = "404", description = "Not Found - Project not found", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))})
+    @RateLimited
+    public Response evaluateSpans(
+            @RequestBody(content = @Content(schema = @Schema(implementation = ManualEvaluationRequest.class))) @Valid @NonNull ManualEvaluationRequest request) {
+
+        var workspaceId = requestContext.get().getWorkspaceId();
+        var userName = requestContext.get().getUserName();
+
+        log.info(
+                "Manual evaluation request for '{}' spans with '{}' rules in project '{}', workspace '{}' by user '{}'",
+                request.entityIds().size(), request.ruleIds().size(), request.projectId(), workspaceId, userName);
+
+        var response = manualEvaluationService.evaluate(request, request.projectId(), workspaceId, userName)
+                .contextWrite(ctx -> setRequestContext(ctx, requestContext))
+                .block();
+
+        log.info("Manual evaluation request accepted for '{}' spans in project '{}', workspace '{}'",
                 request.entityIds().size(), request.projectId(), workspaceId);
 
         return Response.status(Response.Status.ACCEPTED)

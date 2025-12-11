@@ -227,7 +227,8 @@ class PromptServiceImpl implements PromptService {
             // Template structure is immutable after prompt creation.
             log.debug(
                     "Prompt '{}' already exists with template_structure '{}'. Ignoring requested template_structure '{}'.",
-                    name, prompt.templateStructure().getValue(), templateStructure.getValue());
+                    name, prompt.templateStructure().getValue(),
+                    templateStructure != null ? templateStructure.getValue() : null);
             return prompt;
         }
 
