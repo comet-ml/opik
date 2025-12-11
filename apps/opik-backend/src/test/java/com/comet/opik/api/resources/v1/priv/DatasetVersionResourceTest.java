@@ -914,7 +914,7 @@ class DatasetVersionResourceTest {
             assertThat(version1.itemsAdded()).isEqualTo(3);
 
             // Get created items to obtain their IDs
-            var createdItemsPage = datasetResourceClient.getDatasetItems(datasetId, 1, 10, null, API_KEY,
+            var createdItemsPage = datasetResourceClient.getDraftDatasetItems(datasetId, 1, 10, API_KEY,
                     TEST_WORKSPACE);
             var createdItems = createdItemsPage.content();
 
@@ -1030,7 +1030,7 @@ class DatasetVersionResourceTest {
             datasetResourceClient.createDatasetItems(batch, TEST_WORKSPACE, API_KEY);
 
             // Get the draft item IDs
-            var draftItemsPage = datasetResourceClient.getDatasetItems(datasetId, 1, 10, null, API_KEY,
+            var draftItemsPage = datasetResourceClient.getDraftDatasetItems(datasetId, 1, 10, API_KEY,
                     TEST_WORKSPACE);
             var draftItems = draftItemsPage.content();
             var draftItemIds = draftItems.stream().map(DatasetItem::id).toList();
@@ -1104,7 +1104,7 @@ class DatasetVersionResourceTest {
             datasetResourceClient.createDatasetItems(batch1, TEST_WORKSPACE, API_KEY);
 
             // Fetch created items to get their IDs
-            var createdItems = datasetResourceClient.getDatasetItems(datasetId, 1, 10, null, API_KEY, TEST_WORKSPACE)
+            var createdItems = datasetResourceClient.getDraftDatasetItems(datasetId, 1, 10, API_KEY, TEST_WORKSPACE)
                     .content();
 
             // Commit first version
@@ -1224,7 +1224,7 @@ class DatasetVersionResourceTest {
             var datasetId = createDataset(UUID.randomUUID().toString());
 
             // When - Get draft items
-            var draftItems = datasetResourceClient.getDatasetItems(datasetId, 1, 10, null, API_KEY, TEST_WORKSPACE);
+            var draftItems = datasetResourceClient.getDraftDatasetItems(datasetId, 1, 10, API_KEY, TEST_WORKSPACE);
 
             // Then - hasDraft should be false (no items, no changes)
             assertThat(draftItems.hasDraft()).isFalse();
@@ -1240,7 +1240,7 @@ class DatasetVersionResourceTest {
             createDatasetItems(datasetId, 3);
 
             // When - Get draft items
-            var draftItems = datasetResourceClient.getDatasetItems(datasetId, 1, 10, null, API_KEY, TEST_WORKSPACE);
+            var draftItems = datasetResourceClient.getDraftDatasetItems(datasetId, 1, 10, API_KEY, TEST_WORKSPACE);
 
             // Then - hasDraft should be true (items exist, no version to compare against)
             assertThat(draftItems.hasDraft()).isTrue();
@@ -1256,7 +1256,7 @@ class DatasetVersionResourceTest {
             createDatasetItems(datasetId, 2);
 
             // Verify hasDraft is true before version
-            var draftBeforeVersion = datasetResourceClient.getDatasetItems(datasetId, 1, 10, null, API_KEY,
+            var draftBeforeVersion = datasetResourceClient.getDraftDatasetItems(datasetId, 1, 10, API_KEY,
                     TEST_WORKSPACE);
             assertThat(draftBeforeVersion.hasDraft()).isTrue();
 
@@ -1269,7 +1269,7 @@ class DatasetVersionResourceTest {
             datasetResourceClient.commitVersion(datasetId, versionCreate, API_KEY, TEST_WORKSPACE);
 
             // Then - Get draft items after version
-            var draftAfterVersion = datasetResourceClient.getDatasetItems(datasetId, 1, 10, null, API_KEY,
+            var draftAfterVersion = datasetResourceClient.getDraftDatasetItems(datasetId, 1, 10, API_KEY,
                     TEST_WORKSPACE);
 
             // hasDraft should be false (draft matches latest version)
@@ -1292,7 +1292,7 @@ class DatasetVersionResourceTest {
             datasetResourceClient.commitVersion(datasetId, versionCreate, API_KEY, TEST_WORKSPACE);
 
             // Verify hasDraft is false after version
-            var draftAfterVersion = datasetResourceClient.getDatasetItems(datasetId, 1, 10, null, API_KEY,
+            var draftAfterVersion = datasetResourceClient.getDraftDatasetItems(datasetId, 1, 10, API_KEY,
                     TEST_WORKSPACE);
             assertThat(draftAfterVersion.hasDraft()).isFalse();
 
@@ -1300,7 +1300,7 @@ class DatasetVersionResourceTest {
             createDatasetItems(datasetId, 1);
 
             // Then - Get draft items after modification
-            var draftAfterChange = datasetResourceClient.getDatasetItems(datasetId, 1, 10, null, API_KEY,
+            var draftAfterChange = datasetResourceClient.getDraftDatasetItems(datasetId, 1, 10, API_KEY,
                     TEST_WORKSPACE);
 
             // hasDraft should be true (draft has changed from latest version)
@@ -1323,7 +1323,7 @@ class DatasetVersionResourceTest {
                     TEST_WORKSPACE);
 
             // Get draft items to obtain IDs
-            var draftItems = datasetResourceClient.getDatasetItems(datasetId, 1, 10, null, API_KEY, TEST_WORKSPACE);
+            var draftItems = datasetResourceClient.getDraftDatasetItems(datasetId, 1, 10, API_KEY, TEST_WORKSPACE);
             assertThat(draftItems.hasDraft()).isFalse();
 
             var itemToDelete = draftItems.content().get(0);
@@ -1332,7 +1332,7 @@ class DatasetVersionResourceTest {
             deleteDatasetItem(datasetId, itemToDelete.id());
 
             // Then - hasDraft should be true
-            var draftAfterDelete = datasetResourceClient.getDatasetItems(datasetId, 1, 10, null, API_KEY,
+            var draftAfterDelete = datasetResourceClient.getDraftDatasetItems(datasetId, 1, 10, API_KEY,
                     TEST_WORKSPACE);
             assertThat(draftAfterDelete.hasDraft()).isTrue();
             assertThat(draftAfterDelete.content()).hasSize(2);
@@ -1358,7 +1358,7 @@ class DatasetVersionResourceTest {
                     TEST_WORKSPACE);
 
             // Get draft items
-            var draftItems = datasetResourceClient.getDatasetItems(datasetId, 1, 10, null, API_KEY, TEST_WORKSPACE);
+            var draftItems = datasetResourceClient.getDraftDatasetItems(datasetId, 1, 10, API_KEY, TEST_WORKSPACE);
             assertThat(draftItems.hasDraft()).isFalse();
 
             var itemToModify = draftItems.content().get(0);
@@ -1371,7 +1371,7 @@ class DatasetVersionResourceTest {
             datasetResourceClient.patchDatasetItem(itemToModify.id(), modifiedItem, API_KEY, TEST_WORKSPACE);
 
             // Then - hasDraft should be true
-            var draftAfterModify = datasetResourceClient.getDatasetItems(datasetId, 1, 10, null, API_KEY,
+            var draftAfterModify = datasetResourceClient.getDraftDatasetItems(datasetId, 1, 10, API_KEY,
                     TEST_WORKSPACE);
             assertThat(draftAfterModify.hasDraft()).isTrue();
             assertThat(draftAfterModify.content()).hasSize(2);
@@ -1394,7 +1394,7 @@ class DatasetVersionResourceTest {
             createDatasetItems(datasetId, 2);
 
             // Verify hasDraft is true after modification
-            var draftBeforeRestore = datasetResourceClient.getDatasetItems(datasetId, 1, 10, null, API_KEY,
+            var draftBeforeRestore = datasetResourceClient.getDraftDatasetItems(datasetId, 1, 10, API_KEY,
                     TEST_WORKSPACE);
             assertThat(draftBeforeRestore.hasDraft()).isTrue();
 
@@ -1402,7 +1402,7 @@ class DatasetVersionResourceTest {
             datasetResourceClient.restoreVersion(datasetId, DatasetVersionService.LATEST_TAG, API_KEY, TEST_WORKSPACE);
 
             // Then - hasDraft should be false (draft matches version again)
-            var draftAfterRestore = datasetResourceClient.getDatasetItems(datasetId, 1, 10, null, API_KEY,
+            var draftAfterRestore = datasetResourceClient.getDraftDatasetItems(datasetId, 1, 10, API_KEY,
                     TEST_WORKSPACE);
             assertThat(draftAfterRestore.hasDraft()).isFalse();
             assertThat(draftAfterRestore.content()).hasSize(2);
@@ -1423,11 +1423,11 @@ class DatasetVersionResourceTest {
 
             // When - Make multiple changes
             createDatasetItems(datasetId, 1); // Add
-            var draftItems1 = datasetResourceClient.getDatasetItems(datasetId, 1, 10, null, API_KEY, TEST_WORKSPACE);
+            var draftItems1 = datasetResourceClient.getDraftDatasetItems(datasetId, 1, 10, API_KEY, TEST_WORKSPACE);
             assertThat(draftItems1.hasDraft()).isTrue();
 
             createDatasetItems(datasetId, 1); // Add more
-            var draftItems2 = datasetResourceClient.getDatasetItems(datasetId, 1, 10, null, API_KEY, TEST_WORKSPACE);
+            var draftItems2 = datasetResourceClient.getDraftDatasetItems(datasetId, 1, 10, API_KEY, TEST_WORKSPACE);
             assertThat(draftItems2.hasDraft()).isTrue();
 
             // Commit new version
@@ -1438,7 +1438,7 @@ class DatasetVersionResourceTest {
                     TEST_WORKSPACE);
 
             // Then - hasDraft should be false after committing
-            var draftAfterCommit = datasetResourceClient.getDatasetItems(datasetId, 1, 10, null, API_KEY,
+            var draftAfterCommit = datasetResourceClient.getDraftDatasetItems(datasetId, 1, 10, API_KEY,
                     TEST_WORKSPACE);
             assertThat(draftAfterCommit.hasDraft()).isFalse();
             assertThat(draftAfterCommit.content()).hasSize(4);
@@ -1471,7 +1471,7 @@ class DatasetVersionResourceTest {
                     TEST_WORKSPACE);
 
             // Modify draft: add 2 items, delete 1 item
-            var createdItemsPage = datasetResourceClient.getDatasetItems(datasetId, 1, 10, null, API_KEY,
+            var createdItemsPage = datasetResourceClient.getDraftDatasetItems(datasetId, 1, 10, API_KEY,
                     TEST_WORKSPACE);
             var createdItems = createdItemsPage.content();
             var itemToDelete = createdItems.get(0);
@@ -1513,7 +1513,7 @@ class DatasetVersionResourceTest {
             assertThat(restoredVersion.changeDescription()).contains("Restored from version: v1");
 
             // Verify draft items match v1 items
-            var draftItems = datasetResourceClient.getDatasetItems(datasetId, 1, 10, null, API_KEY, TEST_WORKSPACE);
+            var draftItems = datasetResourceClient.getDraftDatasetItems(datasetId, 1, 10, API_KEY, TEST_WORKSPACE);
             assertThat(draftItems.content()).hasSize(3);
 
             // Verify v1 items are still accessible
@@ -1554,7 +1554,7 @@ class DatasetVersionResourceTest {
             datasetResourceClient.createDatasetItems(batch2, TEST_WORKSPACE, API_KEY);
 
             // Verify draft has 5 items
-            var draftBeforeRestore = datasetResourceClient.getDatasetItems(datasetId, 1, 10, null, API_KEY,
+            var draftBeforeRestore = datasetResourceClient.getDraftDatasetItems(datasetId, 1, 10, API_KEY,
                     TEST_WORKSPACE);
             assertThat(draftBeforeRestore.content()).hasSize(5);
 
@@ -1567,7 +1567,7 @@ class DatasetVersionResourceTest {
             assertThat(restoredVersion.versionHash()).isEqualTo(version1.versionHash());
 
             // Verify draft items were reverted to v1 state
-            var draftAfterRestore = datasetResourceClient.getDatasetItems(datasetId, 1, 10, null, API_KEY,
+            var draftAfterRestore = datasetResourceClient.getDraftDatasetItems(datasetId, 1, 10, API_KEY,
                     TEST_WORKSPACE);
             assertThat(draftAfterRestore.content()).hasSize(2);
 
@@ -1718,7 +1718,7 @@ class DatasetVersionResourceTest {
             assertThat(restoredVersion.itemsTotal()).isEqualTo(50);
 
             // Verify draft has correct number of items
-            var draftItems = datasetResourceClient.getDatasetItems(datasetId, 1, 100, null, API_KEY, TEST_WORKSPACE);
+            var draftItems = datasetResourceClient.getDraftDatasetItems(datasetId, 1, 100, API_KEY, TEST_WORKSPACE);
             assertThat(draftItems.content()).hasSize(50);
         }
     }
