@@ -2730,6 +2730,7 @@ class PromptResourceTest {
                 var expectedFromV1 = createdV1.toBuilder()
                         .id(null)
                         .commit(null)
+                        .tags(null) // Restored version should not copy tags
                         .createdAt(createdV1.createdAt())
                         .build();
 
@@ -2970,7 +2971,12 @@ class PromptResourceTest {
         assertThat(createdPromptVersion.template()).isEqualTo(promptVersion.template());
         assertThat(createdPromptVersion.variables())
                 .isEqualTo(TemplateParseUtils.extractVariables(promptVersion.template(), promptVersion.type()));
-        assertThat(createdPromptVersion.tags()).containsExactlyInAnyOrderElementsOf(promptVersion.tags());
+        if (promptVersion.tags() != null) {
+            assertThat(createdPromptVersion.tags()).containsExactlyInAnyOrderElementsOf(promptVersion.tags());
+        } else {
+            // When expected tags are null, the actual tags should also be null
+            assertThat(createdPromptVersion.tags()).isNull();
+        }
         assertThat(createdPromptVersion.createdAt()).isBetween(promptVersion.createdAt(), Instant.now());
         assertThat(createdPromptVersion.createdBy()).isEqualTo(USER);
     }

@@ -648,6 +648,7 @@ class PromptServiceImpl implements PromptService {
                 .commit(newCommit)
                 .createdBy(userName)
                 .changeDescription("Restored from version " + versionToRestore.commit())
+                .tags(null) // Don't propagate tags to restored version
                 .build();
 
         PromptVersion restoredVersion = EntityConstraintHandler
