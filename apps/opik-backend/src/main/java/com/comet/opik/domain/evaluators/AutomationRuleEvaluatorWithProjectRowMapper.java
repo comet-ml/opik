@@ -1,6 +1,7 @@
 package com.comet.opik.domain.evaluators;
 
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorType;
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
@@ -14,6 +15,7 @@ import java.time.Instant;
 import java.util.HashSet;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.Function;
 
 /**
  * Row mapper that handles rows from the join query with automation_rule_projects.
@@ -66,9 +68,9 @@ public class AutomationRuleEvaluatorWithProjectRowMapper implements RowMapper<Au
      */
     public static <T, M extends AutomationRuleEvaluatorModel<T>> M buildModel(
             CommonFields common,
-            java.util.function.Function<JsonNode, T> codeParser,
+            Function<JsonNode, T> codeParser,
             JsonNode codeNode,
-            ModelBuilder<T, M> modelBuilder) throws com.fasterxml.jackson.core.JsonProcessingException {
+            ModelBuilder<T, M> modelBuilder) throws JsonProcessingException {
 
         T code = codeParser.apply(codeNode);
         return modelBuilder.build(common, code);
