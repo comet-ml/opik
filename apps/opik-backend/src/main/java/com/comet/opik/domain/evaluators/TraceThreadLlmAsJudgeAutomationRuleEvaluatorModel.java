@@ -47,26 +47,24 @@ public record TraceThreadLlmAsJudgeAutomationRuleEvaluatorModel(
      * Encapsulates model-specific construction logic including JSON parsing.
      */
     public static TraceThreadLlmAsJudgeAutomationRuleEvaluatorModel fromRowMapper(
-            UUID id, UUID projectId, String projectName, Set<UUID> projectIds,
-            String name, Float samplingRate, boolean enabled, String filters,
-            JsonNode codeNode, Instant createdAt, String createdBy,
-            Instant lastUpdatedAt, String lastUpdatedBy, ObjectMapper objectMapper)
-            throws JsonProcessingException {
+            AutomationRuleEvaluatorWithProjectRowMapper.CommonFields common,
+            JsonNode codeNode,
+            ObjectMapper objectMapper) throws JsonProcessingException {
 
         return builder()
-                .id(id)
-                .projectId(projectId)
-                .projectName(projectName)
-                .projectIds(projectIds)
-                .name(name)
-                .samplingRate(samplingRate)
-                .enabled(enabled)
-                .filters(filters)
+                .id(common.id())
+                .projectId(common.projectId())
+                .projectName(common.projectName())
+                .projectIds(common.projectIds())
+                .name(common.name())
+                .samplingRate(common.samplingRate())
+                .enabled(common.enabled())
+                .filters(common.filters())
                 .code(objectMapper.treeToValue(codeNode, TraceThreadLlmAsJudgeCode.class))
-                .createdAt(createdAt)
-                .createdBy(createdBy)
-                .lastUpdatedAt(lastUpdatedAt)
-                .lastUpdatedBy(lastUpdatedBy)
+                .createdAt(common.createdAt())
+                .createdBy(common.createdBy())
+                .lastUpdatedAt(common.lastUpdatedAt())
+                .lastUpdatedBy(common.lastUpdatedBy())
                 .build();
     }
 

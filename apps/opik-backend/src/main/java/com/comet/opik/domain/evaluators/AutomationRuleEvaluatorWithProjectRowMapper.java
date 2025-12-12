@@ -25,8 +25,69 @@ public class AutomationRuleEvaluatorWithProjectRowMapper implements RowMapper<Au
 
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
+    /**
+     * Common fields extracted from ResultSet, passed to all factory methods.
+     * Reduces parameter duplication from 14 parameters to a single object.
+     */
+    record CommonFields(
+            UUID id,
+            UUID projectId,
+            String projectName,
+            Set<UUID> projectIds,
+            String name,
+            Float samplingRate,
+            boolean enabled,
+            String filters,
+            Instant createdAt,
+            String createdBy,
+            Instant lastUpdatedAt,
+            String lastUpdatedBy) {
+    }
+
     @Override
     public AutomationRuleEvaluatorModel<?> map(ResultSet rs, StatementContext ctx) throws SQLException {
+        // Extract common fields once
+        CommonFields common = extractCommonFields(rs);
+
+        // Extract type-specific fields
+        AutomationRuleEvaluatorType type = AutomationRuleEvaluatorType.fromString(rs.getString("type"));
+        String codeJson = rs.getString("code");
+
+        try {
+            JsonNode codeNode = OBJECT_MAPPER.readTree(codeJson);
+
+            // Delegate to type-specific static factory methods with common fields
+            return switch (type) {
+                case LLM_AS_JUDGE -> LlmAsJudgeAutomationRuleEvaluatorModel.fromRowMapper(
+                        common, codeNode, OBJECT_MAPPER);
+
+                case USER_DEFINED_METRIC_PYTHON -> UserDefinedMetricPythonAutomationRuleEvaluatorModel.fromRowMapper(
+                        common, codeNode, OBJECT_MAPPER);
+
+                case TRACE_THREAD_LLM_AS_JUDGE -> TraceThreadLlmAsJudgeAutomationRuleEvaluatorModel.fromRowMapper(
+                        common, codeNode, OBJECT_MAPPER);
+
+                case TRACE_THREAD_USER_DEFINED_METRIC_PYTHON ->
+                    TraceThreadUserDefinedMetricPythonAutomationRuleEvaluatorModel.fromRowMapper(
+                            common, codeNode, OBJECT_MAPPER);
+
+                case SPAN_LLM_AS_JUDGE -> SpanLlmAsJudgeAutomationRuleEvaluatorModel.fromRowMapper(
+                        common, codeNode, OBJECT_MAPPER);
+
+                case SPAN_USER_DEFINED_METRIC_PYTHON ->
+                    SpanUserDefinedMetricPythonAutomationRuleEvaluatorModel.fromRowMapper(
+                            common, codeNode, OBJECT_MAPPER);
+            };
+        } catch (Exception e) {
+            throw new SQLException("Failed to parse automation rule evaluator code", e);
+        }
+    }
+
+    /**
+     * Extracts common fields from ResultSet into a single object.
+     * This method centralizes the field extraction logic and handles legacy fallback.
+     */
+    private CommonFields extractCommonFields(ResultSet rs) throws SQLException {
         UUID id = UUID.fromString(rs.getString("id"));
         String name = rs.getString("name");
         Float samplingRate = rs.getFloat("sampling_rate");
@@ -56,42 +117,7 @@ public class AutomationRuleEvaluatorWithProjectRowMapper implements RowMapper<Au
         UUID projectId = null;
         String projectName = null;
 
-        AutomationRuleEvaluatorType type = AutomationRuleEvaluatorType.fromString(rs.getString("type"));
-        String codeJson = rs.getString("code");
-
-        try {
-            JsonNode codeNode = OBJECT_MAPPER.readTree(codeJson);
-
-            // Delegate to type-specific static factory methods for construction
-            return switch (type) {
-                case LLM_AS_JUDGE -> LlmAsJudgeAutomationRuleEvaluatorModel.fromRowMapper(
-                        id, projectId, projectName, projectIds, name, samplingRate, enabled, filters,
-                        codeNode, createdAt, createdBy, lastUpdatedAt, lastUpdatedBy, OBJECT_MAPPER);
-
-                case USER_DEFINED_METRIC_PYTHON -> UserDefinedMetricPythonAutomationRuleEvaluatorModel.fromRowMapper(
-                        id, projectId, projectName, projectIds, name, samplingRate, enabled, filters,
-                        codeNode, createdAt, createdBy, lastUpdatedAt, lastUpdatedBy, OBJECT_MAPPER);
-
-                case TRACE_THREAD_LLM_AS_JUDGE -> TraceThreadLlmAsJudgeAutomationRuleEvaluatorModel.fromRowMapper(
-                        id, projectId, projectName, projectIds, name, samplingRate, enabled, filters,
-                        codeNode, createdAt, createdBy, lastUpdatedAt, lastUpdatedBy, OBJECT_MAPPER);
-
-                case TRACE_THREAD_USER_DEFINED_METRIC_PYTHON ->
-                    TraceThreadUserDefinedMetricPythonAutomationRuleEvaluatorModel.fromRowMapper(
-                            id, projectId, projectName, projectIds, name, samplingRate, enabled, filters,
-                            codeNode, createdAt, createdBy, lastUpdatedAt, lastUpdatedBy, OBJECT_MAPPER);
-
-                case SPAN_LLM_AS_JUDGE -> SpanLlmAsJudgeAutomationRuleEvaluatorModel.fromRowMapper(
-                        id, projectId, projectName, projectIds, name, samplingRate, enabled, filters,
-                        codeNode, createdAt, createdBy, lastUpdatedAt, lastUpdatedBy, OBJECT_MAPPER);
-
-                case SPAN_USER_DEFINED_METRIC_PYTHON ->
-                    SpanUserDefinedMetricPythonAutomationRuleEvaluatorModel.fromRowMapper(
-                            id, projectId, projectName, projectIds, name, samplingRate, enabled, filters,
-                            codeNode, createdAt, createdBy, lastUpdatedAt, lastUpdatedBy, OBJECT_MAPPER);
-            };
-        } catch (Exception e) {
-            throw new SQLException("Failed to parse automation rule evaluator code", e);
-        }
+        return new CommonFields(id, projectId, projectName, projectIds, name, samplingRate,
+                enabled, filters, createdAt, createdBy, lastUpdatedAt, lastUpdatedBy);
     }
 }
