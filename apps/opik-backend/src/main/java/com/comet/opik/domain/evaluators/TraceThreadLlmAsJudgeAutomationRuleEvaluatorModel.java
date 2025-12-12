@@ -34,6 +34,11 @@ public record TraceThreadLlmAsJudgeAutomationRuleEvaluatorModel(
         return AutomationRuleEvaluatorType.TRACE_THREAD_LLM_AS_JUDGE;
     }
 
+    @Override
+    public AutomationRuleEvaluatorModel<?> withProjectIds(Set<UUID> projectIds) {
+        return toBuilder().projectIds(projectIds).build();
+    }
+
     record TraceThreadLlmAsJudgeCode(
             LlmAsJudgeCodeParameters model,
             List<LlmAsJudgeCodeMessage> messages,

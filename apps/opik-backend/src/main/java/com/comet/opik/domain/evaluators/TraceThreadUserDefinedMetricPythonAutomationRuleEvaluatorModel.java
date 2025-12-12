@@ -33,6 +33,11 @@ public record TraceThreadUserDefinedMetricPythonAutomationRuleEvaluatorModel(
         return AutomationRuleEvaluatorType.TRACE_THREAD_USER_DEFINED_METRIC_PYTHON;
     }
 
+    @Override
+    public AutomationRuleEvaluatorModel<?> withProjectIds(Set<UUID> projectIds) {
+        return toBuilder().projectIds(projectIds).build();
+    }
+
     record TraceThreadUserDefinedMetricPythonCode(String metric) {
     }
 }

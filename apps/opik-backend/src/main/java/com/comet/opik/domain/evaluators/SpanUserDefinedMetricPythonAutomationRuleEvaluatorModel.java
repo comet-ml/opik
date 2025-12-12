@@ -34,6 +34,11 @@ public record SpanUserDefinedMetricPythonAutomationRuleEvaluatorModel(
         return AutomationRuleEvaluatorType.SPAN_USER_DEFINED_METRIC_PYTHON;
     }
 
+    @Override
+    public AutomationRuleEvaluatorModel<?> withProjectIds(Set<UUID> projectIds) {
+        return toBuilder().projectIds(projectIds).build();
+    }
+
     record SpanUserDefinedMetricPythonCode(String metric, Map<String, String> arguments) {
     }
 }

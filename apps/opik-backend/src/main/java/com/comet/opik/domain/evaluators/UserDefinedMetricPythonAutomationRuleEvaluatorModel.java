@@ -34,6 +34,11 @@ public record UserDefinedMetricPythonAutomationRuleEvaluatorModel(
         return AutomationRuleEvaluatorType.USER_DEFINED_METRIC_PYTHON;
     }
 
+    @Override
+    public AutomationRuleEvaluatorModel<?> withProjectIds(Set<UUID> projectIds) {
+        return toBuilder().projectIds(projectIds).build();
+    }
+
     record UserDefinedMetricPythonCode(String metric, Map<String, String> arguments) {
     }
 }

@@ -35,6 +35,11 @@ public record SpanLlmAsJudgeAutomationRuleEvaluatorModel(
         return AutomationRuleEvaluatorType.SPAN_LLM_AS_JUDGE;
     }
 
+    @Override
+    public AutomationRuleEvaluatorModel<?> withProjectIds(Set<UUID> projectIds) {
+        return toBuilder().projectIds(projectIds).build();
+    }
+
     record SpanLlmAsJudgeCode(LlmAsJudgeCodeParameters model,
             List<LlmAsJudgeCodeMessage> messages,
             Map<String, String> variables,
