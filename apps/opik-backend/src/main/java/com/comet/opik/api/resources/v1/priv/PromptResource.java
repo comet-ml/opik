@@ -21,6 +21,7 @@ import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.ratelimit.RateLimited;
 import com.fasterxml.jackson.annotation.JsonView;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.headers.Header;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
@@ -231,6 +232,7 @@ public class PromptResource {
     public Response getPromptVersions(@PathParam("id") UUID id,
             @QueryParam("page") @Min(1) @DefaultValue("1") int page,
             @QueryParam("size") @Min(1) @DefaultValue("10") int size,
+            @Parameter(description = "Search text to find in template or change description fields") @QueryParam("search") String search,
             @QueryParam("sorting") String sorting,
             @QueryParam("filters") String filters) {
         var workspaceId = requestContext.get().getWorkspaceId();
@@ -239,7 +241,7 @@ public class PromptResource {
         var sortingFields = sortingFactoryPromptVersions.newSorting(sorting);
         var versionFilters = filtersFactory.newFilters(filters, PromptVersionFilter.LIST_TYPE_REFERENCE);
         var promptVersionPage = promptService.getVersionsByPromptId(
-                id, page, size, sortingFields, versionFilters);
+                id, search, page, size, sortingFields, versionFilters);
         log.info("Got prompt versions by id '{}' on workspace_id '{}', count '{}'",
                 id, workspaceId, promptVersionPage.size());
         return Response.ok(promptVersionPage).build();

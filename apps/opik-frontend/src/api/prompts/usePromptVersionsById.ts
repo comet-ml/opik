@@ -12,6 +12,7 @@ type UsePromptVersionsByIdParams = {
   size: number;
   sorting?: Sorting;
   filters?: Filter[];
+  search?: string;
 };
 
 type UsePromptsVersionsByIdResponse = {
@@ -24,7 +25,14 @@ type UsePromptsVersionsByIdResponse = {
 
 const getPromptVersionsById = async (
   { signal }: QueryFunctionContext,
-  { promptId, size, page, sorting, filters }: UsePromptVersionsByIdParams,
+  {
+    promptId,
+    size,
+    page,
+    sorting,
+    filters,
+    search,
+  }: UsePromptVersionsByIdParams,
 ) => {
   const { data } = await api.get(
     `${PROMPTS_REST_ENDPOINT}${promptId}/versions`,
@@ -35,6 +43,7 @@ const getPromptVersionsById = async (
         ...processSorting(sorting),
         size,
         page,
+        ...(search && { search }),
       },
     },
   );

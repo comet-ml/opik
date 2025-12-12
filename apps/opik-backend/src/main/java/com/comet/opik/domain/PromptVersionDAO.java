@@ -65,6 +65,7 @@ interface PromptVersionDAO {
             WHERE pv.workspace_id = :workspace_id
             <if(ids)> AND pv.id IN (<ids>) <endif>
             <if(prompt_id)> AND pv.prompt_id = :prompt_id <endif>
+            <if(search)> AND (pv.template LIKE CONCAT('%', :search, '%') OR pv.change_description LIKE CONCAT('%', :search, '%')) <endif>
             <if(filters)> AND <filters> <endif>
             ORDER BY <if(sort_fields)><sort_fields>, <endif>pv.id DESC
             <if(limit)> LIMIT :limit OFFSET :offset <endif>
@@ -75,6 +76,7 @@ interface PromptVersionDAO {
             @Bind("workspace_id") String workspaceId,
             @Define("ids") @BindList(onEmpty = BindList.EmptyHandling.NULL_VALUE, value = "ids") Collection<UUID> ids,
             @Define("prompt_id") @Bind("prompt_id") UUID promptId,
+            @Define("search") @Bind("search") String search,
             @Define("offset") @Bind("offset") Integer offset,
             @Define("limit") @Bind("limit") Integer limit,
             @Define("sort_fields") String sortingFields,
@@ -86,22 +88,23 @@ interface PromptVersionDAO {
             UUID promptId,
             Integer offset,
             Integer limit) {
-        return find(workspaceId, null, promptId, offset, limit, null, null, Map.of());
+        return find(workspaceId, null, promptId, null, offset, limit, null, null, Map.of());
     }
 
     default List<PromptVersion> find(
             String workspaceId,
             UUID promptId,
+            String search,
             Integer offset,
             Integer limit,
             String sortingFields,
             String filters,
             Map<String, Object> filterMapping) {
-        return find(workspaceId, null, promptId, offset, limit, sortingFields, filters, filterMapping);
+        return find(workspaceId, null, promptId, search, offset, limit, sortingFields, filters, filterMapping);
     }
 
     default List<PromptVersion> findByIds(Collection<UUID> ids, String workspaceId) {
-        return find(workspaceId, ids, null, null, null, null, null, Map.of());
+        return find(workspaceId, ids, null, null, null, null, null, null, Map.of());
     }
 
     @SqlQuery("""
@@ -110,6 +113,7 @@ interface PromptVersionDAO {
             WHERE pv.workspace_id = :workspace_id
             <if(ids)> AND pv.id IN (<ids>) <endif>
             <if(prompt_id)> AND pv.prompt_id = :prompt_id <endif>
+            <if(search)> AND (pv.template LIKE CONCAT('%', :search, '%') OR pv.change_description LIKE CONCAT('%', :search, '%')) <endif>
             <if(filters)> AND <filters> <endif>
             """)
     @UseStringTemplateEngine
@@ -118,15 +122,17 @@ interface PromptVersionDAO {
             @Bind("workspace_id") String workspaceId,
             @Define("ids") @BindList(onEmpty = BindList.EmptyHandling.NULL_VALUE, value = "ids") Collection<UUID> ids,
             @Define("prompt_id") @Bind("prompt_id") UUID promptId,
+            @Define("search") @Bind("search") String search,
             @Define("filters") String filters,
             @BindMap Map<String, Object> filterMapping);
 
     default long findCount(
             String workspaceId,
             UUID promptId,
+            String search,
             String filters,
             Map<String, Object> filterMapping) {
-        return findCount(workspaceId, null, promptId, filters, filterMapping);
+        return findCount(workspaceId, null, promptId, search, filters, filterMapping);
     }
 
     @SqlQuery("""

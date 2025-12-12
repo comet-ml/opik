@@ -68,7 +68,12 @@ public interface PromptService {
     List<Prompt> getByIds(Set<UUID> ids);
 
     PromptVersionPage getVersionsByPromptId(
-            UUID promptId, int page, int size, List<SortingField> sortingFields, List<? extends Filter> filters);
+            UUID promptId,
+            String search,
+            int page,
+            int size,
+            List<SortingField> sortingFields,
+            List<? extends Filter> filters);
 
     PromptVersion getVersionById(UUID id);
 
@@ -535,6 +540,7 @@ class PromptServiceImpl implements PromptService {
     @Override
     public PromptVersionPage getVersionsByPromptId(
             @NonNull UUID promptId,
+            String search,
             int page,
             int size,
             @NonNull List<SortingField> sortingFields,
@@ -550,10 +556,10 @@ class PromptServiceImpl implements PromptService {
                 .orElse(Map.of());
         return transactionTemplate.inTransaction(READ_ONLY, handle -> {
             var dao = handle.attach(PromptVersionDAO.class);
-            var total = dao.findCount(workspaceId, promptId, filtersSQL, filterMapping);
+            var total = dao.findCount(workspaceId, promptId, search, filtersSQL, filterMapping);
             var offset = (page - 1) * size;
             var content = dao.find(
-                    workspaceId, promptId, offset, size, sortingFieldsSql, filtersSQL, filterMapping);
+                    workspaceId, promptId, search, offset, size, sortingFieldsSql, filtersSQL, filterMapping);
             return PromptVersionPage.builder()
                     .page(page)
                     .size(content.size())

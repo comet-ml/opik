@@ -76,6 +76,7 @@ import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
@@ -3067,6 +3068,91 @@ class PromptResourceTest {
 
         Assertions.assertThat(actual).isBetween(expected, now);
         return 0;
+    }
+
+    @Nested
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class PromptVersionSearchTest {
+
+        Stream<Arguments> searchPromptVersions() {
+            return Stream.of(
+                    arguments(
+                            "contains case insensitive in template",
+                            1,
+                            (BiFunction<PromptVersion, PromptVersion, String>) (v1, v2) -> v1.template()
+                                    .substring(5, v1.template().length() - 5)
+                                    .toLowerCase(),
+                            (BiFunction<PromptVersion, PromptVersion, Function<PromptVersion, Boolean>>) (
+                                    v1, v2) -> v -> v.id().equals(v1.id())),
+                    arguments(
+                            "contains case insensitive in change description",
+                            1,
+                            (BiFunction<PromptVersion, PromptVersion, String>) (v1, v2) -> v2.changeDescription()
+                                    .substring(5, v2.changeDescription().length() - 5)
+                                    .toUpperCase(),
+                            (BiFunction<PromptVersion, PromptVersion, Function<PromptVersion, Boolean>>) (
+                                    v1, v2) -> v -> v.id().equals(v2.id())),
+                    arguments(
+                            "contains case insensitive in both template OR change description",
+                            2,
+                            (BiFunction<PromptVersion, PromptVersion, String>) (v1, v2) -> v1.template()
+                                    .substring(5, v1.template().length() - 5),
+                            (BiFunction<PromptVersion, PromptVersion, Function<PromptVersion, Boolean>>) (
+                                    v1, v2) -> v -> v.id().equals(v1.id()) || v.id().equals(v2.id())));
+        }
+
+        @ParameterizedTest(name = "Success: {0}")
+        @MethodSource
+        @DisplayName("Success: search prompt versions by template or change description")
+        void searchPromptVersions(
+                String description,
+                int expectedSize,
+                BiFunction<PromptVersion, PromptVersion, String> getSearch,
+                BiFunction<PromptVersion, PromptVersion, Function<PromptVersion, Boolean>> assertion) {
+            var prompt = factory.manufacturePojo(Prompt.class).toBuilder().template(null).build();
+            var promptId = createPrompt(prompt, API_KEY, TEST_WORKSPACE);
+
+            var versions = PodamFactoryUtils.manufacturePojoList(factory, PromptVersion.class).stream()
+                    .map(v -> v.toBuilder()
+                            .promptId(promptId)
+                            .template(RandomStringUtils.secure().nextAlphanumeric(15))
+                            .changeDescription(RandomStringUtils.secure().nextAlphanumeric(15))
+                            .build())
+                    .collect(Collectors.toCollection(ArrayList::new));
+
+            // Create 2 versions with random data
+            var version1Pojo = versions.getFirst();
+            var version2Pojo = versions.getLast();
+
+            // For OR test (expectedSize == 2): inject v1's template substring into v2's changeDescription
+            if (expectedSize == 2) {
+                version2Pojo = version2Pojo.toBuilder()
+                        .changeDescription(RandomStringUtils.secure().nextAlphanumeric(5) +
+                                version1Pojo.template().substring(5, version1Pojo.template().length() - 5).toUpperCase()
+                                +
+                                RandomStringUtils.secure().nextAlphanumeric(5))
+                        .build();
+                versions.set(versions.size() - 1, version2Pojo);
+            }
+
+            var createdVersions = versions.stream()
+                    .map(promptVersion -> promptVersionResourceClient.createPromptVersion(
+                            CreatePromptVersion.builder().name(prompt.name()).version(promptVersion).build(),
+                            API_KEY, TEST_WORKSPACE))
+                    .toList();
+
+            var createdV1 = createdVersions.getFirst();
+            var createdV2 = createdVersions.getLast();
+            var search = getSearch.apply(createdV1, createdV2);
+            var page = promptVersionResourceClient.getPromptVersionsByPromptId(
+                    promptId, API_KEY, TEST_WORKSPACE, search, null, null);
+
+            var predicate = assertion.apply(createdV1, createdV2);
+            assertThat(page.size()).isEqualTo(expectedSize);
+            assertThat(page.total()).isEqualTo(expectedSize);
+            assertThat(page.content()).hasSize(expectedSize);
+            page.content().forEach(version -> assertThat(predicate.apply(version)).isTrue());
+        }
     }
 
     @Nested

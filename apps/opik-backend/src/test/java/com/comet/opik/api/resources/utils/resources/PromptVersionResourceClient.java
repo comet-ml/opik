@@ -11,6 +11,7 @@ import jakarta.ws.rs.client.Entity;
 import jakarta.ws.rs.core.HttpHeaders;
 import lombok.RequiredArgsConstructor;
 import org.apache.commons.collections4.CollectionUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.hc.core5.http.HttpStatus;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 
@@ -48,7 +49,21 @@ public class PromptVersionResourceClient {
             String workspaceName,
             List<? extends Filter> filters,
             List<SortingField> sortingFields) {
+        return getPromptVersionsByPromptId(promptId, apiKey, workspaceName, null, filters, sortingFields);
+    }
+
+    public PromptVersion.PromptVersionPage getPromptVersionsByPromptId(
+            UUID promptId,
+            String apiKey,
+            String workspaceName,
+            String search,
+            List<? extends Filter> filters,
+            List<SortingField> sortingFields) {
         var target = client.target(PROMPT_ID_VERSIONS_PATH.formatted(baseURI, promptId, ""));
+
+        if (StringUtils.isNotBlank(search)) {
+            target = target.queryParam("search", search);
+        }
         if (CollectionUtils.isNotEmpty(filters)) {
             target = target.queryParam("filters", toURLEncodedQueryParam(filters));
         }

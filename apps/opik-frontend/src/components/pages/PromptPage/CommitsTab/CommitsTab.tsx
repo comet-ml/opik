@@ -7,7 +7,6 @@ import get from "lodash/get";
 import isObject from "lodash/isObject";
 
 import { PromptWithLatestVersion, PromptVersion } from "@/types/prompts";
-import { Filter } from "@/types/filters";
 import Loader from "@/components/shared/Loader/Loader";
 import usePromptVersionsById from "@/api/prompts/usePromptVersionsById";
 
@@ -150,6 +149,7 @@ const CommitsTab = ({ prompt }: CommitsTabInterface) => {
     defaultValue: 10,
   });
 
+  const [searchText, setSearchText] = useState<string>("");
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
   const [columnsWidth, setColumnsWidth] = useLocalStorageState<
     Record<string, number>
@@ -185,10 +185,11 @@ const CommitsTab = ({ prompt }: CommitsTabInterface) => {
   const { data, isPending } = usePromptVersionsById(
     {
       promptId: prompt?.id || "",
-      page: page,
-      size: size,
+      page,
+      size,
       sorting: sortedColumns,
       filters,
+      search: searchText || undefined,
     },
     {
       enabled: !!prompt?.id,
@@ -257,23 +258,13 @@ const CommitsTab = ({ prompt }: CommitsTabInterface) => {
 
   const handleSearchTextChange = useCallback(
     (value: string) => {
-      if (value) {
-        // Search by template (prompt content) - primary search field
-        const newFilters = filters.filter(
-          (f: Filter) => f.field !== "template",
-        );
-        newFilters.push({
-          field: "template",
-          operator: "contains",
-          value,
-        });
-        setFilters(newFilters);
-      } else {
-        // Remove template filter
-        setFilters(filters.filter((f: Filter) => f.field !== "template"));
+      setSearchText(value);
+      // Reset to page 1 when search changes
+      if (page !== 1) {
+        setPage(1);
       }
     },
-    [filters, setFilters],
+    [page, setPage],
   );
 
   if (isPending) {
@@ -289,11 +280,9 @@ const CommitsTab = ({ prompt }: CommitsTabInterface) => {
       >
         <div className="flex items-center gap-2">
           <SearchInput
-            searchText={
-              filters.find((f: Filter) => f.field === "template")?.value ?? ""
-            }
+            searchText={searchText}
             setSearchText={handleSearchTextChange}
-            placeholder="Search by prompt"
+            placeholder="Search in prompt or commit message"
             className="w-[320px]"
             dimension="sm"
           />
