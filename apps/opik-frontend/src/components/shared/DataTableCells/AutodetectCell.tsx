@@ -1,22 +1,23 @@
 import { CellContext } from "@tanstack/react-table";
 import isObject from "lodash/isObject";
-import isString from "lodash/isString";
 import TextCell from "@/components/shared/DataTableCells/TextCell";
 import CodeCell from "@/components/shared/DataTableCells/CodeCell";
 import MediaCell from "@/components/shared/DataTableCells/MediaCell";
 import { toString } from "@/lib/utils";
-import { parseImageValue, parseVideoValue } from "@/lib/images";
+import { useMediaTypeDetection } from "@/hooks/useMediaTypeDetection";
 
 const AutodetectCell = <TData,>(context: CellContext<TData, unknown>) => {
   const value = context.getValue();
 
-  if (isString(value)) {
-    const video = parseVideoValue(value);
-    const image = !video ? parseImageValue(value) : undefined;
+  const { mediaData } = useMediaTypeDetection(value);
 
-    if (video || image) {
-      return <MediaCell {...context} />;
-    }
+  if (mediaData) {
+    const mediaContext = {
+      ...context,
+      getValue: () => mediaData,
+    } as CellContext<TData, unknown>;
+
+    return <MediaCell {...mediaContext} />;
   }
 
   if (isObject(value)) {
