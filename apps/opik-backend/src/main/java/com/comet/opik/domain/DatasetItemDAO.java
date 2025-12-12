@@ -52,7 +52,7 @@ import static com.comet.opik.utils.template.TemplateUtils.getQueryItemPlaceHolde
 public interface DatasetItemDAO {
     Mono<Long> save(UUID datasetId, List<DatasetItem> batch);
 
-    Mono<Long> delete(List<UUID> ids);
+    Mono<Long> delete(Set<UUID> ids, List<DatasetItemFilter> filters);
 
     Mono<DatasetItemPage> getItems(DatasetItemSearchCriteria datasetItemSearchCriteria, int page, int size);
 
@@ -164,8 +164,9 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
 
     private static final String DELETE_DATASET_ITEM = """
             DELETE FROM dataset_items
-            WHERE id IN :ids
-            AND workspace_id = :workspace_id
+            WHERE workspace_id = :workspace_id
+            <if(ids)> AND id IN :ids <endif>
+            <if(dataset_item_filters)> AND (<dataset_item_filters>) <endif>
             ;
             """;
 
@@ -1342,29 +1343,62 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
 
     @Override
     @WithSpan
-    public Mono<Long> delete(@NonNull List<UUID> ids) {
-        if (ids.isEmpty()) {
-            return Mono.empty();
+    public Mono<Long> delete(Set<UUID> ids, List<DatasetItemFilter> filters) {
+        boolean hasIds = CollectionUtils.isNotEmpty(ids);
+        // Empty filters array means "select all items", null means not provided
+        boolean hasFilters = filters != null;
+
+        Preconditions.checkArgument(hasIds || hasFilters, "Either ids or filters must be provided");
+
+        if (hasIds) {
+            log.info("Deleting '{}' dataset items by IDs", ids.size());
+        } else {
+            log.info("Deleting dataset items by filters");
         }
 
+        var template = TemplateUtils.newST(DELETE_DATASET_ITEM);
+
+        // Add ids or filters to template
+        if (hasIds) {
+            template.add("ids", true);
+        } else {
+            validateDatasetIdFilterPresent(filters);
+
+            Optional<String> datasetItemFiltersOpt = filterQueryBuilder.toAnalyticsDbFilters(filters,
+                    FilterStrategy.DATASET_ITEM);
+
+            datasetItemFiltersOpt.ifPresent(datasetItemFilters -> template.add("dataset_item_filters",
+                    datasetItemFilters));
+        }
+
+        var query = template.render();
+
         return asyncTemplate.nonTransaction(connection -> {
+            var statement = connection.createStatement(query);
 
-            Statement statement = connection.createStatement(DELETE_DATASET_ITEM);
+            // Bind ids if provided
+            if (hasIds) {
+                statement.bind("ids", ids.stream().map(UUID::toString).toArray(String[]::new));
+            }
 
-            Segment segment = startSegment(DATASET_ITEMS, CLICKHOUSE, "delete_dataset_items");
+            // Bind filter parameters if provided
+            if (hasFilters) {
+                filterQueryBuilder.bind(statement, filters, FilterStrategy.DATASET_ITEM);
+            }
 
-            return bindAndDelete(ids, statement)
+            String segmentOperation = hasIds ? "delete_dataset_items" : "delete_dataset_items_by_filters";
+            Segment segment = startSegment(DATASET_ITEMS, CLICKHOUSE, segmentOperation);
+
+            String successMessage = hasIds
+                    ? "Completed delete for '%s' dataset items".formatted(ids.size())
+                    : "Completed delete for dataset items matching filters";
+
+            return makeFluxContextAware(bindWorkspaceIdToFlux(statement))
                     .flatMap(Result::getRowsUpdated)
                     .reduce(0L, Long::sum)
-                    .doFinally(signalType -> endSegment(segment));
+                    .doFinally(signalType -> endSegment(segment))
+                    .doOnSuccess(__ -> log.info(successMessage));
         });
-    }
-
-    private Flux<? extends Result> bindAndDelete(List<UUID> ids, Statement statement) {
-
-        statement.bind("ids", ids.stream().map(UUID::toString).toArray(String[]::new));
-
-        return makeFluxContextAware(bindWorkspaceIdToFlux(statement));
     }
 
     private ST newFindTemplate(String query, DatasetItemSearchCriteria datasetItemSearchCriteria) {
@@ -1624,7 +1658,8 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
     public Mono<Void> bulkUpdate(Set<UUID> ids, List<DatasetItemFilter> filters,
             @NonNull DatasetItemUpdate update, boolean mergeTags) {
         boolean hasIds = CollectionUtils.isNotEmpty(ids);
-        boolean hasFilters = CollectionUtils.isNotEmpty(filters);
+        // Empty filters array means "select all items", null means not provided
+        boolean hasFilters = filters != null;
 
         Preconditions.checkArgument(hasIds || hasFilters, "Either ids or filters must be provided");
 
@@ -1817,5 +1852,26 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                         .doFinally(signalType -> endSegment(segment));
             });
         });
+    }
+
+    /**
+     * Validates that the filters contain a required dataset_id equality filter.
+     * This prevents accidental workspace-wide deletion operations.
+     *
+     * @param filters the list of filters to validate
+     * @throws IllegalArgumentException if no valid dataset_id filter is present
+     */
+    private void validateDatasetIdFilterPresent(List<DatasetItemFilter> filters) {
+        boolean hasDatasetIdFilter = filters.stream()
+                .anyMatch(filter -> com.comet.opik.api.filter.Field.DATASET_ID_QUERY_PARAM
+                        .equals(filter.field().getQueryParamField())
+                        && com.comet.opik.api.filter.Operator.EQUAL.equals(filter.operator())
+                        && filter.value() != null);
+
+        if (!hasDatasetIdFilter) {
+            log.error("Filter-based deletion requires dataset_id filter with operator '='");
+            throw new IllegalArgumentException(
+                    "Filter-based deletion requires a dataset_id filter with operator '=' to scope deletion to a specific dataset");
+        }
     }
 }
