@@ -34,6 +34,7 @@ type TracesOrSpansPathsAutocompleteProps = {
   excludeRoot?: boolean;
   projectName?: string; // Optional: if provided, avoids cache lookup
   datasetColumnNames?: string[]; // Optional: dataset column names from playground
+  includeIntermediateNodes?: boolean; // Optional: when true, includes all intermediate paths (e.g., "input", "input.key1", "input.key1.key2")
 };
 
 const TracesOrSpansPathsAutocomplete: React.FC<
@@ -49,6 +50,7 @@ const TracesOrSpansPathsAutocomplete: React.FC<
   excludeRoot = false,
   projectName: projectNameProp,
   datasetColumnNames,
+  includeIntermediateNodes = false,
 }) => {
   // Default placeholder based on type
   const defaultPlaceholder =
@@ -133,10 +135,11 @@ const TracesOrSpansPathsAutocomplete: React.FC<
             (internalAcc, key) =>
               internalAcc.concat(
                 isObject(d[key]) || isArray(d[key])
-                  ? getJSONPaths(d[key], key).map((path) =>
-                      excludeRoot
-                        ? path.substring(path.indexOf(".") + 1)
-                        : path,
+                  ? getJSONPaths(d[key], key, [], includeIntermediateNodes).map(
+                      (path) =>
+                        excludeRoot
+                          ? path.substring(path.indexOf(".") + 1)
+                          : path,
                     )
                   : [],
               ),
@@ -146,8 +149,9 @@ const TracesOrSpansPathsAutocomplete: React.FC<
       }, []);
     }
 
-    // Add root objects (input, output, metadata) as suggestions if not excluding root
-    const rootObjectSuggestions: string[] = !excludeRoot ? rootKeys : [];
+    // When includeIntermediateNodes is enabled and not excluding root, add root keys as suggestions
+    const rootObjectSuggestions: string[] =
+      includeIntermediateNodes && !excludeRoot ? [...rootKeys] : [];
 
     // Add dataset column names at the bottom if provided
     const datasetSuggestions =
@@ -155,28 +159,20 @@ const TracesOrSpansPathsAutocomplete: React.FC<
         (columnName) => `metadata.dataset_item_data.${columnName}`,
       ) || [];
 
-    // Deduplicate within each category
-    const uniqueRootObjects = uniq(rootObjectSuggestions);
-    const uniqueBaseSuggestions = uniq(baseSuggestions);
-    const uniqueDatasetSuggestions = uniq(datasetSuggestions);
+    // Combine and deduplicate suggestions
+    // Root objects come first (when enabled), then regular paths, then dataset columns
+    const allSuggestions = uniq([
+      ...rootObjectSuggestions,
+      ...baseSuggestions,
+      ...datasetSuggestions,
+    ]);
 
-    // Filter each category based on search value
-    const filteredRootObjects = uniqueRootObjects.filter((p) =>
-      value ? p.toLowerCase().includes(value.toLowerCase()) : true,
-    );
-    const filteredBaseSuggestions = uniqueBaseSuggestions.filter((p) =>
-      value ? p.toLowerCase().includes(value.toLowerCase()) : true,
-    );
-    const filteredDatasetSuggestions = uniqueDatasetSuggestions.filter((p) =>
-      value ? p.toLowerCase().includes(value.toLowerCase()) : true,
-    );
-
-    // Sort within each category, then combine: root objects first, then paths, then dataset columns
-    return [
-      ...filteredRootObjects.sort(),
-      ...filteredBaseSuggestions.sort(),
-      ...filteredDatasetSuggestions.sort(),
-    ];
+    // Filter and sort
+    return allSuggestions
+      .filter((p) =>
+        value ? p.toLowerCase().includes(value.toLowerCase()) : true,
+      )
+      .sort();
   }, [
     data,
     dataNonTruncated,
@@ -185,6 +181,7 @@ const TracesOrSpansPathsAutocomplete: React.FC<
     excludeRoot,
     projectName,
     datasetColumnNames,
+    includeIntermediateNodes,
   ]);
 
   return (
