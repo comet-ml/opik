@@ -99,7 +99,7 @@ class AttachmentUtilsExtractAttachmentReferencesTest {
         // Then
         assertThat(result).containsExactly(
                 "input-attachment-1-1234567890.png",
-                "metadata-attachment-2-9876543210.pdf");
+                "metadata-attachment-2-9876543210-sdk.pdf");
     }
 
     @ParameterizedTest
@@ -294,11 +294,14 @@ class AttachmentUtilsExtractAttachmentReferencesTest {
                 Arguments.of("[inputattachment-1-1234567890.png]", "Missing hyphen after context"),
                 Arguments.of("[input-attachment--1234567890.png]", "Double hyphen"),
                 Arguments.of("[ input-attachment-1-1234567890.png ]", "Whitespace inside brackets"),
-                Arguments.of("[INPUT-attachment-1-1234567890.png] [Output-attachment-2-9876543210.json]", "Uppercase context"),
-                Arguments.of("[wrong-attachment-1-1234567890.png] [custom-attachment-2-9876543210.json]","Wrong context prefix"),
+                Arguments.of("[INPUT-attachment-1-1234567890.png] [Output-attachment-2-9876543210.json]",
+                        "Uppercase context"),
+                Arguments.of("[wrong-attachment-1-1234567890.png] [custom-attachment-2-9876543210.json]",
+                        "Wrong context prefix"),
                 Arguments.of("[input-attachment.png]", "Missing numbers"),
-                Arguments.of("[input-attachment-1-1234567890]","Missing extension"),
-                Arguments.of("[invalid-attachment.png] [not-an-attachment-1-123.jpg] [random-text]", "Invalid attachment patterns"),
+                Arguments.of("[input-attachment-1-1234567890]", "Missing extension"),
+                Arguments.of("[invalid-attachment.png] [not-an-attachment-1-123.jpg] [random-text]",
+                        "Invalid attachment patterns"),
                 Arguments.of("input-attachment-1-1234567890.png", "Missing brackets"),
                 Arguments.of("This is just regular text with no attachment references", "Regular text - no references"),
                 Arguments.of("", "Empty string"),
