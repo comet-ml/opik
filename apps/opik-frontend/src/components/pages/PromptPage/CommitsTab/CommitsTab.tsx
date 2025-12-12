@@ -48,7 +48,7 @@ const COLUMNS_SORT_KEY = "prompt-commits-columns-sort";
 
 export const DEFAULT_SORTING_COLUMNS: ColumnSort[] = [
   {
-    id: "commit",
+    id: "created_at",
     desc: true,
   },
 ];
