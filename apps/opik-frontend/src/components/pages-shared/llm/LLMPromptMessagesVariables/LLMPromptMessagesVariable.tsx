@@ -21,6 +21,7 @@ interface LLMPromptMessagesVariableProps {
   projectName?: string;
   datasetColumnNames?: string[];
   type?: TRACE_DATA_TYPE;
+  includeIntermediateNodes?: boolean;
 }
 
 const LLMPromptMessagesVariable = ({
@@ -31,6 +32,7 @@ const LLMPromptMessagesVariable = ({
   projectName,
   datasetColumnNames,
   type = TRACE_DATA_TYPE.traces,
+  includeIntermediateNodes = false,
 }: LLMPromptMessagesVariableProps) => {
   return (
     <div className="relative flex justify-between">
@@ -52,6 +54,7 @@ const LLMPromptMessagesVariable = ({
             projectName={projectName}
             datasetColumnNames={datasetColumnNames}
             type={type}
+            includeIntermediateNodes={includeIntermediateNodes}
           />
           {errorText && (
             <FormErrorSkeleton className="mt-2">{errorText}</FormErrorSkeleton>

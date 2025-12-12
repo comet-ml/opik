@@ -341,6 +341,7 @@ const LLMJudgeRuleDetails: React.FC<LLMJudgeRuleDetailsProps> = ({
                     projectName={projectName}
                     datasetColumnNames={datasetColumnNames}
                     type={autocompleteType}
+                    includeIntermediateNodes
                   />
                 </>
               );

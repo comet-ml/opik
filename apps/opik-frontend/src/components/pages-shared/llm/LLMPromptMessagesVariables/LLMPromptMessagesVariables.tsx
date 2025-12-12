@@ -31,6 +31,7 @@ interface LLMPromptMessagesVariablesProps {
   projectName?: string;
   datasetColumnNames?: string[];
   type?: TRACE_DATA_TYPE;
+  includeIntermediateNodes?: boolean;
 }
 
 const LLMPromptMessagesVariables = ({
@@ -44,6 +45,7 @@ const LLMPromptMessagesVariables = ({
   projectName,
   datasetColumnNames,
   type = TRACE_DATA_TYPE.traces,
+  includeIntermediateNodes = false,
 }: LLMPromptMessagesVariablesProps) => {
   const variablesList: DropdownOption<string>[] = useMemo(() => {
     if (!variables || typeof variables !== "object") {
@@ -88,6 +90,7 @@ const LLMPromptMessagesVariables = ({
             projectName={projectName}
             datasetColumnNames={datasetColumnNames}
             type={type}
+            includeIntermediateNodes={includeIntermediateNodes}
           />
         ))}
       </div>
