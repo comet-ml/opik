@@ -93,30 +93,14 @@ def _apply_qwen_dashscope_filters(
 ) -> None:
     """Apply Qwen/DashScope specific parameter filters.
 
-    top_logprobs is only meaningful if logprobs is true and must be an int
-    in [0, 5]. When logprobs is false, drops top_logprobs; when logprobs is
-    true, clamps top_logprobs into [0, 5].
+    Does not return log probabilities.
     """
 
     unsupported: list[tuple[str, Any]] = []
 
-    logprobs_value = params.get("logprobs")
-    if not logprobs_value:
-        if "top_logprobs" in params:
-            unsupported.append(("top_logprobs", params["top_logprobs"]))
-    else:
-        if "top_logprobs" in params:
-            raw_top_logprobs = params["top_logprobs"]
-            try:
-                top_logprobs = int(raw_top_logprobs)
-            except (TypeError, ValueError):
-                unsupported.append(("top_logprobs", raw_top_logprobs))
-            else:
-                if top_logprobs < 0:
-                    top_logprobs = 0
-                elif top_logprobs > 5:
-                    top_logprobs = 5
-                params["top_logprobs"] = top_logprobs
+    for param in ("logprobs", "top_logprobs"):
+        if param in params:
+            unsupported.append((param, params[param]))
 
     _drop_unsupported_params_with_warning(
         params,
