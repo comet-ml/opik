@@ -76,7 +76,8 @@ const CommitHistory = ({
                   <div className="flex max-w-[160px] shrink flex-nowrap items-center gap-1 overflow-hidden">
                     {version.tags &&
                       version.tags.length > 0 &&
-                      version.tags
+                      [...version.tags]
+                        .sort()
                         .slice(0, 3)
                         .map((tag) => (
                           <ColoredTag
@@ -94,7 +95,7 @@ const CommitHistory = ({
                               All tags ({version.tags.length}):
                             </span>
                             <div className="flex flex-wrap gap-1">
-                              {version.tags.map((tag) => (
+                              {[...version.tags].sort().map((tag) => (
                                 <span
                                   key={tag}
                                   className="text-xs text-muted-foreground"
