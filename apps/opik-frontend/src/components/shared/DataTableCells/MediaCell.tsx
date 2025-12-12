@@ -1,14 +1,15 @@
 import React from "react";
 import { CellContext } from "@tanstack/react-table";
+import isString from "lodash/isString";
 import { ROW_HEIGHT } from "@/types/shared";
-import { parseImageValue, parseVideoValue } from "@/lib/images";
+import { useMediaTypeDetection } from "@/hooks/useMediaTypeDetection";
+import { isParsedMediaData } from "@/lib/images";
 import ImagesListWrapper from "@/components/pages-shared/attachments/ImagesListWrapper/ImagesListWrapper";
-import { ATTACHMENT_TYPE } from "@/types/attachments";
 import CellWrapper from "@/components/shared/DataTableCells/CellWrapper";
 import CellTooltipWrapper from "@/components/shared/DataTableCells/CellTooltipWrapper";
 
 const MediaCell = <TData,>(context: CellContext<TData, unknown>) => {
-  const value = context.getValue() as string;
+  const value = context.getValue();
 
   // Use only the user's row height setting, not overrideRowHeight
   // overrideRowHeight is for layout purposes only (e.g., split cells in experiment comparison)
@@ -17,41 +18,37 @@ const MediaCell = <TData,>(context: CellContext<TData, unknown>) => {
 
   const isBig = rowHeight === ROW_HEIGHT.large;
 
-  const video = parseVideoValue(value);
-  const image = !video ? parseImageValue(value) : undefined;
+  const alreadyParsed = isParsedMediaData(value);
+
+  const { mediaData: detectedMedia } = useMediaTypeDetection(
+    value,
+    isBig && !alreadyParsed,
+  );
+
+  const mediaData = alreadyParsed ? value : detectedMedia;
 
   const getContent = () => {
+    const displayValue = isString(value) ? value : mediaData?.url || "-";
+
     if (!isBig) {
       return (
-        <CellTooltipWrapper content={value}>
-          <span className="truncate">{value}</span>
+        <CellTooltipWrapper content={displayValue}>
+          <span className="truncate">{displayValue}</span>
         </CellTooltipWrapper>
       );
     }
 
-    if (video) {
+    if (mediaData) {
       return (
         <div className="max-h-80 max-w-[320px] overflow-y-auto">
-          <ImagesListWrapper
-            media={[{ ...video, type: ATTACHMENT_TYPE.VIDEO }]}
-          />
-        </div>
-      );
-    }
-
-    if (image) {
-      return (
-        <div className="max-h-80 max-w-[320px] overflow-y-auto">
-          <ImagesListWrapper
-            media={[{ ...image, type: ATTACHMENT_TYPE.IMAGE }]}
-          />
+          <ImagesListWrapper media={[mediaData]} />
         </div>
       );
     }
 
     return (
       <div className="size-full overflow-y-auto whitespace-pre-wrap break-words">
-        {value}
+        {displayValue}
       </div>
     );
   };
