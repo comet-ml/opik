@@ -62,110 +62,33 @@ public class AutomationRuleEvaluatorWithProjectRowMapper implements RowMapper<Au
         try {
             JsonNode codeNode = OBJECT_MAPPER.readTree(codeJson);
 
+            // Delegate to type-specific static factory methods for construction
             return switch (type) {
-                case LLM_AS_JUDGE -> LlmAsJudgeAutomationRuleEvaluatorModel.builder()
-                        .id(id)
-                        .projectId(projectId)
-                        .projectName(projectName)
-                        .projectIds(projectIds)
-                        .name(name)
-                        .samplingRate(samplingRate)
-                        .enabled(enabled)
-                        .filters(filters)
-                        .code(OBJECT_MAPPER.treeToValue(codeNode,
-                                LlmAsJudgeAutomationRuleEvaluatorModel.LlmAsJudgeCode.class))
-                        .createdAt(createdAt)
-                        .createdBy(createdBy)
-                        .lastUpdatedAt(lastUpdatedAt)
-                        .lastUpdatedBy(lastUpdatedBy)
-                        .build();
+                case LLM_AS_JUDGE -> LlmAsJudgeAutomationRuleEvaluatorModel.fromRowMapper(
+                        id, projectId, projectName, projectIds, name, samplingRate, enabled, filters,
+                        codeNode, createdAt, createdBy, lastUpdatedAt, lastUpdatedBy, OBJECT_MAPPER);
 
-                case USER_DEFINED_METRIC_PYTHON -> UserDefinedMetricPythonAutomationRuleEvaluatorModel.builder()
-                        .id(id)
-                        .projectId(projectId)
-                        .projectName(projectName)
-                        .projectIds(projectIds)
-                        .name(name)
-                        .samplingRate(samplingRate)
-                        .enabled(enabled)
-                        .filters(filters)
-                        .code(OBJECT_MAPPER.treeToValue(codeNode,
-                                UserDefinedMetricPythonAutomationRuleEvaluatorModel.UserDefinedMetricPythonCode.class))
-                        .createdAt(createdAt)
-                        .createdBy(createdBy)
-                        .lastUpdatedAt(lastUpdatedAt)
-                        .lastUpdatedBy(lastUpdatedBy)
-                        .build();
+                case USER_DEFINED_METRIC_PYTHON -> UserDefinedMetricPythonAutomationRuleEvaluatorModel.fromRowMapper(
+                        id, projectId, projectName, projectIds, name, samplingRate, enabled, filters,
+                        codeNode, createdAt, createdBy, lastUpdatedAt, lastUpdatedBy, OBJECT_MAPPER);
 
-                case TRACE_THREAD_LLM_AS_JUDGE -> TraceThreadLlmAsJudgeAutomationRuleEvaluatorModel.builder()
-                        .id(id)
-                        .projectId(projectId)
-                        .projectName(projectName)
-                        .projectIds(projectIds)
-                        .name(name)
-                        .samplingRate(samplingRate)
-                        .enabled(enabled)
-                        .filters(filters)
-                        .code(OBJECT_MAPPER.treeToValue(codeNode,
-                                TraceThreadLlmAsJudgeAutomationRuleEvaluatorModel.TraceThreadLlmAsJudgeCode.class))
-                        .createdAt(createdAt)
-                        .createdBy(createdBy)
-                        .lastUpdatedAt(lastUpdatedAt)
-                        .lastUpdatedBy(lastUpdatedBy)
-                        .build();
+                case TRACE_THREAD_LLM_AS_JUDGE -> TraceThreadLlmAsJudgeAutomationRuleEvaluatorModel.fromRowMapper(
+                        id, projectId, projectName, projectIds, name, samplingRate, enabled, filters,
+                        codeNode, createdAt, createdBy, lastUpdatedAt, lastUpdatedBy, OBJECT_MAPPER);
 
                 case TRACE_THREAD_USER_DEFINED_METRIC_PYTHON ->
-                    TraceThreadUserDefinedMetricPythonAutomationRuleEvaluatorModel.builder()
-                            .id(id)
-                            .projectId(projectId)
-                            .projectName(projectName)
-                            .projectIds(projectIds)
-                            .name(name)
-                            .samplingRate(samplingRate)
-                            .enabled(enabled)
-                            .filters(filters)
-                            .code(OBJECT_MAPPER.treeToValue(codeNode,
-                                    TraceThreadUserDefinedMetricPythonAutomationRuleEvaluatorModel.TraceThreadUserDefinedMetricPythonCode.class))
-                            .createdAt(createdAt)
-                            .createdBy(createdBy)
-                            .lastUpdatedAt(lastUpdatedAt)
-                            .lastUpdatedBy(lastUpdatedBy)
-                            .build();
+                    TraceThreadUserDefinedMetricPythonAutomationRuleEvaluatorModel.fromRowMapper(
+                            id, projectId, projectName, projectIds, name, samplingRate, enabled, filters,
+                            codeNode, createdAt, createdBy, lastUpdatedAt, lastUpdatedBy, OBJECT_MAPPER);
 
-                case SPAN_LLM_AS_JUDGE -> SpanLlmAsJudgeAutomationRuleEvaluatorModel.builder()
-                        .id(id)
-                        .projectId(projectId)
-                        .projectName(projectName)
-                        .projectIds(projectIds)
-                        .name(name)
-                        .samplingRate(samplingRate)
-                        .enabled(enabled)
-                        .filters(filters)
-                        .code(OBJECT_MAPPER.treeToValue(codeNode,
-                                SpanLlmAsJudgeAutomationRuleEvaluatorModel.SpanLlmAsJudgeCode.class))
-                        .createdAt(createdAt)
-                        .createdBy(createdBy)
-                        .lastUpdatedAt(lastUpdatedAt)
-                        .lastUpdatedBy(lastUpdatedBy)
-                        .build();
+                case SPAN_LLM_AS_JUDGE -> SpanLlmAsJudgeAutomationRuleEvaluatorModel.fromRowMapper(
+                        id, projectId, projectName, projectIds, name, samplingRate, enabled, filters,
+                        codeNode, createdAt, createdBy, lastUpdatedAt, lastUpdatedBy, OBJECT_MAPPER);
 
-                case SPAN_USER_DEFINED_METRIC_PYTHON -> SpanUserDefinedMetricPythonAutomationRuleEvaluatorModel
-                        .builder()
-                        .id(id)
-                        .projectId(projectId)
-                        .projectName(projectName)
-                        .projectIds(projectIds)
-                        .name(name)
-                        .samplingRate(samplingRate)
-                        .enabled(enabled)
-                        .filters(filters)
-                        .code(OBJECT_MAPPER.treeToValue(codeNode,
-                                SpanUserDefinedMetricPythonAutomationRuleEvaluatorModel.SpanUserDefinedMetricPythonCode.class))
-                        .createdAt(createdAt)
-                        .createdBy(createdBy)
-                        .lastUpdatedAt(lastUpdatedAt)
-                        .lastUpdatedBy(lastUpdatedBy)
-                        .build();
+                case SPAN_USER_DEFINED_METRIC_PYTHON ->
+                    SpanUserDefinedMetricPythonAutomationRuleEvaluatorModel.fromRowMapper(
+                            id, projectId, projectName, projectIds, name, samplingRate, enabled, filters,
+                            codeNode, createdAt, createdBy, lastUpdatedAt, lastUpdatedBy, OBJECT_MAPPER);
             };
         } catch (Exception e) {
             throw new SQLException("Failed to parse automation rule evaluator code", e);

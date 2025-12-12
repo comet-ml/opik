@@ -1,6 +1,9 @@
 package com.comet.opik.domain.evaluators;
 
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorType;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.Builder;
 import org.jdbi.v3.json.Json;
 
@@ -38,6 +41,34 @@ public record SpanLlmAsJudgeAutomationRuleEvaluatorModel(
     @Override
     public AutomationRuleEvaluatorModel<?> withProjectIds(Set<UUID> projectIds) {
         return toBuilder().projectIds(projectIds).build();
+    }
+
+    /**
+     * Factory method for constructing from JDBI row mapper.
+     * Encapsulates model-specific construction logic including JSON parsing.
+     */
+    public static SpanLlmAsJudgeAutomationRuleEvaluatorModel fromRowMapper(
+            UUID id, UUID projectId, String projectName, Set<UUID> projectIds,
+            String name, Float samplingRate, boolean enabled, String filters,
+            JsonNode codeNode, Instant createdAt, String createdBy,
+            Instant lastUpdatedAt, String lastUpdatedBy, ObjectMapper objectMapper)
+            throws JsonProcessingException {
+
+        return builder()
+                .id(id)
+                .projectId(projectId)
+                .projectName(projectName)
+                .projectIds(projectIds)
+                .name(name)
+                .samplingRate(samplingRate)
+                .enabled(enabled)
+                .filters(filters)
+                .code(objectMapper.treeToValue(codeNode, SpanLlmAsJudgeCode.class))
+                .createdAt(createdAt)
+                .createdBy(createdBy)
+                .lastUpdatedAt(lastUpdatedAt)
+                .lastUpdatedBy(lastUpdatedBy)
+                .build();
     }
 
     record SpanLlmAsJudgeCode(LlmAsJudgeCodeParameters model,
