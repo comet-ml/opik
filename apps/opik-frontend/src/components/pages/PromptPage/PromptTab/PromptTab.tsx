@@ -285,7 +285,6 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
         promptName={prompt.name}
         template={activeVersion?.template || ""}
         metadata={activeVersion?.metadata}
-        tags={activeVersion?.tags}
         templateStructure={prompt.template_structure}
         onSetActiveVersionId={setActiveVersionId}
       />

@@ -57,7 +57,6 @@ type EditPromptVersionDialogProps = {
   setOpen: (open: boolean) => void;
   template: string;
   metadata?: object;
-  tags?: string[];
   promptName: string;
   templateStructure?: PROMPT_TEMPLATE_STRUCTURE;
   onSetActiveVersionId: (versionId: string) => void;
@@ -68,7 +67,6 @@ const EditPromptVersionDialog: React.FC<EditPromptVersionDialogProps> = ({
   setOpen,
   template: promptTemplate,
   metadata: promptMetadata,
-  tags: promptTags,
   promptName,
   templateStructure,
   onSetActiveVersionId,
@@ -145,7 +143,6 @@ const EditPromptVersionDialog: React.FC<EditPromptVersionDialogProps> = ({
       template: finalTemplate,
       changeDescription,
       ...(metadata && { metadata: safelyParseJSON(metadata) }),
-      ...(promptTags && { tags: promptTags }),
       ...(templateStructure && { templateStructure }),
       onSuccess: (data) => {
         onSetActiveVersionId(data.id);
