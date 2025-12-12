@@ -50,7 +50,11 @@ public class AutomationRuleEvaluatorWithProjectRowMapper implements RowMapper<Au
             log.debug("Initialized rule '{}' with legacy project_id '{}'", id, legacyProjectId);
         }
 
-        UUID projectId = null; // Will be enriched by Service layer from projectIds
+        // Both projectId and projectName will be enriched by Service layer
+        // projectId: Derived from first element of projectIds (for backward compatibility)
+        // projectName: Fetched from projects table based on projectId
+        UUID projectId = null;
+        String projectName = null;
 
         AutomationRuleEvaluatorType type = AutomationRuleEvaluatorType.fromString(rs.getString("type"));
         String codeJson = rs.getString("code");
@@ -62,7 +66,7 @@ public class AutomationRuleEvaluatorWithProjectRowMapper implements RowMapper<Au
                 case LLM_AS_JUDGE -> LlmAsJudgeAutomationRuleEvaluatorModel.builder()
                         .id(id)
                         .projectId(projectId)
-                        .projectName(null) // Will be enriched by Service layer
+                        .projectName(projectName)
                         .projectIds(projectIds)
                         .name(name)
                         .samplingRate(samplingRate)
@@ -79,7 +83,7 @@ public class AutomationRuleEvaluatorWithProjectRowMapper implements RowMapper<Au
                 case USER_DEFINED_METRIC_PYTHON -> UserDefinedMetricPythonAutomationRuleEvaluatorModel.builder()
                         .id(id)
                         .projectId(projectId)
-                        .projectName(null) // Will be enriched by Service layer
+                        .projectName(projectName)
                         .projectIds(projectIds)
                         .name(name)
                         .samplingRate(samplingRate)
@@ -96,7 +100,7 @@ public class AutomationRuleEvaluatorWithProjectRowMapper implements RowMapper<Au
                 case TRACE_THREAD_LLM_AS_JUDGE -> TraceThreadLlmAsJudgeAutomationRuleEvaluatorModel.builder()
                         .id(id)
                         .projectId(projectId)
-                        .projectName(null) // Will be enriched by Service layer
+                        .projectName(projectName)
                         .projectIds(projectIds)
                         .name(name)
                         .samplingRate(samplingRate)
@@ -114,7 +118,7 @@ public class AutomationRuleEvaluatorWithProjectRowMapper implements RowMapper<Au
                     TraceThreadUserDefinedMetricPythonAutomationRuleEvaluatorModel.builder()
                             .id(id)
                             .projectId(projectId)
-                            .projectName(null) // Will be enriched by Service layer
+                            .projectName(projectName)
                             .projectIds(projectIds)
                             .name(name)
                             .samplingRate(samplingRate)
@@ -131,7 +135,7 @@ public class AutomationRuleEvaluatorWithProjectRowMapper implements RowMapper<Au
                 case SPAN_LLM_AS_JUDGE -> SpanLlmAsJudgeAutomationRuleEvaluatorModel.builder()
                         .id(id)
                         .projectId(projectId)
-                        .projectName(null) // Will be enriched by Service layer
+                        .projectName(projectName)
                         .projectIds(projectIds)
                         .name(name)
                         .samplingRate(samplingRate)
@@ -149,7 +153,7 @@ public class AutomationRuleEvaluatorWithProjectRowMapper implements RowMapper<Au
                         .builder()
                         .id(id)
                         .projectId(projectId)
-                        .projectName(null) // Will be enriched by Service layer
+                        .projectName(projectName)
                         .projectIds(projectIds)
                         .name(name)
                         .samplingRate(samplingRate)
