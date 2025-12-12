@@ -29,9 +29,9 @@ Use this playbook whenever you need to improve a prompt (single-turn or agentic)
 ## 3. Configure the run
 
 ```python
-from opik_optimizer import HierarchicalReflectiveOptimizer
+from opik_optimizer import HAPO
 
-optimizer = HierarchicalReflectiveOptimizer(
+optimizer = HAPO(
     model="openai/gpt-4o",
     max_parallel_batches=4,
     seed=42,
