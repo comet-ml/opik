@@ -298,9 +298,6 @@ Fixed the timeout issue reported by BigCustomer Inc. affecting their 15M row dat
 at https://internal.opik.com/customer/12345
 ```
 
-### **Exception**
-Only include sensitive information if **explicitly requested by the user** and after confirming it is intentional and appropriate for the context.
-
 ---
 
 ## **Best Practices**
