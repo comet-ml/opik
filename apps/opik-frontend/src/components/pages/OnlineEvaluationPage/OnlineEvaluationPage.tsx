@@ -39,9 +39,10 @@ import DataTable from "@/components/shared/DataTable/DataTable";
 import DataTableNoData from "@/components/shared/DataTableNoData/DataTableNoData";
 import DataTablePagination from "@/components/shared/DataTablePagination/DataTablePagination";
 import IdCell from "@/components/shared/DataTableCells/IdCell";
-import ResourceCell from "@/components/shared/DataTableCells/ResourceCell";
 import StatusCell from "@/components/shared/DataTableCells/StatusCell";
 import useRulesList from "@/api/automations/useRulesList";
+import useProjectsList from "@/api/projects/useProjectsList";
+import useAppStore from "@/store/AppStore";
 import { formatDate } from "@/lib/date";
 import NoDataPage from "@/components/shared/NoDataPage/NoDataPage";
 import NoRulesPage from "@/components/pages-shared/automations/NoRulesPage";
@@ -49,7 +50,6 @@ import AddEditRuleDialog from "@/components/pages-shared/automations/AddEditRule
 import RulesActionsPanel from "@/components/pages-shared/automations/RulesActionsPanel";
 import RuleRowActionsCell from "@/components/pages-shared/automations/RuleRowActionsCell";
 import RuleLogsCell from "@/components/pages-shared/automations/RuleLogsCell";
-import { RESOURCE_TYPE } from "@/components/shared/ResourceLink/ResourceLink";
 import ExplainerDescription from "@/components/shared/ExplainerDescription/ExplainerDescription";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 import { capitalizeFirstLetter } from "@/lib/utils";
@@ -70,16 +70,13 @@ const DEFAULT_COLUMNS: ColumnData<EvaluatorsRule>[] = [
     type: COLUMN_TYPE.string,
   },
   {
-    id: "project_name",
-    label: "Project",
+    id: "project_names",
+    label: "Projects",
     type: COLUMN_TYPE.string,
-    cell: ResourceCell as never,
-    accessorFn: (row) => row.project_name,
-    customMeta: {
-      nameKey: "project_name",
-      idKey: "project_id",
-      resource: RESOURCE_TYPE.project,
-    },
+    accessorFn: (row) =>
+      row.project_names && row.project_names.length > 0
+        ? row.project_names.join(", ")
+        : "N/A",
   },
   {
     id: "last_updated_at",
@@ -129,7 +126,7 @@ const DEFAULT_SELECTED_COLUMNS: string[] = [
   "created_at",
   "sampling_rate",
   "enabled",
-  "project_name",
+  "project_names",
   "type",
 ];
 
@@ -140,6 +137,7 @@ const COLUMNS_SORT_KEY = "workspace-rules-columns-sort";
 const PAGINATION_SIZE_KEY = "workspace-rules-pagination-size";
 
 export const OnlineEvaluationPage: React.FC = () => {
+  const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const resetDialogKeyRef = useRef(0);
   const [openDialogForCreate, setOpenDialogForCreate] =
     useState<boolean>(false);
@@ -193,6 +191,23 @@ export const OnlineEvaluationPage: React.FC = () => {
     },
   );
 
+  // Fetch all projects to map project_ids to project_names
+  const { data: projectsData } = useProjectsList({
+    workspaceName,
+    page: 1,
+    size: 1000, // Fetch enough projects to cover all rules
+  });
+
+  // Create project ID to name mapping
+  const projectIdToNameMap = useMemo(
+    () =>
+      (projectsData?.content || []).reduce((map, project) => {
+        map.set(project.id, project.name);
+        return map;
+      }, new Map<string, string>()),
+    [projectsData],
+  );
+
   const sortableBy: string[] = useMemo(
     () => data?.sortable_by ?? [],
     [data?.sortable_by],
@@ -200,7 +215,15 @@ export const OnlineEvaluationPage: React.FC = () => {
   const noData = !search && filters.length === 0;
   const noDataText = noData ? `There are no rules yet` : "No search results";
 
-  const rows: EvaluatorsRule[] = useMemo(() => data?.content ?? [], [data]);
+  // Enrich rules with project names from project_ids
+  const rows: EvaluatorsRule[] = useMemo(() => {
+    return (data?.content ?? []).map((rule) => ({
+      ...rule,
+      project_names: rule.project_ids
+        .map((id) => projectIdToNameMap.get(id))
+        .filter(Boolean) as string[],
+    }));
+  }, [data, projectIdToNameMap]);
 
   const editingRule = rows.find((r) => r.id === editRuleId);
   const isDialogOpen = Boolean(editingRule) || openDialogForCreate;
@@ -308,14 +331,16 @@ export const OnlineEvaluationPage: React.FC = () => {
     [setEditRuleId],
   );
 
-  // Filter out "type" (Scope), "enabled" (Status), and "sampling_rate" from filter options
+  // Filter out "type" (Scope), "enabled" (Status), "sampling_rate", and "project_names" from filter options
+  // Note: project_names filtering is not supported by backend (frontend-only enriched field)
   const filterableColumns = useMemo(
     () =>
       DEFAULT_COLUMNS.filter(
         (col) =>
           col.id !== "type" &&
           col.id !== "enabled" &&
-          col.id !== "sampling_rate",
+          col.id !== "sampling_rate" &&
+          col.id !== "project_names",
       ),
     [],
   );
