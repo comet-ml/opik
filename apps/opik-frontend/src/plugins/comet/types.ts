@@ -48,11 +48,14 @@ export interface Organization {
   role: ORGANIZATION_ROLE_TYPE;
 }
 
+export enum ManagementPermissionsNames {
+  MANAGEMENT = "management",
+  PROJECT_VISIBILITY = "project_visibility",
+  INVITE_USERS = "invite_users_to_workspace",
+}
+
 export interface UserPermission {
-  permissionName:
-    | "management"
-    | "invite_users_to_workspace"
-    | "project_visibility";
+  permissionName: ManagementPermissionsNames;
   permissionValue: "true" | "false";
 }
 

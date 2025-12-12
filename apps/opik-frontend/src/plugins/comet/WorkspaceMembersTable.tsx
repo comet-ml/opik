@@ -7,15 +7,19 @@ import {
 import useUser from "@/plugins/comet/useUser";
 import useAllWorkspaces from "@/plugins/comet/useAllWorkspaces";
 import useAllWorkspaceMembers from "@/plugins/comet/useWorkspaceMembers";
+import useWorkspaceUsersPermissions from "@/plugins/comet/api/useWorkspaceUsersPermissions";
 import useAppStore from "@/store/AppStore";
 import DataTable from "@/components/shared/DataTable/DataTable";
 import Loader from "@/components/shared/Loader/Loader";
+import { getPermissionByType, isUserPermissionValid } from "@/lib/permissions";
+import { ManagementPermissionsNames } from "./types";
 
 interface WorkspaceMember {
   id: string;
   userName: string;
   email: string;
   joinedAt?: string;
+  role?: string;
 }
 
 export interface WorkspaceMembersTableProps {
@@ -51,6 +55,14 @@ const WorkspaceMembersTable: React.FC<WorkspaceMembersTableProps> = ({
     },
   );
 
+  const { data: permissionsData, isPending: isPermissionsPending } =
+    useWorkspaceUsersPermissions(
+      { workspaceId: workspace?.workspaceId || "" },
+      {
+        enabled: Boolean(workspace?.workspaceId),
+      },
+    );
+
   const tableData = useMemo(() => {
     if (!workspaceMembers) return [];
 
@@ -65,15 +77,29 @@ const WorkspaceMembersTable: React.FC<WorkspaceMembersTableProps> = ({
         })
       : workspaceMembers;
 
-    return filteredMembers.map(
-      (member): WorkspaceMember => ({
-        id: member.userName,
-        ...member,
-      }),
-    );
-  }, [workspaceMembers, search]);
+    return filteredMembers.map((member): WorkspaceMember => {
+      const userPermissions = permissionsData?.find(
+        (permission) => permission.userName === member.userName,
+      )?.permissions;
 
-  if (isPending) {
+      const permissionByType = getPermissionByType(
+        userPermissions,
+        ManagementPermissionsNames.MANAGEMENT,
+      );
+
+      const role = isUserPermissionValid(permissionByType?.permissionValue)
+        ? "Workspace owner"
+        : "Workspace member";
+
+      return {
+        id: member.userName,
+        role,
+        ...member,
+      };
+    });
+  }, [workspaceMembers, permissionsData, search]);
+
+  if (isPending || isPermissionsPending) {
     return <Loader />;
   }
 
