@@ -27,6 +27,14 @@ import java.util.UUID;
  * that implicitly calls super(), which requires a no-args constructor in the parent class.
  * Without it, compilation fails with "no suitable constructor found for AutomationRuleEvaluatorModelBase(no arguments)".
  *
+ * IMPORTANT: @Builder.Default with null values is a TECHNICAL REQUIREMENT, not a business feature.
+ * The defaults allow 'final' fields to coexist with @NoArgsConstructor (which can't initialize fields).
+ * In practice, these defaults are NEVER used because:
+ * - Row mappers explicitly set all fields from database values
+ * - Service layer explicitly sets all fields when creating new records (e.g., createdAt = Instant.now())
+ * Using null as default makes bugs obvious if we forget to set a field, rather than silently using
+ * incorrect values like Instant.now() which would mask data corruption issues.
+ *
  * Uses @AllArgsConstructor(access = AccessLevel.PROTECTED) to generate a protected constructor
  * for SuperBuilder, while child classes use @AllArgsConstructor(access = AccessLevel.PUBLIC)
  * to provide JDBI with public constructors for reflection-based instantiation.
