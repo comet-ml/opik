@@ -169,7 +169,7 @@ public interface AutomationRuleEvaluatorDAO extends AutomationRuleDAO {
                     }
 
                     // Use junction table data (new/updated rules)
-                    return rebuildWithProjectIds(rule, projectsFromJunction);
+                    return rule.withProjectIds(projectsFromJunction);
                 })
                 .toList();
     }
@@ -185,24 +185,6 @@ public interface AutomationRuleEvaluatorDAO extends AutomationRuleDAO {
     default List<AutomationRuleEvaluatorModel<?>> find(String workspaceId, UUID projectId,
             AutomationRuleEvaluatorCriteria criteria) {
         return find(workspaceId, projectId, criteria, null, null, Map.of(), null, null);
-    }
-
-    /**
-     * Rebuilds an AutomationRuleEvaluatorModel with new project IDs.
-     * Used to merge project associations fetched separately into rule models.
-     */
-    private static AutomationRuleEvaluatorModel<?> rebuildWithProjectIds(
-            AutomationRuleEvaluatorModel<?> model, Set<UUID> projectIds) {
-        return switch (model) {
-            case LlmAsJudgeAutomationRuleEvaluatorModel m -> m.toBuilder().projectIds(projectIds).build();
-            case UserDefinedMetricPythonAutomationRuleEvaluatorModel m -> m.toBuilder().projectIds(projectIds).build();
-            case TraceThreadLlmAsJudgeAutomationRuleEvaluatorModel m -> m.toBuilder().projectIds(projectIds).build();
-            case TraceThreadUserDefinedMetricPythonAutomationRuleEvaluatorModel m ->
-                m.toBuilder().projectIds(projectIds).build();
-            case SpanLlmAsJudgeAutomationRuleEvaluatorModel m -> m.toBuilder().projectIds(projectIds).build();
-            case SpanUserDefinedMetricPythonAutomationRuleEvaluatorModel m ->
-                m.toBuilder().projectIds(projectIds).build();
-        };
     }
 
     @SqlQuery("""
