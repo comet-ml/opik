@@ -410,6 +410,7 @@ public enum OpenRouterModelName implements StructuredOutputSupported {
             OPENAI_GPT_4_1,
             OPENAI_GPT_4_1_MINI,
             OPENAI_GPT_5_2,
+            OPENAI_GPT_5_2_CHAT_LATEST,
             OPENAI_O1,
             OPENAI_O3_MINI,
             OPENAI_O3_MINI_HIGH,
