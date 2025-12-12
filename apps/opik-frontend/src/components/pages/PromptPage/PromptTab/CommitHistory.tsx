@@ -92,7 +92,7 @@ const CommitHistory = ({
                         content={
                           <div className="flex max-w-[200px] flex-col gap-1">
                             <span className="text-xs font-medium">
-                              All tags ({version.tags.length}):
+                              All version tags ({version.tags.length}):
                             </span>
                             <div className="flex flex-wrap gap-1">
                               {[...version.tags].sort().map((tag) => (

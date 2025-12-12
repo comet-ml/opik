@@ -141,7 +141,36 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
 
       <div className="mt-4 flex gap-6 rounded-md border bg-background p-6">
         <div className="flex grow flex-col gap-2">
-          <div className="flex items-center gap-2">
+          <TagListRenderer
+            tags={activeVersion?.tags || []}
+            onAddTag={(newTag) => {
+              if (!activeVersion?.id) return;
+              const updatedTags = [...(activeVersion.tags || []), newTag];
+              updateVersionsMutation.mutate({
+                versionIds: [activeVersion.id],
+                tags: updatedTags,
+                mergeTags: false,
+              });
+            }}
+            onDeleteTag={(tagToDelete) => {
+              if (!activeVersion?.id) return;
+              const updatedTags = (activeVersion.tags || []).filter(
+                (t) => t !== tagToDelete,
+              );
+              updateVersionsMutation.mutate({
+                versionIds: [activeVersion.id],
+                tags: updatedTags,
+                mergeTags: false,
+              });
+            }}
+            align="start"
+            tooltipText="Version tags list"
+            placeholderText="New version tag"
+            addButtonText="Add version tag"
+            tagType="version tag"
+          />
+
+          <div className="mt-4 flex items-center gap-2">
             <p className="comet-body-s-accented text-foreground">
               {isChatPrompt ? "Chat messages" : "Prompt"}
             </p>
@@ -214,34 +243,6 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
               />
             </>
           )}
-
-          <>
-            <p className="comet-body-s-accented mt-4 text-foreground">Tags</p>
-            <TagListRenderer
-              tags={activeVersion?.tags || []}
-              onAddTag={(newTag) => {
-                if (!activeVersion?.id) return;
-                const updatedTags = [...(activeVersion.tags || []), newTag];
-                updateVersionsMutation.mutate({
-                  versionIds: [activeVersion.id],
-                  tags: updatedTags,
-                  mergeTags: false,
-                });
-              }}
-              onDeleteTag={(tagToDelete) => {
-                if (!activeVersion?.id) return;
-                const updatedTags = (activeVersion.tags || []).filter(
-                  (t) => t !== tagToDelete,
-                );
-                updateVersionsMutation.mutate({
-                  versionIds: [activeVersion.id],
-                  tags: updatedTags,
-                  mergeTags: false,
-                });
-              }}
-              align="start"
-            />
-          </>
 
           {activeVersion?.change_description && (
             <>
