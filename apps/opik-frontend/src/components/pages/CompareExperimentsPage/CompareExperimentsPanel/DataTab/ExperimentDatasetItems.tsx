@@ -10,7 +10,7 @@ import NoData from "@/components/shared/NoData/NoData";
 import React, { useMemo } from "react";
 import { DatasetItem } from "@/types/datasets";
 import { pick } from "lodash";
-import { processInputData } from "@/lib/images";
+import { useProcessedInputData } from "@/hooks/useProcessedInputData";
 
 interface ExperimentDatasetItemsProps {
   data: DatasetItem["data"] | undefined;
@@ -29,10 +29,7 @@ const ExperimentDatasetItems = ({
     return pick(data, selectedKeys);
   }, [selectedKeys, data]);
 
-  const { media, formattedData } = useMemo(
-    () => processInputData(selectedData),
-    [selectedData],
-  );
+  const { media, formattedData } = useProcessedInputData(selectedData);
 
   const showMedia = media?.length > 0;
 
