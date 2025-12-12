@@ -52,6 +52,7 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
       promptId: prompt?.id || "",
       page: 1,
       size: 25,
+      sorting: [{ id: "created_at", desc: true }],
     },
     {
       enabled: !!prompt?.id,
