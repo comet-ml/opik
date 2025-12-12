@@ -119,6 +119,11 @@ describe("media utilities", () => {
     it("should cache null results for failed requests", async () => {
       const testUrl = "https://example.com/404";
 
+      // Mock HEAD request failure (ok: false)
+      (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+        ok: false,
+      });
+      // Mock GET fallback also failing
       (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
         ok: false,
       });
@@ -132,8 +137,8 @@ describe("media utilities", () => {
       const result2 = await detectMediaTypeFromUrl(testUrl);
       expect(result2).toBeNull();
 
-      // Fetch should only be called once
-      expect(global.fetch).toHaveBeenCalledTimes(1);
+      // Fetch should be called twice (HEAD + GET fallback) on first call, then cached
+      expect(global.fetch).toHaveBeenCalledTimes(2);
     });
 
     it("should handle timeout errors", async () => {
