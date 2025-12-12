@@ -1,11 +1,11 @@
-import React, { useCallback, useMemo } from "react";
+import React, { useCallback } from "react";
 import { Pencil } from "lucide-react";
 import ResizableSidePanel from "@/components/shared/ResizableSidePanel/ResizableSidePanel";
 import { Button } from "@/components/ui/button";
 import Loader from "@/components/shared/Loader/Loader";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import TagListRenderer from "@/components/shared/TagListRenderer/TagListRenderer";
-import { processInputData } from "@/lib/images";
+import { useProcessedInputData } from "@/hooks/useProcessedInputData";
 import ImagesListWrapper from "@/components/pages-shared/attachments/ImagesListWrapper/ImagesListWrapper";
 import { useDatasetItemEditorContext } from "./DatasetItemEditorContext";
 import DatasetItemEditorForm from "./DatasetItemEditorForm";
@@ -46,10 +46,7 @@ const DatasetItemEditorLayout: React.FC<DatasetItemEditorLayoutProps> = ({
     datasetItem,
   } = useDatasetItemEditorContext();
 
-  const { media } = useMemo(
-    () => processInputData(datasetItem?.data),
-    [datasetItem?.data],
-  );
+  const { media } = useProcessedInputData(datasetItem?.data);
 
   const hasMedia = media.length > 0;
 

@@ -5,22 +5,19 @@ import { ListTree } from "lucide-react";
 import get from "lodash/get";
 import isFunction from "lodash/isFunction";
 import isObject from "lodash/isObject";
-import isString from "lodash/isString";
 
 import { toString } from "@/lib/utils";
 import { traceVisible } from "@/lib/traces";
-import { parseImageValue, parseVideoValue } from "@/lib/images";
 import { ExperimentItem, ExperimentsCompare } from "@/types/datasets";
 import { ROW_HEIGHT } from "@/types/shared";
-import { ATTACHMENT_TYPE } from "@/types/attachments";
 import VerticallySplitCellWrapper, {
   CustomMeta,
 } from "@/components/pages-shared/experiments/VerticallySplitCellWrapper/VerticallySplitCellWrapper";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import CellTooltipWrapper from "@/components/shared/DataTableCells/CellTooltipWrapper";
-import ImagesListWrapper from "@/components/pages-shared/attachments/ImagesListWrapper/ImagesListWrapper";
 import { Button } from "@/components/ui/button";
 import { useJsonViewTheme } from "@/hooks/useJsonViewTheme";
+import TextAndMediaContentRenderer from "./TextAndMediaContentRenderer";
 
 const CompareExperimentsOutputCell: React.FC<
   CellContext<ExperimentsCompare, unknown>
@@ -54,67 +51,11 @@ const CompareExperimentsOutputCell: React.FC<
     );
   };
 
-  const renderTextContent = (data: string) => {
-    return isSmall ? (
-      <CellTooltipWrapper content={data}>
-        <span className="truncate">{data}</span>
-      </CellTooltipWrapper>
-    ) : (
-      <div className="size-full overflow-y-auto whitespace-pre-wrap break-words">
-        {data}
-      </div>
-    );
-  };
-
-  const renderMediaContent = (data: string) => {
-    if (!isBig) {
-      return (
-        <CellTooltipWrapper content={data}>
-          <span className="truncate">{data}</span>
-        </CellTooltipWrapper>
-      );
-    }
-
-    const video = parseVideoValue(data);
-    if (video) {
-      return (
-        <div className="max-h-80 max-w-[320px] overflow-y-auto">
-          <ImagesListWrapper
-            media={[{ ...video, type: ATTACHMENT_TYPE.VIDEO }]}
-          />
-        </div>
-      );
-    }
-
-    const image = parseImageValue(data);
-    if (image) {
-      return (
-        <div className="max-h-80 max-w-[320px] overflow-y-auto">
-          <ImagesListWrapper
-            media={[{ ...image, type: ATTACHMENT_TYPE.IMAGE }]}
-          />
-        </div>
-      );
-    }
-
-    return (
-      <div className="size-full overflow-y-auto whitespace-pre-wrap break-words">
-        {data}
-      </div>
-    );
-  };
-
   const renderContent = (item: ExperimentItem | undefined) => {
     const data = get(item, ["output", outputKey], undefined);
     const isTraceVisible = item && traceVisible(item);
 
     if (!data) return "-";
-
-    // Check for media content first if data is a string
-    const hasMedia =
-      isString(data) &&
-      (parseVideoValue(data) !== undefined ||
-        parseImageValue(data) !== undefined);
 
     return (
       <>
@@ -135,11 +76,11 @@ const CompareExperimentsOutputCell: React.FC<
             </Button>
           </TooltipWrapper>
         )}
-        {hasMedia
-          ? renderMediaContent(data as string)
-          : isObject(data)
-            ? renderCodeContent(data)
-            : renderTextContent(toString(data))}
+        {isObject(data) ? (
+          renderCodeContent(data)
+        ) : (
+          <TextAndMediaContentRenderer value={toString(data)} isBig={isBig} />
+        )}
       </>
     );
   };
