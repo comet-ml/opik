@@ -13,11 +13,9 @@ import io.swagger.v3.oas.annotations.media.DiscriminatorMapping;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
-import lombok.AllArgsConstructor;
 import lombok.Builder;
-import lombok.EqualsAndHashCode;
-import lombok.Getter;
-import lombok.ToString;
+import lombok.Data;
+import lombok.RequiredArgsConstructor;
 import lombok.experimental.SuperBuilder;
 import lombok.experimental.UtilityClass;
 
@@ -26,9 +24,7 @@ import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 
-@Getter
-@EqualsAndHashCode
-@ToString
+@Data
 @SuperBuilder(toBuilder = true)
 @JsonTypeInfo(use = JsonTypeInfo.Id.NAME, include = JsonTypeInfo.As.EXISTING_PROPERTY, property = "type", visible = true)
 @JsonSubTypes({
@@ -47,7 +43,7 @@ import java.util.UUID;
         @DiscriminatorMapping(value = AutomationRuleEvaluatorType.Constants.SPAN_LLM_AS_JUDGE, schema = AutomationRuleEvaluatorSpanLlmAsJudge.class),
         @DiscriminatorMapping(value = AutomationRuleEvaluatorType.Constants.SPAN_USER_DEFINED_METRIC_PYTHON, schema = AutomationRuleEvaluatorSpanUserDefinedMetricPython.class),
 })
-@AllArgsConstructor
+@RequiredArgsConstructor
 @JsonIgnoreProperties(ignoreUnknown = true)
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
 public abstract sealed class AutomationRuleEvaluator<T, E extends Filter> implements AutomationRule
@@ -55,7 +51,6 @@ public abstract sealed class AutomationRuleEvaluator<T, E extends Filter> implem
         AutomationRuleEvaluatorTraceThreadLlmAsJudge, AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython,
         AutomationRuleEvaluatorSpanLlmAsJudge, AutomationRuleEvaluatorSpanUserDefinedMetricPython {
 
-    @JsonProperty
     @JsonView({View.Public.class})
     @Schema(accessMode = Schema.AccessMode.READ_ONLY)
     private final UUID id;
@@ -67,30 +62,24 @@ public abstract sealed class AutomationRuleEvaluator<T, E extends Filter> implem
     // Frontend can resolve project names from project_ids using projects API
     // Service layer keeps all fields in sync for seamless migration
 
-    @JsonProperty
     @JsonView({View.Public.class, View.Write.class})
     @Schema(description = "Primary project ID (legacy field, maintained for backwards compatibility)")
     private final UUID projectId;
 
-    @JsonProperty
     @JsonView({View.Public.class})
     @Schema(description = "Primary project name (legacy field, maintained for backwards compatibility)", accessMode = Schema.AccessMode.READ_ONLY)
     private final String projectName;
 
-    @JsonProperty
     @JsonView({View.Public.class, View.Write.class})
     @Schema(description = "Multiple project IDs (new field for multi-project support)")
     private final Set<UUID> projectIds;
 
-    @JsonProperty
     @JsonView({View.Public.class, View.Write.class})
     @NotBlank private final String name;
 
-    @JsonProperty
     @JsonView({View.Public.class, View.Write.class})
     private final float samplingRate;
 
-    @JsonProperty
     @JsonView({View.Public.class, View.Write.class})
     @Builder.Default
     private final boolean enabled = true;
@@ -102,22 +91,18 @@ public abstract sealed class AutomationRuleEvaluator<T, E extends Filter> implem
     @JsonIgnore
     @NotNull private final T code;
 
-    @JsonProperty
     @JsonView({View.Public.class})
     @Schema(accessMode = Schema.AccessMode.READ_ONLY)
     private final Instant createdAt;
 
-    @JsonProperty
     @JsonView({View.Public.class})
     @Schema(accessMode = Schema.AccessMode.READ_ONLY)
     private final String createdBy;
 
-    @JsonProperty
     @JsonView({View.Public.class})
     @Schema(accessMode = Schema.AccessMode.READ_ONLY)
     private final Instant lastUpdatedAt;
 
-    @JsonProperty
     @JsonView({View.Public.class})
     @Schema(accessMode = Schema.AccessMode.READ_ONLY)
     private final String lastUpdatedBy;
