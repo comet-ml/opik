@@ -46,6 +46,7 @@ import LLMPromptMessages from "@/components/pages-shared/llm/LLMPromptMessages/L
 import { LLMMessage } from "@/types/llm";
 import ChatPromptRawView from "@/components/pages-shared/llm/ChatPromptRawView/ChatPromptRawView";
 import { PROMPT_TEMPLATE_STRUCTURE } from "@/types/prompts";
+import TagListRenderer from "@/components/shared/TagListRenderer/TagListRenderer";
 
 enum PROMPT_PREVIEW_MODE {
   write = "write",
@@ -57,6 +58,7 @@ type EditPromptVersionDialogProps = {
   setOpen: (open: boolean) => void;
   template: string;
   metadata?: object;
+  tags?: string[];
   promptName: string;
   templateStructure?: PROMPT_TEMPLATE_STRUCTURE;
   onSetActiveVersionId: (versionId: string) => void;
@@ -67,6 +69,7 @@ const EditPromptVersionDialog: React.FC<EditPromptVersionDialogProps> = ({
   setOpen,
   template: promptTemplate,
   metadata: promptMetadata,
+  tags: promptTags,
   promptName,
   templateStructure,
   onSetActiveVersionId,
@@ -82,6 +85,7 @@ const EditPromptVersionDialog: React.FC<EditPromptVersionDialogProps> = ({
   const [template, setTemplate] = useState(promptTemplate);
   const [metadata, setMetadata] = useState(metadataString);
   const [changeDescription, setChangeDescription] = useState("");
+  const [tags, setTags] = useState<string[]>(promptTags || []);
 
   // Parse messages from template if it's a chat prompt
   const initialMessages = useMemo<LLMMessage[]>(() => {
@@ -121,6 +125,14 @@ const EditPromptVersionDialog: React.FC<EditPromptVersionDialogProps> = ({
     });
   }, []);
 
+  const handleAddTag = useCallback((tag: string) => {
+    setTags((prev) => [...prev, tag]);
+  }, []);
+
+  const handleDeleteTag = useCallback((tag: string) => {
+    setTags((prev) => prev.filter((t) => t !== tag));
+  }, []);
+
   const handleClickEditPrompt = () => {
     const isMetadataValid = metadata === "" || isValidJsonObject(metadata);
 
@@ -143,6 +155,7 @@ const EditPromptVersionDialog: React.FC<EditPromptVersionDialogProps> = ({
       template: finalTemplate,
       changeDescription,
       ...(metadata && { metadata: safelyParseJSON(metadata) }),
+      ...(tags && tags.length > 0 && { tags }),
       ...(templateStructure && { templateStructure }),
       onSuccess: (data) => {
         onSetActiveVersionId(data.id);
@@ -411,6 +424,16 @@ const EditPromptVersionDialog: React.FC<EditPromptVersionDialogProps> = ({
               id="promptMetadata"
               value={changeDescription}
               onChange={(e) => setChangeDescription(e.target.value)}
+            />
+          </div>
+          <div className="flex flex-col gap-2 pb-4">
+            <Label htmlFor="tags">Tags</Label>
+            <TagListRenderer
+              tags={tags}
+              onAddTag={handleAddTag}
+              onDeleteTag={handleDeleteTag}
+              size="sm"
+              align="start"
             />
           </div>
           <div className="flex flex-col gap-2 border-t border-border pb-4">

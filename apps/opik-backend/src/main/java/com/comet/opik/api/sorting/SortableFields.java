@@ -52,4 +52,7 @@ public class SortableFields {
     public static final String COMMENTS = "comments";
     public static final String ENABLED = "enabled";
     public static final String SAMPLING_RATE = "sampling_rate";
+    public static final String COMMIT = "commit";
+    public static final String TEMPLATE = "template";
+    public static final String CHANGE_DESCRIPTION = "change_description";
 }

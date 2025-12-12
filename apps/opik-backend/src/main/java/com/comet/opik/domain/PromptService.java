@@ -5,10 +5,12 @@ import com.comet.opik.api.Prompt;
 import com.comet.opik.api.PromptType;
 import com.comet.opik.api.PromptVersion;
 import com.comet.opik.api.PromptVersion.PromptVersionPage;
+import com.comet.opik.api.PromptVersionBatchUpdate;
 import com.comet.opik.api.TemplateStructure;
 import com.comet.opik.api.error.EntityAlreadyExistsException;
 import com.comet.opik.api.events.webhooks.AlertEvent;
 import com.comet.opik.api.filter.Filter;
+import com.comet.opik.api.sorting.SortingFactoryPromptVersions;
 import com.comet.opik.api.sorting.SortingFactoryPrompts;
 import com.comet.opik.api.sorting.SortingField;
 import com.comet.opik.domain.filter.FilterQueryBuilder;
@@ -65,9 +67,12 @@ public interface PromptService {
 
     List<Prompt> getByIds(Set<UUID> ids);
 
-    PromptVersionPage getVersionsByPromptId(UUID promptId, int page, int size);
+    PromptVersionPage getVersionsByPromptId(
+            UUID promptId, int page, int size, List<SortingField> sortingFields, List<? extends Filter> filters);
 
     PromptVersion getVersionById(UUID id);
+
+    int updateVersions(PromptVersionBatchUpdate update);
 
     Mono<Map<UUID, PromptVersion>> findVersionByIds(Set<UUID> ids);
 
@@ -94,6 +99,7 @@ class PromptServiceImpl implements PromptService {
     private final @NonNull SortingQueryBuilder sortingQueryBuilder;
     private final @NonNull FilterQueryBuilder filterQueryBuilder;
     private final @NonNull SortingFactoryPrompts sortingFactory;
+    private final @NonNull SortingFactoryPromptVersions sortingFactoryPromptVersions;
     private final @NonNull EventBus eventBus;
 
     @Override
@@ -527,23 +533,33 @@ class PromptServiceImpl implements PromptService {
     }
 
     @Override
-    public PromptVersionPage getVersionsByPromptId(@NonNull UUID promptId, int page, int size) {
-        String workspaceId = requestContext.get().getWorkspaceId();
-
+    public PromptVersionPage getVersionsByPromptId(
+            @NonNull UUID promptId,
+            int page,
+            int size,
+            @NonNull List<SortingField> sortingFields,
+            List<? extends Filter> filters) {
+        var workspaceId = requestContext.get().getWorkspaceId();
+        var sortingFieldMapping = sortingFactoryPromptVersions.newFieldMapping(sortingFields);
+        var sortingFieldsSql = sortingQueryBuilder.toOrderBySql(sortingFields, sortingFieldMapping);
+        var filtersSQL = Optional.ofNullable(filters)
+                .flatMap(filter -> filterQueryBuilder.toAnalyticsDbFilters(filter, FilterStrategy.PROMPT_VERSION))
+                .orElse(null);
+        var filterMapping = Optional.ofNullable(filters)
+                .map(filter -> filterQueryBuilder.toStateSQLMapping(filter, FilterStrategy.PROMPT_VERSION))
+                .orElse(Map.of());
         return transactionTemplate.inTransaction(READ_ONLY, handle -> {
-            PromptVersionDAO promptVersionDAO = handle.attach(PromptVersionDAO.class);
-
-            long total = promptVersionDAO.countByPromptId(promptId, workspaceId);
-
+            var dao = handle.attach(PromptVersionDAO.class);
+            var total = dao.findCount(workspaceId, promptId, filtersSQL, filterMapping);
             var offset = (page - 1) * size;
-
-            List<PromptVersion> content = promptVersionDAO.findByPromptId(promptId, workspaceId, size, offset);
-
+            var content = dao.find(
+                    workspaceId, promptId, offset, size, sortingFieldsSql, filtersSQL, filterMapping);
             return PromptVersionPage.builder()
                     .page(page)
                     .size(content.size())
                     .content(content)
                     .total(total)
+                    .sortableBy(sortingFactoryPromptVersions.getSortableFields())
                     .build();
         });
     }
@@ -552,6 +568,20 @@ class PromptServiceImpl implements PromptService {
     public PromptVersion getVersionById(@NonNull UUID id) {
         String workspaceId = requestContext.get().getWorkspaceId();
         return getVersionById(workspaceId, id);
+    }
+
+    @Override
+    public int updateVersions(@NonNull PromptVersionBatchUpdate update) {
+        var workspaceId = requestContext.get().getWorkspaceId();
+        log.info("Updating prompt versions on workspaceId '{}', size '{}', mergeTags '{}'",
+                workspaceId, update.ids().size(), update.mergeTags());
+        int updatedCount = transactionTemplate.inTransaction(WRITE, handle -> {
+            var dao = handle.attach(PromptVersionDAO.class);
+            return dao.update(workspaceId, update.ids(), update, update.mergeTags());
+        });
+        log.info("Successfully updated prompt versions on workspaceId '{}', size '{}', mergeTags '{}'",
+                workspaceId, updatedCount, update.mergeTags());
+        return updatedCount;
     }
 
     @Override
@@ -571,7 +601,7 @@ class PromptServiceImpl implements PromptService {
             PromptVersion promptVersion;
             if (commit == null) {
                 // Fetch latest version directly from prompt_versions table
-                List<PromptVersion> versions = promptVersionDAO.findByPromptId(prompt.id(), workspaceId, 1, 0);
+                List<PromptVersion> versions = promptVersionDAO.find(workspaceId, prompt.id(), 0, 1);
                 if (versions.isEmpty()) {
                     throw new NotFoundException(PROMPT_VERSION_NOT_FOUND);
                 }

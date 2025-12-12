@@ -5,13 +5,17 @@ import com.comet.opik.api.CreatePromptVersion;
 import com.comet.opik.api.Prompt;
 import com.comet.opik.api.PromptType;
 import com.comet.opik.api.PromptVersion;
+import com.comet.opik.api.PromptVersionBatchUpdate;
 import com.comet.opik.api.PromptVersionRetrieve;
+import com.comet.opik.api.PromptVersionUpdate;
 import com.comet.opik.api.ReactServiceErrorResponse;
 import com.comet.opik.api.TemplateStructure;
 import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.api.filter.Operator;
 import com.comet.opik.api.filter.PromptField;
 import com.comet.opik.api.filter.PromptFilter;
+import com.comet.opik.api.filter.PromptVersionField;
+import com.comet.opik.api.filter.PromptVersionFilter;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
 import com.comet.opik.api.resources.utils.ClientSupportUtils;
@@ -21,6 +25,7 @@ import com.comet.opik.api.resources.utils.RedisContainerUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
+import com.comet.opik.api.resources.utils.resources.PromptVersionResourceClient;
 import com.comet.opik.api.sorting.Direction;
 import com.comet.opik.api.sorting.SortableFields;
 import com.comet.opik.api.sorting.SortingField;
@@ -39,7 +44,9 @@ import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 import org.apache.commons.collections4.CollectionUtils;
+import org.apache.commons.collections4.SetUtils;
 import org.apache.commons.lang3.RandomStringUtils;
+import org.apache.commons.lang3.RandomUtils;
 import org.apache.commons.lang3.function.TriFunction;
 import org.apache.hc.core5.http.HttpStatus;
 import org.assertj.core.api.Assertions;
@@ -72,11 +79,13 @@ import java.time.temporal.ChronoUnit;
 import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Random;
 import java.util.Set;
 import java.util.UUID;
 import java.util.function.BiFunction;
 import java.util.function.Function;
+import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
@@ -148,12 +157,14 @@ class PromptResourceTest {
 
     private String baseURI;
     private ClientSupport client;
+    private PromptVersionResourceClient promptVersionResourceClient;
 
     @BeforeAll
     void setUpAll(ClientSupport client) {
 
         this.baseURI = TestUtils.getBaseUrl(client);
         this.client = client;
+        this.promptVersionResourceClient = new PromptVersionResourceClient(client, baseURI);
 
         ClientSupportUtils.config(client);
 
@@ -161,7 +172,11 @@ class PromptResourceTest {
     }
 
     private void mockTargetWorkspace(String apiKey, String workspaceName, String workspaceId) {
-        AuthTestUtils.mockTargetWorkspace(wireMock.server(), apiKey, workspaceName, workspaceId, USER);
+        mockTargetWorkspace(apiKey, workspaceName, workspaceId, USER);
+    }
+
+    private void mockTargetWorkspace(String apiKey, String workspaceName, String workspaceId, String user) {
+        AuthTestUtils.mockTargetWorkspace(wireMock.server(), apiKey, workspaceName, workspaceId, user);
     }
 
     @AfterAll
@@ -1026,8 +1041,11 @@ class PromptResourceTest {
 
             var actualPrompt = getPrompt(promptId, API_KEY, TEST_WORKSPACE);
 
+            var expectedTags = updatedPrompt.tags() == null
+                    ? prompt.tags() // if null, keep previous tags
+                    : (updatedPrompt.tags().isEmpty() ? null : updatedPrompt.tags()); // if empty, clears tags
             updatedPrompt = updatedPrompt.toBuilder()
-                    .tags(updatedPrompt.tags() == null ? prompt.tags() : updatedPrompt.tags())
+                    .tags(expectedTags)
                     .build();
 
             assertThat(actualPrompt)
@@ -1464,6 +1482,8 @@ class PromptResourceTest {
 
             var prompts = PodamFactoryUtils.manufacturePojoList(factory, Prompt.class).stream()
                     .map(prompt -> prompt.toBuilder()
+                            // Only alphanumeric to avoid flakiness with special characters when sorting by name
+                            .name(RandomStringUtils.secure().nextAlphanumeric(10))
                             .lastUpdatedBy(USER)
                             .createdBy(USER)
                             .versionCount(random.nextLong(5))
@@ -2950,6 +2970,7 @@ class PromptResourceTest {
         assertThat(createdPromptVersion.template()).isEqualTo(promptVersion.template());
         assertThat(createdPromptVersion.variables())
                 .isEqualTo(TemplateParseUtils.extractVariables(promptVersion.template(), promptVersion.type()));
+        assertThat(createdPromptVersion.tags()).containsExactlyInAnyOrderElementsOf(promptVersion.tags());
         assertThat(createdPromptVersion.createdAt()).isBetween(promptVersion.createdAt(), Instant.now());
         assertThat(createdPromptVersion.createdBy()).isEqualTo(USER);
     }
@@ -3040,5 +3061,928 @@ class PromptResourceTest {
 
         Assertions.assertThat(actual).isBetween(expected, now);
         return 0;
+    }
+
+    @Nested
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class PromptVersionFilteringTest {
+
+        Stream<Arguments> filterPromptVersionsByTags() {
+            return Stream.of(
+                    // CONTAINS operator
+                    arguments(
+                            Operator.CONTAINS,
+                            "contains specific tag",
+                            (BiFunction<PromptVersion, PromptVersion, String>) (v1, v2) -> v1.tags().stream().sorted()
+                                    .findFirst().map(t -> t.substring(2, t.length() - 2)).orElse(null),
+                            (BiFunction<PromptVersion, PromptVersion, Function<PromptVersion, Boolean>>) (v1,
+                                    v2) -> v -> v1.tags().containsAll(v.tags())));
+        }
+
+        @ParameterizedTest(name = "Success: filter by tags - {1}")
+        @MethodSource
+        @DisplayName("Success: filter prompt versions by tags with various operators")
+        void filterPromptVersionsByTags(
+                Operator operator,
+                String description,
+                BiFunction<PromptVersion, PromptVersion, String> getFilterValue,
+                BiFunction<PromptVersion, PromptVersion, Function<PromptVersion, Boolean>> getAssertion) {
+            var prompt = factory.manufacturePojo(Prompt.class);
+            var promptId = createPrompt(prompt, API_KEY, TEST_WORKSPACE);
+
+            var tag1 = RandomStringUtils.secure().nextAlphanumeric(10);
+            var tag2 = RandomStringUtils.secure().nextAlphanumeric(10);
+            var version1 = factory.manufacturePojo(PromptVersion.class).toBuilder()
+                    .promptId(promptId)
+                    .tags(Set.of(tag1))
+                    .build();
+            var version2 = factory.manufacturePojo(PromptVersion.class).toBuilder()
+                    .promptId(promptId)
+                    .tags(Set.of(tag2))
+                    .build();
+            var createdV1 = promptVersionResourceClient.createPromptVersion(
+                    CreatePromptVersion.builder().name(prompt.name()).version(version1).build(), API_KEY,
+                    TEST_WORKSPACE);
+            var createdV2 = promptVersionResourceClient.createPromptVersion(
+                    CreatePromptVersion.builder().name(prompt.name()).version(version2).build(), API_KEY,
+                    TEST_WORKSPACE);
+
+            var filterValue = getFilterValue.apply(createdV1, createdV2);
+            var filters = List.of(PromptVersionFilter.builder()
+                    .field(PromptVersionField.TAGS)
+                    .operator(operator)
+                    .value(filterValue)
+                    .build());
+            var page = promptVersionResourceClient.getPromptVersionsByPromptId(
+                    promptId, API_KEY, TEST_WORKSPACE, filters, null);
+
+            var assertion = getAssertion.apply(createdV1, createdV2);
+            assertThat(page.total()).isEqualTo(1);
+            assertThat(assertion.apply(page.content().getFirst())).isTrue();
+        }
+
+        Stream<Arguments> filterPromptVersionsByMetadata() {
+            // Generate random metadata keys for each test case
+            var keyEqual = RandomStringUtils.secure().nextAlphanumeric(10);
+            var keyNotEqual = RandomStringUtils.secure().nextAlphanumeric(10);
+            var keyContains = RandomStringUtils.secure().nextAlphanumeric(10);
+            var keyNotContains = RandomStringUtils.secure().nextAlphanumeric(10);
+            var keyStartsWith = RandomStringUtils.secure().nextAlphanumeric(10);
+            var keyEndsWith = RandomStringUtils.secure().nextAlphanumeric(10);
+            var keyGreaterThan = RandomStringUtils.secure().nextAlphanumeric(10);
+            var keyLessThan = RandomStringUtils.secure().nextAlphanumeric(10);
+            var keyGreaterThanEqual = RandomStringUtils.secure().nextAlphanumeric(10);
+            var keyLessThanEqual = RandomStringUtils.secure().nextAlphanumeric(10);
+
+            // Generate random values for string fields
+            var value1 = RandomStringUtils.secure().nextAlphanumeric(20);
+            var value2 = RandomStringUtils.secure().nextAlphanumeric(20);
+            var randomInt1 = RandomUtils.secure().randomInt(1000, 2000);
+            var randomInt2 = RandomUtils.secure().randomInt(3000, 4000);
+            var randomDouble1 = RandomUtils.secure().randomDouble(1.0, 2.0);
+            var randomDouble2 = RandomUtils.secure().randomDouble(3.0, 4.0);
+
+            return Stream.of(
+                    // EQUAL operator
+                    arguments(
+                            keyEqual,
+                            value1,
+                            value2,
+                            Operator.EQUAL,
+                            value1,
+                            (Function<PromptVersion, Boolean>) v -> v.metadata().get(keyEqual).asText()
+                                    .equals(value1)),
+                    // NOT_EQUAL operator
+                    arguments(
+                            keyNotEqual,
+                            value1,
+                            value2,
+                            Operator.NOT_EQUAL,
+                            value2,
+                            (Function<PromptVersion, Boolean>) v -> !v.metadata().get(keyNotEqual).asText()
+                                    .equals(value2)),
+                    // CONTAINS operator
+                    arguments(
+                            keyContains,
+                            value1,
+                            value2,
+                            Operator.CONTAINS,
+                            value1.substring(5, 15),
+                            (Function<PromptVersion, Boolean>) v -> v.metadata().get(keyContains).asText()
+                                    .contains(value1.substring(5, 15))),
+                    // NOT_CONTAINS operator
+                    arguments(
+                            keyNotContains,
+                            value1,
+                            value2,
+                            Operator.NOT_CONTAINS,
+                            value2.substring(5, 15),
+                            (Function<PromptVersion, Boolean>) v -> !v.metadata().get(keyNotContains).asText()
+                                    .contains(value2.substring(5, 15))),
+                    // STARTS_WITH operator
+                    arguments(
+                            keyStartsWith,
+                            value1,
+                            value2,
+                            Operator.STARTS_WITH,
+                            value1.substring(0, 10),
+                            (Function<PromptVersion, Boolean>) v -> v.metadata().get(keyStartsWith).asText()
+                                    .startsWith(value1.substring(0, 10))),
+                    // ENDS_WITH operator
+                    arguments(
+                            keyEndsWith,
+                            value1,
+                            value2,
+                            Operator.ENDS_WITH,
+                            value1.substring(10),
+                            (Function<PromptVersion, Boolean>) v -> v.metadata().get(keyEndsWith).asText()
+                                    .endsWith(value1.substring(10))),
+                    // GREATER_THAN operator (numeric)
+                    arguments(
+                            keyGreaterThan,
+                            randomInt1,
+                            randomInt2,
+                            Operator.GREATER_THAN,
+                            String.valueOf((randomInt1 + randomInt2) / 2),
+                            (Function<PromptVersion, Boolean>) v -> v.metadata().get(keyGreaterThan)
+                                    .asInt() > (randomInt1 + randomInt2) / 2),
+                    // LESS_THAN operator (numeric)
+                    arguments(
+                            keyLessThan,
+                            randomDouble1,
+                            randomDouble2,
+                            Operator.LESS_THAN,
+                            String.valueOf((randomDouble1 + randomDouble2) / 2),
+                            (Function<PromptVersion, Boolean>) v -> v.metadata().get(keyLessThan)
+                                    .asDouble() < (randomDouble1 + randomDouble2) / 2),
+                    // GREATER_THAN_EQUAL operator (numeric)
+                    arguments(
+                            keyGreaterThanEqual,
+                            randomInt1,
+                            randomInt2,
+                            Operator.GREATER_THAN_EQUAL,
+                            String.valueOf((randomInt1 + randomInt2) / 2),
+                            (Function<PromptVersion, Boolean>) v -> v.metadata().get(keyGreaterThanEqual)
+                                    .asInt() >= (randomInt1 + randomInt2) / 2),
+                    // LESS_THAN_EQUAL operator (numeric)
+                    arguments(
+                            keyLessThanEqual,
+                            randomInt2,
+                            randomInt1,
+                            Operator.LESS_THAN_EQUAL,
+                            String.valueOf((randomInt1 + randomInt2) / 2),
+                            (Function<PromptVersion, Boolean>) v -> v.metadata().get(keyLessThanEqual)
+                                    .asInt() <= (randomInt1 + randomInt2) / 2));
+        }
+
+        @ParameterizedTest(name = "Success: filter by metadata.{0} - {3}")
+        @MethodSource
+        @DisplayName("Success: filter prompt versions by metadata fields with various operators")
+        void filterPromptVersionsByMetadata(
+                String metadataKey,
+                Object metadataValue1,
+                Object metadataValue2,
+                Operator operator,
+                String filterValue,
+                Function<PromptVersion, Boolean> assertion) {
+            var prompt = factory.manufacturePojo(Prompt.class);
+            var promptId = createPrompt(prompt, API_KEY, TEST_WORKSPACE);
+
+            var version1 = factory.manufacturePojo(PromptVersion.class).toBuilder()
+                    .promptId(promptId)
+                    .metadata(JsonUtils.valueToTree(Map.of(metadataKey, metadataValue1)))
+                    .build();
+            var version2 = factory.manufacturePojo(PromptVersion.class).toBuilder()
+                    .promptId(promptId)
+                    .metadata(JsonUtils.valueToTree(Map.of(metadataKey, metadataValue2)))
+                    .build();
+            promptVersionResourceClient.createPromptVersion(
+                    CreatePromptVersion.builder().name(prompt.name()).version(version1).build(), API_KEY,
+                    TEST_WORKSPACE);
+            promptVersionResourceClient.createPromptVersion(
+                    CreatePromptVersion.builder().name(prompt.name()).version(version2).build(), API_KEY,
+                    TEST_WORKSPACE);
+
+            var filters = List.of(PromptVersionFilter.builder()
+                    .field(PromptVersionField.METADATA)
+                    .operator(operator)
+                    .key(metadataKey)
+                    .value(filterValue)
+                    .build());
+            var page = promptVersionResourceClient.getPromptVersionsByPromptId(
+                    promptId, API_KEY, TEST_WORKSPACE, filters, null);
+
+            assertThat(page.total()).isEqualTo(1);
+            assertThat(assertion.apply(page.content().getFirst())).isTrue();
+        }
+
+        @Test
+        @DisplayName("Success: filter by metadata keys with spaces and special characters")
+        void filterPromptVersionsByMetadataKeysWithSpaces() {
+            var prompt = factory.manufacturePojo(Prompt.class);
+            var promptId = createPrompt(prompt, API_KEY, TEST_WORKSPACE);
+
+            var uniqueValue1 = RandomStringUtils.secure().nextAlphanumeric(12);
+            var uniqueValue2 = RandomStringUtils.secure().nextAlphanumeric(12);
+            var uniqueModelPrefix = RandomStringUtils.secure().nextAlphabetic(8);
+            var randomTokens = RandomUtils.secure().randomInt(1000, 2000);
+            var version1 = factory.manufacturePojo(PromptVersion.class).toBuilder()
+                    .promptId(promptId)
+                    .metadata(JsonUtils.valueToTree(Map.of(
+                            "prompt metadata", uniqueValue1,
+                            "model name", uniqueModelPrefix + "-turbo",
+                            "max tokens", randomTokens)))
+                    .build();
+            var version2 = factory.manufacturePojo(PromptVersion.class).toBuilder()
+                    .promptId(promptId)
+                    .metadata(JsonUtils.valueToTree(Map.of(
+                            "prompt metadata", uniqueValue2,
+                            "model name", "other-" + RandomStringUtils.secure().nextAlphabetic(8))))
+                    .build();
+            promptVersionResourceClient.createPromptVersion(
+                    CreatePromptVersion.builder().name(prompt.name()).version(version1).build(), API_KEY,
+                    TEST_WORKSPACE);
+            promptVersionResourceClient.createPromptVersion(
+                    CreatePromptVersion.builder().name(prompt.name()).version(version2).build(), API_KEY,
+                    TEST_WORKSPACE);
+
+            // Filter by metadata key with spaces using EQUAL operator
+            var filters = List.of(PromptVersionFilter.builder()
+                    .field(PromptVersionField.METADATA)
+                    .operator(Operator.EQUAL)
+                    .key("prompt metadata")
+                    .value(uniqueValue1)
+                    .build());
+            var page = promptVersionResourceClient.getPromptVersionsByPromptId(
+                    promptId, API_KEY, TEST_WORKSPACE, filters, null);
+
+            assertThat(page.total()).isEqualTo(1);
+            assertThat(page.content().getFirst().metadata().get("prompt metadata").asText()).isEqualTo(uniqueValue1);
+
+            // Filter by another key with spaces using CONTAINS operator
+            var filters2 = List.of(PromptVersionFilter.builder()
+                    .field(PromptVersionField.METADATA)
+                    .operator(Operator.CONTAINS)
+                    .key("model name")
+                    .value(uniqueModelPrefix.substring(0, 6))
+                    .build());
+            var page2 = promptVersionResourceClient.getPromptVersionsByPromptId(
+                    promptId, API_KEY, TEST_WORKSPACE, filters2, null);
+
+            assertThat(page2.total()).isEqualTo(1);
+            assertThat(page2.content().getFirst().metadata().get("model name").asText())
+                    .isEqualTo(uniqueModelPrefix + "-turbo");
+
+            // Filter by numeric metadata key with spaces using GREATER_THAN operator
+            var filters3 = List.of(PromptVersionFilter.builder()
+                    .field(PromptVersionField.METADATA)
+                    .operator(Operator.GREATER_THAN)
+                    .key("max tokens")
+                    .value(String.valueOf(randomTokens - 1))
+                    .build());
+            var page3 = promptVersionResourceClient.getPromptVersionsByPromptId(
+                    promptId, API_KEY, TEST_WORKSPACE, filters3, null);
+
+            assertThat(page3.total()).isEqualTo(1);
+            assertThat(page3.content().getFirst().metadata().get("max tokens").asInt())
+                    .isEqualTo(randomTokens);
+        }
+
+        @Test
+        @DisplayName("Success: filter prompt versions by multiple metadata fields")
+        void filterPromptVersionsByMultipleMetadataFields() {
+            var prompt = factory.manufacturePojo(Prompt.class);
+            var promptId = createPrompt(prompt, API_KEY, TEST_WORKSPACE);
+
+            var key1 = RandomStringUtils.secure().nextAlphanumeric(10);
+            var key2 = RandomStringUtils.secure().nextAlphanumeric(10);
+            var value1a = RandomStringUtils.secure().nextAlphanumeric(15);
+            var value1b = RandomStringUtils.secure().nextAlphanumeric(15);
+            var value2a = RandomStringUtils.secure().nextAlphanumeric(15);
+            var value2b = RandomStringUtils.secure().nextAlphanumeric(15);
+            var version1 = factory.manufacturePojo(PromptVersion.class).toBuilder()
+                    .promptId(promptId)
+                    .metadata(JsonUtils.valueToTree(Map.of(key1, value1a, key2, value2a)))
+                    .build();
+            var version2 = factory.manufacturePojo(PromptVersion.class).toBuilder()
+                    .promptId(promptId)
+                    .metadata(JsonUtils.valueToTree(Map.of(key1, value1a, key2, value2b)))
+                    .build();
+            var version3 = factory.manufacturePojo(PromptVersion.class).toBuilder()
+                    .promptId(promptId)
+                    .metadata(JsonUtils.valueToTree(Map.of(key1, value1b, key2, value2a)))
+                    .build();
+
+            promptVersionResourceClient.createPromptVersion(
+                    CreatePromptVersion.builder().name(prompt.name()).version(version1).build(), API_KEY,
+                    TEST_WORKSPACE);
+            promptVersionResourceClient.createPromptVersion(
+                    CreatePromptVersion.builder().name(prompt.name()).version(version2).build(), API_KEY,
+                    TEST_WORKSPACE);
+            promptVersionResourceClient.createPromptVersion(
+                    CreatePromptVersion.builder().name(prompt.name()).version(version3).build(), API_KEY,
+                    TEST_WORKSPACE);
+
+            // Filter by key1 = "value1a" AND key2 = "value2a"
+            var filters = List.of(
+                    PromptVersionFilter.builder()
+                            .field(PromptVersionField.METADATA)
+                            .operator(Operator.EQUAL)
+                            .key(key1)
+                            .value(value1a)
+                            .build(),
+                    PromptVersionFilter.builder()
+                            .field(PromptVersionField.METADATA)
+                            .operator(Operator.EQUAL)
+                            .key(key2)
+                            .value(value2a)
+                            .build());
+            var page = promptVersionResourceClient.getPromptVersionsByPromptId(
+                    promptId, API_KEY, TEST_WORKSPACE, filters, null);
+
+            assertThat(page.total()).isEqualTo(1);
+            assertThat(page.content().getFirst().metadata().get(key1).asText()).isEqualTo(value1a);
+            assertThat(page.content().getFirst().metadata().get(key2).asText()).isEqualTo(value2a);
+        }
+
+        Stream<Arguments> filterPromptVersionsByCommit() {
+            return Stream.of(
+                    // EQUAL operator
+                    arguments(
+                            Operator.EQUAL,
+                            "exact commit match",
+                            (BiFunction<PromptVersion, PromptVersion, String>) (v1, v2) -> v1
+                                    .commit(),
+                            (BiFunction<PromptVersion, PromptVersion, Function<PromptVersion, Boolean>>) (
+                                    v1, v2) -> v -> v.commit().equals(v1.commit())),
+                    // NOT_EQUAL operator
+                    arguments(
+                            Operator.NOT_EQUAL,
+                            "not equal to commit",
+                            (BiFunction<PromptVersion, PromptVersion, String>) (v1, v2) -> v1
+                                    .commit(),
+                            (BiFunction<PromptVersion, PromptVersion, Function<PromptVersion, Boolean>>) (
+                                    v1, v2) -> v -> !v.commit().equals(v1.commit())),
+                    // CONTAINS operator
+                    arguments(
+                            Operator.CONTAINS,
+                            "contains substring",
+                            (BiFunction<PromptVersion, PromptVersion, String>) (v1, v2) -> v1
+                                    .commit().substring(1, 7),
+                            (BiFunction<PromptVersion, PromptVersion, Function<PromptVersion, Boolean>>) (
+                                    v1, v2) -> v -> v.commit().contains(v1.commit().substring(1, 7))),
+                    // NOT_CONTAINS operator
+                    arguments(
+                            Operator.NOT_CONTAINS,
+                            "does not contain substring",
+                            (BiFunction<PromptVersion, PromptVersion, String>) (v1, v2) -> v1
+                                    .commit().substring(1, 7),
+                            (BiFunction<PromptVersion, PromptVersion, Function<PromptVersion, Boolean>>) (
+                                    v1, v2) -> v -> !v.commit().contains(v1.commit().substring(1, 7))),
+                    // STARTS_WITH operator
+                    arguments(
+                            Operator.STARTS_WITH,
+                            "starts with prefix",
+                            (BiFunction<PromptVersion, PromptVersion, String>) (v1, v2) -> v1.commit().substring(0, 6),
+                            (BiFunction<PromptVersion, PromptVersion, Function<PromptVersion, Boolean>>) (
+                                    v1, v2) -> v -> v.commit().startsWith(v1.commit().substring(0, 6))),
+                    // ENDS_WITH operator
+                    arguments(
+                            Operator.ENDS_WITH,
+                            "ends with suffix",
+                            (BiFunction<PromptVersion, PromptVersion, String>) (v1, v2) -> v1.commit().substring(2),
+                            (BiFunction<PromptVersion, PromptVersion, Function<PromptVersion, Boolean>>) (
+                                    v1, v2) -> v -> v.commit().endsWith(v1.commit().substring(2))));
+        }
+
+        @ParameterizedTest(name = "Success: filter by commit - {1}")
+        @MethodSource
+        @DisplayName("Success: filter prompt versions by commit field")
+        void filterPromptVersionsByCommit(
+                Operator operator,
+                String description,
+                BiFunction<PromptVersion, PromptVersion, String> getFilterValue,
+                BiFunction<PromptVersion, PromptVersion, Function<PromptVersion, Boolean>> getAssertion) {
+            // Create prompt without template to avoid auto-creating initial version
+            var prompt = factory.manufacturePojo(Prompt.class).toBuilder()
+                    .template(null)
+                    .build();
+            var promptId = createPrompt(prompt, API_KEY, TEST_WORKSPACE);
+
+            var versions = IntStream.range(0, 2)
+                    .mapToObj(i -> factory.manufacturePojo(PromptVersion.class).toBuilder()
+                            .promptId(promptId)
+                            .build())
+                    .map(version -> promptVersionResourceClient.createPromptVersion(
+                            CreatePromptVersion.builder().name(prompt.name()).version(version).build(),
+                            API_KEY,
+                            TEST_WORKSPACE))
+                    .toList();
+
+            var version1 = versions.get(0);
+            var version2 = versions.get(1);
+            var filterValue = getFilterValue.apply(version1, version2);
+            var filters = List.of(PromptVersionFilter.builder()
+                    .field(PromptVersionField.COMMIT)
+                    .operator(operator)
+                    .value(filterValue)
+                    .build());
+            var page = promptVersionResourceClient.getPromptVersionsByPromptId(
+                    promptId, API_KEY, TEST_WORKSPACE, filters, null);
+
+            var assertion = getAssertion.apply(version1, version2);
+            assertThat(page.total()).isEqualTo(1);
+            assertThat(assertion.apply(page.content().getFirst())).isTrue();
+        }
+
+        Stream<Arguments> filterPromptVersionsByStringFields() {
+            return Stream.of(
+                    // CONTAINS - ID
+                    arguments(
+                            PromptVersionField.ID,
+                            Operator.CONTAINS,
+                            "ID contains substring",
+                            (Function<PromptVersion, String>) v -> v.id().toString(),
+                            (BiFunction<PromptVersion, String, String>) (v, field) -> field.substring(10, 20),
+                            (BiFunction<PromptVersion, String, Boolean>) (v, filterValue) -> v.id().toString()
+                                    .contains(filterValue)),
+                    // NOT_CONTAINS - TEMPLATE
+                    arguments(
+                            PromptVersionField.TEMPLATE,
+                            Operator.NOT_CONTAINS,
+                            "template not contains random string",
+                            (Function<PromptVersion, String>) PromptVersion::template,
+                            (BiFunction<PromptVersion, String, String>) (v, field) -> field.substring(10, 20),
+                            (BiFunction<PromptVersion, String, Boolean>) (v, filterValue) -> !v.template()
+                                    .contains(filterValue)),
+                    // STARTS_WITH - CHANGE_DESCRIPTION
+                    arguments(
+                            PromptVersionField.CHANGE_DESCRIPTION,
+                            Operator.STARTS_WITH,
+                            "change description starts with prefix",
+                            (Function<PromptVersion, String>) PromptVersion::changeDescription,
+                            (BiFunction<PromptVersion, String, String>) (v, field) -> field.substring(0, 6),
+                            (BiFunction<PromptVersion, String, Boolean>) (v, filterValue) -> v.changeDescription()
+                                    .startsWith(filterValue)),
+                    // ENDS_WITH - CREATED_BY
+                    arguments(
+                            PromptVersionField.CREATED_BY,
+                            Operator.ENDS_WITH,
+                            "created_by ends with suffix",
+                            (Function<PromptVersion, String>) PromptVersion::createdBy,
+                            (BiFunction<PromptVersion, String, String>) (v, field) -> field
+                                    .substring(field.length() - 8),
+                            (BiFunction<PromptVersion, String, Boolean>) (v, filterValue) -> v.createdBy()
+                                    .endsWith(filterValue)),
+                    // EQUAL - ID
+                    arguments(
+                            PromptVersionField.ID,
+                            Operator.EQUAL,
+                            "exact ID match",
+                            (Function<PromptVersion, String>) v -> v.id().toString(),
+                            (BiFunction<PromptVersion, String, String>) (v, field) -> field,
+                            (BiFunction<PromptVersion, String, Boolean>) (v, filterValue) -> v.id().toString()
+                                    .equals(filterValue)),
+                    // NOT_EQUAL - TEMPLATE
+                    arguments(
+                            PromptVersionField.TEMPLATE,
+                            Operator.NOT_EQUAL,
+                            "not equal to template",
+                            (Function<PromptVersion, String>) PromptVersion::template,
+                            (BiFunction<PromptVersion, String, String>) (v, field) -> field,
+                            (BiFunction<PromptVersion, String, Boolean>) (v, filterValue) -> !v.template()
+                                    .equals(filterValue)));
+        }
+
+        @ParameterizedTest(name = "Success: filter by {0} - {1}")
+        @MethodSource
+        @DisplayName("Success: filter prompt versions by string fields")
+        void filterPromptVersionsByStringFields(
+                PromptVersionField field,
+                Operator operator,
+                String description,
+                Function<PromptVersion, String> getFieldValue,
+                BiFunction<PromptVersion, String, String> getFilterValue,
+                BiFunction<PromptVersion, String, Boolean> assertion) {
+            var prompt = factory.manufacturePojo(Prompt.class).toBuilder()
+                    .template(null)
+                    .build();
+            var promptId = createPrompt(prompt, API_KEY, TEST_WORKSPACE);
+
+            // Create second API key with different user for version2
+            var apiKey2 = UUID.randomUUID().toString();
+            var user2 = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey2, TEST_WORKSPACE, WORKSPACE_ID, user2);
+
+            var template1 = RandomStringUtils.secure().nextAlphanumeric(30);
+            var template2 = RandomStringUtils.secure().nextAlphanumeric(30);
+            var version1 = factory.manufacturePojo(PromptVersion.class).toBuilder()
+                    .promptId(promptId)
+                    .template(template1)
+                    .build();
+            var createdV1 = promptVersionResourceClient.createPromptVersion(
+                    CreatePromptVersion.builder().name(prompt.name()).version(version1).build(), API_KEY,
+                    TEST_WORKSPACE);
+            var version2 = factory.manufacturePojo(PromptVersion.class).toBuilder()
+                    .promptId(promptId)
+                    .template(template2)
+                    .build();
+            promptVersionResourceClient.createPromptVersion(
+                    CreatePromptVersion.builder().name(prompt.name()).version(version2).build(), apiKey2,
+                    TEST_WORKSPACE);
+
+            var fieldValue = getFieldValue.apply(createdV1);
+            var filterValue = getFilterValue.apply(createdV1, fieldValue);
+            var filters = List.of(PromptVersionFilter.builder()
+                    .field(field)
+                    .operator(operator)
+                    .value(filterValue)
+                    .build());
+            var page = promptVersionResourceClient.getPromptVersionsByPromptId(
+                    promptId, API_KEY, TEST_WORKSPACE, filters, null);
+
+            assertThat(page.total()).isEqualTo(1);
+            assertThat(assertion.apply(page.content().getFirst(), filterValue)).isTrue();
+        }
+
+        Stream<Arguments> filterPromptVersionsByCreatedAt() {
+            return Stream.of(
+                    // CREATED_AT - GREATER_THAN
+                    arguments(
+                            Operator.GREATER_THAN,
+                            "created after timestamp",
+                            (Function<Instant, Instant>) now -> now.minus(1, ChronoUnit.HOURS),
+                            (BiFunction<PromptVersion, Instant, Boolean>) (v, filterValue) -> v.createdAt()
+                                    .isAfter(filterValue)),
+                    // CREATED_AT - LESS_THAN
+                    arguments(
+                            Operator.LESS_THAN,
+                            "created before timestamp",
+                            (Function<Instant, Instant>) now -> now.plus(1, ChronoUnit.HOURS),
+                            (BiFunction<PromptVersion, Instant, Boolean>) (v, filterValue) -> v.createdAt()
+                                    .isBefore(filterValue)),
+                    // CREATED_AT - GREATER_THAN_EQUAL
+                    arguments(
+                            Operator.GREATER_THAN_EQUAL,
+                            "created at or after timestamp",
+                            (Function<Instant, Instant>) now -> now.minus(1, ChronoUnit.HOURS),
+                            (BiFunction<PromptVersion, Instant, Boolean>) (v,
+                                    filterValue) -> v.createdAt().isAfter(filterValue)),
+                    // CREATED_AT - LESS_THAN_EQUAL
+                    arguments(
+                            Operator.LESS_THAN_EQUAL,
+                            "created at or before timestamp",
+                            (Function<Instant, Instant>) now -> now.plus(1, ChronoUnit.HOURS),
+                            (BiFunction<PromptVersion, Instant, Boolean>) (v,
+                                    filterValue) -> v.createdAt().isBefore(filterValue)),
+                    // CREATED_AT - EQUAL
+                    arguments(
+                            Operator.EQUAL,
+                            "exact created_at match",
+                            (Function<Instant, Instant>) now -> now,
+                            (BiFunction<PromptVersion, Instant, Boolean>) (v, filterValue) -> v.createdAt()
+                                    .equals(filterValue)),
+                    // CREATED_AT - NOT_EQUAL
+                    arguments(
+                            Operator.NOT_EQUAL,
+                            "not equal to created_at",
+                            (Function<Instant, Instant>) now -> now.plus(1, ChronoUnit.HOURS),
+                            (BiFunction<PromptVersion, Instant, Boolean>) (v, filterValue) -> !v.createdAt()
+                                    .equals(filterValue)));
+        }
+
+        @ParameterizedTest(name = "Success: filter by CREATED_AT - {1}")
+        @MethodSource
+        @DisplayName("Success: filter prompt versions by CREATED_AT field")
+        void filterPromptVersionsByCreatedAt(
+                Operator operator,
+                String description,
+                Function<Instant, Instant> getFilterValue,
+                BiFunction<PromptVersion, Instant, Boolean> assertion) {
+            var prompt = factory.manufacturePojo(Prompt.class).toBuilder()
+                    .template(null)
+                    .build();
+            var promptId = createPrompt(prompt, API_KEY, TEST_WORKSPACE);
+
+            var version = factory.manufacturePojo(PromptVersion.class).toBuilder()
+                    .promptId(promptId)
+                    .build();
+            var createdVersion = promptVersionResourceClient.createPromptVersion(
+                    CreatePromptVersion.builder().name(prompt.name()).version(version).build(),
+                    API_KEY,
+                    TEST_WORKSPACE);
+
+            // For EQUAL operator, use the actual createdAt timestamp
+            var referenceTime = operator == Operator.EQUAL ? createdVersion.createdAt() : Instant.now();
+            var filterValue = getFilterValue.apply(referenceTime);
+            var filters = List.of(PromptVersionFilter.builder()
+                    .field(PromptVersionField.CREATED_AT)
+                    .operator(operator)
+                    .value(filterValue.toString())
+                    .build());
+            var page = promptVersionResourceClient.getPromptVersionsByPromptId(
+                    promptId, API_KEY, TEST_WORKSPACE, filters, null);
+
+            assertThat(page.total()).isEqualTo(1);
+            assertThat(assertion.apply(page.content().getFirst(), filterValue)).isTrue();
+        }
+
+        Stream<Arguments> filterPromptVersionsByType() {
+            return Stream.of(
+                    // EQUAL operator
+                    arguments(
+                            Operator.EQUAL,
+                            PromptType.MUSTACHE,
+                            (Function<PromptVersion, Boolean>) v -> v.type() == PromptType.MUSTACHE),
+                    // NOT_EQUAL operator
+                    arguments(
+                            Operator.NOT_EQUAL,
+                            PromptType.MUSTACHE,
+                            (Function<PromptVersion, Boolean>) v -> v.type() != PromptType.MUSTACHE));
+        }
+
+        @ParameterizedTest(name = "Success: filter by TYPE - {0}")
+        @MethodSource
+        @DisplayName("Success: filter prompt versions by TYPE field (ENUM)")
+        void filterPromptVersionsByType(
+                Operator operator,
+                PromptType filterType,
+                Function<PromptVersion, Boolean> assertion) {
+            // Create prompt without template to avoid auto-creating initial version
+            var prompt = factory.manufacturePojo(Prompt.class).toBuilder().template(null).build();
+            var promptId = createPrompt(prompt, API_KEY, TEST_WORKSPACE);
+
+            var version1 = factory.manufacturePojo(PromptVersion.class).toBuilder()
+                    .promptId(promptId)
+                    .type(PromptType.MUSTACHE)
+                    .build();
+            var version2 = factory.manufacturePojo(PromptVersion.class).toBuilder()
+                    .promptId(promptId)
+                    .type(PromptType.JINJA2)
+                    .build();
+
+            promptVersionResourceClient.createPromptVersion(
+                    CreatePromptVersion.builder().name(prompt.name()).version(version1).build(), API_KEY,
+                    TEST_WORKSPACE);
+            promptVersionResourceClient.createPromptVersion(
+                    CreatePromptVersion.builder().name(prompt.name()).version(version2).build(), API_KEY,
+                    TEST_WORKSPACE);
+
+            var filters = List.of(PromptVersionFilter.builder()
+                    .field(PromptVersionField.TYPE)
+                    .operator(operator)
+                    .value(filterType.getValue())
+                    .build());
+            var page = promptVersionResourceClient.getPromptVersionsByPromptId(
+                    promptId, API_KEY, TEST_WORKSPACE, filters, null);
+
+            assertThat(page.total()).isEqualTo(1);
+            assertThat(assertion.apply(page.content().getFirst())).isTrue();
+        }
+    }
+
+    @Nested
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class PromptVersionSortingTest {
+        Stream<Arguments> sortPromptVersions() {
+            var idComparator = Comparator.comparing(PromptVersion::id);
+            var commitComparator = Comparator.comparing(
+                    PromptVersion::commit, String.CASE_INSENSITIVE_ORDER)
+                    .thenComparing(PromptVersion::id, Comparator.reverseOrder());
+            var templateComparator = Comparator.comparing(
+                    PromptVersion::template, String.CASE_INSENSITIVE_ORDER)
+                    .thenComparing(PromptVersion::id, Comparator.reverseOrder());
+            var changeDescriptionComparator = Comparator.comparing(
+                    PromptVersion::changeDescription, String.CASE_INSENSITIVE_ORDER)
+                    .thenComparing(PromptVersion::id, Comparator.reverseOrder());
+            var typeComparator = Comparator
+                    .comparing((PromptVersion v) -> v.type().ordinal())
+                    .thenComparing(PromptVersion::id, Comparator.reverseOrder());
+            var typeComparatorReversed = Comparator
+                    .comparing((PromptVersion v) -> v.type().ordinal(), Comparator.reverseOrder())
+                    .thenComparing(PromptVersion::id, Comparator.reverseOrder());
+            var tagsComparator = Comparator
+                    .comparing((PromptVersion v) -> v.tags().toString(), String.CASE_INSENSITIVE_ORDER)
+                    .thenComparing(PromptVersion::id, Comparator.reverseOrder());
+            var createdAtComparator = Comparator.comparing(PromptVersion::createdAt)
+                    .thenComparing(PromptVersion::id, Comparator.reverseOrder());
+            var createdByComparator = Comparator
+                    .comparing(PromptVersion::createdBy, String.CASE_INSENSITIVE_ORDER)
+                    .thenComparing(PromptVersion::id, Comparator.reverseOrder());
+            return Stream.of(
+                    arguments(
+                            idComparator,
+                            "sort by ID ASC",
+                            List.of(SortingField.builder().field(SortableFields.ID).direction(Direction.ASC).build())),
+                    arguments(
+                            idComparator.reversed(),
+                            "sort by ID DESC",
+                            List.of(SortingField.builder().field(SortableFields.ID).direction(Direction.DESC)
+                                    .build())),
+                    arguments(
+                            commitComparator,
+                            "sort by COMMIT ASC",
+                            List.of(SortingField.builder().field(SortableFields.COMMIT).direction(Direction.ASC)
+                                    .build())),
+                    arguments(
+                            commitComparator.reversed(),
+                            "sort by COMMIT DESC",
+                            List.of(SortingField.builder().field(SortableFields.COMMIT).direction(Direction.DESC)
+                                    .build())),
+                    arguments(
+                            templateComparator,
+                            "sort by TEMPLATE ASC",
+                            List.of(SortingField.builder().field(SortableFields.TEMPLATE).direction(Direction.ASC)
+                                    .build())),
+                    arguments(
+                            templateComparator.reversed(),
+                            "sort by TEMPLATE DESC",
+                            List.of(SortingField.builder().field(SortableFields.TEMPLATE).direction(Direction.DESC)
+                                    .build())),
+                    arguments(
+                            changeDescriptionComparator,
+                            "sort by CHANGE_DESCRIPTION ASC",
+                            List.of(SortingField.builder().field(SortableFields.CHANGE_DESCRIPTION)
+                                    .direction(Direction.ASC)
+                                    .build())),
+                    arguments(
+                            changeDescriptionComparator.reversed(),
+                            "sort by CHANGE_DESCRIPTION DESC",
+                            List.of(SortingField.builder().field(SortableFields.CHANGE_DESCRIPTION)
+                                    .direction(Direction.DESC)
+                                    .build())),
+                    arguments(
+                            typeComparator,
+                            "sort by TYPE ASC",
+                            List.of(SortingField.builder().field(SortableFields.TYPE).direction(Direction.ASC)
+                                    .build())),
+                    arguments(
+                            typeComparatorReversed,
+                            "sort by TYPE DESC",
+                            List.of(SortingField.builder().field(SortableFields.TYPE).direction(Direction.DESC)
+                                    .build())),
+                    arguments(
+                            tagsComparator,
+                            "sort by TAGS ASC",
+                            List.of(SortingField.builder().field(SortableFields.TAGS).direction(Direction.ASC)
+                                    .build())),
+                    arguments(
+                            tagsComparator.reversed(),
+                            "sort by TAGS DESC",
+                            List.of(SortingField.builder().field(SortableFields.TAGS).direction(Direction.DESC)
+                                    .build())),
+                    arguments(
+                            createdAtComparator,
+                            "sort by CREATED_AT ASC",
+                            List.of(SortingField.builder().field(SortableFields.CREATED_AT).direction(Direction.ASC)
+                                    .build())),
+                    arguments(
+                            createdAtComparator.reversed(),
+                            "sort by CREATED_AT DESC",
+                            List.of(SortingField.builder().field(SortableFields.CREATED_AT).direction(Direction.DESC)
+                                    .build())),
+                    arguments(
+                            createdByComparator,
+                            "sort by CREATED_BY ASC",
+                            List.of(SortingField.builder().field(SortableFields.CREATED_BY).direction(Direction.ASC)
+                                    .build())),
+                    arguments(
+                            createdByComparator.reversed(),
+                            "sort by CREATED_BY DESC",
+                            List.of(SortingField.builder().field(SortableFields.CREATED_BY).direction(Direction.DESC)
+                                    .build())),
+                    // Multi-field sorting
+                    arguments(
+                            Comparator.comparing((PromptVersion v) -> v.type().ordinal())
+                                    .thenComparing(PromptVersion::createdAt, Comparator.reverseOrder())
+                                    .thenComparing(PromptVersion::id, Comparator.reverseOrder()),
+                            "sort by TYPE ASC, then CREATED_AT DESC",
+                            List.of(
+                                    SortingField.builder().field(SortableFields.TYPE).direction(Direction.ASC).build(),
+                                    SortingField.builder().field(SortableFields.CREATED_AT).direction(Direction.DESC)
+                                            .build())));
+        }
+
+        @ParameterizedTest(name = "{1}")
+        @MethodSource
+        @DisplayName("Success: sort prompt versions by all sortable fields")
+        void sortPromptVersions(
+                Comparator<PromptVersion> comparator, String description, List<SortingField> sortingFields) {
+            var prompt = factory.manufacturePojo(Prompt.class).toBuilder().template(null).build();
+            var promptId = createPrompt(prompt, API_KEY, TEST_WORKSPACE);
+
+            var expectedVersions = PodamFactoryUtils.manufacturePojoList(factory, PromptVersion.class).stream()
+                    .map(promptVersion -> promptVersion.toBuilder()
+                            .promptId(promptId)
+                            // Let server generate these fields
+                            .id(null)
+                            .commit(null)
+                            // Only alphanumeric to avoid flakiness with special characters when sorting
+                            .template(RandomStringUtils.secure().nextAlphanumeric(10))
+                            .changeDescription(RandomStringUtils.secure().nextAlphanumeric(10))
+                            .build())
+                    .map(promptVersion -> {
+                        // With unique users to test sort by created_by
+                        var apiKey = "apiKey-" + UUID.randomUUID();
+                        var user = RandomStringUtils.secure().nextAlphanumeric(10);
+                        mockTargetWorkspace(apiKey, TEST_WORKSPACE, WORKSPACE_ID, user);
+                        return promptVersionResourceClient.createPromptVersion(
+                                CreatePromptVersion.builder().name(prompt.name()).version(promptVersion).build(),
+                                apiKey, TEST_WORKSPACE);
+                    })
+                    .toList();
+
+            var page = promptVersionResourceClient.getPromptVersionsByPromptId(
+                    promptId, API_KEY, TEST_WORKSPACE, null, sortingFields);
+
+            // Verify sort order by comparing IDs in the expected order
+            var actualIds = page.content().stream().map(PromptVersion::id).toList();
+            var expectedIds = expectedVersions.stream().sorted(comparator).map(PromptVersion::id).toList();
+
+            assertThat(page.content()).hasSize(5);
+            assertThat(actualIds).containsExactlyElementsOf(expectedIds);
+        }
+    }
+
+    @Nested
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class UpdatePromptVersionsTest {
+
+        Stream<Arguments> batchUpdatePromptVersionTags() {
+            BiFunction<Set<String>, Set<String>, Set<String>> expectedReplace = (initial, update) -> update;
+            BiFunction<Set<String>, Set<String>, Set<String>> expectedPreserve = (initial, update) -> initial;
+            return Stream.of(
+                    arguments("replace",
+                            PodamFactoryUtils.manufacturePojoSet(factory, String.class),
+                            false,
+                            expectedReplace),
+                    arguments("replace is the default",
+                            PodamFactoryUtils.manufacturePojoSet(factory, String.class),
+                            null,
+                            expectedReplace),
+                    arguments("replace empty clears",
+                            Set.of(),
+                            false,
+                            (BiFunction<Set<String>, Set<String>, Set<String>>) (initial, update) -> null),
+                    arguments("replace null preserves",
+                            null,
+                            false,
+                            expectedPreserve),
+                    arguments("merge",
+                            PodamFactoryUtils.manufacturePojoSet(factory, String.class),
+                            true,
+                            (BiFunction<Set<String>, Set<String>, Set<String>>) SetUtils::union),
+                    arguments("merge empty has no effect",
+                            Set.of(),
+                            true,
+                            expectedPreserve),
+                    arguments("merge null has no effect",
+                            null,
+                            true,
+                            expectedPreserve));
+        }
+
+        @ParameterizedTest(name = "{0}")
+        @MethodSource
+        @DisplayName("Success: batch update prompt version tags")
+        void batchUpdatePromptVersionTags(
+                String testCase,
+                Set<String> updateTags,
+                Boolean mergeTags,
+                BiFunction<Set<String>, Set<String>, Set<String>> expectedTagsFunction) {
+            var prompt = factory.manufacturePojo(Prompt.class).toBuilder().template(null).build();
+            var promptId = createPrompt(prompt, API_KEY, TEST_WORKSPACE);
+
+            var createdVersions = PodamFactoryUtils.manufacturePojoList(factory, PromptVersion.class).stream()
+                    .map(promptVersion -> promptVersion.toBuilder()
+                            .promptId(promptId)
+                            .build())
+                    .map(promptVersion -> promptVersionResourceClient.createPromptVersion(
+                            CreatePromptVersion.builder().name(prompt.name()).version(promptVersion).build(),
+                            API_KEY, TEST_WORKSPACE))
+                    .toList();
+            var initialTagsMap = createdVersions.stream()
+                    .collect(Collectors.toMap(PromptVersion::id, PromptVersion::tags));
+
+            // Batch update tags
+            var update = PromptVersionUpdate.builder().tags(updateTags).build();
+            var batchUpdate = PromptVersionBatchUpdate.builder()
+                    .ids(initialTagsMap.keySet())
+                    .update(update)
+                    .mergeTags(mergeTags)
+                    .build();
+            promptVersionResourceClient.updatePromptVersions(batchUpdate, API_KEY, TEST_WORKSPACE);
+
+            // Retrieve all versions after update
+            var page = promptVersionResourceClient.getPromptVersionsByPromptId(
+                    promptId, API_KEY, TEST_WORKSPACE, null, null);
+
+            assertThat(page.content()).hasSize(5);
+            page.content().forEach(actualVersion -> {
+                var initialTags = initialTagsMap.get(actualVersion.id());
+                var expectedTags = expectedTagsFunction.apply(initialTags, updateTags);
+                assertThat(actualVersion.tags()).isEqualTo(expectedTags);
+            });
+        }
     }
 }

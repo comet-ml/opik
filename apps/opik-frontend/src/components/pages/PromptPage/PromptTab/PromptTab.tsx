@@ -26,6 +26,8 @@ import MediaTagsList from "@/components/pages-shared/llm/PromptMessageMediaTags/
 import { parseLLMMessageContent, parsePromptVersionContent } from "@/lib/llm";
 import CopyButton from "@/components/shared/CopyButton/CopyButton";
 import ChatPromptView from "./ChatPromptView";
+import TagListRenderer from "@/components/shared/TagListRenderer/TagListRenderer";
+import usePromptVersionsUpdateMutation from "@/api/prompts/usePromptVersionsUpdateMutation";
 
 interface PromptTabInterface {
   prompt?: PromptWithLatestVersion;
@@ -43,6 +45,7 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
   );
 
   const editPromptResetKeyRef = useRef(0);
+  const updateVersionsMutation = usePromptVersionsUpdateMutation();
 
   const { data } = usePromptVersionsById(
     {
@@ -211,6 +214,34 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
             </>
           )}
 
+          <>
+            <p className="comet-body-s-accented mt-4 text-foreground">Tags</p>
+            <TagListRenderer
+              tags={activeVersion?.tags || []}
+              onAddTag={(newTag) => {
+                if (!activeVersion?.id) return;
+                const updatedTags = [...(activeVersion.tags || []), newTag];
+                updateVersionsMutation.mutate({
+                  versionIds: [activeVersion.id],
+                  tags: updatedTags,
+                  mergeTags: false,
+                });
+              }}
+              onDeleteTag={(tagToDelete) => {
+                if (!activeVersion?.id) return;
+                const updatedTags = (activeVersion.tags || []).filter(
+                  (t) => t !== tagToDelete,
+                );
+                updateVersionsMutation.mutate({
+                  versionIds: [activeVersion.id],
+                  tags: updatedTags,
+                  mergeTags: false,
+                });
+              }}
+              align="start"
+            />
+          </>
+
           {activeVersion?.change_description && (
             <>
               <p className="comet-body-s-accented mt-4 text-foreground">
@@ -222,7 +253,7 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
             </>
           )}
         </div>
-        <div className="min-w-[320px]">
+        <div className="w-[380px] shrink-0">
           <div className="comet-body-s-accented mb-2 flex items-center gap-1 text-foreground">
             Commit history
             <ExplainerIcon
@@ -253,6 +284,7 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
         promptName={prompt.name}
         template={activeVersion?.template || ""}
         metadata={activeVersion?.metadata}
+        tags={activeVersion?.tags}
         templateStructure={prompt.template_structure}
         onSetActiveVersionId={setActiveVersionId}
       />
