@@ -70,7 +70,7 @@ public final class SpanLlmAsJudgeAutomationRuleEvaluatorModel
             ObjectMapper objectMapper) throws JsonProcessingException {
 
         return builder()
-                .commonFields(common) // ✨ SuperBuilder magic - sets all 12 common fields!
+                .commonFields(common)
                 .code(objectMapper.treeToValue(codeNode, SpanLlmAsJudgeCode.class))
                 .build();
     }
