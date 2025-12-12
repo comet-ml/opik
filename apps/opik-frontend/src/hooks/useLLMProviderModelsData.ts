@@ -29,11 +29,21 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     },
   ],
   [PROVIDER_TYPE.OPEN_AI]: [
-    // GPT-5 Models
+    // GPT-5.2 Models
+    {
+      value: PROVIDER_MODEL_TYPE.GPT_5_2,
+      label: "GPT 5.2",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.GPT_5_2_CHAT_LATEST,
+      label: "GPT 5.2 Chat Latest",
+    },
+    // GPT-5.1 Models
     {
       value: PROVIDER_MODEL_TYPE.GPT_5_1,
       label: "GPT 5.1",
     },
+    // GPT-5 Models
     {
       value: PROVIDER_MODEL_TYPE.GPT_5,
       label: "GPT 5",
@@ -1018,6 +1028,34 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.OPENAI_GPT_5_NANO,
       label: "openai/gpt-5-nano",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.OPENAI_GPT_5_PRO,
+      label: "openai/gpt-5-pro",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.OPENAI_GPT_5_1,
+      label: "openai/gpt-5.1",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.OPENAI_GPT_5_1_CHAT,
+      label: "openai/gpt-5.1-chat",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.OPENAI_GPT_5_1_CODEX,
+      label: "openai/gpt-5.1-codex",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.OPENAI_GPT_5_1_CODEX_MINI,
+      label: "openai/gpt-5.1-codex-mini",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.OPENAI_GPT_5_2,
+      label: "openai/gpt-5.2",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.OPENAI_GPT_5_2_CHAT_LATEST,
+      label: "openai/gpt-5.2-chat-latest",
     },
     {
       value: PROVIDER_MODEL_TYPE.OPENAI_GPT_OSS_120B,

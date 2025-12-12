@@ -84,10 +84,15 @@ export const DEFAULT_CUSTOM_CONFIGS = {
 
 // Reasoning models that require temperature = 1.0
 // These models do not support temperature = 0 and will fail if used
+// Note: GPT-5.2 Pro uses Responses API (/v1/responses) not Chat Completions, so it's excluded
 export const REASONING_MODELS = [
+  // GPT-5.2 family (chat models only - GPT-5.2 Pro uses Responses API)
+  PROVIDER_MODEL_TYPE.GPT_5_2,
+  PROVIDER_MODEL_TYPE.GPT_5_2_CHAT_LATEST,
+  // GPT-5.1 family
+  PROVIDER_MODEL_TYPE.GPT_5_1,
   // GPT-5 family
   PROVIDER_MODEL_TYPE.GPT_5,
-  PROVIDER_MODEL_TYPE.GPT_5_1,
   PROVIDER_MODEL_TYPE.GPT_5_MINI,
   PROVIDER_MODEL_TYPE.GPT_5_NANO,
   PROVIDER_MODEL_TYPE.GPT_5_CHAT_LATEST,
