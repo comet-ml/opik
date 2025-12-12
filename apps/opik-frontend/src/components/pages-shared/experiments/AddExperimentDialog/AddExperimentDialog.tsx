@@ -216,7 +216,8 @@ const AddExperimentDialog: React.FunctionComponent<
         case "output":
           return "llm_response";
         case "expected_output":
-          return 'dataset_item["expected_output"]';
+        case "reference":
+          return 'dataset_item["expected_answer"]';
         case "context":
           return '["placeholder context"]';
         default:
@@ -241,17 +242,9 @@ const AddExperimentDialog: React.FunctionComponent<
     }`
       : `{"output": ${getParamValue("output")}}`;
 
-  const evaluationTaskCode = isDemoDataset
-    ? `def evaluation_task(dataset_item):
-    # Your LLM application is called here
-    question = dataset_item["question"]
-
+  const evaluationTaskCode = `def evaluation_task(dataset_item):
     # Replace with your LLM call
     llm_response = "your LLM response"
-
-    return ${evaluation_task_output}`
-    : `def evaluation_task(dataset_item):
-    # your LLM application is called here
 
     result = ${evaluation_task_output}
 

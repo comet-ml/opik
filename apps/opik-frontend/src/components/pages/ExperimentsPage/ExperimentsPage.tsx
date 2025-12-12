@@ -238,7 +238,7 @@ const ExperimentsPage: React.FC = () => {
   const [query] = useQueryParam("new", JsonParam);
 
   const [openDialog, setOpenDialog] = useState<boolean>(
-    Boolean(query ? query.experiment : false),
+    Boolean(query?.experiment),
   );
 
   const [search = "", setSearch] = useQueryParam("search", StringParam, {
