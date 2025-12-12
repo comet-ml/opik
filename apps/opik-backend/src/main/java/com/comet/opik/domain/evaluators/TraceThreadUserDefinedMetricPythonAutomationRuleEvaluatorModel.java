@@ -4,32 +4,39 @@ import com.comet.opik.api.evaluators.AutomationRuleEvaluatorType;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import lombok.Builder;
+import lombok.AccessLevel;
+import lombok.AllArgsConstructor;
+import lombok.EqualsAndHashCode;
+import lombok.Getter;
+import lombok.ToString;
+import lombok.experimental.Accessors;
+import lombok.experimental.SuperBuilder;
 import org.jdbi.v3.json.Json;
 
-import java.time.Instant;
 import java.util.Set;
 import java.util.UUID;
 
 import static com.comet.opik.domain.evaluators.TraceThreadUserDefinedMetricPythonAutomationRuleEvaluatorModel.TraceThreadUserDefinedMetricPythonCode;
 
-@Builder(toBuilder = true)
-public record TraceThreadUserDefinedMetricPythonAutomationRuleEvaluatorModel(
-        UUID id,
-        UUID projectId, // Legacy single project field for backwards compatibility
-        String projectName, // Legacy project name field (resolved from projectId)
-        Set<UUID> projectIds, // New multi-project field
-        String name,
-        Float samplingRate,
-        boolean enabled,
-        String filters,
-        @Json TraceThreadUserDefinedMetricPythonCode code,
-        Instant createdAt,
-        String createdBy,
-        Instant lastUpdatedAt,
-        String lastUpdatedBy)
+/**
+ * Trace Thread User Defined Metric Python automation rule evaluator model.
+ * Uses @AllArgsConstructor(access = AccessLevel.PUBLIC) to generate a public constructor
+ * that JDBI can use for reflection-based instantiation, solving the IllegalAccessException.
+ */
+@SuperBuilder(toBuilder = true)
+@AllArgsConstructor(access = AccessLevel.PUBLIC)
+@Getter
+@Accessors(fluent = true)
+@EqualsAndHashCode(callSuper = true)
+@ToString(callSuper = true)
+public final class TraceThreadUserDefinedMetricPythonAutomationRuleEvaluatorModel
+        extends
+            AutomationRuleEvaluatorModelBase<TraceThreadUserDefinedMetricPythonCode>
         implements
             AutomationRuleEvaluatorModel<TraceThreadUserDefinedMetricPythonCode> {
+
+    @Json
+    private final TraceThreadUserDefinedMetricPythonCode code;
 
     @Override
     public AutomationRuleEvaluatorType type() {
@@ -44,10 +51,7 @@ public record TraceThreadUserDefinedMetricPythonAutomationRuleEvaluatorModel(
     /**
      * Factory method for constructing from JDBI row mapper.
      * Encapsulates model-specific construction logic including JSON parsing.
-     *
-     * Note: While there's duplication across the 6 model types, extracting this
-     * would require reflection or complex generics. The explicit builder pattern
-     * provides better type safety, performance, and maintainability.
+     * Uses SuperBuilder's commonFields() convenience method for DRY.
      */
     public static TraceThreadUserDefinedMetricPythonAutomationRuleEvaluatorModel fromRowMapper(
             AutomationRuleEvaluatorWithProjectRowMapper.CommonFields common,
@@ -55,22 +59,11 @@ public record TraceThreadUserDefinedMetricPythonAutomationRuleEvaluatorModel(
             ObjectMapper objectMapper) throws JsonProcessingException {
 
         return builder()
-                .id(common.id())
-                .projectId(common.projectId())
-                .projectName(common.projectName())
-                .projectIds(common.projectIds())
-                .name(common.name())
-                .samplingRate(common.samplingRate())
-                .enabled(common.enabled())
-                .filters(common.filters())
+                .commonFields(common) // ✨ SuperBuilder magic - sets all 12 common fields!
                 .code(objectMapper.treeToValue(codeNode, TraceThreadUserDefinedMetricPythonCode.class))
-                .createdAt(common.createdAt())
-                .createdBy(common.createdBy())
-                .lastUpdatedAt(common.lastUpdatedAt())
-                .lastUpdatedBy(common.lastUpdatedBy())
                 .build();
     }
 
-    record TraceThreadUserDefinedMetricPythonCode(String metric) {
+    public record TraceThreadUserDefinedMetricPythonCode(String metric) {
     }
 }

@@ -4,10 +4,15 @@ import com.comet.opik.api.evaluators.AutomationRuleEvaluatorType;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import lombok.Builder;
+import lombok.AccessLevel;
+import lombok.AllArgsConstructor;
+import lombok.EqualsAndHashCode;
+import lombok.Getter;
+import lombok.ToString;
+import lombok.experimental.Accessors;
+import lombok.experimental.SuperBuilder;
 import org.jdbi.v3.json.Json;
 
-import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -15,23 +20,25 @@ import java.util.UUID;
 
 import static com.comet.opik.domain.evaluators.LlmAsJudgeAutomationRuleEvaluatorModel.LlmAsJudgeCode;
 
-@Builder(toBuilder = true)
-public record LlmAsJudgeAutomationRuleEvaluatorModel(
-        UUID id,
-        UUID projectId, // Legacy single project field for backwards compatibility
-        String projectName, // Legacy project name field (resolved from projectId)
-        Set<UUID> projectIds, // New multi-project field
-        String name,
-        Float samplingRate,
-        boolean enabled,
-        String filters,
-        @Json LlmAsJudgeCode code,
-        Instant createdAt,
-        String createdBy,
-        Instant lastUpdatedAt,
-        String lastUpdatedBy)
+/**
+ * LLM as Judge automation rule evaluator model.
+ * Uses @AllArgsConstructor(access = AccessLevel.PUBLIC) to generate a public constructor
+ * that JDBI can use for reflection-based instantiation, solving the IllegalAccessException.
+ */
+@SuperBuilder(toBuilder = true)
+@AllArgsConstructor(access = AccessLevel.PUBLIC)
+@Getter
+@Accessors(fluent = true)
+@EqualsAndHashCode(callSuper = true)
+@ToString(callSuper = true)
+public final class LlmAsJudgeAutomationRuleEvaluatorModel
+        extends
+            AutomationRuleEvaluatorModelBase<LlmAsJudgeCode>
         implements
             AutomationRuleEvaluatorModel<LlmAsJudgeCode> {
+
+    @Json
+    private final LlmAsJudgeCode code;
 
     @Override
     public AutomationRuleEvaluatorType type() {
@@ -46,6 +53,7 @@ public record LlmAsJudgeAutomationRuleEvaluatorModel(
     /**
      * Factory method for constructing from JDBI row mapper.
      * Encapsulates model-specific construction logic including JSON parsing.
+     * Uses SuperBuilder's commonFields() convenience method for DRY.
      */
     public static LlmAsJudgeAutomationRuleEvaluatorModel fromRowMapper(
             AutomationRuleEvaluatorWithProjectRowMapper.CommonFields common,
@@ -53,23 +61,12 @@ public record LlmAsJudgeAutomationRuleEvaluatorModel(
             ObjectMapper objectMapper) throws JsonProcessingException {
 
         return builder()
-                .id(common.id())
-                .projectId(common.projectId())
-                .projectName(common.projectName())
-                .projectIds(common.projectIds())
-                .name(common.name())
-                .samplingRate(common.samplingRate())
-                .enabled(common.enabled())
-                .filters(common.filters())
+                .commonFields(common) // ✨ SuperBuilder magic - sets all 12 common fields!
                 .code(objectMapper.treeToValue(codeNode, LlmAsJudgeCode.class))
-                .createdAt(common.createdAt())
-                .createdBy(common.createdBy())
-                .lastUpdatedAt(common.lastUpdatedAt())
-                .lastUpdatedBy(common.lastUpdatedBy())
                 .build();
     }
 
-    record LlmAsJudgeCode(LlmAsJudgeCodeParameters model,
+    public record LlmAsJudgeCode(LlmAsJudgeCodeParameters model,
             List<LlmAsJudgeCodeMessage> messages,
             Map<String, String> variables,
             List<LlmAsJudgeCodeSchema> schema) {

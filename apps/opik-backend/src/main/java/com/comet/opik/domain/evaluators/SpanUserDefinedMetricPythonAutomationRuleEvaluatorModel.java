@@ -4,33 +4,40 @@ import com.comet.opik.api.evaluators.AutomationRuleEvaluatorType;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import lombok.Builder;
+import lombok.AccessLevel;
+import lombok.AllArgsConstructor;
+import lombok.EqualsAndHashCode;
+import lombok.Getter;
+import lombok.ToString;
+import lombok.experimental.Accessors;
+import lombok.experimental.SuperBuilder;
 import org.jdbi.v3.json.Json;
 
-import java.time.Instant;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
 import static com.comet.opik.domain.evaluators.SpanUserDefinedMetricPythonAutomationRuleEvaluatorModel.SpanUserDefinedMetricPythonCode;
 
-@Builder(toBuilder = true)
-public record SpanUserDefinedMetricPythonAutomationRuleEvaluatorModel(
-        UUID id,
-        UUID projectId, // Legacy single project field for backwards compatibility
-        String projectName, // Legacy project name field (resolved from projectId)
-        Set<UUID> projectIds, // New multi-project field
-        String name,
-        Float samplingRate,
-        boolean enabled,
-        String filters,
-        @Json SpanUserDefinedMetricPythonCode code,
-        Instant createdAt,
-        String createdBy,
-        Instant lastUpdatedAt,
-        String lastUpdatedBy)
+/**
+ * Span User Defined Metric Python automation rule evaluator model.
+ * Uses @AllArgsConstructor(access = AccessLevel.PUBLIC) to generate a public constructor
+ * that JDBI can use for reflection-based instantiation, solving the IllegalAccessException.
+ */
+@SuperBuilder(toBuilder = true)
+@AllArgsConstructor(access = AccessLevel.PUBLIC)
+@Getter
+@Accessors(fluent = true)
+@EqualsAndHashCode(callSuper = true)
+@ToString(callSuper = true)
+public final class SpanUserDefinedMetricPythonAutomationRuleEvaluatorModel
+        extends
+            AutomationRuleEvaluatorModelBase<SpanUserDefinedMetricPythonCode>
         implements
             AutomationRuleEvaluatorModel<SpanUserDefinedMetricPythonCode> {
+
+    @Json
+    private final SpanUserDefinedMetricPythonCode code;
 
     @Override
     public AutomationRuleEvaluatorType type() {
@@ -45,10 +52,7 @@ public record SpanUserDefinedMetricPythonAutomationRuleEvaluatorModel(
     /**
      * Factory method for constructing from JDBI row mapper.
      * Encapsulates model-specific construction logic including JSON parsing.
-     *
-     * Note: While there's duplication across the 6 model types, extracting this
-     * would require reflection or complex generics. The explicit builder pattern
-     * provides better type safety, performance, and maintainability.
+     * Uses SuperBuilder's commonFields() convenience method for DRY.
      */
     public static SpanUserDefinedMetricPythonAutomationRuleEvaluatorModel fromRowMapper(
             AutomationRuleEvaluatorWithProjectRowMapper.CommonFields common,
@@ -56,22 +60,11 @@ public record SpanUserDefinedMetricPythonAutomationRuleEvaluatorModel(
             ObjectMapper objectMapper) throws JsonProcessingException {
 
         return builder()
-                .id(common.id())
-                .projectId(common.projectId())
-                .projectName(common.projectName())
-                .projectIds(common.projectIds())
-                .name(common.name())
-                .samplingRate(common.samplingRate())
-                .enabled(common.enabled())
-                .filters(common.filters())
+                .commonFields(common) // ✨ SuperBuilder magic - sets all 12 common fields!
                 .code(objectMapper.treeToValue(codeNode, SpanUserDefinedMetricPythonCode.class))
-                .createdAt(common.createdAt())
-                .createdBy(common.createdBy())
-                .lastUpdatedAt(common.lastUpdatedAt())
-                .lastUpdatedBy(common.lastUpdatedBy())
                 .build();
     }
 
-    record SpanUserDefinedMetricPythonCode(String metric, Map<String, String> arguments) {
+    public record SpanUserDefinedMetricPythonCode(String metric, Map<String, String> arguments) {
     }
 }
