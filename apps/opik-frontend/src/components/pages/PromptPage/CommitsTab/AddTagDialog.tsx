@@ -49,7 +49,7 @@ const AddTagDialog: React.FunctionComponent<AddTagDialogProps> = ({
         onSuccess: () => {
           toast({
             title: "Success",
-            description: `Tag "${newTag}" added to ${
+            description: `Version tag "${newTag}" added to ${
               rows.length
             } selected prompt version${rows.length > 1 ? "s" : ""}`,
           });
@@ -69,13 +69,14 @@ const AddTagDialog: React.FunctionComponent<AddTagDialogProps> = ({
       <DialogContent className="sm:max-w-[425px]">
         <DialogHeader>
           <DialogTitle>
-            Add tag to {rows.length} prompt version{rows.length > 1 ? "s" : ""}
+            Add version tag to {rows.length} prompt version
+            {rows.length > 1 ? "s" : ""}
           </DialogTitle>
         </DialogHeader>
         <div className="grid gap-4 py-4">
           <div className="flex items-center gap-4">
             <Input
-              placeholder="New tag"
+              placeholder="New version tag"
               value={newTag}
               onChange={(event) => setNewTag(event.target.value)}
               className="col-span-3"
@@ -87,7 +88,7 @@ const AddTagDialog: React.FunctionComponent<AddTagDialogProps> = ({
             Cancel
           </Button>
           <Button onClick={handleAddTag} disabled={!newTag}>
-            Add tag
+            Add version tag
           </Button>
         </DialogFooter>
       </DialogContent>

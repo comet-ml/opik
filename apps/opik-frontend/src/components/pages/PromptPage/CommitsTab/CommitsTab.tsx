@@ -77,7 +77,7 @@ export const DEFAULT_COLUMNS: ColumnData<PromptVersion>[] = [
   },
   {
     id: "tags",
-    label: "Tags",
+    label: "Version tags",
     type: COLUMN_TYPE.list,
     iconType: "tags",
     accessorFn: (row) => row.tags || [],
@@ -128,7 +128,7 @@ export const FILTER_COLUMNS: ColumnData<PromptVersion>[] = [
   },
   {
     id: "tags",
-    label: "Tags",
+    label: "Version tags",
     type: COLUMN_TYPE.list,
     iconType: "tags",
   },

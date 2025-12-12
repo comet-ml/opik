@@ -35,7 +35,7 @@ const CommitsActionsPanel: React.FunctionComponent<
         open={open === 2}
         setOpen={setOpen}
       />
-      <TooltipWrapper content="Add tags">
+      <TooltipWrapper content="Add version tags">
         <Button
           variant="outline"
           size="sm"
@@ -46,7 +46,7 @@ const CommitsActionsPanel: React.FunctionComponent<
           disabled={disabled}
         >
           <Tag className="mr-2 size-4" />
-          Add tags
+          Add version tags
         </Button>
       </TooltipWrapper>
       <TooltipWrapper content="Compare commits">
