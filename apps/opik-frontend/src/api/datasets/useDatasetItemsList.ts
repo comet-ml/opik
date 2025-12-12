@@ -17,6 +17,7 @@ export type UseDatasetItemsListResponse = {
   content: DatasetItem[];
   columns: DatasetItemColumn[];
   total: number;
+  has_draft?: boolean;
 };
 
 const getDatasetItemsList = async (
@@ -29,7 +30,7 @@ const getDatasetItemsList = async (
     search,
     truncate = false,
   }: UseDatasetItemsListParams,
-) => {
+): Promise<UseDatasetItemsListResponse> => {
   const { data } = await api.get(
     `${DATASETS_REST_ENDPOINT}${datasetId}/items`,
     {

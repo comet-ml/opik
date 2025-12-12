@@ -10,11 +10,13 @@ import { FormErrorSkeleton } from "@/components/ui/form";
 interface JsonFieldEditorProps {
   fieldName: string;
   isEditing: boolean;
+  onBlur?: () => void;
 }
 
 const JsonFieldEditor: React.FC<JsonFieldEditorProps> = ({
   fieldName,
   isEditing,
+  onBlur,
 }) => {
   const form = useFormContext<Record<string, unknown>>();
   const theme = useCodemirrorTheme({ editable: isEditing });
@@ -34,6 +36,7 @@ const JsonFieldEditor: React.FC<JsonFieldEditorProps> = ({
           theme={theme}
           value={value || ""}
           onChange={handleChange}
+          onBlur={onBlur}
           extensions={[
             jsonLanguage,
             EditorView.lineWrapping,

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef } from "react";
+import React, { useEffect, useMemo } from "react";
 import { FormProvider, useForm, useFormContext } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import TextareaAutosize from "react-textarea-autosize";
@@ -16,21 +16,17 @@ import { createDynamicSchema } from "./hooks/useDatasetItemFormHelpers";
 interface DatasetItemEditorFormProps {
   formId: string;
   fields: DatasetField[];
-  isEditing: boolean;
-  onSubmit: (data: Record<string, unknown>) => void;
-  setHasUnsavedChanges: (value: boolean) => void;
-  resetKey: number;
+  onSubmit?: (data: Record<string, unknown>) => void;
+  setHasUnsavedChanges?: (value: boolean) => void;
+  onFieldChange?: (data: Record<string, unknown>) => void;
 }
 
-const FieldInput: React.FC<{ field: DatasetField; isEditing: boolean }> = ({
-  field,
-  isEditing,
-}) => {
+const FieldInput: React.FC<{ field: DatasetField }> = ({ field }) => {
   const form = useFormContext<Record<string, unknown>>();
   const fieldValue = form.watch(field.key);
 
   if (field.type === FIELD_TYPE.COMPLEX) {
-    return <JsonFieldEditor fieldName={field.key} isEditing={isEditing} />;
+    return <JsonFieldEditor fieldName={field.key} isEditing={true} />;
   }
 
   const displayValue =
@@ -43,13 +39,9 @@ const FieldInput: React.FC<{ field: DatasetField; isEditing: boolean }> = ({
         onChange={(e) =>
           form.setValue(field.key, e.target.value, { shouldDirty: true })
         }
-        readOnly={!isEditing}
-        placeholder={isEditing ? "Enter text for this field…" : undefined}
+        placeholder="Enter text for this field…"
         className={cn(
-          "flex w-full rounded-md resize-none border border-border bg-background px-3 py-2 text-sm text-foreground ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50 font-mono",
-          isEditing
-            ? "hover:shadow-sm focus-visible:border-primary"
-            : "cursor-text bg-[var(--codemirror-background)]",
+          "flex w-full rounded-md resize-none border border-border bg-background px-3 py-2 text-sm text-foreground ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50 font-mono hover:shadow-sm focus-visible:border-primary",
         )}
         minRows={1}
       />
@@ -60,13 +52,10 @@ const FieldInput: React.FC<{ field: DatasetField; isEditing: boolean }> = ({
 const DatasetItemEditorForm: React.FC<DatasetItemEditorFormProps> = ({
   formId,
   fields,
-  isEditing,
   onSubmit,
   setHasUnsavedChanges,
-  resetKey,
+  onFieldChange,
 }) => {
-  const isEditingRef = useRef(isEditing);
-
   // Create schema from fields
   const schema = useMemo(() => createDynamicSchema(fields), [fields]);
 
@@ -90,35 +79,26 @@ const DatasetItemEditorForm: React.FC<DatasetItemEditorFormProps> = ({
     defaultValues: initialValues,
   });
 
-  // Keep ref in sync with isEditing
+  // Autosave mode: watch for changes and trigger autosave
   useEffect(() => {
-    isEditingRef.current = isEditing;
-  }, [isEditing]);
+    if (onFieldChange) {
+      const subscription = form.watch((value) => {
+        onFieldChange(value as Record<string, unknown>);
+      });
+      return () => subscription.unsubscribe();
+    }
+  }, [form, onFieldChange]);
 
-  // Sync form dirty state with context (only when editing)
+  // Manual save mode: sync dirty state with parent
   useEffect(() => {
-    if (isEditing) {
+    if (setHasUnsavedChanges) {
       setHasUnsavedChanges(form.formState.isDirty);
     }
-  }, [form.formState.isDirty, setHasUnsavedChanges, isEditing]);
+  }, [form.formState.isDirty, setHasUnsavedChanges]);
 
-  // Cancel Handler: Reset form when resetKey changes (explicit cancel)
-  useEffect(() => {
-    if (resetKey > 0) {
-      form.reset(initialValues);
-    }
-  }, [resetKey, initialValues, form]);
-
-  // Data Sync Handler: Reset form when data changes, but only if not editing
-  useEffect(() => {
-    if (!isEditingRef.current) {
-      form.reset(initialValues);
-    }
-  }, [initialValues, form]);
-
-  // Handle form submission
+  // Handle form submission (only for manual save mode)
   const handleSubmit = (data: Record<string, unknown>) => {
-    onSubmit(data);
+    onSubmit?.(data);
   };
 
   return (
@@ -135,7 +115,7 @@ const DatasetItemEditorForm: React.FC<DatasetItemEditorFormProps> = ({
                 {field.key}
               </AccordionTrigger>
               <AccordionContent>
-                <FieldInput field={field} isEditing={isEditing} />
+                <FieldInput field={field} />
               </AccordionContent>
             </AccordionItem>
           ))}

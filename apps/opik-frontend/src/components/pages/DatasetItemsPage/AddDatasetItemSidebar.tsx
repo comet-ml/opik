@@ -1,6 +1,6 @@
 import React, { useCallback } from "react";
 import { DatasetItemColumn } from "@/types/datasets";
-import { DatasetItemEditorProvider } from "./DatasetItemEditor/DatasetItemEditorContext";
+import { AddDatasetItemProvider } from "./DatasetItemEditor/AddDatasetItemContext";
 import AddDatasetItemSidebarLayout from "./DatasetItemEditor/AddDatasetItemSidebarLayout";
 
 interface AddDatasetItemSidebarProps {
@@ -19,14 +19,13 @@ const AddDatasetItemSidebar: React.FC<AddDatasetItemSidebarProps> = ({
   const handleClose = useCallback(() => setOpen(false), [setOpen]);
 
   return (
-    <DatasetItemEditorProvider
+    <AddDatasetItemProvider
       datasetId={datasetId}
       columns={columns}
-      mode="create"
       onClose={handleClose}
     >
       <AddDatasetItemSidebarLayout isOpen={open} onClose={handleClose} />
-    </DatasetItemEditorProvider>
+    </AddDatasetItemProvider>
   );
 };
 
