@@ -331,14 +331,16 @@ export const OnlineEvaluationPage: React.FC = () => {
     [setEditRuleId],
   );
 
-  // Filter out "type" (Scope), "enabled" (Status), and "sampling_rate" from filter options
+  // Filter out "type" (Scope), "enabled" (Status), "sampling_rate", and "project_names" from filter options
+  // Note: project_names filtering is not supported by backend (frontend-only enriched field)
   const filterableColumns = useMemo(
     () =>
       DEFAULT_COLUMNS.filter(
         (col) =>
           col.id !== "type" &&
           col.id !== "enabled" &&
-          col.id !== "sampling_rate",
+          col.id !== "sampling_rate" &&
+          col.id !== "project_names",
       ),
     [],
   );
