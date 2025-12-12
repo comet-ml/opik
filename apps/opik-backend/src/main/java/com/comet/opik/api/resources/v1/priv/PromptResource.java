@@ -290,7 +290,7 @@ public class PromptResource {
         log.info("Updating prompt versions on workspaceId '{}', size '{}', mergeTags '{}'",
                 workspaceId, request.ids().size(), request.mergeTags());
         var updatedCount = promptService.updateVersions(request);
-        log.info("Successfully updated prompt versions on workspaceId '{}', size '{}', mergeTags '{}",
+        log.info("Successfully updated prompt versions on workspaceId '{}', size '{}', mergeTags '{}'",
                 workspaceId, updatedCount, request.mergeTags());
         return Response.noContent().build();
     }
