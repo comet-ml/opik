@@ -9,7 +9,8 @@ public sealed interface AutomationRuleModel
         permits AutomationRuleEvaluatorModel {
 
     UUID id();
-    Set<UUID> projectIds();
+    UUID projectId(); // Legacy single project field for backward compatibility (derived from projectIds)
+    Set<UUID> projectIds(); // New multi-project support
     String name();
 
     Float samplingRate();
