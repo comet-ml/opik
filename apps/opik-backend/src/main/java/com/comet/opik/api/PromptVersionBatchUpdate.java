@@ -41,7 +41,8 @@ public record PromptVersionBatchUpdate(
                 - false: Replace all existing tags with new tags (default behaviour if not provided)
                 """, defaultValue = "false") Boolean mergeTags) {
 
-    public PromptVersionBatchUpdate normalize() {
-        return toBuilder().mergeTags(Boolean.TRUE.equals(mergeTags)).build();
+    @Override
+    public Boolean mergeTags() {
+        return Boolean.TRUE.equals(mergeTags);
     }
 }
