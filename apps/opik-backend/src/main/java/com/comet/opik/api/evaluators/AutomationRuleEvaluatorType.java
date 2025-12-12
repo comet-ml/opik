@@ -24,32 +24,25 @@ import java.util.Arrays;
 public enum AutomationRuleEvaluatorType {
 
     LLM_AS_JUDGE(Constants.LLM_AS_JUDGE,
-            LlmAsJudgeAutomationRuleEvaluatorModel.class,
             LlmAsJudgeAutomationRuleEvaluatorModel::fromRowMapper),
 
     USER_DEFINED_METRIC_PYTHON(Constants.USER_DEFINED_METRIC_PYTHON,
-            UserDefinedMetricPythonAutomationRuleEvaluatorModel.class,
             UserDefinedMetricPythonAutomationRuleEvaluatorModel::fromRowMapper),
 
     TRACE_THREAD_LLM_AS_JUDGE(Constants.TRACE_THREAD_LLM_AS_JUDGE,
-            TraceThreadLlmAsJudgeAutomationRuleEvaluatorModel.class,
             TraceThreadLlmAsJudgeAutomationRuleEvaluatorModel::fromRowMapper),
 
     TRACE_THREAD_USER_DEFINED_METRIC_PYTHON(Constants.TRACE_THREAD_USER_DEFINED_METRIC_PYTHON,
-            TraceThreadUserDefinedMetricPythonAutomationRuleEvaluatorModel.class,
             TraceThreadUserDefinedMetricPythonAutomationRuleEvaluatorModel::fromRowMapper),
 
     SPAN_LLM_AS_JUDGE(Constants.SPAN_LLM_AS_JUDGE,
-            SpanLlmAsJudgeAutomationRuleEvaluatorModel.class,
             SpanLlmAsJudgeAutomationRuleEvaluatorModel::fromRowMapper),
 
     SPAN_USER_DEFINED_METRIC_PYTHON(Constants.SPAN_USER_DEFINED_METRIC_PYTHON,
-            SpanUserDefinedMetricPythonAutomationRuleEvaluatorModel.class,
             SpanUserDefinedMetricPythonAutomationRuleEvaluatorModel::fromRowMapper);
 
     @JsonValue
     private final String type;
-    private final Class<? extends AutomationRuleEvaluatorModel<?>> modelClass;
     private final RowMapperFactory factory;
 
     /**

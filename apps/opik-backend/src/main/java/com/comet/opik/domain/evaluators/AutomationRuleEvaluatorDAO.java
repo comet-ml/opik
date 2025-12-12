@@ -36,7 +36,6 @@ import java.util.stream.Collectors;
 @RegisterConstructorMapper(TraceThreadUserDefinedMetricPythonAutomationRuleEvaluatorModel.class)
 @RegisterConstructorMapper(SpanLlmAsJudgeAutomationRuleEvaluatorModel.class)
 @RegisterConstructorMapper(SpanUserDefinedMetricPythonAutomationRuleEvaluatorModel.class)
-@RegisterRowMapper(AutomationRuleEvaluatorRowMapper.class)
 @RegisterRowMapper(AutomationRuleEvaluatorWithProjectRowMapper.class)
 public interface AutomationRuleEvaluatorDAO extends AutomationRuleDAO {
 

@@ -22,7 +22,6 @@ import java.util.UUID;
 @RegisterConstructorMapper(LlmAsJudgeAutomationRuleEvaluatorModel.class)
 @RegisterConstructorMapper(UserDefinedMetricPythonAutomationRuleEvaluatorModel.class)
 @RegisterConstructorMapper(SpanLlmAsJudgeAutomationRuleEvaluatorModel.class)
-@RegisterRowMapper(AutomationRuleEvaluatorRowMapper.class)
 interface AutomationRuleDAO {
 
     @SqlUpdate("INSERT INTO automation_rules(id, workspace_id, `action`, name, sampling_rate, enabled, filters) "
