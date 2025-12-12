@@ -44,6 +44,35 @@ public class AutomationRuleEvaluatorWithProjectRowMapper implements RowMapper<Au
             String lastUpdatedBy) {
     }
 
+    /**
+     * Functional interface for building a model with common fields + type-specific code.
+     * This allows each model to use its own builder while sharing the field assignment logic.
+     */
+    @FunctionalInterface
+    public interface ModelBuilder<T, M extends AutomationRuleEvaluatorModel<T>> {
+        M build(CommonFields common, T code);
+    }
+
+    /**
+     * Generic helper that applies common fields to any model builder.
+     * Eliminates duplication while keeping type safety and avoiding reflection.
+     *
+     * @param common Common fields from ResultSet
+     * @param codeParser Function to parse JsonNode into type-specific code object
+     * @param codeNode JSON representation of code field
+     * @param modelBuilder Function that builds the final model from common fields and code
+     * @return Fully constructed model
+     */
+    public static <T, M extends AutomationRuleEvaluatorModel<T>> M buildModel(
+            CommonFields common,
+            java.util.function.Function<JsonNode, T> codeParser,
+            JsonNode codeNode,
+            ModelBuilder<T, M> modelBuilder) throws com.fasterxml.jackson.core.JsonProcessingException {
+
+        T code = codeParser.apply(codeNode);
+        return modelBuilder.build(common, code);
+    }
+
     @Override
     public AutomationRuleEvaluatorModel<?> map(ResultSet rs, StatementContext ctx) throws SQLException {
         // Extract common fields once

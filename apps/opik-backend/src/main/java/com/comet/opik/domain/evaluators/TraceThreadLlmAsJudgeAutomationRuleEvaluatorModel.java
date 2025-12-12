@@ -45,6 +45,10 @@ public record TraceThreadLlmAsJudgeAutomationRuleEvaluatorModel(
     /**
      * Factory method for constructing from JDBI row mapper.
      * Encapsulates model-specific construction logic including JSON parsing.
+     *
+     * Note: While there's duplication across the 6 model types, extracting this
+     * would require reflection or complex generics. The explicit builder pattern
+     * provides better type safety, performance, and maintainability.
      */
     public static TraceThreadLlmAsJudgeAutomationRuleEvaluatorModel fromRowMapper(
             AutomationRuleEvaluatorWithProjectRowMapper.CommonFields common,
