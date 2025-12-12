@@ -521,13 +521,14 @@ class OnlineScoringEngineTest {
                 "full_input", "input",
                 "full_output", "output",
                 "full_metadata", "metadata",
+                "subtree", "input.questions",
                 "nested_field", "input.questions.question1");
 
         // When
         var variableMappings = OnlineScoringEngine.toVariableMapping(variables);
 
         // Then
-        assertThat(variableMappings).hasSize(4);
+        assertThat(variableMappings).hasSize(5);
 
         // Test "input" maps to root "$"
         var inputMapping = variableMappings.stream()
@@ -552,6 +553,14 @@ class OnlineScoringEngineTest {
                 .orElseThrow();
         assertThat(metadataMapping.traceSection()).isEqualTo(OnlineScoringEngine.TraceSection.METADATA);
         assertThat(metadataMapping.jsonPath()).isEqualTo("$");
+
+        // Test subtree works correctly
+        var subtreeMapping = variableMappings.stream()
+                .filter(mapping -> "subtree".equals(mapping.variableName()))
+                .findFirst()
+                .orElseThrow();
+        assertThat(subtreeMapping.traceSection()).isEqualTo(OnlineScoringEngine.TraceSection.INPUT);
+        assertThat(subtreeMapping.jsonPath()).isEqualTo("$.questions");
 
         // Test nested field still works correctly
         var nestedMapping = variableMappings.stream()
