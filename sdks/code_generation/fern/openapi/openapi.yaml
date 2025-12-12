@@ -13370,17 +13370,24 @@ components:
     ServiceTogglesConfig:
       required:
       - alertsEnabled
+      - anthropicProviderEnabled
       - csvUploadEnabled
+      - customllmProviderEnabled
       - dashboardsEnabled
       - datasetVersioningEnabled
       - exportEnabled
+      - geminiProviderEnabled
       - guardrailsEnabled
+      - openaiProviderEnabled
+      - openrouterProviderEnabled
       - opikAIEnabled
+      - opikbuiltinProviderEnabled
       - optimizationStudioEnabled
       - pythonEvaluatorEnabled
       - spanLlmAsJudgeEnabled
       - spanUserDefinedMetricPythonEnabled
       - traceThreadPythonEvaluatorEnabled
+      - vertexaiProviderEnabled
       - welcomeWizardEnabled
       type: object
       properties:
@@ -13409,6 +13416,20 @@ components:
         dashboardsEnabled:
           type: boolean
         datasetVersioningEnabled:
+          type: boolean
+        openaiProviderEnabled:
+          type: boolean
+        anthropicProviderEnabled:
+          type: boolean
+        geminiProviderEnabled:
+          type: boolean
+        openrouterProviderEnabled:
+          type: boolean
+        vertexaiProviderEnabled:
+          type: boolean
+        customllmProviderEnabled:
+          type: boolean
+        opikbuiltinProviderEnabled:
           type: boolean
     SpanBatchUpdate:
       required:

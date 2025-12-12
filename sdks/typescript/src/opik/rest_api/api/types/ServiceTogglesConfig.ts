@@ -16,4 +16,11 @@ export interface ServiceTogglesConfig {
     optimizationStudioEnabled: boolean;
     dashboardsEnabled: boolean;
     datasetVersioningEnabled: boolean;
+    openaiProviderEnabled: boolean;
+    anthropicProviderEnabled: boolean;
+    geminiProviderEnabled: boolean;
+    openrouterProviderEnabled: boolean;
+    vertexaiProviderEnabled: boolean;
+    customllmProviderEnabled: boolean;
+    opikbuiltinProviderEnabled: boolean;
 }

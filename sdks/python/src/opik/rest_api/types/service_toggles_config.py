@@ -26,6 +26,13 @@ class ServiceTogglesConfig(UniversalBaseModel):
     optimization_studio_enabled: typing_extensions.Annotated[bool, FieldMetadata(alias="optimizationStudioEnabled")]
     dashboards_enabled: typing_extensions.Annotated[bool, FieldMetadata(alias="dashboardsEnabled")]
     dataset_versioning_enabled: typing_extensions.Annotated[bool, FieldMetadata(alias="datasetVersioningEnabled")]
+    openai_provider_enabled: typing_extensions.Annotated[bool, FieldMetadata(alias="openaiProviderEnabled")]
+    anthropic_provider_enabled: typing_extensions.Annotated[bool, FieldMetadata(alias="anthropicProviderEnabled")]
+    gemini_provider_enabled: typing_extensions.Annotated[bool, FieldMetadata(alias="geminiProviderEnabled")]
+    openrouter_provider_enabled: typing_extensions.Annotated[bool, FieldMetadata(alias="openrouterProviderEnabled")]
+    vertexai_provider_enabled: typing_extensions.Annotated[bool, FieldMetadata(alias="vertexaiProviderEnabled")]
+    customllm_provider_enabled: typing_extensions.Annotated[bool, FieldMetadata(alias="customllmProviderEnabled")]
+    opikbuiltin_provider_enabled: typing_extensions.Annotated[bool, FieldMetadata(alias="opikbuiltinProviderEnabled")]
 
     if IS_PYDANTIC_V2:
         model_config: typing.ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(extra="allow", frozen=True)  # type: ignore # Pydantic v2
