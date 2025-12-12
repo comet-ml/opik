@@ -258,17 +258,19 @@ const CommitsTab = ({ prompt }: CommitsTabInterface) => {
   const handleSearchTextChange = useCallback(
     (value: string) => {
       if (value) {
-        // Add or update commit filter with 'contains' operator
-        const newFilters = filters.filter((f: Filter) => f.field !== "commit");
+        // Search by template (prompt content) - primary search field
+        const newFilters = filters.filter(
+          (f: Filter) => f.field !== "template",
+        );
         newFilters.push({
-          field: "commit",
+          field: "template",
           operator: "contains",
           value,
         });
         setFilters(newFilters);
       } else {
-        // Remove commit filter
-        setFilters(filters.filter((f: Filter) => f.field !== "commit"));
+        // Remove template filter
+        setFilters(filters.filter((f: Filter) => f.field !== "template"));
       }
     },
     [filters, setFilters],
@@ -288,10 +290,10 @@ const CommitsTab = ({ prompt }: CommitsTabInterface) => {
         <div className="flex items-center gap-2">
           <SearchInput
             searchText={
-              filters.find((f: Filter) => f.field === "commit")?.value ?? ""
+              filters.find((f: Filter) => f.field === "template")?.value ?? ""
             }
             setSearchText={handleSearchTextChange}
-            placeholder="Search by commit"
+            placeholder="Search by prompt"
             className="w-[320px]"
             dimension="sm"
           />
