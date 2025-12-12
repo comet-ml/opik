@@ -35,6 +35,21 @@ public class AttachmentUtils {
     public static final String ATTACHMENT_FILENAME_BASE_PATTERN = "(?:input|output|metadata)-attachment-\\d+-\\d+\\.\\w+";
 
     /**
+     * A regex pattern that identifies valid filenames for Python SDK-extracted attachments.
+     *
+     * The pattern matches filenames that adhere to the following format:
+     * - Begin with either "input", "output", or "metadata".
+     * - Include the suffix "-attachment" followed by two numeric segments separated by a hyphen.
+     * - Optionally end with "-sdk".
+     * - Have a file extension starting with a period followed by alphanumeric characters.
+     *
+     * Example valid filenames:
+     * - input-attachment-1-1234567890.png
+     * - output-attachment-5-1234567890-sdk.json
+     */
+    public static final String ATTACHMENT_FILENAME_SDK_SUPPORT_PATTERN = "(?:input|output|metadata)-attachment-\\d+-\\d+(?:-sdk)?\\.\\w+";
+
+    /**
      * Pattern for validating auto-stripped attachment filenames (whole string match).
      * Uses anchors (^$) to ensure the entire string matches the pattern.
      */
@@ -50,10 +65,12 @@ public class AttachmentUtils {
      * No anchors - used with .find() to locate references anywhere in text.
      * Group 1 captures the filename without brackets.
      *
-     * Example: [input-attachment-1-1234567890.jpg]
+     * Examples:
+     *  - [input-attachment-1-1234567890.jpg]
+     *  - [metadata-attachment-1-1704067199000-sdk.pdf]
      */
     public static final Pattern FIND_REFERENCE_PATTERN = Pattern
-            .compile("\\[(" + ATTACHMENT_FILENAME_BASE_PATTERN + ")\\]");
+            .compile("\\[(" + ATTACHMENT_FILENAME_SDK_SUPPORT_PATTERN + ")\\]");
 
     /**
      * Pattern for validating if a string IS an attachment reference (whole string match).
@@ -64,10 +81,11 @@ public class AttachmentUtils {
      * - [input-attachment-1-1704067200000.png] - matches
      * - [output-attachment-2-1704067201000.json] - matches
      * - [metadata-attachment-1-1704067199000.pdf] - matches
+     * - [metadata-attachment-1-1704067199000-sdk.pdf] - matches
      * - "some text [input-attachment-1-123.png] more text" - does NOT match (has extra text)
      */
     public static final Pattern VALIDATE_REFERENCE_PATTERN = Pattern
-            .compile("^\\[(" + ATTACHMENT_FILENAME_BASE_PATTERN + ")\\]$");
+            .compile("^\\[(" + ATTACHMENT_FILENAME_SDK_SUPPORT_PATTERN + ")\\]$");
 
     /**
      * Checks if a filename matches the auto-stripped attachment pattern.
