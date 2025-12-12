@@ -37,7 +37,8 @@ public final class TraceThreadLlmAsJudgeAutomationRuleEvaluatorModel
             AutomationRuleEvaluatorModel<TraceThreadLlmAsJudgeCode> {
 
     @Json
-    private final TraceThreadLlmAsJudgeCode code;
+
+    private TraceThreadLlmAsJudgeCode code;
 
     @Override
     public AutomationRuleEvaluatorType type() {

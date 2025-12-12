@@ -37,7 +37,8 @@ public final class SpanUserDefinedMetricPythonAutomationRuleEvaluatorModel
             AutomationRuleEvaluatorModel<SpanUserDefinedMetricPythonCode> {
 
     @Json
-    private final SpanUserDefinedMetricPythonCode code;
+
+    private SpanUserDefinedMetricPythonCode code;
 
     @Override
     public AutomationRuleEvaluatorType type() {

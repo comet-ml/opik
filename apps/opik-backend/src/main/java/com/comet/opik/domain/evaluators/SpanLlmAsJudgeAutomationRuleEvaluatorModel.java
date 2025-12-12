@@ -38,7 +38,8 @@ public final class SpanLlmAsJudgeAutomationRuleEvaluatorModel
             AutomationRuleEvaluatorModel<SpanLlmAsJudgeCode> {
 
     @Json
-    private final SpanLlmAsJudgeCode code;
+
+    private SpanLlmAsJudgeCode code;
 
     @Override
     public AutomationRuleEvaluatorType type() {

@@ -22,7 +22,10 @@ import java.util.UUID;
  * Uses @Accessors(fluent = true) to generate Record-style getters (e.g., id() instead of getId())
  * that match the interface method signatures automatically.
  *
- * Uses @NoArgsConstructor(access = AccessLevel.PROTECTED) for Lombok's SuperBuilder internal machinery.
+ * CRITICAL: @NoArgsConstructor is REQUIRED by @SuperBuilder - Lombok generates child class code
+ * that implicitly calls super(), which requires a no-args constructor in the parent class.
+ * Without it, compilation fails with "no suitable constructor found for AutomationRuleEvaluatorModelBase(no arguments)".
+ *
  * Uses @AllArgsConstructor(access = AccessLevel.PROTECTED) to generate a protected constructor
  * for SuperBuilder, while child classes use @AllArgsConstructor(access = AccessLevel.PUBLIC)
  * to provide JDBI with public constructors for reflection-based instantiation.
@@ -37,18 +40,18 @@ import java.util.UUID;
 @Accessors(fluent = true)
 public abstract non-sealed class AutomationRuleEvaluatorModelBase<T> implements AutomationRuleModel {
 
-    private final UUID id;
-    private final UUID projectId; // Legacy single project field for backwards compatibility
-    private final String projectName; // Legacy project name field (resolved from projectId)
-    private final Set<UUID> projectIds; // New multi-project field
-    private final String name;
-    private final Float samplingRate;
-    private final boolean enabled;
-    private final String filters;
-    private final Instant createdAt;
-    private final String createdBy;
-    private final Instant lastUpdatedAt;
-    private final String lastUpdatedBy;
+    private UUID id;
+    private UUID projectId; // Legacy single project field for backwards compatibility
+    private String projectName; // Legacy project name field (resolved from projectId)
+    private Set<UUID> projectIds; // New multi-project field
+    private String name;
+    private Float samplingRate;
+    private boolean enabled;
+    private String filters;
+    private Instant createdAt;
+    private String createdBy;
+    private Instant lastUpdatedAt;
+    private String lastUpdatedBy;
 
     @Override
     public AutomationRule.AutomationRuleAction action() {

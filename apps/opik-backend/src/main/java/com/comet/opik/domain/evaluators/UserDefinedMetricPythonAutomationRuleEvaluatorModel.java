@@ -37,7 +37,8 @@ public final class UserDefinedMetricPythonAutomationRuleEvaluatorModel
             AutomationRuleEvaluatorModel<UserDefinedMetricPythonCode> {
 
     @Json
-    private final UserDefinedMetricPythonCode code;
+
+    private UserDefinedMetricPythonCode code;
 
     @Override
     public AutomationRuleEvaluatorType type() {

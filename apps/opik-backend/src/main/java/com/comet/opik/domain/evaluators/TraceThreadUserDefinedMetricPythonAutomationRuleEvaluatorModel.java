@@ -36,7 +36,8 @@ public final class TraceThreadUserDefinedMetricPythonAutomationRuleEvaluatorMode
             AutomationRuleEvaluatorModel<TraceThreadUserDefinedMetricPythonCode> {
 
     @Json
-    private final TraceThreadUserDefinedMetricPythonCode code;
+
+    private TraceThreadUserDefinedMetricPythonCode code;
 
     @Override
     public AutomationRuleEvaluatorType type() {

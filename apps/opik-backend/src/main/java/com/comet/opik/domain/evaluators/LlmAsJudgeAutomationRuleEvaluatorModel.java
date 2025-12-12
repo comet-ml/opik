@@ -38,7 +38,8 @@ public final class LlmAsJudgeAutomationRuleEvaluatorModel
             AutomationRuleEvaluatorModel<LlmAsJudgeCode> {
 
     @Json
-    private final LlmAsJudgeCode code;
+
+    private LlmAsJudgeCode code;
 
     @Override
     public AutomationRuleEvaluatorType type() {
