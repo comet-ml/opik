@@ -36,6 +36,7 @@ import jakarta.ws.rs.core.Response;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.jdbi.v3.core.Handle;
 import org.jdbi.v3.core.statement.UnableToExecuteStatementException;
 import reactor.core.publisher.Mono;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
@@ -202,12 +203,8 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
                 evaluatorsDAO.saveEvaluator(evaluator);
 
                 // Save project associations
-                for (UUID projectId : projectIds) {
-                    log.debug("Saving rule-project association: ruleId='{}', projectId='{}', workspaceId='{}'",
-                            id, projectId, workspaceId);
-                    projectsDAO.saveRuleProject(id, projectId, workspaceId);
-                }
-                log.debug("Saved {} project associations for rule '{}'", projectIds.size(), id);
+                log.debug("Saving {} project associations for rule '{}'", projectIds.size(), id);
+                projectsDAO.saveRuleProjects(id, projectIds, workspaceId);
 
                 return evaluator;
             } catch (UnableToExecuteStatementException e) {
@@ -244,9 +241,7 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
 
                 // Update project associations in junction table
                 projectsDAO.deleteByRuleId(id, workspaceId);
-                for (UUID projectId : projectIds) {
-                    projectsDAO.saveRuleProject(id, projectId, workspaceId);
-                }
+                projectsDAO.saveRuleProjects(id, projectIds, workspaceId);
 
                 // Clear legacy project_id field to prevent stale data
                 dao.clearLegacyProjectId(id, workspaceId);
@@ -572,7 +567,7 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
     private List<AutomationRuleEvaluatorModel<?>> enrichWithProjectNames(
             List<AutomationRuleEvaluatorModel<?>> models,
             String workspaceId,
-            org.jdbi.v3.core.Handle handle) {
+            Handle handle) {
 
         if (models.isEmpty()) {
             return models;

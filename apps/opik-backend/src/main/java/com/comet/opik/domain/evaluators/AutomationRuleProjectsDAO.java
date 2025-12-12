@@ -21,6 +21,12 @@ interface AutomationRuleProjectsDAO {
             @Bind("projectId") UUID projectId,
             @Bind("workspaceId") String workspaceId);
 
+    default void saveRuleProjects(UUID ruleId, Set<UUID> projectIds, String workspaceId) {
+        for (UUID projectId : projectIds) {
+            saveRuleProject(ruleId, projectId, workspaceId);
+        }
+    }
+
     @SqlQuery("SELECT project_id FROM automation_rule_projects " +
             "WHERE rule_id = :ruleId AND workspace_id = :workspaceId")
     Set<UUID> findProjectIdsByRuleId(@Bind("ruleId") UUID ruleId,

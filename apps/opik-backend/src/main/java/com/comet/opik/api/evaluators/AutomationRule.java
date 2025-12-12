@@ -24,7 +24,12 @@ import java.util.UUID;
 public sealed interface AutomationRule permits AutomationRuleEvaluator {
 
     UUID getId();
-    Set<UUID> getProjectIds();
+
+    // Dual-field architecture for backward compatibility
+    UUID getProjectId(); // Legacy - derived from first element of projectIds
+    String getProjectName(); // Legacy - enriched by service layer
+    Set<UUID> getProjectIds(); // New primary field
+
     String getName();
 
     AutomationRuleAction getAction();
