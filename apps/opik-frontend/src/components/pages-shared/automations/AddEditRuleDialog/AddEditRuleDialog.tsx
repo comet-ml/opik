@@ -522,7 +522,7 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
                         <FormItem className="min-w-0 flex-1">
                           <Label className="flex items-center">
                             Scope{" "}
-                            <TooltipWrapper content="Choose whether the evaluation rule scores the entire thread or each individual trace. Thread-level rules assess the full conversation, while trace-level rules evaluate one model response at a time.">
+                            <TooltipWrapper content="Choose whether the evaluation rule scores the entire thread, each individual trace, or each span. Thread-level rules assess the full conversation, trace-level rules evaluate one model response at a time, and span-level rules evaluate individual operations within a trace.">
                               <Info className="ml-1 size-4 text-light-slate" />
                             </TooltipWrapper>
                           </Label>
