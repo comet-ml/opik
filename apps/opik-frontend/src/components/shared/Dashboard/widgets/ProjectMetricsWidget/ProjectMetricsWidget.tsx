@@ -7,13 +7,11 @@ import {
   METRIC_NAME_TYPE,
 } from "@/api/projects/useProjectMetric";
 import { useDashboardStore } from "@/store/DashboardStore";
-import {
-  ProjectDashboardConfig,
-  DashboardWidgetComponentProps,
-} from "@/types/dashboard";
+import { DashboardWidgetComponentProps } from "@/types/dashboard";
 import { Filter } from "@/types/filters";
 import { isFilterValid } from "@/lib/filters";
 import MetricContainerChart from "@/components/pages/TracesPage/MetricsTab/MetricChart/MetricChartContainer";
+import { CHART_TYPE } from "@/constants/chart";
 import {
   INTERVAL_DESCRIPTIONS,
   renderDurationTooltipValue,
@@ -23,19 +21,16 @@ import {
   tokenYTickFormatter,
 } from "@/components/pages/TracesPage/MetricsTab/utils";
 import { calculateIntervalConfig } from "@/components/pages-shared/traces/MetricDateRangeSelect/utils";
-import { DateRangeSerializedValue } from "@/components/shared/DateRangeSelect";
+import { DEFAULT_DATE_PRESET } from "@/components/pages-shared/traces/MetricDateRangeSelect/constants";
 
 const ProjectMetricsWidget: React.FunctionComponent<
   DashboardWidgetComponentProps
 > = ({ sectionId, widgetId, preview = false }) => {
   const globalConfig = useDashboardStore(
-    useShallow((state) => {
-      const config = state.config as ProjectDashboardConfig | null;
-      return {
-        projectId: config?.projectId,
-        dateRange: config?.dateRange as DateRangeSerializedValue,
-      };
-    }),
+    useShallow((state) => ({
+      projectId: state.config?.projectIds?.[0],
+      dateRange: state.config?.dateRange ?? DEFAULT_DATE_PRESET,
+    })),
   );
 
   const widget = useDashboardStore(
@@ -62,7 +57,7 @@ const ProjectMetricsWidget: React.FunctionComponent<
   const widgetProjectId = widget?.config?.projectId as string | undefined;
 
   const { projectId, interval, intervalStart, intervalEnd } = useMemo(() => {
-    const finalProjectId = widgetProjectId || globalConfig.projectId;
+    const finalProjectId = globalConfig.projectId || widgetProjectId;
 
     const { interval, intervalStart, intervalEnd } = calculateIntervalConfig(
       globalConfig.dateRange,
@@ -92,11 +87,24 @@ const ProjectMetricsWidget: React.FunctionComponent<
   }
 
   const renderChartContent = () => {
-    const chartType = (widget.config?.chartType as "line" | "bar") || "line";
+    const chartType =
+      (widget.config?.chartType as CHART_TYPE.line | CHART_TYPE.bar) ||
+      CHART_TYPE.line;
     const traceFilters = widget.config?.traceFilters as Filter[] | undefined;
     const threadFilters = widget.config?.threadFilters as Filter[] | undefined;
 
-    if (!metricType || !projectId || !interval) {
+    if (!projectId) {
+      return (
+        <DashboardWidget.EmptyState
+          title="Project not configured"
+          message="This widget requires a project ID. Configure it in the widget settings or set a default project for the dashboard."
+          onAction={!preview ? handleEdit : undefined}
+          actionLabel="Configure widget"
+        />
+      );
+    }
+
+    if (!metricType || !interval) {
       return (
         <DashboardWidget.EmptyState
           title="No metric selected"

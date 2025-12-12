@@ -13,9 +13,9 @@
         Opik
     </div>
 </h1>
-<h2 align="center" style="border-bottom: none">オープンソースLLM評価プラットフォーム</h2>
+<h2 align="center" style="border-bottom: none">AI向けオープンソースのオブザーバビリティ、評価、最適化プラットフォーム</h2>
 <p align="center">
-Opikは、LLMシステムをより良く、より高速に、より低コストで実行するための構築、評価、最適化を支援します。RAGチャットボットからコードアシスタント、複雑なエージェンシーパイプラインまで、Opikは包括的なトレーシング、評価、ダッシュボード、そして <b>Opik Agent Optimizer</b> や <b>Opik Guardrails</b> といった強力な機能を提供し、本番環境のLLM搭載アプリケーションの改善とセキュリティを支えます。
+Opikは、プロトタイプから本番まで、より良く動作する生成AIアプリケーションの構築、テスト、最適化を支援します。RAGチャットボットやコードアシスタント、複雑なエージェンティックシステムに至るまで、Opikは包括的なトレース、評価、そしてプロンプトやツールの自動最適化を提供し、AI開発における試行錯誤を取り除きます。
 </p>
 
 <div align="center">
@@ -215,6 +215,7 @@ opik configure
 | **Groq**                  | Groq LLM 呼び出しのトレースを記録                                           | [ドキュメント](https://www.comet.com/docs/opik/integrations/groq?utm_source=opik&utm_medium=github&utm_content=groq_link&utm_campaign=opik)                                   |
 | **Guardrails**            | Guardrails AI 検証のトレースを記録                                          | [ドキュメント](https://www.comet.com/docs/opik/integrations/guardrails-ai?utm_source=opik&utm_medium=github&utm_content=guardrails_link&utm_campaign=opik)                    |
 | **Haystack**              | Haystack 呼び出しのトレースを記録                                           | [ドキュメント](https://www.comet.com/docs/opik/integrations/haystack?utm_source=opik&utm_medium=github&utm_content=haystack_link&utm_campaign=opik)                           |
+| **Harbor**                | Harbor ベンチマーク評価トライアルのトレースを記録                             | [ドキュメント](https://www.comet.com/docs/opik/integrations/harbor?utm_source=opik&utm_medium=github&utm_content=harbor_link&utm_campaign=opik)                               |
 | **Instructor**            | Instructor 経由のLLM呼び出しトレースを記録                                  | [ドキュメント](https://www.comet.com/docs/opik/integrations/instructor?utm_source=opik&utm_medium=github&utm_content=instructor_link&utm_campaign=opik)                       |
 | **LangChain (Python)**    | LangChain LLM 呼び出しのトレースを記録                                      | [ドキュメント](https://www.comet.com/docs/opik/integrations/langchain?utm_source=opik&utm_medium=github&utm_content=langchain_link&utm_campaign=opik)                         |
 | **LangChain (JS/TS)**     | LangChain JavaScript/TypeScript 呼び出しのトレースを記録                    | [ドキュメント](https://www.comet.com/docs/opik/integrations/langchainjs?utm_source=opik&utm_medium=github&utm_content=langchainjs_link&utm_campaign=opik)                     |

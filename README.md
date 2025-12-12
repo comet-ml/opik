@@ -12,9 +12,9 @@
         Opik
     </div>
 </h1>
-<h2 align="center" style="border-bottom: none">Open-source LLM evaluation platform</h2>
+<h2 align="center" style="border-bottom: none">Open-source AI Observability, Evaluation, and Optimization</h2>
 <p align="center">
-Opik helps you build, evaluate, and optimize LLM systems that run better, faster, and cheaper. From RAG chatbots to code assistants to complex agentic pipelines, Opik provides comprehensive tracing, evaluations, dashboards, and powerful features like <b>Opik Agent Optimizer</b> and <b>Opik Guardrails</b> to improve and secure your LLM powered applications in production.
+Opik helps you build, test, and optimize generative AI application that run better, from prototype to production.  From RAG chatbots to code assistants to complex agentic systems, Opik provides comprehensive tracing, evaluation, and automatic prompt and tool optimization to take the guesswork out of AI development.
 </p>
 
 <div align="center">
@@ -214,6 +214,7 @@ The easiest way to log traces is to use one of our direct integrations. Opik sup
 | Groq                  | Log traces for Groq LLM calls                           | [Documentation](https://www.comet.com/docs/opik/integrations/groq?utm_source=opik&utm_medium=github&utm_content=groq_link&utm_campaign=opik)                                   |
 | Guardrails            | Log traces for Guardrails AI validations                | [Documentation](https://www.comet.com/docs/opik/integrations/guardrails-ai?utm_source=opik&utm_medium=github&utm_content=guardrails_link&utm_campaign=opik)                    |
 | Haystack              | Log traces for Haystack calls                           | [Documentation](https://www.comet.com/docs/opik/integrations/haystack?utm_source=opik&utm_medium=github&utm_content=haystack_link&utm_campaign=opik)                           |
+| Harbor                | Log traces for Harbor benchmark evaluation trials       | [Documentation](https://www.comet.com/docs/opik/integrations/harbor?utm_source=opik&utm_medium=github&utm_content=harbor_link&utm_campaign=opik)                               |
 | Instructor            | Log traces for LLM calls made with Instructor           | [Documentation](https://www.comet.com/docs/opik/integrations/instructor?utm_source=opik&utm_medium=github&utm_content=instructor_link&utm_campaign=opik)                       |
 | LangChain (Python)    | Log traces for LangChain LLM calls                      | [Documentation](https://www.comet.com/docs/opik/integrations/langchain?utm_source=opik&utm_medium=github&utm_content=langchain_link&utm_campaign=opik)                         |
 | LangChain (JS/TS)     | Log traces for LangChain JavaScript/TypeScript calls    | [Documentation](https://www.comet.com/docs/opik/integrations/langchainjs?utm_source=opik&utm_medium=github&utm_content=langchainjs_link&utm_campaign=opik)                     |

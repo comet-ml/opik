@@ -13,13 +13,23 @@ export const ServiceTogglesConfig: core.serialization.ObjectSchema<
     pythonEvaluatorEnabled: core.serialization.boolean(),
     traceThreadPythonEvaluatorEnabled: core.serialization.boolean(),
     spanLlmAsJudgeEnabled: core.serialization.boolean(),
+    spanUserDefinedMetricPythonEnabled: core.serialization.boolean(),
     guardrailsEnabled: core.serialization.boolean(),
     opikAiEnabled: core.serialization.property("opikAIEnabled", core.serialization.boolean()),
     alertsEnabled: core.serialization.boolean(),
     welcomeWizardEnabled: core.serialization.boolean(),
     csvUploadEnabled: core.serialization.boolean(),
     exportEnabled: core.serialization.boolean(),
+    optimizationStudioEnabled: core.serialization.boolean(),
     dashboardsEnabled: core.serialization.boolean(),
+    datasetVersioningEnabled: core.serialization.boolean(),
+    openaiProviderEnabled: core.serialization.boolean(),
+    anthropicProviderEnabled: core.serialization.boolean(),
+    geminiProviderEnabled: core.serialization.boolean(),
+    openrouterProviderEnabled: core.serialization.boolean(),
+    vertexaiProviderEnabled: core.serialization.boolean(),
+    customllmProviderEnabled: core.serialization.boolean(),
+    opikbuiltinProviderEnabled: core.serialization.boolean(),
 });
 
 export declare namespace ServiceTogglesConfig {
@@ -27,12 +37,22 @@ export declare namespace ServiceTogglesConfig {
         pythonEvaluatorEnabled: boolean;
         traceThreadPythonEvaluatorEnabled: boolean;
         spanLlmAsJudgeEnabled: boolean;
+        spanUserDefinedMetricPythonEnabled: boolean;
         guardrailsEnabled: boolean;
         opikAIEnabled: boolean;
         alertsEnabled: boolean;
         welcomeWizardEnabled: boolean;
         csvUploadEnabled: boolean;
         exportEnabled: boolean;
+        optimizationStudioEnabled: boolean;
         dashboardsEnabled: boolean;
+        datasetVersioningEnabled: boolean;
+        openaiProviderEnabled: boolean;
+        anthropicProviderEnabled: boolean;
+        geminiProviderEnabled: boolean;
+        openrouterProviderEnabled: boolean;
+        vertexaiProviderEnabled: boolean;
+        customllmProviderEnabled: boolean;
+        opikbuiltinProviderEnabled: boolean;
     }
 }

@@ -143,13 +143,13 @@ class ManualEvaluationServiceImpl implements ManualEvaluationService {
         log.info("Evaluating '{}' traces with '{}' rules", traceIds.size(), rules.size());
 
         // Separate rules by type - only trace-level rules are valid for trace evaluation
-        List<AutomationRuleEvaluatorLlmAsJudge> traceLevelLlmAsJudgeRules = new ArrayList<>();
+        List<AutomationRuleEvaluatorLlmAsJudge> spanLevelLlmAsJudgeRules = new ArrayList<>();
         List<AutomationRuleEvaluatorUserDefinedMetricPython> spanLevelPythonRules = new ArrayList<>();
         List<AutomationRuleEvaluator<?, ?>> traceThreadRules = new ArrayList<>();
 
         for (AutomationRuleEvaluator<?, ?> rule : rules) {
             switch (rule) {
-                case AutomationRuleEvaluatorLlmAsJudge llmAsJudge -> traceLevelLlmAsJudgeRules.add(llmAsJudge);
+                case AutomationRuleEvaluatorLlmAsJudge llmAsJudge -> spanLevelLlmAsJudgeRules.add(llmAsJudge);
                 case AutomationRuleEvaluatorUserDefinedMetricPython python -> spanLevelPythonRules.add(python);
                 case AutomationRuleEvaluatorTraceThreadLlmAsJudge traceThreadLlmAsJudge ->
                     traceThreadRules.add(traceThreadLlmAsJudge);
@@ -169,8 +169,8 @@ class ManualEvaluationServiceImpl implements ManualEvaluationService {
 
         // Handle span-level evaluators - need to fetch full traces
         Mono<Void> spanLevelMono = Mono.empty();
-        if (!traceLevelLlmAsJudgeRules.isEmpty() || !spanLevelPythonRules.isEmpty()) {
-            spanLevelMono = enqueueSpanLevelEvaluations(traceIds, traceLevelLlmAsJudgeRules,
+        if (!spanLevelLlmAsJudgeRules.isEmpty() || !spanLevelPythonRules.isEmpty()) {
+            spanLevelMono = enqueueSpanLevelEvaluations(traceIds, spanLevelLlmAsJudgeRules,
                     spanLevelPythonRules, projectId, workspaceId, userName);
         }
 
@@ -280,23 +280,9 @@ class ManualEvaluationServiceImpl implements ManualEvaluationService {
                     spanLlmAsJudgeRules.add(spanLlmAsJudge);
                 case AutomationRuleEvaluatorSpanUserDefinedMetricPython spanPython ->
                     spanPythonRules.add(spanPython);
-                // Reject all non-span rules with clear error
-                case AutomationRuleEvaluatorLlmAsJudge llmRule ->
-                    throw new BadRequestException(
-                            String.format("Rule '%s' of type '%s' cannot be used for SPAN evaluation",
-                                    llmRule.getId(), llmRule.getType()));
-                case AutomationRuleEvaluatorUserDefinedMetricPython pythonRule ->
-                    throw new BadRequestException(
-                            String.format("Rule '%s' of type '%s' cannot be used for SPAN evaluation",
-                                    pythonRule.getId(), pythonRule.getType()));
-                case AutomationRuleEvaluatorTraceThreadLlmAsJudge threadLlmRule ->
-                    throw new BadRequestException(
-                            String.format("Rule '%s' of type '%s' cannot be used for SPAN evaluation",
-                                    threadLlmRule.getId(), threadLlmRule.getType()));
-                case AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython threadPythonRule ->
-                    throw new BadRequestException(
-                            String.format("Rule '%s' of type '%s' cannot be used for SPAN evaluation",
-                                    threadPythonRule.getId(), threadPythonRule.getType()));
+                default -> {
+                    log.warn("Invalid rule type '{}' for span evaluation, skipping", rule.getType());
+                }
             }
         }
 
@@ -372,35 +358,6 @@ class ManualEvaluationServiceImpl implements ManualEvaluationService {
             UUID projectId,
             String workspaceId, String userName) {
         log.info("Evaluating '{}' threads with '{}' rules", threadModelIds.size(), rules.size());
-
-        // Validate that all rules are thread-level rules
-        for (AutomationRuleEvaluator<?, ?> rule : rules) {
-            switch (rule) {
-                case AutomationRuleEvaluatorTraceThreadLlmAsJudge threadLlmRule -> {
-                    // Valid thread rule
-                }
-                case AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython threadPythonRule -> {
-                    // Valid thread rule
-                }
-                // Reject trace and span-level rules for thread evaluation
-                case AutomationRuleEvaluatorLlmAsJudge llmRule ->
-                    throw new BadRequestException(
-                            String.format("Rule '%s' of type '%s' cannot be used for THREAD evaluation",
-                                    llmRule.getId(), llmRule.getType()));
-                case AutomationRuleEvaluatorUserDefinedMetricPython pythonRule ->
-                    throw new BadRequestException(
-                            String.format("Rule '%s' of type '%s' cannot be used for THREAD evaluation",
-                                    pythonRule.getId(), pythonRule.getType()));
-                case AutomationRuleEvaluatorSpanLlmAsJudge spanLlmRule ->
-                    throw new BadRequestException(
-                            String.format("Rule '%s' of type '%s' cannot be used for THREAD evaluation",
-                                    spanLlmRule.getId(), spanLlmRule.getType()));
-                case AutomationRuleEvaluatorSpanUserDefinedMetricPython spanPythonRule ->
-                    throw new BadRequestException(
-                            String.format("Rule '%s' of type '%s' cannot be used for THREAD evaluation",
-                                    spanPythonRule.getId(), spanPythonRule.getType()));
-            }
-        }
 
         // Fetch thread IDs from thread model IDs
         return traceThreadService.getThreadIdsByThreadModelIds(threadModelIds)

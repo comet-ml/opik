@@ -28,5 +28,24 @@ public class ServiceTogglesConfig {
     @JsonProperty
     @NotNull boolean exportEnabled;
     @JsonProperty
+    @NotNull boolean optimizationStudioEnabled;
+    @JsonProperty
     @NotNull boolean dashboardsEnabled;
+    @JsonProperty
+    @NotNull boolean datasetVersioningEnabled;
+    // LLM Provider feature flags
+    @JsonProperty
+    @NotNull boolean openaiProviderEnabled;
+    @JsonProperty
+    @NotNull boolean anthropicProviderEnabled;
+    @JsonProperty
+    @NotNull boolean geminiProviderEnabled;
+    @JsonProperty
+    @NotNull boolean openrouterProviderEnabled;
+    @JsonProperty
+    @NotNull boolean vertexaiProviderEnabled;
+    @JsonProperty
+    @NotNull boolean customllmProviderEnabled;
+    @JsonProperty
+    @NotNull boolean opikbuiltinProviderEnabled;
 }

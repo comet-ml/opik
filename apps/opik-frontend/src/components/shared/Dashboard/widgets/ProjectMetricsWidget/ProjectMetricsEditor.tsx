@@ -32,7 +32,6 @@ import {
   AddWidgetConfig,
   ProjectMetricsWidget,
   WidgetEditorHandle,
-  ProjectDashboardConfig,
 } from "@/types/dashboard";
 import {
   ProjectMetricsWidgetSchema,
@@ -115,10 +114,10 @@ const ProjectMetricsEditor = forwardRef<
     [widgetConfig?.threadFilters],
   );
 
-  const projectConfig = useDashboardStore(
-    (state) => state.config as ProjectDashboardConfig | null,
+  const globalProjectId = useDashboardStore(
+    (state) => state.config?.projectIds?.[0],
   );
-  const projectId = localProjectId || projectConfig?.projectId || "";
+  const projectId = localProjectId || globalProjectId || "";
 
   const selectedMetric = METRIC_OPTIONS.find((m) => m.value === metricType);
   const isTraceMetric = !metricType || selectedMetric?.filterType === "trace";
@@ -276,7 +275,7 @@ const ProjectMetricsEditor = forwardRef<
               const validationErrors = get(formState.errors, ["projectId"]);
               return (
                 <FormItem>
-                  <FormLabel>Project</FormLabel>
+                  <FormLabel>Project (optional)</FormLabel>
                   <FormControl>
                     <ProjectsSelectBox
                       className={cn({
@@ -292,8 +291,8 @@ const ProjectMetricsEditor = forwardRef<
                     />
                   </FormControl>
                   <Description>
-                    Pick the project that contains the data you want to
-                    visualize.
+                    Pick the project for this widget. If not set, the
+                    dashboard&apos;s default project will be used.
                   </Description>
                   <FormMessage />
                 </FormItem>

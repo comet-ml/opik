@@ -26,7 +26,6 @@ import { Input } from "@/components/ui/input";
 import { Description } from "@/components/ui/description";
 import SelectBox from "@/components/shared/SelectBox/SelectBox";
 import { useDashboardStore } from "@/store/DashboardStore";
-import { ProjectDashboardConfig } from "@/types/dashboard";
 import ProjectsSelectBox from "@/components/pages-shared/automations/ProjectsSelectBox";
 import ProjectWidgetFiltersSection from "@/components/shared/Dashboard/widgets/shared/ProjectWidgetFiltersSection/ProjectWidgetFiltersSection";
 import {
@@ -65,10 +64,10 @@ const ProjectStatsCardEditor = forwardRef<
     [widgetConfig?.spanFilters],
   );
 
-  const projectConfig = useDashboardStore(
-    (state) => state.config as ProjectDashboardConfig | null,
+  const globalProjectId = useDashboardStore(
+    (state) => state.config?.projectIds?.[0],
   );
-  const projectId = localProjectId || projectConfig?.projectId || "";
+  const projectId = localProjectId || globalProjectId || "";
   const isTraceSource = source === TRACE_DATA_TYPE.traces;
 
   const { data, isPending } = useTracesOrSpansScoresColumns(
@@ -234,7 +233,7 @@ const ProjectStatsCardEditor = forwardRef<
               const validationErrors = get(formState.errors, ["projectId"]);
               return (
                 <FormItem>
-                  <FormLabel>Project</FormLabel>
+                  <FormLabel>Project (optional)</FormLabel>
                   <FormControl>
                     <ProjectsSelectBox
                       className={cn({
@@ -250,8 +249,8 @@ const ProjectStatsCardEditor = forwardRef<
                     />
                   </FormControl>
                   <Description>
-                    Pick the project that contains the data you want to
-                    visualize.
+                    Pick the project for this widget. If not set, the
+                    dashboard&apos;s default project will be used.
                   </Description>
                   <FormMessage />
                 </FormItem>

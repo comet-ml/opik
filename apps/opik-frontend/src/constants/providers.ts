@@ -4,8 +4,10 @@ import OpenRouterIcon from "@/icons/integrations/open_router.svg?react";
 import GeminiIcon from "@/icons/integrations/gemini.svg?react";
 import VertexAIIcon from "@/icons/integrations/vertex_ai.svg?react";
 import CustomIcon from "@/icons/integrations/custom.svg?react";
+import OpikIcon from "@/icons/integrations/opik.svg?react";
 
 import { PROVIDER_MODEL_TYPE, PROVIDER_TYPE } from "@/types/providers";
+import { FeatureToggleKeys } from "@/types/feature-toggles";
 
 export type IconType = typeof OpenAIIcon;
 
@@ -17,6 +19,8 @@ export type PROVIDER_OPTION_TYPE = {
   defaultModel: PROVIDER_MODEL_TYPE | "";
   description?: string;
   apiKeyURL?: string;
+  /** If true, this provider is system-managed and users cannot configure it */
+  readOnly?: boolean;
 };
 
 type PROVIDERS_TYPE = {
@@ -24,6 +28,15 @@ type PROVIDERS_TYPE = {
 };
 
 export const PROVIDERS: PROVIDERS_TYPE = {
+  [PROVIDER_TYPE.OPIK_BUILTIN]: {
+    label: "Opik Built-in",
+    value: PROVIDER_TYPE.OPIK_BUILTIN,
+    icon: OpikIcon,
+    apiKeyName: "Opik Built-in",
+    defaultModel: PROVIDER_MODEL_TYPE.OPIK_BUILTIN_MODEL,
+    description: "Built-in model provided by Opik - no API key required",
+    readOnly: true,
+  },
   [PROVIDER_TYPE.OPEN_AI]: {
     label: "OpenAI",
     value: PROVIDER_TYPE.OPEN_AI,
@@ -77,5 +90,19 @@ export const PROVIDERS: PROVIDERS_TYPE = {
 export const PROVIDERS_OPTIONS = Object.values(PROVIDERS);
 
 export const CUSTOM_PROVIDER_MODEL_PREFIX = "custom-llm";
+
+// Mapping between provider types and their feature toggle keys
+export const PROVIDER_FEATURE_TOGGLE_MAP: Record<
+  PROVIDER_TYPE,
+  FeatureToggleKeys
+> = {
+  [PROVIDER_TYPE.OPEN_AI]: FeatureToggleKeys.OPENAI_PROVIDER_ENABLED,
+  [PROVIDER_TYPE.ANTHROPIC]: FeatureToggleKeys.ANTHROPIC_PROVIDER_ENABLED,
+  [PROVIDER_TYPE.GEMINI]: FeatureToggleKeys.GEMINI_PROVIDER_ENABLED,
+  [PROVIDER_TYPE.OPEN_ROUTER]: FeatureToggleKeys.OPENROUTER_PROVIDER_ENABLED,
+  [PROVIDER_TYPE.VERTEX_AI]: FeatureToggleKeys.VERTEXAI_PROVIDER_ENABLED,
+  [PROVIDER_TYPE.CUSTOM]: FeatureToggleKeys.CUSTOMLLM_PROVIDER_ENABLED,
+  [PROVIDER_TYPE.OPIK_BUILTIN]: FeatureToggleKeys.OPIKBUILTIN_PROVIDER_ENABLED,
+};
 
 export const LEGACY_CUSTOM_PROVIDER_NAME = "default";

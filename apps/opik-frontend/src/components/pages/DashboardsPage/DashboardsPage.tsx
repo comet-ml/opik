@@ -7,6 +7,8 @@ import {
   StringParam,
   useQueryParam,
 } from "use-query-params";
+import { ColumnPinningState, ColumnSort } from "@tanstack/react-table";
+import useLocalStorageState from "use-local-storage-state";
 
 import DataTable from "@/components/shared/DataTable/DataTable";
 import DataTableNoData from "@/components/shared/DataTableNoData/DataTableNoData";
@@ -17,8 +19,9 @@ import useDashboardsList from "@/api/dashboards/useDashboardsList";
 import useQueryParamAndLocalStorageState from "@/hooks/useQueryParamAndLocalStorageState";
 import { Dashboard } from "@/types/dashboard";
 import Loader from "@/components/shared/Loader/Loader";
-import DashboardCreateDialog from "@/components/pages/DashboardsPage/DashboardCreateDialog";
+import AddEditCloneDashboardDialog from "@/components/pages-shared/dashboards/AddEditCloneDashboardDialog/AddEditCloneDashboardDialog";
 import { DashboardRowActionsCell } from "@/components/pages/DashboardsPage/DashboardRowActionsCell";
+import DashboardsActionsPanel from "@/components/pages/DashboardsPage/DashboardsActionsPanel";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import useAppStore from "@/store/AppStore";
@@ -33,9 +36,11 @@ import {
 } from "@/types/shared";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 import ExplainerDescription from "@/components/shared/ExplainerDescription/ExplainerDescription";
-import { convertColumnDataToColumn, mapColumnDataFields } from "@/lib/table";
-import useLocalStorageState from "use-local-storage-state";
-import { ColumnPinningState } from "@tanstack/react-table";
+import {
+  convertColumnDataToColumn,
+  isColumnSortable,
+  mapColumnDataFields,
+} from "@/lib/table";
 import {
   generateActionsColumDef,
   generateSelectColumDef,
@@ -46,6 +51,7 @@ import { RESOURCE_TYPE } from "@/components/shared/ResourceLink/ResourceLink";
 const SELECTED_COLUMNS_KEY = "dashboards-selected-columns";
 const COLUMNS_WIDTH_KEY = "dashboards-columns-width";
 const COLUMNS_ORDER_KEY = "dashboards-columns-order";
+const COLUMNS_SORT_KEY = "dashboards-columns-sort";
 const PAGINATION_SIZE_KEY = "dashboards-pagination-size";
 
 export const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
@@ -123,9 +129,19 @@ const DashboardsPage: React.FunctionComponent = () => {
     },
   );
 
+  const [sortedColumns, setSortedColumns] = useQueryParamAndLocalStorageState<
+    ColumnSort[]
+  >({
+    localStorageKey: COLUMNS_SORT_KEY,
+    queryKey: "sorting",
+    defaultValue: [],
+    queryParamConfig: JsonParam,
+  });
+
   const { data, isPending } = useDashboardsList(
     {
       workspaceName,
+      sorting: sortedColumns,
       search: search!,
       page: page!,
       size: size!,
@@ -136,11 +152,19 @@ const DashboardsPage: React.FunctionComponent = () => {
   );
 
   const dashboards = useMemo(() => data?.content ?? [], [data?.content]);
+  const sortableBy: string[] = useMemo(
+    () => data?.sortable_by ?? [],
+    [data?.sortable_by],
+  );
   const total = data?.total ?? 0;
   const noData = !search;
   const noDataText = noData
     ? "There are no dashboards yet"
     : "No search results";
+
+  const selectedDashboards = useMemo(() => {
+    return dashboards.filter((dashboard) => rowSelection[dashboard.id]);
+  }, [dashboards, rowSelection]);
 
   const [selectedColumns, setSelectedColumns] = useLocalStorageState<string[]>(
     SELECTED_COLUMNS_KEY,
@@ -175,16 +199,27 @@ const DashboardsPage: React.FunctionComponent = () => {
           idKey: "id",
           resource: RESOURCE_TYPE.dashboard,
         },
+        sortable: isColumnSortable(COLUMN_NAME_ID, sortableBy),
       }),
       ...convertColumnDataToColumn<Dashboard, Dashboard>(columnsDef, {
         columnsOrder,
         selectedColumns,
+        sortableColumns: sortableBy,
       }),
       generateActionsColumDef({
         cell: DashboardRowActionsCell,
       }),
     ];
-  }, [selectedColumns, columnsOrder, columnsDef]);
+  }, [selectedColumns, columnsOrder, columnsDef, sortableBy]);
+
+  const sortConfig = useMemo(
+    () => ({
+      enabled: true,
+      sorting: sortedColumns,
+      setSorting: setSortedColumns,
+    }),
+    [setSortedColumns, sortedColumns],
+  );
 
   const resizeConfig = useMemo(
     () => ({
@@ -235,6 +270,7 @@ const DashboardsPage: React.FunctionComponent = () => {
           dimension="sm"
         ></SearchInput>
         <div className="flex items-center gap-2">
+          <DashboardsActionsPanel dashboards={selectedDashboards} />
           <Separator orientation="vertical" className="mx-2 h-4" />
           <ColumnsButton
             columns={columnsDef}
@@ -252,6 +288,7 @@ const DashboardsPage: React.FunctionComponent = () => {
         columns={columns}
         data={dashboards}
         onRowClick={handleRowClick}
+        sortConfig={sortConfig}
         resizeConfig={resizeConfig}
         selectionConfig={{
           rowSelection,
@@ -278,7 +315,8 @@ const DashboardsPage: React.FunctionComponent = () => {
           total={total}
         ></DataTablePagination>
       </div>
-      <DashboardCreateDialog
+      <AddEditCloneDashboardDialog
+        mode="create"
         key={resetDialogKeyRef.current}
         open={openDialog}
         setOpen={setOpenDialog}

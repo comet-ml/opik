@@ -9,6 +9,7 @@ from ..core.pydantic_utilities import IS_PYDANTIC_V2, UniversalBaseModel
 from .llm_as_judge_code_write import LlmAsJudgeCodeWrite
 from .span_filter_write import SpanFilterWrite
 from .span_llm_as_judge_code_write import SpanLlmAsJudgeCodeWrite
+from .span_user_defined_metric_python_code_write import SpanUserDefinedMetricPythonCodeWrite
 from .trace_filter_write import TraceFilterWrite
 from .trace_thread_filter_write import TraceThreadFilterWrite
 from .trace_thread_llm_as_judge_code_write import TraceThreadLlmAsJudgeCodeWrite
@@ -108,10 +109,26 @@ class AutomationRuleEvaluatorWrite_SpanLlmAsJudge(Base):
             extra = pydantic.Extra.allow
 
 
+class AutomationRuleEvaluatorWrite_SpanUserDefinedMetricPython(Base):
+    type: typing.Literal["span_user_defined_metric_python"] = "span_user_defined_metric_python"
+    filters: typing.Optional[typing.List[SpanFilterWrite]] = None
+    code: typing.Optional[SpanUserDefinedMetricPythonCodeWrite] = None
+
+    if IS_PYDANTIC_V2:
+        model_config: typing.ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(extra="allow", frozen=True)  # type: ignore # Pydantic v2
+    else:
+
+        class Config:
+            frozen = True
+            smart_union = True
+            extra = pydantic.Extra.allow
+
+
 AutomationRuleEvaluatorWrite = typing.Union[
     AutomationRuleEvaluatorWrite_LlmAsJudge,
     AutomationRuleEvaluatorWrite_UserDefinedMetricPython,
     AutomationRuleEvaluatorWrite_TraceThreadLlmAsJudge,
     AutomationRuleEvaluatorWrite_TraceThreadUserDefinedMetricPython,
     AutomationRuleEvaluatorWrite_SpanLlmAsJudge,
+    AutomationRuleEvaluatorWrite_SpanUserDefinedMetricPython,
 ]

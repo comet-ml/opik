@@ -18,6 +18,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.api.gax.rpc.InvalidArgumentException;
 import com.jayway.jsonpath.JsonPath;
+import dev.langchain4j.data.message.AudioContent;
 import dev.langchain4j.data.message.ChatMessage;
 import dev.langchain4j.data.message.ImageContent;
 import dev.langchain4j.data.message.SystemMessage;
@@ -361,7 +362,7 @@ public class OnlineScoringEngine {
 
     /**
      * Build a UserMessage from structured content parts (array format).
-     * Supports text, image_url, and video_url content types.
+     * Supports text, image_url, video_url, and audio_url content types.
      */
     private UserMessage buildUserMessageFromContentParts(
             List<LlmAsJudgeMessageContent> contentParts, Map<String, String> replacements) {
@@ -391,6 +392,13 @@ public class OnlineScoringEngine {
                         builder.addContent(VideoContent.from(unescapedUrl));
                     }
                 }
+                case "audio_url" -> {
+                    if (part.audioUrl() != null && part.audioUrl().url() != null) {
+                        var url = TemplateParseUtils.render(part.audioUrl().url(), replacements, PromptType.MUSTACHE);
+                        var unescapedUrl = StringEscapeUtils.unescapeHtml4(url);
+                        builder.addContent(AudioContent.from(unescapedUrl));
+                    }
+                }
                 default -> log.warn("Unknown content type: {}", part.type());
             }
         }
@@ -411,7 +419,8 @@ public class OnlineScoringEngine {
         }
 
         try {
-            return JsonPath.parse(forcedObject).read(path);
+            var value = JsonPath.parse(forcedObject).read(path);
+            return value != null ? value.toString() : null;
         } catch (Exception e) {
             log.warn("couldn't find path inside json, trying flat structure, path={}, json={}", path, json, e);
             return Optional.ofNullable(forcedObject.get(path.replace("$.", "")))

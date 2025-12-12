@@ -146,6 +146,7 @@ type AddEditRuleDialogProps = {
   projectName?: string; // Optional: project name for pre-selected projects
   datasetColumnNames?: string[]; // Optional: dataset column names from playground
   hideScopeSelector?: boolean; // Optional: hide scope selector (e.g., for contexts that only support one scope)
+  defaultScope?: EVALUATORS_RULE_SCOPE; // Optional: default scope for new rules
 };
 
 const isPythonCodeRule = (rule: EvaluatorsRule) => {
@@ -172,6 +173,7 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
   projectName,
   datasetColumnNames,
   hideScopeSelector = false,
+  defaultScope,
 }) => {
   const isCodeMetricEnabled = useIsFeatureEnabled(
     FeatureToggleKeys.PYTHON_EVALUATOR_ENABLED,
@@ -240,22 +242,28 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
   useEffect(() => {
     if (open && !defaultRule) {
       // Reset the entire form to default values
-      const defaultScope = EVALUATORS_RULE_SCOPE.trace;
+      const initialScope = defaultScope || EVALUATORS_RULE_SCOPE.trace;
       const defaultUIType = UI_EVALUATORS_RULE_TYPE.llm_judge;
+      const defaultType =
+        initialScope === EVALUATORS_RULE_SCOPE.thread
+          ? EVALUATORS_RULE_TYPE.thread_llm_judge
+          : initialScope === EVALUATORS_RULE_SCOPE.span
+            ? EVALUATORS_RULE_TYPE.span_llm_judge
+            : EVALUATORS_RULE_TYPE.llm_judge;
 
       form.reset({
         ruleName: "",
         projectId: projectId || "",
         samplingRate: 1,
         uiType: defaultUIType,
-        scope: defaultScope,
-        type: EVALUATORS_RULE_TYPE.llm_judge,
+        scope: initialScope,
+        type: defaultType,
         enabled: true,
         filters: [],
-        llmJudgeDetails: cloneDeep(DEFAULT_LLM_AS_JUDGE_DATA[defaultScope]),
+        llmJudgeDetails: cloneDeep(DEFAULT_LLM_AS_JUDGE_DATA[initialScope]),
       });
     }
-  }, [open, defaultRule, projectId, form]);
+  }, [open, defaultRule, projectId, defaultScope, form]);
 
   const handleScopeChange = useCallback(
     (value: EVALUATORS_RULE_SCOPE) => {
@@ -308,7 +316,7 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
       [EVALUATORS_RULE_SCOPE.thread]:
         EXPLAINER_ID.i_added_edited_a_new_online_evaluation_thread_level_rule_now_what,
       [EVALUATORS_RULE_SCOPE.span]:
-        EXPLAINER_ID.i_added_edited_a_new_online_evaluation_rule_now_what,
+        EXPLAINER_ID.i_added_edited_a_new_online_evaluation_span_level_rule_now_what,
     };
     const explainer = EXPLAINERS_MAP[expainerIdMap[scope]];
 
@@ -617,35 +625,16 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
                               >
                                 LLM-as-judge
                               </ToggleGroupItem>
-                              {(isCodeMetricEnabled && !isSpanScope) ||
-                              (isSpanScope && isSpanPythonCodeEnabled) ? (
-                                <ToggleGroupItem
-                                  value={UI_EVALUATORS_RULE_TYPE.python_code}
-                                  aria-label="Code metric"
-                                >
-                                  Code metric
-                                </ToggleGroupItem>
-                              ) : (
-                                <TooltipWrapper
-                                  content={
-                                    isSpanScope
-                                      ? "Python code metrics are not enabled for span scope"
-                                      : "This feature is not available for this environment"
-                                  }
-                                >
-                                  <span>
-                                    <ToggleGroupItem
-                                      value={
-                                        UI_EVALUATORS_RULE_TYPE.python_code
-                                      }
-                                      aria-label="Code metric"
-                                      disabled
-                                    >
-                                      Code metric
-                                    </ToggleGroupItem>
-                                  </span>
-                                </TooltipWrapper>
-                              )}
+                              {isCodeMetricEnabled &&
+                                (!isSpanScope ||
+                                  (isSpanScope && isSpanPythonCodeEnabled)) && (
+                                  <ToggleGroupItem
+                                    value={UI_EVALUATORS_RULE_TYPE.python_code}
+                                    aria-label="Code metric"
+                                  >
+                                    Code metric
+                                  </ToggleGroupItem>
+                                )}
                             </ToggleGroup>
                           </div>
                         </FormControl>

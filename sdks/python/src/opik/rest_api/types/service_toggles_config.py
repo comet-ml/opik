@@ -14,13 +14,25 @@ class ServiceTogglesConfig(UniversalBaseModel):
         bool, FieldMetadata(alias="traceThreadPythonEvaluatorEnabled")
     ]
     span_llm_as_judge_enabled: typing_extensions.Annotated[bool, FieldMetadata(alias="spanLlmAsJudgeEnabled")]
+    span_user_defined_metric_python_enabled: typing_extensions.Annotated[
+        bool, FieldMetadata(alias="spanUserDefinedMetricPythonEnabled")
+    ]
     guardrails_enabled: typing_extensions.Annotated[bool, FieldMetadata(alias="guardrailsEnabled")]
     opik_ai_enabled: typing_extensions.Annotated[bool, FieldMetadata(alias="opikAIEnabled")]
     alerts_enabled: typing_extensions.Annotated[bool, FieldMetadata(alias="alertsEnabled")]
     welcome_wizard_enabled: typing_extensions.Annotated[bool, FieldMetadata(alias="welcomeWizardEnabled")]
     csv_upload_enabled: typing_extensions.Annotated[bool, FieldMetadata(alias="csvUploadEnabled")]
     export_enabled: typing_extensions.Annotated[bool, FieldMetadata(alias="exportEnabled")]
+    optimization_studio_enabled: typing_extensions.Annotated[bool, FieldMetadata(alias="optimizationStudioEnabled")]
     dashboards_enabled: typing_extensions.Annotated[bool, FieldMetadata(alias="dashboardsEnabled")]
+    dataset_versioning_enabled: typing_extensions.Annotated[bool, FieldMetadata(alias="datasetVersioningEnabled")]
+    openai_provider_enabled: typing_extensions.Annotated[bool, FieldMetadata(alias="openaiProviderEnabled")]
+    anthropic_provider_enabled: typing_extensions.Annotated[bool, FieldMetadata(alias="anthropicProviderEnabled")]
+    gemini_provider_enabled: typing_extensions.Annotated[bool, FieldMetadata(alias="geminiProviderEnabled")]
+    openrouter_provider_enabled: typing_extensions.Annotated[bool, FieldMetadata(alias="openrouterProviderEnabled")]
+    vertexai_provider_enabled: typing_extensions.Annotated[bool, FieldMetadata(alias="vertexaiProviderEnabled")]
+    customllm_provider_enabled: typing_extensions.Annotated[bool, FieldMetadata(alias="customllmProviderEnabled")]
+    opikbuiltin_provider_enabled: typing_extensions.Annotated[bool, FieldMetadata(alias="opikbuiltinProviderEnabled")]
 
     if IS_PYDANTIC_V2:
         model_config: typing.ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(extra="allow", frozen=True)  # type: ignore # Pydantic v2

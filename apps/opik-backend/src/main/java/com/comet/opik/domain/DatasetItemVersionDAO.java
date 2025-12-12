@@ -32,6 +32,8 @@ public interface DatasetItemVersionDAO {
     Mono<DatasetItemPage> getItems(DatasetItemSearchCriteria searchCriteria, int page, int size, UUID versionId);
 
     Flux<DatasetItemIdAndHash> getItemIdsAndHashes(UUID datasetId, UUID versionId);
+
+    Mono<ItemsHash> getVersionItemsHashAgg(UUID datasetId, UUID versionId);
 }
 
 @Singleton
@@ -134,6 +136,21 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
             AND workspace_id = :workspace_id
             """;
 
+    private static final String SELECT_VERSION_ITEMS_HASH = """
+            SELECT
+                groupBitXor(xxHash64(dataset_item_id)) as id_hash,
+                groupBitXor(data_hash) as data_hash
+            FROM (
+                SELECT data_hash, id, dataset_item_id
+                FROM dataset_item_versions
+                WHERE dataset_id = :datasetId
+                AND dataset_version_id = :versionId
+                AND workspace_id = :workspace_id
+                ORDER BY (workspace_id, dataset_id, dataset_version_id, id) DESC, last_updated_at DESC
+                LIMIT 1 BY id
+            )
+            """;
+
     private final @NonNull TransactionTemplateAsync asyncTemplate;
 
     @Override
@@ -226,7 +243,8 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                                 .doFinally(signalType -> endSegment(segment))
                                 .flatMap(DatasetItemResultMapper::mapItem)
                                 .collectList()
-                                .map(items -> new DatasetItemPage(items, page, items.size(), total, columns, null));
+                                .map(items -> new DatasetItemPage(items, page, items.size(), total, columns, null,
+                                        false));
                     });
                 });
     }
@@ -243,6 +261,30 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                     .doFinally(signalType -> endSegment(segment))
                     .flatMap(result -> result.map((row, meta) -> row.get("count", Long.class)))
                     .reduce(0L, Long::sum);
+        });
+    }
+
+    @Override
+    @WithSpan
+    public Mono<ItemsHash> getVersionItemsHashAgg(@NonNull UUID datasetId, @NonNull UUID versionId) {
+        log.debug("Computing hash for version items of dataset: '{}', version: '{}'", datasetId, versionId);
+
+        Segment segment = startSegment(DATASET_ITEM_VERSIONS, CLICKHOUSE, "get_version_items_hash_agg");
+
+        return asyncTemplate.nonTransaction(connection -> {
+            var statement = connection.createStatement(SELECT_VERSION_ITEMS_HASH)
+                    .bind("datasetId", datasetId)
+                    .bind("versionId", versionId);
+
+            return makeFluxContextAware(bindWorkspaceIdToFlux(statement))
+                    .doFinally(signalType -> endSegment(segment))
+                    .flatMap(result -> result.map((row, metadata) -> {
+                        long idHash = row.get("id_hash", Long.class);
+                        long dataHash = row.get("data_hash", Long.class);
+                        return ItemsHash.builder().idHash(idHash).dataHash(dataHash).build();
+                    }))
+                    .singleOrEmpty()
+                    .defaultIfEmpty(ItemsHash.builder().idHash(0L).dataHash(0L).build());
         });
     }
 }

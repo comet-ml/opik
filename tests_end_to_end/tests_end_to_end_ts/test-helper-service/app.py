@@ -36,6 +36,10 @@ def authenticate_if_needed():
     # Check if API key already exists
     if os.environ.get("OPIK_API_KEY"):
         print("✅ API key already set, skipping authentication")
+        # Still ensure OPIK_URL_OVERRIDE is set even if API key exists
+        if not os.environ.get("OPIK_URL_OVERRIDE"):
+            os.environ["OPIK_URL_OVERRIDE"] = f"{base_url}/api"
+            print(f"📍 Setting API URL: {os.environ.get('OPIK_URL_OVERRIDE')}")
         return
 
     # Get credentials from environment

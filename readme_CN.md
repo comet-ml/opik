@@ -13,9 +13,9 @@
         Opik
     </div>
 </h1>
-<h2 align="center" style="border-bottom: none">开源 LLM 评估平台</h2>
+<h2 align="center" style="border-bottom: none">开源 AI 可观测性、评估与优化平台</h2>
 <p align="center">
-Opik 帮助您构建、评估和优化 LLM 系统，使其运行得更好、更快、更经济。从 RAG 聊天机器人到代码助手，再到复杂的智能体管道，Opik 提供全面的跟踪、评估、仪表板，以及诸如 <b>Opik Agent Optimizer</b> 和 <b>Opik Guardrails</b> 等强大功能，以改进并保护生产环境中的 LLM 驱动应用。
+Opik 帮助您构建、测试并优化生成式 AI 应用，使其从原型到生产环境运行得更好。从 RAG 聊天机器人到代码助手再到复杂的智能体系统，Opik 提供全面的跟踪、评估，以及自动化的提示与工具优化，消除 AI 开发中的猜测。
 </p>
 
 <div align="center">
@@ -213,6 +213,7 @@ opik configure
 | **Groq**                  | 记录 Groq LLM 调用的跟踪                        | [文档](https://www.comet.com/docs/opik/integrations/groq?utm_source=opik&utm_medium=github&utm_content=groq_link&utm_campaign=opik)                                   |
 | **Guardrails**            | 记录 Guardrails AI 验证的跟踪                   | [文档](https://www.comet.com/docs/opik/integrations/guardrails-ai?utm_source=opik&utm_medium=github&utm_content=guardrails_link&utm_campaign=opik)                    |
 | **Haystack**              | 记录 Haystack 调用的跟踪                        | [文档](https://www.comet.com/docs/opik/integrations/haystack?utm_source=opik&utm_medium=github&utm_content=haystack_link&utm_campaign=opik)                           |
+| **Harbor**                | 记录 Harbor 基准评估试验的跟踪                   | [文档](https://www.comet.com/docs/opik/integrations/harbor?utm_source=opik&utm_medium=github&utm_content=harbor_link&utm_campaign=opik)                               |
 | **Instructor**            | 记录 Instructor LLM 调用的跟踪                  | [文档](https://www.comet.com/docs/opik/integrations/instructor?utm_source=opik&utm_medium=github&utm_content=instructor_link&utm_campaign=opik)                       |
 | **LangChain (Python)**    | 记录 LangChain LLM 调用的跟踪                   | [文档](https://www.comet.com/docs/opik/integrations/langchain?utm_source=opik&utm_medium=github&utm_content=langchain_link&utm_campaign=opik)                         |
 | **LangChain (JS/TS)**     | 记录 LangChain JavaScript/TypeScript 调用的跟踪 | [文档](https://www.comet.com/docs/opik/integrations/langchainjs?utm_source=opik&utm_medium=github&utm_content=langchainjs_link&utm_campaign=opik)                     |

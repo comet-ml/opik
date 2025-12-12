@@ -4,14 +4,11 @@ import { useShallow } from "zustand/react/shallow";
 import DashboardWidget from "@/components/shared/Dashboard/DashboardWidget/DashboardWidget";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import { useDashboardStore } from "@/store/DashboardStore";
-import {
-  ProjectDashboardConfig,
-  DashboardWidgetComponentProps,
-} from "@/types/dashboard";
+import { DashboardWidgetComponentProps } from "@/types/dashboard";
 import { Filter } from "@/types/filters";
 import { isFilterValid } from "@/lib/filters";
 import { calculateIntervalConfig } from "@/components/pages-shared/traces/MetricDateRangeSelect/utils";
-import { DateRangeSerializedValue } from "@/components/shared/DateRangeSelect";
+import { DEFAULT_DATE_PRESET } from "@/components/pages-shared/traces/MetricDateRangeSelect/constants";
 import useTracesStatistic from "@/api/traces/useTracesStatistic";
 import useSpansStatistic from "@/api/traces/useSpansStatistic";
 import { ColumnStatistic } from "@/types/shared";
@@ -42,13 +39,10 @@ const ProjectStatsCardWidget: React.FunctionComponent<
   DashboardWidgetComponentProps
 > = ({ sectionId, widgetId, preview = false }) => {
   const globalConfig = useDashboardStore(
-    useShallow((state) => {
-      const config = state.config as ProjectDashboardConfig | null;
-      return {
-        projectId: config?.projectId,
-        dateRange: config?.dateRange as DateRangeSerializedValue,
-      };
-    }),
+    useShallow((state) => ({
+      projectId: state.config?.projectIds?.[0],
+      dateRange: state.config?.dateRange ?? DEFAULT_DATE_PRESET,
+    })),
   );
 
   const widget = useDashboardStore(
@@ -75,7 +69,7 @@ const ProjectStatsCardWidget: React.FunctionComponent<
   const widgetProjectId = widget?.config?.projectId as string | undefined;
 
   const { projectId, intervalStart, intervalEnd } = useMemo(() => {
-    const finalProjectId = widgetProjectId || globalConfig.projectId;
+    const finalProjectId = globalConfig.projectId || widgetProjectId;
 
     const { intervalStart, intervalEnd } = calculateIntervalConfig(
       globalConfig.dateRange,
@@ -133,7 +127,18 @@ const ProjectStatsCardWidget: React.FunctionComponent<
   }
 
   const renderCardContent = () => {
-    if (!source || !metric || !projectId) {
+    if (!projectId) {
+      return (
+        <DashboardWidget.EmptyState
+          title="Project not configured"
+          message="This widget requires a project ID. Configure it in the widget settings or set a default project for the dashboard."
+          onAction={!preview ? handleEdit : undefined}
+          actionLabel="Configure widget"
+        />
+      );
+    }
+
+    if (!source || !metric) {
       return (
         <DashboardWidget.EmptyState
           title="No metric selected"

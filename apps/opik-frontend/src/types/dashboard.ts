@@ -1,11 +1,14 @@
-import { Filter } from "@/types/filters";
+import { Filters } from "@/types/filters";
 import { DateRangeSerializedValue } from "@/components/shared/DateRangeSelect";
 import { TRACE_DATA_TYPE } from "@/constants/traces";
+import { Groups } from "@/types/groups";
+import { CHART_TYPE } from "@/constants/chart";
 
 export enum WIDGET_TYPE {
   PROJECT_METRICS = "project_metrics",
   PROJECT_STATS_CARD = "project_stats_card",
   TEXT_MARKDOWN = "text_markdown",
+  EXPERIMENTS_FEEDBACK_SCORES = "experiments_feedback_scores",
 }
 
 export enum WIDGET_CATEGORY {
@@ -14,15 +17,25 @@ export enum WIDGET_CATEGORY {
   GENERAL = "general",
 }
 
+export enum DASHBOARD_CREATION_TYPE {
+  EMPTY = "empty",
+  TEMPLATE = "template",
+}
+
+export enum TEMPLATE_ID {
+  PROJECT_METRICS = "project-metrics",
+  PERFORMANCE = "performance",
+}
+
 // Widget-specific type definitions with discriminator
 export interface ProjectMetricsWidget {
   type: WIDGET_TYPE.PROJECT_METRICS;
   config: {
     projectId?: string;
     metricType: string;
-    chartType?: "line" | "bar";
-    traceFilters?: Filter[];
-    threadFilters?: Filter[];
+    chartType?: CHART_TYPE.line | CHART_TYPE.bar;
+    traceFilters?: Filters;
+    threadFilters?: Filters;
   } & Record<string, unknown>;
 }
 
@@ -39,8 +52,17 @@ export interface ProjectStatsCardWidget {
     source: TRACE_DATA_TYPE;
     projectId: string;
     metric: string;
-    traceFilters?: Filter[];
-    spanFilters?: Filter[];
+    traceFilters?: Filters;
+    spanFilters?: Filters;
+  } & Record<string, unknown>;
+}
+
+export interface ExperimentsFeedbackScoresWidgetType {
+  type: WIDGET_TYPE.EXPERIMENTS_FEEDBACK_SCORES;
+  config: {
+    filters?: Filters;
+    groups?: Groups;
+    chartType?: CHART_TYPE;
   } & Record<string, unknown>;
 }
 
@@ -48,7 +70,12 @@ export interface ProjectStatsCardWidget {
 export type AddWidgetConfig = {
   title: string;
   subtitle?: string;
-} & (ProjectMetricsWidget | TextMarkdownWidget | ProjectStatsCardWidget);
+} & (
+  | ProjectMetricsWidget
+  | TextMarkdownWidget
+  | ProjectStatsCardWidget
+  | ExperimentsFeedbackScoresWidgetType
+);
 
 // Update config with optional fields
 export type UpdateWidgetConfig = {
@@ -68,6 +95,10 @@ export type UpdateWidgetConfig = {
       config?: Partial<ProjectStatsCardWidget["config"]>;
     }
   | {
+      type: WIDGET_TYPE.EXPERIMENTS_FEEDBACK_SCORES;
+      config?: Partial<ExperimentsFeedbackScoresWidgetType["config"]>;
+    }
+  | {
       type?: undefined;
       config?: Record<string, unknown>;
     }
@@ -82,6 +113,7 @@ export type DashboardWidget = {
   | ProjectMetricsWidget
   | TextMarkdownWidget
   | ProjectStatsCardWidget
+  | ExperimentsFeedbackScoresWidgetType
   | {
       type: string;
       config: Record<string, unknown>;
@@ -141,12 +173,9 @@ export interface Dashboard {
 }
 
 export interface BaseDashboardConfig {
-  [key: string]: unknown;
-}
-
-export interface ProjectDashboardConfig extends BaseDashboardConfig {
-  projectId: string;
   dateRange: DateRangeSerializedValue;
+  projectIds: string[];
+  experimentIds: string[];
 }
 
 export interface DashboardWidgetComponentProps {
@@ -199,4 +228,11 @@ export interface WidgetConfigDialogProps {
   sectionId: string;
   widgetId?: string;
   onSave: (widgetData: Partial<DashboardWidget>) => void;
+}
+
+export interface DashboardTemplate {
+  id: string;
+  title: string;
+  description: string;
+  config: DashboardState;
 }

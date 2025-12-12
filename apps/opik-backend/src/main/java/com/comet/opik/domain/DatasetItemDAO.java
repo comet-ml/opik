@@ -60,6 +60,8 @@ public interface DatasetItemDAO {
 
     Flux<DatasetItem> getItems(UUID datasetId, int limit, UUID lastRetrievedId);
 
+    Mono<Long> deleteAllNonVersionedDatasetItems(UUID datasetId);
+
     Mono<List<WorkspaceAndResourceId>> getDatasetItemWorkspace(Set<UUID> datasetItemIds);
 
     Flux<DatasetItemSummary> findDatasetItemSummaryByDatasetIds(Set<UUID> datasetIds);
@@ -73,6 +75,12 @@ public interface DatasetItemDAO {
             boolean mergeTags);
 
     Flux<DatasetItemIdAndHash> getDraftItemIdsAndHashes(UUID datasetId);
+
+    Mono<ItemsHash> getDraftItemsHashAgg(UUID datasetId);
+
+    Mono<Long> countDraftItems(UUID datasetId);
+
+    Mono<Long> restoreFromVersion(UUID datasetId, UUID versionId);
 }
 
 @Singleton
@@ -157,6 +165,13 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
     private static final String DELETE_DATASET_ITEM = """
             DELETE FROM dataset_items
             WHERE id IN :ids
+            AND workspace_id = :workspace_id
+            ;
+            """;
+
+    private static final String DELETE_ALL_NON_VERSIONED_DATASET_ITEMS = """
+            DELETE FROM dataset_items
+            WHERE dataset_id = :datasetId
             AND workspace_id = :workspace_id
             ;
             """;
@@ -870,189 +885,286 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
             SELECT
                 id,
                 data_hash
-            FROM dataset_items FINAL
+            FROM dataset_items
             WHERE dataset_id = :datasetId
             AND workspace_id = :workspace_id
+            ORDER BY (workspace_id, dataset_id, source, trace_id, span_id, id) DESC, last_updated_at DESC
             LIMIT 1 BY id
             """;
 
-    private static final String SELECT_DATASET_ITEMS_WITH_EXPERIMENT_ITEMS_STATS = String.format(
-            """
-                    WITH feedback_scores_combined_raw AS (
-                        SELECT workspace_id,
-                               project_id,
-                               entity_id,
-                               name,
-                               value,
-                               last_updated_at,
-                               feedback_scores.last_updated_by AS author
-                        FROM feedback_scores FINAL
-                        WHERE entity_type = 'trace'
-                          AND workspace_id = :workspace_id
-                        UNION ALL
-                        SELECT
-                            workspace_id,
-                            project_id,
-                            entity_id,
-                            name,
-                            value,
-                            last_updated_at,
-                            author
-                        FROM authored_feedback_scores FINAL
-                        WHERE entity_type = 'trace'
-                           AND workspace_id = :workspace_id
-                    ), feedback_scores_with_ranking AS (
-                        SELECT workspace_id,
-                               project_id,
-                               entity_id,
-                               name,
-                               value,
-                               last_updated_at,
-                               author,
-                               ROW_NUMBER() OVER (
-                                   PARTITION BY workspace_id, project_id, entity_id, name, author
-                                   ORDER BY last_updated_at DESC
-                               ) as rn
-                        FROM feedback_scores_combined_raw
-                    ), feedback_scores_combined AS (
-                        SELECT workspace_id,
-                               project_id,
-                               entity_id,
-                               name,
-                               value,
-                               last_updated_at,
-                               author
-                        FROM feedback_scores_with_ranking
-                        WHERE rn = 1
-                    ),                     feedback_scores_final AS (
-                        SELECT
-                            workspace_id,
-                            project_id,
-                            entity_id,
-                            name,
-                            if(count() = 1, any(value), toDecimal64(avg(value), 9)) AS value,
-                            max(last_updated_at) AS last_updated_at
-                        FROM feedback_scores_combined
-                        GROUP BY workspace_id, project_id, entity_id, name
-                    )<if(feedback_scores_empty_filters)>,
-                    fsc AS (
-                        SELECT entity_id, COUNT(entity_id) AS feedback_scores_count
-                        FROM (
-                            SELECT *
-                            FROM feedback_scores_final
-                         )
-                         GROUP BY entity_id
-                         HAVING <feedback_scores_empty_filters>
-                    )
-                    <endif>,
-                    experiment_items_filtered AS (
-                        SELECT
-                            ei.id,
-                            ei.experiment_id,
-                            ei.dataset_item_id,
-                            ei.trace_id
-                        FROM experiment_items ei
-                        WHERE ei.workspace_id = :workspace_id
-                        AND ei.dataset_item_id IN (
-                            SELECT id FROM dataset_items WHERE workspace_id = :workspace_id AND dataset_id = :dataset_id
-                        )
-                        <if(experiment_ids)>
-                        AND ei.experiment_id IN :experiment_ids
-                        <endif>
-                        <if(experiment_item_filters)>
-                        AND ei.trace_id IN (
-                            SELECT id FROM traces WHERE workspace_id = :workspace_id AND <experiment_item_filters>
-                        )
-                        <endif>
-                        <if(feedback_scores_empty_filters)>
-                        AND ei.trace_id IN (
-                            SELECT id
-                            FROM traces
-                            LEFT JOIN fsc ON fsc.entity_id = traces.id
-                            WHERE workspace_id = :workspace_id
-                            AND fsc.feedback_scores_count = 0
-                        )
-                        <endif>
-                        <if(feedback_scores_filters)>
-                        AND ei.trace_id IN (
-                            SELECT entity_id
-                            FROM feedback_scores_final
-                            GROUP BY entity_id, name
-                            HAVING <feedback_scores_filters>
-                        )
-                        <endif>
-                        <if(dataset_item_filters)>
-                        AND ei.dataset_item_id IN (
-                            SELECT id FROM dataset_items WHERE workspace_id = :workspace_id AND <dataset_item_filters>
-                        )
-                        <endif>
-                    ), traces_with_cost_and_duration AS (
-                        SELECT DISTINCT
-                            eif.trace_id as trace_id,
-                            t.duration as duration,
-                            s.total_estimated_cost as total_estimated_cost,
-                            s.usage as usage
-                        FROM experiment_items_filtered eif
-                        LEFT JOIN (
-                            SELECT
-                                id,
-                                if(end_time IS NOT NULL AND start_time IS NOT NULL
-                                    AND notEquals(start_time, toDateTime64('1970-01-01 00:00:00.000', 9)),
-                                    (dateDiff('microsecond', start_time, end_time) / 1000.0),
-                                    NULL) as duration
-                            FROM traces final
-                            WHERE workspace_id = :workspace_id
-                            AND id IN (SELECT trace_id FROM experiment_items_filtered)
-                        ) AS t ON eif.trace_id = t.id
-                        LEFT JOIN (
-                            SELECT
-                                trace_id,
-                                sum(total_estimated_cost) as total_estimated_cost,
-                                sumMap(usage) as usage
-                            FROM spans final
-                            WHERE workspace_id = :workspace_id
-                            AND trace_id IN (SELECT trace_id FROM experiment_items_filtered)
-                            GROUP BY workspace_id, project_id, trace_id
-                        ) AS s ON eif.trace_id = s.trace_id
-                    ), feedback_scores_agg AS (
-                        SELECT
-                            entity_id,
-                            mapFromArrays(
-                                groupArray(name),
-                                groupArray(value)
-                            ) AS feedback_scores
-                        FROM feedback_scores_final
-                        WHERE entity_id IN (SELECT trace_id FROM experiment_items_filtered)
-                        GROUP BY workspace_id, project_id, entity_id
-                    )
+    private static final String SELECT_DRAFT_ITEMS_HASH = """
+            SELECT
+                groupBitXor(xxHash64(id)) as id_hash,
+                groupBitXor(data_hash) as data_hash
+            FROM (
+                SELECT data_hash, id
+                FROM dataset_items
+                WHERE dataset_id = :datasetId
+                AND workspace_id = :workspace_id
+                ORDER BY (workspace_id, dataset_id, source, trace_id, span_id, id) DESC, last_updated_at DESC
+                LIMIT 1 BY id
+            )
+            """;
+
+    private static final String COUNT_DRAFT_ITEMS = """
+            SELECT count(DISTINCT id) as count
+            FROM dataset_items
+            WHERE dataset_id = :datasetId
+            AND workspace_id = :workspace_id
+            """;
+
+    private static final String RESTORE_FROM_VERSION = """
+            INSERT INTO dataset_items (
+                id,
+                dataset_id,
+                data,
+                metadata,
+                source,
+                trace_id,
+                span_id,
+                tags,
+                created_at,
+                last_updated_at,
+                created_by,
+                last_updated_by,
+                workspace_id
+            )
+            SELECT
+                dataset_item_id as id,
+                dataset_id,
+                data,
+                metadata,
+                source,
+                trace_id,
+                span_id,
+                tags,
+                item_created_at as created_at,
+                now64(9) as last_updated_at,
+                item_created_by as created_by,
+                :user_name as last_updated_by,
+                workspace_id
+            FROM dataset_item_versions
+            WHERE dataset_id = :datasetId
+            AND dataset_version_id = :versionId
+            AND workspace_id = :workspace_id
+            ORDER BY (workspace_id, dataset_id, dataset_version_id, id) DESC, last_updated_at DESC
+            LIMIT 1 BY id
+            """;
+
+    private static final String SELECT_DATASET_ITEMS_WITH_EXPERIMENT_ITEMS_STATS = """
+            WITH feedback_scores_combined_raw AS (
+                SELECT workspace_id,
+                       project_id,
+                       entity_id,
+                       name,
+                       value,
+                       last_updated_at,
+                       feedback_scores.last_updated_by AS author
+                FROM feedback_scores FINAL
+                WHERE entity_type = 'trace'
+                  AND workspace_id = :workspace_id
+                UNION ALL
+                SELECT
+                    workspace_id,
+                    project_id,
+                    entity_id,
+                    name,
+                    value,
+                    last_updated_at,
+                    author
+                FROM authored_feedback_scores FINAL
+                WHERE entity_type = 'trace'
+                   AND workspace_id = :workspace_id
+            ), feedback_scores_with_ranking AS (
+                SELECT workspace_id,
+                       project_id,
+                       entity_id,
+                       name,
+                       value,
+                       last_updated_at,
+                       author,
+                       ROW_NUMBER() OVER (
+                           PARTITION BY workspace_id, project_id, entity_id, name, author
+                           ORDER BY last_updated_at DESC
+                       ) as rn
+                FROM feedback_scores_combined_raw
+            ), feedback_scores_combined AS (
+                SELECT workspace_id,
+                       project_id,
+                       entity_id,
+                       name,
+                       value,
+                       last_updated_at,
+                       author
+                FROM feedback_scores_with_ranking
+                WHERE rn = 1
+            ),                     feedback_scores_final AS (
+                SELECT
+                    workspace_id,
+                    project_id,
+                    entity_id,
+                    name,
+                    if(count() = 1, any(value), toDecimal64(avg(value), 9)) AS value,
+                    max(last_updated_at) AS last_updated_at
+                FROM feedback_scores_combined
+                GROUP BY workspace_id, project_id, entity_id, name
+            )<if(feedback_scores_empty_filters)>,
+            fsc AS (
+                SELECT entity_id, COUNT(entity_id) AS feedback_scores_count
+                FROM (
+                    SELECT *
+                    FROM feedback_scores_final
+                 )
+                 GROUP BY entity_id
+                 HAVING <feedback_scores_empty_filters>
+            )
+            <endif>,
+            experiment_items_filtered AS (
+                SELECT
+                    ei.id,
+                    ei.experiment_id,
+                    ei.dataset_item_id,
+                    ei.trace_id
+                FROM experiment_items ei
+                WHERE ei.workspace_id = :workspace_id
+                AND ei.dataset_item_id IN (
+                    SELECT id FROM dataset_items WHERE workspace_id = :workspace_id AND dataset_id = :dataset_id
+                )
+                <if(experiment_ids)>
+                AND ei.experiment_id IN :experiment_ids
+                <endif>
+                <if(experiment_item_filters)>
+                AND ei.trace_id IN (
+                    SELECT id FROM traces WHERE workspace_id = :workspace_id AND <experiment_item_filters>
+                )
+                <endif>
+                <if(feedback_scores_empty_filters)>
+                AND ei.trace_id IN (
+                    SELECT id
+                    FROM traces
+                    LEFT JOIN fsc ON fsc.entity_id = traces.id
+                    WHERE workspace_id = :workspace_id
+                    AND fsc.feedback_scores_count = 0
+                )
+                <endif>
+                <if(feedback_scores_filters)>
+                AND ei.trace_id IN (
+                    SELECT entity_id
+                    FROM feedback_scores_final
+                    GROUP BY entity_id, name
+                    HAVING <feedback_scores_filters>
+                )
+                <endif>
+                <if(dataset_item_filters)>
+                AND ei.dataset_item_id IN (
+                    SELECT id FROM dataset_items WHERE workspace_id = :workspace_id AND <dataset_item_filters>
+                )
+                <endif>
+            ), traces_with_cost_and_duration AS (
+                SELECT DISTINCT
+                    eif.trace_id as trace_id,
+                    t.duration as duration,
+                    s.total_estimated_cost as total_estimated_cost,
+                    s.usage as usage
+                FROM experiment_items_filtered eif
+                LEFT JOIN (
                     SELECT
-                        count(DISTINCT ei.id) as experiment_items_count,
-                        count(DISTINCT tc.trace_id) as trace_count,
-                        mapFromArrays(
-                            ['p50', 'p90', 'p99'],
-                            arrayMap(
-                              v -> toDecimal64(
-                                     greatest(
-                                       least(if(isFinite(v), v, 0),  %s),
-                                       %s
-                                     ),
-                                     9
-                                   ),
-                              quantiles(0.5, 0.9, 0.99)(tc.duration)
-                            )
-                        ) AS duration,
-                        avgMap(f.feedback_scores) AS feedback_scores,
-                        avgIf(tc.total_estimated_cost, tc.total_estimated_cost > 0) AS total_estimated_cost_,
-                        toDecimal128(if(isNaN(total_estimated_cost_), 0, total_estimated_cost_), 12) AS total_estimated_cost_avg,
-                        sumIf(tc.total_estimated_cost, tc.total_estimated_cost > 0) AS total_estimated_cost_sum_,
-                        toDecimal128(total_estimated_cost_sum_, 12) AS total_estimated_cost_sum,
-                        avgMap(tc.usage) AS usage
-                    FROM experiment_items_filtered ei
-                    LEFT JOIN traces_with_cost_and_duration AS tc ON ei.trace_id = tc.trace_id
-                    LEFT JOIN feedback_scores_agg AS f ON ei.trace_id = f.entity_id
-                    ;
-                    """,
-            MAX_DECIMAL_BOUND, MIN_DECIMAL_BOUND);
+                        id,
+                        if(end_time IS NOT NULL AND start_time IS NOT NULL
+                            AND notEquals(start_time, toDateTime64('1970-01-01 00:00:00.000', 9)),
+                            (dateDiff('microsecond', start_time, end_time) / 1000.0),
+                            NULL) as duration
+                    FROM traces final
+                    WHERE workspace_id = :workspace_id
+                    AND id IN (SELECT trace_id FROM experiment_items_filtered)
+                ) AS t ON eif.trace_id = t.id
+                LEFT JOIN (
+                    SELECT
+                        trace_id,
+                        sum(total_estimated_cost) as total_estimated_cost,
+                        sumMap(usage) as usage
+                    FROM spans final
+                    WHERE workspace_id = :workspace_id
+                    AND trace_id IN (SELECT trace_id FROM experiment_items_filtered)
+                    GROUP BY workspace_id, project_id, trace_id
+                ) AS s ON eif.trace_id = s.trace_id
+            ), feedback_scores_agg AS (
+                SELECT
+                    entity_id,
+                    mapFromArrays(
+                        groupArray(name),
+                        groupArray(value)
+                    ) AS feedback_scores
+                FROM feedback_scores_final
+                WHERE entity_id IN (SELECT trace_id FROM experiment_items_filtered)
+                GROUP BY workspace_id, project_id, entity_id
+            ), feedback_scores_percentiles AS (
+                SELECT
+                    name,
+                    quantiles(0.5, 0.9, 0.99)(toFloat64(value)) AS percentiles
+                FROM feedback_scores_final
+                WHERE entity_id IN (SELECT trace_id FROM experiment_items_filtered)
+                GROUP BY name
+            ), usage_total_tokens_data AS (
+                SELECT
+                    toFloat64(tc.usage['total_tokens']) AS total_tokens
+                FROM traces_with_cost_and_duration tc
+                WHERE tc.usage['total_tokens'] IS NOT NULL AND tc.usage['total_tokens'] > 0
+            )
+            SELECT
+                count(DISTINCT ei.id) as experiment_items_count,
+                count(DISTINCT tc.trace_id) as trace_count,
+                mapFromArrays(
+                    ['p50', 'p90', 'p99'],
+                    arrayMap(
+                      v -> toDecimal64(
+                             greatest(
+                               least(if(isFinite(v), v, 0), 999999999.999999999),
+                               -999999999.999999999
+                             ),
+                             9
+                           ),
+                      quantiles(0.5, 0.9, 0.99)(tc.duration)
+                    )
+                ) AS duration,
+                avgMap(f.feedback_scores) AS feedback_scores,
+                (SELECT mapFromArrays(
+                    groupArray(name),
+                    groupArray(mapFromArrays(
+                        ['p50', 'p90', 'p99'],
+                        arrayMap(v -> toDecimal64(if(isFinite(v), v, 0), 9), percentiles)
+                    ))
+                ) FROM feedback_scores_percentiles) AS feedback_scores_percentiles,
+                avgIf(tc.total_estimated_cost, tc.total_estimated_cost > 0) AS total_estimated_cost_,
+                toDecimal128(if(isNaN(total_estimated_cost_), 0, total_estimated_cost_), 12) AS total_estimated_cost_avg,
+                sumIf(tc.total_estimated_cost, tc.total_estimated_cost > 0) AS total_estimated_cost_sum_,
+                toDecimal128(total_estimated_cost_sum_, 12) AS total_estimated_cost_sum,
+                mapFromArrays(
+                    ['p50', 'p90', 'p99'],
+                    arrayMap(
+                      v -> toDecimal128(
+                             greatest(
+                               least(if(isFinite(toFloat64(v)), toFloat64(v), 0), 999999999.999999999),
+                               -999999999.999999999
+                             ),
+                             12
+                           ),
+                      quantilesIf(0.5, 0.9, 0.99)(tc.total_estimated_cost, tc.total_estimated_cost > 0)
+                    )
+                ) AS total_estimated_cost_percentiles,
+                avgMap(tc.usage) AS usage,
+                mapFromArrays(
+                    ['p50', 'p90', 'p99'],
+                    arrayMap(
+                      v -> toInt64(greatest(least(if(isFinite(v), v, 0), 999999999.999999999), -999999999.999999999)),
+                      (SELECT quantiles(0.5, 0.9, 0.99)(total_tokens) FROM usage_total_tokens_data)
+                    )
+                ) AS usage_total_tokens_percentiles
+            FROM experiment_items_filtered ei
+            LEFT JOIN traces_with_cost_and_duration AS tc ON ei.trace_id = tc.trace_id
+            LEFT JOIN feedback_scores_agg AS f ON ei.trace_id = f.entity_id
+            ;
+            """;
 
     private final @NonNull TransactionTemplateAsync asyncTemplate;
     private final @NonNull FilterQueryBuilder filterQueryBuilder;
@@ -1376,7 +1488,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                             .onErrorResume(e -> handleSqlError(e, List.of()))
                             .flatMap(
                                     items -> Mono.just(new DatasetItemPage(items, page, items.size(), total, columns,
-                                            sortingFactory.getSortableFields())));
+                                            sortingFactory.getSortableFields(), false)));
                 }));
     }
 
@@ -1614,5 +1726,96 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                             .dataHash(row.get("data_hash", Long.class))
                             .build()));
         }).doFinally(signalType -> endSegment(segment));
+    }
+
+    @Override
+    @WithSpan
+    public Mono<Long> deleteAllNonVersionedDatasetItems(@NonNull UUID datasetId) {
+        log.info("Deleting all draft items for dataset: '{}'", datasetId);
+
+        return asyncTemplate.nonTransaction(connection -> {
+
+            Statement statement = connection.createStatement(DELETE_ALL_NON_VERSIONED_DATASET_ITEMS);
+
+            Segment segment = startSegment(DATASET_ITEMS, CLICKHOUSE, "delete_all_draft_items");
+
+            statement.bind("datasetId", datasetId);
+
+            return makeFluxContextAware(bindWorkspaceIdToFlux(statement))
+                    .flatMap(Result::getRowsUpdated)
+                    .reduce(0L, Long::sum)
+                    .doFinally(signalType -> endSegment(segment));
+        });
+    }
+
+    @Override
+    @WithSpan
+    public Mono<ItemsHash> getDraftItemsHashAgg(@NonNull UUID datasetId) {
+        log.debug("Computing hash for draft items of dataset: '{}'", datasetId);
+
+        Segment segment = startSegment(DATASET_ITEMS, CLICKHOUSE, "get_draft_items_hash_agg");
+
+        return asyncTemplate.nonTransaction(connection -> {
+            var statement = connection.createStatement(SELECT_DRAFT_ITEMS_HASH)
+                    .bind("datasetId", datasetId);
+
+            return makeFluxContextAware(bindWorkspaceIdToFlux(statement))
+                    .doFinally(signalType -> endSegment(segment))
+                    .flatMap(result -> result.map((row, metadata) -> {
+                        long idHash = row.get("id_hash", Long.class);
+                        long dataHash = row.get("data_hash", Long.class);
+                        return ItemsHash.builder().idHash(idHash).dataHash(dataHash).build();
+                    }))
+                    .singleOrEmpty()
+                    .defaultIfEmpty(ItemsHash.builder().idHash(0L).dataHash(0L).build());
+        });
+    }
+
+    @Override
+    @WithSpan
+    public Mono<Long> countDraftItems(@NonNull UUID datasetId) {
+        log.debug("Counting draft items for dataset: '{}'", datasetId);
+
+        Segment segment = startSegment(DATASET_ITEMS, CLICKHOUSE, "count_draft_items");
+
+        return asyncTemplate.nonTransaction(connection -> {
+            var statement = connection.createStatement(COUNT_DRAFT_ITEMS)
+                    .bind("datasetId", datasetId);
+
+            return makeFluxContextAware(bindWorkspaceIdToFlux(statement))
+                    .doFinally(signalType -> endSegment(segment))
+                    .flatMap(result -> result.map((row, metadata) -> row.get("count", Long.class)))
+                    .singleOrEmpty()
+                    .defaultIfEmpty(0L);
+        });
+    }
+
+    @Override
+    @WithSpan
+    public Mono<Long> restoreFromVersion(@NonNull UUID datasetId, @NonNull UUID versionId) {
+        log.info("Restoring draft items from version '{}' for dataset '{}'", versionId, datasetId);
+
+        return asyncTemplate.nonTransaction(connection -> {
+            var statement = connection.createStatement(RESTORE_FROM_VERSION)
+                    .bind("datasetId", datasetId)
+                    .bind("versionId", versionId);
+
+            Segment segment = startSegment(DATASET_ITEMS, CLICKHOUSE, "restore_from_version");
+
+            return makeMonoContextAware((userName, workspaceId) -> {
+                statement.bind("workspace_id", workspaceId);
+                statement.bind("user_name", userName);
+                log.debug("Restoring items: datasetId='{}', versionId='{}', workspaceId='{}', userName='{}'",
+                        datasetId, versionId, workspaceId, userName);
+
+                return Flux.from(statement.execute())
+                        .flatMap(Result::getRowsUpdated)
+                        .reduce(0L, Long::sum)
+                        .doOnSuccess(insertedCount -> log.info(
+                                "Restored '{}' items from version '{}' to dataset '{}'",
+                                insertedCount, versionId, datasetId))
+                        .doFinally(signalType -> endSegment(segment));
+            });
+        });
     }
 }

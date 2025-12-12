@@ -26,10 +26,10 @@ import Loader from "@/components/shared/Loader/Loader";
 import useNavigationBlocker from "@/hooks/useNavigationBlocker";
 import { Separator } from "@/components/ui/separator";
 import { useDashboardSave } from "./useDashboardSave";
-import DashboardSaveActions from "./DashboardSaveActions";
-import ShareDashboardButton from "./ShareDashboardButton";
+import DashboardSaveActions from "@/components/pages-shared/dashboards/DashboardSaveActions/DashboardSaveActions";
+import DashboardProjectSettingsButton from "@/components/pages-shared/dashboards/DashboardProjectSettingsButton/DashboardProjectSettingsButton";
+import ShareDashboardButton from "@/components/pages-shared/dashboards/ShareDashboardButton/ShareDashboardButton";
 import {
-  ProjectDashboardConfig,
   DashboardWidget,
   WIDGET_TYPE,
   AddWidgetConfig,
@@ -67,8 +67,7 @@ const DashboardPage: React.FunctionComponent = () => {
   );
   const setWidgetResolver = useDashboardStore(selectSetWidgetResolver);
 
-  const dateRangeValue =
-    (config as ProjectDashboardConfig)?.dateRange || DEFAULT_DATE_PRESET;
+  const dateRangeValue = config?.dateRange || DEFAULT_DATE_PRESET;
 
   useEffect(() => {
     if (dashboard?.config) {
@@ -98,10 +97,8 @@ const DashboardPage: React.FunctionComponent = () => {
 
   const handleDateRangeValueChange = useCallback(
     (value: DateRangeSerializedValue) => {
-      setConfig({
-        ...(config as ProjectDashboardConfig),
-        dateRange: value,
-      });
+      if (!config) return;
+      setConfig({ ...config, dateRange: value });
     },
     [config, setConfig],
   );
@@ -177,22 +174,23 @@ const DashboardPage: React.FunctionComponent = () => {
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex items-center justify-between pb-4 pt-6">
-        <div className="flex flex-col gap-1">
-          <h1 className="text-2xl font-medium text-foreground">
+      <div className="flex items-center justify-between gap-4 pb-4 pt-6">
+        <div className="flex min-w-0 flex-1 flex-col gap-1">
+          <h1 className="comet-title-l truncate break-words">
             {dashboard.name}
           </h1>
           {dashboard.description && (
-            <p className="text-base text-muted-slate">
+            <p className="line-clamp-3 break-words text-base text-muted-slate">
               {dashboard.description}
             </p>
           )}
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex shrink-0 items-center gap-2">
           <DashboardSaveActions
             hasUnsavedChanges={hasUnsavedChanges}
             onSave={save}
             onDiscard={discard}
+            dashboard={dashboard}
           />
           {hasUnsavedChanges && (
             <Separator orientation="vertical" className="mx-2 h-4" />
@@ -206,6 +204,7 @@ const DashboardPage: React.FunctionComponent = () => {
           />
           <Separator orientation="vertical" className="mx-2 h-4" />
           <ShareDashboardButton />
+          <DashboardProjectSettingsButton />
         </div>
       </div>
 

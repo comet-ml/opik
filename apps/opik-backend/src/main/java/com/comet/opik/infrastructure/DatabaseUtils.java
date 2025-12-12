@@ -49,7 +49,7 @@ public class DatabaseUtils {
             // Use dataset ID + request payload + counters + timestamp for unique hash per commit
             // This prevents unexpected collisions until we have actual content-based hashing
             String input = datasetId.toString() + ":" +
-                    (request.tag() != null ? request.tag() : "") + ":" +
+                    (request.tags() != null ? request.tags().toString() : "") + ":" +
                     (request.changeDescription() != null ? request.changeDescription() : "") + ":" +
                     (request.metadata() != null ? request.metadata().toString() : "") + ":" +
                     itemsTotal + ":" + itemsAdded + ":" + itemsModified + ":" + itemsDeleted + ":" +

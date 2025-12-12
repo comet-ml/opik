@@ -8,6 +8,7 @@ logging:
   #  Description: Individual logger configuration
   loggers:
     com.comet: DEBUG
+    com.comet.opik.infrastructure.llm: INFO
 
 # Description: state database configuration
 # https://www.dropwizard.io/en/stable/manual/configuration.html#database
@@ -434,6 +435,33 @@ serviceToggles:
   # Default: false
   # Description: Whether or not Dashboards feature is enabled
   dashboardsEnabled: "false"
+  # Default: true for testing
+  # Description: Whether or not dataset versioning feature is enabled
+  datasetVersioningEnabled: "true"
+  # Default: false
+  # Description: Whether or not Optimization Studio feature is enabled
+  optimizationStudioEnabled: "false"
+  # Default: true
+  # Description: Whether or not OpenAI provider is enabled
+  openaiProviderEnabled: "true"
+  # Default: true
+  # Description: Whether or not Anthropic provider is enabled
+  anthropicProviderEnabled: "true"
+  # Default: true
+  # Description: Whether or not Gemini provider is enabled
+  geminiProviderEnabled: "true"
+  # Default: true
+  # Description: Whether or not OpenRouter provider is enabled
+  openrouterProviderEnabled: "true"
+  # Default: true
+  # Description: Whether or not Vertex AI provider is enabled
+  vertexaiProviderEnabled: "true"
+  # Default: true
+  # Description: Whether or not Custom LLM provider is enabled
+  customllmProviderEnabled: "true"
+  # Default: true
+  # Description: Whether or not Opik Built-in provider is enabled
+  opikbuiltinProviderEnabled: "true"
 
 # Trace Thread configuration
 traceThreadConfig:

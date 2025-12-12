@@ -11,9 +11,8 @@ import {
 } from "@/components/ui/dropdown-menu";
 import ConfirmDialog from "@/components/shared/ConfirmDialog/ConfirmDialog";
 import { Dashboard } from "@/types/dashboard";
-import useDashboardDeleteMutation from "@/api/dashboards/useDashboardDeleteMutation";
-import DashboardCreateDialog from "@/components/pages/DashboardsPage/DashboardCreateDialog";
-import DashboardCloneDialog from "@/components/pages/DashboardsPage/DashboardCloneDialog";
+import useDashboardBatchDeleteMutation from "@/api/dashboards/useDashboardBatchDeleteMutation";
+import AddEditCloneDashboardDialog from "@/components/pages-shared/dashboards/AddEditCloneDashboardDialog/AddEditCloneDashboardDialog";
 
 export const DashboardRowActionsCell: React.FunctionComponent<
   CellContext<Dashboard, unknown>
@@ -21,7 +20,7 @@ export const DashboardRowActionsCell: React.FunctionComponent<
   const resetKeyRef = useRef(0);
   const dashboard = context.row.original;
 
-  const { mutate: deleteDashboardMutate } = useDashboardDeleteMutation();
+  const { mutate: deleteDashboardMutate } = useDashboardBatchDeleteMutation();
 
   const [open, setOpen] = useState<boolean>(false);
   const [openEdit, setOpenEdit] = useState<boolean>(false);
@@ -30,7 +29,7 @@ export const DashboardRowActionsCell: React.FunctionComponent<
 
   const deleteDashboard = useCallback(() => {
     deleteDashboardMutate({
-      dashboardId: dashboard.id,
+      ids: [dashboard.id],
     });
   }, [dashboard, deleteDashboardMutate]);
 
@@ -78,13 +77,15 @@ export const DashboardRowActionsCell: React.FunctionComponent<
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
-      <DashboardCreateDialog
+      <AddEditCloneDashboardDialog
+        mode="edit"
         key={`edit-${resetKeyRef.current}`}
         dashboard={dashboard}
         open={openEdit}
         setOpen={setOpenEdit}
       />
-      <DashboardCloneDialog
+      <AddEditCloneDashboardDialog
+        mode="clone"
         key={`clone-${resetKeyRef.current}`}
         dashboard={dashboard}
         open={openClone}

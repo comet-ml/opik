@@ -26,6 +26,7 @@ from ..types.dataset_page_public import DatasetPagePublic
 from ..types.dataset_public import DatasetPublic
 from ..types.dataset_version_diff import DatasetVersionDiff
 from ..types.dataset_version_page_public import DatasetVersionPagePublic
+from ..types.dataset_version_public import DatasetVersionPublic
 from ..types.json_node import JsonNode
 from ..types.page_columns import PageColumns
 from ..types.project_stats_public import ProjectStatsPublic
@@ -1397,7 +1398,7 @@ class RawDatasetsClient:
         self,
         id: str,
         *,
-        tag: typing.Optional[str] = OMIT,
+        tags: typing.Optional[typing.Sequence[str]] = OMIT,
         change_description: typing.Optional[str] = OMIT,
         metadata: typing.Optional[typing.Dict[str, str]] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
@@ -1409,8 +1410,8 @@ class RawDatasetsClient:
         ----------
         id : str
 
-        tag : typing.Optional[str]
-            Optional tag for this version
+        tags : typing.Optional[typing.Sequence[str]]
+            Optional list of tags for this version
 
         change_description : typing.Optional[str]
             Optional description of changes in this version
@@ -1429,7 +1430,7 @@ class RawDatasetsClient:
             f"v1/private/datasets/{jsonable_encoder(id)}/versions",
             method="POST",
             json={
-                "tag": tag,
+                "tags": tags,
                 "change_description": change_description,
                 "metadata": metadata,
             },
@@ -1498,6 +1499,158 @@ class RawDatasetsClient:
         try:
             if 200 <= _response.status_code < 300:
                 return HttpResponse(response=_response, data=None)
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
+        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+
+    def restore_dataset_version(
+        self, id: str, *, version_ref: str, request_options: typing.Optional[RequestOptions] = None
+    ) -> HttpResponse[DatasetVersionPublic]:
+        """
+        Restores the dataset to a previous version state. All draft items are replaced with items from the specified version. If the version is not the latest, a new version snapshot is created. If the version is the latest, only draft items are replaced (revert functionality).
+
+        Parameters
+        ----------
+        id : str
+
+        version_ref : str
+            Version hash or tag to restore from
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        HttpResponse[DatasetVersionPublic]
+            Version restored successfully
+        """
+        _response = self._client_wrapper.httpx_client.request(
+            f"v1/private/datasets/{jsonable_encoder(id)}/versions/restore",
+            method="POST",
+            json={
+                "version_ref": version_ref,
+            },
+            headers={
+                "content-type": "application/json",
+            },
+            request_options=request_options,
+            omit=OMIT,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                _data = typing.cast(
+                    DatasetVersionPublic,
+                    parse_obj_as(
+                        type_=DatasetVersionPublic,  # type: ignore
+                        object_=_response.json(),
+                    ),
+                )
+                return HttpResponse(response=_response, data=_data)
+            if _response.status_code == 404:
+                raise NotFoundError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
+        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+
+    def update_dataset_version(
+        self,
+        version_hash: str,
+        id: str,
+        *,
+        change_description: typing.Optional[str] = OMIT,
+        tags_to_add: typing.Optional[typing.Sequence[str]] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> HttpResponse[DatasetVersionPublic]:
+        """
+        Update a dataset version's change_description and/or add new tags
+
+        Parameters
+        ----------
+        version_hash : str
+
+        id : str
+
+        change_description : typing.Optional[str]
+            Optional description of changes in this version
+
+        tags_to_add : typing.Optional[typing.Sequence[str]]
+            Optional list of tags to add to this version
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        HttpResponse[DatasetVersionPublic]
+            Version updated successfully
+        """
+        _response = self._client_wrapper.httpx_client.request(
+            f"v1/private/datasets/{jsonable_encoder(id)}/versions/hash/{jsonable_encoder(version_hash)}",
+            method="PATCH",
+            json={
+                "change_description": change_description,
+                "tags_to_add": tags_to_add,
+            },
+            headers={
+                "content-type": "application/json",
+            },
+            request_options=request_options,
+            omit=OMIT,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                _data = typing.cast(
+                    DatasetVersionPublic,
+                    parse_obj_as(
+                        type_=DatasetVersionPublic,  # type: ignore
+                        object_=_response.json(),
+                    ),
+                )
+                return HttpResponse(response=_response, data=_data)
+            if _response.status_code == 400:
+                raise BadRequestError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            if _response.status_code == 404:
+                raise NotFoundError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            if _response.status_code == 409:
+                raise ConflictError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
             _response_json = _response.json()
         except JSONDecodeError:
             raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
@@ -2866,7 +3019,7 @@ class AsyncRawDatasetsClient:
         self,
         id: str,
         *,
-        tag: typing.Optional[str] = OMIT,
+        tags: typing.Optional[typing.Sequence[str]] = OMIT,
         change_description: typing.Optional[str] = OMIT,
         metadata: typing.Optional[typing.Dict[str, str]] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
@@ -2878,8 +3031,8 @@ class AsyncRawDatasetsClient:
         ----------
         id : str
 
-        tag : typing.Optional[str]
-            Optional tag for this version
+        tags : typing.Optional[typing.Sequence[str]]
+            Optional list of tags for this version
 
         change_description : typing.Optional[str]
             Optional description of changes in this version
@@ -2898,7 +3051,7 @@ class AsyncRawDatasetsClient:
             f"v1/private/datasets/{jsonable_encoder(id)}/versions",
             method="POST",
             json={
-                "tag": tag,
+                "tags": tags,
                 "change_description": change_description,
                 "metadata": metadata,
             },
@@ -2967,6 +3120,158 @@ class AsyncRawDatasetsClient:
         try:
             if 200 <= _response.status_code < 300:
                 return AsyncHttpResponse(response=_response, data=None)
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
+        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+
+    async def restore_dataset_version(
+        self, id: str, *, version_ref: str, request_options: typing.Optional[RequestOptions] = None
+    ) -> AsyncHttpResponse[DatasetVersionPublic]:
+        """
+        Restores the dataset to a previous version state. All draft items are replaced with items from the specified version. If the version is not the latest, a new version snapshot is created. If the version is the latest, only draft items are replaced (revert functionality).
+
+        Parameters
+        ----------
+        id : str
+
+        version_ref : str
+            Version hash or tag to restore from
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        AsyncHttpResponse[DatasetVersionPublic]
+            Version restored successfully
+        """
+        _response = await self._client_wrapper.httpx_client.request(
+            f"v1/private/datasets/{jsonable_encoder(id)}/versions/restore",
+            method="POST",
+            json={
+                "version_ref": version_ref,
+            },
+            headers={
+                "content-type": "application/json",
+            },
+            request_options=request_options,
+            omit=OMIT,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                _data = typing.cast(
+                    DatasetVersionPublic,
+                    parse_obj_as(
+                        type_=DatasetVersionPublic,  # type: ignore
+                        object_=_response.json(),
+                    ),
+                )
+                return AsyncHttpResponse(response=_response, data=_data)
+            if _response.status_code == 404:
+                raise NotFoundError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
+        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+
+    async def update_dataset_version(
+        self,
+        version_hash: str,
+        id: str,
+        *,
+        change_description: typing.Optional[str] = OMIT,
+        tags_to_add: typing.Optional[typing.Sequence[str]] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> AsyncHttpResponse[DatasetVersionPublic]:
+        """
+        Update a dataset version's change_description and/or add new tags
+
+        Parameters
+        ----------
+        version_hash : str
+
+        id : str
+
+        change_description : typing.Optional[str]
+            Optional description of changes in this version
+
+        tags_to_add : typing.Optional[typing.Sequence[str]]
+            Optional list of tags to add to this version
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        AsyncHttpResponse[DatasetVersionPublic]
+            Version updated successfully
+        """
+        _response = await self._client_wrapper.httpx_client.request(
+            f"v1/private/datasets/{jsonable_encoder(id)}/versions/hash/{jsonable_encoder(version_hash)}",
+            method="PATCH",
+            json={
+                "change_description": change_description,
+                "tags_to_add": tags_to_add,
+            },
+            headers={
+                "content-type": "application/json",
+            },
+            request_options=request_options,
+            omit=OMIT,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                _data = typing.cast(
+                    DatasetVersionPublic,
+                    parse_obj_as(
+                        type_=DatasetVersionPublic,  # type: ignore
+                        object_=_response.json(),
+                    ),
+                )
+                return AsyncHttpResponse(response=_response, data=_data)
+            if _response.status_code == 400:
+                raise BadRequestError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            if _response.status_code == 404:
+                raise NotFoundError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            if _response.status_code == 409:
+                raise ConflictError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
             _response_json = _response.json()
         except JSONDecodeError:
             raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)

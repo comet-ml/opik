@@ -734,6 +734,77 @@ class OnlineScoringEngineTest {
                 arguments("subObject.nestedKey", "{\"subObject\":{\"nestedKey\":\"expected-value\"}}"));
     }
 
+    private static Stream<Arguments> testExtractFromJsonWithDifferentValueTypes() {
+        return Stream.of(
+                // ===== TOP-LEVEL KEYS =====
+                // JSON scalars: Strings, Numbers (Integers and Decimals), Booleans, Null
+                arguments("key", "{\"key\":\"text\"}", "text"),
+                arguments("key", "{\"key\":123}", "123"),
+                arguments("key", "{\"key\":1.23}", "1.23"),
+                arguments("key", "{\"key\":true}", "true"),
+                arguments("key", "{\"key\":null}", ""),
+                // JSON objects
+                arguments("key", "{\"key\":{\"object\":\"text\"}}", "{object&#61;text}"),
+                arguments("key", "{\"key\":{\"object\":123}}", "{object&#61;123}"),
+                arguments("key", "{\"key\":{\"object\":1.23}}", "{object&#61;1.23}"),
+                arguments("key", "{\"key\":{\"object\":true}}", "{object&#61;true}"),
+                arguments("key", "{\"key\":{\"object\":null}}", "{object&#61;null}"),
+                arguments("key", "{\"key\":{\"a\":1,\"b\":2}}", "{a&#61;1, b&#61;2}"),
+                arguments("key", "{\"key\":{}}", "{}"),
+                // JSON Arrays
+                arguments("key", "{\"key\":[\"a\",\"b\"]}", "[a, b]"),
+                arguments("key", "{\"key\":[1,2]}", "[1, 2]"),
+                arguments("key", "{\"key\":[1.2,3.4]}", "[1.2, 3.4]"),
+                arguments("key", "{\"key\":[true,false]}", "[true, false]"),
+                arguments("key", "{\"key\":[null,null]}", "[null, null]"),
+                arguments("key", "{\"key\":[]}", "[]"),
+
+                // ===== NESTED KEYS =====
+                // JSON scalars: Strings, Numbers (Integers and Decimals), Booleans, Null
+                // Types other than String under nested keys were causing the original production bug
+                arguments("nested.key", "{\"nested\":{\"key\":\"text\"}}", "text"),
+                arguments("nested.key", "{\"nested\":{\"key\":123}}", "123"),
+                arguments("nested.key", "{\"nested\":{\"key\":1.23}}", "1.23"),
+                arguments("nested.key", "{\"nested\":{\"key\":true}}", "true"),
+                arguments("nested.key", "{\"nested\":{\"key\":null}}", ""),
+                // Objects (with all scalar types inside)
+                arguments("nested.key", "{\"nested\":{\"key\":{\"object\":\"text\"}}}", "{object&#61;text}"),
+                arguments("nested.key", "{\"nested\":{\"key\":{\"object\":123}}}", "{object&#61;123}"),
+                arguments("nested.key", "{\"nested\":{\"key\":{\"object\":1.23}}}", "{object&#61;1.23}"),
+                arguments("nested.key", "{\"nested\":{\"key\":{\"object\":true}}}", "{object&#61;true}"),
+                arguments("nested.key", "{\"nested\":{\"key\":{\"object\":null}}}", "{object&#61;null}"),
+                arguments("nested.key", "{\"nested\":{\"key\":{\"x\":10,\"y\":20}}}", "{x&#61;10, y&#61;20}"),
+                arguments("nested.key", "{\"nested\":{\"key\":{}}}", "{}"),
+                // Arrays (with all scalar types)
+                arguments("nested.key", "{\"nested\":{\"key\":[\"a\",\"b\"]}}", "[a, b]"),
+                arguments("nested.key", "{\"nested\":{\"key\":[1,2]}}", "[1, 2]"),
+                arguments("nested.key", "{\"nested\":{\"key\":[1.2,3.4]}}", "[1.2, 3.4]"),
+                arguments("nested.key", "{\"nested\":{\"key\":[true,false]}}", "[true, false]"),
+                arguments("nested.key", "{\"nested\":{\"key\":[null,null]}}", "[null, null]"),
+                arguments("nested.key", "{\"nested\":{\"key\":[]}}", "[]"));
+    }
+
+    @ParameterizedTest
+    @MethodSource
+    @DisplayName("renderMessages should handle different JSON value types without ClassCastException")
+    void testExtractFromJsonWithDifferentValueTypes(String key, String jsonBody, String expectedValue) {
+        var variables = Map.of("testVar", "input." + key);
+        var trace = factory.manufacturePojo(Trace.class).toBuilder()
+                .input(JsonUtils.getJsonNodeFromString(jsonBody))
+                .build();
+
+        // Render a message using the variable
+        var template = List.of(LlmAsJudgeMessage.builder()
+                .role(ChatMessageType.USER)
+                .content("Test value: {{testVar}}")
+                .build());
+        var rendered = OnlineScoringEngine.renderMessages(template, variables, trace);
+        assertThat(rendered).hasSize(1);
+        var userMessage = rendered.getFirst();
+        assertThat(userMessage).isInstanceOf(UserMessage.class);
+        assertThat(((UserMessage) userMessage).singleText()).contains("Test value: " + expectedValue);
+    }
+
     @Test
     @DisplayName("should handle multimodal content with multiple images")
     void shouldHandleMultimodalContent_whenMultipleImages() {

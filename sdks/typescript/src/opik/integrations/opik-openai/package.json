@@ -1,7 +1,7 @@
 {
   "name": "opik-openai",
   "description": "Opik TypeScript and JavaScript SDK integration with OpenAI",
-  "version": "1.0.2",
+  "version": "1.9.46",
   "engines": {
     "node": ">=18"
   },
@@ -50,7 +50,7 @@
     "lint": "eslint '**/*.{ts,tsx}'",
     "typecheck": "tsc --noEmit",
     "format": "prettier --write 'src/**/*.{ts,tsx,js,jsx,json,md}'",
-    "test": "vitest"
+    "test": "vitest run"
   },
   "files": [
     "dist/**/*",

@@ -336,25 +336,24 @@ class BaseTrackDecorator(abc.ABC):
                 )
                 error_info = error_info_collector.collect(exception)
                 func_exception = exception
-            finally:
-                stream_or_stream_manager = self._streams_handler(
-                    result,
-                    track_options.capture_output,
-                    track_options.generations_aggregator,
-                )
-                if stream_or_stream_manager is not None:
-                    return stream_or_stream_manager
 
-                self._after_call(
-                    output=result,
-                    error_info=error_info,
-                    capture_output=track_options.capture_output,
-                    flush=track_options.flush,
-                )
-                if func_exception is not None:
-                    raise func_exception
-                else:
-                    return result
+            stream_or_stream_manager = self._streams_handler(
+                result,
+                track_options.capture_output,
+                track_options.generations_aggregator,
+            )
+            if stream_or_stream_manager is not None:
+                return stream_or_stream_manager
+
+            self._after_call(
+                output=result,
+                error_info=error_info,
+                capture_output=track_options.capture_output,
+                flush=track_options.flush,
+            )
+            if func_exception is not None:
+                raise func_exception
+            return result
 
         wrapper.opik_tracked = True  # type: ignore
 
@@ -390,25 +389,24 @@ class BaseTrackDecorator(abc.ABC):
                 )
                 error_info = error_info_collector.collect(exception)
                 func_exception = exception
-            finally:
-                stream_or_stream_manager = self._streams_handler(
-                    result,
-                    track_options.capture_output,
-                    track_options.generations_aggregator,
-                )
-                if stream_or_stream_manager is not None:
-                    return stream_or_stream_manager
 
-                self._after_call(
-                    output=result,
-                    error_info=error_info,
-                    capture_output=track_options.capture_output,
-                    flush=track_options.flush,
-                )
-                if func_exception is not None:
-                    raise func_exception
-                else:
-                    return result
+            stream_or_stream_manager = self._streams_handler(
+                result,
+                track_options.capture_output,
+                track_options.generations_aggregator,
+            )
+            if stream_or_stream_manager is not None:
+                return stream_or_stream_manager
+
+            self._after_call(
+                output=result,
+                error_info=error_info,
+                capture_output=track_options.capture_output,
+                flush=track_options.flush,
+            )
+            if func_exception is not None:
+                raise func_exception
+            return result
 
         wrapper.opik_tracked = True  # type: ignore
         return wrapper

@@ -11,4 +11,13 @@ export enum FeatureToggleKeys {
   SPAN_LLM_AS_JUDGE_ENABLED = "span_llm_as_judge_enabled",
   SPAN_USER_DEFINED_METRIC_PYTHON_ENABLED = "span_user_defined_metric_python_enabled",
   DASHBOARDS_ENABLED = "dashboards_enabled",
+  OPTIMIZATION_STUDIO_ENABLED = "optimization_studio_enabled",
+  // LLM Provider feature flags
+  OPENAI_PROVIDER_ENABLED = "openai_provider_enabled",
+  ANTHROPIC_PROVIDER_ENABLED = "anthropic_provider_enabled",
+  GEMINI_PROVIDER_ENABLED = "gemini_provider_enabled",
+  OPENROUTER_PROVIDER_ENABLED = "openrouter_provider_enabled",
+  VERTEXAI_PROVIDER_ENABLED = "vertexai_provider_enabled",
+  CUSTOMLLM_PROVIDER_ENABLED = "customllm_provider_enabled",
+  OPIKBUILTIN_PROVIDER_ENABLED = "opikbuiltin_provider_enabled",
 }

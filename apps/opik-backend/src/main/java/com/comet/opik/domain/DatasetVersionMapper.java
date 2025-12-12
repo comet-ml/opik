@@ -18,6 +18,8 @@ interface DatasetVersionMapper {
     @Mapping(target = "metadata", source = "request.metadata")
     @Mapping(target = "createdBy", source = "userName")
     @Mapping(target = "lastUpdatedBy", source = "userName")
+    @Mapping(target = "isLatest", ignore = true)
+    @Mapping(target = "tags", ignore = true)
     DatasetVersion toDatasetVersion(
             UUID versionId,
             UUID datasetId,
