@@ -22,6 +22,7 @@ import java.util.UUID;
  * Uses @Accessors(fluent = true) to generate Record-style getters (e.g., id() instead of getId())
  * that match the interface method signatures automatically.
  *
+ * Uses @NoArgsConstructor(access = AccessLevel.PROTECTED) for Lombok's SuperBuilder internal machinery.
  * Uses @AllArgsConstructor(access = AccessLevel.PROTECTED) to generate a protected constructor
  * for SuperBuilder, while child classes use @AllArgsConstructor(access = AccessLevel.PUBLIC)
  * to provide JDBI with public constructors for reflection-based instantiation.
