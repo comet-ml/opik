@@ -5,9 +5,12 @@ import {
   parseVideoValue,
   parseImageValue,
   parseAudioValue,
-  extractFilename,
 } from "@/lib/images";
-import { detectMediaTypeFromUrl, isHttpUrl } from "@/lib/media";
+import {
+  detectMediaTypeFromUrl,
+  isHttpUrl,
+  createMediaData,
+} from "@/lib/media";
 import { ParsedMediaData, ATTACHMENT_TYPE } from "@/types/attachments";
 
 export type DetectedMediaType = "video" | "image" | "audio" | "none";
@@ -141,33 +144,10 @@ export const useMediaTypeDetection = (
         }
 
         const { category, mimeType } = mediaInfo;
-        const filename = extractFilename(stringValue);
+        const mediaData = createMediaData(stringValue, category, mimeType);
 
-        let mediaData: ParsedMediaData;
-
-        if (category === "video") {
-          mediaData = {
-            url: stringValue,
-            name: filename || "Video",
-            type: ATTACHMENT_TYPE.VIDEO,
-            ...(mimeType && { mimeType }),
-          };
-          updateResult("video", mediaData);
-        } else if (category === "image") {
-          mediaData = {
-            url: stringValue,
-            name: filename || "Image",
-            type: ATTACHMENT_TYPE.IMAGE,
-          };
-          updateResult("image", mediaData);
-        } else if (category === "audio") {
-          mediaData = {
-            url: stringValue,
-            name: filename || "Audio",
-            type: ATTACHMENT_TYPE.AUDIO,
-            ...(mimeType && { mimeType }),
-          };
-          updateResult("audio", mediaData);
+        if (mediaData) {
+          updateResult(category, mediaData);
         } else {
           updateResult("none", null);
         }

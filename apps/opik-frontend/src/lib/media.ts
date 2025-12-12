@@ -112,19 +112,20 @@ export const detectMediaTypeFromUrl = async (
   }
 };
 
-export const detectMediaFromUrl = async (
+/**
+ * Converts media type information to ParsedMediaData structure.
+ * Shared helper to avoid duplication between hook and utility functions.
+ *
+ * @param url - The media URL
+ * @param category - The detected media category (video, image, audio)
+ * @param mimeType - Optional MIME type from Content-Type header
+ * @returns ParsedMediaData object or null if category is invalid
+ */
+export const createMediaData = (
   url: string,
-): Promise<ParsedMediaData | null> => {
-  if (!isHttpUrl(url)) {
-    return null;
-  }
-
-  const mediaInfo = await detectMediaTypeFromUrl(url);
-  if (!mediaInfo) {
-    return null;
-  }
-
-  const { category, mimeType } = mediaInfo;
+  category: MediaCategory,
+  mimeType: string | null,
+): ParsedMediaData | null => {
   const filename = extractFilename(url);
 
   if (category === "video") {
@@ -154,6 +155,22 @@ export const detectMediaFromUrl = async (
   }
 
   return null;
+};
+
+export const detectMediaFromUrl = async (
+  url: string,
+): Promise<ParsedMediaData | null> => {
+  if (!isHttpUrl(url)) {
+    return null;
+  }
+
+  const mediaInfo = await detectMediaTypeFromUrl(url);
+  if (!mediaInfo) {
+    return null;
+  }
+
+  const { category, mimeType } = mediaInfo;
+  return createMediaData(url, category, mimeType);
 };
 
 export const clearMediaTypeCache = (): void => {
