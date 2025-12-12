@@ -286,7 +286,6 @@ public class PromptResource {
     public Response updatePromptVersions(
             @RequestBody(content = @Content(schema = @Schema(implementation = PromptVersionBatchUpdate.class))) @Valid @NotNull PromptVersionBatchUpdate request) {
         var workspaceId = requestContext.get().getWorkspaceId();
-        request = request.normalize();
         log.info("Updating prompt versions on workspaceId '{}', size '{}', mergeTags '{}'",
                 workspaceId, request.ids().size(), request.mergeTags());
         var updatedCount = promptService.updateVersions(request);
