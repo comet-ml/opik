@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import { keepPreviousData } from "@tanstack/react-query";
 import { ColumnSort, RowSelectionState } from "@tanstack/react-table";
 import useLocalStorageState from "use-local-storage-state";
@@ -255,6 +255,25 @@ const CommitsTab = ({ prompt }: CommitsTabInterface) => {
     return versions.filter((row) => rowSelection[row.id]);
   }, [rowSelection, versions]);
 
+  const handleSearchTextChange = useCallback(
+    (value: string) => {
+      if (value) {
+        // Add or update commit filter with 'contains' operator
+        const newFilters = filters.filter((f: Filter) => f.field !== "commit");
+        newFilters.push({
+          field: "commit",
+          operator: "contains",
+          value,
+        });
+        setFilters(newFilters);
+      } else {
+        // Remove commit filter
+        setFilters(filters.filter((f: Filter) => f.field !== "commit"));
+      }
+    },
+    [filters, setFilters],
+  );
+
   if (isPending) {
     return <Loader />;
   }
@@ -271,23 +290,7 @@ const CommitsTab = ({ prompt }: CommitsTabInterface) => {
             searchText={
               filters.find((f: Filter) => f.field === "commit")?.value ?? ""
             }
-            setSearchText={(value) => {
-              if (value) {
-                // Add or update commit filter with 'contains' operator
-                const newFilters = filters.filter(
-                  (f: Filter) => f.field !== "commit",
-                );
-                newFilters.push({
-                  field: "commit",
-                  operator: "contains",
-                  value,
-                });
-                setFilters(newFilters);
-              } else {
-                // Remove commit filter
-                setFilters(filters.filter((f: Filter) => f.field !== "commit"));
-              }
-            }}
+            setSearchText={handleSearchTextChange}
             placeholder="Search by commit"
             className="w-[320px]"
             dimension="sm"
