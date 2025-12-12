@@ -3,7 +3,6 @@ package com.comet.opik.domain.evaluators;
 import com.comet.opik.api.evaluators.AutomationRule;
 import com.comet.opik.infrastructure.db.UUIDArgumentFactory;
 import org.jdbi.v3.sqlobject.config.RegisterArgumentFactory;
-import org.jdbi.v3.sqlobject.config.RegisterConstructorMapper;
 import org.jdbi.v3.sqlobject.config.RegisterRowMapper;
 import org.jdbi.v3.sqlobject.customizer.AllowUnusedBindings;
 import org.jdbi.v3.sqlobject.customizer.Bind;
@@ -19,9 +18,6 @@ import java.util.UUID;
 
 @RegisterArgumentFactory(UUIDArgumentFactory.class)
 @RegisterRowMapper(AutomationRuleRowMapper.class)
-@RegisterConstructorMapper(LlmAsJudgeAutomationRuleEvaluatorModel.class)
-@RegisterConstructorMapper(UserDefinedMetricPythonAutomationRuleEvaluatorModel.class)
-@RegisterConstructorMapper(SpanLlmAsJudgeAutomationRuleEvaluatorModel.class)
 interface AutomationRuleDAO {
 
     @SqlUpdate("INSERT INTO automation_rules(id, workspace_id, `action`, name, sampling_rate, enabled, filters) "

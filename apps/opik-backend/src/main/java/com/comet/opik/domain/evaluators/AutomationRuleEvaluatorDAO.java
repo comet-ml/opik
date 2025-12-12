@@ -7,7 +7,6 @@ import com.comet.opik.infrastructure.db.UUIDArgumentFactory;
 import org.jdbi.v3.core.mapper.RowMapper;
 import org.jdbi.v3.core.statement.StatementContext;
 import org.jdbi.v3.sqlobject.config.RegisterArgumentFactory;
-import org.jdbi.v3.sqlobject.config.RegisterConstructorMapper;
 import org.jdbi.v3.sqlobject.config.RegisterRowMapper;
 import org.jdbi.v3.sqlobject.customizer.AllowUnusedBindings;
 import org.jdbi.v3.sqlobject.customizer.Bind;
@@ -30,12 +29,6 @@ import java.util.stream.Collectors;
 
 @RegisterArgumentFactory(UUIDArgumentFactory.class)
 @RegisterArgumentFactory(JsonNodeArgumentFactory.class)
-@RegisterConstructorMapper(LlmAsJudgeAutomationRuleEvaluatorModel.class)
-@RegisterConstructorMapper(UserDefinedMetricPythonAutomationRuleEvaluatorModel.class)
-@RegisterConstructorMapper(TraceThreadLlmAsJudgeAutomationRuleEvaluatorModel.class)
-@RegisterConstructorMapper(TraceThreadUserDefinedMetricPythonAutomationRuleEvaluatorModel.class)
-@RegisterConstructorMapper(SpanLlmAsJudgeAutomationRuleEvaluatorModel.class)
-@RegisterConstructorMapper(SpanUserDefinedMetricPythonAutomationRuleEvaluatorModel.class)
 @RegisterRowMapper(AutomationRuleEvaluatorWithProjectRowMapper.class)
 public interface AutomationRuleEvaluatorDAO extends AutomationRuleDAO {
 
