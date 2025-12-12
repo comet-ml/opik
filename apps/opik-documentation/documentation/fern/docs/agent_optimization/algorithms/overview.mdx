@@ -22,7 +22,7 @@ The Opik Optimizer SDK wraps a mix of in-house algorithms (MetaPrompt, HAPO) and
 | Optimizer | Origin | Best for | Key inputs | Notes |
 | --- | --- | --- | --- | --- |
 | [MetaPrompt](/agent_optimization/algorithms/metaprompt_optimizer) | Opik | General prompt refinement | Prompt + dataset + metric | Reasoning LLM critiques and rewrites prompts, supports MCP workflows and tool schemas. |
-| [HAPO](/agent_optimization/algorithms/hierarchical_reflective_optimizer) | Opik | Root-cause analysis on complex prompts | Metrics with detailed reasons | Batches failures, synthesizes themes, proposes targeted fixes. |
+| [HAPO](/agent_optimization/algorithms/hierarchical_adaptive_optimizer) | Opik | Root-cause analysis on complex prompts | Metrics with detailed reasons | Batches failures, synthesizes themes, proposes targeted fixes. |
 | [Few-Shot Bayesian](/agent_optimization/algorithms/fewshot_bayesian_optimizer) | Opik | Optimizing few-shot example sets | Dataset with demonstrations | Uses Optuna to pick count/order of examples for chat prompts. |
 | [Evolutionary](/agent_optimization/algorithms/evolutionary_optimizer) | Opik + DEAP | Exploring diverse prompt structures | Mutation/crossover params | Multi-objective optimization (score vs. length) and LLM-driven operators. |
 | [GEPA](/agent_optimization/algorithms/gepa_optimizer) | External (GEPA) | Single-turn, reflection-heavy tasks | `gepa` dependency + reflection minibatches | We provide a wrapper so GEPA consumes Opik datasets/metrics while preserving its Pareto search. |

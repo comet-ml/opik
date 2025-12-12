@@ -717,7 +717,7 @@ navigation:
           - page: HAPO
             icon: fa-regular fa-puzzle-piece
             path: docs/agent_optimization/algorithms/hierarchical_reflective_optimizer.mdx
-            slug: hierarchical_reflective_optimizer
+            slug: hierarchical_adaptive_optimizer
           - page: Few-Shot Bayesian
             icon: fa-regular fa-puzzle-piece
             path: docs/agent_optimization/algorithms/fewshot_bayesian_optimizer.mdx
@@ -1305,6 +1305,10 @@ redirects:
     permanent: true
   - source: "/docs/opik/self-host/kubernetes/backup"
     destination: "/docs/opik/self-host/backup"
+    permanent: true
+  # HAPO (formerly Hierarchical Reflective Optimizer) redirect
+  - source: "/docs/opik/agent_optimization/algorithms/hierarchical_reflective_optimizer"
+    destination: "/docs/opik/agent_optimization/algorithms/hierarchical_adaptive_optimizer"
     permanent: true
   - source: "/docs/opik/tracing/debug_mode"
     destination: "/docs/opik/tracing/sdk_configuration#debug-mode-and-logging"
