@@ -54,27 +54,8 @@ public abstract non-sealed class AutomationRuleEvaluatorModelBase<T> implements 
         return AutomationRule.AutomationRuleAction.EVALUATOR;
     }
 
-    // Note: code() method is declared in AutomationRuleEvaluatorModel interface
-    // and implemented by concrete classes via Lombok @Getter @Accessors(fluent = true) on their code field
-
-    /**
-     * Convenience method for SuperBuilder to set all common fields at once from CommonFields record.
-     * This is the key to DRY - child builders can call this instead of setting 12 fields individually.
-     *
-     * Usage in factory methods:
-     * <pre>
-     * return builder()
-     *     .commonFields(common)  // Sets all 12 common fields!
-     *     .code(parseCode())      // Only set type-specific field
-     *     .build();
-     * </pre>
-     */
     public abstract static class AutomationRuleEvaluatorModelBaseBuilder<T, C extends AutomationRuleEvaluatorModelBase<T>, B extends AutomationRuleEvaluatorModelBaseBuilder<T, C, B>> {
 
-        /**
-         * Sets all common fields from CommonFields record in one call.
-         * Eliminates 12-line builder chains down to 1 line.
-         */
         public B commonFields(AutomationRuleEvaluatorWithProjectRowMapper.CommonFields common) {
             return this.id(common.id())
                     .projectId(common.projectId())
