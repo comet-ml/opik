@@ -306,7 +306,7 @@ const CommitsTab = ({ prompt }: CommitsTabInterface) => {
                       onValueChange: (value: string) => void;
                     },
                   keyComponentProps: {
-                    prompt: prompt,
+                    prompt,
                     placeholder: "key",
                   },
                 },

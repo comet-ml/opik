@@ -1041,8 +1041,11 @@ class PromptResourceTest {
 
             var actualPrompt = getPrompt(promptId, API_KEY, TEST_WORKSPACE);
 
+            var expectedTags = updatedPrompt.tags() == null
+                    ? prompt.tags() // if null, keep previous tags
+                    : (updatedPrompt.tags().isEmpty() ? null : updatedPrompt.tags()); // if empty, clears tags
             updatedPrompt = updatedPrompt.toBuilder()
-                    .tags(updatedPrompt.tags() == null ? prompt.tags() : updatedPrompt.tags())
+                    .tags(expectedTags)
                     .build();
 
             assertThat(actualPrompt)
@@ -3921,7 +3924,7 @@ class PromptResourceTest {
                             Set.of(),
                             false,
                             (BiFunction<Set<String>, Set<String>, Set<String>>) (initial, update) -> null),
-                    arguments("replace null preservers",
+                    arguments("replace null preserves",
                             null,
                             false,
                             expectedPreserve),

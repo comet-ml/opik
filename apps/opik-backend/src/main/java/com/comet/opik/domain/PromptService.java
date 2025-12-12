@@ -579,7 +579,7 @@ class PromptServiceImpl implements PromptService {
             var dao = handle.attach(PromptVersionDAO.class);
             return dao.update(workspaceId, update.ids(), update, update.mergeTags());
         });
-        log.info("Successfully updated prompt versions on workspaceId '{}', size '{}', mergeTags '{}",
+        log.info("Successfully updated prompt versions on workspaceId '{}', size '{}', mergeTags '{}'",
                 workspaceId, updatedCount, update.mergeTags());
         return updatedCount;
     }
