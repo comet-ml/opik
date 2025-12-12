@@ -13,6 +13,7 @@ from .algorithms import (
     MetaPromptOptimizer,
     EvolutionaryOptimizer,
     HierarchicalReflectiveOptimizer,
+    HAPO,
     FewShotBayesianOptimizer,
     ParameterOptimizer,
 )
@@ -44,6 +45,7 @@ __all__ = [
     "MetaPromptOptimizer",
     "EvolutionaryOptimizer",
     "HierarchicalReflectiveOptimizer",
+    "HAPO",
     "ParameterOptimizer",
     "OptimizationResult",
     "OptimizableAgent",

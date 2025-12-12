@@ -1,5 +1,5 @@
 from opik_optimizer.datasets import driving_hazard_50
-from opik_optimizer import ChatPrompt, HierarchicalReflectiveOptimizer
+from opik_optimizer import ChatPrompt, HAPO
 from opik.evaluation.metrics import LevenshteinRatio
 from opik.evaluation.metrics.score_result import ScoreResult
 
@@ -51,8 +51,8 @@ prompt = ChatPrompt(
     ],
 )
 
-# Initialize the Hierarchical Reflective Optimizer
-optimizer = HierarchicalReflectiveOptimizer(model="openai/gpt-4o")
+# Initialize HAPO (Hierarchical Adaptive Prompt Optimizer)
+optimizer = HAPO(model="openai/gpt-4o")
 
 # Run optimization
 optimization_result = optimizer.optimize_prompt(

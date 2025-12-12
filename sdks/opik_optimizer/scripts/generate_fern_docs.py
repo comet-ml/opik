@@ -354,7 +354,7 @@ classes_to_document = [
     opik_optimizer.MetaPromptOptimizer,
     opik_optimizer.EvolutionaryOptimizer,
     opik_optimizer.GepaOptimizer,
-    opik_optimizer.HierarchicalReflectiveOptimizer,
+    opik_optimizer.HAPO,  # Alias for HierarchicalReflectiveOptimizer (Hierarchical Adaptive Prompt Optimizer)
     opik_optimizer.ChatPrompt,
     opik_optimizer.OptimizationResult,
     opik_optimizer.OptimizableAgent,
@@ -388,7 +388,7 @@ The SDK provides several optimizer classes that all inherit from `BaseOptimizer`
 - **MetaPromptOptimizer**: Employs meta-prompting techniques for optimization
 - **EvolutionaryOptimizer**: Uses genetic algorithms for prompt evolution
 - **GepaOptimizer**: Leverages GEPA (Genetic-Pareto) optimization approach
-- **HierarchicalReflectiveOptimizer**: Uses hierarchical root cause analysis for targeted prompt refinement
+- **HAPO (HierarchicalReflectiveOptimizer)**: Uses hierarchical root cause analysis for targeted prompt refinement
 
 ## Standardized Method Signatures
 
