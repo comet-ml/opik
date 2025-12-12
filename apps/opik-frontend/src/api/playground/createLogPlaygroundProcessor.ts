@@ -111,6 +111,9 @@ const getTraceFromRun = (run: LogQueueParams): LogTrace => {
       messages: run.providerMessages,
     },
     output: { output: parseCompletionOutput(run) },
+    metadata: {
+      created_from: "playground",
+    },
   };
 
   // Add selected_rule_ids to trace metadata if provided

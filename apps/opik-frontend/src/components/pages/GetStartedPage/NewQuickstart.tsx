@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect } from "react";
 import { IntegrationExplorer } from "@/components/pages-shared/onboarding/IntegrationExplorer";
 import OnboardingOverlay from "@/components/shared/OnboardingOverlay/OnboardingOverlay";
 import {
@@ -6,6 +6,7 @@ import {
   ONBOARDING_STEP_KEY,
 } from "@/components/shared/OnboardingOverlay/OnboardingOverlayContext";
 import useLocalStorageState from "use-local-storage-state";
+import posthog from "posthog-js";
 
 export interface NewQuickstartProps {
   shouldSkipQuestions?: boolean;
@@ -16,10 +17,31 @@ const NewQuickstart: React.FunctionComponent<NewQuickstartProps> = ({
 }) => {
   const [currentOnboardingStep] = useLocalStorageState(ONBOARDING_STEP_KEY);
 
-  if (
-    currentOnboardingStep !== ONBOARDING_STEP_FINISHED &&
-    !shouldSkipQuestions
-  ) {
+  const showIntegrationList =
+    currentOnboardingStep === ONBOARDING_STEP_FINISHED || shouldSkipQuestions;
+
+  // Update URL hash when showing integration list
+  // This allows FullStory and PostHog to distinguish this step by URL
+  useEffect(() => {
+    if (!showIntegrationList) return;
+
+    const hash = "#integration_list";
+
+    if (window.location.hash !== hash) {
+      window.history.replaceState(null, "", hash);
+
+      // Manually trigger PostHog pageview for hash changes
+      try {
+        if (posthog.is_capturing()) {
+          posthog.capture("$pageview");
+        }
+      } catch (error) {
+        // PostHog may not be initialized or available
+      }
+    }
+  }, [showIntegrationList]);
+
+  if (!showIntegrationList) {
     return <OnboardingOverlay />;
   }
 

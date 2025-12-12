@@ -34,6 +34,7 @@ type OnboardingStepComponents = {
   AnswerButton: typeof AnswerButton;
   Skip: typeof Skip;
   BackButton: typeof BackButton;
+  StartExploring: typeof StartExploring;
 };
 
 const OnboardingStep: OnboardingStepComponents &
@@ -120,6 +121,24 @@ const Skip: React.FC = () => {
   );
 };
 
+const StartExploring: React.FC = () => {
+  const { handleSkip, currentStep } = useOnboarding();
+  const stepIdentifier = currentStep || "unknown";
+
+  return (
+    <Button
+      variant="link"
+      className="pl-0 text-foreground"
+      onClick={handleSkip}
+      id={`onboarding-step-${stepIdentifier}-start-exploring`}
+      data-fs-element={`onboarding-step-${stepIdentifier}-start-exploring`}
+    >
+      Start exploring Opik
+      <ChevronsRight className="ml-1 size-4" />
+    </Button>
+  );
+};
+
 const BackButton: React.FC = () => {
   const { handleBack, currentStep } = useOnboarding();
   const stepIdentifier = currentStep || "unknown";
@@ -146,5 +165,6 @@ OnboardingStep.AnswerList = AnswerList;
 OnboardingStep.AnswerButton = AnswerButton;
 OnboardingStep.Skip = Skip;
 OnboardingStep.BackButton = BackButton;
+OnboardingStep.StartExploring = StartExploring;
 
 export default OnboardingStep;
