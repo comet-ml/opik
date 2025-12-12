@@ -11,6 +11,7 @@ import lombok.RequiredArgsConstructor;
 
 import java.time.Instant;
 import java.util.Arrays;
+import java.util.Set;
 import java.util.UUID;
 
 @JsonTypeInfo(use = JsonTypeInfo.Id.NAME, include = JsonTypeInfo.As.EXISTING_PROPERTY, property = "action", visible = true)
@@ -23,7 +24,12 @@ import java.util.UUID;
 public sealed interface AutomationRule permits AutomationRuleEvaluator {
 
     UUID getId();
-    UUID getProjectId();
+
+    // Dual-field architecture for backward compatibility
+    UUID getProjectId(); // Legacy - derived from first element of projectIds
+    String getProjectName(); // Legacy - enriched by service layer
+    Set<UUID> getProjectIds(); // New primary field
+
     String getName();
 
     AutomationRuleAction getAction();

@@ -31,6 +31,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.security.NoSuchAlgorithmException;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 import static com.comet.opik.api.evaluators.AutomationRuleEvaluatorSpanLlmAsJudge.SpanLlmAsJudgeCode;
@@ -535,8 +536,7 @@ class OnlineScoringSpanSamplerTest {
 
         return AutomationRuleEvaluatorSpanLlmAsJudge.builder()
                 .id(UUID.randomUUID())
-                .projectId(projectId)
-                .projectName("test-project")
+                .projectIds(Set.of(projectId))
                 .name("test-evaluator")
                 .samplingRate(samplingRate)
                 .enabled(enabled)
