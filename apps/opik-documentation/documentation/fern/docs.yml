@@ -6,14 +6,12 @@ metadata:
   og:site_name: "Opik Documentation"
   og:title: "Opik LLM development Platform | Observability, Evaluation & Security"
   og:description: "Debug, evaluate, and monitor your LLM applications, RAG systems, and agentic workflows with comprehensive tracing, automated evaluations, and production-ready dashboards."
-  og:image: "https://www.comet.com/docs/opik/img/opik-social-preview.jpg"
-  og:image:width: 1424
-  og:image:height: 752
+  og:image: "https://www.comet.com/site/wp-content/uploads/2025/10/Share-image-3.png"
   og:url: "https://www.comet.com/docs/opik"
   og:locale: "en_US"
   twitter:title: "Opik Documentation"
   twitter:description: "Debug, evaluate, and monitor your LLM applications with comprehensive tracing and automated evaluations."
-  twitter:image: "https://www.comet.com/docs/opik/img/opik-social-preview.jpg"
+  twitter:image: "https://www.comet.com/site/wp-content/uploads/2025/10/Share-image-3.png"
   twitter:card: "summary_large_image"
   twitter:site: "@CometML"
 
