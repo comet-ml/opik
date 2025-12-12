@@ -1,9 +1,9 @@
-import opik
 import pytest
+
+import opik
+from opik.api_objects import opik_client
 from opik.message_processing import message_processors_chain
 from opik.message_processing.emulation.models import TraceModel, SpanModel
-from opik.api_objects import opik_client
-
 from ..testlib import assert_equal, ANY_BUT_NONE
 
 

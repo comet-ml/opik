@@ -76,3 +76,17 @@ class ChainedMessageProcessor(BaseMessageProcessor):
             if isinstance(processor, processor_type):
                 return processor
         return None
+
+    def add_first(self, processor: BaseMessageProcessor) -> None:
+        """
+        Inserts a processor at the first position in the list of processors.
+
+        This method allows prioritizing a given processor by placing it
+        at the beginning of the internal processor list. As a result, the
+        provided processor will be executed before others.
+
+        Args:
+            processor: The message processor to be
+                added to the front of the processor list.
+        """
+        self._processors.insert(0, processor)

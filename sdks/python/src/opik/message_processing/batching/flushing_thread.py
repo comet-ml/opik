@@ -17,9 +17,6 @@ class FlushingThread(threading.Thread):
         self._closed = False
 
     def close(self) -> None:
-        for batcher in self._batchers:
-            batcher.flush()
-
         self._closed = True
 
     def run(self) -> None:

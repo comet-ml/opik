@@ -1,3 +1,4 @@
+import os
 import re
 import importlib
 from unittest.mock import patch
@@ -98,6 +99,32 @@ def test_upload_attachment__local__no_monitor(
 
     route = respx.put(rx_url)
     assert route.call_count == 1
+
+
+def test_upload_attachment__file_deleted_after_upload_if_requested(
+    attachment_to_be_deleted, rest_client_local, respx_mock
+):
+    file_to_upload = upload_options.file_upload_options_from_attachment(
+        attachment_to_be_deleted
+    )
+
+    rx_url = re.compile("https://localhost:8080/bucket/*")
+    respx_mock.put(rx_url).respond(200)
+
+    file_to_upload.delete_after_upload = True
+
+    file_uploader.upload_attachment(
+        upload_options=file_to_upload,
+        rest_client=rest_client_local,
+        upload_httpx_client=httpx_client.get(
+            None, None, check_tls_certificate=False, compress_json_requests=False
+        ),
+    )
+
+    route = respx.put(rx_url)
+    assert route.call_count == 1
+
+    assert not os.path.exists(file_to_upload.file_path)
 
 
 class TestUploadAttachmentRetry:

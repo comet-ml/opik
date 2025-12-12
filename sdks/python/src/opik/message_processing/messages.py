@@ -4,6 +4,7 @@ from dataclasses import field
 from typing import Optional, Any, Dict, List, Union, Literal, Set
 
 from . import arguments_utils
+from .preprocessing import constants
 from ..rest_api.types import span_write, trace_write
 from ..types import SpanType, ErrorInfoDict, LLMProvider, AttachmentEntityType
 
@@ -21,6 +22,8 @@ class BaseMessage:
             data.pop("delivery_time")
         if "delivery_attempts" in data:
             data.pop("delivery_attempts")
+        if constants.MARKER_ATTRIBUTE_NAME in data:
+            data.pop(constants.MARKER_ATTRIBUTE_NAME)
         return data
 
 
@@ -285,3 +288,9 @@ class CreateAttachmentMessage(BaseMessage):
     entity_id: str
     project_name: str
     encoded_url_override: str
+    delete_after_upload: bool = False
+
+
+@dataclasses.dataclass
+class AttachmentSupportingMessage(BaseMessage):
+    original_message: BaseMessage
