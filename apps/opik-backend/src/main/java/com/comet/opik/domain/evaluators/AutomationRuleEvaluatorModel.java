@@ -14,8 +14,6 @@ public sealed interface AutomationRuleEvaluatorModel<T> extends AutomationRuleMo
         SpanLlmAsJudgeAutomationRuleEvaluatorModel,
         SpanUserDefinedMetricPythonAutomationRuleEvaluatorModel {
 
-    String projectName(); // Legacy project name field (resolved from projectId)
-
     @Json
     T code();
 

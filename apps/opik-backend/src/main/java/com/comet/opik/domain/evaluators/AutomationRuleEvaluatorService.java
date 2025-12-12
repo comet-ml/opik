@@ -580,8 +580,8 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
 
         // Log incoming models for debugging
         models.forEach(model -> log.debug(
-                "Model before enrichment - id: '{}', projectId: '{}', projectIds: '{}', projectName: '{}'",
-                model.id(), model.projectId(), model.projectIds(), model.projectName()));
+                "Model before enrichment - id: '{}', projectId: '{}', projectIds: '{}'",
+                model.id(), model.projectId(), model.projectIds()));
 
         // Extract unique project IDs from all models' projectIds sets
         Set<UUID> allProjectIds = models.stream()
@@ -621,8 +621,8 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
 
         // Log enriched models for debugging
         enrichedModels
-                .forEach(model -> log.debug("Model after enrichment - id: '{}', projectId: '{}', projectName: '{}'",
-                        model.id(), model.projectId(), model.projectName()));
+                .forEach(model -> log.debug("Model after enrichment - id: '{}', projectId: '{}'",
+                        model.id(), model.projectId()));
 
         return enrichedModels;
     }
