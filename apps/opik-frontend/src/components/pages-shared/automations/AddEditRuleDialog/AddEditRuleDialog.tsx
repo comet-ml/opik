@@ -146,6 +146,7 @@ type AddEditRuleDialogProps = {
   projectName?: string; // Optional: project name for pre-selected projects
   datasetColumnNames?: string[]; // Optional: dataset column names from playground
   hideScopeSelector?: boolean; // Optional: hide scope selector (e.g., for contexts that only support one scope)
+  defaultScope?: EVALUATORS_RULE_SCOPE; // Optional: default scope for new rules
 };
 
 const isPythonCodeRule = (rule: EvaluatorsRule) => {
@@ -172,6 +173,7 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
   projectName,
   datasetColumnNames,
   hideScopeSelector = false,
+  defaultScope,
 }) => {
   const isCodeMetricEnabled = useIsFeatureEnabled(
     FeatureToggleKeys.PYTHON_EVALUATOR_ENABLED,
@@ -240,22 +242,28 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
   useEffect(() => {
     if (open && !defaultRule) {
       // Reset the entire form to default values
-      const defaultScope = EVALUATORS_RULE_SCOPE.trace;
+      const initialScope = defaultScope || EVALUATORS_RULE_SCOPE.trace;
       const defaultUIType = UI_EVALUATORS_RULE_TYPE.llm_judge;
+      const defaultType =
+        initialScope === EVALUATORS_RULE_SCOPE.thread
+          ? EVALUATORS_RULE_TYPE.thread_llm_judge
+          : initialScope === EVALUATORS_RULE_SCOPE.span
+            ? EVALUATORS_RULE_TYPE.span_llm_judge
+            : EVALUATORS_RULE_TYPE.llm_judge;
 
       form.reset({
         ruleName: "",
         projectIds: projectId ? [projectId] : [],
         samplingRate: 1,
         uiType: defaultUIType,
-        scope: defaultScope,
-        type: EVALUATORS_RULE_TYPE.llm_judge,
+        scope: initialScope,
+        type: defaultType,
         enabled: true,
         filters: [],
-        llmJudgeDetails: cloneDeep(DEFAULT_LLM_AS_JUDGE_DATA[defaultScope]),
+        llmJudgeDetails: cloneDeep(DEFAULT_LLM_AS_JUDGE_DATA[initialScope]),
       });
     }
-  }, [open, defaultRule, projectId, form]);
+  }, [open, defaultRule, projectId, defaultScope, form]);
 
   const handleScopeChange = useCallback(
     (value: EVALUATORS_RULE_SCOPE) => {
