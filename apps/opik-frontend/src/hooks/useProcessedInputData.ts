@@ -27,11 +27,24 @@ export const useProcessedInputData = (
       return;
     }
 
+    let isCancelled = false;
     setIsDetecting(true);
 
     detectAdditionalMedia(input, initialMedia)
-      .then(setMedia)
-      .finally(() => setIsDetecting(false));
+      .then((result) => {
+        if (!isCancelled) {
+          setMedia(result);
+        }
+      })
+      .finally(() => {
+        if (!isCancelled) {
+          setIsDetecting(false);
+        }
+      });
+
+    return () => {
+      isCancelled = true;
+    };
   }, [input, initialMedia]);
 
   return { media, formattedData, isDetecting };

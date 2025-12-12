@@ -44,8 +44,17 @@ export const detectMediaTypeFromUrl = async (
       signal: AbortSignal.timeout(HEAD_REQUEST_TIMEOUT_MS),
     });
 
-    // If HEAD is not successful, try GET
+    // Only fallback to GET for specific cases (e.g., 405 Method Not Allowed)
+    // Don't retry for client/server errors (4xx, 5xx) to avoid security issues
     if (!response.ok) {
+      // Check if it's an HTTP error that shouldn't be retried
+      if (response.status >= 400) {
+        // Cache failure for 4xx and 5xx errors (403 Forbidden, 404 Not Found, 500, etc.)
+        mediaTypeCache.set(url, null);
+        return null;
+      }
+
+      // Only retry for other cases like 405 Method Not Allowed
       response = await fetch(url, {
         method: "GET",
         headers: {
@@ -56,7 +65,7 @@ export const detectMediaTypeFromUrl = async (
     }
   } catch (headError) {
     // HEAD request failed (CORS, network error, timeout, etc.)
-    // Fallback to GET with Range header
+    // Fallback to GET with Range header for network-level failures only
     try {
       response = await fetch(url, {
         method: "GET",

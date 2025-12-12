@@ -152,6 +152,39 @@ describe("media utilities", () => {
       expect(result).toBeNull();
       expect(getMediaTypeCacheSize()).toBe(1);
     });
+
+    it("should not retry GET for 403 Forbidden responses", async () => {
+      const testUrl = "https://forbidden.example.com/video";
+
+      // Mock HEAD request returning 403
+      (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+        ok: false,
+        status: 403,
+      });
+
+      const result = await detectMediaTypeFromUrl(testUrl);
+      expect(result).toBeNull();
+      expect(getMediaTypeCacheSize()).toBe(1);
+
+      // Should only call HEAD, not GET (security fix)
+      expect(global.fetch).toHaveBeenCalledTimes(1);
+    });
+
+    it("should not retry GET for 404 Not Found responses", async () => {
+      const testUrl = "https://notfound.example.com/video";
+
+      // Mock HEAD request returning 404
+      (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+        ok: false,
+        status: 404,
+      });
+
+      const result = await detectMediaTypeFromUrl(testUrl);
+      expect(result).toBeNull();
+
+      // Should only call HEAD, not GET
+      expect(global.fetch).toHaveBeenCalledTimes(1);
+    });
   });
 
   describe("cache management", () => {
