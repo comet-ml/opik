@@ -22,8 +22,6 @@ import static com.comet.opik.domain.evaluators.TraceThreadLlmAsJudgeAutomationRu
 
 /**
  * Trace Thread LLM as Judge automation rule evaluator model.
- * Uses @AllArgsConstructor(access = AccessLevel.PUBLIC) to generate a public constructor
- * that JDBI can use for reflection-based instantiation, solving the IllegalAccessException.
  */
 @SuperBuilder(toBuilder = true)
 @AllArgsConstructor(access = AccessLevel.PUBLIC)

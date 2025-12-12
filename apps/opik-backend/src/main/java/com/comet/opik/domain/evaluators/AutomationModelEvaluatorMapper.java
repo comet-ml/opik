@@ -29,8 +29,6 @@ interface AutomationModelEvaluatorMapper {
 
     AutomationModelEvaluatorMapper INSTANCE = Mappers.getMapper(AutomationModelEvaluatorMapper.class);
 
-    // Explicit mappings for all fields (parent + child) to ensure MapStruct generates correct code
-    // Model classes use @Accessors(fluent = true) so method names are id(), not getId()
     @Mapping(target = "id", expression = "java(model.id())")
     @Mapping(target = "projectId", expression = "java(model.projectId())")
     @Mapping(target = "projectName", expression = "java(model.projectName())")
