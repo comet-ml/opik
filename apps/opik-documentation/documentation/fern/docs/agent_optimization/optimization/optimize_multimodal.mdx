@@ -1,6 +1,11 @@
 ---
-title: "Optimize multimodal prompts"
-description: "Run optimizations for prompts that combine text, images, and other modalities."
+description: Run optimizations for prompts that combine text, images, and other modalities.
+headline: Optimize multimodal | Opik Documentation
+og:description: Optimize your multimodal agents to effectively handle text, images,
+  and videos using Opik’s optimizers for seamless integration.
+og:site_name: Opik Documentation
+og:title: Optimize multimodal performance with Opik
+title: Optimize multimodal prompts
 ---
 
 Multimodal agents often juggle text instructions, image references, and structured outputs. Opik’s optimizers can work with any model that LiteLLM supports for images or videos (GPT-4o, Gemini, Claude 3.5 Sonnet vision, etc.). Make sure that both the optimizer’s `model` and your `ChatPrompt.model` accept the modality you plan to optimize. Otherwise, the run will fail or silently ignore the media.
