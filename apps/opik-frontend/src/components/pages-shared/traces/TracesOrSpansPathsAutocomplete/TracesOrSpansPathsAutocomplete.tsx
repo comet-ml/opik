@@ -146,21 +146,37 @@ const TracesOrSpansPathsAutocomplete: React.FC<
       }, []);
     }
 
+    // Add root objects (input, output, metadata) as suggestions if not excluding root
+    const rootObjectSuggestions: string[] = !excludeRoot ? rootKeys : [];
+
     // Add dataset column names at the bottom if provided
     const datasetSuggestions =
       datasetColumnNames?.map(
         (columnName) => `metadata.dataset_item_data.${columnName}`,
       ) || [];
 
-    // Combine and deduplicate suggestions
-    const allSuggestions = uniq([...baseSuggestions, ...datasetSuggestions]);
+    // Deduplicate within each category
+    const uniqueRootObjects = uniq(rootObjectSuggestions);
+    const uniqueBaseSuggestions = uniq(baseSuggestions);
+    const uniqueDatasetSuggestions = uniq(datasetSuggestions);
 
-    // Filter and sort
-    return allSuggestions
-      .filter((p) =>
-        value ? p.toLowerCase().includes(value.toLowerCase()) : true,
-      )
-      .sort();
+    // Filter each category based on search value
+    const filteredRootObjects = uniqueRootObjects.filter((p) =>
+      value ? p.toLowerCase().includes(value.toLowerCase()) : true,
+    );
+    const filteredBaseSuggestions = uniqueBaseSuggestions.filter((p) =>
+      value ? p.toLowerCase().includes(value.toLowerCase()) : true,
+    );
+    const filteredDatasetSuggestions = uniqueDatasetSuggestions.filter((p) =>
+      value ? p.toLowerCase().includes(value.toLowerCase()) : true,
+    );
+
+    // Sort within each category, then combine: root objects first, then paths, then dataset columns
+    return [
+      ...filteredRootObjects.sort(),
+      ...filteredBaseSuggestions.sort(),
+      ...filteredDatasetSuggestions.sort(),
+    ];
   }, [
     data,
     dataNonTruncated,

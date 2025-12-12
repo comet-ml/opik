@@ -207,7 +207,7 @@ export const LLMJudgeDetailsTraceFormSchema = LLMJudgeBaseSchema.extend({
       .string()
       .min(1, { message: "Key is required" })
       .regex(/^(input|output|metadata)(\.|$)/, {
-        message: `Key is invalid, it should be "input", "output", "metadata", or follow this format: "input.[PATH]" For example: "input.message" or just "input" for the whole object`,
+        message: `Key is invalid, it should be "input", "output", "metadata", and follow this format: "input.[PATH]" For example: "input.message" or just "input" for the whole object`,
       }),
   ),
 }).superRefine((data, ctx) => {
@@ -258,7 +258,7 @@ export const LLMJudgeDetailsSpanFormSchema = LLMJudgeBaseSchema.extend({
       .string()
       .min(1, { message: "Key is required" })
       .regex(/^(input|output|metadata)(\.|$)/, {
-        message: `Key is invalid, it should be "input", "output", "metadata", or follow this format: "input.[PATH]" For example: "input.message" or just "input" for the whole object`,
+        message: `Key is invalid, it should be "input", "output", "metadata", and follow this format: "input.[PATH]" For example: "input.message" or just "input" for the whole object`,
       }),
   ),
 }).superRefine((data, ctx) => {
@@ -359,7 +359,7 @@ export const PythonCodeDetailsTraceFormSchema = BasePythonCodeFormSchema.extend(
         .string()
         .min(1, { message: "Key is required" })
         .regex(/^(input|output|metadata)(\.|$)/, {
-          message: `Key is invalid, it should be "input", "output", "metadata", or follow this format: "input.[PATH]" For example: "input.message" or just "input" for the whole object`,
+          message: `Key is invalid, it should be "input", "output", "metadata", and follow this format: "input.[PATH]" For example: "input.message" or just "input" for the whole object`,
         }),
     ),
     parsingArgumentsError: z.boolean().optional(),
@@ -375,7 +375,7 @@ export const PythonCodeDetailsSpanFormSchema = BasePythonCodeFormSchema.extend({
       .string()
       .min(1, { message: "Key is required" })
       .regex(/^(input|output|metadata)(\.|$)/, {
-        message: `Key is invalid, it should be "input", "output", "metadata", or follow this format: "input.[PATH]" For example: "input.message" or just "input" for the whole object`,
+        message: `Key is invalid, it should be "input", "output", "metadata", and follow this format: "input.[PATH]" For example: "input.message" or just "input" for the whole object`,
       }),
   ),
   parsingArgumentsError: z.boolean().optional(),
