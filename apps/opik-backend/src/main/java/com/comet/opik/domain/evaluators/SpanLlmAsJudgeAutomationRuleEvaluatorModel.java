@@ -38,10 +38,18 @@ public final class SpanLlmAsJudgeAutomationRuleEvaluatorModel
         implements
             AutomationRuleEvaluatorModel<SpanLlmAsJudgeCode> {
 
-    @Json
-
     @Builder.Default
     private final SpanLlmAsJudgeCode code = null;
+
+    /**
+     * Explicit override to apply @Json annotation for JDBI serialization.
+     * Lombok's @Getter doesn't preserve annotations from fields on generated methods.
+     */
+    @Override
+    @Json
+    public SpanLlmAsJudgeCode code() {
+        return code;
+    }
 
     @Override
     public AutomationRuleEvaluatorType type() {

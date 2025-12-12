@@ -38,9 +38,18 @@ public final class LlmAsJudgeAutomationRuleEvaluatorModel
         implements
             AutomationRuleEvaluatorModel<LlmAsJudgeCode> {
 
-    @Json
     @Builder.Default
     private final LlmAsJudgeCode code = null;
+
+    /**
+     * Explicit override to apply @Json annotation for JDBI serialization.
+     * Lombok's @Getter doesn't preserve annotations from fields on generated methods.
+     */
+    @Override
+    @Json
+    public LlmAsJudgeCode code() {
+        return code;
+    }
 
     @Override
     public AutomationRuleEvaluatorType type() {

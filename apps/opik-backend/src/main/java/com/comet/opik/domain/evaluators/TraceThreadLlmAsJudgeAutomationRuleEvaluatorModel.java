@@ -37,10 +37,18 @@ public final class TraceThreadLlmAsJudgeAutomationRuleEvaluatorModel
         implements
             AutomationRuleEvaluatorModel<TraceThreadLlmAsJudgeCode> {
 
-    @Json
-
     @Builder.Default
     private final TraceThreadLlmAsJudgeCode code = null;
+
+    /**
+     * Explicit override to apply @Json annotation for JDBI serialization.
+     * Lombok's @Getter doesn't preserve annotations from fields on generated methods.
+     */
+    @Override
+    @Json
+    public TraceThreadLlmAsJudgeCode code() {
+        return code;
+    }
 
     @Override
     public AutomationRuleEvaluatorType type() {
