@@ -7,10 +7,13 @@ import com.comet.opik.api.Prompt;
 import com.comet.opik.api.Prompt.PromptPage;
 import com.comet.opik.api.PromptVersion;
 import com.comet.opik.api.PromptVersion.PromptVersionPage;
+import com.comet.opik.api.PromptVersionBatchUpdate;
 import com.comet.opik.api.PromptVersionRetrieve;
 import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.api.filter.FiltersFactory;
 import com.comet.opik.api.filter.PromptFilter;
+import com.comet.opik.api.filter.PromptVersionFilter;
+import com.comet.opik.api.sorting.SortingFactoryPromptVersions;
 import com.comet.opik.api.sorting.SortingFactoryPrompts;
 import com.comet.opik.api.sorting.SortingField;
 import com.comet.opik.domain.PromptService;
@@ -33,6 +36,7 @@ import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.DELETE;
 import jakarta.ws.rs.DefaultValue;
 import jakarta.ws.rs.GET;
+import jakarta.ws.rs.PATCH;
 import jakarta.ws.rs.POST;
 import jakarta.ws.rs.PUT;
 import jakarta.ws.rs.Path;
@@ -62,6 +66,7 @@ public class PromptResource {
     private final @NonNull Provider<RequestContext> requestContext;
     private final @NonNull PromptService promptService;
     private final @NonNull SortingFactoryPrompts sortingFactory;
+    private final @NonNull SortingFactoryPromptVersions sortingFactoryPromptVersions;
     private final @NonNull FiltersFactory filtersFactory;
 
     @POST
@@ -225,18 +230,18 @@ public class PromptResource {
     @JsonView({PromptVersion.View.Public.class})
     public Response getPromptVersions(@PathParam("id") UUID id,
             @QueryParam("page") @Min(1) @DefaultValue("1") int page,
-            @QueryParam("size") @Min(1) @DefaultValue("10") int size) {
-
-        String workspaceId = requestContext.get().getWorkspaceId();
-
-        log.info("Getting prompt versions by id '{}' on workspace_id '{}', page '{}', size '{}'", id, workspaceId, page,
-                size);
-
-        PromptVersionPage promptVersionPage = promptService.getVersionsByPromptId(id, page, size);
-
-        log.info("Got prompt versions by id '{}' on workspace_id '{}', count '{}'", id, workspaceId,
-                promptVersionPage.size());
-
+            @QueryParam("size") @Min(1) @DefaultValue("10") int size,
+            @QueryParam("sorting") String sorting,
+            @QueryParam("filters") String filters) {
+        var workspaceId = requestContext.get().getWorkspaceId();
+        log.info("Getting prompt versions by id '{}' on workspace_id '{}', page '{}', size '{}'",
+                id, workspaceId, page, size);
+        var sortingFields = sortingFactoryPromptVersions.newSorting(sorting);
+        var versionFilters = filtersFactory.newFilters(filters, PromptVersionFilter.LIST_TYPE_REFERENCE);
+        var promptVersionPage = promptService.getVersionsByPromptId(
+                id, page, size, sortingFields, versionFilters);
+        log.info("Got prompt versions by id '{}' on workspace_id '{}', count '{}'",
+                id, workspaceId, promptVersionPage.size());
         return Response.ok(promptVersionPage).build();
     }
 
@@ -258,6 +263,35 @@ public class PromptResource {
         log.info("Got prompt version by id '{}' on workspace_id '{}'", id, workspaceId);
 
         return Response.ok(promptVersion).build();
+    }
+
+    @PATCH
+    @Path("/versions")
+    @Operation(operationId = "updatePromptVersions", summary = "Update prompt versions", description = """
+            Update one or more prompt versions.
+
+            Note: Prompt versions are immutable by design.
+            Only organizational properties, such as tags etc., can be updated.
+            Core properties like template and metadata cannot be modified after creation.
+
+            PATCH semantics:
+            - non-empty values update the field
+            - null values preserve existing field values (no change)
+            - empty values explicitly clear the field
+            """, responses = {
+            @ApiResponse(responseCode = "204", description = "No Content"),
+            @ApiResponse(responseCode = "400", description = "Bad Request", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))
+    })
+    @RateLimited
+    public Response updatePromptVersions(
+            @RequestBody(content = @Content(schema = @Schema(implementation = PromptVersionBatchUpdate.class))) @Valid @NotNull PromptVersionBatchUpdate request) {
+        var workspaceId = requestContext.get().getWorkspaceId();
+        log.info("Updating prompt versions on workspaceId '{}', size '{}', mergeTags '{}'",
+                workspaceId, request.ids().size(), request.mergeTags());
+        var updatedCount = promptService.updateVersions(request);
+        log.info("Successfully updated prompt versions on workspaceId '{}', size '{}', mergeTags '{}'",
+                workspaceId, updatedCount, request.mergeTags());
+        return Response.noContent().build();
     }
 
     @POST
