@@ -55,6 +55,7 @@ public abstract sealed class AutomationRuleEvaluator<T, E extends Filter> implem
         AutomationRuleEvaluatorTraceThreadLlmAsJudge, AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython,
         AutomationRuleEvaluatorSpanLlmAsJudge, AutomationRuleEvaluatorSpanUserDefinedMetricPython {
 
+    @JsonProperty
     @JsonView({View.Public.class})
     @Schema(accessMode = Schema.AccessMode.READ_ONLY)
     private final UUID id;
@@ -66,24 +67,30 @@ public abstract sealed class AutomationRuleEvaluator<T, E extends Filter> implem
     // Frontend can resolve project names from project_ids using projects API
     // Service layer keeps all fields in sync for seamless migration
 
+    @JsonProperty
     @JsonView({View.Public.class, View.Write.class})
     @Schema(description = "Primary project ID (legacy field, maintained for backwards compatibility)")
     private final UUID projectId;
 
+    @JsonProperty
     @JsonView({View.Public.class})
     @Schema(description = "Primary project name (legacy field, maintained for backwards compatibility)", accessMode = Schema.AccessMode.READ_ONLY)
     private final String projectName;
 
+    @JsonProperty
     @JsonView({View.Public.class, View.Write.class})
     @Schema(description = "Multiple project IDs (new field for multi-project support)")
     private final Set<UUID> projectIds;
 
+    @JsonProperty
     @JsonView({View.Public.class, View.Write.class})
     @NotBlank private final String name;
 
+    @JsonProperty
     @JsonView({View.Public.class, View.Write.class})
     private final float samplingRate;
 
+    @JsonProperty
     @JsonView({View.Public.class, View.Write.class})
     @Builder.Default
     private final boolean enabled = true;
@@ -95,18 +102,22 @@ public abstract sealed class AutomationRuleEvaluator<T, E extends Filter> implem
     @JsonIgnore
     @NotNull private final T code;
 
+    @JsonProperty
     @JsonView({View.Public.class})
     @Schema(accessMode = Schema.AccessMode.READ_ONLY)
     private final Instant createdAt;
 
+    @JsonProperty
     @JsonView({View.Public.class})
     @Schema(accessMode = Schema.AccessMode.READ_ONLY)
     private final String createdBy;
 
+    @JsonProperty
     @JsonView({View.Public.class})
     @Schema(accessMode = Schema.AccessMode.READ_ONLY)
     private final Instant lastUpdatedAt;
 
+    @JsonProperty
     @JsonView({View.Public.class})
     @Schema(accessMode = Schema.AccessMode.READ_ONLY)
     private final String lastUpdatedBy;
