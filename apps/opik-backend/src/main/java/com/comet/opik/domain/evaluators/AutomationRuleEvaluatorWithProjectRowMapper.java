@@ -28,8 +28,9 @@ public class AutomationRuleEvaluatorWithProjectRowMapper implements RowMapper<Au
     /**
      * Common fields extracted from ResultSet, passed to all factory methods.
      * Reduces parameter duplication from 14 parameters to a single object.
+     * Made public to be accessible by AutomationRuleEvaluatorType in API layer.
      */
-    record CommonFields(
+    public record CommonFields(
             UUID id,
             UUID projectId,
             String projectName,
@@ -85,28 +86,11 @@ public class AutomationRuleEvaluatorWithProjectRowMapper implements RowMapper<Au
         try {
             JsonNode codeNode = OBJECT_MAPPER.readTree(codeJson);
 
-            // Delegate to type-specific static factory methods with common fields
-            return switch (type) {
-                case LLM_AS_JUDGE -> LlmAsJudgeAutomationRuleEvaluatorModel.fromRowMapper(
-                        common, codeNode, OBJECT_MAPPER);
+            // Delegate to the type's factory via method reference (Strategy pattern)
+            // No switch statement needed - each type knows how to construct itself
+            // Similar to RedisStreamCodec pattern used elsewhere in the codebase
+            return type.fromRowMapper(common, codeNode, OBJECT_MAPPER);
 
-                case USER_DEFINED_METRIC_PYTHON -> UserDefinedMetricPythonAutomationRuleEvaluatorModel.fromRowMapper(
-                        common, codeNode, OBJECT_MAPPER);
-
-                case TRACE_THREAD_LLM_AS_JUDGE -> TraceThreadLlmAsJudgeAutomationRuleEvaluatorModel.fromRowMapper(
-                        common, codeNode, OBJECT_MAPPER);
-
-                case TRACE_THREAD_USER_DEFINED_METRIC_PYTHON ->
-                    TraceThreadUserDefinedMetricPythonAutomationRuleEvaluatorModel.fromRowMapper(
-                            common, codeNode, OBJECT_MAPPER);
-
-                case SPAN_LLM_AS_JUDGE -> SpanLlmAsJudgeAutomationRuleEvaluatorModel.fromRowMapper(
-                        common, codeNode, OBJECT_MAPPER);
-
-                case SPAN_USER_DEFINED_METRIC_PYTHON ->
-                    SpanUserDefinedMetricPythonAutomationRuleEvaluatorModel.fromRowMapper(
-                            common, codeNode, OBJECT_MAPPER);
-            };
         } catch (Exception e) {
             throw new SQLException("Failed to parse automation rule evaluator code", e);
         }
