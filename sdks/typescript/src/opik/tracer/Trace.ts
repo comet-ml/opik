@@ -1,11 +1,9 @@
 import { OpikClient } from "@/client/Client";
-import type {
-  Span as ISpan,
-  Trace as ITrace,
-  TraceUpdate,
-} from "@/rest_api/api";
+import type { Span as ISpan, Trace as ITrace } from "@/rest_api/api";
 import { generateId } from "@/utils/generateId";
 import { SavedSpan, Span } from "./Span";
+import type { TraceUpdateData } from "./types";
+import { UpdateService } from "./UpdateService";
 
 export interface SavedTrace extends ITrace {
   id: string;
@@ -62,10 +60,15 @@ export class Trace {
     return span;
   };
 
-  public update = (updates: Omit<TraceUpdate, "projectId">) => {
+  public update = (updates: TraceUpdateData) => {
+    const processedUpdates = UpdateService.processTraceUpdate(
+      updates,
+      this.data.metadata
+    );
+
     const traceUpdates = {
       projectName: this.data.projectName ?? this.opik.config.projectName,
-      ...updates,
+      ...processedUpdates,
     };
 
     this.opik.traceBatchQueue.update(this.data.id, traceUpdates);
