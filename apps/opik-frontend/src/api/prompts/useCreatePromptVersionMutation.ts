@@ -10,6 +10,7 @@ type UseCreatePromptVersionMutationParams = {
   name: string;
   template: string;
   metadata?: object;
+  tags?: string[];
   changeDescription?: string;
   templateStructure?: PROMPT_TEMPLATE_STRUCTURE;
   onSuccess: (promptVersion: PromptVersion) => void;
@@ -24,6 +25,7 @@ const useCreatePromptVersionMutation = () => {
       name,
       template,
       metadata,
+      tags,
       changeDescription,
       templateStructure,
     }: UseCreatePromptVersionMutationParams) => {
@@ -32,6 +34,7 @@ const useCreatePromptVersionMutation = () => {
         version: {
           template,
           ...(metadata && { metadata }),
+          ...(tags && { tags }),
           ...(changeDescription && { change_description: changeDescription }),
         },
         ...(templateStructure && { template_structure: templateStructure }),
