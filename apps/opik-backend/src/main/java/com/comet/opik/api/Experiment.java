@@ -54,7 +54,8 @@ public record Experiment(
                 Experiment.View.Write.class}) List<@NotNull @Valid ExperimentScore> experimentScores,
         @JsonView({Experiment.View.Public.class,
                 Experiment.View.Write.class}) @Schema(deprecated = true) PromptVersionLink promptVersion,
-        @JsonView({Experiment.View.Public.class, Experiment.View.Write.class}) List<PromptVersionLink> promptVersions){
+        @JsonView({Experiment.View.Public.class, Experiment.View.Write.class}) List<PromptVersionLink> promptVersions,
+        @JsonView({Experiment.View.Public.class, Experiment.View.Write.class}) UUID datasetVersionId){
 
     @Builder(toBuilder = true)
     public record ExperimentPage(

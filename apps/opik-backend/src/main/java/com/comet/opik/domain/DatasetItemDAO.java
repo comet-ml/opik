@@ -1488,7 +1488,7 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
                             .onErrorResume(e -> handleSqlError(e, List.of()))
                             .flatMap(
                                     items -> Mono.just(new DatasetItemPage(items, page, items.size(), total, columns,
-                                            sortingFactory.getSortableFields(), false)));
+                                            sortingFactory.getSortableFields(), false, null)));
                 }));
     }
 
