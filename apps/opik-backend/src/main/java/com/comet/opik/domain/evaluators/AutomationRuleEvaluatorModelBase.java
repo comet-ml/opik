@@ -3,6 +3,7 @@ package com.comet.opik.domain.evaluators;
 import com.comet.opik.api.evaluators.AutomationRule;
 import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
+import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.experimental.Accessors;
@@ -40,18 +41,30 @@ import java.util.UUID;
 @Accessors(fluent = true)
 public abstract non-sealed class AutomationRuleEvaluatorModelBase<T> implements AutomationRuleModel {
 
-    private UUID id;
-    private UUID projectId; // Legacy single project field for backwards compatibility
-    private String projectName; // Legacy project name field (resolved from projectId)
-    private Set<UUID> projectIds; // New multi-project field
-    private String name;
-    private Float samplingRate;
-    private boolean enabled;
-    private String filters;
-    private Instant createdAt;
-    private String createdBy;
-    private Instant lastUpdatedAt;
-    private String lastUpdatedBy;
+    @Builder.Default
+    private final UUID id = null;
+    @Builder.Default
+    private final UUID projectId = null; // Legacy single project field for backwards compatibility
+    @Builder.Default
+    private final String projectName = null; // Legacy project name field (resolved from projectId)
+    @Builder.Default
+    private final Set<UUID> projectIds = null; // New multi-project field
+    @Builder.Default
+    private final String name = null;
+    @Builder.Default
+    private final Float samplingRate = null;
+    @Builder.Default
+    private final boolean enabled = false;
+    @Builder.Default
+    private final String filters = null;
+    @Builder.Default
+    private final Instant createdAt = null;
+    @Builder.Default
+    private final String createdBy = null;
+    @Builder.Default
+    private final Instant lastUpdatedAt = null;
+    @Builder.Default
+    private final String lastUpdatedBy = null;
 
     @Override
     public AutomationRule.AutomationRuleAction action() {

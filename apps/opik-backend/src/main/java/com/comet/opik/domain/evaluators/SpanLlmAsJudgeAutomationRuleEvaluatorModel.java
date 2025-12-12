@@ -6,6 +6,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
+import lombok.Builder;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.ToString;
@@ -39,7 +40,8 @@ public final class SpanLlmAsJudgeAutomationRuleEvaluatorModel
 
     @Json
 
-    private SpanLlmAsJudgeCode code;
+    @Builder.Default
+    private final SpanLlmAsJudgeCode code = null;
 
     @Override
     public AutomationRuleEvaluatorType type() {
