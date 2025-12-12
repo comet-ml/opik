@@ -1,21 +1,21 @@
 ---
-description: Learn how to use the Hierarchical Reflective Optimizer to improve prompts
+description: Learn how to use HAPO (Hierarchical Adaptive Prompt Optimizer) to improve prompts
   through systematic root cause analysis of failure modes and targeted refinement.
-headline: Hierarchical Reflective | Opik Documentation
-og:description: Learn how the HierarchicalReflectiveOptimizer enhances prompt refinement
+headline: HAPO | Opik Documentation
+og:description: Learn how HAPO (HierarchicalReflectiveOptimizer) enhances prompt refinement
   by addressing specific failure modes through systematic analysis.
 og:site_name: Opik Documentation
-og:title: Hierarchical Reflective Optimization - Opik
+og:title: HAPO (Hierarchical Adaptive Prompt Optimizer) - Opik
 subtitle: Hierarchical root cause analysis for targeted prompt improvement
-title: Hierarchical Reflective Optimizer
+title: HAPO (Hierarchical Adaptive Prompt Optimizer)
 ---
 
-The `HierarchicalReflectiveOptimizer` uses hierarchical root cause analysis to identify and address
+The `HierarchicalReflectiveOptimizer` (HAPO - Hierarchical Adaptive Prompt Optimizer) uses hierarchical root cause analysis to identify and address
 specific failure modes in your prompts. It analyzes evaluation results, identifies patterns in
 failures, and generates targeted improvements to address each failure mode systematically.
 
 <Note>
-  `HierarchicalReflectiveOptimizer` is ideal when you have a complex prompt that you want to refine
+  `HierarchicalReflectiveOptimizer` (HAPO) is ideal when you have a complex prompt that you want to refine
   based on understanding *why* it's failing. Unlike optimizers that generate many random variations,
   this optimizer systematically analyzes failures, identifies root causes, and makes surgical
   improvements to address each specific issue.
@@ -23,7 +23,7 @@ failures, and generates targeted improvements to address each failure mode syste
 
 ## How It Works
 
-The Hierarchical Reflective Optimizer has been developed by the Opik team to improve prompts that
+HAPO (Hierarchical Adaptive Prompt Optimizer) has been developed by the Opik team to improve prompts that
 might have already gone through a few rounds of manual prompt engineering. It focuses on identifying
 why a prompt is failing and then updating the prompts to address the issues.
 
@@ -31,7 +31,7 @@ As datasets can be large, we split the analysis into batches and analyze them in
 synthesize the findings across all batches to identify the core issues with the prompt.
 
 <Frame>
-  <img src="/img/agent_optimization/hierarchical_reflective_optimizer.png" alt="Hierarchical Reflective Optimizer" />
+  <img src="/img/agent_optimization/hierarchical_reflective_optimizer.png" alt="HAPO (Hierarchical Adaptive Prompt Optimizer)" />
 </Frame>
 
 <Tip>
