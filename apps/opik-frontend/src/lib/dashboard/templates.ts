@@ -1,15 +1,23 @@
-import { DashboardTemplate, WIDGET_TYPE, TEMPLATE_ID } from "@/types/dashboard";
-import { DASHBOARD_VERSION } from "@/lib/dashboard/utils";
+import {
+  DashboardTemplate,
+  WIDGET_TYPE,
+  TEMPLATE_TYPE,
+} from "@/types/dashboard";
+import { DASHBOARD_VERSION, createTemplateId } from "@/lib/dashboard/utils";
 import { DEFAULT_DATE_PRESET } from "@/components/pages-shared/traces/MetricDateRangeSelect/constants";
 import { METRIC_NAME_TYPE } from "@/api/projects/useProjectMetric";
 import { CHART_TYPE } from "@/constants/chart";
 import { TRACE_DATA_TYPE } from "@/constants/traces";
+import { ChartLine, Activity } from "lucide-react";
 
 const PROJECT_METRICS_TEMPLATE: DashboardTemplate = {
-  id: TEMPLATE_ID.PROJECT_METRICS,
+  id: createTemplateId(TEMPLATE_TYPE.PROJECT_METRICS),
+  type: TEMPLATE_TYPE.PROJECT_METRICS,
   title: "Project metrics",
   description:
     "Track token usage, cost, and performance metrics for traces and threads",
+  icon: ChartLine,
+  iconColor: "text-template-icon-metrics",
   config: {
     version: DASHBOARD_VERSION,
     sections: [
@@ -201,10 +209,13 @@ const PROJECT_METRICS_TEMPLATE: DashboardTemplate = {
 };
 
 const PERFORMANCE_OVERVIEW_TEMPLATE: DashboardTemplate = {
-  id: TEMPLATE_ID.PERFORMANCE,
+  id: createTemplateId(TEMPLATE_TYPE.PROJECT_PERFORMANCE),
+  type: TEMPLATE_TYPE.PROJECT_PERFORMANCE,
   title: "Performance Overview",
   description:
     "Comprehensive performance monitoring including traces, threads, quality metrics, and latency",
+  icon: Activity,
+  iconColor: "text-template-icon-performance",
   config: {
     version: DASHBOARD_VERSION,
     sections: [
@@ -459,12 +470,12 @@ const PERFORMANCE_OVERVIEW_TEMPLATE: DashboardTemplate = {
   },
 };
 
-export const DASHBOARD_TEMPLATES: Record<TEMPLATE_ID, DashboardTemplate> = {
-  [TEMPLATE_ID.PROJECT_METRICS]: PROJECT_METRICS_TEMPLATE,
-  [TEMPLATE_ID.PERFORMANCE]: PERFORMANCE_OVERVIEW_TEMPLATE,
+export const DASHBOARD_TEMPLATES: Record<TEMPLATE_TYPE, DashboardTemplate> = {
+  [TEMPLATE_TYPE.PROJECT_METRICS]: PROJECT_METRICS_TEMPLATE,
+  [TEMPLATE_TYPE.PROJECT_PERFORMANCE]: PERFORMANCE_OVERVIEW_TEMPLATE,
 };
 
-export const TEMPLATE_OPTIONS_ORDER: TEMPLATE_ID[] = [
-  TEMPLATE_ID.PROJECT_METRICS,
-  TEMPLATE_ID.PERFORMANCE,
+export const TEMPLATE_LIST: DashboardTemplate[] = [
+  PROJECT_METRICS_TEMPLATE,
+  PERFORMANCE_OVERVIEW_TEMPLATE,
 ];

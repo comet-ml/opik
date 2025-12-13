@@ -17,17 +17,11 @@ export enum WIDGET_CATEGORY {
   GENERAL = "general",
 }
 
-export enum DASHBOARD_CREATION_TYPE {
-  EMPTY = "empty",
-  TEMPLATE = "template",
-}
-
-export enum TEMPLATE_ID {
+export enum TEMPLATE_TYPE {
   PROJECT_METRICS = "project-metrics",
-  PERFORMANCE = "performance",
+  PROJECT_PERFORMANCE = "project-performance",
 }
 
-// Widget-specific type definitions with discriminator
 export interface ProjectMetricsWidget {
   type: WIDGET_TYPE.PROJECT_METRICS;
   config: {
@@ -232,7 +226,10 @@ export interface WidgetConfigDialogProps {
 
 export interface DashboardTemplate {
   id: string;
+  type: TEMPLATE_TYPE;
   title: string;
   description: string;
+  icon: React.ComponentType<{ className?: string }>;
+  iconColor: string;
   config: DashboardState;
 }

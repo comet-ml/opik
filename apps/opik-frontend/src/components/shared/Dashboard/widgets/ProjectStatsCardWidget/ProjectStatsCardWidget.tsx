@@ -3,7 +3,7 @@ import { useShallow } from "zustand/react/shallow";
 
 import DashboardWidget from "@/components/shared/Dashboard/DashboardWidget/DashboardWidget";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
-import { useDashboardStore } from "@/store/DashboardStore";
+import { useDashboardStore, selectMixedConfig } from "@/store/DashboardStore";
 import { DashboardWidgetComponentProps } from "@/types/dashboard";
 import { Filter } from "@/types/filters";
 import { isFilterValid } from "@/lib/filters";
@@ -39,10 +39,13 @@ const ProjectStatsCardWidget: React.FunctionComponent<
   DashboardWidgetComponentProps
 > = ({ sectionId, widgetId, preview = false }) => {
   const globalConfig = useDashboardStore(
-    useShallow((state) => ({
-      projectId: state.config?.projectIds?.[0],
-      dateRange: state.config?.dateRange ?? DEFAULT_DATE_PRESET,
-    })),
+    useShallow((state) => {
+      const config = selectMixedConfig(state);
+      return {
+        projectId: config?.projectIds?.[0],
+        dateRange: config?.dateRange ?? DEFAULT_DATE_PRESET,
+      };
+    }),
   );
 
   const widget = useDashboardStore(
