@@ -10,7 +10,6 @@ services:
   demo-data-generator:
     depends_on: !override
       [ ]
-
   # Override to not depend on backend
   frontend:
     depends_on: !override
