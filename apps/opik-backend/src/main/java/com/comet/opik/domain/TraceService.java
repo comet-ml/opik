@@ -100,6 +100,8 @@ public interface TraceService {
 
     Mono<ProjectStats> getStats(TraceSearchCriteria searchCriteria);
 
+    Mono<ProjectStats> getThreadStats(TraceSearchCriteria searchCriteria);
+
     Mono<Long> getDailyCreatedCount();
 
     Mono<Map<UUID, Instant>> getLastUpdatedTraceAt(Set<UUID> projectIds, String workspaceId);
@@ -543,6 +545,14 @@ class TraceServiceImpl implements TraceService {
     public Mono<ProjectStats> getStats(@NonNull TraceSearchCriteria criteria) {
         return findProjectAndVerifyVisibility(criteria)
                 .flatMap(dao::getStats)
+                .switchIfEmpty(Mono.just(ProjectStats.empty()));
+    }
+
+    @Override
+    @WithSpan
+    public Mono<ProjectStats> getThreadStats(@NonNull TraceSearchCriteria criteria) {
+        return findProjectAndVerifyVisibility(criteria)
+                .flatMap(dao::getThreadStats)
                 .switchIfEmpty(Mono.just(ProjectStats.empty()));
     }
 

@@ -500,6 +500,38 @@ public class TraceResourceClient extends BaseCommentResourceClient {
         return actualResponse.readEntity(ProjectStats.class);
     }
 
+    public ProjectStats getTraceThreadStats(String projectName, UUID projectId, String apiKey, String workspaceName,
+            List<? extends TraceThreadFilter> filters, Map<String, String> queryParams) {
+        WebTarget webTarget = client.target(RESOURCE_PATH.formatted(baseURI))
+                .path("threads")
+                .path("stats");
+
+        if (projectName != null) {
+            webTarget = webTarget.queryParam("project_name", projectName);
+        }
+
+        if (filters != null) {
+            webTarget = webTarget.queryParam("filters", TestUtils.toURLEncodedQueryParam(filters));
+        }
+
+        if (projectId != null) {
+            webTarget = webTarget.queryParam("project_id", projectId);
+        }
+
+        webTarget = queryParams.entrySet()
+                .stream()
+                .reduce(webTarget, (acc, entry) -> acc.queryParam(entry.getKey(), entry.getValue()), (a, b) -> b);
+
+        var actualResponse = webTarget
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .get();
+
+        assertThat(actualResponse.getStatus()).isEqualTo(HttpStatus.SC_OK);
+        return actualResponse.readEntity(ProjectStats.class);
+    }
+
     public Trace.TracePage getTraces(String projectName, UUID projectId, String apiKey, String workspaceName,
             List<? extends TraceFilter> filters, List<SortingField> sortingFields, int size,
             Map<String, String> queryParams) {

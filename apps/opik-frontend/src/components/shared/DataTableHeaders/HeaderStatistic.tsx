@@ -120,7 +120,9 @@ const HeaderStatistic: React.FC<HeaderStatisticProps> = ({
       columnsStatistic,
       (s) =>
         s.type === STATISTIC_AGGREGATION_TYPE.COUNT &&
-        (s.name === "trace_count" || s.name === "span_count"),
+        (s.name === "trace_count" ||
+          s.name === "span_count" ||
+          s.name === "thread_count"),
     );
     if (countStat) {
       sumValue = Number(countStat.value) * statistic.value;
