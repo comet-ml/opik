@@ -21,7 +21,11 @@ import CodeCell from "@/components/shared/DataTableCells/CodeCell";
 import ResourceCell from "@/components/shared/DataTableCells/ResourceCell";
 import ListCell from "@/components/shared/DataTableCells/ListCell";
 import { formatDate } from "@/lib/date";
-import { convertColumnDataToColumn, mapColumnDataFields } from "@/lib/table";
+import {
+  convertColumnDataToColumn,
+  isColumnSortable,
+  mapColumnDataFields,
+} from "@/lib/table";
 import { generateSelectColumDef } from "@/components/shared/DataTable/utils";
 import { RESOURCE_TYPE } from "@/components/shared/ResourceLink/ResourceLink";
 import CommitsActionsPanel from "@/components/pages/PromptPage/CommitsTab/CommitsActionsPanel";
@@ -81,6 +85,9 @@ export const DEFAULT_COLUMNS: ColumnData<PromptVersion>[] = [
     iconType: "tags",
     accessorFn: (row) => row.tags || [],
     cell: ListCell as never,
+    customMeta: {
+      tooltipLabel: "version tags",
+    },
   },
   {
     id: "created_at",
@@ -221,7 +228,7 @@ const CommitsTab = ({ prompt }: CommitsTabInterface) => {
           }),
         },
         explainer: EXPLAINERS_MAP[EXPLAINER_ID.whats_a_prompt_commit],
-        sortable: true,
+        sortable: isColumnSortable("commit", sortableColumns),
       }),
       ...convertColumnDataToColumn<PromptVersion, PromptVersion>(
         DEFAULT_COLUMNS,
