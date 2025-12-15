@@ -38,6 +38,7 @@ export enum EXPLAINER_ID {
   whats_the_playground = "whats_the_playground",
   whats_these_configuration_things = "whats_these_configuration_things",
   why_do_i_need_an_ai_provider = "why_do_i_need_an_ai_provider",
+  why_do_i_need_the_collaborators_tab = "why_do_i_need_the_collaborators_tab",
   what_does_the_dataset_do_here = "what_does_the_dataset_do_here",
   how_do_i_use_the_dataset_in_the_playground = "how_do_i_use_the_dataset_in_the_playground",
   whats_llm_as_a_judge = "whats_llm_as_a_judge",
@@ -336,6 +337,10 @@ export const EXPLAINERS_MAP: Record<EXPLAINER_ID, Explainer> = {
     id: EXPLAINER_ID.why_do_i_need_an_ai_provider,
     description:
       "Connect AI providers to test prompts, preview model responses, and score traces using online evaluation rules in the Playground.",
+  },
+  [EXPLAINER_ID.why_do_i_need_the_collaborators_tab]: {
+    id: EXPLAINER_ID.why_do_i_need_the_collaborators_tab,
+    description: "Manage access to your workspace.",
   },
   [EXPLAINER_ID.what_does_the_dataset_do_here]: {
     id: EXPLAINER_ID.what_does_the_dataset_do_here,
