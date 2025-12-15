@@ -1,21 +1,21 @@
 ---
-description: Learn how to use the Hierarchical Reflective Optimizer to improve prompts
+description: Learn how to use HRPO (Hierarchical Reflective Prompt Optimizer) to improve prompts
   through systematic root cause analysis of failure modes and targeted refinement.
-headline: Hierarchical Reflective | Opik Documentation
-og:description: Learn how the HierarchicalReflectiveOptimizer enhances prompt refinement
+headline: HRPO | Opik Documentation
+og:description: Learn how HRPO (Hierarchical Reflective Prompt Optimizer) enhances prompt refinement
   by addressing specific failure modes through systematic analysis.
 og:site_name: Opik Documentation
-og:title: Hierarchical Reflective Optimization - Opik
+og:title: HRPO (Hierarchical Reflective Prompt Optimizer) - Opik
 subtitle: Hierarchical root cause analysis for targeted prompt improvement
-title: Hierarchical Reflective Optimizer
+title: HRPO (Hierarchical Reflective Prompt Optimizer)
 ---
 
-The `HierarchicalReflectiveOptimizer` uses hierarchical root cause analysis to identify and address
+`HRPO` (Hierarchical Reflective Prompt Optimizer) uses hierarchical root cause analysis to identify and address
 specific failure modes in your prompts. It analyzes evaluation results, identifies patterns in
 failures, and generates targeted improvements to address each failure mode systematically.
 
 <Note>
-  `HierarchicalReflectiveOptimizer` is ideal when you have a complex prompt that you want to refine
+  `HRPO` is ideal when you have a complex prompt that you want to refine
   based on understanding *why* it's failing. Unlike optimizers that generate many random variations,
   this optimizer systematically analyzes failures, identifies root causes, and makes surgical
   improvements to address each specific issue.
@@ -23,7 +23,7 @@ failures, and generates targeted improvements to address each failure mode syste
 
 ## How It Works
 
-The Hierarchical Reflective Optimizer has been developed by the Opik team to improve prompts that
+HRPO (Hierarchical Reflective Prompt Optimizer) has been developed by the Opik team to improve prompts that
 might have already gone through a few rounds of manual prompt engineering. It focuses on identifying
 why a prompt is failing and then updating the prompts to address the issues.
 
@@ -31,7 +31,7 @@ As datasets can be large, we split the analysis into batches and analyze them in
 synthesize the findings across all batches to identify the core issues with the prompt.
 
 <Frame>
-  <img src="/img/agent_optimization/hierarchical_reflective_optimizer.png" alt="Hierarchical Reflective Optimizer" />
+  <img src="/img/agent_optimization/hierarchical_reflective_optimizer.png" alt="HRPO (Hierarchical Reflective Prompt Optimizer)" />
 </Frame>
 
 <Tip>
@@ -41,10 +41,10 @@ The optimizer is open-source, you can check out the root cause analysis code and
 
 ## Quickstart
 
-You can use the `HierarchicalReflectiveOptimizer` to optimize a prompt:
+You can use `HRPO` to optimize a prompt:
 
 ```python maxLines=1000
-from opik_optimizer import HierarchicalReflectiveOptimizer, ChatPrompt, datasets
+from opik_optimizer import HRPO, ChatPrompt, datasets
 from opik.evaluation.metrics.score_result import ScoreResult
 
 # 1. Define your evaluation dataset
@@ -85,8 +85,8 @@ initial_prompt = ChatPrompt(
     ]
 )
 
-# 4. Initialize the HierarchicalReflectiveOptimizer
-optimizer = HierarchicalReflectiveOptimizer(
+# 4. Initialize HRPO
+optimizer = HRPO(
     model="gpt-4o",
     n_threads=8,
     max_parallel_batches=5,
@@ -143,8 +143,8 @@ The `optimize_prompt` method has the following parameters:
 
 ### Model Support
 
-There are two models to consider when using the `HierarchicalReflectiveOptimizer`:
-- `HierarchicalReflectiveOptimizer.model`: The model used for the root cause analysis and failure mode synthesis.
+There are two models to consider when using `HRPO`:
+- `HRPO.model`: The model used for the root cause analysis and failure mode synthesis.
 - `ChatPrompt.model`: The model used to evaluate the prompt.
 
 The `model` parameter accepts any LiteLLM-supported model string (e.g., `"gpt-4o"`, `"azure/gpt-4"`,
@@ -152,7 +152,7 @@ The `model` parameter accepts any LiteLLM-supported model string (e.g., `"gpt-4o
 using the `model_parameters` parameter:
 
 ```python
-optimizer = HierarchicalReflectiveOptimizer(
+optimizer = HRPO(
     model="anthropic/claude-3-opus-20240229",
     model_parameters={
         "temperature": 0.7,
