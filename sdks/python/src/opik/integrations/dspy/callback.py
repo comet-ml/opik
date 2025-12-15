@@ -4,12 +4,13 @@ import logging
 import dspy
 from dspy.utils import callback as dspy_callback
 
-from opik import context_storage, opik_context, tracing_runtime_config, types
+from opik import context_storage, opik_context, tracing_runtime_config
+from opik import llm_usage
 from opik.api_objects import helpers, span, trace, opik_client
 from opik.decorator import error_info_collector
-from opik import llm_usage
 
 from .graph import build_mermaid_graph_from_module
+from .parsers import LMHistoryInfo, extract_lm_info_from_history, get_span_type
 
 LOGGER = logging.getLogger(__name__)
 
@@ -106,7 +107,7 @@ class OpikCallback(dspy_callback.BaseCallback):
             parent_project_name=current_span_data.project_name,
             child_project_name=self._project_name,
         )
-        span_type = self._get_span_type(instance)
+        span_type = get_span_type(instance)
 
         span_data = span.SpanData(
             trace_id=current_span_data.trace_id,
@@ -130,7 +131,7 @@ class OpikCallback(dspy_callback.BaseCallback):
             current_trace_data.project_name,
             self._project_name,
         )
-        span_type = self._get_span_type(instance)
+        span_type = get_span_type(instance)
 
         span_data = span.SpanData(
             trace_id=current_trace_data.id,
@@ -203,17 +204,37 @@ class OpikCallback(dspy_callback.BaseCallback):
         exception: Optional[Exception] = None,
         usage: Optional[llm_usage.OpikUsage] = None,
         extra_metadata: Optional[Dict[str, Any]] = None,
+        actual_provider: Optional[str] = None,
+        total_cost: Optional[float] = None,
     ) -> None:
         if span_data := self._map_call_id_to_span_data.pop(call_id, None):
             if exception:
                 error_info = error_info_collector.collect(exception)
                 span_data.update(error_info=error_info)
 
-            span_data.update(
-                output={"output": outputs},
-                usage=usage,
-                metadata=extra_metadata,
-            ).init_end_time()
+            # Prepare the update dict
+            update_kwargs: Dict[str, Any] = {
+                "output": {"output": outputs},
+                "usage": usage,
+                "total_cost": total_cost,
+            }
+
+            # Handle LLM routers like OpenRouter that return the actual serving provider
+            if (
+                actual_provider is not None
+                and span_data.provider is not None
+                and span_data.provider.lower() != actual_provider.lower()
+            ):
+                # Store the original provider (e.g., "openrouter") in metadata
+                if extra_metadata is None:
+                    extra_metadata = {}
+                extra_metadata["llm_router"] = span_data.provider
+                # Update to the actual provider for accurate cost tracking
+                update_kwargs["provider"] = actual_provider
+
+            update_kwargs["metadata"] = extra_metadata
+
+            span_data.update(**update_kwargs).init_end_time()
             if tracing_runtime_config.is_tracing_active():
                 self._opik_client.span(**span_data.as_parameters)
 
@@ -240,7 +261,7 @@ class OpikCallback(dspy_callback.BaseCallback):
             trace_id = current_callback_context_data.id
             parent_span_id = None
 
-        span_type = self._get_span_type(instance)
+        span_type = get_span_type(instance)
 
         return span.SpanData(
             trace_id=trace_id,
@@ -287,17 +308,21 @@ class OpikCallback(dspy_callback.BaseCallback):
         outputs: Optional[Dict[str, Any]],
         exception: Optional[Exception] = None,
     ) -> None:
-        usage, cache_hit = self._extract_lm_info_from_history(call_id)
+        lm_info = self._extract_lm_info_from_history(call_id)
 
         # Add cache_hit to span metadata only when we have a definitive value
-        extra_metadata = {"cache_hit": cache_hit} if cache_hit is not None else None
+        extra_metadata = (
+            {"cache_hit": lm_info.cache_hit} if lm_info.cache_hit is not None else None
+        )
 
         self._end_span(
             call_id=call_id,
             exception=exception,
             outputs=outputs,
-            usage=usage,
+            usage=lm_info.usage,
             extra_metadata=extra_metadata,
+            actual_provider=lm_info.actual_provider,
+            total_cost=lm_info.total_cost,
         )
 
     def on_tool_start(
@@ -339,73 +364,32 @@ class OpikCallback(dspy_callback.BaseCallback):
             return span_data
         return self._context_storage.get_trace_data()
 
-    def _get_span_type(self, instance: Any) -> types.SpanType:
-        if isinstance(instance, dspy.Predict):
-            return "llm"
-        elif isinstance(instance, dspy.LM):
-            return "llm"
-        elif isinstance(instance, dspy.Tool):
-            return "tool"
-        return "general"
-
-    def _extract_lm_info_from_history(
-        self, call_id: str
-    ) -> Tuple[Optional[llm_usage.OpikUsage], Optional[bool]]:
+    def _extract_lm_info_from_history(self, call_id: str) -> LMHistoryInfo:
         """
-        Extract token usage and cache status from the LM's history.
+        Extract token usage, cache status, actual provider, and cost from the LM's history.
 
         DSPy stores usage information in the LM's history after each call.
         We verify the history entry matches our expected messages to handle
         potential race conditions with concurrent LM calls.
 
+        For routers like OpenRouter, the response contains the actual provider
+        that served the request (e.g., "Novita", "Together"), which differs from
+        the router name used in the model string (e.g., "openrouter").
+
+        The cost field is provided by providers like OpenRouter and includes
+        accurate pricing for all token types (reasoning, cache, multimodal).
+
         Returns:
-            Tuple of (usage, cache_hit) where:
-            - usage: OpikUsage object if available, None otherwise
-            - cache_hit: True if response was from cache, False if not, None if unknown
+            LMHistoryInfo containing usage, cache_hit, actual_provider, and total_cost.
         """
         lm_info = self._map_call_id_to_lm_info.pop(call_id, None)
         if lm_info is None:
-            return None, None
+            return LMHistoryInfo(
+                usage=None, cache_hit=None, actual_provider=None, total_cost=None
+            )
 
         lm_instance, expected_messages = lm_info
-
-        if not hasattr(lm_instance, "history") or not lm_instance.history:
-            return None, None
-
-        try:
-            last_entry = lm_instance.history[-1]
-
-            # Verify we have the correct history entry by checking messages match
-            if last_entry.get("messages") != expected_messages:
-                LOGGER.debug(
-                    "History entry messages don't match expected messages, "
-                    "skipping usage extraction (possibly due to concurrent LM calls)"
-                )
-                return None, None
-
-            response = last_entry.get("response")
-            usage_dict = last_entry.get("usage")
-
-            # Get explicit cache_hit if set, otherwise infer from usage (empty = cached)
-            if response is None:
-                cache_hit = not usage_dict
-            elif hasattr(response, "cache_hit") and response.cache_hit is not None:
-                cache_hit = response.cache_hit
-            else:
-                # Fallback: infer from usage (empty = cached)
-                cache_hit = not usage_dict
-
-            if usage_dict:
-                usage = llm_usage.build_opik_usage_from_unknown_provider(usage_dict)
-                return usage, cache_hit
-            else:
-                return None, cache_hit
-        except Exception:
-            LOGGER.debug(
-                "Failed to extract info from DSPy LM history",
-                exc_info=True,
-            )
-            return None, None
+        return extract_lm_info_from_history(lm_instance, expected_messages)
 
     def _get_opik_metadata(self, instance: Any) -> Dict[str, Any]:
         graph = None
