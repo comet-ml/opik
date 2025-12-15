@@ -321,7 +321,7 @@
         <dependency>
             <groupId>io.vavr</groupId>
             <artifactId>vavr</artifactId>
-            <version>0.10.7</version>
+            <version>0.11.0</version>
         </dependency>
 
         <!-- Test -->
