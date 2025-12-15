@@ -18,6 +18,7 @@ type PluginStore = {
   }> | null;
   InviteDevButton: React.ComponentType<InviteDevButtonProps> | null;
   SidebarInviteDevButton: React.ComponentType<SidebarInviteDevButtonProps> | null;
+  CollaboratorsTab: React.ComponentType | null;
   init: unknown;
   setupPlugins: (folderName: string) => Promise<void>;
 };
@@ -33,6 +34,7 @@ const PLUGIN_NAMES = [
   "RetentionBanner",
   "InviteDevButton",
   "SidebarInviteDevButton",
+  "CollaboratorsTab",
   "init",
 ];
 
@@ -46,6 +48,7 @@ const usePluginsStore = create<PluginStore>((set) => ({
   RetentionBanner: null,
   InviteDevButton: null,
   SidebarInviteDevButton: null,
+  CollaboratorsTab: null,
   init: null,
   setupPlugins: async (folderName: string) => {
     if (!VALID_PLUGIN_FOLDER_NAMES.includes(folderName)) {

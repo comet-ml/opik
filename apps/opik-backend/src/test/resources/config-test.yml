@@ -462,6 +462,9 @@ serviceToggles:
   # Default: true
   # Description: Whether or not Opik Built-in provider is enabled
   opikbuiltinProviderEnabled: "true"
+  # Default: false
+  # Description: Whether or not Collaborators tab feature is enabled
+  collaboratorsTabEnabled: "false"
 
 # Trace Thread configuration
 traceThreadConfig:
