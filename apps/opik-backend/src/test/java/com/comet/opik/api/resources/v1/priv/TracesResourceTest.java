@@ -27,6 +27,7 @@ import com.comet.opik.api.TraceThreadUpdate;
 import com.comet.opik.api.TraceUpdate;
 import com.comet.opik.api.Visibility;
 import com.comet.opik.api.VisibilityMode;
+import com.comet.opik.api.attachment.Attachment;
 import com.comet.opik.api.attachment.EntityType;
 import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.api.filter.Filter;
@@ -2054,7 +2055,7 @@ class TracesResourceTest {
 
             String originalInputJson = String.format(
                     "{\"message\": \"Images attached:\", " +
-                            "\"png_data\": \"%s\", " +
+                            "\"png_data\": \"image %s used for training\", " +
                             "\"gif_data\": \"%s\", " +
                             "\"user_id\": \"user123\", " +
                             "\"session_id\": \"session456\", " +
@@ -2119,7 +2120,7 @@ class TracesResourceTest {
 
             // Verify attachment names contain our references with context prefixes
             var attachmentNames = attachmentPage.content().stream()
-                    .map(attachment -> attachment.fileName())
+                    .map(Attachment::fileName)
                     .toList();
             // Verify attachment names contain our references with context prefixes (with timestamps)
             assertThat(attachmentNames).anyMatch(name -> name.matches("input-attachment-1-\\d+\\.png"));
@@ -2136,7 +2137,7 @@ class TracesResourceTest {
             String originalInputJson = String.format(
                     "{\"message\": \"Images attached:\", " +
                             "\"png_data\": \"%s\", " +
-                            "\"gif_data\": \"%s\"}",
+                            "\"gif_data\": \"image %s used for training\"}",
                     base64Png, base64Gif);
 
             var trace = factory.manufacturePojo(Trace.class).toBuilder()
@@ -2545,7 +2546,7 @@ class TracesResourceTest {
             // Create first trace with PNG in input and GIF in output
             String inputJson1 = String.format(
                     "{\"message\": \"First trace with PNG\", " +
-                            "\"image_data\": \"%s\", " +
+                            "\"image_data\": \"image %s used for training\", " +
                             "\"user_id\": \"user123\", " +
                             "\"request_type\": \"image_analysis\"}",
                     base64Png);
@@ -3526,7 +3527,7 @@ class TracesResourceTest {
 
             // Verify all initial attachments are JPEGs
             var initialAttachmentNames = initialAttachmentPage.content().stream()
-                    .map(attachment -> attachment.fileName())
+                    .map(Attachment::fileName)
                     .toList();
             assertThat(initialAttachmentNames).allSatisfy(name -> assertThat(name).contains(".jpg"));
 
@@ -3536,7 +3537,7 @@ class TracesResourceTest {
 
             String updatedInputJson = String.format(
                     "{\"message\": \"Updated trace with 2 PNG images\", " +
-                            "\"png_image1\": \"%s\", " +
+                            "\"png_image1\": \"image %s used for training\", " +
                             "\"png_image2\": \"%s\", " +
                             "\"user_id\": \"user123\", " +
                             "\"operation\": \"png_processing\"}",
@@ -3595,7 +3596,7 @@ class TracesResourceTest {
 
             // Verify all final attachments are PNGs
             var finalAttachmentNames = finalAttachmentPage.content().stream()
-                    .map(attachment -> attachment.fileName())
+                    .map(Attachment::fileName)
                     .toList();
             assertThat(finalAttachmentNames).allSatisfy(name -> assertThat(name).contains(".png"));
 
