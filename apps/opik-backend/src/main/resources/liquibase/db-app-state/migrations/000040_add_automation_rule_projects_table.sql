@@ -12,8 +12,7 @@ CREATE TABLE IF NOT EXISTS automation_rule_projects (
     
     CONSTRAINT `automation_rule_projects_pk` PRIMARY KEY (rule_id, project_id),
     INDEX `automation_rule_projects_workspace_idx` (workspace_id),
-    INDEX `automation_rule_projects_project_idx` (project_id),
-    INDEX `automation_rule_projects_rule_idx` (rule_id)
+    INDEX `automation_rule_projects_project_idx` (project_id)
 );
 
 -- Make project_id nullable since we're no longer writing to it (single source of truth is junction table)
@@ -25,6 +24,8 @@ ALTER TABLE automation_rules MODIFY COLUMN project_id CHAR(36) DEFAULT NULL;
 -- New rules will have project_id = NULL and use junction table exclusively
 -- The Service layer will populate projectId from projectIds for backward compatibility
 
---rollback ALTER TABLE automation_rules MODIFY COLUMN project_id CHAR(36) NOT NULL;
---rollback DROP TABLE IF EXISTS automation_rule_projects;
-
+-- Rollback: This is a one-way migration. Rolling back would:
+-- 1. Fail if any rules have project_id = NULL (new rules created after migration)
+-- 2. Cause data loss by dropping automation_rule_projects table
+-- Therefore, rollback is explicitly marked as empty (non-rollbackable)
+--rollback empty

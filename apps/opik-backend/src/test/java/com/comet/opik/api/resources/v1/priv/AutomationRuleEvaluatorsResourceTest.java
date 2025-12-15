@@ -1579,8 +1579,6 @@ class AutomationRuleEvaluatorsResourceTest {
                 var actualAutomationRuleEvaluator = actualAutomationRuleEvaluators.get(i);
                 var expectedAutomationRuleEvaluator = expectedAutomationRuleEvaluators.get(i);
                 assertIgnoredFields(actualAutomationRuleEvaluator, expectedAutomationRuleEvaluator);
-                //                 assertThat(actualAutomationRuleEvaluator.getProjectName()) // projectName removed
-                //                         .isEqualTo(expectedAutomationRuleEvaluator.getProjectName()); // projectName removed
             }
 
             assertThat(actualAutomationRuleEvaluators)
@@ -2023,7 +2021,6 @@ class AutomationRuleEvaluatorsResourceTest {
                     .filter(e -> e.getId().equals(id1))
                     .toList();
             assertThat(matchingEvaluators).hasSize(1);
-            //             assertThat(matchingEvaluators.get(0).getProjectName()).satisfies(matchPredicate::test); // projectName removed
             assertThat(matchingEvaluators.get(0).getProjectIds()).isEqualTo(projectId1);
         }
 

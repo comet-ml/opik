@@ -169,7 +169,10 @@ public class AutomationRuleEvaluatorsResource {
         var workspaceId = requestContext.get().getWorkspaceId();
         var userName = requestContext.get().getUserName();
 
-        var projectIds = evaluatorUpdate.getProjectIds();
+        Set<UUID> projectIds = Optional.ofNullable(evaluatorUpdate.getProjectIds())
+                .orElseGet(() -> Optional.ofNullable(evaluatorUpdate.getProjectId())
+                        .map(Set::of)
+                        .orElse(Set.of()));
         log.info("Updating automation rule evaluator by id '{}' and project_ids '{}' on workspace_id '{}'", id,
                 projectIds, workspaceId);
         service.update(id, projectIds, workspaceId, userName, evaluatorUpdate);

@@ -57,11 +57,11 @@ public interface AutomationRuleEvaluatorDAO extends AutomationRuleDAO {
             JOIN automation_rule_evaluators evaluator ON rule.id = evaluator.id
             WHERE rule.workspace_id = :workspaceId AND rule.action = :action
             <if(projectIds)>
-            AND rule.id IN (
+            AND (rule.project_id IN (<projectIds>) OR rule.id IN (
                 SELECT DISTINCT rule_id
                 FROM automation_rule_projects
                 WHERE workspace_id = :workspaceId AND project_id IN (<projectIds>)
-            )
+            ))
             <endif>
             <if(type)> AND evaluator.type = :type <endif>
             <if(ids)> AND rule.id IN (<ids>) <endif>
@@ -189,7 +189,7 @@ public interface AutomationRuleEvaluatorDAO extends AutomationRuleDAO {
               ON rule.id = arp.rule_id AND rule.workspace_id = arp.workspace_id
             <endif>
             WHERE rule.workspace_id = :workspaceId AND rule.action = :action
-            <if(projectIds)> AND arp.project_id IN (<projectIds>) <endif>
+            <if(projectIds)> AND (rule.project_id IN (<projectIds>) OR arp.project_id IN (<projectIds>)) <endif>
             <if(type)> AND evaluator.type = :type <endif>
             <if(ids)> AND rule.id IN (<ids>) <endif>
             <if(id)> AND rule.id like concat('%', :id, '%') <endif>
