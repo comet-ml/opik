@@ -1,21 +1,23 @@
-<div align="center"><b><a href="README.md">English</a> | <a href="readme_CN.md">简体中文</a> | <a href="readme_JP.md">日本語</a> | <a href="readme_PT_BR.md">Português (Brasil)</a> | <a href="readme_KO.md">한국어</a></b></div>
+<h4 align="center">
+  <p>
+    <a href="README.md">English</a> | 
+    <a href="readme_CN.md">简体中文</a> | 
+    <a href="readme_JP.md">日本語</a> | 
+    <a href="readme_PT_BR.md">Português (Brasil)</a> | 
+    <a href="readme_KO.md">한국어</a>
+  </p>
+</h4>
 
-
-<h1 align="center" style="border-bottom: none">
-    <div>
-        <a href="https://www.comet.com/site/products/opik/?from=llm&utm_source=opik&utm_medium=github&utm_content=header_img&utm_campaign=opik"><picture>
-            <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/comet-ml/opik/refs/heads/main/apps/opik-documentation/documentation/static/img/logo-dark-mode.svg">
-            <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/comet-ml/opik/refs/heads/main/apps/opik-documentation/documentation/static/img/opik-logo.svg">
-            <img alt="Comet Opik logo" src="https://raw.githubusercontent.com/comet-ml/opik/refs/heads/main/apps/opik-documentation/documentation/static/img/opik-logo.svg" width="200" />
-        </picture></a>
-        <br>
-        Opik
-    </div>
-</h1>
-<h2 align="center" style="border-bottom: none">Open-source AI Observability, Evaluation, and Optimization</h2>
 <p align="center">
-Opik helps you build, test, and optimize generative AI application that run better, from prototype to production.  From RAG chatbots to code assistants to complex agentic systems, Opik provides comprehensive tracing, evaluation, and automatic prompt and tool optimization to take the guesswork out of AI development.
+ <a href="https://www.comet.com/site/products/opik/?from=llm&utm_source=opik&utm_medium=github&utm_content=header_img&utm_campaign=opik">
+ <picture>
+      <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/comet-ml/opik/refs/heads/main/apps/opik-documentation/documentation/static/img/logo-dark-mode.svg">
+      <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/comet-ml/opik/refs/heads/main/apps/opik-documentation/documentation/static/img/opik-logo.svg">
+      <img alt="Comet Opik logo" src="https://raw.githubusercontent.com/comet-ml/opik/refs/heads/main/apps/opik-documentation/documentation/static/img/opik-logo.svg" width="200" /></a>
+  </picture>
+  <br/>
 </p>
+
 
 <div align="center">
 
@@ -28,20 +30,20 @@ Opik helps you build, test, and optimize generative AI application that run bett
 
 </div>
 
+<h2 align="center">
+    <p>The Open-Source Platform for GenAI Observability and Optimization</p>
+</h2>
+<p align="center">
+Opik provides tracing, evals, and automatic improvements to help you build and maintain reliable GenAI applications. Use it to log each step of your application, run comprehensive evaluations, and auto-optimize your prompts and tools.
+</p>
 <p align="center">
     <a href="https://www.comet.com/site/products/opik/?from=llm&utm_source=opik&utm_medium=github&utm_content=website_button&utm_campaign=opik"><b>Website</b></a> •
     <a href="https://chat.comet.com"><b>Slack Community</b></a> •
     <a href="https://x.com/Cometml"><b>Twitter</b></a> •
     <a href="https://www.comet.com/docs/opik/changelog"><b>Changelog</b></a> •
-    <a href="https://www.comet.com/docs/opik/?from=llm&utm_source=opik&utm_medium=github&utm_content=docs_button&utm_campaign=opik"><b>Documentation</b></a>
+    <a href="https://www.comet.com/docs/opik/?from=llm&utm_source=opik&utm_medium=github&utm_content=docs_button&utm_campaign=opik"><b>Documentation</b></a> •
+    <a href="https://www.comet.com/docs/opik/agent_optimization/overview"><b>Agent Optimizer</b></a>
 </p>
-
-<div align="center" style="margin-top: 1em; margin-bottom: 1em;">
-<a href="#-what-is-opik">🚀 What is Opik?</a> • <a href="#%EF%B8%8F-opik-server-installation">🛠️ Opik Server Installation</a> • <a href="#-opik-client-sdk">💻 Opik Client SDK</a> • <a href="#-logging-traces-with-integrations">📝 Logging Traces</a><br>
-<a href="#-llm-as-a-judge-metrics">🧑‍⚖️ LLM as a Judge</a> • <a href="#-evaluating-your-llm-application">🔍 Evaluating your Application</a> • <a href="#-star-us-on-github">⭐ Star Us</a> • <a href="#-contributing">🤝 Contributing</a>
-</div>
-
-<br>
 
 [![Opik platform screenshot (thumbnail)](readme-thumbnail-new.png)](https://www.comet.com/signup?from=llm&utm_source=opik&utm_medium=github&utm_content=readme_banner&utm_campaign=opik)
 
