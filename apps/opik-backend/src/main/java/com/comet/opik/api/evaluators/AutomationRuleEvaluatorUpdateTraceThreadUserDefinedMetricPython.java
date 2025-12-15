@@ -13,6 +13,7 @@ import lombok.experimental.SuperBuilder;
 
 import java.beans.ConstructorProperties;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 import static com.comet.opik.api.evaluators.AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython.TraceThreadUserDefinedMetricPythonCode;
@@ -26,12 +27,13 @@ public final class AutomationRuleEvaluatorUpdateTraceThreadUserDefinedMetricPyth
         extends
             AutomationRuleEvaluatorUpdate<TraceThreadUserDefinedMetricPythonCode, TraceThreadFilter> {
 
-    @ConstructorProperties({"name", "samplingRate", "enabled", "filters", "code", "projectId"})
+    @ConstructorProperties({"name", "samplingRate", "enabled", "filters", "code", "projectId", "projectIds"})
     public AutomationRuleEvaluatorUpdateTraceThreadUserDefinedMetricPython(
             @NotBlank String name, float samplingRate, boolean enabled, List<TraceThreadFilter> filters,
             @NotNull TraceThreadUserDefinedMetricPythonCode code,
-            @NotNull UUID projectId) {
-        super(name, samplingRate, enabled, filters, code, projectId);
+            UUID projectId,
+            Set<UUID> projectIds) {
+        super(name, samplingRate, enabled, filters, code, projectId, projectIds);
     }
 
     /**

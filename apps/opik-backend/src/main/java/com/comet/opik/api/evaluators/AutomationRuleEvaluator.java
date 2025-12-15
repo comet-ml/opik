@@ -13,14 +13,15 @@ import io.swagger.v3.oas.annotations.media.DiscriminatorMapping;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
-import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
+import lombok.RequiredArgsConstructor;
 import lombok.experimental.SuperBuilder;
 import lombok.experimental.UtilityClass;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.SortedSet;
 import java.util.UUID;
 
 @Data
@@ -42,7 +43,7 @@ import java.util.UUID;
         @DiscriminatorMapping(value = AutomationRuleEvaluatorType.Constants.SPAN_LLM_AS_JUDGE, schema = AutomationRuleEvaluatorSpanLlmAsJudge.class),
         @DiscriminatorMapping(value = AutomationRuleEvaluatorType.Constants.SPAN_USER_DEFINED_METRIC_PYTHON, schema = AutomationRuleEvaluatorSpanUserDefinedMetricPython.class),
 })
-@AllArgsConstructor
+@RequiredArgsConstructor
 @JsonIgnoreProperties(ignoreUnknown = true)
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
 public abstract sealed class AutomationRuleEvaluator<T, E extends Filter> implements AutomationRule
@@ -55,11 +56,16 @@ public abstract sealed class AutomationRuleEvaluator<T, E extends Filter> implem
     private final UUID id;
 
     @JsonView({View.Public.class, View.Write.class})
-    @NotNull private final UUID projectId;
+    @Schema(description = "Primary project ID (legacy field for backwards compatibility)")
+    private final UUID projectId;
 
     @JsonView({View.Public.class})
-    @Schema(accessMode = Schema.AccessMode.READ_ONLY)
+    @Schema(description = "Primary project name (legacy field for backwards compatibility)", accessMode = Schema.AccessMode.READ_ONLY)
     private final String projectName;
+
+    @JsonView({View.Public.class, View.Write.class})
+    @Schema(description = "Projects assigned to this rule (unique, sorted alphabetically by name)")
+    private final SortedSet<ProjectReference> projects;
 
     @JsonView({View.Public.class, View.Write.class})
     @NotBlank private final String name;

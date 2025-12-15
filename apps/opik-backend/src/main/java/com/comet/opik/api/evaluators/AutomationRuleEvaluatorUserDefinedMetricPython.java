@@ -9,20 +9,21 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
 import lombok.Builder;
-import lombok.Data;
 import lombok.EqualsAndHashCode;
+import lombok.Getter;
 import lombok.experimental.SuperBuilder;
 
 import java.beans.ConstructorProperties;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.util.SortedSet;
 import java.util.UUID;
 
 import static com.comet.opik.api.evaluators.AutomationRuleEvaluatorUserDefinedMetricPython.UserDefinedMetricPythonCode;
 
 @SuperBuilder(toBuilder = true)
-@Data
+@Getter
 @EqualsAndHashCode(callSuper = true)
 @JsonIgnoreProperties(ignoreUnknown = true)
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
@@ -39,16 +40,19 @@ public final class AutomationRuleEvaluatorUserDefinedMetricPython
             @JsonView({View.Public.class, View.Write.class}) @NotEmpty Map<String, String> arguments){
     }
 
-    @ConstructorProperties({"id", "projectId", "projectName", "name", "samplingRate", "enabled", "filters", "code",
+    @ConstructorProperties({"id", "projectId", "projectName", "projects", "name", "samplingRate",
+            "enabled", "filters", "code",
             "createdAt",
             "createdBy",
             "lastUpdatedAt", "lastUpdatedBy"})
-    public AutomationRuleEvaluatorUserDefinedMetricPython(UUID id, @NotNull UUID projectId, String projectName,
+    public AutomationRuleEvaluatorUserDefinedMetricPython(UUID id, UUID projectId, String projectName,
+            SortedSet<ProjectReference> projects,
             @NotBlank String name, float samplingRate, boolean enabled, List<TraceFilter> filters,
             @NotNull UserDefinedMetricPythonCode code,
             Instant createdAt,
             String createdBy, Instant lastUpdatedAt, String lastUpdatedBy) {
-        super(id, projectId, projectName, name, samplingRate, enabled, filters, code, createdAt, createdBy,
+        super(id, projectId, projectName, projects, name, samplingRate, enabled, filters, code,
+                createdAt, createdBy,
                 lastUpdatedAt, lastUpdatedBy);
     }
 
