@@ -28,4 +28,19 @@ public class AutomationRuleEvaluatorTestUtils {
                 .map(id -> new ProjectReference(id, "project-" + id))
                 .collect(Collectors.toCollection(TreeSet::new));
     }
+
+    /**
+     * Helper method to get the primary (alphabetically first) project ID from a set of projects.
+     * This matches the backend behavior where the legacy projectId field is set to the first
+     * project in the alphabetically sorted set.
+     *
+     * @param projects SortedSet of ProjectReference objects
+     * @return The project ID of the alphabetically first project, or null if the set is empty
+     */
+    public static UUID getPrimaryProjectId(SortedSet<ProjectReference> projects) {
+        return projects.stream()
+                .map(ProjectReference::projectId)
+                .findFirst()
+                .orElse(null);
+    }
 }

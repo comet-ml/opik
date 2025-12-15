@@ -104,6 +104,7 @@ import java.util.stream.Stream;
 
 import static com.comet.opik.api.LogItem.LogLevel;
 import static com.comet.opik.api.LogItem.LogPage;
+import static com.comet.opik.api.resources.utils.AutomationRuleEvaluatorTestUtils.getPrimaryProjectId;
 import static com.comet.opik.api.resources.utils.AutomationRuleEvaluatorTestUtils.toProjects;
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.CustomConfig;
@@ -667,9 +668,8 @@ class AutomationRuleEvaluatorsResourceTest {
         @MethodSource
         void createAndGet(AutomationRuleEvaluator<?, ?> automationRuleEvaluator, boolean withProjectId) {
             var id = evaluatorsResourceClient.createEvaluator(automationRuleEvaluator, WORKSPACE_NAME, API_KEY);
-            // Set projectId (singular, legacy field) to first element from projectIds for backward compatibility
-            var primaryProjectId = automationRuleEvaluator.getProjects().stream().map(ProjectReference::projectId)
-                    .collect(Collectors.toSet()).stream().findFirst().orElse(null);
+            // Set projectId (singular, legacy field) to alphabetically-first project for backward compatibility
+            var primaryProjectId = getPrimaryProjectId(automationRuleEvaluator.getProjects());
             var expectedAutomationRuleEvaluator = automationRuleEvaluator.toBuilder()
                     .id(id)
                     .projectId(primaryProjectId)
@@ -725,9 +725,10 @@ class AutomationRuleEvaluatorsResourceTest {
                             .build())
                     .map(evaluator -> {
                         var id = evaluatorsResourceClient.createEvaluator(evaluator, WORKSPACE_NAME, API_KEY);
+                        var primaryProjectId = getPrimaryProjectId(evaluator.getProjects());
                         return (AutomationRuleEvaluator<?, ?>) evaluator.toBuilder()
                                 .id(id)
-                                .projectId(projectId) // Set legacy projectId field for backward compatibility
+                                .projectId(primaryProjectId) // Set legacy projectId to alphabetically-first project
                                 .createdBy(USER)
                                 .lastUpdatedBy(USER)
                                 .build();
@@ -740,9 +741,10 @@ class AutomationRuleEvaluatorsResourceTest {
                             .build())
                     .map(evaluator -> {
                         var id = evaluatorsResourceClient.createEvaluator(evaluator, WORKSPACE_NAME, API_KEY);
+                        var primaryProjectId = getPrimaryProjectId(evaluator.getProjects());
                         return (AutomationRuleEvaluator<?, ?>) evaluator.toBuilder()
                                 .id(id)
-                                .projectId(unexpectedProjectId) // Set legacy projectId field for backward compatibility
+                                .projectId(primaryProjectId) // Set legacy projectId to alphabetically-first project
                                 .createdBy(USER)
                                 .lastUpdatedBy(USER)
                                 .build();
@@ -793,9 +795,10 @@ class AutomationRuleEvaluatorsResourceTest {
                             .build())
                     .map(evaluator -> {
                         var id = evaluatorsResourceClient.createEvaluator(evaluator, WORKSPACE_NAME, API_KEY);
+                        var primaryProjectId = getPrimaryProjectId(evaluator.getProjects());
                         return (AutomationRuleEvaluator<?, ?>) evaluator.toBuilder()
                                 .id(id)
-                                .projectId(projectId) // Set legacy projectId field for backward compatibility
+                                .projectId(primaryProjectId) // Set legacy projectId to alphabetically-first project
                                 .createdBy(USER)
                                 .lastUpdatedBy(USER)
                                 .build();
@@ -865,9 +868,10 @@ class AutomationRuleEvaluatorsResourceTest {
             }
 
             // Build expected result from the evaluator with correct projectIds and projectId
+            var primaryProjectId = getPrimaryProjectId(evaluatorWithProject.getProjects());
             var expectedAutomationRuleEvaluator = evaluatorWithProject.toBuilder()
                     .id(id)
-                    .projectId(projectId) // Set legacy projectId field for backward compatibility
+                    .projectId(primaryProjectId) // Set legacy projectId to alphabetically-first project
                     .createdBy(USER)
                     .lastUpdatedBy(USER)
                     .name(updatedEvaluator.getName())
