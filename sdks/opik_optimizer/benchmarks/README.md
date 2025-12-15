@@ -185,7 +185,7 @@ All parameters work for both local and Modal execution:
 - `few_shot` - Few-shot Bayesian optimizer
 - `meta_prompt` - Meta-prompt optimizer
 - `evolutionary_optimizer` - Evolutionary optimizer
-- `hierarchical_reflective` - Hierarchical reflective optimizer
+- `hierarchical_reflective` - Hierarchical Reflective Prompt Optimizer (HRPO)
 
 ## Examples
 
