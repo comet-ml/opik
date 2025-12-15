@@ -17,7 +17,7 @@ CREATE TABLE IF NOT EXISTS automation_rule_projects (
 
 -- Make project_id nullable since we're no longer writing to it (single source of truth is junction table)
 -- Existing legacy data will keep their project_id values, new rules will have NULL
-ALTER TABLE automation_rules MODIFY COLUMN project_id CHAR(36) DEFAULT NULL;
+ALTER TABLE automation_rules MODIFY COLUMN project_id CHAR(36) NULL DEFAULT NULL;
 
 -- Note: No data migration performed - using lazy migration strategy
 -- Existing rules will continue having their project_id field populated (legacy data)
