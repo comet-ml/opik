@@ -145,14 +145,15 @@ public class AutomationRuleEvaluatorsResource {
         String workspaceId = requestContext.get().getWorkspaceId();
         String userName = requestContext.get().getUserName();
 
-        // Extract project IDs from projects field (or fall back to legacy projectId)
-        Set<UUID> projectIds = Optional.ofNullable(evaluator.getProjects())
-                .map(projects -> projects.stream()
-                        .map(ProjectReference::projectId)
-                        .collect(Collectors.toSet()))
-                .orElseGet(() -> Optional.ofNullable(evaluator.getProjectId())
-                        .map(Set::of)
-                        .orElse(Set.of()));
+        // Extract project IDs: prioritize projectIds field, then projects field, then fall back to legacy projectId
+        Set<UUID> projectIds = Optional.ofNullable(evaluator.getProjectIds())
+                .orElseGet(() -> Optional.ofNullable(evaluator.getProjects())
+                        .map(projects -> projects.stream()
+                                .map(ProjectReference::projectId)
+                                .collect(Collectors.toSet()))
+                        .orElseGet(() -> Optional.ofNullable(evaluator.getProjectId())
+                                .map(Set::of)
+                                .orElse(Set.of())));
         log.info("Creating {} evaluator for '{}' projects on workspace_id '{}'", evaluator.getType(),
                 projectIds.size(), workspaceId);
         AutomationRuleEvaluator<?, ?> savedEvaluator = service.save(evaluator, projectIds, workspaceId, userName);
