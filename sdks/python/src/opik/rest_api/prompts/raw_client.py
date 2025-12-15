@@ -19,6 +19,7 @@ from ..types.prompt_detail import PromptDetail
 from ..types.prompt_page_public import PromptPagePublic
 from ..types.prompt_version_detail import PromptVersionDetail
 from ..types.prompt_version_page_public import PromptVersionPagePublic
+from ..types.prompt_version_update import PromptVersionUpdate
 from .types.create_prompt_version_detail_template_structure import CreatePromptVersionDetailTemplateStructure
 from .types.prompt_write_template_structure import PromptWriteTemplateStructure
 from .types.prompt_write_type import PromptWriteType
@@ -275,6 +276,80 @@ class RawPromptsClient:
                 )
             if _response.status_code == 422:
                 raise UnprocessableEntityError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
+        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+
+    def update_prompt_versions(
+        self,
+        *,
+        ids: typing.Sequence[str],
+        update: PromptVersionUpdate,
+        merge_tags: typing.Optional[bool] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> HttpResponse[None]:
+        """
+        Update one or more prompt versions.
+
+        Note: Prompt versions are immutable by design.
+        Only organizational properties, such as tags etc., can be updated.
+        Core properties like template and metadata cannot be modified after creation.
+
+        PATCH semantics:
+        - non-empty values update the field
+        - null values preserve existing field values (no change)
+        - empty values explicitly clear the field
+
+        Parameters
+        ----------
+        ids : typing.Sequence[str]
+            IDs of prompt versions to update
+
+        update : PromptVersionUpdate
+
+        merge_tags : typing.Optional[bool]
+            Tag merge behavior:
+            - true: Add new tags to existing tags (union)
+            - false: Replace all existing tags with new tags (default behaviour if not provided)
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        HttpResponse[None]
+        """
+        _response = self._client_wrapper.httpx_client.request(
+            "v1/private/prompts/versions",
+            method="PATCH",
+            json={
+                "ids": ids,
+                "update": convert_and_respect_annotation_metadata(
+                    object_=update, annotation=PromptVersionUpdate, direction="write"
+                ),
+                "merge_tags": merge_tags,
+            },
+            headers={
+                "content-type": "application/json",
+            },
+            request_options=request_options,
+            omit=OMIT,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                return HttpResponse(response=_response, data=None)
+            if _response.status_code == 400:
+                raise BadRequestError(
                     headers=dict(_response.headers),
                     body=typing.cast(
                         typing.Optional[typing.Any],
@@ -553,6 +628,9 @@ class RawPromptsClient:
         *,
         page: typing.Optional[int] = None,
         size: typing.Optional[int] = None,
+        search: typing.Optional[str] = None,
+        sorting: typing.Optional[str] = None,
+        filters: typing.Optional[str] = None,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> HttpResponse[PromptVersionPagePublic]:
         """
@@ -565,6 +643,13 @@ class RawPromptsClient:
         page : typing.Optional[int]
 
         size : typing.Optional[int]
+
+        search : typing.Optional[str]
+            Search text to find in template or change description fields
+
+        sorting : typing.Optional[str]
+
+        filters : typing.Optional[str]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -580,6 +665,9 @@ class RawPromptsClient:
             params={
                 "page": page,
                 "size": size,
+                "search": search,
+                "sorting": sorting,
+                "filters": filters,
             },
             request_options=request_options,
         )
@@ -1004,6 +1092,80 @@ class AsyncRawPromptsClient:
             raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
         raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
 
+    async def update_prompt_versions(
+        self,
+        *,
+        ids: typing.Sequence[str],
+        update: PromptVersionUpdate,
+        merge_tags: typing.Optional[bool] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> AsyncHttpResponse[None]:
+        """
+        Update one or more prompt versions.
+
+        Note: Prompt versions are immutable by design.
+        Only organizational properties, such as tags etc., can be updated.
+        Core properties like template and metadata cannot be modified after creation.
+
+        PATCH semantics:
+        - non-empty values update the field
+        - null values preserve existing field values (no change)
+        - empty values explicitly clear the field
+
+        Parameters
+        ----------
+        ids : typing.Sequence[str]
+            IDs of prompt versions to update
+
+        update : PromptVersionUpdate
+
+        merge_tags : typing.Optional[bool]
+            Tag merge behavior:
+            - true: Add new tags to existing tags (union)
+            - false: Replace all existing tags with new tags (default behaviour if not provided)
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        AsyncHttpResponse[None]
+        """
+        _response = await self._client_wrapper.httpx_client.request(
+            "v1/private/prompts/versions",
+            method="PATCH",
+            json={
+                "ids": ids,
+                "update": convert_and_respect_annotation_metadata(
+                    object_=update, annotation=PromptVersionUpdate, direction="write"
+                ),
+                "merge_tags": merge_tags,
+            },
+            headers={
+                "content-type": "application/json",
+            },
+            request_options=request_options,
+            omit=OMIT,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                return AsyncHttpResponse(response=_response, data=None)
+            if _response.status_code == 400:
+                raise BadRequestError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
+        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+
     async def get_prompt_by_id(
         self, id: str, *, request_options: typing.Optional[RequestOptions] = None
     ) -> AsyncHttpResponse[PromptDetail]:
@@ -1270,6 +1432,9 @@ class AsyncRawPromptsClient:
         *,
         page: typing.Optional[int] = None,
         size: typing.Optional[int] = None,
+        search: typing.Optional[str] = None,
+        sorting: typing.Optional[str] = None,
+        filters: typing.Optional[str] = None,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> AsyncHttpResponse[PromptVersionPagePublic]:
         """
@@ -1282,6 +1447,13 @@ class AsyncRawPromptsClient:
         page : typing.Optional[int]
 
         size : typing.Optional[int]
+
+        search : typing.Optional[str]
+            Search text to find in template or change description fields
+
+        sorting : typing.Optional[str]
+
+        filters : typing.Optional[str]
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -1297,6 +1469,9 @@ class AsyncRawPromptsClient:
             params={
                 "page": page,
                 "size": size,
+                "search": search,
+                "sorting": sorting,
+                "filters": filters,
             },
             request_options=request_options,
         )
