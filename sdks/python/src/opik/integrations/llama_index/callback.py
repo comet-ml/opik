@@ -73,6 +73,15 @@ class LlamaIndexCallbackHandler(base_handler.BaseCallbackHandler):
             str, Union[span.SpanData, trace.TraceData]
         ] = {}
 
+    def _send_root_to_backend(
+        self, root: Union[span.SpanData, trace.TraceData]
+    ) -> None:
+        """Send root trace or span data to the backend."""
+        if isinstance(root, span.SpanData):
+            self._opik_client.span(**root.as_parameters)
+        elif isinstance(root, trace.TraceData):
+            self._opik_client.trace(**root.as_parameters)
+
     def start_trace(self, trace_id: Optional[str] = None) -> None:
         if (
             self._skip_index_construction_trace
@@ -126,10 +135,7 @@ class LlamaIndexCallbackHandler(base_handler.BaseCallbackHandler):
             root.init_end_time().update(output=last_event_output)
 
             # Send the trace/span with output
-            if isinstance(root, span.SpanData):
-                self._opik_client.span(**root.as_parameters)
-            elif isinstance(root, trace.TraceData):
-                self._opik_client.trace(**root.as_parameters)
+            self._send_root_to_backend(root)
         else:
             # Output not available yet (streaming scenario).
             # Store the root so we can update it when event_end is called.
@@ -242,10 +248,7 @@ class LlamaIndexCallbackHandler(base_handler.BaseCallbackHandler):
             root.init_end_time().update(output=span_output)
 
             # Send the trace/span to the backend with correct end_time and output
-            if isinstance(root, span.SpanData):
-                self._opik_client.span(**root.as_parameters)
-            elif isinstance(root, trace.TraceData):
-                self._opik_client.trace(**root.as_parameters)
+            self._send_root_to_backend(root)
 
         # Finalize span if it exists
         if event_id in self._map_event_id_to_span_data:
