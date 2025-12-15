@@ -18,7 +18,7 @@ import {
 } from "@/components/ui/dialog";
 import { Form } from "@/components/ui/form";
 import useDashboardCreateMutation from "@/api/dashboards/useDashboardCreateMutation";
-import { Dashboard, TEMPLATE_TYPE } from "@/types/dashboard";
+import { Dashboard, TEMPLATE_TYPE, TEMPLATE_SCOPE } from "@/types/dashboard";
 import useDashboardUpdateMutation from "@/api/dashboards/useDashboardUpdateMutation";
 import { useNavigate } from "@tanstack/react-router";
 import useAppStore from "@/store/AppStore";
@@ -37,6 +37,12 @@ enum DialogStep {
   DETAILS = "details",
 }
 
+const getTemplateScope = (templateType?: string): TEMPLATE_SCOPE | null => {
+  if (!templateType) return null;
+  const template = DASHBOARD_TEMPLATES[templateType as TEMPLATE_TYPE];
+  return template?.scope ?? null;
+};
+
 const DashboardFormSchema = z
   .object({
     name: z
@@ -50,16 +56,32 @@ const DashboardFormSchema = z
       .optional()
       .or(z.literal("")),
     projectId: z.string().optional(),
+    experimentIds: z.array(z.string()).optional(),
     templateType: z.string().optional(),
   })
   .refine(
     (data) => {
-      if (data.templateType) return !!data.projectId;
+      const scope = getTemplateScope(data.templateType);
+      if (scope === TEMPLATE_SCOPE.PROJECT) return !!data.projectId;
       return true;
     },
     {
-      message: "Project is required when using a template",
+      message: "Project is required when using a project template",
       path: ["projectId"],
+    },
+  )
+  .refine(
+    (data) => {
+      const scope = getTemplateScope(data.templateType);
+      if (scope === TEMPLATE_SCOPE.EXPERIMENTS) {
+        return data.experimentIds && data.experimentIds.length > 0;
+      }
+      return true;
+    },
+    {
+      message:
+        "At least one experiment is required when using an experiments template",
+      path: ["experimentIds"],
     },
   );
 
@@ -76,6 +98,7 @@ type AddEditCloneDashboardDialogProps = {
   onEditSuccess?: () => void;
   navigateOnCreate?: boolean;
   defaultProjectId?: string;
+  defaultExperimentIds?: string[];
 };
 
 const AddEditCloneDashboardDialog: React.FC<
@@ -89,6 +112,7 @@ const AddEditCloneDashboardDialog: React.FC<
   onEditSuccess,
   navigateOnCreate = true,
   defaultProjectId,
+  defaultExperimentIds,
 }) => {
   const navigate = useNavigate();
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
@@ -125,6 +149,7 @@ const AddEditCloneDashboardDialog: React.FC<
       name: getInitialName(),
       description: dashboard?.description || "",
       projectId: defaultProjectId,
+      experimentIds: defaultExperimentIds || [],
       templateType: undefined,
     },
   });
@@ -246,9 +271,14 @@ const AddEditCloneDashboardDialog: React.FC<
             const template =
               DASHBOARD_TEMPLATES[values.templateType as TEMPLATE_TYPE];
             dashboardConfig = regenerateAllIds(template.config);
-            dashboardConfig.config.projectIds = values.projectId
-              ? [values.projectId]
-              : [];
+
+            if (template.scope === TEMPLATE_SCOPE.PROJECT) {
+              dashboardConfig.config.projectIds = values.projectId
+                ? [values.projectId]
+                : [];
+            } else if (template.scope === TEMPLATE_SCOPE.EXPERIMENTS) {
+              dashboardConfig.config.experimentIds = values.experimentIds || [];
+            }
           } else {
             dashboardConfig = generateEmptyDashboard();
           }
@@ -256,6 +286,9 @@ const AddEditCloneDashboardDialog: React.FC<
           dashboardConfig = regenerateAllIds(dashboard!.config);
           if (defaultProjectId) {
             dashboardConfig.config.projectIds = [defaultProjectId];
+          }
+          if (defaultExperimentIds && defaultExperimentIds.length > 0) {
+            dashboardConfig.config.experimentIds = defaultExperimentIds;
           }
         }
 
@@ -286,6 +319,7 @@ const AddEditCloneDashboardDialog: React.FC<
       handleMutationError,
       createMutate,
       defaultProjectId,
+      defaultExperimentIds,
       onDashboardCreated,
     ],
   );
@@ -314,12 +348,18 @@ const AddEditCloneDashboardDialog: React.FC<
               >
                 <DashboardDialogDetailsStep
                   control={form.control}
-                  showProjectSelector={
+                  showProjectSelect={
                     isCreateMode &&
-                    !!form.watch("templateType") &&
-                    !defaultProjectId
+                    !defaultProjectId &&
+                    getTemplateScope(form.watch("templateType")) ===
+                      TEMPLATE_SCOPE.PROJECT
                   }
-                  defaultDescriptionOpen={true}
+                  showExperimentsSelect={
+                    isCreateMode &&
+                    !defaultExperimentIds &&
+                    getTemplateScope(form.watch("templateType")) ===
+                      TEMPLATE_SCOPE.EXPERIMENTS
+                  }
                   onSubmit={form.handleSubmit(onSubmit)}
                 />
               </form>

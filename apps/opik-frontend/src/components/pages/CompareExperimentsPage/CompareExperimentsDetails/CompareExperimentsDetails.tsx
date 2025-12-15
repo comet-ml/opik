@@ -16,6 +16,11 @@ import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 import ExperimentTag from "@/components/shared/ExperimentTag/ExperimentTag";
 import { RESOURCE_TYPE } from "@/components/shared/ResourceLink/ResourceLink";
 import { AggregatedFeedbackScore } from "@/types/shared";
+import ViewSelector, {
+  VIEW_TYPE,
+} from "@/components/pages-shared/dashboards/ViewSelector/ViewSelector";
+import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
+import { FeatureToggleKeys } from "@/types/feature-toggles";
 
 type ExperimentScoreTagsProps = {
   experiment: Experiment;
@@ -58,11 +63,13 @@ type CompareExperimentsDetailsProps = {
   experimentsIds: string[];
   experiments: Experiment[];
   isPending: boolean;
+  view: VIEW_TYPE;
+  onViewChange: (value: VIEW_TYPE) => void;
 };
 
 const CompareExperimentsDetails: React.FunctionComponent<
   CompareExperimentsDetailsProps
-> = ({ experiments, experimentsIds, isPending }) => {
+> = ({ experiments, experimentsIds, isPending, view, onViewChange }) => {
   const setBreadcrumbParam = useBreadcrumbsStore((state) => state.setParam);
 
   const isCompare = experimentsIds.length > 1;
@@ -72,6 +79,11 @@ const CompareExperimentsDetails: React.FunctionComponent<
   const title = !isCompare
     ? experiment?.name
     : `Compare (${experimentsIds.length})`;
+
+  // TODO: Remove when dashboards are enabled by default - this entire expand/collapse charts feature will be replaced by dashboard view
+  const isDashboardsEnabled = useIsFeatureEnabled(
+    FeatureToggleKeys.DASHBOARDS_ENABLED,
+  );
 
   const [showCharts = true, setShowCharts] = useQueryParam(
     "chartsExpanded",
@@ -98,7 +110,7 @@ const CompareExperimentsDetails: React.FunctionComponent<
   });
 
   const renderCompareFeedbackScoresButton = () => {
-    if (!isCompare) return null;
+    if (!isCompare || isDashboardsEnabled) return null;
 
     const text = showCharts ? "Collapse charts" : "Expand charts";
     const Icon = showCharts ? Minimize2 : Maximize2;
@@ -149,7 +161,8 @@ const CompareExperimentsDetails: React.FunctionComponent<
   };
 
   const renderCharts = () => {
-    if (!isCompare || !showCharts || isPending) return null;
+    if (!isCompare || !showCharts || isPending || isDashboardsEnabled)
+      return null;
 
     return (
       <div className="mb-2 mt-4 overflow-auto">
@@ -191,7 +204,15 @@ const CompareExperimentsDetails: React.FunctionComponent<
     <div className="pb-4 pt-6">
       <div className="mb-4 flex min-h-8 items-center justify-between">
         <h1 className="comet-title-l truncate break-words">{title}</h1>
-        {renderCompareFeedbackScoresButton()}
+        {isDashboardsEnabled ? (
+          <ViewSelector value={view} onChange={onViewChange} />
+        ) : (
+          isCompare && (
+            <div className="flex shrink-0 items-center gap-2">
+              {renderCompareFeedbackScoresButton()}
+            </div>
+          )
+        )}
       </div>
       <div className="mb-1 flex gap-2 overflow-x-auto">
         {!isCompare && (
