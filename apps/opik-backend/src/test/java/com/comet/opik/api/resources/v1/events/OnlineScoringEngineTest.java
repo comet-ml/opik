@@ -87,6 +87,7 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
+import static com.comet.opik.api.resources.utils.AutomationRuleEvaluatorTestUtils.toProjects;
 import static com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.newTestDropwizardAppExtension;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.params.provider.Arguments.arguments;
@@ -466,7 +467,7 @@ class OnlineScoringEngineTest {
 
     private AutomationRuleEvaluatorLlmAsJudge createRule(UUID projectId, LlmAsJudgeCode evaluatorCode) {
         return AutomationRuleEvaluatorLlmAsJudge.builder()
-                .projectIds(Set.of(projectId))
+                .projects(toProjects(Set.of(projectId)))
                 .name("evaluator-test-" + RandomStringUtils.secure().nextAlphanumeric(36))
                 .createdBy(USER_NAME)
                 .code(evaluatorCode)

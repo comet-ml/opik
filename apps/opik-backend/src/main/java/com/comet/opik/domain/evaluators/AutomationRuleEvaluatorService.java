@@ -44,7 +44,6 @@ import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
 import java.sql.SQLIntegrityConstraintViolationException;
 import java.util.Collections;
-import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -649,8 +648,7 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
                     return new ProjectReference(id, name);
                 })
                 .filter(Objects::nonNull)
-                .collect(Collectors.toCollection(() -> new TreeSet<>(Comparator.comparing(
-                        ProjectReference::projectName))));
+                .collect(Collectors.toCollection(TreeSet::new));
 
         log.debug("Enriched rule '{}' with {} projects", model.id(), projects.size());
 

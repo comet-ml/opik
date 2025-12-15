@@ -9,10 +9,18 @@ import java.util.UUID;
 /**
  * Reference to a project with its ID and name.
  * Used in automation rules to represent project assignments.
+ * Implements Comparable for natural ordering by project name.
  */
 @Schema(description = "Project reference with ID and name")
 public record ProjectReference(
         @NonNull @JsonProperty("project_id") @Schema(description = "Project ID") UUID projectId,
 
-        @NonNull @JsonProperty("project_name") @Schema(description = "Project name") String projectName) {
+        @NonNull @JsonProperty("project_name") @Schema(description = "Project name") String projectName)
+        implements
+            Comparable<ProjectReference> {
+
+    @Override
+    public int compareTo(ProjectReference other) {
+        return this.projectName.compareTo(other.projectName);
+    }
 }
