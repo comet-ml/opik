@@ -513,6 +513,193 @@ class OnlineScoringEngineTest {
         assertThat(actualVarLiteral).isEqualTo(expectedVarLiteral);
     }
 
+    @Test
+    @DisplayName("parse variable mapping with root objects (input, output, metadata)")
+    void testVariableMappingWithRootObjects() {
+        // Given
+        var variables = Map.of(
+                "full_input", "input",
+                "full_output", "output",
+                "full_metadata", "metadata",
+                "subtree", "input.questions",
+                "nested_field", "input.questions.question1");
+
+        // When
+        var variableMappings = OnlineScoringEngine.toVariableMapping(variables);
+
+        // Then
+        assertThat(variableMappings).hasSize(5);
+
+        // Test "input" maps to root "$"
+        var inputMapping = variableMappings.stream()
+                .filter(mapping -> "full_input".equals(mapping.variableName()))
+                .findFirst()
+                .orElseThrow();
+        assertThat(inputMapping.traceSection()).isEqualTo(OnlineScoringEngine.TraceSection.INPUT);
+        assertThat(inputMapping.jsonPath()).isEqualTo("$");
+
+        // Test "output" maps to root "$"
+        var outputMapping = variableMappings.stream()
+                .filter(mapping -> "full_output".equals(mapping.variableName()))
+                .findFirst()
+                .orElseThrow();
+        assertThat(outputMapping.traceSection()).isEqualTo(OnlineScoringEngine.TraceSection.OUTPUT);
+        assertThat(outputMapping.jsonPath()).isEqualTo("$");
+
+        // Test "metadata" maps to root "$"
+        var metadataMapping = variableMappings.stream()
+                .filter(mapping -> "full_metadata".equals(mapping.variableName()))
+                .findFirst()
+                .orElseThrow();
+        assertThat(metadataMapping.traceSection()).isEqualTo(OnlineScoringEngine.TraceSection.METADATA);
+        assertThat(metadataMapping.jsonPath()).isEqualTo("$");
+
+        // Test subtree works correctly
+        var subtreeMapping = variableMappings.stream()
+                .filter(mapping -> "subtree".equals(mapping.variableName()))
+                .findFirst()
+                .orElseThrow();
+        assertThat(subtreeMapping.traceSection()).isEqualTo(OnlineScoringEngine.TraceSection.INPUT);
+        assertThat(subtreeMapping.jsonPath()).isEqualTo("$.questions");
+
+        // Test nested field still works correctly
+        var nestedMapping = variableMappings.stream()
+                .filter(mapping -> "nested_field".equals(mapping.variableName()))
+                .findFirst()
+                .orElseThrow();
+        assertThat(nestedMapping.traceSection()).isEqualTo(OnlineScoringEngine.TraceSection.INPUT);
+        assertThat(nestedMapping.jsonPath()).isEqualTo("$.questions.question1");
+    }
+
+    @Test
+    @DisplayName("render message templates with root object variables")
+    void testRenderTemplateWithRootObjects() throws JsonProcessingException {
+        // Given
+        var messageTemplate = "Full input: {{full_input}}\\nNested field: {{nested_field}}";
+        var evaluatorJson = """
+                {
+                  "model": { "name": "gpt-4o", "temperature": 0.3 },
+                  "messages": [
+                    { "role": "USER", "content": "%s" }
+                  ],
+                  "variables": {
+                      "full_input": "input",
+                      "nested_field": "input.questions.question1"
+                  },
+                  "schema": [
+                    { "name": "Relevance", "type": "INTEGER", "description": "Test" }
+                  ]
+                }
+                """.formatted(messageTemplate).trim();
+
+        var evaluatorCode = JsonUtils.readValue(evaluatorJson, LlmAsJudgeCode.class);
+        var traceId = generator.generate();
+        var projectId = generator.generate();
+        var trace = createTrace(traceId, projectId);
+
+        // When
+        var renderedMessages = OnlineScoringEngine.renderMessages(
+                evaluatorCode.messages(), evaluatorCode.variables(), trace);
+
+        // Then
+        assertThat(renderedMessages).hasSize(1);
+        var userMessage = (UserMessage) renderedMessages.getFirst();
+        var messageText = userMessage.singleText();
+
+        // Should contain the entire input JSON object (HTML-encoded)
+        assertThat(messageText).contains("Full input: {");
+        assertThat(messageText).containsAnyOf("\"questions\"", "&quot;questions&quot;");
+        assertThat(messageText).containsAnyOf("\"question1\"", "&quot;question1&quot;");
+        assertThat(messageText).containsAnyOf("\"pdf_url\"", "&quot;pdf_url&quot;");
+
+        // Should also contain the nested field value
+        assertThat(messageText).contains("Nested field: " + SUMMARY_STR);
+    }
+
+    @Test
+    @DisplayName("render message templates with output root object")
+    void testRenderTemplateWithOutputRootObject() throws JsonProcessingException {
+        // Given
+        var messageTemplate = "Full output: {{full_output}}";
+        var evaluatorJson = """
+                {
+                  "model": { "name": "gpt-4o", "temperature": 0.3 },
+                  "messages": [
+                    { "role": "USER", "content": "%s" }
+                  ],
+                  "variables": {
+                      "full_output": "output"
+                  },
+                  "schema": [
+                    { "name": "Relevance", "type": "INTEGER", "description": "Test" }
+                  ]
+                }
+                """.formatted(messageTemplate).trim();
+
+        var evaluatorCode = JsonUtils.readValue(evaluatorJson, LlmAsJudgeCode.class);
+        var traceId = generator.generate();
+        var projectId = generator.generate();
+        var trace = createTrace(traceId, projectId);
+
+        // When
+        var renderedMessages = OnlineScoringEngine.renderMessages(
+                evaluatorCode.messages(), evaluatorCode.variables(), trace);
+
+        // Then
+        assertThat(renderedMessages).hasSize(1);
+        var userMessage = (UserMessage) renderedMessages.getFirst();
+        var messageText = userMessage.singleText();
+
+        // Should contain the entire output JSON object (HTML-encoded)
+        assertThat(messageText).contains("Full output: {");
+        assertThat(messageText).containsAnyOf("\"output\"", "&quot;output&quot;");
+        assertThat(messageText).contains(OUTPUT_STR);
+    }
+
+    @Test
+    @DisplayName("render span message templates with root object variables")
+    void testRenderSpanTemplateWithRootObjects() throws JsonProcessingException {
+        // Given
+        var messageTemplate = "Full input: {{full_input}}\\nNested field: {{nested_field}}";
+        var evaluatorJson = """
+                {
+                  "model": { "name": "gpt-4o", "temperature": 0.3 },
+                  "messages": [
+                    { "role": "USER", "content": "%s" }
+                  ],
+                  "variables": {
+                      "full_input": "input",
+                      "nested_field": "input.questions.question1"
+                  },
+                  "schema": [
+                    { "name": "Relevance", "type": "INTEGER", "description": "Test" }
+                  ]
+                }
+                """.formatted(messageTemplate).trim();
+
+        var evaluatorCode = JsonUtils.readValue(evaluatorJson,
+                com.comet.opik.api.evaluators.AutomationRuleEvaluatorSpanLlmAsJudge.SpanLlmAsJudgeCode.class);
+        var spanId = generator.generate();
+        var projectId = generator.generate();
+        var span = createSpan(spanId, projectId);
+
+        // When
+        var renderedMessages = OnlineScoringEngine.renderMessages(
+                evaluatorCode.messages(), evaluatorCode.variables(), span);
+
+        // Then
+        assertThat(renderedMessages).hasSize(1);
+        var userMessage = (UserMessage) renderedMessages.getFirst();
+        var messageText = userMessage.singleText();
+
+        // Should contain the entire input JSON object (HTML-encoded)
+        assertThat(messageText).contains("Full input: {");
+        assertThat(messageText).containsAnyOf("\"questions\"", "&quot;questions&quot;");
+
+        // Should also contain the nested field value
+        assertThat(messageText).contains("Nested field: " + SUMMARY_STR);
+    }
+
     Stream<String> testRenderTemplate() {
         return Stream.of(TEST_EVALUATOR, TEST_EVALUATOR_EDGE_CASE);
     }

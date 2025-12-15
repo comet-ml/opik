@@ -141,6 +141,7 @@ export const getJSONPaths = (
   node: JsonNode,
   previousPath: string = "",
   results: string[] = [],
+  includeIntermediateNodes: boolean = false,
 ) => {
   if (isObject(node) || isArray(node)) {
     for (const key in node) {
@@ -152,9 +153,15 @@ export const getJSONPaths = (
         : key;
 
       if (isArray(value)) {
-        getJSONPaths(value, path, results);
+        if (includeIntermediateNodes) {
+          results.push(path);
+        }
+        getJSONPaths(value, path, results, includeIntermediateNodes);
       } else if (isObject(value)) {
-        getJSONPaths(value, path, results);
+        if (includeIntermediateNodes) {
+          results.push(path);
+        }
+        getJSONPaths(value, path, results, includeIntermediateNodes);
       } else {
         results.push(path);
       }

@@ -347,10 +347,20 @@ public class OnlineScoringEngine {
                     var builder = MessageVariableMapping.builder().variableName(templateVariable);
                     // check if its input/output/metadata variable and fix the json path
                     Arrays.stream(TraceSection.values())
-                            .filter(traceSection -> tracePath.startsWith(traceSection.prefix))
+                            .filter(traceSection -> {
+                                // Match "input." or just "input" (same for output/metadata)
+                                String prefixWithDot = traceSection.prefix;
+                                String prefixWithoutDot = prefixWithDot.substring(0, prefixWithDot.length() - 1);
+                                return tracePath.startsWith(prefixWithDot) || tracePath.equals(prefixWithoutDot);
+                            })
                             .findFirst()
-                            .ifPresentOrElse(traceSection -> builder.traceSection(traceSection)
-                                    .jsonPath("$." + tracePath.substring(traceSection.prefix.length())),
+                            .ifPresentOrElse(traceSection -> {
+                                // If path contains a dot, extract nested path; otherwise use root "$"
+                                String jsonPath = tracePath.contains(".")
+                                        ? "$." + tracePath.substring(traceSection.prefix.length())
+                                        : "$";
+                                builder.traceSection(traceSection).jsonPath(jsonPath);
+                            },
                                     // if not a trace section, it's a literal value to replace
                                     () -> builder.valueToReplace(tracePath));
 
@@ -407,6 +417,16 @@ public class OnlineScoringEngine {
     }
 
     private static String extractFromJson(JsonNode json, String path) {
+        // Special case: if path is "$", return the entire JSON object as string
+        if ("$".equals(path)) {
+            try {
+                return OBJECT_MAPPER.writeValueAsString(json);
+            } catch (JsonProcessingException e) {
+                log.warn("failed to serialize entire json object, json={}", json, e);
+                return null;
+            }
+        }
+
         Map<String, Object> forcedObject;
         try {
             // JsonPath didn't work with JsonNode, even explicitly using
