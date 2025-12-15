@@ -11,6 +11,7 @@ import {
   WIDGET_TYPE,
   AddWidgetConfig,
   WidgetResolver,
+  TEMPLATE_TYPE,
 } from "@/types/dashboard";
 import { areLayoutsEqual } from "@/lib/dashboard/layout";
 import { isLooseEqual } from "@/lib/utils";
@@ -18,6 +19,16 @@ import { DEFAULT_DATE_PRESET } from "@/components/pages-shared/traces/MetricDate
 
 export const DASHBOARD_VERSION = 1;
 const DEFAULT_SECTION_NAME = "New section";
+
+const TEMPLATE_ID_PREFIX = "template:";
+
+export const createTemplateId = (templateId: TEMPLATE_TYPE): string => {
+  return `${TEMPLATE_ID_PREFIX}${templateId}`;
+};
+
+export const isTemplateId = (id: string | null): boolean => {
+  return id?.startsWith(TEMPLATE_ID_PREFIX) ?? false;
+};
 
 export const WIDGET_TYPES = WIDGET_TYPE;
 

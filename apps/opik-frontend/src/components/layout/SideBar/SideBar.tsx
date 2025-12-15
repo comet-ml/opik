@@ -15,7 +15,7 @@ import {
   ChevronRight,
   SparklesIcon,
   UserPen,
-  BarChart3,
+  ChartLine,
   Zap,
 } from "lucide-react";
 import { keepPreviousData } from "@tanstack/react-query";
@@ -74,7 +74,7 @@ const MENU_ITEMS: MenuItemGroup[] = [
         id: "dashboards",
         path: "/$workspaceName/dashboards",
         type: MENU_ITEM_TYPE.router,
-        icon: BarChart3,
+        icon: ChartLine,
         label: "Dashboards",
         featureFlag: FeatureToggleKeys.DASHBOARDS_ENABLED,
       },

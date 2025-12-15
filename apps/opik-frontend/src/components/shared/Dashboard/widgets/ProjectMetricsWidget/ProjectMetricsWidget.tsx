@@ -6,7 +6,7 @@ import {
   INTERVAL_TYPE,
   METRIC_NAME_TYPE,
 } from "@/api/projects/useProjectMetric";
-import { useDashboardStore } from "@/store/DashboardStore";
+import { useDashboardStore, selectMixedConfig } from "@/store/DashboardStore";
 import { DashboardWidgetComponentProps } from "@/types/dashboard";
 import { Filter } from "@/types/filters";
 import { isFilterValid } from "@/lib/filters";
@@ -27,10 +27,13 @@ const ProjectMetricsWidget: React.FunctionComponent<
   DashboardWidgetComponentProps
 > = ({ sectionId, widgetId, preview = false }) => {
   const globalConfig = useDashboardStore(
-    useShallow((state) => ({
-      projectId: state.config?.projectIds?.[0],
-      dateRange: state.config?.dateRange ?? DEFAULT_DATE_PRESET,
-    })),
+    useShallow((state) => {
+      const config = selectMixedConfig(state);
+      return {
+        projectId: config?.projectIds?.[0],
+        dateRange: config?.dateRange ?? DEFAULT_DATE_PRESET,
+      };
+    }),
   );
 
   const widget = useDashboardStore(
