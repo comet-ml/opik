@@ -60,15 +60,15 @@ const EVALUATOR_MODEL_MAP: Record<EVALUATOR_MODEL, ModelData> = {
   },
   [EVALUATOR_MODEL.moderation]: {
     class: "Moderation",
-    scoreParameters: ["input", "output", "context"],
+    scoreParameters: ["output"],
   },
   [EVALUATOR_MODEL.answer_relevance]: {
     class: "AnswerRelevance",
-    scoreParameters: ["input", "output", "context"],
+    scoreParameters: ["input", "output"],
   },
   [EVALUATOR_MODEL.hallucination]: {
     class: "Hallucination",
-    scoreParameters: ["input", "output", "context"],
+    scoreParameters: ["input", "output"],
   },
   [EVALUATOR_MODEL.context_recall]: {
     class: "ContextRecall",
@@ -157,6 +157,7 @@ const LLM_JUDGES_MODELS_OPTIONS: MetricOption[] = [
 ];
 
 const DEFAULT_LOADED_DATASET_ITEMS = 25;
+const DEMO_DATASET_NAME = "Opik Demo Questions";
 
 type AddExperimentDialogProps = {
   open: boolean;
@@ -197,6 +198,37 @@ const AddExperimentDialog: React.FunctionComponent<
           .join(", ")}]\n`
       : "";
 
+  const metricsParam =
+    models.length > 0
+      ? `,
+  scoring_metrics=metrics`
+      : "";
+
+  const isDemoDataset = datasetName === DEMO_DATASET_NAME;
+
+  // Map parameter names to their values based on whether it's a demo dataset
+  const getParamValue = (param: string | undefined): string => {
+    if (!param) return '"placeholder string"';
+    if (isDemoDataset) {
+      switch (param) {
+        case "input":
+          return 'dataset_item["question"]';
+        case "output":
+          return "llm_response";
+        case "expected_output":
+        case "reference":
+          return 'dataset_item["expected_answer"]';
+        case "context":
+          return '["placeholder context"]';
+        default:
+          return '"placeholder string"';
+      }
+    }
+    return param === "context"
+      ? '["placeholder string"]'
+      : '"placeholder string"';
+  };
+
   const evaluation_task_output =
     models.length > 0
       ? `{
@@ -205,20 +237,18 @@ const AddExperimentDialog: React.FunctionComponent<
             models.flatMap((m) => EVALUATOR_MODEL_MAP[m].scoreParameters),
           ),
         ]
-          .map((p) =>
-            p === "context"
-              ? `"${p}": ["placeholder string"]`
-              : `"${p}": "placeholder string"`,
-          )
+          .map((p) => `"${p}": ${getParamValue(p)}`)
           .join(",\n        ")}
     }`
-      : `{"output": "placeholder string"}`;
+      : `{"output": ${getParamValue("output")}}`;
 
-  const metricsParam =
-    models.length > 0
-      ? `,
-  scoring_metrics=metrics`
-      : "";
+  const evaluationTaskCode = `def evaluation_task(dataset_item):
+    # Replace with your LLM call
+    llm_response = "your LLM response"
+
+    result = ${evaluation_task_output}
+
+    return result`;
 
   const section3 =
     "" +
@@ -236,12 +266,7 @@ dataset = client.get_dataset(name="${
       datasetName || "dataset name placeholder"
     }")
 
-def evaluation_task(dataset_item):
-    # your LLM application is called here
-
-    result = ${evaluation_task_output}
-
-    return result
+${evaluationTaskCode}
 ${metricsString}
 eval_results = evaluate(
   experiment_name="my_evaluation",

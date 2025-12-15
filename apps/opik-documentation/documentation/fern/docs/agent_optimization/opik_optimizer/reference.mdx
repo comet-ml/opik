@@ -1,6 +1,11 @@
 ---
-title: "Opik Agent Optimizer API Reference"
-subtitle: "Technical SDK reference guide"
+headline: API Reference | Opik Documentation
+og:description: Explore tools to optimize LLM prompts and agents with the standardized
+  API for consistent optimization across multiple algorithms.
+og:site_name: Opik Documentation
+og:title: API Reference - Opik Agent Optimizer SDK
+subtitle: Technical SDK reference guide
+title: Opik Agent Optimizer API Reference
 ---
 
 The Opik Agent Optimizer SDK provides a comprehensive set of tools for optimizing LLM prompts and agents. This reference guide documents the standardized API that all optimizers follow, ensuring consistency and interoperability across different optimization algorithms.
@@ -24,7 +29,7 @@ The SDK provides several optimizer classes that all inherit from `BaseOptimizer`
 - **MetaPromptOptimizer**: Employs meta-prompting techniques for optimization
 - **EvolutionaryOptimizer**: Uses genetic algorithms for prompt evolution
 - **GepaOptimizer**: Leverages GEPA (Genetic-Pareto) optimization approach
-- **HierarchicalReflectiveOptimizer**: Uses hierarchical root cause analysis for targeted prompt refinement
+- **HRPO (Hierarchical Reflective Prompt Optimizer)**: Uses hierarchical root cause analysis for targeted prompt refinement
 
 ## Standardized Method Signatures
 
@@ -797,10 +802,10 @@ optimize_prompt(
 <ParamField path="args" type="Any" />
 <ParamField path="kwargs" type="Any" />
 
-## HierarchicalReflectiveOptimizer
+## HRPO
 
 ```python
-HierarchicalReflectiveOptimizer(
+HRPO(
     model: str = 'gpt-4o',
     model_parameters: dict[str, typing.Any] | None = None,
     max_parallel_batches: int = 5,
@@ -1109,4 +1114,3 @@ llm_invoke(
 <ParamField path="messages" type="list[dict[str, str]] | None" optional={true} />
 <ParamField path="seed" type="int | None" optional={true} />
 <ParamField path="allow_tool_use" type="bool | None" optional={true} default="False" />
-

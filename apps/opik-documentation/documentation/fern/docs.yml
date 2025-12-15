@@ -6,10 +6,14 @@ metadata:
   og:site_name: "Opik Documentation"
   og:title: "Opik LLM development Platform | Observability, Evaluation & Security"
   og:description: "Debug, evaluate, and monitor your LLM applications, RAG systems, and agentic workflows with comprehensive tracing, automated evaluations, and production-ready dashboards."
+  og:image: "https://www.comet.com/site/wp-content/uploads/2025/10/Share-image-3.png"
   og:url: "https://www.comet.com/docs/opik"
   og:locale: "en_US"
   twitter:title: "Opik Documentation"
-  twitter:description: "Debug, evaluate, and monitor your LLM applications, RAG systems, and agentic workflows with comprehensive tracing, automated evaluations, and production-ready dashboards."
+  twitter:description: "Debug, evaluate, and monitor your LLM applications with comprehensive tracing and automated evaluations."
+  twitter:image: "https://www.comet.com/site/wp-content/uploads/2025/10/Share-image-3.png"
+  twitter:card: "summary_large_image"
+  twitter:site: "@CometML"
 
 title: Opik Documentation
 favicon: img/logo.svg
@@ -450,6 +454,9 @@ navigation:
               - page: Haystack
                 path: docs/tracing/integrations/haystack.mdx
                 slug: haystack
+              - page: Harbor
+                path: docs/tracing/integrations/harbor.mdx
+                slug: harbor
               - page: Instructor
                 path: docs/tracing/integrations/instructor.mdx
                 slug: instructor
@@ -707,10 +714,10 @@ navigation:
             icon: fa-regular fa-puzzle-piece
             path: docs/agent_optimization/algorithms/metaprompt_optimizer.mdx
             slug: metaprompt_optimizer
-          - page: Hierarchical Reflective
+          - page: HRPO
             icon: fa-regular fa-puzzle-piece
             path: docs/agent_optimization/algorithms/hierarchical_reflective_optimizer.mdx
-            slug: hierarchical_reflective_optimizer
+            slug: hierarchical_adaptive_optimizer
           - page: Few-Shot Bayesian
             icon: fa-regular fa-puzzle-piece
             path: docs/agent_optimization/algorithms/fewshot_bayesian_optimizer.mdx
@@ -1298,6 +1305,10 @@ redirects:
     permanent: true
   - source: "/docs/opik/self-host/kubernetes/backup"
     destination: "/docs/opik/self-host/backup"
+    permanent: true
+  # HRPO (formerly Hierarchical Reflective Optimizer) redirect
+  - source: "/docs/opik/agent_optimization/algorithms/hierarchical_reflective_optimizer"
+    destination: "/docs/opik/agent_optimization/algorithms/hierarchical_adaptive_optimizer"
     permanent: true
   - source: "/docs/opik/tracing/debug_mode"
     destination: "/docs/opik/tracing/sdk_configuration#debug-mode-and-logging"

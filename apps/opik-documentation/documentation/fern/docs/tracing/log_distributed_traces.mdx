@@ -1,3 +1,12 @@
+---
+headline: Log distributed traces | Opik Documentation
+og:description: Learn to track distributed traces in complex LLM applications using
+  Opik's built-in support for multi-service tracing.
+og:site_name: Opik Documentation
+og:title: Log Distributed Traces with Opik
+title: Log distributed traces
+---
+
 When working with complex LLM applications, it is common to need to track a traces across multiple services. Opik supports distributed tracing out of the box when integrating using function decorators using a mechanism that is similar to how OpenTelemetry implements distributed tracing.
 
 For the purposes of this guide, we will assume that you have a simple LLM application that is made up of two services: a client and a server. We will assume that the client will create the trace and span, while the server will add a nested span. In order to do this, the `trace_id` and `span_id` will be passed in the headers of the request from the client to the server.

@@ -114,6 +114,7 @@ const PythonCodeRuleDetails: React.FC<PythonCodeRuleDetailsProps> = ({
                 errorText="Code parsing error. The variables cannot be extracted."
                 projectName={projectName}
                 datasetColumnNames={datasetColumnNames}
+                includeIntermediateNodes
               />
             );
           }}
