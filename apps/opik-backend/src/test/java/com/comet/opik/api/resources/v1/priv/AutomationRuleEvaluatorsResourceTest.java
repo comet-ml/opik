@@ -680,8 +680,7 @@ class AutomationRuleEvaluatorsResourceTest {
             try (var actualResponse = evaluatorsResourceClient.getEvaluator(
                     id,
                     withProjectId
-                            ? expectedAutomationRuleEvaluator.getProjects().stream().map(ProjectReference::projectId)
-                                    .collect(Collectors.toSet()).stream().findFirst().orElse(null)
+                            ? getPrimaryProjectId(expectedAutomationRuleEvaluator.getProjects())
                             : null,
                     WORKSPACE_NAME,
                     API_KEY,

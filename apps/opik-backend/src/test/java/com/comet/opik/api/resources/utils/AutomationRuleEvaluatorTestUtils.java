@@ -35,9 +35,12 @@ public class AutomationRuleEvaluatorTestUtils {
      * project in the alphabetically sorted set.
      *
      * @param projects SortedSet of ProjectReference objects
-     * @return The project ID of the alphabetically first project, or null if the set is empty
+     * @return The project ID of the alphabetically first project, or null if the set is empty or null
      */
     public static UUID getPrimaryProjectId(SortedSet<ProjectReference> projects) {
+        if (projects == null || projects.isEmpty()) {
+            return null;
+        }
         return projects.stream()
                 .map(ProjectReference::projectId)
                 .findFirst()
