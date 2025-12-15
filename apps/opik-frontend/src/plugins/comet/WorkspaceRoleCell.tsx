@@ -1,6 +1,7 @@
-import React, { useState } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import { CellContext } from "@tanstack/react-table";
 import { ChevronDown } from "lucide-react";
+import debounce from "lodash/debounce";
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -9,9 +10,11 @@ import CellWrapper from "@/components/shared/DataTableCells/CellWrapper";
 import useManageUsersRolePopover from "@/hooks/useManageUsersRolePopover";
 import useUserPermission from "@/plugins/comet/useUserPermission";
 import { UserPermission, WorkspaceMember } from "@/plugins/comet/types";
+import WorkspaceRolePopover from "@/plugins/comet/WorkspaceRolePopover";
+import useAllWorkspaces from "@/plugins/comet/useAllWorkspaces";
+import { useUpdateWorkspaceUsersPermissionsMutation } from "@/plugins/comet/api/useUpdateWorkspaceUsersPermissionsMutation";
 import useAppStore, { useLoggedInUserName } from "@/store/AppStore";
 import { getKeyForChangingRole } from "@/lib/permissions";
-import WorkspaceRolePopover from "@/plugins/comet/WorkspaceRolePopover";
 
 interface PopoverData extends WorkspaceMember {
   avatar?: string;
@@ -34,6 +37,43 @@ const WorkspaceRoleCell = (context: CellContext<WorkspaceMember, string>) => {
 
   const [popoverData, setPopoverData] = useState<PopoverData | null>(null);
 
+  const { data: allWorkspaces } = useAllWorkspaces();
+  const workspace = allWorkspaces?.find(
+    (w) => w.workspaceName === workspaceName,
+  );
+
+  const { mutate: updateWorkspaceUsersPermissions } =
+    useUpdateWorkspaceUsersPermissionsMutation();
+
+  const debouncedUpdatePermissions = useMemo(
+    () =>
+      debounce(
+        (
+          workspaceId: string,
+          userName: string,
+          permissions: UserPermission[],
+        ) => {
+          updateWorkspaceUsersPermissions({
+            workspaceId,
+            usersPermissions: [
+              {
+                userName,
+                permissions,
+              },
+            ],
+          });
+        },
+        500,
+      ),
+    [updateWorkspaceUsersPermissions],
+  );
+
+  useEffect(() => {
+    return () => {
+      debouncedUpdatePermissions.cancel();
+    };
+  }, [debouncedUpdatePermissions]);
+
   const ifChangeWsRoleDisabled = !getPermissionStatus({
     workspaceName,
     permissionKey: getKeyForChangingRole(
@@ -43,10 +83,20 @@ const WorkspaceRoleCell = (context: CellContext<WorkspaceMember, string>) => {
   });
 
   const setPermissions = (newPermissions: UserPermission[]) => {
+    const userName = popoverData?.userName || popoverData?.email;
+
     setPopoverData((data) => ({
       ...data!,
       permissions: newPermissions,
     }));
+
+    if (workspace?.workspaceId && userName) {
+      debouncedUpdatePermissions(
+        workspace.workspaceId,
+        userName,
+        newPermissions,
+      );
+    }
   };
 
   const decisionTreeProps = useManageUsersRolePopover(
