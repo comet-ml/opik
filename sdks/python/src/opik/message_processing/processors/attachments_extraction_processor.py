@@ -1,13 +1,15 @@
 import logging
 from typing import Optional, NamedTuple, List, Literal, cast
 
-from . import message_processors, messages, streamer
-from .preprocessing import constants
-from ..api_objects.attachment import (
+from opik.api_objects.attachment import (
     attachments_extractor,
     attachment_context,
     converters,
 )
+
+from . import message_processors
+from ..preprocessing import constants
+from .. import messages, streamer
 
 
 LOGGER = logging.getLogger(__name__)

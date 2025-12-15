@@ -3,11 +3,9 @@ from unittest import mock
 import pytest
 
 from opik.api_objects.attachment import attachment, attachment_context
-from opik.message_processing import (
-    attachments_extraction_processor,
-    messages,
-)
+from opik.message_processing import messages
 from opik.message_processing.preprocessing import constants
+from opik.message_processing.processors import attachments_extraction_processor
 
 
 @pytest.fixture

@@ -9,7 +9,9 @@ from opik import dict_utils
 from opik.rest_api.types import span_write, trace_write
 from opik.types import ErrorInfoDict, SpanType
 from . import models
-from .. import message_processors, messages
+from .. import messages
+from ..processors import message_processors
+
 
 LOGGER = logging.getLogger(__name__)
 

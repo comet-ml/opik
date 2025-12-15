@@ -4,21 +4,18 @@ from typing import Callable, Dict, Type, Any
 import pydantic
 import tenacity
 
-from . import encoder_helpers, messages, message_processors
-from .. import (
-    exceptions as exceptions,
-    logging_messages as logging_messages,
-    dict_utils,
-)
-from ..rate_limit import rate_limit
-from ..rest_api import client as rest_api_client, core as rest_api_core
-from ..rest_api.types import (
+from opik import dict_utils, exceptions, logging_messages
+from opik.rate_limit import rate_limit
+from opik.rest_api import client as rest_api_client, core as rest_api_core
+from opik.rest_api.types import (
     feedback_score_batch_item,
     feedback_score_batch_item_thread,
     guardrail,
     experiment_item,
 )
 
+from . import message_processors
+from .. import encoder_helpers, messages
 
 LOGGER = logging.getLogger(__name__)
 

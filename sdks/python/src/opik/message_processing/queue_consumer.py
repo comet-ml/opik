@@ -4,7 +4,8 @@ import time
 from queue import Empty
 from typing import Optional
 
-from . import message_processors, message_queue, messages
+from . import message_queue, messages
+from .processors import message_processors
 from .. import exceptions, _logging
 
 LOGGER = logging.getLogger(__name__)

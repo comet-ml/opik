@@ -1,9 +1,10 @@
 import contextlib
 from typing import Iterator, List
 from typing import Optional
+
 from . import opik_client
-from ..message_processing import message_processors_chain
 from ..message_processing.emulation import local_emulator_message_processor, models
+from ..message_processing.processors import message_processors_chain
 
 
 class _LocalRecordingHandle:

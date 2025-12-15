@@ -2,7 +2,7 @@ import abc
 import logging
 from typing import List, Optional, TypeVar, Type
 
-from . import messages
+from .. import messages
 
 import opik.exceptions
 

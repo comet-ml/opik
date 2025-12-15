@@ -39,13 +39,15 @@ from .. import (
     url_helpers,
 )
 from ..message_processing import (
-    attachments_extraction_processor,
     messages,
     streamer_constructors,
     message_queue,
-    message_processors_chain,
 )
 from ..message_processing.batching import sequence_splitter
+from ..message_processing.processors import (
+    attachments_extraction_processor,
+    message_processors_chain,
+)
 from ..rest_api import client as rest_api_client
 from ..rest_api.core.api_error import ApiError
 from ..rest_api.types import (

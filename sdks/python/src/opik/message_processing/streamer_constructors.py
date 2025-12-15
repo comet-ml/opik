@@ -5,7 +5,6 @@ import httpx
 from . import (
     queue_consumer,
     messages,
-    message_processors,
     message_queue,
     streamer,
 )
@@ -15,6 +14,7 @@ from .preprocessing import (
     batching_preprocessor,
     file_upload_preprocessor,
 )
+from .processors import message_processors
 from ..file_upload import upload_manager
 from ..rest_api import client as rest_api_client
 
