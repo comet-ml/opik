@@ -4,7 +4,6 @@ import {
   OnChangeFn,
   ColumnSizingState,
 } from "@tanstack/react-table";
-import useUser from "@/plugins/comet/useUser";
 import useAllWorkspaces from "@/plugins/comet/useAllWorkspaces";
 import useAllWorkspaceMembers from "@/plugins/comet/useWorkspaceMembers";
 import useAppStore from "@/store/AppStore";
@@ -35,10 +34,7 @@ const WorkspaceMembersTable: React.FC<WorkspaceMembersTableProps> = ({
 }) => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
 
-  const { data: user } = useUser();
-  const { data: allWorkspaces } = useAllWorkspaces({
-    enabled: !!user?.loggedIn,
-  });
+  const { data: allWorkspaces } = useAllWorkspaces();
 
   const workspace = allWorkspaces?.find(
     (w) => w.workspaceName === workspaceName,
