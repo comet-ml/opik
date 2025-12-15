@@ -106,7 +106,9 @@ const PromptModelSelect = ({
 
     const model = providerModels[0];
     // Use model_label from config (e.g., "gpt-4o-mini") with "(free)" suffix
-    const modelLabel = freeProvider.configuration?.model_label ?? model.label;
+    // Handle empty string by falling back to default label
+    const configModelLabel = freeProvider.configuration?.model_label?.trim();
+    const modelLabel = configModelLabel || model.label;
 
     // Register in provider map for selection handling
     modelProviderMapRef.current[model.value] = PROVIDER_TYPE.OPIK_FREE;

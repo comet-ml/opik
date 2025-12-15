@@ -23,21 +23,52 @@ public class FreeModelConfig {
      */
     public static final String FREE_MODEL = "opik-free-model";
 
+    /**
+     * Whether the free model provider is enabled in configuration.
+     * Note: Use {@link #isEnabled()} to check if the provider is actually usable,
+     * as it also validates that required fields are configured.
+     */
     @JsonProperty
     private boolean enabled = false;
 
+    /**
+     * The actual model name sent to the AI server (e.g., "gpt-4o-mini").
+     * Required when enabled=true. If empty, the provider will not be registered.
+     */
     @JsonProperty
     private String actualModel = "";
 
+    /**
+     * Provider name stored in spans for cost tracking (e.g., "openai").
+     * Required when enabled=true. If empty, the provider will not be registered.
+     */
     @JsonProperty
     private String spanProvider = "";
 
+    /**
+     * Base URL for the OpenAI-compatible endpoint (e.g., "https://api.openai.com/v1").
+     * Required when enabled=true. If empty, the provider will not be registered.
+     */
     @JsonProperty
     private String baseUrl = "";
 
+    /**
+     * API key for the endpoint. Optional for auth-less endpoints.
+     */
     @JsonProperty
     @ToString.Exclude
     private String apiKey = "";
+
+    /**
+     * Returns true if the free model provider is enabled AND all required fields are configured.
+     * This ensures fail-fast behavior - the provider won't register with missing configuration.
+     */
+    public boolean isEnabled() {
+        return enabled
+                && actualModel != null && !actualModel.isBlank()
+                && spanProvider != null && !spanProvider.isBlank()
+                && baseUrl != null && !baseUrl.isBlank();
+    }
 
     /**
      * Returns the fixed model name. This is not configurable to ensure backward compatibility
