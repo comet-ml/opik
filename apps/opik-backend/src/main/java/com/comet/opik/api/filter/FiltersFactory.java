@@ -86,6 +86,8 @@ public class FiltersFactory {
                     })
                     .put(FieldType.DICTIONARY, filter -> filter.value() != null &&
                             StringUtils.isNotBlank(filter.key()))
+                    .put(FieldType.DICTIONARY_STATE_DB, filter -> filter.value() != null &&
+                            StringUtils.isNotBlank(filter.key()))
                     .put(FieldType.MAP, filter -> filter.value() != null &&
                             StringUtils.isNotBlank(filter.key()))
                     .put(FieldType.LIST, filter -> StringUtils.isNotBlank(filter.value()))
