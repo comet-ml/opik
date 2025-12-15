@@ -1,13 +1,13 @@
-from opik_optimizer.datasets import driving_hazard_50
+from typing import Any
+
+from opik_optimizer.datasets import driving_hazard
 from opik_optimizer import ChatPrompt, HRPO
 from opik.evaluation.metrics import LevenshteinRatio
 from opik.evaluation.metrics.score_result import ScoreResult
 
-from typing import Any
-
 # Import the dataset
-dataset = driving_hazard_50(test_mode=True)
-
+dataset = driving_hazard(count=20)
+validation_dataset = driving_hazard(split="test", count=5)
 
 # Define the metric to optimize on
 def levenshtein_ratio(dataset_item: dict[str, Any], llm_output: str) -> ScoreResult:
@@ -52,11 +52,16 @@ prompt = ChatPrompt(
 )
 
 # Initialize HRPO (Hierarchical Reflective Prompt Optimizer)
-optimizer = HRPO(model="openai/gpt-4o")
+optimizer = HRPO(model="openai/gpt-5.2", model_parameters={"temperature": 1})
 
 # Run optimization
 optimization_result = optimizer.optimize_prompt(
-    prompt=prompt, dataset=dataset, metric=levenshtein_ratio
+    prompt=prompt,
+    dataset=dataset,
+    validation_dataset=validation_dataset,
+    metric=levenshtein_ratio,
+    max_trials=10,
 )
 
+# Show results
 optimization_result.display()
