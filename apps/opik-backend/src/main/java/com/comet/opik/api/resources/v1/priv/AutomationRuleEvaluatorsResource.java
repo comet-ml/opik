@@ -6,6 +6,7 @@ import com.comet.opik.api.LogCriteria;
 import com.comet.opik.api.Page;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluator;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorUpdate;
+import com.comet.opik.api.evaluators.ProjectReference;
 import com.comet.opik.api.filter.AutomationRuleEvaluatorFilter;
 import com.comet.opik.api.filter.FiltersFactory;
 import com.comet.opik.api.sorting.AutomationRuleEvaluatorSortingFactory;
@@ -50,6 +51,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 import static com.comet.opik.api.LogItem.LogPage;
 import static com.comet.opik.api.evaluators.AutomationRuleEvaluator.AutomationRuleEvaluatorPage;
@@ -143,12 +145,15 @@ public class AutomationRuleEvaluatorsResource {
         String workspaceId = requestContext.get().getWorkspaceId();
         String userName = requestContext.get().getUserName();
 
-        Set<UUID> projectIds = evaluator.getProjectIds();
-        log.info("Creating {} evaluator for project_ids '{}' on workspace_id '{}'", evaluator.getType(),
-                evaluator.getProjectIds(), workspaceId);
+        // Extract project IDs from projects field
+        Set<UUID> projectIds = evaluator.getProjects().stream()
+                .map(ProjectReference::projectId)
+                .collect(Collectors.toSet());
+        log.info("Creating {} evaluator for '{}' projects on workspace_id '{}'", evaluator.getType(),
+                projectIds.size(), workspaceId);
         AutomationRuleEvaluator<?, ?> savedEvaluator = service.save(evaluator, projectIds, workspaceId, userName);
-        log.info("Created {} evaluator '{}' for project_ids '{}' on workspace_id '{}'", savedEvaluator.getType(),
-                savedEvaluator.getId(), savedEvaluator.getProjectIds(), workspaceId);
+        log.info("Created {} evaluator '{}' for '{}' projects on workspace_id '{}'", savedEvaluator.getType(),
+                savedEvaluator.getId(), savedEvaluator.getProjects().size(), workspaceId);
 
         URI uri = uriInfo.getBaseUriBuilder()
                 .path("v1/private/automations/evaluators/{id}")
@@ -169,6 +174,7 @@ public class AutomationRuleEvaluatorsResource {
         var workspaceId = requestContext.get().getWorkspaceId();
         var userName = requestContext.get().getUserName();
 
+        // Extract project IDs from projectIds field (or fall back to legacy projectId)
         Set<UUID> projectIds = Optional.ofNullable(evaluatorUpdate.getProjectIds())
                 .orElseGet(() -> Optional.ofNullable(evaluatorUpdate.getProjectId())
                         .map(Set::of)

@@ -15,7 +15,7 @@ import lombok.experimental.SuperBuilder;
 import java.beans.ConstructorProperties;
 import java.time.Instant;
 import java.util.List;
-import java.util.Set;
+import java.util.SortedSet;
 import java.util.UUID;
 
 import static com.comet.opik.api.evaluators.AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython.TraceThreadUserDefinedMetricPythonCode;
@@ -39,17 +39,17 @@ public final class AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython
         public static final String CONTEXT_ARG_NAME = "context";
     }
 
-    @ConstructorProperties({"id", "projectId", "projectName", "projectIds", "name", "samplingRate",
+    @ConstructorProperties({"id", "projectId", "projectName", "projects", "name", "samplingRate",
             "enabled", "filters", "code",
             "createdAt",
             "createdBy",
             "lastUpdatedAt", "lastUpdatedBy"})
     public AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython(UUID id, UUID projectId, String projectName,
-            Set<UUID> projectIds,
+            SortedSet<ProjectReference> projects,
             @NotBlank String name, float samplingRate, boolean enabled, List<TraceThreadFilter> filters,
             @NotNull TraceThreadUserDefinedMetricPythonCode code,
             Instant createdAt, String createdBy, Instant lastUpdatedAt, String lastUpdatedBy) {
-        super(id, projectId, projectName, projectIds, name, samplingRate, enabled, filters, code,
+        super(id, projectId, projectName, projects, name, samplingRate, enabled, filters, code,
                 createdAt, createdBy,
                 lastUpdatedAt,
                 lastUpdatedBy);

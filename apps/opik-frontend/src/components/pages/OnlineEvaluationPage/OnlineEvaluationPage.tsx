@@ -41,8 +41,6 @@ import DataTablePagination from "@/components/shared/DataTablePagination/DataTab
 import IdCell from "@/components/shared/DataTableCells/IdCell";
 import StatusCell from "@/components/shared/DataTableCells/StatusCell";
 import useRulesList from "@/api/automations/useRulesList";
-import useProjectsList from "@/api/projects/useProjectsList";
-import useAppStore from "@/store/AppStore";
 import { formatDate } from "@/lib/date";
 import NoDataPage from "@/components/shared/NoDataPage/NoDataPage";
 import NoRulesPage from "@/components/pages-shared/automations/NoRulesPage";
@@ -70,12 +68,12 @@ const DEFAULT_COLUMNS: ColumnData<EvaluatorsRule>[] = [
     type: COLUMN_TYPE.string,
   },
   {
-    id: "project_names",
+    id: "projects",
     label: "Projects",
     type: COLUMN_TYPE.string,
     accessorFn: (row) =>
-      row.project_names && row.project_names.length > 0
-        ? row.project_names.join(", ")
+      row.projects && row.projects.length > 0
+        ? row.projects.map((p) => p.project_name).join(", ")
         : "N/A",
   },
   {
@@ -126,7 +124,7 @@ const DEFAULT_SELECTED_COLUMNS: string[] = [
   "created_at",
   "sampling_rate",
   "enabled",
-  "project_names",
+  "projects",
   "type",
 ];
 
@@ -137,7 +135,6 @@ const COLUMNS_SORT_KEY = "workspace-rules-columns-sort";
 const PAGINATION_SIZE_KEY = "workspace-rules-pagination-size";
 
 export const OnlineEvaluationPage: React.FC = () => {
-  const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const resetDialogKeyRef = useRef(0);
   const [openDialogForCreate, setOpenDialogForCreate] =
     useState<boolean>(false);
@@ -191,23 +188,6 @@ export const OnlineEvaluationPage: React.FC = () => {
     },
   );
 
-  // Fetch all projects to map project_ids to project_names
-  const { data: projectsData } = useProjectsList({
-    workspaceName,
-    page: 1,
-    size: 1000, // Fetch enough projects to cover all rules
-  });
-
-  // Create project ID to name mapping
-  const projectIdToNameMap = useMemo(
-    () =>
-      (projectsData?.content || []).reduce((map, project) => {
-        map.set(project.id, project.name);
-        return map;
-      }, new Map<string, string>()),
-    [projectsData],
-  );
-
   const sortableBy: string[] = useMemo(
     () => data?.sortable_by ?? [],
     [data?.sortable_by],
@@ -215,15 +195,8 @@ export const OnlineEvaluationPage: React.FC = () => {
   const noData = !search && filters.length === 0;
   const noDataText = noData ? `There are no rules yet` : "No search results";
 
-  // Enrich rules with project names from project_ids
-  const rows: EvaluatorsRule[] = useMemo(() => {
-    return (data?.content ?? []).map((rule) => ({
-      ...rule,
-      project_names: rule.project_ids
-        .map((id) => projectIdToNameMap.get(id))
-        .filter(Boolean) as string[],
-    }));
-  }, [data, projectIdToNameMap]);
+  // Backend now enriches projects (ID + name pairs) from projectIds
+  const rows: EvaluatorsRule[] = useMemo(() => data?.content ?? [], [data]);
 
   const editingRule = rows.find((r) => r.id === editRuleId);
   const isDialogOpen = Boolean(editingRule) || openDialogForCreate;
@@ -331,8 +304,8 @@ export const OnlineEvaluationPage: React.FC = () => {
     [setEditRuleId],
   );
 
-  // Filter out "type" (Scope), "enabled" (Status), "sampling_rate", and "project_names" from filter options
-  // Note: project_names filtering is not supported by backend (frontend-only enriched field)
+  // Filter out "type" (Scope), "enabled" (Status), "sampling_rate", and "projects" from filter options
+  // Note: projects filtering is not supported by backend (see OPIK-3446)
   const filterableColumns = useMemo(
     () =>
       DEFAULT_COLUMNS.filter(
@@ -340,7 +313,7 @@ export const OnlineEvaluationPage: React.FC = () => {
           col.id !== "type" &&
           col.id !== "enabled" &&
           col.id !== "sampling_rate" &&
-          col.id !== "project_names",
+          col.id !== "projects",
       ),
     [],
   );

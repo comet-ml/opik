@@ -1,6 +1,7 @@
 package com.comet.opik.domain.evaluators;
 
 import com.comet.opik.api.evaluators.AutomationRule;
+import com.comet.opik.api.evaluators.ProjectReference;
 import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -11,6 +12,7 @@ import lombok.experimental.SuperBuilder;
 
 import java.time.Instant;
 import java.util.Set;
+import java.util.SortedSet;
 import java.util.UUID;
 
 /**
@@ -31,7 +33,9 @@ public abstract non-sealed class AutomationRuleEvaluatorModelBase<T> implements 
     @Builder.Default
     private final String projectName = null; // Legacy project name field (resolved from projectId)
     @Builder.Default
-    private final Set<UUID> projectIds = null; // New multi-project field
+    private final Set<UUID> projectIds = null; // Multi-project IDs (database field)
+    @Builder.Default
+    private final SortedSet<ProjectReference> projects = null; // Projects assigned to this rule (unique, sorted alphabetically by name, enriched from projectIds)
     @Builder.Default
     private final String name = null;
     @Builder.Default
@@ -61,6 +65,7 @@ public abstract non-sealed class AutomationRuleEvaluatorModelBase<T> implements 
                     .projectId(common.projectId())
                     .projectName(common.projectName())
                     .projectIds(common.projectIds())
+                    .projects(common.projects())
                     .name(common.name())
                     .samplingRate(common.samplingRate())
                     .enabled(common.enabled())

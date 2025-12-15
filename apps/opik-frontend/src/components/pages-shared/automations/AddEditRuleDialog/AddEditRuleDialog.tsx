@@ -203,7 +203,9 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
     resolver: zodResolver(EvaluationRuleFormSchema),
     defaultValues: {
       ruleName: defaultRule?.name || "",
-      projectIds: defaultRule?.project_ids || (projectId ? [projectId] : []),
+      projectIds:
+        defaultRule?.projects?.map((p) => p.project_id) ||
+        (projectId ? [projectId] : []),
       samplingRate: defaultRule?.sampling_rate ?? 1,
       uiType: formUIRuleType,
       scope: formScope,

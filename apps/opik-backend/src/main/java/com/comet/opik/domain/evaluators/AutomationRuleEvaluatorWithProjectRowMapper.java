@@ -1,6 +1,7 @@
 package com.comet.opik.domain.evaluators;
 
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorType;
+import com.comet.opik.api.evaluators.ProjectReference;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -14,6 +15,7 @@ import java.sql.SQLException;
 import java.time.Instant;
 import java.util.HashSet;
 import java.util.Set;
+import java.util.SortedSet;
 import java.util.UUID;
 import java.util.function.Function;
 
@@ -37,6 +39,7 @@ public class AutomationRuleEvaluatorWithProjectRowMapper implements RowMapper<Au
             UUID projectId,
             String projectName,
             Set<UUID> projectIds,
+            SortedSet<ProjectReference> projects,
             String name,
             Float samplingRate,
             boolean enabled,
@@ -126,13 +129,15 @@ public class AutomationRuleEvaluatorWithProjectRowMapper implements RowMapper<Au
             log.debug("Initialized rule '{}' with legacy project_id '{}'", id, legacyProjectId);
         }
 
-        // Both projectId and projectName will be enriched by Service layer
-        // projectId: Derived from first element of projectIds (for backward compatibility)
-        // projectName: Fetched from projects table based on projectId
+        // projectId, projectName, and projects will be enriched by Service layer
+        // projectId: Derived from first project (for backward compatibility)
+        // projectName: Derived from first project (for backward compatibility)
+        // projects: SortedSet of ProjectReference built from projectIds + fetched names (sorted alphabetically)
         UUID projectId = null;
         String projectName = null;
+        SortedSet<ProjectReference> projects = null;
 
-        return new CommonFields(id, projectId, projectName, projectIds, name, samplingRate,
+        return new CommonFields(id, projectId, projectName, projectIds, projects, name, samplingRate,
                 enabled, filters, createdAt, createdBy, lastUpdatedAt, lastUpdatedBy);
     }
 }

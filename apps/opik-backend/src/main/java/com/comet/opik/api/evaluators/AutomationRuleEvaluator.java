@@ -21,7 +21,7 @@ import lombok.experimental.UtilityClass;
 
 import java.time.Instant;
 import java.util.List;
-import java.util.Set;
+import java.util.SortedSet;
 import java.util.UUID;
 
 @Data
@@ -64,8 +64,8 @@ public abstract sealed class AutomationRuleEvaluator<T, E extends Filter> implem
     private final String projectName;
 
     @JsonView({View.Public.class, View.Write.class})
-    @Schema(description = "Multiple project IDs for multi-project support")
-    private final Set<UUID> projectIds;
+    @Schema(description = "Projects assigned to this rule (unique, sorted alphabetically by name)")
+    private final SortedSet<ProjectReference> projects;
 
     @JsonView({View.Public.class, View.Write.class})
     @NotBlank private final String name;

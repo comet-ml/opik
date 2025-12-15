@@ -18,6 +18,7 @@ import com.comet.opik.api.evaluators.AutomationRuleEvaluatorUpdateTraceThreadLlm
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorUpdateTraceThreadUserDefinedMetricPython;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorUpdateUserDefinedMetricPython;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorUserDefinedMetricPython;
+import com.comet.opik.api.evaluators.ProjectReference;
 import com.comet.opik.api.filter.Filter;
 import com.comet.opik.api.sorting.AutomationRuleEvaluatorSortingFactory;
 import com.comet.opik.domain.IdGenerator;
@@ -43,11 +44,16 @@ import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
 import java.sql.SQLIntegrityConstraintViolationException;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.SortedSet;
+import java.util.TreeSet;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 import static com.comet.opik.api.LogItem.LogPage;
 import static com.comet.opik.api.evaluators.AutomationRuleEvaluator.AutomationRuleEvaluatorPage;
@@ -122,7 +128,6 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
                     var definition = llmAsJudge.toBuilder()
                             .id(id)
                             .projectId(primaryProjectId)
-                            .projectIds(projectIds)
                             .createdBy(userName)
                             .lastUpdatedBy(userName)
                             .build();
@@ -136,7 +141,6 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
                     var definition = userDefinedMetricPython.toBuilder()
                             .id(id)
                             .projectId(primaryProjectId)
-                            .projectIds(projectIds)
                             .createdBy(userName)
                             .lastUpdatedBy(userName)
                             .build();
@@ -147,7 +151,6 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
                     var definition = traceThreadLlmAsJudge.toBuilder()
                             .id(id)
                             .projectId(primaryProjectId)
-                            .projectIds(projectIds)
                             .createdBy(userName)
                             .lastUpdatedBy(userName)
                             .build();
@@ -161,7 +164,6 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
                     var definition = userDefinedMetricPython.toBuilder()
                             .id(id)
                             .projectId(primaryProjectId)
-                            .projectIds(projectIds)
                             .createdBy(userName)
                             .lastUpdatedBy(userName)
                             .build();
@@ -172,7 +174,6 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
                     var definition = spanLlmAsJudge.toBuilder()
                             .id(id)
                             .projectId(primaryProjectId)
-                            .projectIds(projectIds)
                             .createdBy(userName)
                             .lastUpdatedBy(userName)
                             .build();
@@ -186,7 +187,6 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
                     var definition = spanUserDefinedMetricPython.toBuilder()
                             .id(id)
                             .projectId(primaryProjectId)
-                            .projectIds(projectIds)
                             .createdBy(userName)
                             .lastUpdatedBy(userName)
                             .build();
@@ -623,7 +623,7 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
     }
 
     /**
-     * Enriches a single AutomationRuleEvaluatorModel with the project name.
+     * Enriches a single AutomationRuleEvaluatorModel with project references.
      *
      * @param model the model to enrich
      * @param projectNameMap map of projectId to projectName
@@ -633,37 +633,45 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
             AutomationRuleEvaluatorModel<?> model,
             Map<UUID, String> projectNameMap) {
 
-        // For backward compatibility: derive projectId from first element of projectIds set
-        UUID projectId = model.projectIds().stream().findFirst().orElse(null);
-
-        log.debug("Enriching model - ruleId: '{}', projectIds count: '{}', derived projectId: '{}'",
-                model.id(), model.projectIds().size(), projectId);
-
-        if (projectId == null) {
+        if (model.projectIds().isEmpty()) {
             log.debug("Skipping enrichment for rule '{}' - no projects assigned", model.id());
-            return model; // No projects assigned
+            return model;
         }
 
-        String projectName = projectNameMap.get(projectId);
-        if (projectName == null) {
-            log.warn("Project name not found for projectId '{}' in rule '{}'", projectId, model.id());
-            // Continue with projectId even if name is missing
-        }
+        // Build SortedSet of ProjectReference objects (unique, sorted alphabetically by name)
+        SortedSet<ProjectReference> projects = model.projectIds().stream()
+                .map(id -> {
+                    String name = projectNameMap.get(id);
+                    if (name == null) {
+                        log.warn("Project name not found for projectId '{}' in rule '{}'", id, model.id());
+                        return null;
+                    }
+                    return new ProjectReference(id, name);
+                })
+                .filter(Objects::nonNull)
+                .collect(Collectors.toCollection(() -> new TreeSet<>(Comparator.comparing(
+                        ProjectReference::projectName))));
 
-        // Use builder pattern to update the model with projectId (for backward compatibility) and projectName
+        log.debug("Enriched rule '{}' with {} projects", model.id(), projects.size());
+
+        // For backward compatibility: derive legacy fields from first project
+        UUID projectId = projects.isEmpty() ? null : projects.first().projectId();
+        String projectName = projects.isEmpty() ? null : projects.first().projectName();
+
+        // Use builder pattern to update the model with projects and legacy fields
         return switch (model) {
             case LlmAsJudgeAutomationRuleEvaluatorModel m ->
-                m.toBuilder().projectId(projectId).projectName(projectName).build();
+                m.toBuilder().projectId(projectId).projectName(projectName).projects(projects).build();
             case UserDefinedMetricPythonAutomationRuleEvaluatorModel m ->
-                m.toBuilder().projectId(projectId).projectName(projectName).build();
+                m.toBuilder().projectId(projectId).projectName(projectName).projects(projects).build();
             case TraceThreadLlmAsJudgeAutomationRuleEvaluatorModel m ->
-                m.toBuilder().projectId(projectId).projectName(projectName).build();
+                m.toBuilder().projectId(projectId).projectName(projectName).projects(projects).build();
             case TraceThreadUserDefinedMetricPythonAutomationRuleEvaluatorModel m ->
-                m.toBuilder().projectId(projectId).projectName(projectName).build();
+                m.toBuilder().projectId(projectId).projectName(projectName).projects(projects).build();
             case SpanLlmAsJudgeAutomationRuleEvaluatorModel m ->
-                m.toBuilder().projectId(projectId).projectName(projectName).build();
+                m.toBuilder().projectId(projectId).projectName(projectName).projects(projects).build();
             case SpanUserDefinedMetricPythonAutomationRuleEvaluatorModel m ->
-                m.toBuilder().projectId(projectId).projectName(projectName).build();
+                m.toBuilder().projectId(projectId).projectName(projectName).projects(projects).build();
         };
     }
 }
