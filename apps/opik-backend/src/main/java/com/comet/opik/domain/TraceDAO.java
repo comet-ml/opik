@@ -2170,6 +2170,7 @@ class TraceDAOImpl implements TraceDAO {
                     workspace_id,
                     project_id,
                     id,
+                    thread_id,
                     if(input_length > 0, 1, 0) as input_count,
                     if(output_length > 0, 1, 0) as output_count,
                     if(metadata_length > 0, 1, 0) as metadata_count,
@@ -2242,6 +2243,7 @@ class TraceDAOImpl implements TraceDAO {
                 t.workspace_id as workspace_id,
                 t.project_id as project_id,
                 countDistinct(t.id) AS trace_count,
+                countDistinctIf(t.thread_id, t.thread_id != '') AS thread_count,
                 arrayMap(
                   v -> toDecimal64(
                          greatest(
