@@ -1,10 +1,10 @@
 import { useMemo, useState } from "react";
 import useLocalStorageState from "use-local-storage-state";
 import useAllWorkspaceMembers from "@/plugins/comet/useWorkspaceMembers";
-import useAllWorkspaces from "@/plugins/comet/useAllWorkspaces";
 import useWorkspaceUsersPermissions from "@/plugins/comet/api/useWorkspaceUsersPermissions";
 import useOrganizationMembers from "@/plugins/comet/api/useOrganizationMembers";
 import useCurrentOrganization from "@/plugins/comet/useCurrentOrganization";
+import useWorkspace from "@/plugins/comet/useWorkspace";
 import DataTable from "@/components/shared/DataTable/DataTable";
 import ExplainerCallout from "@/components/shared/ExplainerCallout/ExplainerCallout";
 import SearchInput from "@/components/shared/SearchInput/SearchInput";
@@ -14,7 +14,6 @@ import { convertColumnDataToColumn } from "@/lib/table";
 import { formatDate } from "@/lib/date";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 import { getPermissionByType, isUserPermissionValid } from "@/lib/permissions";
-import useAppStore from "@/store/AppStore";
 import {
   ManagementPermissionsNames,
   ORGANIZATION_ROLE_TYPE,
@@ -62,28 +61,23 @@ const CollaboratorsTab = () => {
 
   const [search, setSearch] = useState("");
 
-  const workspaceName = useAppStore((state) => state.activeWorkspaceName);
-
-  const { data: allWorkspaces } = useAllWorkspaces();
-
-  const workspace = allWorkspaces?.find(
-    (w) => w.workspaceName === workspaceName,
-  );
+  const workspace = useWorkspace();
+  const workspaceId = workspace?.workspaceId;
 
   const currentOrganization = useCurrentOrganization();
 
   const { data: workspaceMembers, isPending } = useAllWorkspaceMembers(
-    { workspaceId: workspace?.workspaceId || "" },
+    { workspaceId: workspaceId || "" },
     {
-      enabled: Boolean(workspace?.workspaceId),
+      enabled: Boolean(workspaceId),
     },
   );
 
   const { data: permissionsData, isPending: isPermissionsPending } =
     useWorkspaceUsersPermissions(
-      { workspaceId: workspace?.workspaceId || "" },
+      { workspaceId: workspaceId || "" },
       {
-        enabled: Boolean(workspace?.workspaceId),
+        enabled: Boolean(workspaceId),
       },
     );
 

@@ -10,10 +10,10 @@ import CellWrapper from "@/components/shared/DataTableCells/CellWrapper";
 import useManageUsersRolePopover from "@/hooks/useManageUsersRolePopover";
 import useUserPermission from "@/plugins/comet/useUserPermission";
 import { UserPermission, WorkspaceMember } from "@/plugins/comet/types";
+import useWorkspace from "@/plugins/comet/useWorkspace";
 import WorkspaceRolePopover from "@/plugins/comet/WorkspaceRolePopover";
-import useAllWorkspaces from "@/plugins/comet/useAllWorkspaces";
 import { useUpdateWorkspaceUsersPermissionsMutation } from "@/plugins/comet/api/useUpdateWorkspaceUsersPermissionsMutation";
-import useAppStore, { useLoggedInUserName } from "@/store/AppStore";
+import { useLoggedInUserName } from "@/store/AppStore";
 import { getKeyForChangingRole } from "@/lib/permissions";
 
 interface PopoverData extends WorkspaceMember {
@@ -29,18 +29,13 @@ const WorkspaceRoleCell = (context: CellContext<WorkspaceMember, string>) => {
   const value = context.getValue();
   const row = context.row.original;
 
-  const workspaceName = useAppStore((state) => state.activeWorkspaceName);
-
   const currentUserName = useLoggedInUserName();
 
   const { getPermissionStatus } = useUserPermission();
 
-  const [popoverData, setPopoverData] = useState<PopoverData | null>(null);
+  const workspace = useWorkspace();
 
-  const { data: allWorkspaces } = useAllWorkspaces();
-  const workspace = allWorkspaces?.find(
-    (w) => w.workspaceName === workspaceName,
-  );
+  const [popoverData, setPopoverData] = useState<PopoverData | null>(null);
 
   const { mutate: updateWorkspaceUsersPermissions } =
     useUpdateWorkspaceUsersPermissionsMutation();
@@ -74,13 +69,12 @@ const WorkspaceRoleCell = (context: CellContext<WorkspaceMember, string>) => {
     };
   }, [debouncedUpdatePermissions]);
 
-  const ifChangeWsRoleDisabled = !getPermissionStatus({
-    workspaceName,
-    permissionKey: getKeyForChangingRole(
+  const ifChangeWsRoleDisabled = !getPermissionStatus(
+    getKeyForChangingRole(
       currentUserName!,
       popoverData?.userName || popoverData?.email || "",
     ),
-  });
+  );
 
   const setPermissions = (newPermissions: UserPermission[]) => {
     const userName = popoverData?.userName || popoverData?.email;
@@ -92,7 +86,7 @@ const WorkspaceRoleCell = (context: CellContext<WorkspaceMember, string>) => {
 
     if (workspace?.workspaceId && userName) {
       debouncedUpdatePermissions(
-        workspace.workspaceId,
+        workspace?.workspaceId,
         userName,
         newPermissions,
       );

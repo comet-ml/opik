@@ -1,6 +1,6 @@
 import { useCallback } from "react";
 import find from "lodash/find";
-import { useLoggedInUserName } from "@/store/AppStore";
+import useAppStore, { useLoggedInUserName } from "@/store/AppStore";
 import useCurrentOrganization from "./useCurrentOrganization";
 import useUserPermissions from "./useUserPermissions";
 import { MANAGEMENT_PERMISSIONS } from "@/constants/permissions";
@@ -18,6 +18,8 @@ const useUserPermission = (config?: { enabled?: boolean }) => {
 
   const userName = useLoggedInUserName();
 
+  const workspaceName = useAppStore((state) => state.activeWorkspaceName);
+
   const isAdmin = currentOrganization?.role === ORGANIZATION_ROLE_TYPE.admin;
 
   const { data: userPermissions } = useUserPermissions(
@@ -33,13 +35,9 @@ const useUserPermission = (config?: { enabled?: boolean }) => {
   );
 
   const getPermissionStatus = useCallback(
-    ({
-      workspaceName,
-      permissionKey,
-    }: {
-      workspaceName: string;
-      permissionKey: (typeof MANAGEMENT_PERMISSIONS)[keyof typeof MANAGEMENT_PERMISSIONS];
-    }) => {
+    (
+      permissionKey: (typeof MANAGEMENT_PERMISSIONS)[keyof typeof MANAGEMENT_PERMISSIONS],
+    ) => {
       if (!currentOrganization) {
         return false;
       }
@@ -83,7 +81,7 @@ const useUserPermission = (config?: { enabled?: boolean }) => {
           currentOrganization?.onlyAdminsInviteByEmail,
       });
     },
-    [userPermissions, currentOrganization, isAdmin],
+    [userPermissions, currentOrganization, isAdmin, workspaceName],
   );
 
   return { getPermissionStatus };
