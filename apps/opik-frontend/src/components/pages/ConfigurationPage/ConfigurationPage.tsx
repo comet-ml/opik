@@ -2,11 +2,11 @@ import React, { useEffect } from "react";
 import AIProvidersTab from "@/components/pages/ConfigurationPage/AIProvidersTab/AIProvidersTab";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { StringParam, useQueryParam } from "use-query-params";
+import usePluginsStore from "@/store/PluginsStore";
 import FeedbackDefinitionsTab from "@/components/pages/ConfigurationPage/FeedbackDefinitionsTab/FeedbackDefinitionsTab";
 import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
 import WorkspacePreferencesTab from "./WorkspacePreferencesTab/WorkspacePreferencesTab";
-import CollaboratorsTab from "./CollaboratorsTab/CollaboratorsTab";
 
 enum CONFIGURATION_TABS {
   FEEDBACK_DEFINITIONS = "feedback-definitions",
@@ -23,6 +23,8 @@ const ConfigurationPage = () => {
   const isCollaboratorsTabEnabled = useIsFeatureEnabled(
     FeatureToggleKeys.COLLABORATORS_TAB_ENABLED,
   );
+
+  const CollaboratorsTab = usePluginsStore((state) => state.CollaboratorsTab);
 
   useEffect(() => {
     if (!tab) {
@@ -59,7 +61,7 @@ const ConfigurationPage = () => {
             >
               Workspace preferences
             </TabsTrigger>
-            {isCollaboratorsTabEnabled && (
+            {isCollaboratorsTabEnabled && CollaboratorsTab && (
               <TabsTrigger
                 variant="underline"
                 value={CONFIGURATION_TABS.COLLABORATORS}
@@ -81,7 +83,7 @@ const ConfigurationPage = () => {
             <WorkspacePreferencesTab />
           </TabsContent>
 
-          {isCollaboratorsTabEnabled && (
+          {isCollaboratorsTabEnabled && CollaboratorsTab && (
             <TabsContent value={CONFIGURATION_TABS.COLLABORATORS}>
               <CollaboratorsTab />
             </TabsContent>
