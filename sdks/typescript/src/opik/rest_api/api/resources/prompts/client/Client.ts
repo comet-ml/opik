@@ -344,6 +344,103 @@ export class Prompts {
     }
 
     /**
+     * Update one or more prompt versions.
+     *
+     * Note: Prompt versions are immutable by design.
+     * Only organizational properties, such as tags etc., can be updated.
+     * Core properties like template and metadata cannot be modified after creation.
+     *
+     * PATCH semantics:
+     * - non-empty values update the field
+     * - null values preserve existing field values (no change)
+     * - empty values explicitly clear the field
+     *
+     * @param {OpikApi.PromptVersionBatchUpdate} request
+     * @param {Prompts.RequestOptions} requestOptions - Request-specific configuration.
+     *
+     * @throws {@link OpikApi.BadRequestError}
+     *
+     * @example
+     *     await client.prompts.updatePromptVersions({
+     *         ids: ["ids"],
+     *         update: {}
+     *     })
+     */
+    public updatePromptVersions(
+        request: OpikApi.PromptVersionBatchUpdate,
+        requestOptions?: Prompts.RequestOptions,
+    ): core.HttpResponsePromise<void> {
+        return core.HttpResponsePromise.fromPromise(this.__updatePromptVersions(request, requestOptions));
+    }
+
+    private async __updatePromptVersions(
+        request: OpikApi.PromptVersionBatchUpdate,
+        requestOptions?: Prompts.RequestOptions,
+    ): Promise<core.WithRawResponse<void>> {
+        const _response = await core.fetcher({
+            url: urlJoin(
+                (await core.Supplier.get(this._options.baseUrl)) ??
+                    (await core.Supplier.get(this._options.environment)) ??
+                    environments.OpikApiEnvironment.Default,
+                "v1/private/prompts/versions",
+            ),
+            method: "PATCH",
+            headers: {
+                "Comet-Workspace":
+                    (await core.Supplier.get(this._options.workspaceName)) != null
+                        ? await core.Supplier.get(this._options.workspaceName)
+                        : undefined,
+                "X-Fern-Language": "JavaScript",
+                "X-Fern-Runtime": core.RUNTIME.type,
+                "X-Fern-Runtime-Version": core.RUNTIME.version,
+                ...(await this._getCustomAuthorizationHeaders()),
+                ...requestOptions?.headers,
+            },
+            contentType: "application/json",
+            requestType: "json",
+            body: serializers.PromptVersionBatchUpdate.jsonOrThrow(request, { unrecognizedObjectKeys: "strip" }),
+            timeoutMs: requestOptions?.timeoutInSeconds != null ? requestOptions.timeoutInSeconds * 1000 : 60000,
+            maxRetries: requestOptions?.maxRetries,
+            withCredentials: true,
+            abortSignal: requestOptions?.abortSignal,
+        });
+        if (_response.ok) {
+            return { data: undefined, rawResponse: _response.rawResponse };
+        }
+
+        if (_response.error.reason === "status-code") {
+            switch (_response.error.statusCode) {
+                case 400:
+                    throw new OpikApi.BadRequestError(_response.error.body, _response.rawResponse);
+                default:
+                    throw new errors.OpikApiError({
+                        statusCode: _response.error.statusCode,
+                        body: _response.error.body,
+                        rawResponse: _response.rawResponse,
+                    });
+            }
+        }
+
+        switch (_response.error.reason) {
+            case "non-json":
+                throw new errors.OpikApiError({
+                    statusCode: _response.error.statusCode,
+                    body: _response.error.rawBody,
+                    rawResponse: _response.rawResponse,
+                });
+            case "timeout":
+                throw new errors.OpikApiTimeoutError(
+                    "Timeout exceeded when calling PATCH /v1/private/prompts/versions.",
+                );
+            case "unknown":
+                throw new errors.OpikApiError({
+                    message: _response.error.errorMessage,
+                    rawResponse: _response.rawResponse,
+                });
+        }
+    }
+
+    /**
      * Get prompt by id
      *
      * @param {string} id
@@ -795,7 +892,7 @@ export class Prompts {
         request: OpikApi.GetPromptVersionsRequest = {},
         requestOptions?: Prompts.RequestOptions,
     ): Promise<core.WithRawResponse<OpikApi.PromptVersionPagePublic>> {
-        const { page, size } = request;
+        const { page, size, search, sorting, filters } = request;
         const _queryParams: Record<string, string | string[] | object | object[] | null> = {};
         if (page != null) {
             _queryParams["page"] = page.toString();
@@ -803,6 +900,18 @@ export class Prompts {
 
         if (size != null) {
             _queryParams["size"] = size.toString();
+        }
+
+        if (search != null) {
+            _queryParams["search"] = search;
+        }
+
+        if (sorting != null) {
+            _queryParams["sorting"] = sorting;
+        }
+
+        if (filters != null) {
+            _queryParams["filters"] = filters;
         }
 
         const _response = await core.fetcher({

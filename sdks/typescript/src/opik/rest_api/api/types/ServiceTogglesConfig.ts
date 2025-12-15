@@ -23,4 +23,5 @@ export interface ServiceTogglesConfig {
     vertexaiProviderEnabled: boolean;
     customllmProviderEnabled: boolean;
     opikbuiltinProviderEnabled: boolean;
+    collaboratorsTabEnabled: boolean;
 }

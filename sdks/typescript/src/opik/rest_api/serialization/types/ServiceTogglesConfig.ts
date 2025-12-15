@@ -30,6 +30,7 @@ export const ServiceTogglesConfig: core.serialization.ObjectSchema<
     vertexaiProviderEnabled: core.serialization.boolean(),
     customllmProviderEnabled: core.serialization.boolean(),
     opikbuiltinProviderEnabled: core.serialization.boolean(),
+    collaboratorsTabEnabled: core.serialization.boolean(),
 });
 
 export declare namespace ServiceTogglesConfig {
@@ -54,5 +55,6 @@ export declare namespace ServiceTogglesConfig {
         vertexaiProviderEnabled: boolean;
         customllmProviderEnabled: boolean;
         opikbuiltinProviderEnabled: boolean;
+        collaboratorsTabEnabled: boolean;
     }
 }
