@@ -2972,11 +2972,14 @@ class DatasetsResourceTest {
                 assertThat(actualResponse.hasEntity()).isFalse();
             }
 
+            var expectedTags = datasetUpdate.tags() == null
+                    ? dataset.tags() // if null, keep previous tags
+                    : (datasetUpdate.tags().isEmpty() ? null : datasetUpdate.tags()); // if empty, clears tags
             var expectedDataset = dataset.toBuilder()
                     .name(datasetUpdate.name())
                     .description(datasetUpdate.description())
                     .visibility(datasetUpdate.visibility())
-                    .tags(datasetUpdate.tags() == null ? dataset.tags() : datasetUpdate.tags())
+                    .tags(expectedTags)
                     .build();
 
             getAndAssertEquals(id, expectedDataset, TEST_WORKSPACE, API_KEY);

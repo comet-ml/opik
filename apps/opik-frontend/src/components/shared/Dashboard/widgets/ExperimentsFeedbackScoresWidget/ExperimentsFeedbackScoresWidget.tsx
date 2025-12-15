@@ -308,7 +308,7 @@ const ExperimentsFeedbackScoresWidget: React.FunctionComponent<
       return (
         <DashboardWidget.EmptyState
           title="No data available"
-          message="Configure filters to display experiment feedback scores"
+          message="Configure filters to display experiment metrics"
           onAction={!preview ? handleEdit : undefined}
           actionLabel="Configure widget"
         />

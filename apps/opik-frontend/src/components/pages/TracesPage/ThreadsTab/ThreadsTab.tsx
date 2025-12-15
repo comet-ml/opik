@@ -29,6 +29,7 @@ import {
   COLUMN_TYPE,
   COLUMN_USAGE_ID,
   ColumnData,
+  ColumnsStatistic,
   DynamicColumn,
   ROW_HEIGHT,
 } from "@/types/shared";
@@ -61,9 +62,10 @@ import ThreadDetailsPanel from "@/components/pages-shared/traces/ThreadDetailsPa
 import TraceDetailsPanel from "@/components/pages-shared/traces/TraceDetailsPanel/TraceDetailsPanel";
 import PageBodyStickyContainer from "@/components/layout/PageBodyStickyContainer/PageBodyStickyContainer";
 import PageBodyStickyTableWrapper from "@/components/layout/PageBodyStickyTableWrapper/PageBodyStickyTableWrapper";
-import { formatDate } from "@/lib/date";
+import { formatDate, formatDuration } from "@/lib/date";
 import ThreadsActionsPanel from "@/components/pages/TracesPage/ThreadsTab/ThreadsActionsPanel";
 import useThreadList from "@/api/traces/useThreadsList";
+import useThreadsStatistic from "@/api/traces/useThreadsStatistic";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 import ThreadStatusCell from "@/components/shared/DataTableCells/ThreadStatusCell";
 import FeedbackScoreHeader from "@/components/shared/DataTableHeaders/FeedbackScoreHeader";
@@ -135,6 +137,8 @@ const SHARED_COLUMNS: ColumnData<Thread>[] = [
     label: "Duration",
     type: COLUMN_TYPE.duration,
     cell: DurationCell as never,
+    statisticDataFormater: (value) => formatDuration(value),
+    supportsPercentiles: true,
   },
   {
     id: "tags",
@@ -167,6 +171,27 @@ const DEFAULT_COLUMNS: ColumnData<Thread>[] = [
       row.usage && isNumber(row.usage.total_tokens)
         ? `${row.usage.total_tokens}`
         : "-",
+    statisticKey: "usage.total_tokens",
+  },
+  {
+    id: `${COLUMN_USAGE_ID}.prompt_tokens`,
+    label: "Total input tokens",
+    type: COLUMN_TYPE.number,
+    accessorFn: (row) =>
+      row.usage && isNumber(row.usage.prompt_tokens)
+        ? `${row.usage.prompt_tokens}`
+        : "-",
+    statisticKey: "usage.prompt_tokens",
+  },
+  {
+    id: `${COLUMN_USAGE_ID}.completion_tokens`,
+    label: "Total output tokens",
+    type: COLUMN_TYPE.number,
+    accessorFn: (row) =>
+      row.usage && isNumber(row.usage.completion_tokens)
+        ? `${row.usage.completion_tokens}`
+        : "-",
+    statisticKey: "usage.completion_tokens",
   },
   {
     id: "total_estimated_cost",
@@ -175,6 +200,7 @@ const DEFAULT_COLUMNS: ColumnData<Thread>[] = [
     cell: CostCell as never,
     explainer: EXPLAINERS_MAP[EXPLAINER_ID.hows_the_thread_cost_estimated],
     size: 160,
+    statisticKey: "total_estimated_cost",
   },
   {
     id: "created_by",
@@ -367,6 +393,19 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
     },
   );
 
+  const { data: statisticData } = useThreadsStatistic(
+    {
+      projectId,
+      filters,
+      search: search as string,
+      fromTime: intervalStart,
+      toTime: intervalEnd,
+    },
+    {
+      refetchInterval: REFETCH_INTERVAL,
+    },
+  );
+
   const noData = !search && filters.length === 0;
   const noDataText = noData ? `There are no threads yet` : "No search results";
 
@@ -437,6 +476,11 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
   const sortableBy: string[] = useMemo(
     () => data?.sortable_by ?? [],
     [data?.sortable_by],
+  );
+
+  const columnsStatistic: ColumnsStatistic = useMemo(
+    () => statisticData?.stats ?? [],
+    [statisticData?.stats],
   );
 
   const [selectedColumns, setSelectedColumns] = useLocalStorageState<string[]>(
@@ -668,6 +712,7 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
         <>
           <DataTable
             columns={columns}
+            columnsStatistic={columnsStatistic}
             data={rows}
             onRowClick={handleRowClick}
             activeRowId={activeRowId ?? ""}

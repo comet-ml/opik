@@ -66,6 +66,9 @@ const useThreadFeedbackScoreSetMutation = () => {
       await queryClient.invalidateQueries({
         queryKey: ["threads-columns", { projectId: variables.projectId }],
       });
+      await queryClient.invalidateQueries({
+        queryKey: ["threads-statistic", { projectId: variables.projectId }],
+      });
     },
   });
 };

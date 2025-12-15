@@ -21,4 +21,5 @@ export enum FeatureToggleKeys {
   VERTEXAI_PROVIDER_ENABLED = "vertexai_provider_enabled",
   CUSTOMLLM_PROVIDER_ENABLED = "customllm_provider_enabled",
   OPIKBUILTIN_PROVIDER_ENABLED = "opikbuiltin_provider_enabled",
+  COLLABORATORS_TAB_ENABLED = "collaborators_tab_enabled",
 }

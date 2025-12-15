@@ -18,7 +18,7 @@ import {
 } from "@/components/ui/dialog";
 import { Form } from "@/components/ui/form";
 import useDashboardCreateMutation from "@/api/dashboards/useDashboardCreateMutation";
-import { Dashboard, TEMPLATE_ID } from "@/types/dashboard";
+import { Dashboard, TEMPLATE_TYPE } from "@/types/dashboard";
 import useDashboardUpdateMutation from "@/api/dashboards/useDashboardUpdateMutation";
 import { useNavigate } from "@tanstack/react-router";
 import useAppStore from "@/store/AppStore";
@@ -50,11 +50,11 @@ const DashboardFormSchema = z
       .optional()
       .or(z.literal("")),
     projectId: z.string().optional(),
-    templateId: z.string().optional(),
+    templateType: z.string().optional(),
   })
   .refine(
     (data) => {
-      if (data.templateId) return !!data.projectId;
+      if (data.templateType) return !!data.projectId;
       return true;
     },
     {
@@ -72,12 +72,24 @@ type AddEditCloneDashboardDialogProps = {
   dashboard?: Dashboard;
   open: boolean;
   setOpen: (open: boolean) => void;
-  onSuccess?: () => void;
+  onCreateSuccess?: (dashboardId: string) => void;
+  onEditSuccess?: () => void;
+  navigateOnCreate?: boolean;
+  defaultProjectId?: string;
 };
 
 const AddEditCloneDashboardDialog: React.FC<
   AddEditCloneDashboardDialogProps
-> = ({ mode, dashboard, open, setOpen, onSuccess }) => {
+> = ({
+  mode,
+  dashboard,
+  open,
+  setOpen,
+  onCreateSuccess,
+  onEditSuccess,
+  navigateOnCreate = true,
+  defaultProjectId,
+}) => {
   const navigate = useNavigate();
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const { toast } = useToast();
@@ -112,14 +124,14 @@ const AddEditCloneDashboardDialog: React.FC<
     defaultValues: {
       name: getInitialName(),
       description: dashboard?.description || "",
-      projectId: undefined,
-      templateId: undefined,
+      projectId: defaultProjectId,
+      templateType: undefined,
     },
   });
 
-  const handleSelectOption = (templateId: string) => {
+  const handleSelectOption = (templateType: string) => {
     setCurrentStep(DialogStep.DETAILS);
-    form.setValue("templateId", templateId, {
+    form.setValue("templateType", templateType, {
       shouldValidate: true,
       shouldDirty: true,
       shouldTouch: true,
@@ -160,22 +172,25 @@ const AddEditCloneDashboardDialog: React.FC<
 
   const onDashboardCreated = useCallback(
     (dashboardData?: { id?: string }) => {
-      if (dashboardData?.id) {
+      const dashboardId = dashboardData?.id;
+      if (dashboardId) {
         // Force synchronous state update before navigation
         flushSync(() => {
-          onSuccess?.();
+          onCreateSuccess?.(dashboardId);
         });
 
-        navigate({
-          to: "/$workspaceName/dashboards/$dashboardId",
-          params: {
-            dashboardId: dashboardData.id,
-            workspaceName,
-          },
-        });
+        if (navigateOnCreate) {
+          navigate({
+            to: "/$workspaceName/dashboards/$dashboardId",
+            params: {
+              dashboardId,
+              workspaceName,
+            },
+          });
+        }
       }
     },
-    [navigate, workspaceName, onSuccess],
+    [navigate, workspaceName, onCreateSuccess, navigateOnCreate],
   );
 
   const handleMutationError = useCallback(
@@ -216,6 +231,7 @@ const AddEditCloneDashboardDialog: React.FC<
           },
           {
             onSuccess: () => {
+              onEditSuccess?.();
               setOpen(false);
             },
             onError: (error: AxiosError) =>
@@ -226,9 +242,9 @@ const AddEditCloneDashboardDialog: React.FC<
         let dashboardConfig;
 
         if (mode === "create") {
-          if (values.templateId) {
+          if (values.templateType) {
             const template =
-              DASHBOARD_TEMPLATES[values.templateId as TEMPLATE_ID];
+              DASHBOARD_TEMPLATES[values.templateType as TEMPLATE_TYPE];
             dashboardConfig = regenerateAllIds(template.config);
             dashboardConfig.config.projectIds = values.projectId
               ? [values.projectId]
@@ -236,10 +252,11 @@ const AddEditCloneDashboardDialog: React.FC<
           } else {
             dashboardConfig = generateEmptyDashboard();
           }
-        } else if (mode === "save_as") {
+        } else if (mode === "save_as" || mode === "clone") {
           dashboardConfig = regenerateAllIds(dashboard!.config);
-        } else {
-          dashboardConfig = regenerateAllIds(dashboard!.config);
+          if (defaultProjectId) {
+            dashboardConfig.config.projectIds = [defaultProjectId];
+          }
         }
 
         createMutate(
@@ -251,7 +268,10 @@ const AddEditCloneDashboardDialog: React.FC<
             },
           },
           {
-            onSuccess: onDashboardCreated,
+            onSuccess: (data) => {
+              onDashboardCreated(data);
+              setOpen(false);
+            },
             onError: (error: AxiosError) => handleMutationError(error, mode),
           },
         );
@@ -259,12 +279,14 @@ const AddEditCloneDashboardDialog: React.FC<
     },
     [
       mode,
-      dashboard,
-      createMutate,
       updateMutate,
-      onDashboardCreated,
-      handleMutationError,
+      dashboard,
+      onEditSuccess,
       setOpen,
+      handleMutationError,
+      createMutate,
+      defaultProjectId,
+      onDashboardCreated,
     ],
   );
 
@@ -293,9 +315,11 @@ const AddEditCloneDashboardDialog: React.FC<
                 <DashboardDialogDetailsStep
                   control={form.control}
                   showProjectSelector={
-                    isCreateMode && !!form.watch("templateId")
+                    isCreateMode &&
+                    !!form.watch("templateType") &&
+                    !defaultProjectId
                   }
-                  defaultDescriptionOpen={!!dashboard?.description}
+                  defaultDescriptionOpen={true}
                   onSubmit={form.handleSubmit(onSubmit)}
                 />
               </form>
