@@ -182,16 +182,13 @@ class DatasetVersionServiceImpl implements DatasetVersionService {
         String versionHash = CommitUtils.getCommit(versionId);
         log.info("Generated version hash '{}' for dataset '{}'", versionHash, datasetId);
 
-        // Count items first to determine how many UUIDs we need to generate
-        Long itemCount = datasetItemDAO.countDraftItems(datasetId)
-                .contextWrite(ctx -> ctx
-                        .put(RequestContext.USER_NAME, userName)
-                        .put(RequestContext.WORKSPACE_ID, workspaceId))
-                .block();
-        log.info("Dataset '{}' has '{}' items to snapshot", datasetId, itemCount);
+        // Get item count from the latest version to determine how many UUIDs we need
+        Optional<DatasetVersion> latestVersion = getLatestVersion(datasetId, workspaceId);
+        int latestVersionItemCount = latestVersion.map(DatasetVersion::itemsTotal).orElse(0);
+        log.info("Dataset '{}' latest version has '{}' items", datasetId, latestVersionItemCount);
 
-        // Generate UUIDs in Java (double the count for safety)
-        int uuidCount = itemCount.intValue() * 2;
+        // Generate UUIDs in Java (double the count for safety, with minimum pool size)
+        int uuidCount = Math.max(latestVersionItemCount * 2, 1000);
         List<UUID> uuids = IntStream.range(0, uuidCount)
                 .mapToObj(i -> idGenerator.generateId())
                 .toList();
@@ -216,7 +213,8 @@ class DatasetVersionServiceImpl implements DatasetVersionService {
             DatasetVersionDiffStats diffStats = previousVersion
                     .map(datasetVersion -> calculateDiffStatistics(datasetId, datasetVersion.id(), versionId,
                             workspaceId, userName))
-                    .orElseGet(() -> new DatasetVersionDiffStats(itemCount.intValue(), 0, 0, itemCount.intValue()));
+                    .orElseGet(() -> new DatasetVersionDiffStats(snapshotCount.intValue(), 0, 0,
+                            snapshotCount.intValue()));
 
             log.info("Diff statistics for dataset '{}': added='{}', modified='{}', deleted='{}', unchanged='{}'",
                     datasetId, diffStats.itemsAdded(), diffStats.itemsModified(),
@@ -225,7 +223,7 @@ class DatasetVersionServiceImpl implements DatasetVersionService {
             // Create a new version with calculated diff statistics
             var version = DatasetVersionMapper.INSTANCE.toDatasetVersion(
                     versionId, datasetId, versionHash,
-                    itemCount.intValue(),
+                    snapshotCount.intValue(),
                     diffStats.itemsAdded(),
                     diffStats.itemsModified(),
                     diffStats.itemsDeleted(),
@@ -542,69 +540,118 @@ class DatasetVersionServiceImpl implements DatasetVersionService {
     public Mono<DatasetVersion> restoreVersion(@NonNull UUID datasetId, @NonNull String versionRef) {
         log.info("Restoring dataset '{}' to version '{}'", datasetId, versionRef);
 
-        // Capture request context values before entering reactive chain
         String workspaceId = requestContext.get().getWorkspaceId();
         String userName = requestContext.get().getUserName();
 
-        return Mono.fromCallable(() -> {
-            // Resolve version reference to version ID and get version details
-            UUID versionId = resolveVersionId(workspaceId, datasetId, versionRef);
-            DatasetVersion versionToRestore = template.inTransaction(READ_ONLY, handle -> {
-                var dao = handle.attach(DatasetVersionDAO.class);
-                return dao.findById(versionId, workspaceId).orElseThrow(
-                        () -> new NotFoundException(ERROR_VERSION_NOT_FOUND.formatted(versionRef, datasetId)));
-            });
-
-            return new RestoreContext(versionId, versionToRestore, workspaceId, userName);
-        })
+        return Mono.fromCallable(() -> buildRestoreContext(datasetId, versionRef, workspaceId, userName))
                 .subscribeOn(Schedulers.boundedElastic())
                 .flatMap(context -> {
-                    // Step 1: Delete all draft items
-                    return datasetItemDAO.deleteAllNonVersionedDatasetItems(datasetId)
-                            .doOnSuccess(deletedCount -> log.info("Deleted '{}' draft items for dataset '{}'",
-                                    deletedCount, datasetId))
-                            // Step 2: Copy items from version to draft using bulk INSERT INTO ... SELECT
-                            .flatMap(deletedCount -> datasetItemDAO.restoreFromVersion(datasetId, context.versionId))
-                            .doOnSuccess(restoredCount -> log.info(
-                                    "Restored '{}' items from version '{}' to draft for dataset '{}'",
-                                    restoredCount, versionRef, datasetId))
-                            // Step 3: Check if this is the latest version AFTER restore operations
-                            // (delayed to reduce race condition window)
-                            .flatMap(restoredCount -> Mono.fromCallable(() -> {
-                                Optional<DatasetVersion> latestVersion = getLatestVersion(datasetId,
-                                        context.workspaceId);
-                                boolean isLatestVersion = latestVersion.isPresent()
-                                        && latestVersion.get().id().equals(context.versionId);
-
-                                log.info("Restored version '{}' for dataset '{}', isLatest='{}'",
-                                        versionRef, datasetId, isLatestVersion);
-
-                                return isLatestVersion;
-                            }).subscribeOn(Schedulers.boundedElastic()))
-                            // Step 4: If not latest version, commit a new version with the restored items
-                            .flatMap(isLatestVersion -> {
-                                if (!isLatestVersion) {
-                                    log.info("Creating new version snapshot after restore for dataset '{}'",
-                                            datasetId);
-                                    // Call internal commitVersion with captured workspace ID and user name
-                                    return Mono.fromCallable(() -> commitVersion(datasetId,
-                                            DatasetVersionCreate.builder()
-                                                    .changeDescription("Restored from version: " + versionRef)
-                                                    .build(),
-                                            context.workspaceId,
-                                            context.userName))
-                                            .subscribeOn(Schedulers.boundedElastic());
-                                } else {
-                                    // If restoring to latest version, just return the existing version (revert scenario)
-                                    log.info("Restored to latest version '{}' for dataset '{}' (revert scenario)",
-                                            versionRef, datasetId);
-                                    return Mono.just(context.versionToRestore);
-                                }
-                            });
+                    if (context.isLatestVersion) {
+                        log.info("Version '{}' is already the latest for dataset '{}', returning as-is",
+                                versionRef, datasetId);
+                        return Mono.just(context.sourceVersion);
+                    }
+                    return createRestoredVersion(datasetId, versionRef, context);
                 });
     }
 
-    private record RestoreContext(UUID versionId, DatasetVersion versionToRestore, String workspaceId,
-            String userName) {
+    private RestoreContext buildRestoreContext(UUID datasetId, String versionRef,
+            String workspaceId, String userName) {
+        UUID sourceVersionId = resolveVersionId(workspaceId, datasetId, versionRef);
+
+        DatasetVersion sourceVersion = template.inTransaction(READ_ONLY, handle -> {
+            var dao = handle.attach(DatasetVersionDAO.class);
+            return dao.findById(sourceVersionId, workspaceId).orElseThrow(
+                    () -> new NotFoundException(ERROR_VERSION_NOT_FOUND.formatted(versionRef, datasetId)));
+        });
+
+        Optional<DatasetVersion> latestVersion = getLatestVersion(datasetId, workspaceId);
+        boolean isLatestVersion = latestVersion.isPresent()
+                && latestVersion.get().id().equals(sourceVersionId);
+
+        return new RestoreContext(sourceVersionId, sourceVersion, latestVersion.orElse(null),
+                isLatestVersion, workspaceId, userName);
+    }
+
+    private Mono<DatasetVersion> createRestoredVersion(UUID datasetId, String versionRef, RestoreContext context) {
+        log.info("Creating new version by copying items from version '{}' for dataset '{}'", versionRef, datasetId);
+
+        UUID newVersionId = idGenerator.generateId();
+        String newVersionHash = CommitUtils.getCommit(newVersionId);
+        List<UUID> uuids = generateUuidsForCopy(context.sourceVersion.itemsTotal());
+
+        return copyItemsToNewVersion(datasetId, context, newVersionId, uuids)
+                .flatMap(copiedCount -> {
+                    log.info("Copied '{}' items from version '{}' to new version '{}' for dataset '{}'",
+                            copiedCount, versionRef, newVersionHash, datasetId);
+                    return createRestoredVersionMetadata(datasetId, versionRef, context,
+                            newVersionId, newVersionHash, copiedCount.intValue());
+                });
+    }
+
+    private List<UUID> generateUuidsForCopy(int sourceItemCount) {
+        int uuidCount = Math.max(sourceItemCount * 2, 1000);
+        return IntStream.range(0, uuidCount)
+                .mapToObj(i -> idGenerator.generateId())
+                .toList();
+    }
+
+    private Mono<Long> copyItemsToNewVersion(UUID datasetId, RestoreContext context,
+            UUID newVersionId, List<UUID> uuids) {
+        return datasetItemVersionDAO
+                .copyVersionItems(datasetId, context.sourceVersionId, newVersionId, uuids)
+                .contextWrite(ctx -> ctx
+                        .put(RequestContext.USER_NAME, context.userName)
+                        .put(RequestContext.WORKSPACE_ID, context.workspaceId));
+    }
+
+    private Mono<DatasetVersion> createRestoredVersionMetadata(UUID datasetId, String versionRef,
+            RestoreContext context, UUID newVersionId, String newVersionHash, int itemsTotal) {
+        return Mono.fromCallable(() -> template.inTransaction(WRITE, handle -> {
+            var dao = handle.attach(DatasetVersionDAO.class);
+
+            DatasetVersionDiffStats diffStats = calculateRestoreDiffStats(datasetId, context, newVersionId);
+            log.info("Restore diff for dataset '{}': added='{}', modified='{}', deleted='{}', unchanged='{}'",
+                    datasetId, diffStats.itemsAdded(), diffStats.itemsModified(),
+                    diffStats.itemsDeleted(), diffStats.itemsUnchanged());
+
+            var version = DatasetVersionMapper.INSTANCE.toDatasetVersion(
+                    newVersionId, datasetId, newVersionHash, itemsTotal,
+                    diffStats.itemsAdded(), diffStats.itemsModified(), diffStats.itemsDeleted(),
+                    DatasetVersionCreate.builder()
+                            .changeDescription("Restored from version: " + versionRef)
+                            .build(),
+                    context.userName);
+
+            insertVersionAndUpdateTags(dao, datasetId, version, newVersionId, context);
+
+            log.info("Created restored version '{}' for dataset '{}'", newVersionHash, datasetId);
+            return dao.findById(newVersionId, context.workspaceId).orElseThrow();
+        })).subscribeOn(Schedulers.boundedElastic());
+    }
+
+    private DatasetVersionDiffStats calculateRestoreDiffStats(UUID datasetId, RestoreContext context,
+            UUID newVersionId) {
+        if (context.previousLatestVersion == null) {
+            return new DatasetVersionDiffStats(0, 0, 0, 0);
+        }
+        return calculateDiffStatistics(datasetId, context.previousLatestVersion.id(),
+                newVersionId, context.workspaceId, context.userName);
+    }
+
+    private void insertVersionAndUpdateTags(DatasetVersionDAO dao, UUID datasetId,
+            DatasetVersion version, UUID newVersionId, RestoreContext context) {
+        EntityConstraintHandler.handle(() -> {
+            dao.insert(version, context.workspaceId);
+            return version;
+        }).withError(() -> new EntityAlreadyExistsException(
+                new ErrorMessage(List.of(ERROR_VERSION_HASH_EXISTS.formatted(datasetId)))));
+
+        dao.deleteTag(datasetId, LATEST_TAG, context.workspaceId);
+        dao.insertTag(datasetId, LATEST_TAG, newVersionId, context.userName, context.workspaceId);
+    }
+
+    private record RestoreContext(UUID sourceVersionId, DatasetVersion sourceVersion,
+            DatasetVersion previousLatestVersion, boolean isLatestVersion, String workspaceId, String userName) {
     }
 }
