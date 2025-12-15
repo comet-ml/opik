@@ -96,7 +96,7 @@ public class AutomationRuleEvaluatorWithProjectRowMapper implements RowMapper<Au
             // Similar to RedisStreamCodec pattern used elsewhere in the codebase
             return type.fromRowMapper(common, codeNode, OBJECT_MAPPER);
 
-        } catch (Exception e) {
+        } catch (JsonProcessingException e) {
             throw new SQLException("Failed to parse automation rule evaluator code", e);
         }
     }
