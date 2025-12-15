@@ -93,20 +93,15 @@ class OpikGEPAAdapter(GEPAAdapter[OpikDataInst, dict[str, Any], dict[str, Any]])
         """
         Determine which dataset to use based on the batch item IDs.
 
-        GEPA passes items from both trainset and valset to evaluate(). We need to
-        route evaluation to the correct dataset so IDs can be found.
+        GEPA passes items from either trainset or valset to evaluate(), never mixed.
+        We check validation first (if provided), then fall back to train.
         """
         if not dataset_item_ids:
             return self._dataset
 
-        # Check if the batch items belong to the validation dataset
+        # Check validation dataset first (if provided)
         if self._validation_dataset is not None and self._val_item_ids:
-            ids_in_val = sum(1 for id_ in dataset_item_ids if id_ in self._val_item_ids)
-            ids_in_train = sum(
-                1 for id_ in dataset_item_ids if id_ in self._train_item_ids
-            )
-            # Use validation dataset if more IDs match there
-            if ids_in_val > ids_in_train:
+            if any(id_ in self._val_item_ids for id_ in dataset_item_ids):
                 return self._validation_dataset
 
         return self._dataset
