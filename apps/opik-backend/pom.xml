@@ -21,7 +21,7 @@
         <lombok.version>1.18.38</lombok.version>
         <mysql.version>9.5.0</mysql.version>
         <dropwizard-guicey.version>8.0.0</dropwizard-guicey.version>
-        <stringtemplate.version>3.50.0</stringtemplate.version>
+        <stringtemplate.version>3.51.0</stringtemplate.version>
         <jakarta.annotation.version>3.0.0</jakarta.annotation.version>
         <liquibase-clickhouse.version>0.7.2</liquibase-clickhouse.version>
         <clickhouse-java.version>0.9.0</clickhouse-java.version>
