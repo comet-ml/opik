@@ -15,6 +15,11 @@ import { useToast } from "@/components/ui/use-toast";
 import { ExperimentsCompare } from "@/types/datasets";
 import { OnChangeFn } from "@/types/shared";
 import useDatasetItemById from "@/api/datasets/useDatasetItemById";
+import useCompareExperimentsList from "@/api/datasets/useCompareExperimentsList";
+import useAppStore from "@/store/AppStore";
+import { useDatasetIdFromCompareExperimentsURL } from "@/hooks/useDatasetIdFromCompareExperimentsURL";
+import { createFilter } from "@/lib/filters";
+import { COLUMN_TYPE } from "@/types/shared";
 import DataTab from "@/components/pages/CompareExperimentsPage/CompareExperimentsPanel/DataTab/DataTab";
 
 type CompareExperimentsPanelProps = {
@@ -43,12 +48,43 @@ const CompareExperimentsPanel: React.FunctionComponent<
   isTraceDetailsOpened,
 }) => {
   const { toast } = useToast();
+  const workspaceName = useAppStore((state) => state.activeWorkspaceName);
+  const datasetId = useDatasetIdFromCompareExperimentsURL();
+
+  // Fetch non-truncated data for the sidebar
+  const { data: nonTruncatedData } = useCompareExperimentsList(
+    {
+      workspaceName,
+      datasetId,
+      experimentsIds,
+      filters: [
+        createFilter({
+          field: "id",
+          type: COLUMN_TYPE.string,
+          operator: "=",
+          value: experimentsCompareId as string,
+        }),
+      ],
+      truncate: false,
+      page: 1,
+      size: 1,
+    },
+    {
+      placeholderData: keepPreviousData,
+      enabled: Boolean(experimentsCompareId) && Boolean(datasetId),
+    },
+  );
+
+  // Use non-truncated data when available, fall back to truncated data while loading
+  const nonTruncatedExperimentsCompare = nonTruncatedData?.content?.[0];
+  const activeExperimentsCompare =
+    nonTruncatedExperimentsCompare ?? experimentsCompare;
 
   const experimentItems = useMemo(() => {
-    return sortBy(experimentsCompare?.experiment_items || [], (e) =>
+    return sortBy(activeExperimentsCompare?.experiment_items || [], (e) =>
       findIndex(experimentsIds, (id) => e.id === id),
     );
-  }, [experimentsCompare?.experiment_items, experimentsIds]);
+  }, [activeExperimentsCompare?.experiment_items, experimentsIds]);
 
   const datasetItemId = experimentItems?.[0]?.dataset_item_id || undefined;
   const { data: datasetItem } = useDatasetItemById(
@@ -61,16 +97,16 @@ const CompareExperimentsPanel: React.FunctionComponent<
     },
   );
 
-  const data = datasetItem?.data || experimentsCompare?.data;
+  const data = datasetItem?.data || activeExperimentsCompare?.data;
 
   const copyClickHandler = useCallback(() => {
-    if (experimentsCompare?.id) {
+    if (activeExperimentsCompare?.id) {
       toast({
         description: "ID successfully copied to clipboard",
       });
-      copy(experimentsCompare?.id);
+      copy(activeExperimentsCompare?.id);
     }
-  }, [toast, experimentsCompare?.id]);
+  }, [toast, activeExperimentsCompare?.id]);
 
   const horizontalNavigation = useMemo(
     () =>
@@ -87,7 +123,7 @@ const CompareExperimentsPanel: React.FunctionComponent<
   );
 
   const renderContent = () => {
-    if (!experimentsCompare) {
+    if (!activeExperimentsCompare) {
       return <NoData />;
     }
 
