@@ -5,6 +5,7 @@ import {
   isImageContent,
   processInputData,
 } from "@/lib/images";
+import { ATTACHMENT_TYPE } from "@/types/attachments";
 
 // Mock dependencies
 vi.mock("@/lib/utils", () => ({
@@ -25,18 +26,15 @@ describe("processInputData", () => {
   it("should return empty result when input is undefined", () => {
     const result = processInputData(undefined);
     expect(result).toEqual({
-      images: [],
-      formattedData: undefined,
-      videos: [],
       media: [],
-      audios: [],
+      formattedData: undefined,
     });
   });
 
   it("should return empty images array when input has no images", () => {
     const input = { text: "Hello world" };
     const result = processInputData(input);
-    expect(result.images).toEqual([]);
+    expect(result.media).toEqual([]);
     expect(result.formattedData).toEqual(input);
   });
 
@@ -56,10 +54,11 @@ describe("processInputData", () => {
     };
 
     const result = processInputData(input);
-    expect(result.images).toHaveLength(1);
-    expect(result.images[0]).toEqual({
+    expect(result.media).toHaveLength(1);
+    expect(result.media[0]).toEqual({
       url: "https://example.com/image.jpg",
       name: "image.jpg",
+      type: ATTACHMENT_TYPE.IMAGE,
     });
   });
 
@@ -68,9 +67,10 @@ describe("processInputData", () => {
     const input = { text: `Check this image: ${dataURI}` };
 
     const result = processInputData(input);
-    expect(result.images).toHaveLength(1);
-    expect(result.images[0].url).toBe(dataURI);
-    expect(result.images[0].name).toBe("Base64: [image_0]");
+    expect(result.media).toHaveLength(1);
+    expect(result.media[0].url).toBe(dataURI);
+    expect(result.media[0].name).toBe("Base64: [image_0]");
+    expect(result.media[0].type).toBe(ATTACHMENT_TYPE.IMAGE);
     expect(result.formattedData).toEqual({
       text: "Check this image: [image_0]",
     });
@@ -81,9 +81,9 @@ describe("processInputData", () => {
     const input = { text: `Raw base64: ${base64Image}` };
 
     const result = processInputData(input);
-    expect(result.images).toHaveLength(1);
-    expect(result.images[0].url).toBe(`data:image/png;base64,${base64Image}`);
-    expect(result.images[0].name).toBe("Base64: [image_0]");
+    expect(result.media).toHaveLength(1);
+    expect(result.media[0].url).toBe(`data:image/png;base64,${base64Image}`);
+    expect(result.media[0].name).toBe("Base64: [image_0]");
   });
 
   it("should extract image URLs from text", () => {
@@ -92,9 +92,9 @@ describe("processInputData", () => {
     };
 
     const result = processInputData(input);
-    expect(result.images).toHaveLength(2);
-    expect(result.images[0].url).toBe("https://example.com/image1.jpg");
-    expect(result.images[1].url).toBe(
+    expect(result.media).toHaveLength(2);
+    expect(result.media[0].url).toBe("https://example.com/image1.jpg");
+    expect(result.media[1].url).toBe(
       "https://example.com/image2.png?size=large",
     );
   });
@@ -119,8 +119,8 @@ describe("processInputData", () => {
     };
 
     const result = processInputData(input);
-    expect(result.images).toHaveLength(1);
-    expect(result.images[0].url).toBe("https://example.com/image.jpg");
+    expect(result.media).toHaveLength(1);
+    expect(result.media[0].url).toBe("https://example.com/image.jpg");
   });
 
   it("should handle multiple types of images in one input", () => {
@@ -143,20 +143,20 @@ describe("processInputData", () => {
     };
 
     const result = processInputData(input);
-    expect(result.images).toHaveLength(4);
+    expect(result.media).toHaveLength(4);
 
     // Check that we have one of each type
     expect(
-      result.images.some((img) => img.url === "https://example.com/photo.jpg"),
+      result.media.some((img) => img.url === "https://example.com/photo.jpg"),
     ).toBeTruthy();
-    expect(result.images.some((img) => img.url === dataURI)).toBeTruthy();
+    expect(result.media.some((img) => img.url === dataURI)).toBeTruthy();
     expect(
-      result.images.some((img) =>
+      result.media.some((img) =>
         img.url.includes("data:image/png;base64,iVBORw0KGgoAAAA"),
       ),
     ).toBeTruthy();
     expect(
-      result.images.some((img) => img.url === "https://images.com/pic.png"),
+      result.media.some((img) => img.url === "https://images.com/pic.png"),
     ).toBeTruthy();
   });
 
@@ -173,7 +173,7 @@ describe("processInputData", () => {
     };
 
     const result = processInputData(input);
-    expect(result.images).toHaveLength(0);
+    expect(result.media).toHaveLength(0);
   });
 
   it("should handle malformed image_url content", () => {
@@ -190,7 +190,7 @@ describe("processInputData", () => {
     };
 
     const result = processInputData(input);
-    expect(result.images).toHaveLength(0);
+    expect(result.media).toHaveLength(0);
   });
 
   it("should properly extract images with URL parameters and fragments", () => {
@@ -199,11 +199,11 @@ describe("processInputData", () => {
     };
 
     const result = processInputData(input);
-    expect(result.images).toHaveLength(1);
-    expect(result.images[0].url).toBe(
+    expect(result.media).toHaveLength(1);
+    expect(result.media[0].url).toBe(
       "https://example.com/image.jpg?width=800&height=600#section1",
     );
-    expect(result.images[0].name).toBe("image.jpg");
+    expect(result.media[0].name).toBe("image.jpg");
   });
 
   it("should extract image names correctly from URLs", () => {
@@ -223,8 +223,8 @@ describe("processInputData", () => {
     };
 
     const result = processInputData(input);
-    expect(result.images).toHaveLength(1);
-    expect(result.images[0].name).toBe("my-awesome-image.jpg");
+    expect(result.media).toHaveLength(1);
+    expect(result.media[0].name).toBe("my-awesome-image.jpg");
   });
 
   it("should handle base64 images with different prefixes", () => {
@@ -242,11 +242,9 @@ describe("processInputData", () => {
       const input = { text: `Image: ${prefix}` };
       const result = processInputData(input);
 
-      expect(result.images).toHaveLength(1);
-      expect(result.images[0].url).toBe(
-        `data:image/${format};base64,${prefix}`,
-      );
-      expect(result.images[0].name).toMatch(/Base64: \[image_\d+\]/);
+      expect(result.media).toHaveLength(1);
+      expect(result.media[0].url).toBe(`data:image/${format};base64,${prefix}`);
+      expect(result.media[0].name).toMatch(/Base64: \[image_\d+\]/);
     }
   });
 
@@ -259,11 +257,11 @@ describe("processInputData", () => {
 
     const result = processInputData(input);
 
-    expect(result.images).toHaveLength(extensions.length);
+    expect(result.media).toHaveLength(extensions.length);
 
     extensions.forEach((ext, idx) => {
-      expect(result.images[idx].url).toBe(`https://example.com/image.${ext}`);
-      expect(result.images[idx].name).toBe(`image.${ext}`);
+      expect(result.media[idx].url).toBe(`https://example.com/image.${ext}`);
+      expect(result.media[idx].name).toBe(`image.${ext}`);
     });
   });
 
@@ -283,7 +281,7 @@ describe("processInputData", () => {
   it("should handle empty messages array", () => {
     const input = { messages: [] };
     const result = processInputData(input);
-    expect(result.images).toHaveLength(0);
+    expect(result.media).toHaveLength(0);
   });
 
   it("should handle null or undefined content in messages", () => {
@@ -296,7 +294,7 @@ describe("processInputData", () => {
     };
 
     const result = processInputData(input);
-    expect(result.images).toHaveLength(0);
+    expect(result.media).toHaveLength(0);
   });
 });
 
@@ -351,13 +349,12 @@ describe("Duplicate media detection", () => {
 
     const result = processInputData(input);
 
-    // Video URL should not be added as image
-    expect(result.images).toHaveLength(0);
-    // Video URL should be extracted by regex as video
-    expect(result.videos).toHaveLength(1);
-    expect(result.videos[0].url).toBe(
+    // Video URL should be extracted as video (not image)
+    expect(result.media).toHaveLength(1);
+    expect(result.media[0].url).toBe(
       "https://cdn.pixabay.com/video/2024/01/15/video.mp4",
     );
+    expect(result.media[0].type).toBe(ATTACHMENT_TYPE.VIDEO);
   });
 
   it("should skip image URL in video_url field", () => {
@@ -378,11 +375,10 @@ describe("Duplicate media detection", () => {
 
     const result = processInputData(input);
 
-    // Image URL should not be added as video
-    expect(result.videos).toHaveLength(0);
-    // Image URL should be extracted by regex as image
-    expect(result.images).toHaveLength(1);
-    expect(result.images[0].url).toBe("https://example.com/image.jpg");
+    // Image URL should be extracted as image (not video)
+    expect(result.media).toHaveLength(1);
+    expect(result.media[0].url).toBe("https://example.com/image.jpg");
+    expect(result.media[0].type).toBe(ATTACHMENT_TYPE.IMAGE);
   });
 
   it("should keep extensionless URLs in image_url as images", () => {
@@ -404,9 +400,9 @@ describe("Duplicate media detection", () => {
     const result = processInputData(input);
 
     // Extensionless URL should be kept as image based on field type
-    expect(result.images).toHaveLength(1);
-    expect(result.images[0].url).toBe("https://api.example.com/media/12345");
-    expect(result.videos).toHaveLength(0);
+    expect(result.media).toHaveLength(1);
+    expect(result.media[0].url).toBe("https://api.example.com/media/12345");
+    expect(result.media[0].type).toBe(ATTACHMENT_TYPE.IMAGE);
   });
 
   it("should keep extensionless URLs in video_url as videos", () => {
@@ -428,9 +424,9 @@ describe("Duplicate media detection", () => {
     const result = processInputData(input);
 
     // Extensionless URL should be kept as video based on field type
-    expect(result.videos).toHaveLength(1);
-    expect(result.videos[0].url).toBe("https://api.example.com/media/12345");
-    expect(result.images).toHaveLength(0);
+    expect(result.media).toHaveLength(1);
+    expect(result.media[0].url).toBe("https://api.example.com/media/12345");
+    expect(result.media[0].type).toBe(ATTACHMENT_TYPE.VIDEO);
   });
 
   it("should handle mix of correct and incorrect extension types", () => {
@@ -461,14 +457,27 @@ describe("Duplicate media detection", () => {
 
     const result = processInputData(input);
 
-    // Only correct types should be kept
-    expect(result.images).toHaveLength(2);
-    expect(result.images[0].url).toBe("https://example.com/photo.jpg");
-    expect(result.images[1].url).toBe("https://example.com/image.png");
+    // All 4 items should be extracted with their correct types
+    expect(result.media).toHaveLength(4);
 
-    expect(result.videos).toHaveLength(2);
-    expect(result.videos[0].url).toBe("https://example.com/clip.webm");
-    expect(result.videos[1].url).toBe("https://example.com/video.mp4");
+    const images = result.media.filter((m) => m.type === ATTACHMENT_TYPE.IMAGE);
+    const videos = result.media.filter((m) => m.type === ATTACHMENT_TYPE.VIDEO);
+
+    expect(images).toHaveLength(2);
+    expect(images.some((m) => m.url === "https://example.com/photo.jpg")).toBe(
+      true,
+    );
+    expect(images.some((m) => m.url === "https://example.com/image.png")).toBe(
+      true,
+    );
+
+    expect(videos).toHaveLength(2);
+    expect(videos.some((m) => m.url === "https://example.com/clip.webm")).toBe(
+      true,
+    );
+    expect(videos.some((m) => m.url === "https://example.com/video.mp4")).toBe(
+      true,
+    );
   });
 
   it("should remove cross-duplicates and prioritize video type", () => {
@@ -488,14 +497,10 @@ describe("Duplicate media detection", () => {
 
     const result = processInputData(input);
 
-    // URL with .mp4 should only appear in videos, not images
-    expect(result.images).toHaveLength(0);
-    expect(result.videos).toHaveLength(1);
-    expect(result.videos[0].url).toBe("https://example.com/media.mp4");
-
-    // Media array should contain only video
+    // URL with .mp4 should be deduplicated and appear as video
     expect(result.media).toHaveLength(1);
-    expect(result.media[0].type).toBe("video");
+    expect(result.media[0].url).toBe("https://example.com/media.mp4");
+    expect(result.media[0].type).toBe(ATTACHMENT_TYPE.VIDEO);
   });
 
   it("should handle video URLs with query parameters in image_url field", () => {
@@ -516,12 +521,12 @@ describe("Duplicate media detection", () => {
 
     const result = processInputData(input);
 
-    // Video URL with query params should not be added as image
-    expect(result.images).toHaveLength(0);
-    expect(result.videos).toHaveLength(1);
-    expect(result.videos[0].url).toBe(
+    // Video URL with query params should be extracted as video
+    expect(result.media).toHaveLength(1);
+    expect(result.media[0].url).toBe(
       "https://cdn.example.com/video.mp4?quality=high&size=large",
     );
+    expect(result.media[0].type).toBe(ATTACHMENT_TYPE.VIDEO);
   });
 
   it("should handle base64 videos correctly in video_url field", () => {
@@ -543,11 +548,10 @@ describe("Duplicate media detection", () => {
 
     const result = processInputData(input);
 
-    expect(result.videos).toHaveLength(1);
-    expect(result.videos[0].url).toBe(base64Video);
-    // Base64 videos get extracted and named by the regex extraction
-    expect(result.videos[0].name).toContain("Base64 Video");
-    expect(result.images).toHaveLength(0);
+    expect(result.media).toHaveLength(1);
+    expect(result.media[0].url).toBe(base64Video);
+    expect(result.media[0].name).toContain("Base64 Video");
+    expect(result.media[0].type).toBe(ATTACHMENT_TYPE.VIDEO);
   });
 
   it("should extract base64 images even from video_url field", () => {
@@ -571,11 +575,9 @@ describe("Duplicate media detection", () => {
 
     const result = processInputData(input);
 
-    // Base64 URLs don't start with http, so extension check is skipped
-    // The image regex will extract it from the stringified JSON
-    expect(result.videos).toHaveLength(1);
-    expect(result.images).toHaveLength(1);
-    expect(result.videos[0].url).toBe(base64Image);
-    expect(result.images[0].url).toBe(base64Image);
+    // Base64 image URL should be deduplicated and extracted as image
+    expect(result.media).toHaveLength(1);
+    expect(result.media[0].url).toBe(base64Image);
+    expect(result.media[0].type).toBe(ATTACHMENT_TYPE.IMAGE);
   });
 });

@@ -1,11 +1,19 @@
 ---
-title: "Agent Optimization"
-description: "Learn about Opik's automated LLM prompt and agent optimization SDK. Discover MetaPrompt, Few-shot Bayesian, and Evolutionary optimization algorithms for enhanced performance."
-keywords: "LLM optimization, prompt engineering, agent optimization, MetaPrompt, Few-shot learning, Bayesian optimization, Evolutionary algorithms, DSPy"
-og:image: "/img/agent_optimization/introducing.png"
+description: Learn about Opik's automated LLM prompt and agent optimization SDK. Discover
+  MetaPrompt, Few-shot Bayesian, and Evolutionary optimization algorithms for enhanced
+  performance.
+headline: Opik Agent Optimizer | Opik Documentation
+keywords: LLM optimization, prompt engineering, agent optimization, MetaPrompt, Few-shot
+  learning, Bayesian optimization, Evolutionary algorithms, DSPy
+og:description: Learn to automate prompt and agent workflow tuning using Opik's optimization
+  SDK for improved performance and efficiency.
+og:image: /img/agent_optimization/introducing.png
+og:site_name: Opik Documentation
+og:title: Optimize Prompts with Opik Agent Optimizer
+title: Agent Optimization
 ---
 
-**Opik Agent Optimizer** is a turnkey, open-source agent and prompt optimization SDK. It automatically tunes prompts, tools, and agent workflows using the datasets, metrics, and traces you already log to Opik. Instead of hand-editing instructions and re-running evaluations, pick an optimizer (MetaPrompt, Hierarchical Reflective, Evolutionary, GEPA, etc.) and let it iterate for you online or fully offline inside Docker and Kubernetes.
+**Opik Agent Optimizer** is a turnkey, open-source agent and prompt optimization SDK. It automatically tunes prompts, tools, and agent workflows using the datasets, metrics, and traces you already log to Opik. Instead of hand-editing instructions and re-running evaluations, pick an optimizer (MetaPrompt, HRPO, Evolutionary, GEPA, etc.) and let it iterate for you online or fully offline inside Docker and Kubernetes.
 
 <Frame>
   <img src="/img/agent_optimization/dashboard.png" alt="Opik Agent Optimizer Dashboard showing optimization progress" />
@@ -21,7 +29,7 @@ og:image: "/img/agent_optimization/introducing.png"
 ## Key capabilities
 
 <Cards>
-  <Card title="Optimizers" body="MetaPrompt, Hierarchical Reflective, Few-Shot Bayesian, Evolutionary, GEPA, Parameter tuning—all open-source, mixing in-house algorithms with popular public projects." />
+  <Card title="Optimizers" body="MetaPrompt, HRPO (Hierarchical Reflective Prompt Optimizer), Few-Shot Bayesian, Evolutionary, GEPA, Parameter tuning—all open-source, mixing in-house algorithms with popular public projects." />
   <Card title="Tool & MCP support" body="Optimize beyond system prompts: MCP tool signatures, OpenAI function calling, and traditional prompt text all benefit from the same workflows." />
   <Card title="Agent integrations" body="Ready-made adapters for LangGraph, Google ADK, MCP workflows, and custom agents, plus the ability to build your own `OptimizableAgent`." />
   <Card title="Dashboard analytics" body="Optimization runs show progress charts, per-trial prompts, dataset coverage, and traces for root-cause analysis." />
@@ -51,13 +59,13 @@ og:image: "/img/agent_optimization/introducing.png"
 ## Optimization Algorithms
 
 The optimizer implements both proprietary and open-source optimization algorithms. Each one has it's
-strengths and weaknesses, we recommend first trying out either GEPA or the Hierarchical Reflective
-Optimizer as a first step:
+strengths and weaknesses, we recommend first trying out either GEPA or HRPO (Hierarchical Reflective Prompt Optimizer)
+as a first step:
 
 | **Algorithm**                                                                               | **Description**                                                                                                                                                                                                      |
 | ------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | [MetaPrompt Optimization](/agent_optimization/algorithms/metaprompt_optimizer)              | Uses an LLM ("reasoning model") to critique and iteratively refine an initial instruction prompt. Good for general prompt wording, clarity, and structural improvements. **Supports [MCP tool calling optimization](/agent_optimization/algorithms/tool_optimization).** |
-| [Hierarchical Reflective Optimization](/agent_optimization/algorithms/hierarchical_reflective_optimizer) | Uses hierarchical root cause analysis to systematically improve prompts by analyzing failures in batches, synthesizing findings, and addressing identified failure modes. Best for complex prompts requiring systematic refinement based on understanding why they fail. |
+| [HRPO (Hierarchical Reflective Prompt Optimizer)](/agent_optimization/algorithms/hierarchical_adaptive_optimizer) | Uses hierarchical root cause analysis to systematically improve prompts by analyzing failures in batches, synthesizing findings, and addressing identified failure modes. Best for complex prompts requiring systematic refinement based on understanding why they fail. |
 | [Few-shot Bayesian Optimization](/agent_optimization/algorithms/fewshot_bayesian_optimizer) | Specifically for chat models, this optimizer uses Bayesian optimization (Optuna) to find the optimal number and combination of few-shot examples (demonstrations) to accompany a system prompt.                      |
 | [Evolutionary Optimization](/agent_optimization/algorithms/evolutionary_optimizer)          | Employs genetic algorithms to evolve a population of prompts. Can discover novel prompt structures and supports multi-objective optimization (e.g., score vs. length). Can use LLMs for advanced mutation/crossover. |
 | [GEPA Optimization](/agent_optimization/algorithms/gepa_optimizer)                   | Wraps the external GEPA package to optimize a single system prompt for single-turn tasks using a reflection model. Requires `pip install gepa`.                                         |

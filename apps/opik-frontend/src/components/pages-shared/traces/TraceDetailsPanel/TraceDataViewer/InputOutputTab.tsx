@@ -1,6 +1,6 @@
-import React, { useMemo } from "react";
+import React from "react";
 import { Span, Trace } from "@/types/traces";
-import { processInputData } from "@/lib/images";
+import { useProcessedInputData } from "@/hooks/useProcessedInputData";
 import {
   Accordion,
   AccordionContent,
@@ -23,10 +23,8 @@ const InputOutputTab: React.FunctionComponent<InputOutputTabProps> = ({
   isLoading,
   search,
 }) => {
-  const { media, formattedData } = useMemo(
-    () => processInputData(data.input),
-    [data.input],
-  );
+  const { media, formattedData } = useProcessedInputData(data.input);
+
   const hasError = Boolean(data.error_info);
 
   return (

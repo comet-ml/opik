@@ -31,7 +31,7 @@ const OpenAIModelConfigs = ({
   model,
   onChange,
 }: OpenAIModelSettingsProps) => {
-  // Reasoning models (GPT-5, O1, O3, O4-mini) require temperature = 1.0
+  // Reasoning models (GPT-5.2, GPT-5.1, GPT-5, O1, O3, O4-mini) require temperature = 1.0
   const isReasoning = isReasoningModel(model);
 
   return (
@@ -144,6 +144,7 @@ const OpenAIModelConfigs = ({
               <SelectItem value="low">Low</SelectItem>
               <SelectItem value="medium">Medium</SelectItem>
               <SelectItem value="high">High</SelectItem>
+              <SelectItem value="xhigh">XHigh</SelectItem>
             </SelectContent>
           </Select>
         </div>
