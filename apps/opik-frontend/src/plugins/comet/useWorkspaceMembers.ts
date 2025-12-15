@@ -7,6 +7,10 @@ export interface UseWorkspaceMembersResponse {
   joinedAt?: string;
 }
 
+interface WorkspaceMember extends UseWorkspaceMembersResponse {
+  isMember: boolean;
+}
+
 interface UseAllWorkspaceMembers {
   workspaceId: string;
 }
@@ -22,12 +26,15 @@ const getWorkspaceMembers = async (
     },
   );
 
-  return response?.data;
+  return response?.data.map((member) => ({
+    ...member,
+    isMember: true,
+  }));
 };
 
 const useWorkspaceMembers = (
   { workspaceId }: UseAllWorkspaceMembers,
-  options?: QueryConfig<UseWorkspaceMembersResponse[]>,
+  options?: QueryConfig<WorkspaceMember[]>,
 ) => {
   return useQuery({
     queryKey: ["workspace-members", { workspaceId }],

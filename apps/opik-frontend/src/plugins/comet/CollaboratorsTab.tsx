@@ -3,6 +3,8 @@ import useLocalStorageState from "use-local-storage-state";
 import useAllWorkspaceMembers from "@/plugins/comet/useWorkspaceMembers";
 import useAllWorkspaces from "@/plugins/comet/useAllWorkspaces";
 import useWorkspaceUsersPermissions from "@/plugins/comet/api/useWorkspaceUsersPermissions";
+import useOrganizationMembers from "@/plugins/comet/api/useOrganizationMembers";
+import useCurrentOrganization from "@/plugins/comet/useCurrentOrganization";
 import DataTable from "@/components/shared/DataTable/DataTable";
 import ExplainerCallout from "@/components/shared/ExplainerCallout/ExplainerCallout";
 import SearchInput from "@/components/shared/SearchInput/SearchInput";
@@ -11,19 +13,16 @@ import { COLUMN_TYPE, ColumnData } from "@/types/shared";
 import { convertColumnDataToColumn } from "@/lib/table";
 import { formatDate } from "@/lib/date";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
-import useAppStore from "@/store/AppStore";
 import { getPermissionByType, isUserPermissionValid } from "@/lib/permissions";
-import { ManagementPermissionsNames } from "./types";
+import useAppStore from "@/store/AppStore";
+import {
+  ManagementPermissionsNames,
+  ORGANIZATION_ROLE_TYPE,
+  WorkspaceMember,
+} from "./types";
+import WorkspaceRoleCell from "./WorkspaceRoleCell";
 
 const COLUMNS_WIDTH_KEY = "workspace-members-columns-width";
-
-interface WorkspaceMember {
-  id: string;
-  userName: string;
-  email: string;
-  joinedAt?: string;
-  role?: string;
-}
 
 const DEFAULT_COLUMNS: ColumnData<WorkspaceMember>[] = [
   {
@@ -50,6 +49,7 @@ const DEFAULT_COLUMNS: ColumnData<WorkspaceMember>[] = [
     id: "role",
     label: "Workspace role",
     type: COLUMN_TYPE.category,
+    cell: WorkspaceRoleCell as never,
   },
 ];
 
@@ -70,6 +70,8 @@ const CollaboratorsTab = () => {
     (w) => w.workspaceName === workspaceName,
   );
 
+  const currentOrganization = useCurrentOrganization();
+
   const { data: workspaceMembers, isPending } = useAllWorkspaceMembers(
     { workspaceId: workspace?.workspaceId || "" },
     {
@@ -84,6 +86,10 @@ const CollaboratorsTab = () => {
         enabled: Boolean(workspace?.workspaceId),
       },
     );
+
+  const { data: organizationMembers } = useOrganizationMembers({
+    organizationId: currentOrganization?.id || "",
+  });
 
   const columns = useMemo(() => {
     return convertColumnDataToColumn<WorkspaceMember, WorkspaceMember>(
@@ -129,13 +135,24 @@ const CollaboratorsTab = () => {
         ? "Workspace owner"
         : "Workspace member";
 
+      const uniqueName = member.isMember
+        ? member.userName || member.email
+        : member.email;
+
+      const memberInOrganization = organizationMembers?.find(
+        (memberInOrg) =>
+          (memberInOrg?.userName || memberInOrg?.email) === uniqueName,
+      );
+
       return {
         id: member.userName,
         role,
+        isAdmin: memberInOrganization?.role === ORGANIZATION_ROLE_TYPE.admin,
+        permissions: userPermissions,
         ...member,
       };
     });
-  }, [workspaceMembers, permissionsData, search]);
+  }, [workspaceMembers, permissionsData, organizationMembers, search]);
 
   const renderTable = () => {
     if (isPending || isPermissionsPending) {

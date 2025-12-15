@@ -46,6 +46,7 @@ export interface Organization {
   paymentPlan: string;
   academic: boolean;
   role: ORGANIZATION_ROLE_TYPE;
+  onlyAdminsInviteByEmail: boolean;
 }
 
 export enum ManagementPermissionsNames {
@@ -74,4 +75,15 @@ export interface OrganizationMember {
   userName: string;
   email: string;
   role: ORGANIZATION_ROLE_TYPE;
+}
+
+export interface WorkspaceMember {
+  id: string;
+  userName: string;
+  email: string;
+  joinedAt?: string;
+  role?: string;
+  isAdmin?: boolean;
+  isMember?: boolean;
+  permissions?: UserPermission[];
 }
