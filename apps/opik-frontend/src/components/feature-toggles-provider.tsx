@@ -33,7 +33,7 @@ const DEFAULT_STATE: FeatureToggles = {
   [FeatureToggleKeys.OPENROUTER_PROVIDER_ENABLED]: true,
   [FeatureToggleKeys.VERTEXAI_PROVIDER_ENABLED]: true,
   [FeatureToggleKeys.CUSTOMLLM_PROVIDER_ENABLED]: true,
-  [FeatureToggleKeys.OPIKBUILTIN_PROVIDER_ENABLED]: true,
+  [FeatureToggleKeys.OPIKFREE_PROVIDER_ENABLED]: true,
   [FeatureToggleKeys.COLLABORATORS_TAB_ENABLED]: false,
 };
 

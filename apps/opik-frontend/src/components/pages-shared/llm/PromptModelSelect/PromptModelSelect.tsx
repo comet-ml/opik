@@ -23,7 +23,11 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
-import { PROVIDER_MODEL_TYPE, COMPOSED_PROVIDER_TYPE } from "@/types/providers";
+import {
+  PROVIDER_MODEL_TYPE,
+  COMPOSED_PROVIDER_TYPE,
+  PROVIDER_TYPE,
+} from "@/types/providers";
 import useProviderKeys from "@/api/provider-keys/useProviderKeys";
 import ManageAIProviderDialog from "@/components/pages-shared/llm/ManageAIProviderDialog/ManageAIProviderDialog";
 import useLLMProviderModelsData from "@/hooks/useLLMProviderModelsData";
@@ -85,10 +89,43 @@ const PromptModelSelect = ({
     [data?.content],
   );
 
+  // Free model option (shown directly, not in a dropdown)
+  const freeModelOption = useMemo(() => {
+    const freeProvider = configuredProvidersList.find(
+      (p) => p.provider === PROVIDER_TYPE.OPIK_FREE,
+    );
+
+    if (!freeProvider) {
+      return null;
+    }
+
+    const providerModels = getProviderModels()[PROVIDER_TYPE.OPIK_FREE];
+    if (!providerModels?.length) {
+      return null;
+    }
+
+    const model = providerModels[0];
+    // Use model_label from config (e.g., "gpt-4o-mini") with "(free)" suffix
+    const modelLabel = freeProvider.configuration?.model_label ?? model.label;
+
+    // Register in provider map for selection handling
+    modelProviderMapRef.current[model.value] = PROVIDER_TYPE.OPIK_FREE;
+
+    return {
+      label: `${modelLabel} (free)`,
+      value: model.value,
+      composedProviderType: PROVIDER_TYPE.OPIK_FREE as COMPOSED_PROVIDER_TYPE,
+      icon: getProviderIcon(freeProvider),
+    };
+  }, [configuredProvidersList, getProviderModels]);
+
+  // Other provider groups (excluding free model)
   const groupOptions = useMemo(() => {
     const filteredByConfiguredProviders = pick(
       getProviderModels(),
-      configuredProvidersList.map((p) => p.ui_composed_provider),
+      configuredProvidersList
+        .filter((p) => p.provider !== PROVIDER_TYPE.OPIK_FREE)
+        .map((p) => p.ui_composed_provider),
     );
 
     Object.entries(filteredByConfiguredProviders).forEach(
@@ -124,6 +161,21 @@ const PromptModelSelect = ({
       })
       .filter((g): g is NonNullable<typeof g> => !isNull(g));
   }, [configuredProvidersList, getProviderModels]);
+
+  // Check if free model matches search filter
+  const filteredFreeModel = useMemo(() => {
+    if (!freeModelOption) return null;
+    if (filterValue === "") return freeModelOption;
+
+    const loweredFilterValue = filterValue.toLowerCase();
+    if (
+      freeModelOption.label.toLowerCase().includes(loweredFilterValue) ||
+      freeModelOption.value.toLowerCase().includes(loweredFilterValue)
+    ) {
+      return freeModelOption;
+    }
+    return null;
+  }, [filterValue, freeModelOption]);
 
   const filteredOptions = useMemo(() => {
     if (filterValue === "") {
@@ -179,7 +231,12 @@ const PromptModelSelect = ({
   };
 
   const renderOptions = () => {
-    if (configuredProvidersList?.length === 0) {
+    const hasNoProviders =
+      !freeModelOption && configuredProvidersList?.length === 0;
+    const hasNoResults =
+      !filteredFreeModel && filteredOptions.length === 0 && filterValue !== "";
+
+    if (hasNoProviders) {
       return (
         <div className="comet-body-s flex h-20 items-center justify-center text-muted-slate">
           No configured providers
@@ -187,7 +244,7 @@ const PromptModelSelect = ({
       );
     }
 
-    if (filteredOptions.length === 0 && filterValue !== "") {
+    if (hasNoResults) {
       return (
         <div className="comet-body-s flex h-20 items-center justify-center text-muted-slate">
           No search results
@@ -195,27 +252,64 @@ const PromptModelSelect = ({
       );
     }
 
+    // When searching, show flat list
     if (filterValue !== "") {
-      return filteredOptions.map((groupOption) => {
-        return (
-          <SelectGroup key={groupOption?.label}>
-            <SelectLabel className="h-10">{groupOption?.label}</SelectLabel>
-            {groupOption?.options?.map((option) => (
-              <SelectItem
-                key={option.value}
-                value={option.value!}
-                className="h-10 justify-center"
-              >
-                {option.label}
-              </SelectItem>
-            ))}
-          </SelectGroup>
-        );
-      });
+      const FreeModelIcon = filteredFreeModel?.icon;
+      return (
+        <>
+          {/* Free model shown as single clickable row when searching */}
+          {filteredFreeModel && (
+            <SelectItem
+              value={filteredFreeModel.value}
+              withoutCheck
+              className="comet-body-s h-10 hover:bg-primary-foreground"
+            >
+              <div className="flex items-center gap-1">
+                {FreeModelIcon && <FreeModelIcon className="size-4" />}
+                <span>{filteredFreeModel.label}</span>
+              </div>
+            </SelectItem>
+          )}
+          {filteredOptions.map((groupOption) => {
+            return (
+              <SelectGroup key={groupOption?.label}>
+                <SelectLabel className="h-10">{groupOption?.label}</SelectLabel>
+                {groupOption?.options?.map((option) => (
+                  <SelectItem
+                    key={option.value}
+                    value={option.value!}
+                    className="h-10 justify-center"
+                  >
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectGroup>
+            );
+          })}
+        </>
+      );
     }
 
+    const FreeModelIconNormal = freeModelOption?.icon;
     return (
       <div>
+        {/* Free model shown as single clickable row - matches provider row styling */}
+        {freeModelOption && (
+          <SelectItem
+            value={freeModelOption.value}
+            withoutCheck
+            className="comet-body-s h-10 hover:bg-primary-foreground"
+          >
+            <div className="flex w-full items-center gap-1">
+              {FreeModelIconNormal && (
+                <FreeModelIconNormal className="size-4" />
+              )}
+              <span>{freeModelOption.label}</span>
+            </div>
+          </SelectItem>
+        )}
+
+        {/* Other providers with dropdown submenus */}
         {groupOptions.map((group) => (
           <Popover
             key={group.label}
@@ -271,6 +365,34 @@ const PromptModelSelect = ({
   };
 
   const renderSelectTrigger = () => {
+    // Check if free model is selected
+    if (
+      freeModelOption &&
+      provider === PROVIDER_TYPE.OPIK_FREE &&
+      value === freeModelOption.value
+    ) {
+      const FreeIcon = freeModelOption.icon;
+      return (
+        <TooltipWrapper content={freeModelOption.label}>
+          <SelectTrigger
+            className={cn("size-full data-[placeholder]:text-light-slate", {
+              "border-destructive": hasError,
+            })}
+          >
+            <SelectValue
+              placeholder="Select an LLM model"
+              data-testid="select-a-llm-model"
+            >
+              <div className="flex items-center gap-2">
+                {FreeIcon && <FreeIcon className="min-w-3.5 text-foreground" />}
+                <span className="truncate">{freeModelOption.label}</span>
+              </div>
+            </SelectValue>
+          </SelectTrigger>
+        </TooltipWrapper>
+      );
+    }
+
     const selectedGroup = groupOptions.find(
       (o) => o.composedProviderType === provider,
     );

@@ -16,9 +16,9 @@ export const ProviderApiKeyProvider: core.serialization.Schema<
     "openrouter",
     "vertex-ai",
     "custom-llm",
-    "opik-builtin",
+    "opik-free",
 ]);
 
 export declare namespace ProviderApiKeyProvider {
-    export type Raw = "openai" | "anthropic" | "gemini" | "openrouter" | "vertex-ai" | "custom-llm" | "opik-builtin";
+    export type Raw = "openai" | "anthropic" | "gemini" | "openrouter" | "vertex-ai" | "custom-llm" | "opik-free";
 }

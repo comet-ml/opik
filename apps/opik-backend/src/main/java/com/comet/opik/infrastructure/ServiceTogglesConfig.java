@@ -47,7 +47,7 @@ public class ServiceTogglesConfig {
     @JsonProperty
     @NotNull boolean customllmProviderEnabled;
     @JsonProperty
-    @NotNull boolean opikbuiltinProviderEnabled;
+    @NotNull boolean opikfreeProviderEnabled;
     @JsonProperty
     @NotNull boolean collaboratorsTabEnabled;
 }

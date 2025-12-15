@@ -28,13 +28,13 @@ type PROVIDERS_TYPE = {
 };
 
 export const PROVIDERS: PROVIDERS_TYPE = {
-  [PROVIDER_TYPE.OPIK_BUILTIN]: {
-    label: "Opik Built-in",
-    value: PROVIDER_TYPE.OPIK_BUILTIN,
+  [PROVIDER_TYPE.OPIK_FREE]: {
+    label: "Opik",
+    value: PROVIDER_TYPE.OPIK_FREE,
     icon: OpikIcon,
-    apiKeyName: "Opik Built-in",
-    defaultModel: PROVIDER_MODEL_TYPE.OPIK_BUILTIN_MODEL,
-    description: "Built-in model provided by Opik - no API key required",
+    apiKeyName: "OPIK_FREE_MODEL_API_KEY",
+    defaultModel: PROVIDER_MODEL_TYPE.OPIK_FREE_MODEL,
+    description: "Free model provided by Opik - no API key required",
     readOnly: true,
   },
   [PROVIDER_TYPE.OPEN_AI]: {
@@ -102,7 +102,7 @@ export const PROVIDER_FEATURE_TOGGLE_MAP: Record<
   [PROVIDER_TYPE.OPEN_ROUTER]: FeatureToggleKeys.OPENROUTER_PROVIDER_ENABLED,
   [PROVIDER_TYPE.VERTEX_AI]: FeatureToggleKeys.VERTEXAI_PROVIDER_ENABLED,
   [PROVIDER_TYPE.CUSTOM]: FeatureToggleKeys.CUSTOMLLM_PROVIDER_ENABLED,
-  [PROVIDER_TYPE.OPIK_BUILTIN]: FeatureToggleKeys.OPIKBUILTIN_PROVIDER_ENABLED,
+  [PROVIDER_TYPE.OPIK_FREE]: FeatureToggleKeys.OPIKFREE_PROVIDER_ENABLED,
 };
 
 export const LEGACY_CUSTOM_PROVIDER_NAME = "default";

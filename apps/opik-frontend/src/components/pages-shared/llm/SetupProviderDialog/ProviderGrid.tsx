@@ -34,8 +34,8 @@ const ProviderGrid: React.FC<ProviderGridProps> = ({
   const isCustomLLMEnabled = useIsFeatureEnabled(
     FeatureToggleKeys.CUSTOMLLM_PROVIDER_ENABLED,
   );
-  const isOpikBuiltinEnabled = useIsFeatureEnabled(
-    FeatureToggleKeys.OPIKBUILTIN_PROVIDER_ENABLED,
+  const isOpikFreeEnabled = useIsFeatureEnabled(
+    FeatureToggleKeys.OPIKFREE_PROVIDER_ENABLED,
   );
 
   const providerEnabledMap = useMemo(
@@ -46,7 +46,7 @@ const ProviderGrid: React.FC<ProviderGridProps> = ({
       [PROVIDER_TYPE.OPEN_ROUTER]: isOpenRouterEnabled,
       [PROVIDER_TYPE.VERTEX_AI]: isVertexAIEnabled,
       [PROVIDER_TYPE.CUSTOM]: isCustomLLMEnabled,
-      [PROVIDER_TYPE.OPIK_BUILTIN]: isOpikBuiltinEnabled,
+      [PROVIDER_TYPE.OPIK_FREE]: isOpikFreeEnabled,
     }),
     [
       isOpenAIEnabled,
@@ -55,7 +55,7 @@ const ProviderGrid: React.FC<ProviderGridProps> = ({
       isOpenRouterEnabled,
       isVertexAIEnabled,
       isCustomLLMEnabled,
-      isOpikBuiltinEnabled,
+      isOpikFreeEnabled,
     ],
   );
 

@@ -7,14 +7,14 @@ export enum PROVIDER_TYPE {
   GEMINI = "gemini",
   VERTEX_AI = "vertex-ai",
   CUSTOM = "custom-llm",
-  OPIK_BUILTIN = "opik-builtin",
+  OPIK_FREE = "opik-free",
 }
 
 export type COMPOSED_PROVIDER_TYPE = PROVIDER_TYPE | string;
 
 export enum PROVIDER_MODEL_TYPE {
-  // <------ opik built-in
-  OPIK_BUILTIN_MODEL = "opik-builtin-model",
+  // <------ opik free model
+  OPIK_FREE_MODEL = "opik-free-model",
 
   // <------ openai
   GPT_4O = "gpt-4o",
@@ -447,6 +447,8 @@ export type PROVIDER_MODELS_TYPE = {
 export interface ProviderKeyConfiguration {
   location?: string;
   models?: string;
+  /** For free model: the display label showing actual provider/model (e.g., "openai/gpt-4o-mini") */
+  model_label?: string;
 }
 
 export interface BaseProviderKey {

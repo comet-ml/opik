@@ -11828,7 +11828,7 @@ components:
           - openrouter
           - vertex-ai
           - custom-llm
-          - opik-builtin
+          - opik-free
         api_key:
           type: string
         name:
@@ -11892,7 +11892,7 @@ components:
           - openrouter
           - vertex-ai
           - custom-llm
-          - opik-builtin
+          - opik-free
         api_key:
           type: string
         name:
@@ -11952,7 +11952,7 @@ components:
           - openrouter
           - vertex-ai
           - custom-llm
-          - opik-builtin
+          - opik-free
         api_key:
           type: string
         name:
