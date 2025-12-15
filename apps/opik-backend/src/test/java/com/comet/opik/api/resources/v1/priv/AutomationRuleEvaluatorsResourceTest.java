@@ -131,7 +131,7 @@ import static org.mockito.Mockito.when;
 class AutomationRuleEvaluatorsResourceTest {
 
     private static final String[] AUTOMATION_RULE_EVALUATOR_IGNORED_FIELDS = {
-            "createdAt", "lastUpdatedAt", "projectName"};
+            "createdAt", "lastUpdatedAt", "projectName", "projects.projectName"};
 
     private static final String MESSAGE_TO_TEST = "Summary: {{summary}}\\nInstruction: {{instruction}}\\n\\n";
     private static final String LLM_AS_A_JUDGE_EVALUATOR = """
