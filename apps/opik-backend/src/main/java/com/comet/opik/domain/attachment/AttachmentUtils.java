@@ -32,42 +32,46 @@ public class AttachmentUtils {
      *
      * Example: input-attachment-1-1234567890.jpg
      */
-    public static final String ATTACHMENT_FILENAME_BASE_PATTERN = "(?:input|output|metadata)-attachment-\\d+-\\d+\\.\\w+";
+    private static final String ATTACHMENT_FILENAME_BASE_PATTERN = "(?:input|output|metadata)-attachment-\\d+-\\d+\\.\\w+";
+
+    /**
+     * A regex pattern that identifies valid filenames for Python SDK-extracted attachments.
+     *
+     * The pattern matches filenames that adhere to the following format:
+     * - Begin with either "input", "output", or "metadata".
+     * - Include the suffix "-attachment" followed by two numeric segments separated by a hyphen.
+     * - Optionally end with "-sdk".
+     * - Have a file extension starting with a period followed by alphanumeric characters.
+     *
+     * Example valid filenames:
+     * - input-attachment-1-1234567890.png
+     * - output-attachment-5-1234567890-sdk.json
+     */
+    private static final String ATTACHMENT_FILENAME_SDK_SUPPORT_PATTERN = "(?:input|output|metadata)-attachment-\\d+-\\d+(?:-sdk)?\\.\\w+";
 
     /**
      * Pattern for validating auto-stripped attachment filenames (whole string match).
      * Uses anchors (^$) to ensure the entire string matches the pattern.
      */
-    public static final String AUTO_STRIPPED_FILENAME_PATTERN = "^" + ATTACHMENT_FILENAME_BASE_PATTERN + "$";
+    private static final String AUTO_STRIPPED_FILENAME_PATTERN = "^" + ATTACHMENT_FILENAME_BASE_PATTERN + "$";
 
     /**
      * Compiled pattern for validating auto-stripped attachment filenames.
      */
-    public static final Pattern AUTO_STRIPPED_PATTERN = Pattern.compile(AUTO_STRIPPED_FILENAME_PATTERN);
+    private static final Pattern AUTO_STRIPPED_PATTERN = Pattern.compile(AUTO_STRIPPED_FILENAME_PATTERN);
 
     /**
      * Pattern for finding attachment references in JSON strings (with brackets).
      * No anchors - used with .find() to locate references anywhere in text.
      * Group 1 captures the filename without brackets.
      *
-     * Example: [input-attachment-1-1234567890.jpg]
-     */
-    public static final Pattern FIND_REFERENCE_PATTERN = Pattern
-            .compile("\\[(" + ATTACHMENT_FILENAME_BASE_PATTERN + ")\\]");
-
-    /**
-     * Pattern for validating if a string IS an attachment reference (whole string match).
-     * Uses anchors (^$) to ensure the entire string matches [filename] format.
-     * Group 1 captures the filename without brackets.
-     *
      * Examples:
-     * - [input-attachment-1-1704067200000.png] - matches
-     * - [output-attachment-2-1704067201000.json] - matches
-     * - [metadata-attachment-1-1704067199000.pdf] - matches
-     * - "some text [input-attachment-1-123.png] more text" - does NOT match (has extra text)
+     *  - [input-attachment-1-1234567890.jpg]
+     *  - [metadata-attachment-1-1704067199000-sdk.pdf]
+     *  - "some text [input-attachment-1-123.png] more text"
      */
-    public static final Pattern VALIDATE_REFERENCE_PATTERN = Pattern
-            .compile("^\\[(" + ATTACHMENT_FILENAME_BASE_PATTERN + ")\\]$");
+    private static final Pattern FIND_REFERENCE_PATTERN = Pattern
+            .compile("\\[(" + ATTACHMENT_FILENAME_SDK_SUPPORT_PATTERN + ")\\]");
 
     /**
      * Checks if a filename matches the auto-stripped attachment pattern.
@@ -137,26 +141,6 @@ public class AttachmentUtils {
     }
 
     /**
-     * Unwraps an attachment reference to extract the filename.
-     *
-     * @param reference the reference to unwrap (e.g., "[input-attachment-1-123.png]")
-     * @return the filename without brackets (e.g., "input-attachment-1-123.png"),
-     *         or the original string if it doesn't match the pattern
-     */
-    public static String unwrapReference(String reference) {
-        if (reference == null || reference.isEmpty()) {
-            return reference;
-        }
-
-        Matcher matcher = VALIDATE_REFERENCE_PATTERN.matcher(reference);
-        if (matcher.matches()) {
-            return matcher.group(1); // Extract filename without brackets
-        }
-
-        return reference; // Return as-is if not a valid reference
-    }
-
-    /**
      * Recursively scans a JsonNode to check if it contains any attachment references.
      * Handles TextNodes that contain JSON strings by parsing and recursing into them.
      *
@@ -172,7 +156,7 @@ public class AttachmentUtils {
         if (node.isTextual()) {
             String text = node.asText();
             // First check if the text itself is an attachment reference
-            if (VALIDATE_REFERENCE_PATTERN.matcher(text).matches()) {
+            if (FIND_REFERENCE_PATTERN.matcher(text).find()) {
                 return true;
             }
             // If it's a JSON string, try to parse it and check recursively
