@@ -43,7 +43,7 @@ title: Optimizer Frequently Asked Questions
 <AccordionGroup>
   <Accordion title="What are the supported optimization algorithms?">
   Opik Agent Optimizer supports a wide range of optimization algorithms including:
-  - [HAPO (Hierarchical Adaptive Prompt Optimizer)](/agent_optimization/algorithms/hierarchical_adaptive_optimizer)
+  - [HRPO (Hierarchical Reflective Prompt Optimizer)](/agent_optimization/algorithms/hierarchical_adaptive_optimizer)
   - [GEPA Optimization](/agent_optimization/algorithms/gepa_optimizer)
   - [Evolutionary Optimization](/agent_optimization/algorithms/evolutionary_optimizer)
   - [Few-shot Bayesian Optimization](/agent_optimization/algorithms/fewshot_bayesian_optimizer)
@@ -54,7 +54,7 @@ title: Optimizer Frequently Asked Questions
   </Accordion>
   <Accordion title="How do I choose the right optimizer for my task?">
   Knowing which optimizer to use depends on your specific needs. As a rule of thumb, we recommend
-  starting with [HAPO (Hierarchical Adaptive Prompt Optimizer)](/agent_optimization/algorithms/hierarchical_adaptive_optimizer)
+  starting with [HRPO (Hierarchical Reflective Prompt Optimizer)](/agent_optimization/algorithms/hierarchical_adaptive_optimizer)
   as this has been shown to be a strong baseline for most tasks.
 
   You can also try to use:
@@ -201,10 +201,10 @@ title: Optimizer Frequently Asked Questions
 
 <AccordionGroup>
   <Accordion title="Why do some optimized prompts look like gibberish?">
-    Research has shown "evil twin" prompts and unusual delimiters can perform well despite being hard to interpret. Optimizers explore the search space indiscriminately, so high-performing instructions aren't always human-readable. When interpretability matters, prefer algorithms like HAPO that include reasoning traces or enforce structure via custom metrics.
+    Research has shown "evil twin" prompts and unusual delimiters can perform well despite being hard to interpret. Optimizers explore the search space indiscriminately, so high-performing instructions aren't always human-readable. When interpretability matters, prefer algorithms like HRPO that include reasoning traces or enforce structure via custom metrics.
   </Accordion>
   <Accordion title="How expensive are optimizers in terms of API calls?">
-    Cost varies widely. Reflection-heavy optimizers (e.g., HAPO, GEPA) may call LLMs multiple times per trial, while MetaPrompt/Few-Shot Bayesian are lighter weight. Start with small `n_samples` and `max_trials`, monitor API usage, and review the [Benchmarks](/agent_optimization/algorithms/benchmarks) page for sample-efficiency notes.
+    Cost varies widely. Reflection-heavy optimizers (e.g., HRPO, GEPA) may call LLMs multiple times per trial, while MetaPrompt/Few-Shot Bayesian are lighter weight. Start with small `n_samples` and `max_trials`, monitor API usage, and review the [Benchmarks](/agent_optimization/algorithms/benchmarks) page for sample-efficiency notes.
   </Accordion>
   <Accordion title="Do optimized prompts generalize across tasks?">
     Optimizers tune prompts for the dataset you provide. Prompts may overfit if the dataset lacks coverage. Use diverse datasets, consider chaining optimizers (e.g., Evolutionary → Few-Shot Bayesian) to encourage generalization, and re-evaluate on unseen samples before shipping.

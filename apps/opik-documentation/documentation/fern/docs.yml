@@ -714,7 +714,7 @@ navigation:
             icon: fa-regular fa-puzzle-piece
             path: docs/agent_optimization/algorithms/metaprompt_optimizer.mdx
             slug: metaprompt_optimizer
-          - page: HAPO
+          - page: HRPO
             icon: fa-regular fa-puzzle-piece
             path: docs/agent_optimization/algorithms/hierarchical_reflective_optimizer.mdx
             slug: hierarchical_adaptive_optimizer
@@ -1306,7 +1306,7 @@ redirects:
   - source: "/docs/opik/self-host/kubernetes/backup"
     destination: "/docs/opik/self-host/backup"
     permanent: true
-  # HAPO (formerly Hierarchical Reflective Optimizer) redirect
+  # HRPO (formerly Hierarchical Reflective Optimizer) redirect
   - source: "/docs/opik/agent_optimization/algorithms/hierarchical_reflective_optimizer"
     destination: "/docs/opik/agent_optimization/algorithms/hierarchical_adaptive_optimizer"
     permanent: true

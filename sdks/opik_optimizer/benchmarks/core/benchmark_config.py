@@ -331,7 +331,7 @@ OPTIMIZER_CONFIGS: dict[str, BenchmarkOptimizerConfig] = {
         },
     ),
     "hierarchical_reflective": BenchmarkOptimizerConfig(
-        class_name="HAPO",  # Alias for HierarchicalReflectiveOptimizer (Hierarchical Adaptive Prompt Optimizer)
+        class_name="HRPO",  # Alias for HierarchicalReflectiveOptimizer
         params={
             "n_threads": 4,
             "max_parallel_batches": 5,

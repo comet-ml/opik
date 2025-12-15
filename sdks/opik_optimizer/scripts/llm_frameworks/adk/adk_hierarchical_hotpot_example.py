@@ -2,7 +2,7 @@ from typing import Any
 
 from opik_optimizer import (
     ChatPrompt,
-    HAPO,
+    HRPO,
 )
 from opik_optimizer.datasets import hotpot
 
@@ -17,7 +17,7 @@ dataset = hotpot(count=300)
 def levenshtein_ratio(dataset_item: dict[str, Any], llm_output: str) -> ScoreResult:
     metric = LevenshteinRatio()
     result = metric.score(reference=dataset_item["answer"], output=llm_output)
-    # Add reason field required by HAPO
+    # Add reason field required by HRPO
     result.reason = f"Levenshtein similarity between output and reference '{dataset_item['answer']}': {result.value:.4f}"
     return result
 
@@ -36,7 +36,7 @@ prompt = ChatPrompt(
 )
 
 # Optimize it:
-optimizer = HAPO(
+optimizer = HRPO(
     model="openai/gpt-4o-mini",
     n_threads=1,
     max_parallel_batches=3,

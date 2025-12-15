@@ -5,15 +5,15 @@ from .hierarchical_reflective_optimizer import HierarchicalReflectiveOptimizer
 from .few_shot_bayesian_optimizer import FewShotBayesianOptimizer
 from .parameter_optimizer import ParameterOptimizer
 
-# HAPO is an alias for HierarchicalReflectiveOptimizer (Hierarchical Adaptive Prompt Optimizer)
-HAPO = HierarchicalReflectiveOptimizer
+# HRPO is an alias for HierarchicalReflectiveOptimizer (Hierarchical Reflective Prompt Optimizer)
+HRPO = HierarchicalReflectiveOptimizer
 
 __all__ = [
     "GepaOptimizer",
     "MetaPromptOptimizer",
     "EvolutionaryOptimizer",
     "HierarchicalReflectiveOptimizer",
-    "HAPO",
+    "HRPO",
     "FewShotBayesianOptimizer",
     "ParameterOptimizer",
 ]
