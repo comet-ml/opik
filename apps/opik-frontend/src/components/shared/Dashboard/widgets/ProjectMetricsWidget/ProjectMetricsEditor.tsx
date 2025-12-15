@@ -23,7 +23,7 @@ import ProjectsSelectBox from "@/components/pages-shared/automations/ProjectsSel
 import ProjectWidgetFiltersSection from "@/components/shared/Dashboard/widgets/shared/ProjectWidgetFiltersSection/ProjectWidgetFiltersSection";
 
 import { cn } from "@/lib/utils";
-import { useDashboardStore } from "@/store/DashboardStore";
+import { useDashboardStore, selectMixedConfig } from "@/store/DashboardStore";
 
 import get from "lodash/get";
 
@@ -114,9 +114,10 @@ const ProjectMetricsEditor = forwardRef<
     [widgetConfig?.threadFilters],
   );
 
-  const globalProjectId = useDashboardStore(
-    (state) => state.config?.projectIds?.[0],
-  );
+  const globalProjectId = useDashboardStore((state) => {
+    const config = selectMixedConfig(state);
+    return config?.projectIds?.[0];
+  });
   const projectId = localProjectId || globalProjectId || "";
 
   const selectedMetric = METRIC_OPTIONS.find((m) => m.value === metricType);

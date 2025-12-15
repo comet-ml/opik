@@ -3651,6 +3651,36 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorMessage_Detail"
+    patch:
+      tags:
+      - Prompts
+      summary: Update prompt versions
+      description: |
+        Update one or more prompt versions.
+
+        Note: Prompt versions are immutable by design.
+        Only organizational properties, such as tags etc., can be updated.
+        Core properties like template and metadata cannot be modified after creation.
+
+        PATCH semantics:
+        - non-empty values update the field
+        - null values preserve existing field values (no change)
+        - empty values explicitly clear the field
+      operationId: updatePromptVersions
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PromptVersionBatchUpdate"
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
   /v1/private/prompts/{id}:
     get:
       tags:
@@ -3809,6 +3839,19 @@ paths:
           type: integer
           format: int32
           default: 10
+      - name: search
+        in: query
+        description: Search text to find in template or change description fields
+        schema:
+          type: string
+      - name: sorting
+        in: query
+        schema:
+          type: string
+      - name: filters
+        in: query
+        schema:
+          type: string
       responses:
         "200":
           description: OK
@@ -4949,6 +4992,47 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorMessage"
+  /v1/private/traces/threads/stats:
+    get:
+      tags:
+      - Traces
+      summary: Get trace thread stats
+      description: Get trace thread stats
+      operationId: getTraceThreadStats
+      parameters:
+      - name: project_id
+        in: query
+        schema:
+          type: string
+          format: uuid
+      - name: project_name
+        in: query
+        schema:
+          type: string
+      - name: filters
+        in: query
+        schema:
+          type: string
+      - name: from_time
+        in: query
+        schema:
+          type: string
+          description: Filter trace threads created from this time (ISO-8601 format).
+          format: date-time
+      - name: to_time
+        in: query
+        schema:
+          type: string
+          description: "Filter trace threads created up to this time (ISO-8601 format).\
+            \ If not provided, defaults to current time. Must be after 'from_time'."
+          format: date-time
+      responses:
+        "200":
+          description: Trace thread stats resource
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectStats_Public"
   /v1/private/traces/{traceId}/comments/{commentId}:
     get:
       tags:
@@ -13018,6 +13102,12 @@ components:
           - jinja2
         change_description:
           type: string
+        tags:
+          uniqueItems: true
+          type: array
+          items:
+            minLength: 1
+            type: string
         variables:
           uniqueItems: true
           type: array
@@ -13112,6 +13202,12 @@ components:
           - jinja2
         change_description:
           type: string
+        tags:
+          uniqueItems: true
+          type: array
+          items:
+            minLength: 1
+            type: string
         variables:
           uniqueItems: true
           type: array
@@ -13229,6 +13325,10 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/PromptVersion_Public"
+        sortableBy:
+          type: array
+          items:
+            type: string
     PromptVersion_Public:
       required:
       - template
@@ -13259,6 +13359,12 @@ components:
           - jinja2
         change_description:
           type: string
+        tags:
+          uniqueItems: true
+          type: array
+          items:
+            minLength: 1
+            type: string
         template_structure:
           type: string
           readOnly: true
@@ -13367,20 +13473,82 @@ components:
           type: array
           items:
             type: string
+    PromptVersionBatchUpdate:
+      required:
+      - ids
+      - update
+      type: object
+      properties:
+        ids:
+          maxItems: 1000
+          minItems: 1
+          uniqueItems: true
+          type: array
+          description: IDs of prompt versions to update
+          items:
+            type: string
+            description: IDs of prompt versions to update
+            format: uuid
+        update:
+          $ref: "#/components/schemas/PromptVersionUpdate"
+        merge_tags:
+          type: boolean
+          description: |
+            Tag merge behavior:
+            - true: Add new tags to existing tags (union)
+            - false: Replace all existing tags with new tags (default behaviour if not provided)
+          default: false
+      description: |
+        Request to update one or more prompt versions.
+        Note: Prompt versions are immutable by design - only organizational properties (such as tags etc.) can be updated.
+    PromptVersionUpdate:
+      type: object
+      properties:
+        tags:
+          uniqueItems: true
+          type: array
+          description: |
+            Tags to set or merge with existing tags. Follows PATCH semantics:
+            - If merge_tags is true, these tags will be added to existing tags.
+            - If merge_tags is false, these tags will replace all existing tags.
+            - null: preserve existing tags (no change).
+            - empty set: clear all tags merge_tags is false.
+          items:
+            minLength: 1
+            type: string
+            description: |
+              Tags to set or merge with existing tags. Follows PATCH semantics:
+              - If merge_tags is true, these tags will be added to existing tags.
+              - If merge_tags is false, these tags will replace all existing tags.
+              - null: preserve existing tags (no change).
+              - empty set: clear all tags merge_tags is false.
+      description: |
+        Update to apply to prompt versions.
+        Note: Prompt versions are immutable by design.
+        Only organizational properties (such as tags etc.) can be updated.
+        Core properties like template, metadata etc. cannot be modified after creation.
     ServiceTogglesConfig:
       required:
       - alertsEnabled
+      - anthropicProviderEnabled
+      - collaboratorsTabEnabled
       - csvUploadEnabled
+      - customllmProviderEnabled
       - dashboardsEnabled
       - datasetVersioningEnabled
       - exportEnabled
+      - geminiProviderEnabled
       - guardrailsEnabled
+      - openaiProviderEnabled
+      - openrouterProviderEnabled
       - opikAIEnabled
+      - opikbuiltinProviderEnabled
       - optimizationStudioEnabled
       - pythonEvaluatorEnabled
       - spanLlmAsJudgeEnabled
       - spanUserDefinedMetricPythonEnabled
       - traceThreadPythonEvaluatorEnabled
+      - vertexaiProviderEnabled
       - welcomeWizardEnabled
       type: object
       properties:
@@ -13409,6 +13577,22 @@ components:
         dashboardsEnabled:
           type: boolean
         datasetVersioningEnabled:
+          type: boolean
+        openaiProviderEnabled:
+          type: boolean
+        anthropicProviderEnabled:
+          type: boolean
+        geminiProviderEnabled:
+          type: boolean
+        openrouterProviderEnabled:
+          type: boolean
+        vertexaiProviderEnabled:
+          type: boolean
+        customllmProviderEnabled:
+          type: boolean
+        opikbuiltinProviderEnabled:
+          type: boolean
+        collaboratorsTabEnabled:
           type: boolean
     SpanBatchUpdate:
       required:
