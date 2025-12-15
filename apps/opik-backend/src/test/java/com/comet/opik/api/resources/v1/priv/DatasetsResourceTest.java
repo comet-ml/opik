@@ -4635,14 +4635,13 @@ class DatasetsResourceTest {
             // Get dataset ID from one of the items
             var datasetId = retrieved1.datasetId();
 
-            // Create filters to match items with "delete-me" tag within the specific dataset
-            var datasetFilter = new DatasetItemFilter(DatasetItemField.DATASET_ID, Operator.EQUAL, null,
-                    datasetId.toString());
+            // Create filter to match items with "delete-me" tag
             var tagFilter = new DatasetItemFilter(DatasetItemField.TAGS, Operator.CONTAINS, null, "delete-me");
 
-            // Delete by filters (with dataset_id to comply with validation)
+            // Delete by filters with explicit dataset_id
             var deleteRequest = DatasetItemsDelete.builder()
-                    .filters(List.of(datasetFilter, tagFilter))
+                    .datasetId(datasetId)
+                    .filters(List.of(tagFilter))
                     .build();
 
             try (var actualResponse = client.target(BASE_RESOURCE_URI.formatted(baseURI))
@@ -4734,14 +4733,13 @@ class DatasetsResourceTest {
             assertThat(datasetResourceClient.getDatasetItem(item1Dataset2.id(), API_KEY, TEST_WORKSPACE)).isNotNull();
             assertThat(datasetResourceClient.getDatasetItem(item2Dataset2.id(), API_KEY, TEST_WORKSPACE)).isNotNull();
 
-            // Create filters to delete items with "delete-me" tag ONLY from dataset1
-            var datasetFilter = new DatasetItemFilter(DatasetItemField.DATASET_ID, Operator.EQUAL, null,
-                    dataset1Id.toString());
+            // Create filter to delete items with "delete-me" tag
             var tagFilter = new DatasetItemFilter(DatasetItemField.TAGS, Operator.CONTAINS, null, "delete-me");
 
-            // Delete by filters with dataset_id
+            // Delete by filters with explicit dataset_id (only from dataset1)
             var deleteRequest = DatasetItemsDelete.builder()
-                    .filters(List.of(datasetFilter, tagFilter))
+                    .datasetId(dataset1Id)
+                    .filters(List.of(tagFilter))
                     .build();
 
             try (var actualResponse = client.target(BASE_RESOURCE_URI.formatted(baseURI))
@@ -4822,11 +4820,9 @@ class DatasetsResourceTest {
             // Get dataset ID
             var datasetId = retrieved1.datasetId();
 
-            // Delete with only dataset_id filter - should delete ALL items in that dataset
-            var datasetFilter = new DatasetItemFilter(DatasetItemField.DATASET_ID, Operator.EQUAL, null,
-                    datasetId.toString());
+            // Delete with only dataset_id - should delete ALL items in that dataset
             var deleteRequest = DatasetItemsDelete.builder()
-                    .filters(List.of(datasetFilter))
+                    .datasetId(datasetId)
                     .build();
 
             try (var actualResponse = client.target(BASE_RESOURCE_URI.formatted(baseURI))

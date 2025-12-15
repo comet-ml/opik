@@ -539,23 +539,36 @@ public class DatasetsResource {
 
     @POST
     @Path("/items/delete")
-    @Operation(operationId = "deleteDatasetItems", summary = "Delete dataset items", description = "Delete dataset items", responses = {
+    @Operation(operationId = "deleteDatasetItems", summary = "Delete dataset items", description = """
+            Delete dataset items using one of two modes:
+            1. **Delete by IDs**: Provide 'item_ids' to delete specific items by their IDs
+            2. **Delete by filters**: Provide 'dataset_id' with optional 'filters' to delete items matching criteria
+
+            When using filters, an empty 'filters' array will delete all items in the specified dataset.
+            """, responses = {
             @ApiResponse(responseCode = "204", description = "No content"),
+            @ApiResponse(responseCode = "400", description = "Bad request - invalid parameters or conflicting fields"),
     })
     public Response deleteDatasetItems(
             @RequestBody(content = @Content(schema = @Schema(implementation = DatasetItemsDelete.class))) @NotNull @Valid DatasetItemsDelete request) {
 
         String workspaceId = requestContext.get().getWorkspaceId();
 
-        log.info("Deleting dataset items. workspaceId='{}', itemIdsSize='{}', filters='{}'", workspaceId,
-                emptyIfNull(request.itemIds()).size(), emptyIfNull(request.filters()).size());
+        log.info("Deleting dataset items. workspaceId='{}', itemIdsSize='{}', datasetId='{}', filtersSize='{}'",
+                workspaceId,
+                emptyIfNull(request.itemIds()).size(),
+                request.datasetId(),
+                emptyIfNull(request.filters()).size());
 
-        itemService.delete(request.itemIds(), request.filters())
+        itemService.delete(request.itemIds(), request.datasetId(), request.filters())
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
 
-        log.info("Deleted dataset items. workspaceId='{}', itemIdsSize='{}', filters='{}'", workspaceId,
-                emptyIfNull(request.itemIds()).size(), emptyIfNull(request.filters()).size());
+        log.info("Deleted dataset items. workspaceId='{}', itemIdsSize='{}', datasetId='{}', filtersSize='{}'",
+                workspaceId,
+                emptyIfNull(request.itemIds()).size(),
+                request.datasetId(),
+                emptyIfNull(request.filters()).size());
 
         return Response.noContent().build();
     }

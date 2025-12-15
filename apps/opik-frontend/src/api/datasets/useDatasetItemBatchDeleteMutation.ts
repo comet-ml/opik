@@ -5,7 +5,6 @@ import { useToast } from "@/components/ui/use-toast";
 import api, { DATASETS_REST_ENDPOINT } from "@/api/api";
 import { Filters } from "@/types/filters";
 import {
-  createFilter,
   generateSearchByFieldFilters,
   processFiltersArray,
 } from "@/lib/filters";
@@ -33,18 +32,13 @@ const useDatasetItemBatchDeleteMutation = () => {
       let payload;
 
       if (isAllItemsSelected) {
-        // CRITICAL SECURITY: Always include dataset_id filter to scope deletion to a specific dataset
         const combinedFilters = [
-          createFilter({
-            field: "dataset_id",
-            operator: "=",
-            value: datasetId,
-          }),
           ...filters,
           ...generateSearchByFieldFilters("data", search),
         ];
 
         payload = {
+          dataset_id: datasetId,
           filters: processFiltersArray(combinedFilters),
         };
       } else {

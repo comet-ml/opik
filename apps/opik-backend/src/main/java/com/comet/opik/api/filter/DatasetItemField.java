@@ -20,7 +20,6 @@ public enum DatasetItemField implements Field {
     CREATED_BY(CREATED_BY_QUERY_PARAM, FieldType.STRING),
     LAST_UPDATED_BY(LAST_UPDATED_BY_QUERY_PARAM, FieldType.STRING),
     TAGS(TAGS_QUERY_PARAM, FieldType.LIST),
-    DATASET_ID(DATASET_ID_QUERY_PARAM, FieldType.STRING),
     ;
 
     private final String queryParamField;

@@ -75,8 +75,8 @@ export const DatasetItemEditorAutosaveProvider: React.FC<
   const { formId } = useDatasetItemFormState({ datasetItemId });
 
   // Mutations
-  const updateMutation = useDatasetItemUpdateMutation();
-  const deleteMutation = useDatasetItemBatchDeleteMutation();
+  const { mutate: updateDatasetItem } = useDatasetItemUpdateMutation();
+  const { mutate: deleteDatasetItem } = useDatasetItemBatchDeleteMutation();
 
   // Autosave
   const {
@@ -97,25 +97,25 @@ export const DatasetItemEditorAutosaveProvider: React.FC<
   const handleAddTag = useCallback(
     (newTag: string) => {
       if (!datasetItemId) return;
-      updateMutation.mutate({
+      updateDatasetItem({
         datasetId,
         itemId: datasetItemId,
         item: { tags: [...tags, newTag] },
       });
     },
-    [updateMutation, datasetId, datasetItemId, tags],
+    [updateDatasetItem, datasetId, datasetItemId, tags],
   );
 
   const handleDeleteTag = useCallback(
     (tag: string) => {
       if (!datasetItemId) return;
-      updateMutation.mutate({
+      updateDatasetItem({
         datasetId,
         itemId: datasetItemId,
         item: { tags: tags.filter((t) => t !== tag) },
       });
     },
-    [updateMutation, datasetId, datasetItemId, tags],
+    [updateDatasetItem, datasetId, datasetItemId, tags],
   );
 
   const handleFieldChange = useCallback(
@@ -130,14 +130,14 @@ export const DatasetItemEditorAutosaveProvider: React.FC<
       if (!datasetItemId) return;
       // Cancel any pending autosave before deleting
       cancelPendingSave();
-      deleteMutation.mutate(
+      deleteDatasetItem(
         { datasetId, ids: [datasetItemId] },
         {
           onSuccess,
         },
       );
     },
-    [deleteMutation, datasetId, datasetItemId, cancelPendingSave],
+    [deleteDatasetItem, datasetId, datasetItemId, cancelPendingSave],
   );
 
   // Navigation - no unsaved changes confirmation needed for autosave
