@@ -1,6 +1,11 @@
 ---
-title: "Optimize agents"
-description: "Connect the Agent Optimizer to Agent Frameworks."
+description: Connect the Agent Optimizer to Agent Frameworks.
+headline: Optimize agents | Opik Documentation
+og:description: Learn to enhance agent frameworks using Opik's Agent Optimizer for
+  efficient orchestration of prompts and tools in multi-agent systems.
+og:site_name: Opik Documentation
+og:title: Optimize Agents with Opik
+title: Optimize agents
 ---
 
 Agent frameworks orchestrate complex chains of prompts and tools. The Agent Optimizer treats any agent as an `OptimizableAgent`, a thin wrapper with a predictable interface so optimizers can call it repeatedly during a run. This means the optimizer SDK is able to work with most agentic workflows and multi-agent systems out of the box or with minimal changes.
@@ -34,7 +39,7 @@ See `sdks/opik_optimizer/scripts/llm_frameworks/` for working agents (LangGraph,
 
 1. **Log traces** from your agent (LangGraph, Google ADK, etc.) into Opik so you can collect datasets and failure examples.
 2. **Snapshot the agent prompt or plan** as a `ChatPrompt` or optimizer-ready artifact.
-3. **Run optimizers** (MetaPrompt, Hierarchical Reflective, etc.) using your agent’s datasets.
+3. **Run optimizers** (MetaPrompt, HRPO, etc.) using your agent's datasets.
 4. **Deploy the improved instructions** back into the agent runtime.
 
 <Info>

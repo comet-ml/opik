@@ -164,7 +164,7 @@ class BaseOptimizer(ABC):
 
         if prompt._has_content_parts() and not support_content_parts:
             raise ValueError(
-                "Prompt has content parts, which are not supported by this optimizer - You can use the Hierarchical Reflective Optimizer instead."
+                "Prompt has content parts, which are not supported by this optimizer - You can use the Hierarchical Reflective Prompt Optimizer instead."
             )
 
     def _setup_agent_class(

@@ -20,7 +20,7 @@ class AnswerCorrectnessMetric(base_metric.BaseMetric):
     This metric uses an LLM to judge whether the model's output is
     semantically correct compared to the reference answer. It returns
     a binary score (1.0 for correct, 0.0 for incorrect) along with
-    detailed reasoning which is critical for the Hierarchical Reflective
+    detailed reasoning which is critical for the Hierarchical Reflective Prompt
     Optimizer's root cause analysis.
     """
 

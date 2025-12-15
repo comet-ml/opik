@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo } from "react";
+import React, { useCallback } from "react";
 import { keepPreviousData } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
 import {
@@ -12,7 +12,7 @@ import { Trace } from "@/types/traces";
 import { useSMEFlow } from "../SMEFlowContext";
 import { useAnnotationTreeState } from "./AnnotationTreeStateContext";
 import useTraceById from "@/api/traces/useTraceById";
-import { processInputData } from "@/lib/images";
+import { useProcessedInputData } from "@/hooks/useProcessedInputData";
 import AttachmentsList from "@/components/pages-shared/traces/TraceDetailsPanel/TraceDataViewer/AttachmentsList";
 
 const STALE_TIME = 5 * 60 * 1000; // 5 minutes
@@ -50,10 +50,7 @@ const TraceDataViewer: React.FC = () => {
 
   const displayTrace = fullTrace || trace;
 
-  const { media } = useMemo(
-    () => processInputData(displayTrace?.input),
-    [displayTrace?.input],
-  );
+  const { media } = useProcessedInputData(displayTrace?.input);
 
   // Handlers for scroll position changes
   const handleInputScrollChange = useCallback(
