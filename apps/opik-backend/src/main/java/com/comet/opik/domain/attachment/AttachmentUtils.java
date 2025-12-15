@@ -32,7 +32,7 @@ public class AttachmentUtils {
      *
      * Example: input-attachment-1-1234567890.jpg
      */
-    public static final String ATTACHMENT_FILENAME_BASE_PATTERN = "(?:input|output|metadata)-attachment-\\d+-\\d+\\.\\w+";
+    private static final String ATTACHMENT_FILENAME_BASE_PATTERN = "(?:input|output|metadata)-attachment-\\d+-\\d+\\.\\w+";
 
     /**
      * A regex pattern that identifies valid filenames for Python SDK-extracted attachments.
@@ -47,18 +47,18 @@ public class AttachmentUtils {
      * - input-attachment-1-1234567890.png
      * - output-attachment-5-1234567890-sdk.json
      */
-    public static final String ATTACHMENT_FILENAME_SDK_SUPPORT_PATTERN = "(?:input|output|metadata)-attachment-\\d+-\\d+(?:-sdk)?\\.\\w+";
+    private static final String ATTACHMENT_FILENAME_SDK_SUPPORT_PATTERN = "(?:input|output|metadata)-attachment-\\d+-\\d+(?:-sdk)?\\.\\w+";
 
     /**
      * Pattern for validating auto-stripped attachment filenames (whole string match).
      * Uses anchors (^$) to ensure the entire string matches the pattern.
      */
-    public static final String AUTO_STRIPPED_FILENAME_PATTERN = "^" + ATTACHMENT_FILENAME_BASE_PATTERN + "$";
+    private static final String AUTO_STRIPPED_FILENAME_PATTERN = "^" + ATTACHMENT_FILENAME_BASE_PATTERN + "$";
 
     /**
      * Compiled pattern for validating auto-stripped attachment filenames.
      */
-    public static final Pattern AUTO_STRIPPED_PATTERN = Pattern.compile(AUTO_STRIPPED_FILENAME_PATTERN);
+    private static final Pattern AUTO_STRIPPED_PATTERN = Pattern.compile(AUTO_STRIPPED_FILENAME_PATTERN);
 
     /**
      * Pattern for finding attachment references in JSON strings (with brackets).
@@ -70,7 +70,7 @@ public class AttachmentUtils {
      *  - [metadata-attachment-1-1704067199000-sdk.pdf]
      *  - "some text [input-attachment-1-123.png] more text"
      */
-    public static final Pattern FIND_REFERENCE_PATTERN = Pattern
+    private static final Pattern FIND_REFERENCE_PATTERN = Pattern
             .compile("\\[(" + ATTACHMENT_FILENAME_SDK_SUPPORT_PATTERN + ")\\]");
 
     /**
