@@ -24,7 +24,7 @@ def test_streamer__attachment_uploads__flush__ok(temp_file_15mb):
             message_processor=mock.Mock(),
             n_consumers=1,
             use_batching=True,
-            extract_attachments=False,
+            use_attachment_extraction=False,
             upload_preprocessor=file_upload_preprocessor.FileUploadPreprocessor(
                 file_upload_manager
             ),
@@ -67,7 +67,7 @@ def test_streamer__attachment_uploads__flush__timeout(temp_file_15mb):
             message_processor=mock.Mock(),
             n_consumers=1,
             use_batching=True,
-            extract_attachments=False,
+            use_attachment_extraction=False,
             upload_preprocessor=file_upload_preprocessor.FileUploadPreprocessor(
                 file_upload_manager
             ),

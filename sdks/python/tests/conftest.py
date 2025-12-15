@@ -56,7 +56,7 @@ def patch_streamer(noop_file_upload_preprocessor):
             use_batching=True,
             upload_preprocessor=noop_file_upload_preprocessor,
             max_queue_size=None,
-            extract_attachments=False,
+            use_attachment_extraction=False,
         )
 
         yield streamer, fake_message_processor_
@@ -79,7 +79,7 @@ def patch_streamer_without_batching(noop_file_upload_preprocessor):
             use_batching=False,
             upload_preprocessor=noop_file_upload_preprocessor,
             max_queue_size=None,
-            extract_attachments=False,
+            use_attachment_extraction=False,
         )
 
         yield streamer, fake_message_processor_

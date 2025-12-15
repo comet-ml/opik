@@ -19,7 +19,7 @@ def batched_streamer_and_mock_message_processor(noop_file_upload_preprocessor):
             message_processor=mock_message_processor,
             n_consumers=1,
             use_batching=True,
-            extract_attachments=False,
+            use_attachment_extraction=False,
             upload_preprocessor=noop_file_upload_preprocessor,
             max_queue_size=None,
         )
@@ -64,7 +64,7 @@ def test_streamer__batching_disabled__messages_that_support_batching_are_process
             message_processor=mock_message_processor,
             n_consumers=1,
             use_batching=False,
-            extract_attachments=False,
+            use_attachment_extraction=False,
             upload_preprocessor=noop_file_upload_preprocessor,
             max_queue_size=None,
         )

@@ -42,7 +42,7 @@ def construct_online_streamer(
         ),
         n_consumers=n_consumers,
         use_batching=use_batching,
-        extract_attachments=extract_attachments,
+        use_attachment_extraction=extract_attachments,
         max_queue_size=max_queue_size,
     )
 
@@ -52,7 +52,7 @@ def construct_streamer(
     upload_preprocessor: file_upload_preprocessor.FileUploadPreprocessor,
     n_consumers: int,
     use_batching: bool,
-    extract_attachments: bool,
+    use_attachment_extraction: bool,
     max_queue_size: Optional[int],
 ) -> streamer.Streamer:
     message_queue_: message_queue.MessageQueue[messages.BaseMessage] = (
@@ -80,7 +80,7 @@ def construct_streamer(
         batch_preprocessor=batching_preprocessor.BatchingPreprocessor(batch_manager),
         upload_preprocessor=upload_preprocessor,
         attachments_preprocessor=attachments_preprocessor.AttachmentsPreprocessor(
-            extract_attachments
+            use_attachment_extraction
         ),
     )
 

@@ -26,7 +26,7 @@ def streamer_with_attachments_enabled(noop_file_upload_preprocessor):
             message_processor=mock_message_processor,
             n_consumers=1,
             use_batching=True,
-            extract_attachments=True,
+            use_attachment_extraction=True,
             upload_preprocessor=noop_file_upload_preprocessor,
             max_queue_size=None,
         )
@@ -47,7 +47,7 @@ def streamer_with_attachments_disabled(noop_file_upload_preprocessor):
             message_processor=mock_message_processor,
             n_consumers=1,
             use_batching=True,
-            extract_attachments=False,
+            use_attachment_extraction=False,
             upload_preprocessor=noop_file_upload_preprocessor,
             max_queue_size=None,
         )
