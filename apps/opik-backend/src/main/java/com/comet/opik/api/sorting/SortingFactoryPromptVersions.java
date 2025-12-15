@@ -1,11 +1,13 @@
 package com.comet.opik.api.sorting;
 
+import lombok.Getter;
 import lombok.NonNull;
 
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
+@Getter
 public class SortingFactoryPromptVersions extends SortingFactory {
 
     /**
@@ -13,18 +15,15 @@ public class SortingFactoryPromptVersions extends SortingFactory {
      */
     public static final String PROMPT_VERSIONS_FIELDS_PATTERN = "pv.%s";
 
-    @Override
-    public List<String> getSortableFields() {
-        return List.of(
-                SortableFields.ID,
-                SortableFields.COMMIT,
-                SortableFields.TEMPLATE,
-                SortableFields.CHANGE_DESCRIPTION,
-                SortableFields.TYPE,
-                SortableFields.TAGS,
-                SortableFields.CREATED_AT,
-                SortableFields.CREATED_BY);
-    }
+    private final List<String> sortableFields = List.of(
+            SortableFields.ID,
+            SortableFields.COMMIT,
+            SortableFields.TEMPLATE,
+            SortableFields.CHANGE_DESCRIPTION,
+            SortableFields.TYPE,
+            SortableFields.TAGS,
+            SortableFields.CREATED_AT,
+            SortableFields.CREATED_BY);
 
     public Map<String, String> newFieldMapping(@NonNull List<SortingField> sortingFields) {
         var fieldMapping = sortingFields.stream()

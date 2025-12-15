@@ -1,4 +1,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { AxiosError } from "axios";
+import get from "lodash/get";
+
 import api, { PROMPTS_REST_ENDPOINT } from "@/api/api";
 import { useToast } from "@/components/ui/use-toast";
 
@@ -33,10 +36,17 @@ export default function usePromptVersionsUpdateMutation() {
       queryClient.invalidateQueries({ queryKey: ["prompt-version"] });
       queryClient.invalidateQueries({ queryKey: ["prompt"] });
     },
-    onError: (error) => {
+    onError: (error: AxiosError) => {
+      const message = get(
+        error,
+        ["response", "data", "message"],
+        error.message,
+      );
+
       toast({
+        title: "Error",
+        description: message,
         variant: "destructive",
-        description: error.message || "Failed to update prompt versions",
       });
     },
   });

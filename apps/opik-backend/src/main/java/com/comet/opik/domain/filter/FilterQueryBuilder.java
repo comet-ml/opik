@@ -807,8 +807,7 @@ public class FilterQueryBuilder {
                         String keyName = fieldName.substring(firstDot + 1);
 
                         statement = statement.bind("dynamicField%d".formatted(i), keyName);
-                    }
-                    if (filterStrategy == FilterStrategy.PROMPT_VERSION && fieldName.contains(".")) {
+                    } else if (filterStrategy == FilterStrategy.PROMPT_VERSION && fieldName.contains(".")) {
                         var jsonPath = getStateSQLJsonPath(fieldName);
                         statement = statement.bind("dynamicJsonPath%d".formatted(i), jsonPath);
                     } else {
