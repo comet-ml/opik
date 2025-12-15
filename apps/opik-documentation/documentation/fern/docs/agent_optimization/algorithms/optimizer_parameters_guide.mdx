@@ -103,9 +103,9 @@ All optimizers support these parameters in their `optimize_prompt()` method:
 - **Max Rounds**: More rounds (5-10) for thorough refinement, fewer (2-3) for quick improvement
 - **Prompts Per Round**: More candidates (6-8) for exploration, fewer (2-4) for focused refinement
 
-### HierarchicalReflectiveOptimizer
+### HRPO (Hierarchical Reflective Prompt Optimizer)
 
-**Purpose**: Uses hierarchical root cause analysis to systematically improve prompts by analyzing failures in batches, synthesizing findings, and addressing identified failure modes.
+**Purpose**: HRPO (Hierarchical Reflective Prompt Optimizer) uses hierarchical root cause analysis to systematically improve prompts by analyzing failures in batches, synthesizing findings, and addressing identified failure modes.
 
 **Specific Parameters:**
 - **`reasoning_model`** (str): Model used for root cause analysis and prompt improvement (e.g., "openai/gpt-4o")

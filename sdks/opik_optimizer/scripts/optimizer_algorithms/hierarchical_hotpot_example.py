@@ -1,19 +1,18 @@
 """
-Hierarchical Reflective Optimizer example on Hotpot dataset using LiteLLM.
+HRPO (Hierarchical Reflective Prompt Optimizer) example on Hotpot dataset using LiteLLM.
 
 This script demonstrates:
-- Using HierarchicalReflectiveOptimizer to systematically improve prompts
+- Using HRPO to systematically improve prompts
 - Creating a custom LLM-as-judge metric for semantic similarity
 - The importance of metrics that provide reasoning for root cause analysis
 - Optimizing prompts with tool calling support
 
-Note: The HierarchicalReflectiveOptimizer requires metrics that return
-ScoreResult with detailed 'reason' fields for effective root cause analysis.
+Note: HRPO requires metrics that return ScoreResult with detailed 'reason'
+fields for effective root cause analysis.
 """
 
 import opik  # noqa: E402
-from opik_optimizer import ChatPrompt  # noqa: E402
-from opik_optimizer import HierarchicalReflectiveOptimizer  # noqa: E402
+from opik_optimizer import ChatPrompt, HRPO  # noqa: E402
 from opik_optimizer.datasets import hotpot  # noqa: E402
 from opik_optimizer.utils import search_wikipedia  # noqa: E402
 
@@ -62,8 +61,8 @@ prompt = ChatPrompt(
 # Define the metric to optimize
 optimization_metric = answer_correctness_score
 
-# Initialize the Hierarchical Reflective Optimizer
-optimizer = HierarchicalReflectiveOptimizer(
+# Initialize HRPO (Hierarchical Reflective Prompt Optimizer)
+optimizer = HRPO(
     model="openai/gpt-4o",  # Model for analysis and improvement
     n_threads=4,  # Parallel evaluation threads
     max_parallel_batches=3,  # Batches analyzed concurrently

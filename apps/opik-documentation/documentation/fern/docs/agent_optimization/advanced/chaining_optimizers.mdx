@@ -14,7 +14,7 @@ Some projects benefit from running two or more optimizers back-to-back. For exam
 
 | Pipeline | Why run it | Pros | Cons | Complexity |
 | --- | --- | --- | --- | --- |
-| Hierarchical Reflective → Parameter | Existing long/complex prompt scenario: Reflective analysis finds failure modes; Parameter optimizer then tightens parameters on the improved prompt. | Excellent for legacy prompts with lots of existing complexity. Helps produce explainable changelog. | Requires metrics with rich `reason` strings; two stages increase cost. | Medium |
+| HRPO → Parameter | Existing long/complex prompt scenario: HRPO's reflective analysis finds failure modes; Parameter optimizer then tightens parameters on the improved prompt. | Excellent for legacy prompts with lots of existing complexity. Helps produce explainable changelog. | Requires metrics with rich `reason` strings; two stages increase cost. | Medium |
 | Evolutionary → Few-Shot Bayesian | Cold-start scenario: explore many prompt architectures first, then let Few-Shot Bayesian pick the best example combination for the winning structure. | High diversity followed by precise example selection. | Evolutionary runs are expensive; Bayesian stage relies on curated datasets. | High |
 | MetaPrompt → Parameter | Baseline prompts need polish plus sampling tweaks. | Quick wins with minimal configuration; can run in under an hour. | Less insight into failure modes than reflective pipelines. | Low. |
 | Evolutionary → Parameter | Hunt for novel prompts, then squeeze out cost/latency by tuning temperature/top_p. | Balances creativity with production readiness. | Two heavy optimization loops; ensure budget headroom. | High. |
@@ -70,5 +70,5 @@ final_result = parameter.optimize_parameter(
 
 - [Optimize prompts](/agent_optimization/optimization/optimize_prompts)
 - [Few-Shot Bayesian optimizer](/agent_optimization/algorithms/fewshot_bayesian_optimizer)
-- [Hierarchical Reflective optimizer](/agent_optimization/algorithms/hierarchical_reflective_optimizer)
+- [HRPO (Hierarchical Reflective Prompt Optimizer)](/agent_optimization/algorithms/hierarchical_adaptive_optimizer)
 - [Parameter optimizer](/agent_optimization/algorithms/parameter_optimizer)

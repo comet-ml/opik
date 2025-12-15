@@ -29,7 +29,7 @@ The SDK provides several optimizer classes that all inherit from `BaseOptimizer`
 - **MetaPromptOptimizer**: Employs meta-prompting techniques for optimization
 - **EvolutionaryOptimizer**: Uses genetic algorithms for prompt evolution
 - **GepaOptimizer**: Leverages GEPA (Genetic-Pareto) optimization approach
-- **HierarchicalReflectiveOptimizer**: Uses hierarchical root cause analysis for targeted prompt refinement
+- **HRPO (Hierarchical Reflective Prompt Optimizer)**: Uses hierarchical root cause analysis for targeted prompt refinement
 
 ## Standardized Method Signatures
 
@@ -802,10 +802,10 @@ optimize_prompt(
 <ParamField path="args" type="Any" />
 <ParamField path="kwargs" type="Any" />
 
-## HierarchicalReflectiveOptimizer
+## HRPO
 
 ```python
-HierarchicalReflectiveOptimizer(
+HRPO(
     model: str = 'gpt-4o',
     model_parameters: dict[str, typing.Any] | None = None,
     max_parallel_batches: int = 5,

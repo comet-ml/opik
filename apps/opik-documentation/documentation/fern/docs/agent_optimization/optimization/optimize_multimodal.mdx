@@ -16,7 +16,7 @@ Use optimizers that can forward OpenAI-style content parts (string or an array o
 
 | Optimizer | Multimodal (text+image) | Notes |
 |---|---|---|
-| Hierarchical Reflective Optimizer | ✓ | Ensure the `ChatPrompt.model` are vision-capable. |
+| HRPO (Hierarchical Reflective Prompt Optimizer) | ✓ | Ensure the `ChatPrompt.model` are vision-capable. |
 | MetaPrompt Optimizer | ✗ | Planned |
 | Evolutionary Optimizer | ✗ | Planned |
 | Few-shot Bayesian Optimizer | ✗ | Planned |
@@ -63,7 +63,7 @@ prompt = ChatPrompt(
 ## Running optimizations
 
 - Start with MetaPrompt for wording improvements. For cold-start exploration, pair Evolutionary → Few-Shot Bayesian to uncover new structures and example choices.
-- Use Hierarchical Reflective to catch recurring multimodal failures (e.g., missing chart descriptions) and highlight which dataset rows are problematic.
+- Use HRPO to catch recurring multimodal failures (e.g., missing chart descriptions) and highlight which dataset rows are problematic.
 - Monitor token usage because multimodal prompts send larger payloads; pick models like `gpt-4o-mini` when budgets are tight.
 - If an optimizer does not support the modality (e.g., text-only GEPA with image inputs), it will still mutate the prompt but cannot execute candidate evaluations—stick to optimizers whose evaluation models accept the modality.
 
