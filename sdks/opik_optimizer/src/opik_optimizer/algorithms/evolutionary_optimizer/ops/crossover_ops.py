@@ -8,6 +8,7 @@ from deap import creator as _creator
 
 from .. import prompts as evo_prompts
 from .. import reporting
+from ....api_objects import chat_prompt
 from .... import utils, _llm_calls
 
 
@@ -201,8 +202,20 @@ def llm_deap_crossover(
         first_child_messages = children[0]
         second_child_messages = children[1] if len(children) > 1 else children[0]
 
-        child1 = creator.Individual(first_child_messages)
-        child2 = creator.Individual(second_child_messages)
+        validated_children: list[list[dict[str, Any]]] = []
+        for idx, child_messages in enumerate(
+            (first_child_messages, second_child_messages), start=1
+        ):
+            try:
+                prompt_candidate = chat_prompt.ChatPrompt(messages=child_messages)
+            except ValueError as exc:
+                raise ValueError(
+                    f"LLM crossover produced invalid child prompt #{idx}: {exc}"
+                ) from exc
+            validated_children.append(prompt_candidate.get_messages())
+
+        child1 = creator.Individual(validated_children[0])
+        child2 = creator.Individual(validated_children[1])
 
         # Preserve tools and function_map from parents
         if hasattr(ind1, "tools"):

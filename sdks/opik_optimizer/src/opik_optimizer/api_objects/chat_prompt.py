@@ -85,12 +85,65 @@ class ChatPrompt:
         self.invoke = invoke
 
     @staticmethod
-    def _validate_messages(messages: list[dict[str, Any]]) -> None:
+    def _content_part_has_payload(part: Any) -> bool:
+        """Return True when a multimodal part contains non-empty info."""
+        if isinstance(part, types.TextContentPart):
+            return bool(part.text.strip())
+
+        if isinstance(part, types.ImageContentPart):
+            return bool(part.image_url.url.strip())
+
+        if isinstance(part, dict):
+            part_type = part.get("type")
+            if part_type == "text":
+                text = part.get("text")
+                if isinstance(text, str) and text.strip():
+                    return True
+            elif part_type == "image_url":
+                image_url = part.get("image_url", {})
+                if isinstance(image_url, dict):
+                    url = image_url.get("url")
+                    if isinstance(url, str) and url.strip():
+                        return True
+
+            # Fallback: check any nested strings (future modalities or custom schemas).
+            for value in part.values():
+                if isinstance(value, str) and value.strip():
+                    return True
+                if isinstance(value, dict) and ChatPrompt._content_part_has_payload(
+                    value
+                ):
+                    return True
+
+        return False
+
+    @classmethod
+    def _has_non_empty_content(cls, content: types.Content) -> bool:
+        """Return True if the message content carries at least one non-empty value."""
+        if isinstance(content, str):
+            return bool(content.strip())
+
+        if isinstance(content, list):
+            if not content:
+                return False
+            for part in content:
+                if cls._content_part_has_payload(part):
+                    return True
+            return False
+
+        return False
+
+    @classmethod
+    def _validate_messages(cls, messages: list[dict[str, Any]]) -> None:
         if not isinstance(messages, list):
             raise ValueError("`messages` must be a list")
-        else:
-            for message in messages:
-                types.Message.model_validate(message)
+
+        for idx, message in enumerate(messages):
+            validated_message = types.Message.model_validate(message)
+            if not cls._has_non_empty_content(validated_message.content):
+                raise ValueError(
+                    f"Message at index {idx} with role '{validated_message.role}' must include non-empty content."
+                )
 
     @staticmethod
     def _validate_tools(tools: list[dict[str, Any]]) -> None:
