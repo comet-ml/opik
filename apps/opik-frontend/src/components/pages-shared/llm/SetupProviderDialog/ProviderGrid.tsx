@@ -35,7 +35,7 @@ const ProviderGrid: React.FC<ProviderGridProps> = ({
     FeatureToggleKeys.CUSTOMLLM_PROVIDER_ENABLED,
   );
   const isOpikFreeEnabled = useIsFeatureEnabled(
-    FeatureToggleKeys.OPIKFREE_PROVIDER_ENABLED,
+    FeatureToggleKeys.OPIK_FREE_PROVIDER_ENABLED,
   );
 
   const providerEnabledMap = useMemo(
