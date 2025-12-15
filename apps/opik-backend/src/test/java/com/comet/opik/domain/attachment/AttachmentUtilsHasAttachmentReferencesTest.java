@@ -239,9 +239,9 @@ class AttachmentUtilsHasAttachmentReferencesTest {
     }
 
     @Test
-    @DisplayName("Should return false when attachment reference is surrounded by other text")
-    void shouldReturnFalseWhenAttachmentReferenceIsSurroundedByOtherText() throws Exception {
-        // Given - The VALIDATE_REFERENCE_PATTERN requires the entire string to be a reference
+    @DisplayName("Should return true when attachment reference is surrounded by other text")
+    void shouldReturnTrueWhenAttachmentReferenceIsSurroundedByOtherText() throws Exception {
+        // Given
         JsonNode node = objectMapper
                 .readTree("{\"text\": \"Check this image [input-attachment-1-1234567890.png] for details\"}");
 
@@ -249,7 +249,7 @@ class AttachmentUtilsHasAttachmentReferencesTest {
         boolean result = AttachmentUtils.hasAttachmentReferences(objectMapper, node);
 
         // Then
-        assertThat(result).isFalse();
+        assertThat(result).isTrue();
     }
 
     @Test
@@ -336,7 +336,7 @@ class AttachmentUtilsHasAttachmentReferencesTest {
     @DisplayName("Should return true when node contains deeply nested JSON string with attachment reference")
     void shouldReturnTrueWhenNodeContainsDeeplyNestedJsonStringWithAttachmentReference() throws Exception {
         // Given
-        String level2Json = "{\\\\\\\"img\\\\\\\": \\\\\\\"[input-attachment-1-1234567890.png]\\\\\\\"}";
+        String level2Json = "{\\\\\\\"data\\\\\\\": \\\\\\\"image: [input-attachment-1-1234567890.png]\\\\\\\"}";
         String level1Json = "{\\\"nested\\\": \\\"" + level2Json + "\\\"}";
         JsonNode node = objectMapper.readTree("{\"data\": \"" + level1Json + "\"}");
 
