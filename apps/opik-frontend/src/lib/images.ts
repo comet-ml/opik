@@ -11,6 +11,20 @@ import {
 } from "@/types/attachments";
 import { safelyParseJSON } from "@/lib/utils";
 
+/**
+ * Type guard to check if a value is already parsed media data
+ */
+export const isParsedMediaData = (value: unknown): value is ParsedMediaData => {
+  return (
+    isObject(value) &&
+    "type" in value &&
+    "url" in value &&
+    "name" in value &&
+    isString(value.url) &&
+    isString(value.name)
+  );
+};
+
 const BASE64_PREFIXES_MAP = {
   "/9j/": "jpeg",
   iVBORw0KGgo: "png",
@@ -229,9 +243,6 @@ export const AUDIO_URL_REGEX = new RegExp(
 );
 
 export type ProcessedInput = {
-  images: ParsedImageData[];
-  videos: ParsedVideoData[];
-  audios: ParsedAudioData[];
   media: ParsedMediaData[];
   formattedData: object | undefined;
 };
@@ -776,9 +787,6 @@ const extractAudioURLs = (input: string, audios: ParsedAudioData[]) => {
 export const processInputData = (input?: object): ProcessedInput => {
   if (!input) {
     return {
-      images: [],
-      videos: [],
-      audios: [],
       media: [],
       formattedData: input,
     };
@@ -817,28 +825,25 @@ export const processInputData = (input?: object): ProcessedInput => {
   extractVideoURLs(inputString, videos);
   extractAudioURLs(inputString, audios);
 
-  const uniqueImages = uniqBy(images, "url");
-  const uniqueVideos = uniqBy(videos, "url");
-  const uniqueAudios = uniqBy(audios, "url");
-  const media: ParsedMediaData[] = [
-    ...uniqueImages.map((image) => ({
-      ...image,
-      type: ATTACHMENT_TYPE.IMAGE as const,
-    })),
-    ...uniqueVideos.map((video) => ({
-      ...video,
-      type: ATTACHMENT_TYPE.VIDEO as const,
-    })),
-    ...uniqueAudios.map((audio) => ({
-      ...audio,
-      type: ATTACHMENT_TYPE.AUDIO as const,
-    })),
-  ];
+  const media: ParsedMediaData[] = uniqBy(
+    [
+      ...images.map((image) => ({
+        ...image,
+        type: ATTACHMENT_TYPE.IMAGE as const,
+      })),
+      ...videos.map((video) => ({
+        ...video,
+        type: ATTACHMENT_TYPE.VIDEO as const,
+      })),
+      ...audios.map((audio) => ({
+        ...audio,
+        type: ATTACHMENT_TYPE.AUDIO as const,
+      })),
+    ],
+    "url",
+  );
 
   return {
-    images: uniqueImages,
-    videos: uniqueVideos,
-    audios: uniqueAudios,
     media,
     formattedData: safelyParseJSON(inputString),
   };

@@ -1,6 +1,11 @@
 ---
-title: "Optimize prompts"
-description: "Pick the right optimizer, run experiments, and ship better prompts."
+description: Pick the right optimizer, run experiments, and ship better prompts.
+headline: Optimize prompts | Opik Documentation
+og:description: Learn to enhance your prompt optimization process using proven techniques
+  for better performance and efficiency.
+og:site_name: Opik Documentation
+og:title: Optimize prompts effectively with Opik
+title: Optimize prompts
 ---
 
 Use this playbook whenever you need to improve a prompt (single-turn or agentic) and want a repeatable process rather than manual tweaks.
@@ -16,7 +21,7 @@ Use this playbook whenever you need to improve a prompt (single-turn or agentic)
 | Scenario | Recommended optimizer |
 | --- | --- |
 | General prompt copy edits | [MetaPrompt](/agent_optimization/algorithms/metaprompt_optimizer) |
-| Complex failure analysis | [Hierarchical Reflective](/agent_optimization/algorithms/hierarchical_reflective_optimizer) |
+| Complex failure analysis | [HRPO](/agent_optimization/algorithms/hierarchical_adaptive_optimizer) |
 | Need diverse candidates | [Evolutionary](/agent_optimization/algorithms/evolutionary_optimizer) |
 | Few-shot heavy prompts | [Few-Shot Bayesian](/agent_optimization/algorithms/fewshot_bayesian_optimizer) |
 | Tune sampling params | [Parameter optimizer](/agent_optimization/algorithms/parameter_optimizer) |
@@ -24,9 +29,9 @@ Use this playbook whenever you need to improve a prompt (single-turn or agentic)
 ## 3. Configure the run
 
 ```python
-from opik_optimizer import HierarchicalReflectiveOptimizer
+from opik_optimizer import HRPO
 
-optimizer = HierarchicalReflectiveOptimizer(
+optimizer = HRPO(
     model="openai/gpt-4o",
     max_parallel_batches=4,
     seed=42,

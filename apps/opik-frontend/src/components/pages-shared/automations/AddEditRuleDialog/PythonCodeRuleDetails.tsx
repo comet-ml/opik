@@ -17,6 +17,7 @@ import { Label } from "@/components/ui/label";
 import { useCodemirrorTheme } from "@/hooks/useCodemirrorTheme";
 import { parsePythonMethodParameters } from "@/lib/pythonArgumentsParser";
 import { EVALUATORS_RULE_SCOPE } from "@/types/automations";
+import { TRACE_DATA_TYPE } from "@/hooks/useTracesOrSpansList";
 
 type PythonCodeRuleDetailsProps = {
   form: UseFormReturn<EvaluationRuleFormType>;
@@ -35,6 +36,12 @@ const PythonCodeRuleDetails: React.FC<PythonCodeRuleDetailsProps> = ({
 
   const scope = form.watch("scope");
   const isThreadScope = scope === EVALUATORS_RULE_SCOPE.thread;
+  const isSpanScope = scope === EVALUATORS_RULE_SCOPE.span;
+
+  // Determine the type for autocomplete based on scope
+  const autocompleteType = isSpanScope
+    ? TRACE_DATA_TYPE.spans
+    : TRACE_DATA_TYPE.traces;
 
   return (
     <>
@@ -114,6 +121,8 @@ const PythonCodeRuleDetails: React.FC<PythonCodeRuleDetailsProps> = ({
                 errorText="Code parsing error. The variables cannot be extracted."
                 projectName={projectName}
                 datasetColumnNames={datasetColumnNames}
+                type={autocompleteType}
+                includeIntermediateNodes
               />
             );
           }}

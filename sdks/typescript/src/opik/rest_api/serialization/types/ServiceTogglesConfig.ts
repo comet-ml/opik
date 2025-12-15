@@ -23,6 +23,13 @@ export const ServiceTogglesConfig: core.serialization.ObjectSchema<
     optimizationStudioEnabled: core.serialization.boolean(),
     dashboardsEnabled: core.serialization.boolean(),
     datasetVersioningEnabled: core.serialization.boolean(),
+    openaiProviderEnabled: core.serialization.boolean(),
+    anthropicProviderEnabled: core.serialization.boolean(),
+    geminiProviderEnabled: core.serialization.boolean(),
+    openrouterProviderEnabled: core.serialization.boolean(),
+    vertexaiProviderEnabled: core.serialization.boolean(),
+    customllmProviderEnabled: core.serialization.boolean(),
+    opikbuiltinProviderEnabled: core.serialization.boolean(),
 });
 
 export declare namespace ServiceTogglesConfig {
@@ -40,5 +47,12 @@ export declare namespace ServiceTogglesConfig {
         optimizationStudioEnabled: boolean;
         dashboardsEnabled: boolean;
         datasetVersioningEnabled: boolean;
+        openaiProviderEnabled: boolean;
+        anthropicProviderEnabled: boolean;
+        geminiProviderEnabled: boolean;
+        openrouterProviderEnabled: boolean;
+        vertexaiProviderEnabled: boolean;
+        customllmProviderEnabled: boolean;
+        opikbuiltinProviderEnabled: boolean;
     }
 }
