@@ -132,6 +132,11 @@ const ProjectsPage: React.FunctionComponent = () => {
         type: COLUMN_TYPE.number,
       },
       {
+        id: "thread_count",
+        label: "Thread count",
+        type: COLUMN_TYPE.number,
+      },
+      {
         id: "error_count",
         label: "Errors",
         type: COLUMN_TYPE.errors,
