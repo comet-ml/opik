@@ -19,6 +19,13 @@ from ..unit.api_objects.attachment import constants
 from .. import testlib
 
 
+@pytest.fixture(autouse=True)
+def disable_tests_if_attachment_extraction_not_enabled(opik_client: opik.Opik):
+    """Disable tests if attachment extraction is not enabled."""
+    if not opik_client.config.is_attachment_extraction_active:
+        pytest.skip("Attachment extraction is not enabled - skipping E2E tests")
+
+
 @pytest.fixture(autouse=True, scope="module")
 def configure_min_size_tests_env():
     with testlib.patch_environ({"OPIK_MIN_BASE64_EMBEDDED_ATTACHMENT_SIZE": "30"}):
