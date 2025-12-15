@@ -6,7 +6,6 @@ import com.comet.opik.api.LogCriteria;
 import com.comet.opik.api.Page;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluator;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorUpdate;
-import com.comet.opik.api.evaluators.ProjectReference;
 import com.comet.opik.api.filter.AutomationRuleEvaluatorFilter;
 import com.comet.opik.api.filter.FiltersFactory;
 import com.comet.opik.api.sorting.AutomationRuleEvaluatorSortingFactory;
@@ -29,6 +28,7 @@ import jakarta.inject.Provider;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
+import jakarta.ws.rs.BadRequestException;
 import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.DefaultValue;
 import jakarta.ws.rs.GET;
@@ -51,7 +51,6 @@ import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
-import java.util.stream.Collectors;
 
 import static com.comet.opik.api.LogItem.LogPage;
 import static com.comet.opik.api.evaluators.AutomationRuleEvaluator.AutomationRuleEvaluatorPage;
@@ -131,6 +130,31 @@ public class AutomationRuleEvaluatorsResource {
         return Response.ok().entity(evaluator).build();
     }
 
+    /**
+     * Extracts and validates project IDs from an evaluator write request.
+     * Enforces business rule: evaluators must be scoped to at least one project.
+     * Note: The 'projects' field is read-only and never populated from write requests.
+     *
+     * @param projectIds The projectIds field from the request (write-only field, new multi-project API)
+     * @param projectId The legacy projectId field (single project, for backward compatibility)
+     * @return Non-empty set of project UUIDs
+     * @throws BadRequestException if no projects are specified
+     */
+    private Set<UUID> extractAndValidateProjectIds(Set<UUID> projectIds, UUID projectId) {
+        // Extract project IDs: prioritize projectIds field, then fall back to legacy projectId
+        Set<UUID> extractedProjectIds = Optional.ofNullable(projectIds)
+                .orElseGet(() -> Optional.ofNullable(projectId)
+                        .map(Set::of)
+                        .orElse(Set.of()));
+
+        // Validate that at least one project is specified (business rule: evaluators must be scoped to projects)
+        if (extractedProjectIds.isEmpty()) {
+            throw new BadRequestException("At least one project must be specified for the automation rule evaluator");
+        }
+
+        return extractedProjectIds;
+    }
+
     @POST
     @Operation(operationId = "createAutomationRuleEvaluator", summary = "Create automation rule evaluator", description = "Create automation rule evaluator", responses = {
             @ApiResponse(responseCode = "201", description = "Created", headers = {
@@ -145,15 +169,8 @@ public class AutomationRuleEvaluatorsResource {
         String workspaceId = requestContext.get().getWorkspaceId();
         String userName = requestContext.get().getUserName();
 
-        // Extract project IDs: prioritize projectIds field, then projects field, then fall back to legacy projectId
-        Set<UUID> projectIds = Optional.ofNullable(evaluator.getProjectIds())
-                .orElseGet(() -> Optional.ofNullable(evaluator.getProjects())
-                        .map(projects -> projects.stream()
-                                .map(ProjectReference::projectId)
-                                .collect(Collectors.toSet()))
-                        .orElseGet(() -> Optional.ofNullable(evaluator.getProjectId())
-                                .map(Set::of)
-                                .orElse(Set.of())));
+        Set<UUID> projectIds = extractAndValidateProjectIds(evaluator.getProjectIds(), evaluator.getProjectId());
+
         log.info("Creating {} evaluator for '{}' projects on workspace_id '{}'", evaluator.getType(),
                 projectIds.size(), workspaceId);
         AutomationRuleEvaluator<?, ?> savedEvaluator = service.save(evaluator, projectIds, workspaceId, userName);
@@ -179,11 +196,9 @@ public class AutomationRuleEvaluatorsResource {
         var workspaceId = requestContext.get().getWorkspaceId();
         var userName = requestContext.get().getUserName();
 
-        // Extract project IDs from projectIds field (or fall back to legacy projectId)
-        Set<UUID> projectIds = Optional.ofNullable(evaluatorUpdate.getProjectIds())
-                .orElseGet(() -> Optional.ofNullable(evaluatorUpdate.getProjectId())
-                        .map(Set::of)
-                        .orElse(Set.of()));
+        Set<UUID> projectIds = extractAndValidateProjectIds(evaluatorUpdate.getProjectIds(),
+                evaluatorUpdate.getProjectId());
+
         log.info("Updating automation rule evaluator by id '{}' and project_ids '{}' on workspace_id '{}'", id,
                 projectIds, workspaceId);
         service.update(id, projectIds, workspaceId, userName, evaluatorUpdate);
