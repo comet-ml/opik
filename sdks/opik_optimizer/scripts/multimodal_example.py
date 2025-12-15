@@ -9,6 +9,7 @@ from opik.evaluation.metrics.score_result import ScoreResult
 dataset = driving_hazard(count=20)
 validation_dataset = driving_hazard(split="test", count=5)
 
+
 # Define the metric to optimize on
 def levenshtein_ratio(dataset_item: dict[str, Any], llm_output: str) -> ScoreResult:
     metric = LevenshteinRatio()
