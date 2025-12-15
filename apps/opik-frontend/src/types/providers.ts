@@ -30,6 +30,8 @@ export enum PROVIDER_MODEL_TYPE {
   GPT_5_NANO = "gpt-5-nano",
   GPT_5_CHAT_LATEST = "gpt-5-chat-latest",
   GPT_5_1 = "gpt-5.1",
+  GPT_5_2 = "gpt-5.2",
+  GPT_5_2_CHAT_LATEST = "gpt-5.2-chat-latest",
   GPT_4_TURBO = "gpt-4-turbo",
   GPT_4 = "gpt-4",
   GPT_4_TURBO_PREVIEW = "gpt-4-turbo-preview",
@@ -297,6 +299,8 @@ export enum PROVIDER_MODEL_TYPE {
   OPENAI_GPT_5_1_CHAT = "openai/gpt-5.1-chat",
   OPENAI_GPT_5_1_CODEX = "openai/gpt-5.1-codex",
   OPENAI_GPT_5_1_CODEX_MINI = "openai/gpt-5.1-codex-mini",
+  OPENAI_GPT_5_2 = "openai/gpt-5.2",
+  OPENAI_GPT_5_2_CHAT_LATEST = "openai/gpt-5.2-chat-latest",
   OPENAI_GPT_OSS_120B = "openai/gpt-oss-120b",
   OPENAI_GPT_OSS_120B_EXACTO = "openai/gpt-oss-120b:exacto",
   OPENAI_GPT_OSS_20B = "openai/gpt-oss-20b",
@@ -480,7 +484,7 @@ export type PartialProviderKeyUpdate = Partial<
   headers?: Record<string, string>;
 };
 
-export type ReasoningEffort = "minimal" | "low" | "medium" | "high";
+export type ReasoningEffort = "minimal" | "low" | "medium" | "high" | "xhigh";
 
 export interface LLMOpenAIConfigsType {
   temperature: number;

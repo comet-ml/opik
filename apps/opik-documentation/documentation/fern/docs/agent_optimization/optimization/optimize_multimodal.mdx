@@ -1,6 +1,11 @@
 ---
-title: "Optimize multimodal prompts"
-description: "Run optimizations for prompts that combine text, images, and other modalities."
+description: Run optimizations for prompts that combine text, images, and other modalities.
+headline: Optimize multimodal | Opik Documentation
+og:description: Optimize your multimodal agents to effectively handle text, images,
+  and videos using Opik’s optimizers for seamless integration.
+og:site_name: Opik Documentation
+og:title: Optimize multimodal performance with Opik
+title: Optimize multimodal prompts
 ---
 
 Multimodal agents often juggle text instructions, image references, and structured outputs. Opik’s optimizers can work with any model that LiteLLM supports for images or videos (GPT-4o, Gemini, Claude 3.5 Sonnet vision, etc.). Make sure that both the optimizer’s `model` and your `ChatPrompt.model` accept the modality you plan to optimize. Otherwise, the run will fail or silently ignore the media.
@@ -11,7 +16,7 @@ Use optimizers that can forward OpenAI-style content parts (string or an array o
 
 | Optimizer | Multimodal (text+image) | Notes |
 |---|---|---|
-| Hierarchical Reflective Optimizer | ✓ | Ensure the `ChatPrompt.model` are vision-capable. |
+| HRPO (Hierarchical Reflective Prompt Optimizer) | ✓ | Ensure the `ChatPrompt.model` are vision-capable. |
 | MetaPrompt Optimizer | ✗ | Planned |
 | Evolutionary Optimizer | ✗ | Planned |
 | Few-shot Bayesian Optimizer | ✗ | Planned |
@@ -58,7 +63,7 @@ prompt = ChatPrompt(
 ## Running optimizations
 
 - Start with MetaPrompt for wording improvements. For cold-start exploration, pair Evolutionary → Few-Shot Bayesian to uncover new structures and example choices.
-- Use Hierarchical Reflective to catch recurring multimodal failures (e.g., missing chart descriptions) and highlight which dataset rows are problematic.
+- Use HRPO to catch recurring multimodal failures (e.g., missing chart descriptions) and highlight which dataset rows are problematic.
 - Monitor token usage because multimodal prompts send larger payloads; pick models like `gpt-4o-mini` when budgets are tight.
 - If an optimizer does not support the modality (e.g., text-only GEPA with image inputs), it will still mutate the prompt but cannot execute candidate evaluations—stick to optimizers whose evaluation models accept the modality.
 
