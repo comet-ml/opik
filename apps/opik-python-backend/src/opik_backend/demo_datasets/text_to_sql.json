@@ -1,0 +1,170 @@
+{
+  "id": "0199a001-0002-7002-a002-000000000002",
+  "name": "Opik Demo Text to SQL",
+  "description": "Training data for Text-to-SQL optimization. Natural language questions with expected SQL queries against an e-commerce database.",
+  "tags": ["optimization-studio", "text-to-sql"],
+  "schema": "-- E-commerce Database Schema\n\nCREATE TABLE customers (\n    customer_id INT PRIMARY KEY,\n    name VARCHAR(100),\n    email VARCHAR(100),\n    city VARCHAR(50),\n    country VARCHAR(50),\n    created_at TIMESTAMP\n);\n\nCREATE TABLE products (\n    product_id INT PRIMARY KEY,\n    name VARCHAR(100),\n    category VARCHAR(50),\n    price DECIMAL(10,2),\n    stock_quantity INT\n);\n\nCREATE TABLE orders (\n    order_id INT PRIMARY KEY,\n    customer_id INT REFERENCES customers(customer_id),\n    order_date TIMESTAMP,\n    total_amount DECIMAL(10,2),\n    status VARCHAR(20)\n);\n\nCREATE TABLE order_items (\n    item_id INT PRIMARY KEY,\n    order_id INT REFERENCES orders(order_id),\n    product_id INT REFERENCES products(product_id),\n    quantity INT,\n    unit_price DECIMAL(10,2)\n);",
+  "items": [
+    {
+      "id": "0199a001-0002-7002-b002-000000000001",
+      "data": {
+        "question": "List all customers",
+        "expected_sql": "SELECT * FROM customers;",
+        "difficulty": "easy"
+      }
+    },
+    {
+      "id": "0199a001-0002-7002-b002-000000000002",
+      "data": {
+        "question": "Show all products with their prices",
+        "expected_sql": "SELECT name, price FROM products;",
+        "difficulty": "easy"
+      }
+    },
+    {
+      "id": "0199a001-0002-7002-b002-000000000003",
+      "data": {
+        "question": "Get all orders from 2024",
+        "expected_sql": "SELECT * FROM orders WHERE YEAR(order_date) = 2024;",
+        "difficulty": "easy"
+      }
+    },
+    {
+      "id": "0199a001-0002-7002-b002-000000000004",
+      "data": {
+        "question": "Find customers from the United States",
+        "expected_sql": "SELECT * FROM customers WHERE country = 'United States';",
+        "difficulty": "easy"
+      }
+    },
+    {
+      "id": "0199a001-0002-7002-b002-000000000005",
+      "data": {
+        "question": "Show products that cost more than $100",
+        "expected_sql": "SELECT * FROM products WHERE price > 100;",
+        "difficulty": "easy"
+      }
+    },
+    {
+      "id": "0199a001-0002-7002-b002-000000000006",
+      "data": {
+        "question": "List all pending orders",
+        "expected_sql": "SELECT * FROM orders WHERE status = 'pending';",
+        "difficulty": "easy"
+      }
+    },
+    {
+      "id": "0199a001-0002-7002-b002-000000000007",
+      "data": {
+        "question": "How many customers do we have?",
+        "expected_sql": "SELECT COUNT(*) FROM customers;",
+        "difficulty": "medium"
+      }
+    },
+    {
+      "id": "0199a001-0002-7002-b002-000000000008",
+      "data": {
+        "question": "What is the total revenue from all orders?",
+        "expected_sql": "SELECT SUM(total_amount) FROM orders;",
+        "difficulty": "medium"
+      }
+    },
+    {
+      "id": "0199a001-0002-7002-b002-000000000009",
+      "data": {
+        "question": "What is the average product price?",
+        "expected_sql": "SELECT AVG(price) FROM products;",
+        "difficulty": "medium"
+      }
+    },
+    {
+      "id": "0199a001-0002-7002-b002-000000000010",
+      "data": {
+        "question": "How many orders are in each status?",
+        "expected_sql": "SELECT status, COUNT(*) FROM orders GROUP BY status;",
+        "difficulty": "medium"
+      }
+    },
+    {
+      "id": "0199a001-0002-7002-b002-000000000011",
+      "data": {
+        "question": "List all orders with customer names",
+        "expected_sql": "SELECT o.*, c.name FROM orders o JOIN customers c ON o.customer_id = c.customer_id;",
+        "difficulty": "medium"
+      }
+    },
+    {
+      "id": "0199a001-0002-7002-b002-000000000012",
+      "data": {
+        "question": "Show products that have been ordered along with their order quantities",
+        "expected_sql": "SELECT p.name, oi.quantity FROM products p JOIN order_items oi ON p.product_id = oi.product_id;",
+        "difficulty": "medium"
+      }
+    },
+    {
+      "id": "0199a001-0002-7002-b002-000000000013",
+      "data": {
+        "question": "Find all orders with their items and product names",
+        "expected_sql": "SELECT o.order_id, p.name, oi.quantity FROM orders o JOIN order_items oi ON o.order_id = oi.order_id JOIN products p ON oi.product_id = p.product_id;",
+        "difficulty": "hard"
+      }
+    },
+    {
+      "id": "0199a001-0002-7002-b002-000000000014",
+      "data": {
+        "question": "Who are the top 5 customers by total spending?",
+        "expected_sql": "SELECT c.name, SUM(o.total_amount) as total_spent FROM customers c JOIN orders o ON c.customer_id = o.customer_id GROUP BY c.customer_id, c.name ORDER BY total_spent DESC LIMIT 5;",
+        "difficulty": "hard"
+      }
+    },
+    {
+      "id": "0199a001-0002-7002-b002-000000000015",
+      "data": {
+        "question": "What are the best selling products by quantity?",
+        "expected_sql": "SELECT p.name, SUM(oi.quantity) as total_sold FROM products p JOIN order_items oi ON p.product_id = oi.product_id GROUP BY p.product_id, p.name ORDER BY total_sold DESC;",
+        "difficulty": "hard"
+      }
+    },
+    {
+      "id": "0199a001-0002-7002-b002-000000000016",
+      "data": {
+        "question": "Find customers who have never placed an order",
+        "expected_sql": "SELECT * FROM customers c WHERE NOT EXISTS (SELECT 1 FROM orders o WHERE o.customer_id = c.customer_id);",
+        "difficulty": "hard"
+      }
+    },
+    {
+      "id": "0199a001-0002-7002-b002-000000000017",
+      "data": {
+        "question": "Show the monthly revenue for 2024",
+        "expected_sql": "SELECT MONTH(order_date) as month, SUM(total_amount) as revenue FROM orders WHERE YEAR(order_date) = 2024 GROUP BY MONTH(order_date) ORDER BY month;",
+        "difficulty": "hard"
+      }
+    },
+    {
+      "id": "0199a001-0002-7002-b002-000000000018",
+      "data": {
+        "question": "List products that are low in stock (less than 10 items)",
+        "expected_sql": "SELECT * FROM products WHERE stock_quantity < 10;",
+        "difficulty": "easy"
+      }
+    },
+    {
+      "id": "0199a001-0002-7002-b002-000000000019",
+      "data": {
+        "question": "Find the most expensive product in each category",
+        "expected_sql": "SELECT category, name, price FROM products p1 WHERE price = (SELECT MAX(price) FROM products p2 WHERE p2.category = p1.category);",
+        "difficulty": "hard"
+      }
+    },
+    {
+      "id": "0199a001-0002-7002-b002-000000000020",
+      "data": {
+        "question": "Calculate the average order value per customer",
+        "expected_sql": "SELECT c.name, AVG(o.total_amount) as avg_order_value FROM customers c JOIN orders o ON c.customer_id = o.customer_id GROUP BY c.customer_id, c.name;",
+        "difficulty": "medium"
+      }
+    }
+  ]
+}
+

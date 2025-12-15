@@ -1,0 +1,4018 @@
+{
+  "name": "Opik Demo Structured Output",
+  "description": "Hard JSON schemas from JSONSchemaBench Github_hard dataset for testing structured output generation.",
+  "items": [
+    {
+      "json_schema": {
+        "$schema": "http://json-schema.org/draft-04/schema#",
+        "definitions": {
+          "MakerJs.IModel": {
+            "description": "A model is a composite object which may contain an array of paths, or an array of models recursively.\n\nExample:\n```\nvar m = { \n   paths: { \n     \"line1\": { type: 'line', origin: [0, 0], end: [1, 1] }, \n     \"line2\": { type: 'line', origin: [0, 0], end: [-1, -1] } \n   } \n};\n```",
+            "properties": {
+              "exporterOptions": {
+                "additionalProperties": {},
+                "description": "Optional exporter options for this model.",
+                "type": "object"
+              },
+              "layer": {
+                "description": "Optional layer of this model.",
+                "type": "string"
+              },
+              "models": {
+                "$ref": "#/definitions/MakerJs.IModelMap",
+                "description": "Optional array of models within this model."
+              },
+              "notes": {
+                "description": "An author may wish to add notes to this model instance.",
+                "type": "string"
+              },
+              "origin": {
+                "$ref": "#/definitions/MakerJs.IPoint",
+                "description": "Optional origin location of this model."
+              },
+              "paths": {
+                "$ref": "#/definitions/MakerJs.IPathMap",
+                "description": "Optional array of path objects in this model."
+              },
+              "type": {
+                "description": "A model may want to specify its type, but this value is not employed yet.",
+                "type": "string"
+              },
+              "units": {
+                "description": "Optional unit system of this model. See UnitType for possible values.",
+                "type": "string"
+              }
+            },
+            "type": "object"
+          },
+          "MakerJs.IModelMap": {
+            "additionalProperties": {
+              "$ref": "#/definitions/MakerJs.IModel"
+            },
+            "description": "Model objects by id.",
+            "type": "object"
+          },
+          "MakerJs.IPath": {
+            "description": "A line, curved line or other simple two dimensional shape.",
+            "properties": {
+              "layer": {
+                "description": "Optional layer of this path.",
+                "type": "string"
+              },
+              "origin": {
+                "$ref": "#/definitions/MakerJs.IPoint",
+                "description": "The main point of reference for this path."
+              },
+              "type": {
+                "description": "The type of the path, e.g. \"line\", \"circle\", or \"arc\". These strings are enumerated in pathType.",
+                "type": "string"
+              }
+            },
+            "type": "object"
+          },
+          "MakerJs.IPathArc": {
+            "description": "An arc path.\n\nExamples:\n```\nvar arc: IPathArc = { type: 'arc', origin: [0, 0], radius: 7, startAngle: 0, endAngle: 45 };   //typescript\nvar arc = { type: 'arc', origin: [0, 0], radius: 7, startAngle: 0, endAngle: 45 };   //javascript\n```",
+            "properties": {
+              "endAngle": {
+                "description": "The angle (in degrees) to end drawing the arc, in polar (counter-clockwise) direction. May be less than start angle if it past 360.",
+                "type": "number"
+              },
+              "layer": {
+                "description": "Optional layer of this path.",
+                "type": "string"
+              },
+              "origin": {
+                "$ref": "#/definitions/MakerJs.IPoint",
+                "description": "The main point of reference for this path."
+              },
+              "radius": {
+                "description": "The radius of the circle.",
+                "type": "number"
+              },
+              "startAngle": {
+                "description": "The angle (in degrees) to begin drawing the arc, in polar (counter-clockwise) direction.",
+                "type": "number"
+              },
+              "type": {
+                "description": "The type of the path, e.g. \"line\", \"circle\", or \"arc\". These strings are enumerated in pathType.",
+                "type": "string"
+              }
+            },
+            "type": "object"
+          },
+          "MakerJs.IPathCircle": {
+            "description": "A circle path.\n\nExamples:\n```\nvar circle: IPathCircle = { type: 'circle', origin: [0, 0], radius: 7 };   //typescript\nvar circle = { type: 'circle', origin: [0, 0], radius: 7 };   //javascript\n```",
+            "properties": {
+              "layer": {
+                "description": "Optional layer of this path.",
+                "type": "string"
+              },
+              "origin": {
+                "$ref": "#/definitions/MakerJs.IPoint",
+                "description": "The main point of reference for this path."
+              },
+              "radius": {
+                "description": "The radius of the circle.",
+                "type": "number"
+              },
+              "type": {
+                "description": "The type of the path, e.g. \"line\", \"circle\", or \"arc\". These strings are enumerated in pathType.",
+                "type": "string"
+              }
+            },
+            "type": "object"
+          },
+          "MakerJs.IPathLine": {
+            "description": "A line path.\n\nExamples:\n```\nvar line: IPathLine = { type: 'line', origin: [0, 0], end: [1, 1] };   //typescript\nvar line = { type: 'line', origin: [0, 0], end: [1, 1] };   //javascript\n```",
+            "properties": {
+              "end": {
+                "$ref": "#/definitions/MakerJs.IPoint",
+                "description": "The end point defining the line. The start point is the origin."
+              },
+              "layer": {
+                "description": "Optional layer of this path.",
+                "type": "string"
+              },
+              "origin": {
+                "$ref": "#/definitions/MakerJs.IPoint",
+                "description": "The main point of reference for this path."
+              },
+              "type": {
+                "description": "The type of the path, e.g. \"line\", \"circle\", or \"arc\". These strings are enumerated in pathType.",
+                "type": "string"
+              }
+            },
+            "type": "object"
+          },
+          "MakerJs.IPathMap": {
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/MakerJs.IPath"
+                },
+                {
+                  "$ref": "#/definitions/MakerJs.IPathLine"
+                },
+                {
+                  "$ref": "#/definitions/MakerJs.IPathCircle"
+                },
+                {
+                  "$ref": "#/definitions/MakerJs.IPathArc"
+                }
+              ]
+            },
+            "description": "Path objects by id.",
+            "type": "object"
+          },
+          "MakerJs.IPoint": {
+            "description": "An x-y point in a two-dimensional space.\nImplemented as an array with 2 elements. The first element is x, the second element is y.\n\nExamples:\n```\nvar p: IPoint = [0, 0];   //typescript\nvar p = [0, 0];   //javascript\n```",
+            "items": {
+              "type": "number"
+            },
+            "type": "array"
+          }
+        },
+        "description": "A model is a composite object which may contain an array of paths, or an array of models recursively.\n\nExample:\n```\nvar m = { \n   paths: { \n     \"line1\": { type: 'line', origin: [0, 0], end: [1, 1] }, \n     \"line2\": { type: 'line', origin: [0, 0], end: [-1, -1] } \n   } \n};\n```",
+        "properties": {
+          "exporterOptions": {
+            "additionalProperties": {},
+            "description": "Optional exporter options for this model.",
+            "type": "object"
+          },
+          "layer": {
+            "description": "Optional layer of this model.",
+            "type": "string"
+          },
+          "models": {
+            "$ref": "#/definitions/MakerJs.IModelMap",
+            "description": "Optional array of models within this model."
+          },
+          "notes": {
+            "description": "An author may wish to add notes to this model instance.",
+            "type": "string"
+          },
+          "origin": {
+            "$ref": "#/definitions/MakerJs.IPoint",
+            "description": "Optional origin location of this model."
+          },
+          "paths": {
+            "$ref": "#/definitions/MakerJs.IPathMap",
+            "description": "Optional array of path objects in this model."
+          },
+          "type": {
+            "description": "A model may want to specify its type, but this value is not employed yet.",
+            "type": "string"
+          },
+          "units": {
+            "description": "Optional unit system of this model. See UnitType for possible values.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      }
+    },
+    {
+      "json_schema": {
+        "id": "https://almanak.github.io/schemas/events.aarhusteater.json",
+        "$schema": "http://json-schema.org/draft-04/schema#",
+        "title": "events.aarhusteater",
+        "description": "Schema for all plays at Aarhus Teater. Must extend the generic people-schema.",
+        "type": "object",
+        "_meta": {
+          "indexProperties": [
+            "id",
+            "domain",
+            "schema",
+            "from_date",
+            "to_date"
+          ],
+          "systemProperties": [
+            "uuid",
+            "id",
+            "domain",
+            "schema",
+            "scheme",
+            "created",
+            "created_by",
+            "updated",
+            "updated_by",
+            "ext_data.scope",
+            "status"
+          ],
+          "fulltextProperties": [
+            "description"
+          ],
+          "autocompleteProperties": [
+            "display_label"
+          ]
+        },
+        "properties": {
+          "uuid": {
+            "type": "string",
+            "title": "Universal unique identifier",
+            "description": "UUID1. Assigned by system",
+            "pattern": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+          },
+          "id": {
+            "type": "string",
+            "title": "Resourcespecifik ID",
+            "description": "9-cifret l\u00f8benummer semi-specifik for resourcetypen. Assigned by system",
+            "pattern": "^[0-9]+$"
+          },
+          "domain": {
+            "type": "string",
+            "enum": [
+              "records",
+              "people",
+              "organisations",
+              "families",
+              "events",
+              "places",
+              "concepts",
+              "things"
+            ],
+            "title": "Resourcetype",
+            "description": "S\u00e6ttes kun n\u00e5r der v\u00e6lges skema til oprettelse. Ellers fastsat."
+          },
+          "schema": {
+            "type": "string",
+            "title": "Skema",
+            "description": "S\u00e6ttes kun n\u00e5r der v\u00e6lges skema til oprettelse. Ellers fastsat."
+          },
+          "created": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Skabt",
+            "description": "Datetime for skabelse af metadata-ressourcen"
+          },
+          "created_by": {
+            "type": "string",
+            "maxLength": 255,
+            "title": "Skabt af",
+            "description": "Brugernavn/ID p\u00e5 skaber/oploader af metadata-ressourcen"
+          },
+          "updated": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Senest opdateret",
+            "description": "Datetime for seneste opdatering af ressourcen"
+          },
+          "updated_by": {
+            "type": "string",
+            "maxLength": 255,
+            "title": "Senest opdateret af",
+            "description": "Brugernavn p\u00e5 seneste opdaterer af metadata-ressourcen"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "validated",
+              "machine-generated",
+              "user-generated"
+            ],
+            "title": "Status",
+            "default": "user-generated"
+          },
+          "name": {
+            "type": "string",
+            "maxLength": 255,
+            "title": "Forestillingsnavn",
+            "description": "Navnet p\u00e5 forestillingen (uden \u00e5rstal)"
+          },
+          "display_label": {
+            "type": "string",
+            "maxLength": 255,
+            "title": "Displaynavn",
+            "description": "Den label, som entiteten repr\u00e6senteres med"
+          },
+          "description": {
+            "type": "string",
+            "maxLength": 5000,
+            "title": "Beskrivelse"
+          },
+          "sources": {
+            "type": "string",
+            "title": "Kilder",
+            "description": "URL-links eller enkeltlinje referencer"
+          },
+          "portrait": {
+            "type": "string",
+            "maxLength": 255,
+            "format": "uri",
+            "title": "Portr\u00e6t"
+          },
+          "date_from": {
+            "type": "string",
+            "format": "date",
+            "title": "F\u00f8dselsdato (\u00e5\u00e5\u00e5\u00e5-mm-dd)",
+            "pattern": "^([0-9]{4})(-([0-9]{2}))?(-([0-9]{2}))?$"
+          },
+          "date_to": {
+            "type": "string",
+            "format": "date",
+            "title": "D\u00f8dsdato (\u00e5\u00e5\u00e5\u00e5-mm-dd)",
+            "pattern": "^([0-9]{4})(-([0-9]{2}))?(-([0-9]{2}))?$"
+          },
+          "ext_data": {
+            "type": "object",
+            "title": "Udvided metadata",
+            "properties": {
+              "original_id": {
+                "type": "string",
+                "title": "Originalt ID"
+              },
+              "poster": {
+                "type": "boolean",
+                "title": "Plakat"
+              },
+              "stagename": {
+                "type": "string",
+                "title": "Scene"
+              },
+              "composer": {
+                "type": "string",
+                "title": "Komponist"
+              },
+              "translater": {
+                "type": "string",
+                "title": "Overs\u00e6tter"
+              },
+              "publisher": {
+                "type": "string",
+                "title": "Udgiver"
+              },
+              "programme": {
+                "type": "boolean",
+                "title": "Program"
+              },
+              "season": {
+                "type": "string",
+                "title": "S\u00e6son"
+              },
+              "playwright": {
+                "type": "string",
+                "title": "Forfatter"
+              },
+              "director": {
+                "type": "string",
+                "title": "Instrukt\u00f8r"
+              },
+              "scenographer": {
+                "type": "string",
+                "title": "Scenograf"
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "json_schema": {
+        "id": "https://almanak.github.io/schemas/people.aarhusteater.json",
+        "$schema": "http://json-schema.org/draft-04/schema#",
+        "title": "people.aarhusteater",
+        "description": "Schema for all personnel resources at Aarhus Teater.",
+        "type": "object",
+        "_meta": {
+          "indexProperties": [
+            "id",
+            "domain",
+            "schema",
+            "occupation",
+            "date_from",
+            "date_to"
+          ],
+          "systemProperties": [
+            "uuid",
+            "id",
+            "domain",
+            "schema",
+            "scheme",
+            "created",
+            "created_by",
+            "updated",
+            "updated_by",
+            "status"
+          ],
+          "fulltextProperties": [
+            "description"
+          ],
+          "autocompleteProperties": [
+            "display_label"
+          ]
+        },
+        "required": [
+          "lastnames",
+          "gender"
+        ],
+        "properties": {
+          "uuid": {
+            "type": "string",
+            "title": "Universal unique identifier",
+            "description": "UUID1. Assigned by system",
+            "pattern": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+          },
+          "id": {
+            "type": "string",
+            "title": "Resourcespecifik ID",
+            "description": "9-cifret l\u00f8benummer semi-specifik for resourcetypen. Assigned by system",
+            "maxLength": 9,
+            "pattern": "^[0-9]{9}$"
+          },
+          "domain": {
+            "type": "string",
+            "enum": [
+              "records",
+              "people",
+              "organisations",
+              "families",
+              "events",
+              "places",
+              "concepts",
+              "things"
+            ],
+            "title": "Resourcetype",
+            "description": "S\u00e6ttes kun n\u00e5r der v\u00e6lges skema til oprettelse. Ellers fastsat."
+          },
+          "schema": {
+            "type": "string",
+            "title": "Skema",
+            "description": "S\u00e6ttes kun n\u00e5r der v\u00e6lges skema til oprettelse. Ellers fastsat."
+          },
+          "created": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Skabt",
+            "description": "Datetime for skabelse af metadata-ressourcen"
+          },
+          "created_by": {
+            "type": "string",
+            "maxLength": 255,
+            "title": "Skabt af",
+            "description": "Brugernavn/ID p\u00e5 skaber/oploader af metadata-ressourcen"
+          },
+          "updated": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Senest opdateret",
+            "description": "Datetime for seneste opdatering af ressourcen"
+          },
+          "updated_by": {
+            "type": "string",
+            "maxLength": 255,
+            "title": "Senest opdateret af",
+            "description": "Brugernavn p\u00e5 seneste opdaterer af metadata-ressourcen"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "validated",
+              "machine-generated",
+              "user-generated"
+            ],
+            "title": "Status",
+            "default": "user-generated"
+          },
+          "display_label": {
+            "type": "string",
+            "maxLength": 255,
+            "title": "Displaynavn",
+            "description": "Den streng, som entiteten repr\u00e6senteres med"
+          },
+          "description": {
+            "type": "string",
+            "maxLength": 5000,
+            "title": "Beskrivelse"
+          },
+          "sources": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 255
+            },
+            "title": "Kilder",
+            "description": "URL-links eller enkeltlinje referencer"
+          },
+          "portrait": {
+            "type": "string",
+            "maxLength": 255,
+            "format": "uri",
+            "title": "Portr\u00e6t"
+          },
+          "firstnames": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 255
+            },
+            "description": "Alle fornavne i korrekt r\u00e6kkef\u00f8lge",
+            "title": "Fornavne"
+          },
+          "birthname": {
+            "type": "string",
+            "title": "Pigenavn (f\u00f8dt)",
+            "description": "Det eller de efternavne som vedkommende havde f\u00f8r giftem\u00e5l.",
+            "maxLength": 255
+          },
+          "lastnames": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 255
+            },
+            "title": "Mellem- og efternavne",
+            "description": "Alle nuv\u00e6rende mellem og efternavne i korrekt r\u00e6kkef\u00f8lge"
+          },
+          "gender": {
+            "type": "string",
+            "enum": [
+              "mand",
+              "kvinde",
+              "ukendt"
+            ],
+            "title": "K\u00f8n",
+            "description": "Selvforklarende"
+          },
+          "occupation": {
+            "type": "array",
+            "description": "B\u00f8r v\u00e6re en brance-betegnelse fra DB07",
+            "items": {
+              "type": "string",
+              "maxLength": 255
+            },
+            "_uniqueItems": true,
+            "title": "Erhverv"
+          },
+          "date_from": {
+            "type": "string",
+            "format": "date",
+            "maxLength": 255,
+            "title": "F\u00f8dselsdato (\u00e5\u00e5\u00e5\u00e5-mm-dd)",
+            "pattern": "^([0-9]{4})(-([0-9]{2}))?(-([0-9]{2}))?$"
+          },
+          "place_of_birth": {
+            "type": "string",
+            "maxLength": 255,
+            "title": "F\u00f8dselssted"
+          },
+          "date_to": {
+            "type": "string",
+            "format": "date",
+            "maxLength": 255,
+            "title": "D\u00f8dsdato (\u00e5\u00e5\u00e5\u00e5-mm-dd)",
+            "pattern": "^([0-9]{4})(-([0-9]{2}))?(-([0-9]{2}))?$"
+          },
+          "place_of_death": {
+            "type": "string",
+            "maxLength": 255,
+            "title": "D\u00f8dssted"
+          },
+          "ext_data": {
+            "type": "object",
+            "title": "Udvided metadata",
+            "properties": {
+              "original_id": {
+                "type": "string",
+                "maxLength": 255,
+                "title": "Originalt ID"
+              },
+              "place_of_education": {
+                "type": "string",
+                "maxLength": 255,
+                "title": "Uddannelsessted"
+              },
+              "year_of_graduation": {
+                "type": "string",
+                "pattern": "^[0-9]{4}$",
+                "title": "Uddannelses\u00e5r"
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "json_schema": {
+        "additionalProperties": false,
+        "properties": {
+          "additional_optional_text": {
+            "description": "\u0414\u043e\u043f\u043e\u043b\u043d\u0438\u0442\u0435\u043b\u044c\u043d\u044b\u0439 \u043f\u0440\u043e\u0438\u0437\u0432\u043e\u043b\u044c\u043d\u044b\u0439 \u0442\u0435\u043a\u0441\u0442 \u0434\u043b\u044f \u043f\u0435\u0447\u0430\u0442\u043d\u043e\u0439 \u0444\u043e\u0440\u043c\u044b \u0434\u043b\u044f \u0432\u0432\u043e\u0434\u0430 \u0438\u043d\u0444\u043e\u0440\u043c\u0430\u0446\u0438\u0438 \u0438 \u0434\u043e\u043a\u0443\u043c\u0435\u043d\u0442\u0435, \u0444\u0438\u043a\u0441\u0438\u0440\u0443\u044e\u0449\u0435\u043c \u0441\u0440\u043e\u043a\u0438 \u043d\u0430\u0447\u0430\u043b\u0430 \u0441\u0442\u0440\u043e\u0438\u0442\u0435\u043b\u044c\u0441\u0442\u0432\u0430 \u0432 \u0441\u043b\u0443\u0447\u0430\u0435, \u043a\u043e\u0433\u0434\u0430 \u043f\u0440\u0430\u0432\u043e\u043d\u0430\u0440\u0443\u0448\u0435\u043d\u0438\u0435 \u2014 \u041d\u0435 \u043d\u0430\u043f\u0440\u0430\u0432\u043b\u0435\u043d\u043e \u0438\u0437\u0432\u0435\u0449\u0435\u043d\u0438\u0435 \u043e \u043d\u0430\u0447\u0430\u043b\u0435 \u0441\u0442\u0440\u043e\u0438\u0442\u0435\u043b\u044c\u0441\u0442\u0432\u0430",
+            "type": "string"
+          },
+          "approvers": {
+            "items": {
+              "properties": {
+                "id_employee": {
+                  "description": "\u0418\u0434\u0435\u043d\u0442\u0438\u0444\u0438\u043a\u0430\u0442\u043e\u0440 \u0441\u043e\u0433\u043b\u0430\u0441\u0443\u044e\u0449\u0435\u0433\u043e \u043b\u0438\u0446\u0430",
+                  "type": "integer"
+                },
+                "is_complete": {
+                  "description": "\u041f\u0440\u0438\u0437\u043d\u0430\u043a \u0441\u043e\u0433\u043b\u0430\u0441\u043e\u0432\u0430\u043d\u0438\u044f",
+                  "type": "boolean"
+                },
+                "resolution": {
+                  "description": "\u041f\u0440\u0438\u043c\u0435\u0447\u0430\u043d\u0438\u0435 \u0441\u043e\u0433\u043b\u0430\u0441\u043e\u0432\u0430\u043d\u0438\u044f",
+                  "type": "string"
+                },
+                "role": {
+                  "oneOf": [
+                    {
+                      "description": "\u0421\u043e\u0433\u043b\u0430\u0441\u0430\u043d\u0442",
+                      "pattern": "APPROVER"
+                    },
+                    {
+                      "description": "\u041f\u043e\u0434\u043f\u0438\u0441\u0430\u043d\u0442",
+                      "pattern": "SIGNER"
+                    }
+                  ]
+                }
+              },
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "assignee": {
+            "description": "\u0418\u0441\u043f\u043e\u043b\u043d\u0438\u0442\u0435\u043b\u044c \u043f\u043e \u0434\u043e\u043a\u0443\u043c\u0435\u043d\u0442\u0443: \u0421\u0441\u044b\u043b\u043a\u0430 \u043d\u0430 \u0441\u043e\u0442\u0440\u0443\u0434\u043d\u0438\u043a\u0430 \u0432 \u0441\u043f\u0440\u0430\u0432\u043e\u0447\u043d\u0438\u043a\u0435 \"\u0421\u043e\u0442\u0440\u0443\u0434\u043d\u0438\u043a\u0438\"",
+            "type": "integer"
+          },
+          "case_administrative_offence": {
+            "description": "\u0421\u0441\u044b\u043b\u043a\u0430 \u043d\u0430 \u0414\u0435\u043b\u043e \u043e\u0431 \u0410\u041f, \u0432 \u0440\u0430\u043c\u043a\u0430\u0445 \u043a\u043e\u0442\u043e\u0440\u043e\u0433\u043e \u0441\u043e\u0437\u0434\u0430\u0451\u0442\u0441\u044f \u0434\u043e\u043a\u0443\u043c\u0435\u043d\u0442",
+            "pattern": "^[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}$",
+            "type": "string"
+          },
+          "date_create_original": {
+            "description": "\u0414\u0430\u0442\u0430 \u0434\u043e\u043a\u0443\u043c\u0435\u043d\u0442\u0430",
+            "format": "date-time",
+            "type": "string"
+          },
+          "effective_date": {
+            "description": "\u0414\u0430\u0442\u0430 \u0432\u0441\u0442\u0443\u043f\u043b\u0435\u043d\u0438\u044f \u0432 \u0441\u0438\u043b\u0443 \u041f\u043e\u0441\u0442\u0430\u043d\u043e\u0432\u043b\u0435\u043d\u0438\u044f",
+            "format": "date-time",
+            "type": "string"
+          },
+          "hearing": {
+            "description": "\u0421\u0441\u044b\u043b\u043a\u0430 \u043d\u0430 \u0431\u0438\u0437\u043d\u0435\u0441-\u0441\u0443\u0449\u043d\u043e\u0441\u0442\u044c \u0420\u0430\u0441\u0441\u043c\u043e\u0442\u0440\u0435\u043d\u0438\u0435",
+            "pattern": "^[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}$",
+            "type": "string"
+          },
+          "is_archived": {
+            "default": false,
+            "description": "\u0414\u043e\u043a\u0443\u043c\u0435\u043d\u0442 \u043f\u0435\u0440\u0435\u0434\u0430\u043d \u0432 \u0430\u0440\u0445\u0438\u0432",
+            "type": "boolean"
+          },
+          "is_deleted": {
+            "default": false,
+            "description": "\u0414\u043e\u043a\u0443\u043c\u0435\u043d\u0442 \u043f\u043e\u043c\u0435\u0447\u0435\u043d \u043d\u0430 \u0443\u0434\u0430\u043b\u0435\u043d\u0438\u0435",
+            "type": "boolean"
+          },
+          "no_number": {
+            "default": false,
+            "description": "\u041f\u0440\u0438\u0437\u043d\u0430\u043a \"\u0411\u0435\u0437 \u043d\u043e\u043c\u0435\u0440\u0430\"",
+            "type": "boolean"
+          },
+          "note": {
+            "description": "\u041f\u0440\u0438\u043c\u0435\u0447\u0430\u043d\u0438\u0435",
+            "type": "string"
+          },
+          "number": {
+            "description": "\u041d\u043e\u043c\u0435\u0440 \u0434\u043e\u043a\u0443\u043c\u0435\u043d\u0442\u0430. \u0424\u043e\u0440\u043c\u0438\u0440\u0443\u0435\u0442\u0441\u044f \u0430\u0432\u0442\u043e\u043c\u0430\u0442\u0438\u0447\u0435\u0441\u043a\u0438 \u043f\u043e \u0437\u0430\u0434\u0430\u043d\u043d\u043e\u043c\u0443 \u0430\u043b\u0433\u043e\u0440\u0438\u0442\u043c\u0443",
+            "type": "string"
+          },
+          "optional_text": {
+            "description": "\u041f\u0440\u043e\u0438\u0437\u0432\u043e\u043b\u044c\u043d\u044b\u0439 \u0442\u0435\u043a\u0441\u0442 \u0434\u043b\u044f \u0432\u044b\u0432\u043e\u0434\u0430 \u0432 \u043f\u0435\u0447\u0430\u0442\u043d\u0443\u044e \u0444\u043e\u0440\u043c\u0443 \u0431\u043b\u043e\u043a\u0430 \u0434\u043e\u043f\u043e\u043b\u043d\u0438\u0442\u0435\u043b\u044c\u043d\u044b\u0445 \u043e\u0441\u043d\u043e\u0432\u0430\u043d\u0438\u0439 \u0434\u043b\u044f \u0432\u044b\u043d\u0435\u0441\u0435\u043d\u0438\u044f \u043f\u043e\u0441\u0442\u0430\u043d\u043e\u0432\u043b\u0435\u043d\u0438\u044f",
+            "type": "string"
+          },
+          "penner": {
+            "description": "\u0421\u043e\u0441\u0442\u0430\u0432\u0438\u0442\u0435\u043b\u044c (\u0430\u0432\u0442\u043e\u0440) \u0434\u043e\u043a\u0443\u043c\u0435\u043d\u0442\u0430: \u0421\u0441\u044b\u043b\u043a\u0430 \u043d\u0430 \u0441\u043e\u0442\u0440\u0443\u0434\u043d\u0438\u043a\u0430 \u0432 \u0441\u043f\u0440\u0430\u0432\u043e\u0447\u043d\u0438\u043a\u0435 \"\u0421\u043e\u0442\u0440\u0443\u0434\u043d\u0438\u043a\u0438\"",
+            "type": "integer"
+          },
+          "place": {
+            "description": "\u041c\u0435\u0441\u0442\u043e \u0441\u043e\u0441\u0442\u0430\u0432\u043b\u0435\u043d\u0438\u044f \u0434\u043e\u043a\u0443\u043c\u0435\u043d\u0442\u0430 - \u0430\u0434\u0440\u0435\u0441 \u0413\u0423\u0421\u041d",
+            "type": "string"
+          },
+          "signer": {
+            "properties": {
+              "empty_string": {
+                "description": "\u041f\u0440\u0438\u0437\u043d\u0430\u043a \u0434\u043e\u0431\u0430\u0432\u043b\u0435\u043d\u0438\u044f \u043f\u0443\u0441\u0442\u043e\u0439 \u0441\u0442\u0440\u043e\u043a\u0438 \u0434\u043b\u044f \u0440\u0443\u0447\u043d\u043e\u0433\u043e \u0437\u0430\u043f\u043e\u043b\u043d\u0435\u043d\u0438\u044f \u0438\u043d\u0444\u043e\u0440\u043c\u0430\u0446\u0438\u0438 \u043e \u043f\u043e\u0434\u043f\u0438\u0441\u0430\u043d\u0442\u0435",
+                "type": "boolean"
+              },
+              "full_name": {
+                "description": "\u0424\u0418\u041e \u043f\u0440\u0435\u0434\u0441\u0442\u0430\u0432\u0438\u0442\u0435\u043b\u044f",
+                "type": "string"
+              },
+              "post": {
+                "description": "\u0414\u043e\u043b\u0436\u043d\u043e\u0441\u0442\u044c \u043f\u0440\u0435\u0434\u0441\u0442\u0430\u0432\u0438\u0442\u0435\u043b\u044f",
+                "type": "string"
+              }
+            },
+            "type": "object"
+          },
+          "soft_copy": {
+            "description": "\u0421\u043f\u0438\u0441\u043e\u043a \u0441 \u043e\u0434\u043d\u0438\u043c \u043f\u0440\u0438\u043b\u043e\u0436\u0435\u043d\u043d\u044b\u043c \u0444\u0430\u0439\u043b\u043e\u043c. \u0418\u0441\u043f\u043e\u043b\u044c\u0437\u0443\u0435\u043c \u0432\u0435\u0437\u0434\u0435 \u043c\u0430\u0441\u0441\u0438\u0432 \u0434\u043b\u044f \u043f\u0440\u0438\u0435\u043c\u0441\u0442\u0432\u0435\u043d\u043d\u043e\u0441\u0442\u0438 \u0442\u0438\u043f\u043e\u0432.",
+            "items": {
+              "properties": {
+                "guid": {
+                  "description": "\u0421\u0441\u044b\u043b\u043a\u0430 \u043d\u0430 \u0444\u0430\u0439\u043b",
+                  "pattern": "^[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}$",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "guid"
+              ],
+              "type": "object"
+            },
+            "maxItems": 1,
+            "type": "array"
+          },
+          "state": {
+            "default": "NEW",
+            "description": "\u0421\u0442\u0430\u0442\u0443\u0441 \u0434\u043e\u043a\u0443\u043c\u0435\u043d\u0442\u0430",
+            "oneOf": [
+              {
+                "description": "\u0421\u043e\u0437\u0434\u0430\u043d \u043f\u0440\u043e\u0435\u043a\u0442 \u0434\u043e\u043a\u0443\u043c\u0435\u043d\u0442\u0430",
+                "name": "\u041d\u043e\u0432\u044b\u0439",
+                "pattern": "NEW"
+              },
+              {
+                "description": "\u0414\u043e\u043a\u0443\u043c\u0435\u043d\u0442 \u043d\u0430\u0445\u043e\u0434\u0438\u0442\u0441\u044f \u043d\u0430 \u0441\u043e\u0433\u043b\u0430\u0441\u043e\u0432\u0430\u043d\u0438\u0438",
+                "name": "\u041d\u0430 \u0441\u043e\u0433\u043b\u0430\u0441\u043e\u0432\u0430\u043d\u0438\u0438",
+                "pattern": "ON_APPROVAL"
+              },
+              {
+                "description": "\u0414\u043e\u043a\u0443\u043c\u0435\u043d\u0442 \u043d\u0430\u0445\u043e\u0434\u0438\u0442\u0441\u044f \u043d\u0430 \u043f\u043e\u0434\u043f\u0438\u0441\u0430\u043d\u0438\u0438",
+                "name": "\u041d\u0430 \u043f\u043e\u0434\u043f\u0438\u0441\u0430\u043d\u0438\u0438",
+                "pattern": "ON_SIGNING"
+              },
+              {
+                "description": "\u0414\u043e\u043a\u0443\u043c\u0435\u043d\u0442 \u043e\u0442\u043f\u0440\u0430\u0432\u043b\u0435\u043d \u043d\u0430 \u0434\u043e\u0440\u0430\u0431\u043e\u0442\u043a\u0443",
+                "name": "\u041d\u0430 \u0434\u043e\u0440\u0430\u0431\u043e\u0442\u043a\u0435",
+                "pattern": "ON_MODIFICATION"
+              },
+              {
+                "description": "\u0414\u043e\u043a\u0443\u043c\u0435\u043d\u0442 \u0438\u0441\u043f\u043e\u043b\u043d\u0435\u043d",
+                "name": "\u0418\u0441\u043f\u043e\u043b\u043d\u0435\u043d",
+                "pattern": "EXECUTED"
+              },
+              {
+                "description": "\u0414\u043e\u043a\u0443\u043c\u0435\u043d\u0442 \u043e\u0442\u043c\u0435\u043d\u0451\u043d",
+                "name": "\u041e\u0442\u043c\u0435\u043d\u0451\u043d",
+                "pattern": "DEPRECATED"
+              },
+              {
+                "description": "\u041f\u043e \u0434\u043e\u043a\u0443\u043c\u0435\u043d\u0442\u0443 \u043f\u0440\u0438\u043d\u044f\u0442\u043e \u0440\u0435\u0448\u0435\u043d\u0438\u0435 \"\u041e\u0442\u043a\u0430\u0437\"",
+                "name": "\u041e\u0442\u043a\u043b\u043e\u043d\u0451\u043d",
+                "pattern": "REJECTED"
+              }
+            ],
+            "type": "string"
+          },
+          "stroyform_id": {
+            "description": "\u0418\u0434\u0435\u043d\u0442\u0438\u0444\u0438\u043a\u0430\u0442\u043e\u0440 \u0434\u043e\u043a\u0443\u043c\u0435\u043d\u0442\u0430 \u0432 \u0421\u0442\u0440\u043e\u0439\u0444\u043e\u0440\u043c",
+            "type": "string"
+          },
+          "title": {
+            "description": "\u041d\u0430\u0438\u043c\u0435\u043d\u043e\u0432\u0430\u043d\u0438\u0435 \u0434\u043e\u043a\u0443\u043c\u0435\u043d\u0442\u0430",
+            "title": "\u041d\u0430\u0438\u043c\u0435\u043d\u043e\u0432\u0430\u043d\u0438\u0435 \u0434\u043e\u043a\u0443\u043c\u0435\u043d\u0442\u0430",
+            "type": "string"
+          }
+        },
+        "title": "\u041f\u043e\u0441\u0442\u0430\u043d\u043e\u0432\u043b\u0435\u043d\u0438\u0435 \u043e \u043d\u0430\u0437\u043d\u0430\u0447\u0435\u043d\u0438\u0438 \u0448\u0442\u0440\u0430\u0444\u0430",
+        "type": "object"
+      }
+    },
+    {
+      "json_schema": {
+        "$schema": "http://json-schema.org/draft-04/schema#",
+        "title": "OSVR Display Descriptor (v1)",
+        "description": "This schema documents and guides creation of a display descriptor, that describes properties of a head-mounted display",
+        "type": "object",
+        "properties": {
+          "meta": {
+            "title": "JSON Schema metadata",
+            "description": "Details about the JSON display descriptor schema.",
+            "type": "object",
+            "properties": {
+              "schemaVersion": {
+                "title": "Schema Version",
+                "description": "Version number of the display descriptor JSON schema. If you're using this schema, the value should be 1",
+                "type": "number",
+                "default": 1
+              }
+            }
+          },
+          "hmd": {
+            "title": "HMD",
+            "description": "Properties of a head-mounted display.",
+            "type": "object",
+            "properties": {
+              "device": {
+                "title": "HMD Device Description",
+                "description": "Describes HMD hardware and metadata.",
+                "type": "object",
+                "properties": {
+                  "vendor": {
+                    "title": "Device vendor/manufacturer",
+                    "type": "string"
+                  },
+                  "model": {
+                    "title": "Device model",
+                    "type": "string"
+                  },
+                  "Version": {
+                    "title": "Device version",
+                    "type": "string"
+                  },
+                  "num_displays": {
+                    "title": "Number of physical screens (NOT USED)",
+                    "description": "This is redundant with information elsewhere in the schema and should not be used.",
+                    "type": "integer",
+                    "default": 1
+                  },
+                  "Note": {
+                    "title": "Notes about the device",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "vendor",
+                  "model"
+                ]
+              },
+              "field_of_view": {
+                "title": "HMD Field of View Description",
+                "description": "Defines the optical parameters of the HMD. Since some HMDs have partial overlap \u2013 meaning that the viewing direction of the left and right eye are not identical \u2013 we define the field of view of just one eye and then the overlap between them.",
+                "type": "object",
+                "properties": {
+                  "monocular_horizontal": {
+                    "title": "Monocular Horizontal FOV in degrees",
+                    "type": "number"
+                  },
+                  "monocular_vertical": {
+                    "title": "Monocular Vertical FOV in degrees",
+                    "type": "number"
+                  },
+                  "overlap_percent": {
+                    "title": "Percentage of horizontal FOV that is 'overlapped'.",
+                    "type": "number"
+                  },
+                  "pitch_tilt": {
+                    "title": "Pitch tilt in degrees (NOT HANDLED)",
+                    "description": "Some HMDs have their field of view tilted downwards. In this case, pitch_tilt would have a non-zero value in degrees, where positive is a downward tilt.",
+                    "type": "number",
+                    "default": 0
+                  }
+                },
+                "required": [
+                  "monocular_horizontal",
+                  "monocular_vertical",
+                  "overlap_percent"
+                ]
+              },
+              "resolutions": {
+                "title": "Supported resolutions",
+                "type": "array",
+                "minItems": 1,
+                "maxItems": 1,
+                "items": {
+                  "title": "HMD Resolution Description",
+                  "description": "Describes HMD properties related to resolution.",
+                  "type": "object",
+                  "properties": {
+                    "width": {
+                      "title": "Horizontal size, in pixels, of a video input.",
+                      "type": "integer"
+                    },
+                    "height": {
+                      "title": "Vertical size, in pixels, of a video input.",
+                      "type": "integer"
+                    },
+                    "video_inputs": {
+                      "title": "Number of distinct video inputs",
+                      "description": "Some HMDs have 2 separate inputs, one for each eye.",
+                      "type": "integer",
+                      "default": 1
+                    },
+                    "display_mode": {
+                      "title": "Display Mode",
+                      "description": "If a single input is used in side-by-side mode, width and height show the entire width and height of both sides combined.",
+                      "enum": [
+                        "horz_side_by_side",
+                        "vert_side_by_side",
+                        "full_screen"
+                      ],
+                      "default": "horz_side_by_side"
+                    }
+                  },
+                  "required": [
+                    "width",
+                    "height",
+                    "video_inputs",
+                    "display_mode"
+                  ]
+                }
+              },
+              "distortion": {
+                "title": "HMD Distortion Description",
+                "description": "Describes HMD properties related to distortion shader.",
+                "type": "object",
+                "properties": {
+                  "k1_red": {
+                    "title": "K1 Red distortion value",
+                    "type": "number",
+                    "default": 0
+                  },
+                  "k1_green": {
+                    "title": "K1 Green distortion value",
+                    "type": "number",
+                    "default": 0
+                  },
+                  "k1_blue": {
+                    "title": "K1 Blue distortion value",
+                    "type": "number",
+                    "default": 0
+                  }
+                },
+                "required": [
+                  "k1_red",
+                  "k1_green",
+                  "k1_blue"
+                ]
+              },
+              "rendering": {
+                "title": "HMD Rendering Description (NOT HANDLED)",
+                "description": "Describes HMD properties related to rendering. These parameters are not used - please use the per-eye rotate_180 parameter for now",
+                "type": "object",
+                "properties": {
+                  "right_roll": {
+                    "title": "Right eye roll amount (degrees)",
+                    "type": "number",
+                    "default": 0
+                  },
+                  "left_roll": {
+                    "title": "Left eye roll amount (degrees)",
+                    "type": "number",
+                    "default": 0
+                  }
+                },
+                "required": [
+                  "right_roll",
+                  "left_roll"
+                ]
+              },
+              "eyes": {
+                "title": "HMD Eyes Description",
+                "description": "Describes HMD properties related to eyes.",
+                "type": "array",
+                "minItems": 1,
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "center_proj_x": {
+                      "title": "Horizontal center of projection",
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 1
+                    },
+                    "center_proj_y": {
+                      "title": "Vertical center of projection",
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 1
+                    },
+                    "rotate_180": {
+                      "anyOf": [
+                        {
+                          "title": "Flip Display Rotation",
+                          "description": "Indicates if the view needs to flipped 180 degrees on the z axis (that is, in the plane of the screen) - 1 for true, 0 for false.",
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 1
+                        },
+                        {
+                          "title": "Flip Display Rotation",
+                          "description": "Indicates if the view needs to flipped 180 degrees on the z axis (that is, in the plane of the screen)",
+                          "type": "boolean",
+                          "default": false
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "center_proj_y",
+                    "center_proj_x"
+                  ]
+                }
+              }
+            },
+            "required": [
+              "device",
+              "field_of_view",
+              "resolutions",
+              "distortion",
+              "rendering",
+              "eyes"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "json_schema": {
+        "properties": {
+          "Attachments": {
+            "_id": "Attachment",
+            "foreignKey": "ParentId",
+            "type": "array"
+          },
+          "ConnectionReceivedId": {
+            "description": "Received Connection ID",
+            "type": "integer"
+          },
+          "ConnectionSentId": {
+            "description": "Sent Connection ID",
+            "type": "integer"
+          },
+          "CreatedById": {
+            "description": "Created By ID",
+            "type": "integer"
+          },
+          "CreatedDate": {
+            "description": "Created Date",
+            "type": "string"
+          },
+          "FeedSubscriptionsForEntity": {
+            "_id": "EntitySubscription",
+            "foreignKey": "ParentId",
+            "type": "array"
+          },
+          "Id": {
+            "description": "Record ID",
+            "type": "integer"
+          },
+          "IsDeleted": {
+            "description": "Deleted",
+            "type": "boolean"
+          },
+          "LastModifiedById": {
+            "description": "Last Modified By ID",
+            "type": "integer"
+          },
+          "LastModifiedDate": {
+            "description": "Last Modified Date",
+            "type": "string"
+          },
+          "Name": {
+            "description": "Test Event Name",
+            "type": "string"
+          },
+          "Notes": {
+            "_id": "Note",
+            "foreignKey": "ParentId",
+            "type": "array"
+          },
+          "NotesAndAttachments": {
+            "_id": "NoteAndAttachment",
+            "foreignKey": "ParentId",
+            "type": "array"
+          },
+          "OwnerId": {
+            "description": "Owner ID",
+            "type": "integer"
+          },
+          "ProcessInstances": {
+            "_id": "ProcessInstance",
+            "foreignKey": "TargetObjectId",
+            "type": "array"
+          },
+          "ProcessSteps": {
+            "_id": "ProcessInstanceHistory",
+            "foreignKey": "TargetObjectId",
+            "type": "array"
+          },
+          "SystemModstamp": {
+            "description": "System Modstamp",
+            "type": "string"
+          },
+          "vera__Attendance__r": {
+            "_id": "vera__Attendance__c",
+            "foreignKey": "vera__Test_Event__c",
+            "type": "array"
+          },
+          "vera__Boats1__r": {
+            "_id": "vera__Boat__c",
+            "foreignKey": "vera__Other_Event__c",
+            "type": "array"
+          },
+          "vera__Boats_Frilitanger__r": {
+            "_id": "vera__Boat__c",
+            "foreignKey": "vera__Third_Event__c",
+            "type": "array"
+          },
+          "vera__Boats__r": {
+            "_id": "vera__Boat__c",
+            "foreignKey": "vera__Test_Event__c",
+            "type": "array"
+          },
+          "vera__Cars__r": {
+            "_id": "vera__Car__c",
+            "foreignKey": "vera__Test_Event__c",
+            "type": "array"
+          },
+          "vera__Catches__r": {
+            "_id": "vera__Catch__c",
+            "foreignKey": "vera__Test_Event__c",
+            "type": "array"
+          },
+          "vera__End_Date__c": {
+            "description": "End Date",
+            "type": "string"
+          },
+          "vera__ODK_Key__c": {
+            "description": "ODK Key",
+            "type": "string"
+          },
+          "vera__Start_Date__c": {
+            "description": "Start Date",
+            "type": "string"
+          },
+          "vera__Students__r": {
+            "_id": "vera__Student__c",
+            "foreignKey": "vera__Test_Event__c",
+            "type": "array"
+          },
+          "vera__Test_Event_Name_Unique__c": {
+            "description": "Test Event Name Unique",
+            "type": "string"
+          },
+          "vera__food_color__c": {
+            "description": "food color",
+            "type": "string"
+          },
+          "vera__food_name__c": {
+            "description": "food name",
+            "type": "string"
+          },
+          "vera__sound_volume__c": {
+            "description": "sound volume",
+            "type": "string"
+          }
+        },
+        "required": [
+          "Id",
+          "OwnerId",
+          "IsDeleted",
+          "Name",
+          "CreatedDate",
+          "CreatedById",
+          "LastModifiedDate",
+          "LastModifiedById",
+          "SystemModstamp"
+        ],
+        "title": "Test Event",
+        "type": "object"
+      }
+    },
+    {
+      "json_schema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "definitions": {
+          "positiveNumber": {
+            "type": "number",
+            "minimum": 0
+          },
+          "returnTipHeightRange": {
+            "type": "number",
+            "minimum": 0.25,
+            "maximum": 1.25
+          },
+          "idleCurrentRange": {
+            "type": "number",
+            "minimum": 0.01,
+            "maximum": 1.0
+          },
+          "xyzArray": {
+            "type": "array",
+            "description": "Array of 3 numbers, [x, y, z]",
+            "items": {
+              "type": "number"
+            },
+            "minItems": 3,
+            "maxItems": 3
+          },
+          "linearEquations": {
+            "description": "Array containing any number of 3-arrays. Each inner 3-array describes a line segment: [boundary, slope, intercept]. So [1, 2, 3] would mean 'where (next_boundary > x >= 1), y = 2x + 3'",
+            "type": "array",
+            "items": {
+              "type": "array",
+              "items": {
+                "type": "number"
+              },
+              "minItems": 3,
+              "maxItems": 3
+            }
+          },
+          "liquidHandlingSpecs": {
+            "description": "Object containing linear equations for translating between uL of liquid and mm of plunger travel. There is one linear equation for aspiration and one for dispense",
+            "type": "object",
+            "required": [
+              "aspirate",
+              "dispense"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "aspirate": {
+                "$ref": "#/definitions/linearEquations"
+              },
+              "dispense": {
+                "$ref": "#/definitions/linearEquations"
+              }
+            }
+          },
+          "editConfigurations": {
+            "type": "object",
+            "description": "Object allowing you to modify a config",
+            "required": [
+              "value"
+            ],
+            "properties": {
+              "value": {
+                "type": [
+                  "number",
+                  "array"
+                ]
+              },
+              "min": {
+                "type": "number"
+              },
+              "max": {
+                "type": "number"
+              },
+              "units": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              },
+              "displayName": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "config",
+          "mutableConfigs"
+        ],
+        "properties": {
+          "config": {
+            "description": "Version-level pipette specifications, which may vary across different versions of the same pipette",
+            "type": "object",
+            "$comment": "Example key: 'p10_single_v1.3'",
+            "patternProperties": {
+              ".*": {
+                "required": [
+                  "name",
+                  "top",
+                  "bottom",
+                  "blowout",
+                  "dropTip",
+                  "pickUpCurrent",
+                  "pickUpDistance",
+                  "pickUpIncrement",
+                  "pickUpPresses",
+                  "pickUpSpeed",
+                  "modelOffset",
+                  "plungerCurrent",
+                  "dropTipCurrent",
+                  "dropTipSpeed",
+                  "ulPerMm",
+                  "tipLength"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "name": {
+                    "description": "reference to name of this version, should match a key in corresponding pipetteNameSpecs.json file",
+                    "type": "string"
+                  },
+                  "backCompatNames": {
+                    "description": "Optional reference for name of backwards compatible pipette corresponding to a key in pipetteNameSpecs.json, only relevant to gen2 pipettes",
+                    "type": "array"
+                  },
+                  "top": {
+                    "$ref": "#/definitions/editConfigurations"
+                  },
+                  "bottom": {
+                    "$ref": "#/definitions/editConfigurations"
+                  },
+                  "blowout": {
+                    "$ref": "#/definitions/editConfigurations"
+                  },
+                  "dropTip": {
+                    "$ref": "#/definitions/editConfigurations"
+                  },
+                  "pickUpCurrent": {
+                    "$ref": "#/definitions/editConfigurations"
+                  },
+                  "pickUpDistance": {
+                    "$ref": "#/definitions/editConfigurations"
+                  },
+                  "pickUpPresses": {
+                    "$ref": "#/definitions/editConfigurations"
+                  },
+                  "pickUpIncrement": {
+                    "$ref": "#/definitions/editConfigurations"
+                  },
+                  "pickUpSpeed": {
+                    "$ref": "#/definitions/editConfigurations"
+                  },
+                  "modelOffset": {
+                    "$ref": "#/definitions/xyzArray"
+                  },
+                  "plungerCurrent": {
+                    "$ref": "#/definitions/editConfigurations"
+                  },
+                  "dropTipCurrent": {
+                    "$ref": "#/definitions/editConfigurations"
+                  },
+                  "dropTipSpeed": {
+                    "$ref": "#/definitions/editConfigurations"
+                  },
+                  "ulPerMm": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/definitions/liquidHandlingSpecs"
+                    }
+                  },
+                  "quirks": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "tipLength": {
+                    "type": "object",
+                    "value": {
+                      "$ref": "#/definitions/positiveNumber"
+                    }
+                  },
+                  "idleCurrent": {
+                    "$ref": "#/definitions/idleCurrentRange"
+                  },
+                  "returnTipHeight": {
+                    "$ref": "#/definitions/returnTipHeightRange"
+                  },
+                  "tipOverlap": {
+                    "type": "object",
+                    "description": "Map of tip overlap values with defaults",
+                    "required": [
+                      "default"
+                    ],
+                    "$comment": "Other keys in here should be labware URIs",
+                    "properties": {
+                      "default": {
+                        "type": "number"
+                      }
+                    },
+                    "additionalProperties": {
+                      "type": "number"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "mutableConfigs": {
+            "type": "array",
+            "description": "Array of mutable configs for a given pipette",
+            "items": {
+              "type": "string"
+            }
+          },
+          "validQuirks": {
+            "type": "array",
+            "description": "Array of valid quirks for a given pipette",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    {
+      "json_schema": {
+        "$schema": "http://json-schema.org/draft-04/schema#",
+        "title": "Question Info",
+        "description": "Info files for questions.",
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "uuid",
+          "type",
+          "title",
+          "topic"
+        ],
+        "properties": {
+          "uuid": {
+            "description": "Unique identifier (UUID v4).",
+            "type": "string",
+            "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+          },
+          "type": {
+            "description": "Type of the question.",
+            "enum": [
+              "Calculation",
+              "ShortAnswer",
+              "MultipleChoice",
+              "Checkbox",
+              "File",
+              "MultipleTrueFalse",
+              "v3"
+            ]
+          },
+          "title": {
+            "description": "The title of the question (e.g., 'Addition of vectors in Cartesian coordinates').",
+            "type": "string"
+          },
+          "topic": {
+            "description": "The category of question (e.g., 'Vectors', 'Energy').",
+            "type": "string"
+          },
+          "secondaryTopics": {
+            "description": "Other topics also covered by the question (e.g., 'Vectors', 'Energy').",
+            "type": "array",
+            "items": {
+              "description": "A single topic covered by the question.",
+              "type": "string"
+            }
+          },
+          "tags": {
+            "description": "Extra tags associated with the question (e.g., 'Exam Only', 'Broken').",
+            "type": "array",
+            "items": {
+              "description": "A tag associated with a question.",
+              "type": "string"
+            }
+          },
+          "clientFiles": {
+            "description": "The list of question files accessible by the client (defaults to [\"client.js\"]).",
+            "type": "array",
+            "items": {
+              "description": "A single file accessible by the client.",
+              "type": "string"
+            }
+          },
+          "clientTemplates": {
+            "description": "List of client-accessible templates to render server-side.",
+            "type": "array",
+            "items": {
+              "description": "A single template file accessible by the client.",
+              "type": "string"
+            }
+          },
+          "template": {
+            "description": "The QID of a question that serves at the template for this question.",
+            "type": "string"
+          },
+          "gradingMethod": {
+            "description": "The grading method used for this question.",
+            "enum": [
+              "Internal",
+              "External",
+              "Manual"
+            ]
+          },
+          "singleVariant": {
+            "description": "Whether the question is not randomized and only generates a single variant (defaults to \"false\").",
+            "type": "boolean"
+          },
+          "partialCredit": {
+            "description": "Whether the question will give partial points for fractional scores (defaults to \"false\" for v2 questions and \"true\" for v3.).",
+            "type": "boolean"
+          },
+          "options": {
+            "description": "Options that define how the question will work, specific to the individual question type.",
+            "type": "object"
+          },
+          "externalGradingOptions": {
+            "description": "Options for externally graded questions.",
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "image",
+              "entrypoint"
+            ],
+            "properties": {
+              "enabled": {
+                "description": "Whether the external grader is currently enabled. Useful if it is breaking, for example.",
+                "type": "boolean"
+              },
+              "image": {
+                "description": "The Docker image that will be used to grade this question. Should be specified as Dockerhub image.",
+                "type": "string"
+              },
+              "entrypoint": {
+                "description": "Program to run as the entrypoint to your grader. Must be runnable as 'chmod +x script && ./script'.",
+                "type": "string"
+              },
+              "serverFilesCourse": {
+                "description": "The list of files or directories that will be copied from course/externalGradingFiles/ to /grade/shared/",
+                "type": "array",
+                "items": {
+                  "description": "A single file or directory that will be copied to the external grader.",
+                  "type": "string"
+                }
+              },
+              "timeout": {
+                "description": "The number of seconds after which the grading job will timeout.",
+                "type": "integer"
+              },
+              "enableNetworking": {
+                "description": "Whether the grading containers should have network access. Access is disabled by default.",
+                "type": "boolean"
+              }
+            }
+          },
+          "dependencies": {
+            "description": "The question's client-side dependencies.",
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "coreStyles": {
+                "description": "The styles required by this question from /public/stylesheets.",
+                "type": "array",
+                "items": {
+                  "description": "A .css file located in /public/stylesheets.",
+                  "type": "string"
+                }
+              },
+              "coreScripts": {
+                "description": "The scripts required by this question from /public/javascripts.",
+                "type": "array",
+                "items": {
+                  "description": "A .js file located in /public/javascripts.",
+                  "type": "string"
+                }
+              },
+              "nodeModulesStyles": {
+                "description": "The styles required by this question from /node_modules.",
+                "type": "array",
+                "items": {
+                  "description": "A .css file located in /node_modules.",
+                  "type": "string"
+                }
+              },
+              "nodeModulesScripts": {
+                "description": "The scripts required by this question from /node_modules.",
+                "type": "array",
+                "items": {
+                  "description": "A .js file located in /node_modules.",
+                  "type": "string"
+                }
+              },
+              "clientFilesCourseStyles": {
+                "description": "The styles required by this question from clientFilesCourse.",
+                "type": "array",
+                "items": {
+                  "description": "A .css file located in clientFilesCourse.",
+                  "type": "string"
+                }
+              },
+              "clientFilesCourseScripts": {
+                "description": "The styles required by this question from clientFilesCourse.",
+                "type": "array",
+                "items": {
+                  "description": "A .js file located in clientFilesCourse.",
+                  "type": "string"
+                }
+              },
+              "clientFilesQuestionStyles": {
+                "description": "The styles required by this question from clientFilesQuestion.",
+                "type": "array",
+                "items": {
+                  "description": "A .css file located in the clientFilesQuestion.",
+                  "type": "string"
+                }
+              },
+              "clientFilesQuestionScripts": {
+                "description": "The scripts required by this question from clientFilesQuestion.",
+                "type": "array",
+                "items": {
+                  "description": "A .js file located in the clientFilesQuestion.",
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "workspaceOptions": {
+            "description": "Options for workspace questions.",
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "image",
+              "port",
+              "gradedFiles"
+            ],
+            "properties": {
+              "image": {
+                "description": "The Docker image that will be used to serve this question. Should be specified as Dockerhub image.",
+                "type": "string"
+              },
+              "port": {
+                "description": "The port number used in the Docker image.",
+                "type": "integer"
+              },
+              "gradedFiles": {
+                "description": "The list of files or directories that will be copied for grading.",
+                "type": "array",
+                "items": {
+                  "description": "A single file or directory that will be copied for grading.",
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "json_schema": {
+        "$schema": "http://json-schema.org/draft-04/schema#",
+        "title": "Backend Config",
+        "description": "A configuration file for the PrairieLearn server.",
+        "type": "object",
+        "properties": {
+          "courseDirs": {
+            "description": "Paths of the course directories.",
+            "type": "array",
+            "items": {
+              "description": "A single course directory path.",
+              "type": "string"
+            }
+          },
+          "secretKey": {
+            "description": "Secret key for authenticating users (should be a long random string).",
+            "type": "string"
+          },
+          "postgresqlUser": {
+            "description": "The user for connecting to the PostgreSQL database.",
+            "type": "string"
+          },
+          "postgresqlDatabase": {
+            "description": "The database for connecting to the PostgreSQL database.",
+            "type": "string"
+          },
+          "postgresqlHost": {
+            "description": "The host for connecting to the PostgreSQL database.",
+            "type": "string"
+          },
+          "redisUrl": {
+            "description": "The url for connecting to Redis.",
+            "type": "string"
+          },
+          "logFilename": {
+            "description": "Filename to use for server logging.",
+            "type": "string"
+          },
+          "authType": {
+            "description": "The type of authentication to use.",
+            "enum": [
+              "none",
+              "x-auth",
+              "eppn",
+              "x-trust-auth"
+            ]
+          },
+          "serverType": {
+            "description": "The type of server to start.",
+            "enum": [
+              "http",
+              "https"
+            ]
+          },
+          "sslCertificateFile": {
+            "description": "Path to SSL certificate",
+            "type": "string"
+          },
+          "sslKeyFile": {
+            "description": "Path to SSL certificate key file",
+            "type": "string"
+          },
+          "sslCAFile": {
+            "description": "Path to SSL CA chain file",
+            "type": "string"
+          },
+          "serverPort": {
+            "description": "The TCP port number for the server.",
+            "type": "string"
+          },
+          "groupName": {
+            "description": "The group of servers we belong to, used for load reporting and autoscaling.",
+            "type": "string"
+          },
+          "blockedWarnEnable": {
+            "description": "Whether to detect and warn on blockages in the event loop.",
+            "type": "boolean"
+          },
+          "blockedAtWarnEnable": {
+            "description": "Whether to use more expensive event-loop-blocking detection that includes stack traces (not for routine use in production).",
+            "type": "boolean"
+          },
+          "blockedWarnThresholdMS": {
+            "description": "The threshold (in milliseconds) for detecting event-loop blockages.",
+            "type": "integer"
+          },
+          "checkAccessRulesExamUuid": {
+            "description": "On sync, check if assessment access rules examUuid exists in database (default false)",
+            "type": "boolean"
+          },
+          "cronIntervalMS": {
+            "description": "Time between cron job runs (milliseconds).",
+            "type": "integer"
+          },
+          "autoFinishAgeMins": {
+            "description": "Time after last activity when exams are auto-closed (minutes).",
+            "type": "integer"
+          },
+          "runningInEc2": {
+            "description": "Whether PL is running as an AWS EC2 instance",
+            "type": "boolean"
+          },
+          "externalGradingUseAws": {
+            "description": "If the external grader should use AWS (production) or not (local dev).",
+            "type": "boolean"
+          },
+          "externalGradingS3Bucket": {
+            "description": "The S3 bucket that externally graded jobs should be stored in.",
+            "type": "string"
+          },
+          "externalGradingResultsS3Bucket": {
+            "description": "The S3 bucket where externally graded job results will be stored.",
+            "type": "string"
+          },
+          "externalGradingJobQueue": {
+            "description": "The name of the job queue where externally graded jobs will be submitted.",
+            "type": "string"
+          },
+          "externalGradingJobRole": {
+            "description": "The ARN of the role that should be provided to external grading containers for resource access.",
+            "type": "string"
+          },
+          "externalGradingWebhookUrl": {
+            "description": "The endpoint that should be hit when a grading result is updated. Should be null when running locally.",
+            "type": "string"
+          },
+          "externalGradingDefaultTimeout": {
+            "description": "The default timeout to use for external grading if none is specified by a question.",
+            "type": "integer"
+          },
+          "externalGradingPullImagesFromDockerHub": {
+            "description": "Whether externally graded questions should automatically pull container images from Docker Hub (true) or use only locally cached images (false)",
+            "type": "boolean"
+          },
+          "awsRegion": {
+            "description": "The region for AWS resources.",
+            "type": "string"
+          },
+          "hasShib": {
+            "description": "Enables Shibboleth authentication",
+            "type": "boolean"
+          },
+          "hasAzure": {
+            "description": "Enables Azure authentication",
+            "type": "boolean"
+          },
+          "hasOauth": {
+            "description": "Enables OAuth authentication",
+            "type": "boolean"
+          },
+          "useWorkers": {
+            "description": "Enable persistent, forking Python workers",
+            "type": "boolean"
+          },
+          "workersCount": {
+            "description": "The number of workers to use (or null to use workersPerCpu).",
+            "type": "integer"
+          },
+          "workersPerCpu": {
+            "description": "The number of workers per CPU (if workersCount is null).",
+            "type": "number"
+          }
+        }
+      }
+    },
+    {
+      "json_schema": {
+        "$schema": "http://json-schema.org/draft-04/schema#",
+        "id": "http://www.qiskit.org/schemas/default_pulse_config_schema.json",
+        "description": "Default OpenPulse backend configuration",
+        "version": "1.0.0",
+        "definitions": {
+          "cmd_def": {
+            "description": "OpenPulse command definition schema. Defines QASM commands in terms of pulses.",
+            "properties": {
+              "name": {
+                "description": "QASM command name",
+                "type": "string"
+              },
+              "qubits": {
+                "description": "Qubits to which this command def applies",
+                "items": {
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                "minItems": 1,
+                "type": "array"
+              },
+              "sequence": {
+                "description": "Sequence of pulse instructions",
+                "items": {
+                  "type": "object"
+                },
+                "type": "array"
+              }
+            },
+            "required": [
+              "name"
+            ],
+            "type": "object"
+          },
+          "complex": {
+            "description": "JSON representation of a complex number",
+            "items": {
+              "type": "number"
+            },
+            "maxItems": 2,
+            "minItems": 2,
+            "type": "array"
+          },
+          "complex_array": {
+            "description": "JSON representation of a complex vector",
+            "items": {
+              "$ref": "#/definitions/complex"
+            },
+            "minItems": 1,
+            "type": "array"
+          },
+          "complex_matrix": {
+            "description": "JSON representation of a complex matrix",
+            "items": {
+              "$ref": "#/definitions/complex_array"
+            },
+            "minItems": 1,
+            "type": "array"
+          },
+          "discriminator": {
+            "description": "Default measurement kernel",
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "params": {
+                "type": "object"
+              }
+            },
+            "type": "object"
+          },
+          "meas_kernel": {
+            "description": "Default measurement kernel",
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "params": {
+                "type": "object"
+              }
+            },
+            "type": "object"
+          }
+        },
+        "properties": {
+          "buffer": {
+            "default": 1,
+            "description": "Default buffer time between pulses",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "cmd_def": {
+            "description": "Backend calibrated QASM to Pulse definitions",
+            "items": {
+              "$ref": "#/definitions/cmd_def"
+            },
+            "type": "array"
+          },
+          "discriminator": {
+            "$ref": "#/definitions/discriminator"
+          },
+          "meas_freq_est": {
+            "description": "Backend calibrated qubit frequencies",
+            "items": {
+              "type": "number"
+            },
+            "minItems": 1,
+            "type": "array"
+          },
+          "meas_kernel": {
+            "$ref": "#/definitions/meas_kernel"
+          },
+          "pulse_library": {
+            "description": "Backend pulse library",
+            "items": {
+              "properties": {
+                "name": {
+                  "description": "Pulse name",
+                  "type": "string"
+                },
+                "samples": {
+                  "$ref": "#/definitions/complex_array"
+                }
+              },
+              "required": [
+                "name",
+                "samples"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "qubit_freq_est": {
+            "description": "Backend calibrated qubit frequencies",
+            "items": {
+              "type": "number"
+            },
+            "minItems": 1,
+            "type": "array"
+          }
+        },
+        "required": [
+          "qubit_freq_est",
+          "meas_freq_est",
+          "pulse_library",
+          "buffer"
+        ],
+        "type": "object"
+      }
+    },
+    {
+      "json_schema": {
+        "$schema": "http://json-schema.org/draft-04/schema#",
+        "id": "http://www.qiskit.org/schemas/result_schema.json",
+        "title": "qobj results",
+        "description": "The results of executing a qobj",
+        "version": "1.0.0",
+        "definitions": {
+          "complex": {
+            "description": "JSON representation of a complex number",
+            "type": "array",
+            "minItems": 2,
+            "maxItems": 2,
+            "items": {
+              "type": "number"
+            }
+          },
+          "complex_array": {
+            "description": "JSON representation of a complex vector",
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "$ref": "#/definitions/complex"
+            }
+          },
+          "complex_matrix": {
+            "description": "JSON representation of a complex matrix",
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "$ref": "#/definitions/complex_array"
+            }
+          },
+          "memory": {
+            "type": "array",
+            "minItems": 1,
+            "description": "Output of the memory"
+          },
+          "resultobj": {
+            "type": "object",
+            "required": [
+              "success",
+              "shots",
+              "data"
+            ],
+            "properties": {
+              "shots": {
+                "oneOf": [
+                  {
+                    "type": "array",
+                    "minItems": 2,
+                    "maxItems": 2,
+                    "items": {
+                      "type": "integer",
+                      "minimum": 1
+                    }
+                  },
+                  {
+                    "type": "integer"
+                  }
+                ],
+                "description": "The starting and ending shot for this data. If there is only one shot to the experiment this is [1,1]"
+              },
+              "success": {
+                "type": "boolean",
+                "description": "If true, we can trust results for this experiment."
+              },
+              "status": {
+                "type": "string",
+                "description": "Human-readable description of status of this experiment"
+              },
+              "seed": {
+                "type": "integer",
+                "description": "Experiment-level random seed"
+              },
+              "meas_level": {
+                "type": "integer",
+                "enum": [
+                  0,
+                  1,
+                  2
+                ],
+                "description": "Measurement level of experiment"
+              },
+              "meas_return": {
+                "type": "string",
+                "enum": [
+                  "single",
+                  "avg"
+                ],
+                "description": "Is the data averaged or from each shot"
+              },
+              "header": {
+                "type": "object",
+                "properties": {},
+                "description": "Header passed through from the qobj with experiment metadata"
+              },
+              "data": {
+                "type": "object",
+                "properties": {
+                  "counts": {
+                    "type": "object",
+                    "description": "Histogram of the memory over the indicated shots",
+                    "patternProperties": {
+                      "^0x([0-9A-Fa-f])+$": {
+                        "type": "integer",
+                        "minimum": 0
+                      }
+                    },
+                    "additionalProperties": false
+                  },
+                  "snapshots": {
+                    "description": "collection of all snapshots of simulator state",
+                    "type": "object"
+                  },
+                  "memory": {
+                    "$ref": "#/definitions/memory"
+                  },
+                  "statevector": {
+                    "$ref": "#/definitions/complex_array"
+                  },
+                  "unitary": {
+                    "$ref": "#/definitions/complex_matrix"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "type": "object",
+        "required": [
+          "backend_name",
+          "backend_version",
+          "qobj_id",
+          "job_id",
+          "success",
+          "results"
+        ],
+        "properties": {
+          "backend_name": {
+            "type": "string",
+            "description": "Backend name"
+          },
+          "backend_version": {
+            "type": "string",
+            "pattern": "[0-9]+.[0-9]+.[0-9]+$",
+            "description": "Backend version in the form X.X.X"
+          },
+          "qobj_id": {
+            "type": "string",
+            "description": "User generated Qobj id"
+          },
+          "job_id": {
+            "type": "string",
+            "description": "Unique execution id from the backend"
+          },
+          "date": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Date/time of job execution"
+          },
+          "success": {
+            "type": "boolean",
+            "description": "True if complete input qobj executed correctly. (Implies each experiment success)"
+          },
+          "status": {
+            "type": "string",
+            "description": "Human-readable status of complete qobj execution"
+          },
+          "header": {
+            "type": "object",
+            "properties": {},
+            "description": "Header passed through from the qobj with job metadata"
+          },
+          "results": {
+            "type": "array",
+            "description": "Corresponding results for array of experiments of the input qobj",
+            "items": {
+              "$ref": "#/definitions/resultobj"
+            }
+          }
+        }
+      }
+    },
+    {
+      "json_schema": {
+        "$schema": "http://json-schema.org/draft-04/schema#",
+        "definitions": {
+          "fieldOptions": {
+            "title": "Field options",
+            "description": "Field-level configuration options",
+            "type": "object",
+            "properties": {
+              "label": {
+                "title": "Field label",
+                "description": "Field labels are auto-generated from field names. This option allows to control the label",
+                "type": "string",
+                "minLength": 1
+              },
+              "default": {
+                "title": "Default value",
+                "description": "Default value for the field",
+                "anyOf": [
+                  {
+                    "type": "boolean"
+                  },
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "string"
+                  }
+                ]
+              },
+              "renderAs": {
+                "title": "Render value",
+                "description": "Non-default rendering of the field value",
+                "type": "string"
+              },
+              "orderBy": {
+                "title": "Order by field",
+                "description": "Field name to use for ordering",
+                "type": "string"
+              },
+              "orderDir": {
+                "title": "Order by direction",
+                "description": "Direction to use for ordering",
+                "type": "string",
+                "enum": [
+                  "desc",
+                  "asc"
+                ]
+              },
+              "format": {
+                "title": "Date/time format",
+                "description": "Date time format for time stamp fields",
+                "type": "string"
+              },
+              "precision": {
+                "title": "Numeric precision",
+                "description": "How many digits to render after the floating point",
+                "type": "integer"
+              },
+              "linkTo": {
+                "title": "Link value to URL",
+                "description": "URL to use for linking rendered values (use %s as placeholder)",
+                "type": "string"
+              },
+              "linkTarget": {
+                "title": "Link target for value URL",
+                "description": "Target for link value URL (_blank, _self, _parent, _top, framename)",
+                "type": "string"
+              },
+              "limit": {
+                "title": "Limit of field entity outputs",
+                "description": "Used for aggregate fields, like file uploads",
+                "type": "integer"
+              },
+              "translatable": {
+                "title": "Translatable button",
+                "description": "Allow Render translatable button",
+                "type": "boolean"
+              },
+              "auto-increment": {
+                "title": "Auto-increment flag",
+                "description": "Auto-increment flag",
+                "type": "boolean"
+              },
+              "min": {
+                "title": "Minimal value",
+                "description": "Define a minimal value for field",
+                "type": "integer"
+              },
+              "placeholder": {
+                "title": "Placeholder attribute used in HTML tags",
+                "description": "Define placeholder attr for input/textarea tags",
+                "type": "string"
+              },
+              "timeIncrement": {
+                "title": "Datetime Picker Minutes increment",
+                "description": "Define time increment for minutes dropdown",
+                "type": "integer"
+              },
+              "showMonthYearSelect": {
+                "title": "Show year month dropdowns",
+                "description": "Show year and month select boxes above calendars to jump to a specific month and year",
+                "type": "boolean"
+              },
+              "timePicker": {
+                "title": "Adding time handlers into popup",
+                "description": "Adds select boxes to choose times in addition to dates",
+                "type": "boolean"
+              },
+              "max": {
+                "title": "Maximal value",
+                "description": "Define a maximal value for field",
+                "type": "integer"
+              },
+              "step": {
+                "title": "Step value",
+                "description": "Define a step value to increase/decrease numeric field",
+                "type": "integer"
+              },
+              "fileUploadAdapter": {
+                "title": "Upload Adapter",
+                "description": "Define Upload Adapter for FileStorage plugin",
+                "type": "string",
+                "enum": [
+                  "Local",
+                  "AwsS3",
+                  "Dropbox",
+                  "AzureBlobStorage",
+                  "GoogleCloudStorage"
+                ]
+              },
+              "personal": {
+                "title": "Personal Identifiable Information (PII)",
+                "description": "Define PPI (US term), personal data (EU term) and sensitive data (EU term)",
+                "type": "boolean",
+                "default": false
+              },
+              "help": {
+                "title": "Help tooltip",
+                "description": "Add help tooltip next to the label of the field",
+                "type": "string"
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "title": "Fields configuration",
+        "description": "Fields configuration options",
+        "type": "object",
+        "properties": {},
+        "additionalProperties": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/fieldOptions"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "json_schema": {
+        "$schema": "http://json-schema.org/draft-04/schema#",
+        "title": "COBRA",
+        "description": "JSON representation of COBRA model",
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "version": {
+            "type": "integer",
+            "default": 1
+          },
+          "reactions": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "metabolites": {
+                  "type": "object",
+                  "patternProperties": {
+                    ".*": {
+                      "type": "number"
+                    }
+                  }
+                },
+                "gene_reaction_rule": {
+                  "type": "string"
+                },
+                "lower_bound": {
+                  "type": "number"
+                },
+                "upper_bound": {
+                  "type": "number"
+                },
+                "objective_coefficient": {
+                  "type": "number",
+                  "default": 0
+                },
+                "variable_kind": {
+                  "type": "string",
+                  "pattern": "integer|continuous",
+                  "default": "continuous"
+                },
+                "subsystem": {
+                  "type": "string"
+                },
+                "notes": {
+                  "type": "object"
+                },
+                "annotation": {
+                  "type": "object"
+                }
+              },
+              "required": [
+                "id",
+                "name",
+                "metabolites",
+                "lower_bound",
+                "upper_bound",
+                "gene_reaction_rule"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "metabolites": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "compartment": {
+                  "type": "string",
+                  "pattern": "[a-z]{1,2}"
+                },
+                "charge": {
+                  "type": "integer"
+                },
+                "formula": {
+                  "type": "string"
+                },
+                "_bound": {
+                  "type": "number",
+                  "default": 0
+                },
+                "_constraint_sense": {
+                  "type": "string",
+                  "default": "E",
+                  "pattern": "E|L|G"
+                },
+                "notes": {
+                  "type": "object"
+                },
+                "annotation": {
+                  "type": "object"
+                }
+              },
+              "required": [
+                "id",
+                "name",
+                "compartment"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "genes": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "notes": {
+                  "type": "object"
+                },
+                "annotation": {
+                  "type": "object"
+                }
+              },
+              "required": [
+                "id",
+                "name"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "compartments": {
+            "type": "object",
+            "patternProperties": {
+              "[a-z]{1,2}": {
+                "type": "string"
+              }
+            }
+          },
+          "notes": {
+            "type": "object"
+          },
+          "annotation": {
+            "type": "object"
+          }
+        },
+        "required": [
+          "id",
+          "reactions",
+          "metabolites",
+          "genes"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "json_schema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "title": "Scheduling Block Instance (SBI)",
+        "description": "Schema for a SIP interpretation of an SKA SBI",
+        "version": "1.0.0",
+        "type": "object",
+        "required": [
+          "id",
+          "version",
+          "scheduling_block",
+          "processing_blocks"
+        ],
+        "properties": {
+          "id": {
+            "description": "Primary SBI Id, SBI-[date]-[project]-*",
+            "type": "string",
+            "pattern": "^SBI-[0-9]{8}-[a-z|A-Z]+-.*$"
+          },
+          "version": {
+            "description": "SBI configuration version",
+            "type": "string",
+            "pattern": "[0-9]{1,4}.[0-9]{1,4}.[0-9]{1,4}"
+          },
+          "scheduling_block": {
+            "description": "Scheduling Block properties",
+            "$ref": "#/definitions/scheduling_block"
+          },
+          "processing_blocks": {
+            "description": "Array of PBs defined for this SBI",
+            "type": "array",
+            "items": {
+              "description": "PB configuration",
+              "$ref": "#/definitions/processing_block"
+            }
+          },
+          "scans": {
+            "description": "Array of Scans assocaited with this SBI",
+            "type": "array",
+            "items": {
+              "description": "Scan configuration object",
+              "type": "object"
+            }
+          }
+        },
+        "definitions": {
+          "scheduling_block": {
+            "type": "object",
+            "required": [
+              "id"
+            ],
+            "properties": {
+              "id": {
+                "description": "SB Id",
+                "type": "string"
+              },
+              "project": {
+                "description": "Project Id",
+                "type": "string"
+              },
+              "telescope": {
+                "description": "Telescope Id",
+                "type": "string"
+              },
+              "programme_block": {
+                "description": "Programme block Id",
+                "type": "string"
+              }
+            }
+          },
+          "processing_block": {
+            "type": "object",
+            "required": [
+              "id",
+              "version",
+              "type",
+              "workflow"
+            ],
+            "properties": {
+              "id": {
+                "description": "Primary PB Id, PB-[date]-[project]-*",
+                "type": "string",
+                "pattern": "^PB-[0-9]{8}-[a-z|A-Z]+-.*$"
+              },
+              "version": {
+                "description": "PB configuration version",
+                "type": "string",
+                "pattern": "[0-9]{1,4}.[0-9]{1,4}.[0-9]{1,4}"
+              },
+              "type": {
+                "description": "[realtime, offline]",
+                "enum": [
+                  "realtime",
+                  "offline"
+                ]
+              },
+              "workflow": {
+                "description": "PB workflow description",
+                "type": "object",
+                "required": [
+                  "id",
+                  "version",
+                  "configuration"
+                ],
+                "$ref": "#/definitions/workflow"
+              },
+              "priority": {
+                "description": "PB priority",
+                "type": "number",
+                "minimum": -1,
+                "maximum": 100
+              },
+              "dependencies": {
+                "description": "PB dependencies",
+                "type": "array",
+                "items": {
+                  "description": "PB dependency",
+                  "type": "object",
+                  "required": [
+                    "type",
+                    "value",
+                    "condition"
+                  ],
+                  "$ref": "#/definitions/dependency"
+                }
+              }
+            }
+          },
+          "workflow": {
+            "properties": {
+              "id": {
+                "description": "Workflow Id",
+                "type": "string"
+              },
+              "version": {
+                "description": "Workflow version",
+                "type": "string",
+                "pattern": "^[0-9]{1,4}.[0-9]{1,4}.[0-9]{1,4}"
+              },
+              "parameters": {
+                "description": "Workflow parameters",
+                "type": "object"
+              }
+            }
+          },
+          "dependency": {
+            "properties": {
+              "type": {
+                "description": "Type of dependency",
+                "type": "string"
+              },
+              "value": {
+                "description": "Value of the dependency",
+                "type": "string"
+              },
+              "condition": {
+                "description": "Dependency condition",
+                "type": "string"
+              },
+              "parameters": {
+                "description": "Additional parameters describing the dependency",
+                "type": "object"
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "json_schema": {
+        "$schema": "http://json-schema.org/draft-04/schema#",
+        "type": "object",
+        "properties": {
+          "migration": {
+            "type": "object",
+            "properties": {
+              "nbCandidatMigration": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "stepMigration": {
+                "type": "integer",
+                "minimum": 0
+              }
+            },
+            "required": [
+              "nbCandidatMigration",
+              "stepMigration"
+            ]
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "dataFile": {
+            "type": "string",
+            "minLength": 1
+          },
+          "tabAlgoGen": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "initParam": {
+                  "type": "object",
+                  "properties": {
+                    "taillePop": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "nbGeneration": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "probaCroisement": {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 1
+                    },
+                    "probaMutation": {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 1
+                    },
+                    "tabProbaMigration": {
+                      "type": "array",
+                      "items": {
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 1
+                      }
+                    },
+                    "classUsed": {
+                      "type": "object",
+                      "properties": {
+                        "typeInd": {
+                          "type": "object",
+                          "properties": {
+                            "class": {
+                              "enum": [
+                                "itemset",
+                                "itemsetO"
+                              ]
+                            },
+                            "typePrimitif": {
+                              "enum": [
+                                "char"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "class",
+                            "typePrimitif"
+                          ]
+                        },
+                        "populate": {
+                          "type": "object",
+                          "properties": {
+                            "class": {
+                              "enum": [
+                                "randPop",
+                                "freqPop",
+                                "irandPop"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "class"
+                          ]
+                        },
+                        "evaluate": {
+                          "type": "object",
+                          "properties": {
+                            "class": {
+                              "enum": [
+                                "freqEval",
+                                "closeEval"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "class"
+                          ]
+                        },
+                        "crossover": {
+                          "type": "object",
+                          "properties": {
+                            "class": {
+                              "enum": [
+                                "monoPCross",
+                                "multiPCross",
+                                "uCross"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "class"
+                          ]
+                        },
+                        "mutator": {
+                          "type": "object",
+                          "properties": {
+                            "class": {
+                              "enum": [
+                                "randMut"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "class"
+                          ]
+                        },
+                        "selectPolicy": {
+                          "type": "object",
+                          "properties": {
+                            "class": {
+                              "enum": [
+                                "bestS",
+                                "randS",
+                                "tournamentS"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "class"
+                          ]
+                        },
+                        "indelPolicy": {
+                          "type": "object",
+                          "properties": {
+                            "class": {
+                              "enum": [
+                                "fitnessID",
+                                "ageID"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "class"
+                          ]
+                        },
+                        "selectPolicyMigrate": {
+                          "type": "object",
+                          "properties": {
+                            "class": {
+                              "enum": [
+                                "bestMig",
+                                "tournamentMig"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "class"
+                          ]
+                        },
+                        "indelPolicyMigrate": {
+                          "type": "object",
+                          "properties": {
+                            "class": {
+                              "enum": [
+                                "oldestIDMig",
+                                "worstIDMig"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "class"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "typeInd",
+                        "populate",
+                        "evaluate",
+                        "crossover",
+                        "mutator",
+                        "selectPolicy",
+                        "indelPolicy",
+                        "selectPolicyMigrate",
+                        "indelPolicyMigrate"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "taillePop",
+                    "nbGeneration",
+                    "probaCroisement",
+                    "probaMutation",
+                    "tabProbaMigration",
+                    "classUsed"
+                  ]
+                },
+                "resultFile": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "required": [
+                "id",
+                "initParam",
+                "resultFile"
+              ]
+            },
+            "minItems": 1
+          }
+        },
+        "required": [
+          "migration",
+          "name",
+          "dataFile",
+          "tabAlgoGen"
+        ]
+      }
+    },
+    {
+      "json_schema": {
+        "$schema": "http://json-schema.org/draft-04/schema#",
+        "title": "Rules",
+        "description": "The collection of rules",
+        "type": "array",
+        "items": {
+          "title": "Rule.",
+          "type": "object",
+          "properties": {
+            "id": {
+              "description": "Unique identifier given by the server",
+              "type": "integer"
+            },
+            "name": {
+              "description": "A name to identify the rule.",
+              "type": "string"
+            },
+            "active": {
+              "description": "Enable/Disable a rule. When disabled, the rule is not evaluated on events received.",
+              "type": "boolean"
+            },
+            "organizationId": {
+              "description": "The organization for which the rule is configured.",
+              "type": "integer"
+            },
+            "conditions": {
+              "description": "List of condition to evaluate against events received.",
+              "type": "array",
+              "items": {
+                "description": "Condition to evaluate, **MUST** define at least one of the three condition criteria: `eventSourceId`, `eventTypeId` or `fn`.",
+                "type": "object",
+                "properties": {
+                  "description": {
+                    "description": "Human friendly text to let the possibility to explain what the condition evaluates.",
+                    "type": "string"
+                  },
+                  "eventSource": {
+                    "description": "Define the data for an event source",
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "description": "The event source to match on event received. If not present, joker `*` will be used.",
+                        "type": "integer"
+                      },
+                      "generatedIdentifier": {
+                        "description": "Unique identifier generated by iFLUX server of the event source usable in the events.",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "generatedIdentifier"
+                    ]
+                  },
+                  "eventType": {
+                    "description": "Define the data for an event type",
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "description": "The event type to match on event received. If not present, joker `*` will be used.",
+                        "type": "integer"
+                      },
+                      "type": {
+                        "description": "Event type used in the events sent.",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "type"
+                    ]
+                  },
+                  "fn": {
+                    "description": "Javascript expression to be evaluated. If not present, only `event source` and `event type` will be evaluated.",
+                    "type": "object",
+                    "properties": {
+                      "expression": {
+                        "description": "Javascript expression to let more complex condition matching. **MUST** be a valid javascript expression",
+                        "type": "string"
+                      },
+                      "sampleEvent": {
+                        "description": "A valid event that will be evaluated to true with the expression.",
+                        "type": "object"
+                      }
+                    },
+                    "required": [
+                      "expression",
+                      "sample"
+                    ]
+                  }
+                }
+              },
+              "minItems": 1
+            },
+            "transformations": {
+              "description": "List of transformations to apply to an event once the conditions matched.",
+              "type": "array",
+              "items": {
+                "description": "Transformation to apply.",
+                "type": "object",
+                "properties": {
+                  "description": {
+                    "description": "Human friendly text to let the possibility to explain what the transformation does.",
+                    "type": "string"
+                  },
+                  "actionTarget": {
+                    "description": "Define the data for an action target",
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "description": "The action target to send the event transformed.",
+                        "type": "integer"
+                      },
+                      "generatedIdentifier": {
+                        "description": "Unique identifier generated by iFLUX server of the action target sent with actions.",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "generatedIdentifier"
+                    ]
+                  },
+                  "actionType": {
+                    "description": "Define the data for an action type",
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "description": "The action type.",
+                        "type": "integer"
+                      },
+                      "type": {
+                        "description": "Action type used in the actions sent.",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "type"
+                    ]
+                  },
+                  "fn": {
+                    "description": "Javascript expression to transform the events. If not present, event is not transformed and passed as it is received.",
+                    "type": "object",
+                    "properties": {
+                      "expression": {
+                        "description": "Javascript expression to let more complex transformation. **MUST** be a valid javascript expression",
+                        "type": "string"
+                      },
+                      "sample": {
+                        "description": "A valid sample to validate the transformation expression.",
+                        "type": "object",
+                        "properties": {
+                          "event": {
+                            "description": "A valid event for the transformation expression validation.",
+                            "type": "object"
+                          },
+                          "eventSourceTemplateId": {
+                            "description": "The event source template to inject to the transformation validation.",
+                            "type": "integer"
+                          },
+                          "eventTypeId": {
+                            "description": "The event type to inject to the transformation validation.",
+                            "type": "integer"
+                          }
+                        },
+                        "required": [
+                          "event"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "expression",
+                      "sample"
+                    ]
+                  }
+                },
+                "required": [
+                  "actionTarget",
+                  "actionType"
+                ]
+              },
+              "minItems": 1
+            }
+          },
+          "required": [
+            "id",
+            "name",
+            "active",
+            "organizationId",
+            "conditions",
+            "transformations"
+          ]
+        }
+      }
+    },
+    {
+      "json_schema": {
+        "$schema": "http://json-schema.org/draft-04/schema#",
+        "definitions": {
+          "Main": {
+            "properties": {
+              "ABI3": {
+                "$ref": "#/definitions/ABI3"
+              },
+              "Object": {
+                "$ref": "#/definitions/Object"
+              },
+              "Connections": {
+                "$ref": "#/definitions/Connections"
+              }
+            },
+            "type": "object"
+          },
+          "ABI3": {
+            "properties": {
+              "Template": {
+                "$ref": "#/definitions/Template"
+              },
+              "Metadata": {
+                "$ref": "#/definitions/Metadata"
+              }
+            },
+            "type": "object"
+          },
+          "Template": {
+            "properties": {
+              "Phase": {
+                "enum": [
+                  "extract"
+                ]
+              },
+              "Pattern": {
+                "enum": [
+                  "full"
+                ]
+              },
+              "Source": {
+                "enum": [
+                  "viw",
+                  "xsl",
+                  "qry",
+                  "csv"
+                ]
+              },
+              "Implementation": {
+                "enum": [
+                  "single",
+                  "loop",
+                  "parallel"
+                ]
+              },
+              "Version": {
+                "enum": [
+                  1
+                ]
+              }
+            },
+            "type": "object"
+          },
+          "Metadata": {
+            "properties": {
+              "Version": {
+                "enum": [
+                  1
+                ]
+              }
+            },
+            "type": "object"
+          },
+          "Object": {
+            "properties": {
+              "SourceObject": {
+                "$ref": "#/definitions/SourceObject"
+              },
+              "DestinationTable": {
+                "$ref": "#/definitions/DestinationTable"
+              },
+              "PrimaryKeyColumns": {
+                "type": "array"
+              }
+            },
+            "type": "object"
+          },
+          "SourceObject": {
+            "properties": {
+              "Schema": {
+                "type": "string"
+              },
+              "Name": {
+                "type": "string"
+              },
+              "FullName": {
+                "type": "string"
+              }
+            },
+            "type": "object"
+          },
+          "DestinationTable": {
+            "type": "object",
+            "properties": {
+              "Schema": {
+                "type": "string"
+              },
+              "Name": {
+                "type": "string"
+              },
+              "FullName": {
+                "type": "string"
+              },
+              "CreatePrimaryKey": {
+                "type": "number"
+              },
+              "Columns": {
+                "type": "array",
+                "items": {
+                  "oneOf": [
+                    {
+                      "$ref": "#/definitions/Column"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "Column": {
+            "type": "object",
+            "properties": {
+              "Name": {
+                "type": "string"
+              },
+              "DataType": {
+                "type": "string"
+              }
+            }
+          },
+          "Connections": {
+            "properties": {
+              "Metadata": {
+                "$ref": "#/definitions/Connection"
+              },
+              "Log": {
+                "$ref": "#/definitions/Connection"
+              },
+              "Staging": {
+                "$ref": "#/definitions/Connection"
+              },
+              "Configuration": {
+                "$ref": "#/definitions/Connection"
+              },
+              "Helpers": {
+                "type": "array",
+                "items": {
+                  "oneOf": [
+                    {
+                      "$ref": "#/definitions/Connection"
+                    }
+                  ]
+                }
+              }
+            },
+            "type": "object"
+          },
+          "Connection": {
+            "properties": {
+              "Name": {
+                "type": "string"
+              },
+              "Database": {
+                "type": "string"
+              },
+              "ConnectionString": {
+                "type": "string"
+              }
+            },
+            "type": "object"
+          }
+        },
+        "allOf": [
+          {
+            "$ref": "#/definitions/Main"
+          }
+        ],
+        "type": "object"
+      }
+    },
+    {
+      "json_schema": {
+        "$schema": "http://json-schema.org/draft-04/schema#",
+        "definitions": {
+          "Main": {
+            "properties": {
+              "ABI3": {
+                "$ref": "#/definitions/ABI3"
+              },
+              "Object": {
+                "$ref": "#/definitions/Object"
+              },
+              "Connections": {
+                "$ref": "#/definitions/Connections"
+              }
+            },
+            "type": "object"
+          },
+          "ABI3": {
+            "properties": {
+              "Template": {
+                "$ref": "#/definitions/Template"
+              },
+              "Metadata": {
+                "$ref": "#/definitions/Metadata"
+              },
+              "Project": {
+                "$ref": "#/definitions/Project"
+              }
+            },
+            "type": "object"
+          },
+          "Template": {
+            "properties": {
+              "Phase": {
+                "enum": [
+                  "extract"
+                ]
+              },
+              "Pattern": {
+                "enum": [
+                  "full",
+                  "diff"
+                ]
+              },
+              "Source": {
+                "enum": [
+                  "viw",
+                  "xsl",
+                  "qry",
+                  "csv"
+                ]
+              },
+              "Implementation": {
+                "enum": [
+                  "single",
+                  "loop",
+                  "parallel"
+                ]
+              },
+              "Version": {
+                "enum": [
+                  1
+                ]
+              }
+            },
+            "type": "object"
+          },
+          "Metadata": {
+            "properties": {
+              "Version": {
+                "enum": [
+                  1
+                ]
+              }
+            },
+            "type": "object"
+          },
+          "Project": {
+            "properties": {
+              "Name": {
+                "type": "string"
+              },
+              "TargetSQLPlatformVersion": {
+                "type": "string"
+              }
+            },
+            "type": "object"
+          },
+          "Object": {
+            "properties": {
+              "SourceObject": {
+                "$ref": "#/definitions/SourceObject"
+              },
+              "DestinationTable": {
+                "$ref": "#/definitions/DestinationTable"
+              },
+              "PrimaryKeyColumns": {
+                "type": "array"
+              }
+            },
+            "type": "object"
+          },
+          "SourceObject": {
+            "properties": {
+              "Schema": {
+                "type": "string"
+              },
+              "Name": {
+                "type": "string"
+              },
+              "FullName": {
+                "type": "string"
+              }
+            },
+            "type": "object"
+          },
+          "DestinationTable": {
+            "type": "object",
+            "properties": {
+              "Connection": {
+                "$ref": "#/definitions/Connection"
+              },
+              "Schema": {
+                "type": "string"
+              },
+              "Name": {
+                "type": "string"
+              },
+              "FullName": {
+                "type": "string"
+              },
+              "CreatePrimaryKey": {
+                "type": "number"
+              },
+              "Columns": {
+                "type": "array",
+                "items": {
+                  "oneOf": [
+                    {
+                      "$ref": "#/definitions/Column"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "Column": {
+            "type": "object",
+            "properties": {
+              "Name": {
+                "type": "string"
+              },
+              "DataType": {
+                "type": "string"
+              }
+            }
+          },
+          "Connections": {
+            "properties": {
+              "Metadata": {
+                "$ref": "#/definitions/Connection"
+              },
+              "Log": {
+                "$ref": "#/definitions/Connection"
+              },
+              "Staging": {
+                "$ref": "#/definitions/Connection"
+              },
+              "Configuration": {
+                "$ref": "#/definitions/Connection"
+              },
+              "DataWarehouse": {
+                "$ref": "#/definitions/Connection"
+              },
+              "Helpers": {
+                "type": "array",
+                "items": {
+                  "oneOf": [
+                    {
+                      "$ref": "#/definitions/Connection"
+                    }
+                  ]
+                }
+              }
+            },
+            "type": "object"
+          },
+          "Connection": {
+            "properties": {
+              "Name": {
+                "type": "string"
+              },
+              "Database": {
+                "type": "string"
+              },
+              "ConnectionString": {
+                "type": "string"
+              }
+            },
+            "type": "object"
+          }
+        },
+        "allOf": [
+          {
+            "$ref": "#/definitions/Main"
+          }
+        ],
+        "type": "object"
+      }
+    },
+    {
+      "json_schema": {
+        "$schema": "http://json-schema.org/draft-04/schema#",
+        "type": "object",
+        "properties": {
+          "debug": {
+            "type": "boolean"
+          },
+          "delay": {
+            "type": "number"
+          },
+          "gutter_theme": {
+            "type": "string"
+          },
+          "highlights.time_to_idle": {
+            "type": "number"
+          },
+          "highlights.demote_while_editing": {
+            "type": "string",
+            "enum": [
+              "none",
+              "ws_only",
+              "some_ws",
+              "multilines",
+              "warnings",
+              "all"
+            ]
+          },
+          "kill_old_processes": {
+            "type": "boolean"
+          },
+          "highlights.demote_scope": {
+            "type": "string"
+          },
+          "highlights.start_hidden": {
+            "type": "boolean"
+          },
+          "lint_mode": {
+            "type": "string",
+            "enum": [
+              "background",
+              "load_save",
+              "manual",
+              "save"
+            ]
+          },
+          "linters": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "object",
+              "properties": {
+                "args": {
+                  "type": [
+                    "array",
+                    "string"
+                  ],
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "disable": {
+                  "type": "boolean"
+                },
+                "env": {
+                  "type": "object"
+                },
+                "executable": {
+                  "type": [
+                    "array",
+                    "string"
+                  ],
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "excludes": {
+                  "type": [
+                    "array",
+                    "string"
+                  ],
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "lint_mode": {
+                  "type": "string",
+                  "enum": [
+                    "background",
+                    "load_save",
+                    "manual",
+                    "save"
+                  ]
+                },
+                "selector": {
+                  "type": "string"
+                },
+                "working_dir": {
+                  "type": "string"
+                },
+                "styles": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "mark_style": {
+                        "type": "string",
+                        "enum": [
+                          "fill",
+                          "outline",
+                          "solid_underline",
+                          "squiggly_underline",
+                          "stippled_underline",
+                          "none"
+                        ]
+                      },
+                      "priority": {
+                        "type": "integer",
+                        "minimum": 0
+                      },
+                      "scope": {
+                        "type": "string"
+                      },
+                      "icon": {
+                        "type": "string"
+                      },
+                      "types": {
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "enum": [
+                            "error",
+                            "warning"
+                          ]
+                        },
+                        "minItems": 1,
+                        "_uniqueItems": true
+                      },
+                      "codes": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        },
+                        "minItems": 1,
+                        "_uniqueItems": true
+                      }
+                    },
+                    "additionalProperties": false
+                  }
+                }
+              }
+            }
+          },
+          "no_column_highlights_line": {
+            "type": "boolean"
+          },
+          "paths": {
+            "type": "object"
+          },
+          "show_hover_line_report": {
+            "type": "boolean"
+          },
+          "show_hover_region_report": {
+            "type": "boolean"
+          },
+          "show_marks_in_minimap": {
+            "type": "boolean"
+          },
+          "show_panel_on_save": {
+            "type": "string",
+            "enum": [
+              "never",
+              "view",
+              "window"
+            ]
+          },
+          "syntax_map": {
+            "type": "object"
+          },
+          "statusbar.counters_template": {
+            "type": "string"
+          },
+          "statusbar.messages_template": {
+            "type": "string"
+          },
+          "statusbar.show_active_linters": {
+            "type": "boolean"
+          },
+          "styles": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "mark_style": {
+                  "type": "string",
+                  "enum": [
+                    "fill",
+                    "outline",
+                    "solid_underline",
+                    "squiggly_underline",
+                    "stippled_underline",
+                    "none"
+                  ]
+                },
+                "priority": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "scope": {
+                  "type": "string",
+                  "examples": [
+                    "region.redish",
+                    "region.orangish",
+                    "region.yellowish",
+                    "region.greenish",
+                    "region.bluish",
+                    "region.purplish",
+                    "region.pinkish",
+                    "markup.warning",
+                    "markup.error"
+                  ]
+                },
+                "icon": {
+                  "type": "string"
+                },
+                "types": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "enum": [
+                      "error",
+                      "warning"
+                    ]
+                  },
+                  "minItems": 1,
+                  "_uniqueItems": true
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "xperiments": {
+            "additionalProperties": true
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "json_schema": {
+        "definitions": {
+          "evaluate-condition": {
+            "description": "Evaluate the properties, e.g. speed > 5. Note that we only support one level of brackets.",
+            "type": "string"
+          },
+          "inside-condition": {
+            "description": "Geo-fence: check whether the updated feature, or the feature with ID featureId, is inside the area.",
+            "properties": {
+              "featureId": {
+                "description": "ID of the feature that must be checked whether it is inside the area.",
+                "type": "string"
+              },
+              "polyId": {
+                "description": "ID of the feature that represents the polygon area (geo-fence).",
+                "type": "string"
+              },
+              "static": {
+                "description": "When true, the polygon ID represents a static area, resulting in slightly optimized code.",
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "polyId"
+            ],
+            "type": "object"
+          },
+          "nearby-condition": {
+            "description": "Check whether the updated feature is near the point.",
+            "properties": {
+              "distance": {
+                "description": "Distance to the reference location in units",
+                "type": "number"
+              },
+              "locationId": {
+                "description": "ID of the feature that represents the reference point.",
+                "type": "string"
+              },
+              "locationLatLng": {
+                "description": "Specifies the reference location in latitude and longitude.",
+                "items": {
+                  "type": "number"
+                },
+                "maxItems": 2,
+                "minItems": 2,
+                "type": "array"
+              },
+              "static": {
+                "description": "When true, the polygon ID represents a static area, resulting in slightly optimized code.",
+                "type": "boolean"
+              },
+              "units": {
+                "default": "kilometers",
+                "description": "Specifies the unit type in which the distance is measured.",
+                "enum": [
+                  "kilometers",
+                  "radians",
+                  "miles",
+                  "degrees"
+                ]
+              }
+            },
+            "required": [
+              "distance"
+            ],
+            "type": "object"
+          },
+          "sendImbMessage-action": {
+            "properties": {
+              "method": {
+                "description": "Name of the method to execute at the receiver.",
+                "type": "string"
+              },
+              "property": {
+                "properties": {
+                  "attach": {
+                    "oneOf": [
+                      {
+                        "description": "Attach either the complete feature, its properties or geometry to the message.",
+                        "enum": [
+                          "$feature",
+                          "$properties",
+                          "$geometry"
+                        ]
+                      },
+                      {
+                        "description": "Alternatively, you can also provide an attached object.",
+                        "type": "object"
+                      }
+                    ]
+                  },
+                  "message": {
+                    "description": "Message to show in the client.",
+                    "type": "string"
+                  }
+                },
+                "type": "object"
+              },
+              "publisher": {
+                "description": "The publisher type - may be superfluous after renaming the method to sendImbMessage.",
+                "type": "string"
+              },
+              "topic": {
+                "description": "Channel or topic name.",
+                "type": "string"
+              }
+            },
+            "type": "object"
+          }
+        },
+        "description": "Describes a rule, which consists of zero or more conditions that must be evaluated to true in order to trigger the one or more actions",
+        "properties": {
+          "_id": {
+            "description": "Unique identifier (name) of the rule.",
+            "id": "id",
+            "title": "Id schema.",
+            "type": "string"
+          },
+          "actions": {
+            "_id": "actions",
+            "description": "An array of actions: each action is executed when the rule is triggered.",
+            "items": {
+              "description": "A single action",
+              "properties": {
+                "delayInMSec": {
+                  "description": "Delay in milliseconds before triggering the action.",
+                  "type": "number"
+                },
+                "method": {
+                  "description": "Type of action.",
+                  "enum": [
+                    "sendImbMessage"
+                  ]
+                },
+                "property": {
+                  "oneOf": [
+                    {
+                      "$ref": "#/definitions/sendImbMessage-action"
+                    }
+                  ]
+                }
+              },
+              "required": [
+                "method",
+                "property"
+              ],
+              "type": "object"
+            },
+            "title": "Actions schema.",
+            "type": "array"
+          },
+          "activatedAt": {
+            "description": "The time the rule is activated."
+          },
+          "activationType": {
+            "default": "Continuously",
+            "description": "Determines when the rule should be activated / triggered.",
+            "enum": [
+              "OnEnter",
+              "OnExit",
+              "OnChange",
+              "Continuous",
+              "Manual"
+            ]
+          },
+          "conditions": {
+            "description": "An array of AND conditions: each condition must be evaluated to true in order to trigger the actions in the rule.",
+            "items": {
+              "description": "A single AND condition",
+              "properties": {
+                "method": {
+                  "description": "Type of condition.",
+                  "enum": [
+                    "evaluate",
+                    "inside",
+                    "nearby"
+                  ]
+                },
+                "property": {
+                  "oneOf": [
+                    {
+                      "$ref": "#/definitions/evaluate-condition"
+                    },
+                    {
+                      "$ref": "#/definitions/inside-condition"
+                    },
+                    {
+                      "$ref": "#/definitions/nearby-condition"
+                    }
+                  ]
+                }
+              },
+              "type": "object"
+            },
+            "title": "Conditions schema.",
+            "type": "array"
+          },
+          "description": {
+            "_id": "description",
+            "description": "Description of the rule's purpose. Solely used for documentation purposes.",
+            "title": "Description schema.",
+            "type": "string"
+          },
+          "featureId": {
+            "description": "Feature (ID) this rule applies too. If the featureId is specified, the rule is not generic.",
+            "type": "string"
+          },
+          "isActive": {
+            "_id": "isActive",
+            "default": true,
+            "description": "A rule may start active, meaning it will be evaluated every time, or inactive, waiting for activation to occur.",
+            "title": "IsActive schema.",
+            "type": "boolean"
+          },
+          "isGeneric": {
+            "description": "If true, indicates that we are dealing with a rule that is not bound to a specific feature, but applied to all.",
+            "type": "boolean"
+          },
+          "recurrence": {
+            "_id": "recurrence",
+            "default": -1,
+            "description": "How often may the rule fire. In case the value is -1, fire continuously.",
+            "minimum": -1,
+            "title": "Recurrence schema.",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "recurrence",
+          "isActive",
+          "actions"
+        ],
+        "title": "Rule schema.",
+        "type": "object"
+      }
+    }
+  ]
+}

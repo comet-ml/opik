@@ -636,6 +636,63 @@ def create_demo_playground_project(context: DemoDataContext, base_url: str, work
         except Exception as e:
             logger.error("Error creating playground project: %s", e)
 
+def create_optimization_studio_datasets(base_url: str, workspace_name, comet_api_key):
+    """Create demo datasets for Optimization Studio templates."""
+    with tracer.start_as_current_span("create_optimization_studio_datasets"):
+        from opik_backend.demo_datasets import get_all_optimization_studio_datasets
+        
+        client: opik.Opik = None
+        try:
+            client = opik.Opik(
+                workspace=workspace_name,
+                host=base_url,
+                api_key=comet_api_key,
+                _use_batching=True,
+            )
+            
+            datasets = get_all_optimization_studio_datasets()
+            
+            for dataset_config in datasets:
+                dataset_name = dataset_config["name"]
+                
+                # Check if dataset already exists
+                try:
+                    existing = client.get_dataset(dataset_name)
+                    if existing:
+                        logger.info("Dataset '%s' already exists, skipping", dataset_name)
+                        continue
+                except Exception:
+                    pass  # Dataset doesn't exist, create it
+                
+                # Create the dataset
+                opik_dataset = client.create_dataset(
+                    name=dataset_name,
+                    description=dataset_config.get("description", "")
+                )
+                
+                # Insert items
+                items = dataset_config.get("items", [])
+                if items:
+                    # Extract just the data field for each item
+                    dataset_items = [
+                        {
+                            **item["data"],
+                            "id": item["id"]
+                        }
+                        for item in items
+                    ]
+                    opik_dataset.insert(dataset_items)
+                
+                logger.info("Created dataset '%s' with %d items", dataset_name, len(items))
+                
+        except Exception as e:
+            logger.error("Error creating optimization studio datasets: %s", e)
+        finally:
+            if client:
+                client.flush()
+                client.end()
+
+
 def create_demo_data(base_url: str, workspace_name, comet_api_key):
     with tracer.start_as_current_span("create_demo_data"):
         # Create a fresh context for this invocation to prevent race conditions
@@ -647,6 +704,7 @@ def create_demo_data(base_url: str, workspace_name, comet_api_key):
             create_demo_optimizer_project(context, base_url, workspace_name, comet_api_key)
             create_demo_chatbot_project(context, base_url, workspace_name, comet_api_key)
             create_demo_playground_project(context, base_url, workspace_name, comet_api_key)
+            create_optimization_studio_datasets(base_url, workspace_name, comet_api_key)
             create_feedback_scores_definition(base_url, workspace_name, comet_api_key)
             logger.info("Demo data created successfully")
         except Exception as e:
