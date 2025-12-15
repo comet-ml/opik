@@ -19,7 +19,8 @@ def _ensure_creator_initialized() -> None:
 def _make_individual(messages: list[dict[str, Any]]) -> Any:
     _ensure_creator_initialized()
     individual = crossover_ops.creator.Individual(messages)
-    individual.fitness.values = (0.0,)
+    num_weights = len(getattr(individual.fitness, "weights", (0.0,)))
+    individual.fitness.values = (0.0,) * max(1, num_weights)
     return individual
 
 
