@@ -39,7 +39,7 @@ const useDatasetItemBatchUpdateMutation = () => {
       if (isAllItemsSelected) {
         const combinedFilters = [
           ...filters,
-          ...generateSearchByFieldFilters("data", search),
+          ...generateSearchByFieldFilters("full_data", search),
         ];
 
         payload = {
