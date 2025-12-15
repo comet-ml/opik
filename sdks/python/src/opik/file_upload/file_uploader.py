@@ -29,6 +29,10 @@ def upload_attachment(
             httpx_client=upload_httpx_client,
             monitor=monitor,
         )
+
+        # delete the file after upload if requested
+        if upload_options.delete_after_upload:
+            _delete_attachment_file(upload_options.file_path)
     except Exception as e:
         LOGGER.error(
             "Failed to upload attachment: '%s' from file: [%s] with size: [%s]. Error: %s",
@@ -39,10 +43,6 @@ def upload_attachment(
             exc_info=True,
         )
         raise
-    finally:
-        # delete the file after upload if requested
-        if upload_options.delete_after_upload:
-            _delete_attachment_file(upload_options.file_path)
 
 
 def _delete_attachment_file(file_path: str) -> None:
