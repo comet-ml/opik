@@ -671,8 +671,7 @@ responseFormatting:
 queues:
   # Default: true
   # Description: Whether queue functionality is enabled
-  enabled:
-    ${OPIK_QUEUES_ENABLED:-true}
+  enabled: ${OPIK_QUEUES_ENABLED:-true}
     # Default: 14 days
   # Description: Default TTL for jobs in queues (how long job data is kept in Redis)
   defaultJobTtl: ${OPIK_QUEUES_DEFAULT_JOB_TTL:-14 days}
