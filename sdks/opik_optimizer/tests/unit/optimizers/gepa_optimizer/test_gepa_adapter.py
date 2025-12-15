@@ -80,6 +80,18 @@ def _create_metric(
     return metric
 
 
+class MockDataset:
+    """Mock dataset that implements the get_items interface for unit tests."""
+
+    def __init__(self, items: list[dict[str, Any]] | None = None) -> None:
+        self._items = items or []
+
+    def get_items(self, nb_samples: int | None = None) -> list[dict[str, Any]]:
+        if nb_samples is not None:
+            return self._items[:nb_samples]
+        return self._items
+
+
 def test_adapter_evaluate_uses_metric(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
@@ -130,12 +142,15 @@ def test_adapter_evaluate_uses_metric(
         fake_evaluate,
     )
 
+    # Use MockDataset with matching item IDs for proper ID lookup
+    mock_dataset = MockDataset([{"id": "item-1", "input": "Which?", "answer": "A"}])
+
     adapter = OpikGEPAAdapter(
         base_prompt=prompt,
         optimizer=optimizer,
         metric=metric,
         system_fallback="Answer",
-        dataset=object(),
+        dataset=mock_dataset,
         experiment_config={"project_name": "TestProject"},
     )
 
@@ -189,12 +204,15 @@ def test_adapter_falls_back_without_ids(
         fake_evaluate,
     )
 
+    # Use MockDataset - items don't need IDs since this test verifies fallback behavior
+    mock_dataset = MockDataset([])
+
     adapter = OpikGEPAAdapter(
         base_prompt=prompt,
         optimizer=optimizer,
         metric=metric,
         system_fallback="Answer",
-        dataset=object(),
+        dataset=mock_dataset,
         experiment_config=None,
     )
 
