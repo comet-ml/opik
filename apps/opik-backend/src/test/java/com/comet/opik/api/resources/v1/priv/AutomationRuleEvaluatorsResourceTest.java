@@ -131,7 +131,7 @@ import static org.mockito.Mockito.when;
 class AutomationRuleEvaluatorsResourceTest {
 
     private static final String[] AUTOMATION_RULE_EVALUATOR_IGNORED_FIELDS = {
-            "createdAt", "lastUpdatedAt", "projectName", "projects.projectName"};
+            "createdAt", "lastUpdatedAt", "projectName", "projects"};
 
     private static final String MESSAGE_TO_TEST = "Summary: {{summary}}\\nInstruction: {{instruction}}\\n\\n";
     private static final String LLM_AS_A_JUDGE_EVALUATOR = """
@@ -510,9 +510,17 @@ class AutomationRuleEvaluatorsResourceTest {
             var evaluator = factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class);
             var id = evaluatorsResourceClient.createEvaluator(evaluator, WORKSPACE_NAME, API_KEY);
 
-            var updatedEvaluator = factory.manufacturePojo(AutomationRuleEvaluatorUpdateLlmAsJudge.class).toBuilder()
-                    .projectIds(evaluator.getProjects().stream().map(ProjectReference::projectId)
+            // Extract project IDs with null-safe handling (support backward compatibility)
+            Set<UUID> projectIds = Optional.ofNullable(evaluator.getProjects())
+                    .map(projects -> projects.stream()
+                            .map(ProjectReference::projectId)
                             .collect(Collectors.toSet()))
+                    .orElseGet(() -> Optional.ofNullable(evaluator.getProjectId())
+                            .map(Set::of)
+                            .orElse(Set.of()));
+
+            var updatedEvaluator = factory.manufacturePojo(AutomationRuleEvaluatorUpdateLlmAsJudge.class).toBuilder()
+                    .projectIds(projectIds)
                     .build();
             try (var actualResponse = evaluatorsResourceClient.updateEvaluatorWithSessionToken(
                     id, updatedEvaluator, sessionToken, workspaceName)) {
