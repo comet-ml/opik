@@ -1966,6 +1966,114 @@ export class Traces {
     }
 
     /**
+     * Get trace thread stats
+     *
+     * @param {OpikApi.GetTraceThreadStatsRequest} request
+     * @param {Traces.RequestOptions} requestOptions - Request-specific configuration.
+     *
+     * @example
+     *     await client.traces.getTraceThreadStats()
+     */
+    public getTraceThreadStats(
+        request: OpikApi.GetTraceThreadStatsRequest = {},
+        requestOptions?: Traces.RequestOptions,
+    ): core.HttpResponsePromise<OpikApi.ProjectStatsPublic> {
+        return core.HttpResponsePromise.fromPromise(this.__getTraceThreadStats(request, requestOptions));
+    }
+
+    private async __getTraceThreadStats(
+        request: OpikApi.GetTraceThreadStatsRequest = {},
+        requestOptions?: Traces.RequestOptions,
+    ): Promise<core.WithRawResponse<OpikApi.ProjectStatsPublic>> {
+        const { projectId, projectName, filters, fromTime, toTime } = request;
+        const _queryParams: Record<string, string | string[] | object | object[] | null> = {};
+        if (projectId != null) {
+            _queryParams["project_id"] = projectId;
+        }
+
+        if (projectName != null) {
+            _queryParams["project_name"] = projectName;
+        }
+
+        if (filters != null) {
+            _queryParams["filters"] = filters;
+        }
+
+        if (fromTime != null) {
+            _queryParams["from_time"] = fromTime.toISOString();
+        }
+
+        if (toTime != null) {
+            _queryParams["to_time"] = toTime.toISOString();
+        }
+
+        const _response = await core.fetcher({
+            url: urlJoin(
+                (await core.Supplier.get(this._options.baseUrl)) ??
+                    (await core.Supplier.get(this._options.environment)) ??
+                    environments.OpikApiEnvironment.Default,
+                "v1/private/traces/threads/stats",
+            ),
+            method: "GET",
+            headers: {
+                "Comet-Workspace":
+                    (await core.Supplier.get(this._options.workspaceName)) != null
+                        ? await core.Supplier.get(this._options.workspaceName)
+                        : undefined,
+                "X-Fern-Language": "JavaScript",
+                "X-Fern-Runtime": core.RUNTIME.type,
+                "X-Fern-Runtime-Version": core.RUNTIME.version,
+                ...(await this._getCustomAuthorizationHeaders()),
+                ...requestOptions?.headers,
+            },
+            contentType: "application/json",
+            queryParameters: _queryParams,
+            requestType: "json",
+            timeoutMs: requestOptions?.timeoutInSeconds != null ? requestOptions.timeoutInSeconds * 1000 : 60000,
+            maxRetries: requestOptions?.maxRetries,
+            withCredentials: true,
+            abortSignal: requestOptions?.abortSignal,
+        });
+        if (_response.ok) {
+            return {
+                data: serializers.ProjectStatsPublic.parseOrThrow(_response.body, {
+                    unrecognizedObjectKeys: "passthrough",
+                    allowUnrecognizedUnionMembers: true,
+                    allowUnrecognizedEnumValues: true,
+                    breadcrumbsPrefix: ["response"],
+                }),
+                rawResponse: _response.rawResponse,
+            };
+        }
+
+        if (_response.error.reason === "status-code") {
+            throw new errors.OpikApiError({
+                statusCode: _response.error.statusCode,
+                body: _response.error.body,
+                rawResponse: _response.rawResponse,
+            });
+        }
+
+        switch (_response.error.reason) {
+            case "non-json":
+                throw new errors.OpikApiError({
+                    statusCode: _response.error.statusCode,
+                    body: _response.error.rawBody,
+                    rawResponse: _response.rawResponse,
+                });
+            case "timeout":
+                throw new errors.OpikApiTimeoutError(
+                    "Timeout exceeded when calling GET /v1/private/traces/threads/stats.",
+                );
+            case "unknown":
+                throw new errors.OpikApiError({
+                    message: _response.error.errorMessage,
+                    rawResponse: _response.rawResponse,
+                });
+        }
+    }
+
+    /**
      * Get trace comment
      *
      * @param {string} commentId

@@ -402,6 +402,7 @@ export * from "./PromptVersionPublic";
 export * from "./PromptPagePublic";
 export * from "./PromptPublicTemplateStructure";
 export * from "./PromptPublic";
+export * from "./PromptVersionUpdate";
 export * from "./ServiceTogglesConfig";
 export * from "./SpanUpdateType";
 export * from "./SpanUpdate";
