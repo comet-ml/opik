@@ -17,6 +17,7 @@ import java.beans.ConstructorProperties;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.SortedSet;
 import java.util.UUID;
 
@@ -40,18 +41,19 @@ public final class AutomationRuleEvaluatorUserDefinedMetricPython
             @JsonView({View.Public.class, View.Write.class}) @NotEmpty Map<String, String> arguments){
     }
 
-    @ConstructorProperties({"id", "projectId", "projectName", "projects", "name", "samplingRate",
+    @ConstructorProperties({"id", "projectId", "projectName", "projects", "projectIds", "name", "samplingRate",
             "enabled", "filters", "code",
             "createdAt",
             "createdBy",
             "lastUpdatedAt", "lastUpdatedBy"})
     public AutomationRuleEvaluatorUserDefinedMetricPython(UUID id, UUID projectId, String projectName,
             SortedSet<ProjectReference> projects,
+            Set<UUID> projectIds,
             @NotBlank String name, float samplingRate, boolean enabled, List<TraceFilter> filters,
             @NotNull UserDefinedMetricPythonCode code,
             Instant createdAt,
             String createdBy, Instant lastUpdatedAt, String lastUpdatedBy) {
-        super(id, projectId, projectName, projects, name, samplingRate, enabled, filters, code,
+        super(id, projectId, projectName, projects, projectIds, name, samplingRate, enabled, filters, code,
                 createdAt, createdBy,
                 lastUpdatedAt, lastUpdatedBy);
     }
