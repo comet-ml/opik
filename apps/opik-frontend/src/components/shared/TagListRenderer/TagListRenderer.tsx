@@ -17,6 +17,10 @@ export type TagListRendererProps = {
   onDeleteTag: (tag: string) => void;
   align?: "start" | "end";
   size?: "md" | "sm";
+  tooltipText?: string;
+  placeholderText?: string;
+  addButtonText?: string;
+  tagType?: string; // For error messages (e.g., "tag", "version tag")
 };
 
 const TagListRenderer: React.FC<TagListRendererProps> = ({
@@ -25,6 +29,10 @@ const TagListRenderer: React.FC<TagListRendererProps> = ({
   onDeleteTag,
   align = "end",
   size = "md",
+  tooltipText = "Tags list",
+  placeholderText = "New tag",
+  addButtonText = "Add tag",
+  tagType = "tag",
 }) => {
   const { toast } = useToast();
   const [open, setOpen] = useState(false);
@@ -39,7 +47,7 @@ const TagListRenderer: React.FC<TagListRendererProps> = ({
     if (tags.includes(newTag)) {
       toast({
         title: "Error",
-        description: `The tag "${newTag}" already exists`,
+        description: `The ${tagType} "${newTag}" already exists`,
         variant: "destructive",
       });
       return;
@@ -52,7 +60,7 @@ const TagListRenderer: React.FC<TagListRendererProps> = ({
 
   return (
     <div className="flex min-h-7 w-full flex-wrap items-center gap-2 overflow-x-hidden">
-      <TooltipWrapper content="Tags list">
+      <TooltipWrapper content={tooltipText}>
         <Tag className={`${tagMarginClass} ${tagSizeClass} text-muted-slate`} />
       </TooltipWrapper>
       {[...tags].sort().map((tag) => {
@@ -78,7 +86,7 @@ const TagListRenderer: React.FC<TagListRendererProps> = ({
         <PopoverContent className="w-[420px] p-6" align={align}>
           <div className="flex gap-2">
             <Input
-              placeholder="New tag"
+              placeholder={placeholderText}
               value={newTag}
               onChange={(event) => setNewTag(event.target.value)}
               onKeyDown={(event) => {
@@ -88,7 +96,7 @@ const TagListRenderer: React.FC<TagListRendererProps> = ({
               }}
             />
             <Button variant="default" onClick={handleAddTag}>
-              Add tag
+              {addButtonText}
             </Button>
           </div>
         </PopoverContent>

@@ -41,6 +41,8 @@ public record PromptVersion(
                 PromptVersion.View.Detail.class}) PromptType type,
         @JsonView({PromptVersion.View.Public.class, Prompt.View.Detail.class,
                 PromptVersion.View.Detail.class}) String changeDescription,
+        @JsonView({PromptVersion.View.Public.class, Prompt.View.Detail.class,
+                PromptVersion.View.Detail.class}) Set<@NotBlank String> tags,
         @JsonView({Prompt.View.Detail.class,
                 PromptVersion.View.Detail.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) @Nullable Set<String> variables,
         @JsonView({Prompt.View.Detail.class,
@@ -67,12 +69,13 @@ public record PromptVersion(
                     PromptVersion.View.Public.class}) int page,
             @JsonView({PromptVersion.View.Public.class}) int size,
             @JsonView({PromptVersion.View.Public.class}) long total,
-            @JsonView({PromptVersion.View.Public.class}) List<PromptVersion> content)
+            @JsonView({PromptVersion.View.Public.class}) List<PromptVersion> content,
+            @JsonView({PromptVersion.View.Public.class}) List<String> sortableBy)
             implements
                 Page<PromptVersion>{
 
-        public static PromptVersion.PromptVersionPage empty(int page) {
-            return new PromptVersion.PromptVersionPage(page, 0, 0, List.of());
+        public static PromptVersion.PromptVersionPage empty(int page, List<String> sortableBy) {
+            return new PromptVersion.PromptVersionPage(page, 0, 0, List.of(), sortableBy);
         }
     }
 

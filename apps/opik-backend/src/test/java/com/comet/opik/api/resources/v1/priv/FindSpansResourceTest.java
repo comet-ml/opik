@@ -451,7 +451,8 @@ class FindSpansResourceTest {
 
         private String getValidValue(Field field) {
             return switch (field.getType()) {
-                case STRING, LIST, DICTIONARY, MAP, ENUM, ERROR_CONTAINER, STRING_STATE_DB, CUSTOM ->
+                case STRING, LIST, DICTIONARY, DICTIONARY_STATE_DB, MAP, ENUM, ERROR_CONTAINER, STRING_STATE_DB,
+                        CUSTOM ->
                     RandomStringUtils.secure().nextAlphanumeric(10);
                 case NUMBER, DURATION, FEEDBACK_SCORES_NUMBER -> String.valueOf(randomNumber(1, 10));
                 case DATE_TIME, DATE_TIME_STATE_DB -> Instant.now().toString();
@@ -464,13 +465,13 @@ class FindSpansResourceTest {
                         DATE_TIME_STATE_DB ->
                     null;
                 case FEEDBACK_SCORES_NUMBER, CUSTOM -> RandomStringUtils.secure().nextAlphanumeric(10);
-                case DICTIONARY, MAP -> "";
+                case DICTIONARY, DICTIONARY_STATE_DB, MAP -> "";
             };
         }
 
         private String getInvalidValue(Field field) {
             return switch (field.getType()) {
-                case STRING, DICTIONARY, MAP, CUSTOM, LIST, ENUM, ERROR_CONTAINER, STRING_STATE_DB,
+                case STRING, DICTIONARY, DICTIONARY_STATE_DB, MAP, CUSTOM, LIST, ENUM, ERROR_CONTAINER, STRING_STATE_DB,
                         DATE_TIME_STATE_DB ->
                     " ";
                 case NUMBER, DURATION, DATE_TIME, FEEDBACK_SCORES_NUMBER ->

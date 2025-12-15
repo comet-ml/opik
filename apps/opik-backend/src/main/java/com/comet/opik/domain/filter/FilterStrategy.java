@@ -1,6 +1,7 @@
 package com.comet.opik.domain.filter;
 
 import com.comet.opik.api.filter.Field;
+import com.comet.opik.api.filter.FieldType;
 
 public enum FilterStrategy {
     TRACE,
@@ -16,6 +17,7 @@ public enum FilterStrategy {
     SPAN_FEEDBACK_SCORES_IS_EMPTY,
     EXPERIMENT,
     PROMPT,
+    PROMPT_VERSION,
     DATASET,
     ANNOTATION_QUEUE,
     ALERT,
@@ -32,6 +34,17 @@ public enum FilterStrategy {
 
         String fieldName = field.getQueryParamField();
         int firstDot = fieldName.indexOf('.');
+
+        // Handle dynamic fields like "metadata.environment" in MySQL (state DB)
+        if (this == PROMPT_VERSION && firstDot > 0) {
+            // For DICTIONARY_STATE_DB fields (like METADATA), return just the column name
+            // e.g: "metadata.environment" - "metadata" is the JSON column name
+            var columnName = fieldName.substring(0, firstDot);
+            if (field.getType() == FieldType.DICTIONARY_STATE_DB) {
+                return columnName;
+            }
+            throw new IllegalArgumentException("Invalid field type: '%s'".formatted(field.getType()));
+        }
 
         // For EXPERIMENT_ITEM, handle fields like "output.some_field" where "output" is a column name
         if (this == EXPERIMENT_ITEM && firstDot > 0) {

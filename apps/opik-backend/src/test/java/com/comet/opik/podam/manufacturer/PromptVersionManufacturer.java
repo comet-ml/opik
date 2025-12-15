@@ -12,6 +12,8 @@ import uk.co.jemos.podam.typeManufacturers.AbstractTypeManufacturer;
 
 import java.time.Instant;
 import java.util.UUID;
+import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 public class PromptVersionManufacturer extends AbstractTypeManufacturer<PromptVersion> {
 
@@ -38,6 +40,10 @@ public class PromptVersionManufacturer extends AbstractTypeManufacturer<PromptVe
 
         String template = String.format(TEMPLATE, variable1, variable2, variable3);
 
+        var tags = IntStream.range(0, 5)
+                .mapToObj(i -> "tag-" + RandomStringUtils.secure().nextAlphanumeric(8))
+                .collect(Collectors.toSet());
+
         return PromptVersion.builder()
                 .id(id)
                 .commit(id.toString().substring(id.toString().length() - 8))
@@ -45,6 +51,7 @@ public class PromptVersionManufacturer extends AbstractTypeManufacturer<PromptVe
                 .metadata(strategy.getTypeValue(metadata, context, JsonNode.class))
                 .changeDescription(strategy.getTypeValue(metadata, context, String.class))
                 .type(randomPromptType())
+                .tags(tags)
                 .promptId(strategy.getTypeValue(metadata, context, UUID.class))
                 .createdBy(strategy.getTypeValue(metadata, context, String.class))
                 .createdAt(Instant.now())

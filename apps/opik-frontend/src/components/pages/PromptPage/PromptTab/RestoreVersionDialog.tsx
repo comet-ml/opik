@@ -39,7 +39,7 @@ const RestoreVersionDialog: React.FunctionComponent<
       {
         onSuccess(data) {
           setOpen(false);
-          onSetActiveVersionId(data.versionId);
+          onSetActiveVersionId(data.id);
         },
       },
     );

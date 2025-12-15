@@ -21,10 +21,23 @@ public class TestUtils {
         return UUID.fromString(location.getPath().substring(location.getPath().lastIndexOf('/') + 1));
     }
 
+    /**
+     * Converts a list to JSON and encodes it for use as a URL query parameter.
+     *
+     * <p>This method handles URL encoding with special attention to space character encoding.
+     * URLEncoder.encode() uses '+' for spaces (application/x-www-form-urlencoded format per RFC 1738),
+     * but Jersey's @QueryParam uses URI decoding (RFC 3986) which expects '%20' for spaces.
+     * We replace '+' with '%20' to ensure spaces are properly decoded by Jersey.
+     *
+     * @param filters the list to encode (filters, sorting fields, etc.)
+     * @return URL-encoded JSON string, or null if list is empty
+     */
     public static String toURLEncodedQueryParam(List<?> filters) {
-        return CollectionUtils.isEmpty(filters)
-                ? null
-                : URLEncoder.encode(JsonUtils.writeValueAsString(filters), StandardCharsets.UTF_8);
+        if (CollectionUtils.isEmpty(filters)) {
+            return null;
+        }
+        return URLEncoder.encode(JsonUtils.writeValueAsString(filters), StandardCharsets.UTF_8)
+                .replace("+", "%20");
     }
 
     public static String getBaseUrl(ClientSupport client) {

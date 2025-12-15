@@ -2,6 +2,7 @@ package com.comet.opik.infrastructure.db;
 
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.core.type.TypeReference;
+import org.apache.commons.collections4.CollectionUtils;
 import org.jdbi.v3.core.argument.AbstractArgumentFactory;
 import org.jdbi.v3.core.argument.Argument;
 import org.jdbi.v3.core.config.ConfigRegistry;
@@ -40,6 +41,7 @@ public class SetFlatArgumentFactory extends AbstractArgumentFactory<Set<String>>
     public Set<String> map(ResultSet r, int columnNumber, StatementContext ctx) throws SQLException {
         return Optional.ofNullable(r.getString(columnNumber))
                 .map(value -> JsonUtils.readValue(value, TYPE_REFERENCE))
+                .filter(CollectionUtils::isNotEmpty)
                 .orElse(null);
     }
 
@@ -47,6 +49,7 @@ public class SetFlatArgumentFactory extends AbstractArgumentFactory<Set<String>>
     public Set<String> map(ResultSet r, String columnLabel, StatementContext ctx) throws SQLException {
         return Optional.ofNullable(r.getString(columnLabel))
                 .map(value -> JsonUtils.readValue(value, TYPE_REFERENCE))
+                .filter(CollectionUtils::isNotEmpty)
                 .orElse(null);
     }
 }

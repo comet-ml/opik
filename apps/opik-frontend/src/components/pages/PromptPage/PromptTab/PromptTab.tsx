@@ -26,6 +26,8 @@ import MediaTagsList from "@/components/pages-shared/llm/PromptMessageMediaTags/
 import { parseLLMMessageContent, parsePromptVersionContent } from "@/lib/llm";
 import CopyButton from "@/components/shared/CopyButton/CopyButton";
 import ChatPromptView from "./ChatPromptView";
+import TagListRenderer from "@/components/shared/TagListRenderer/TagListRenderer";
+import usePromptVersionsUpdateMutation from "@/api/prompts/usePromptVersionsUpdateMutation";
 
 interface PromptTabInterface {
   prompt?: PromptWithLatestVersion;
@@ -43,12 +45,14 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
   );
 
   const editPromptResetKeyRef = useRef(0);
+  const updateVersionsMutation = usePromptVersionsUpdateMutation();
 
   const { data } = usePromptVersionsById(
     {
       promptId: prompt?.id || "",
       page: 1,
       size: 25,
+      sorting: [{ id: "created_at", desc: true }],
     },
     {
       enabled: !!prompt?.id,
@@ -137,7 +141,36 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
 
       <div className="mt-4 flex gap-6 rounded-md border bg-background p-6">
         <div className="flex grow flex-col gap-2">
-          <div className="flex items-center gap-2">
+          <TagListRenderer
+            tags={activeVersion?.tags || []}
+            onAddTag={(newTag) => {
+              if (!activeVersion?.id) return;
+              const updatedTags = [...(activeVersion.tags || []), newTag];
+              updateVersionsMutation.mutate({
+                versionIds: [activeVersion.id],
+                tags: updatedTags,
+                mergeTags: false,
+              });
+            }}
+            onDeleteTag={(tagToDelete) => {
+              if (!activeVersion?.id) return;
+              const updatedTags = (activeVersion.tags || []).filter(
+                (t) => t !== tagToDelete,
+              );
+              updateVersionsMutation.mutate({
+                versionIds: [activeVersion.id],
+                tags: updatedTags,
+                mergeTags: false,
+              });
+            }}
+            align="start"
+            tooltipText="Version tags list"
+            placeholderText="New version tag"
+            addButtonText="Add version tag"
+            tagType="version tag"
+          />
+
+          <div className="mt-4 flex items-center gap-2">
             <p className="comet-body-s-accented text-foreground">
               {isChatPrompt ? "Chat messages" : "Prompt"}
             </p>
@@ -222,7 +255,7 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
             </>
           )}
         </div>
-        <div className="min-w-[320px]">
+        <div className="w-[380px] shrink-0">
           <div className="comet-body-s-accented mb-2 flex items-center gap-1 text-foreground">
             Commit history
             <ExplainerIcon
