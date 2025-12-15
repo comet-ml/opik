@@ -7,7 +7,7 @@ COPY package*.json ./
 COPY patches ./patches
 RUN npm install
 # Copy and build the application
-COPY --exclude=nginx . .
+COPY . .
 
 ARG OPIK_VERSION
 ARG SENTRY_ENABLED

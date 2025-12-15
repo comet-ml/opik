@@ -107,6 +107,7 @@ services:
 
   minio:
     image: minio/minio:RELEASE.2025-03-12T18-04-18Z
+    pull_policy: always
     environment:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:-THAAIOSFODNN7EXAMPLE}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-LESlrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY}
@@ -122,6 +123,7 @@ services:
 
   mc:
     image: minio/mc:RELEASE.2025-03-12T17-29-24Z
+    pull_policy: always
     depends_on:
       - minio
     entrypoint: >
@@ -310,12 +312,14 @@ services:
       #   - type=local,dest=./.cache
     hostname: frontend
     ports:
-      - "${NGINX_PORT:-8080}:${NGINX_PORT:-8080}" # Frontend server port (configurable via NGINX_PORT env var)
+      - "${NGINX_PORT:-5173}:${NGINX_PORT:-5173}" # Frontend server port (configurable via NGINX_PORT env var)
     volumes:
       - ./nginx_${OPIK_FRONTEND_FLAVOR:-default}_local.conf:/etc/nginx/templates/default.conf.template:ro
     depends_on:
       backend:
         condition: service_healthy
+      # The following dependency on otel-collector is required only when distributed tracing is enabled (OTEL_TRACE=on).
+      # Uncomment to ensure frontend waits for otel-collector to be healthy before starting.
       # otel-collector:
       #   condition: service_healthy
     healthcheck:

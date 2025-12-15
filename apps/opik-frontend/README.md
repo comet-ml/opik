@@ -17,8 +17,8 @@ The following environment variables can be used to configure the Nginx container
 | `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` | `http://${OTEL_COLLECTOR_HOST}:${OTEL_COLLECTOR_PORT}` | Full endpoint URL for OTLP traces. |
 | `NGINX_PORT` | `8080` | Port Nginx listens on. |
 | `OTEL_TRACE` | `off` | Enable (`on`) or disable (`off`) OpenTelemetry tracing. |
-| `NGINX_EXTRA_ACCESS_LOG` | _(empty)_ | Additional access log configuration. f.e. `access_log syslog:server=otel-collector:5140 logger-json;` |
-| `NGINX_EXTRA_ERROR_LOG` | _(empty)_ | Additional error log configuration. f.e. `error_log syslog:server=otel-collector:5140 error;` |
+| `NGINX_EXTRA_ACCESS_LOG` | _(empty)_ | Additional access log configuration. e.g. `access_log syslog:server=otel-collector:5140 logger-json;` |
+| `NGINX_EXTRA_ERROR_LOG` | _(empty)_ | Additional error log configuration. e.g. `error_log syslog:server=otel-collector:5140 error;` |
 
 ### Backend (Build/Runtime)
 
