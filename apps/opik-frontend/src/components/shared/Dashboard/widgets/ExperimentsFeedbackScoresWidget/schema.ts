@@ -26,6 +26,7 @@ export const ExperimentsFeedbackScoresWidgetSchema = z.object({
   groups: z.array(GroupSchema).optional(),
   experimentIds: z.array(z.string()).optional(),
   chartType: z.nativeEnum(CHART_TYPE).optional(),
+  feedbackScores: z.array(z.string()).optional(),
 });
 
 export type ExperimentsFeedbackScoresWidgetFormData = z.infer<

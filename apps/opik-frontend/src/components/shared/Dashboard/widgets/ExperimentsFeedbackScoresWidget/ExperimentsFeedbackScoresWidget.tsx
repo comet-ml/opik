@@ -46,11 +46,23 @@ type ChartData = {
   lines: string[];
 };
 
+const shouldIncludeScore = (
+  scoreName: string,
+  feedbackScores?: string[],
+): boolean => {
+  return (
+    !feedbackScores ||
+    feedbackScores.length === 0 ||
+    feedbackScores.includes(scoreName)
+  );
+};
+
 function transformGroupedExperimentsToChartData(
   groupsAggregationsData:
     | { content: Record<string, ExperimentsGroupNodeWithAggregations> }
     | undefined,
   validGroups: Groups,
+  feedbackScores?: string[],
 ): ChartData {
   if (!groupsAggregationsData?.content) {
     return { data: [], lines: [] };
@@ -81,18 +93,24 @@ function transformGroupedExperimentsToChartData(
         processGroup(value.groups!, depth + 1, currentValues);
       } else if (value.aggregations) {
         const scores: Record<string, number> = {};
-        const feedbackScores = value.aggregations.feedback_scores || [];
-        const experimentScores = value.aggregations.experiment_scores || [];
+        const aggregatedFeedbackScores =
+          value.aggregations.feedback_scores || [];
+        const aggregatedExperimentScores =
+          value.aggregations.experiment_scores || [];
 
-        feedbackScores.forEach((score) => {
+        aggregatedFeedbackScores.forEach((score) => {
           const scoreName = `${score.name} (avg)`;
-          scores[scoreName] = score.value;
-          allLines.push(scoreName);
+          if (shouldIncludeScore(score.name, feedbackScores)) {
+            scores[scoreName] = score.value;
+            allLines.push(scoreName);
+          }
         });
 
-        experimentScores.forEach((score) => {
-          scores[score.name] = score.value;
-          allLines.push(score.name);
+        aggregatedExperimentScores.forEach((score) => {
+          if (shouldIncludeScore(score.name, feedbackScores)) {
+            scores[score.name] = score.value;
+            allLines.push(score.name);
+          }
         });
 
         if (Object.keys(scores).length > 0) {
@@ -117,6 +135,7 @@ function transformGroupedExperimentsToChartData(
 
 function transformUngroupedExperimentsToChartData(
   experiments: Experiment[],
+  feedbackScores?: string[],
 ): ChartData {
   const allLines: string[] = [];
 
@@ -125,13 +144,17 @@ function transformUngroupedExperimentsToChartData(
 
     (experiment.feedback_scores || []).forEach((score) => {
       const scoreName = `${score.name} (avg)`;
-      scores[scoreName] = score.value;
-      allLines.push(scoreName);
+      if (shouldIncludeScore(score.name, feedbackScores)) {
+        scores[scoreName] = score.value;
+        allLines.push(scoreName);
+      }
     });
 
     (experiment.experiment_scores || []).forEach((score) => {
-      scores[score.name] = score.value;
-      allLines.push(score.name);
+      if (shouldIncludeScore(score.name, feedbackScores)) {
+        scores[score.name] = score.value;
+        allLines.push(score.name);
+      }
     });
 
     return {
@@ -190,6 +213,7 @@ const ExperimentsFeedbackScoresWidget: React.FunctionComponent<
   const dataSource =
     widgetConfig?.dataSource || EXPERIMENT_DATA_SOURCE.FILTER_AND_GROUP;
   const chartType = widgetConfig?.chartType || CHART_TYPE.line;
+  const feedbackScores = widgetConfig?.feedbackScores;
 
   const validFilters = useMemo(() => {
     const filters = (widgetConfig?.filters || []) as Filters;
@@ -220,7 +244,7 @@ const ExperimentsFeedbackScoresWidget: React.FunctionComponent<
 
   const infoMessage =
     isUsingGlobalExperiments && isSelectExperimentsMode
-      ? "Using global experiment config"
+      ? "Using global experiment configuration"
       : undefined;
 
   // Limit to first 10 experiments
@@ -268,6 +292,7 @@ const ExperimentsFeedbackScoresWidget: React.FunctionComponent<
       return transformGroupedExperimentsToChartData(
         groupsAggregationsData,
         validGroups,
+        feedbackScores,
       );
     }
 
@@ -275,11 +300,17 @@ const ExperimentsFeedbackScoresWidget: React.FunctionComponent<
       const experiments = experimentsByIdsResults
         .map((result) => result.data)
         .filter((exp): exp is Experiment => exp !== undefined);
-      return transformUngroupedExperimentsToChartData(experiments);
+      return transformUngroupedExperimentsToChartData(
+        experiments,
+        feedbackScores,
+      );
     }
 
     if (experimentsData?.content) {
-      return transformUngroupedExperimentsToChartData(experimentsData.content);
+      return transformUngroupedExperimentsToChartData(
+        experimentsData.content,
+        feedbackScores,
+      );
     }
 
     return { data: [], lines: [] };
@@ -290,6 +321,7 @@ const ExperimentsFeedbackScoresWidget: React.FunctionComponent<
     isSelectExperimentsMode,
     experimentsByIdsResults,
     experimentsData?.content,
+    feedbackScores,
   ]);
 
   const isExperimentsByIdsPending =
@@ -382,9 +414,14 @@ const ExperimentsFeedbackScoresWidget: React.FunctionComponent<
     }
 
     if (chartData.data.length === 0 || noData) {
-      const emptyMessage = isSelectExperimentsMode
-        ? "Selected experiments have no feedback scores"
-        : "Configure filters to display experiment metrics";
+      const hasFeedbackScoresFilter =
+        feedbackScores && feedbackScores.length > 0;
+
+      const emptyMessage = hasFeedbackScoresFilter
+        ? "No data available for selected metrics"
+        : isSelectExperimentsMode
+          ? "Selected experiments have no feedback scores"
+          : "Configure filters to display experiment metrics";
 
       return (
         <DashboardWidget.EmptyState

@@ -116,6 +116,13 @@ const TRACE_SPECIFIC_METRICS: MetricDefinition[] = [
     formatter: (value: number) => value.toLocaleString(),
   },
   {
+    value: "thread_count",
+    label: "Total thread count",
+    type: STATISTIC_AGGREGATION_TYPE.COUNT,
+    statName: "thread_count",
+    formatter: (value: number) => value.toLocaleString(),
+  },
+  {
     value: "llm_span_count",
     label: "Average LLM span count",
     type: STATISTIC_AGGREGATION_TYPE.AVG,
