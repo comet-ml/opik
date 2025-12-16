@@ -39,6 +39,7 @@ type UseTracesOrSpansListResponse = {
   data: TracesOrSpansListData | undefined;
   isPending: boolean;
   isLoading: boolean;
+  isFetching: boolean;
   isError: boolean;
   refetch: (
     options?: RefetchOptions,
@@ -57,6 +58,7 @@ export default function useTracesOrSpansList(
     isError: isTracesError,
     isPending: isTracesPending,
     isLoading: isTracesLoading,
+    isFetching: isTracesFetching,
     refetch: refetchTrace,
   } = useTracesList(params, {
     ...config,
@@ -69,6 +71,7 @@ export default function useTracesOrSpansList(
     isError: isSpansError,
     isPending: isSpansPending,
     isLoading: isSpansLoading,
+    isFetching: isSpansFetching,
     refetch: refetchSpan,
   } = useSpansList(
     {
@@ -86,6 +89,7 @@ export default function useTracesOrSpansList(
   const isError = !isTracesData ? isSpansError : isTracesError;
   const isPending = !isTracesData ? isSpansPending : isTracesPending;
   const isLoading = !isTracesData ? isSpansLoading : isTracesLoading;
+  const isFetching = !isTracesData ? isSpansFetching : isTracesFetching;
   const refetch = !isTracesData ? refetchSpan : refetchTrace;
 
   return {
@@ -94,5 +98,6 @@ export default function useTracesOrSpansList(
     isError,
     isPending,
     isLoading,
+    isFetching,
   } as UseTracesOrSpansListResponse;
 }

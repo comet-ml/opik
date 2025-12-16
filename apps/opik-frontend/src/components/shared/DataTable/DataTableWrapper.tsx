@@ -1,4 +1,5 @@
 import React from "react";
+import LoadingOverlay from "@/components/shared/LoadingOverlay/LoadingOverlay";
 
 export type DataTableWrapperProps = {
   children: React.ReactNode;
@@ -13,9 +14,7 @@ const DataTableWrapper: React.FC<DataTableWrapperProps> = ({
     <div className="overflow-x-auto overflow-y-hidden rounded-md border">
       <div className="relative">
         {children}
-        {showLoadingOverlay && (
-          <div className="duration-[1500ms] absolute inset-0 z-20 animate-pulse bg-background/70 ease-in-out" />
-        )}
+        <LoadingOverlay isVisible={showLoadingOverlay} />
       </div>
     </div>
   );

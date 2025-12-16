@@ -280,7 +280,10 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
 
   const truncationEnabled = useTruncationEnabled();
 
-  const { data, isPending } = useCompareExperimentsList(
+  // Disable auto-refresh when sidebar is open to prevent UI flickering
+  const isSidebarOpen = Boolean(activeRowId) || Boolean(traceId);
+
+  const { data, isPending, isFetching } = useCompareExperimentsList(
     {
       workspaceName,
       datasetId,
@@ -294,7 +297,7 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
     },
     {
       placeholderData: keepPreviousData,
-      refetchInterval: REFETCH_INTERVAL,
+      refetchInterval: isSidebarOpen ? false : REFETCH_INTERVAL,
     },
   );
 
@@ -326,7 +329,7 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
       },
       {
         placeholderData: keepPreviousData,
-        refetchInterval: REFETCH_INTERVAL,
+        refetchInterval: isSidebarOpen ? false : REFETCH_INTERVAL,
       },
     );
 
@@ -337,7 +340,7 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
       },
       {
         placeholderData: keepPreviousData,
-        refetchInterval: REFETCH_INTERVAL,
+        refetchInterval: isSidebarOpen ? false : REFETCH_INTERVAL,
       },
     );
 
@@ -349,7 +352,7 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
     },
     {
       placeholderData: keepPreviousData,
-      refetchInterval: REFETCH_INTERVAL,
+      refetchInterval: isSidebarOpen ? false : REFETCH_INTERVAL,
     },
   );
 
@@ -888,6 +891,7 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
         TableBody={DataTableVirtualBody}
         stickyHeader
         meta={meta}
+        showLoadingOverlay={isFetching && !isPending}
       />
       <PageBodyStickyContainer
         className="py-4"

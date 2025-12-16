@@ -456,7 +456,10 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
     return () => clearTimeout(timer);
   }, []);
 
-  const { data, isPending, refetch } = useTracesOrSpansList(
+  // Disable auto-refresh when sidebar is open to prevent UI flickering
+  const isSidebarOpen = Boolean(traceId) || Boolean(threadId);
+
+  const { data, isPending, isFetching, refetch } = useTracesOrSpansList(
     {
       projectId,
       type: type as TRACE_DATA_TYPE,
@@ -471,7 +474,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
     },
     {
       enabled: isTableDataEnabled,
-      refetchInterval: REFETCH_INTERVAL,
+      refetchInterval: isSidebarOpen ? false : REFETCH_INTERVAL,
       refetchOnMount: false,
     },
   );
@@ -506,7 +509,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
         toTime: intervalEnd,
       },
       {
-        refetchInterval: REFETCH_INTERVAL,
+        refetchInterval: isSidebarOpen ? false : REFETCH_INTERVAL,
       },
     );
 
@@ -517,7 +520,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
         type: type as TRACE_DATA_TYPE,
       },
       {
-        refetchInterval: REFETCH_INTERVAL,
+        refetchInterval: isSidebarOpen ? false : REFETCH_INTERVAL,
       },
     );
 
@@ -531,7 +534,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
     },
     {
       enabled: type === TRACE_DATA_TYPE.traces,
-      refetchInterval: REFETCH_INTERVAL,
+      refetchInterval: isSidebarOpen ? false : REFETCH_INTERVAL,
     },
   );
 
@@ -1076,6 +1079,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
             TableWrapper={PageBodyStickyTableWrapper}
             stickyHeader
             meta={meta}
+            showLoadingOverlay={isFetching && !isPending}
           />
           <PageBodyStickyContainer
             className="py-4"

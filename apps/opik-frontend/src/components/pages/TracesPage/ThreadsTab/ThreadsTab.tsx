@@ -355,7 +355,10 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
     return () => clearTimeout(timer);
   }, []);
 
-  const { data, isPending, refetch } = useThreadList(
+  // Disable auto-refresh when sidebar is open to prevent UI flickering
+  const isSidebarOpen = Boolean(traceId) || Boolean(threadId);
+
+  const { data, isPending, isFetching, refetch } = useThreadList(
     {
       projectId,
       sorting: sortedColumns,
@@ -370,7 +373,7 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
     {
       enabled: isTableDataEnabled,
       placeholderData: keepPreviousData,
-      refetchInterval: REFETCH_INTERVAL,
+      refetchInterval: isSidebarOpen ? false : REFETCH_INTERVAL,
       refetchOnMount: false,
     },
   );
@@ -402,7 +405,7 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
       toTime: intervalEnd,
     },
     {
-      refetchInterval: REFETCH_INTERVAL,
+      refetchInterval: isSidebarOpen ? false : REFETCH_INTERVAL,
     },
   );
 
@@ -729,6 +732,7 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
             TableWrapper={PageBodyStickyTableWrapper}
             stickyHeader
             meta={meta}
+            showLoadingOverlay={isFetching && !isPending}
           />
           <PageBodyStickyContainer
             className="py-4"
