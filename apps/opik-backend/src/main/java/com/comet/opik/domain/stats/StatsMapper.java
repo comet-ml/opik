@@ -39,6 +39,7 @@ public class StatsMapper {
     public static final String SPAN_COUNT = "span_count";
     public static final String SPAN_COUNT_AVG = "span_count_avg";
     public static final String TRACE_COUNT = "trace_count";
+    public static final String THREAD_COUNT = "thread_count";
     public static final String GUARDRAILS_FAILED_COUNT = "guardrails_failed_count";
     public static final String RECENT_ERROR_COUNT = "recent_error_count";
     public static final String PAST_PERIOD_ERROR_COUNT = "past_period_error_count";
@@ -61,6 +62,11 @@ public class StatsMapper {
                 .add(new CountValueStat(OUTPUT, row.get("output", Long.class)))
                 .add(new CountValueStat(METADATA, row.get("metadata", Long.class)))
                 .add(new AvgValueStat(TAGS, row.get("tags", Double.class)));
+
+        // Add thread count if available (only for project stats)
+        if (!entityCountLabel.equals(THREAD_COUNT) && row.getMetadata().contains(THREAD_COUNT)) {
+            stats.add(new CountValueStat(THREAD_COUNT, row.get(THREAD_COUNT, Long.class)));
+        }
 
         if (entityCountLabel.equals("trace_count")) {
             stats.add(new AvgValueStat(LLM_SPAN_COUNT, row.get(LLM_SPAN_COUNT_AVG, Double.class)));
@@ -181,6 +187,12 @@ public class StatsMapper {
     public static Long getStatsTraceCount(Map<String, Object> projectStats) {
         return Optional.ofNullable(projectStats)
                 .map(map -> (Long) map.get(TRACE_COUNT))
+                .orElse(null);
+    }
+
+    public static Long getStatsThreadCount(Map<String, Object> projectStats) {
+        return Optional.ofNullable(projectStats)
+                .map(map -> (Long) map.get(THREAD_COUNT))
                 .orElse(null);
     }
 
