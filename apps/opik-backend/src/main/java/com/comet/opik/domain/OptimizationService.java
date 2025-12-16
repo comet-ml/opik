@@ -176,7 +176,9 @@ class OptimizationServiceImpl implements OptimizationService {
                                             }
                                         }
 
-                                        String opikApiKey = ctx.getOrDefault(RequestContext.API_KEY, null);
+                                        String opikApiKey = newOptimization.studioConfig() != null
+                                                ? newOptimization.studioConfig().opikApiKey()
+                                                : null;
 
                                         enqueueStudioOptimizationJob(newOptimization, workspaceId, workspaceName,
                                                 opikApiKey);
