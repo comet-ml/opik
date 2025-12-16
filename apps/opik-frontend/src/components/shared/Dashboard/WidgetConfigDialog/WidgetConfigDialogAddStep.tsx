@@ -8,22 +8,18 @@ import { getAllWidgetTypes } from "@/components/shared/Dashboard/widgets/widgetR
 
 const CATEGORY_CONFIG: Record<
   WIDGET_CATEGORY,
-  { label: string; description: string; gridCols: string }
+  { label: string; gridCols: string }
 > = {
   [WIDGET_CATEGORY.OBSERVABILITY]: {
     label: "Observability",
-    description: "Show performance and usage metrics from your projects.",
     gridCols: "grid-cols-2",
   },
   [WIDGET_CATEGORY.EVALUATION]: {
     label: "Evaluation",
-    description: "Evaluate and compare model performance across experiments.",
     gridCols: "grid-cols-2",
   },
   [WIDGET_CATEGORY.GENERAL]: {
     label: "General",
-    description:
-      "Add context or explanations to your dashboard using simple text or markdown.",
     gridCols: "grid-cols-1",
   },
 };
@@ -65,9 +61,6 @@ const WidgetConfigDialogAddStep: React.FunctionComponent<
               <h3 className="text-sm font-medium text-foreground">
                 {categoryConfig.label}
               </h3>
-              <p className="text-sm text-muted-foreground">
-                {categoryConfig.description}
-              </p>
             </div>
 
             <div className={`grid ${categoryConfig.gridCols} gap-4`}>
