@@ -241,7 +241,7 @@ For synchronous graph execution using `invoke()`, everything works out of the bo
 ```python
 import opik_context
 from opik import track
-from opik.integrations.langchain import OpikTracer
+from opik.integrations.langchain import OpikTracer, track_langgraph
 from langgraph.graph import StateGraph, START, END
 
 @track
@@ -265,9 +265,10 @@ graph.add_edge("processor", END)
 
 app = graph.compile()
 opik_tracer = OpikTracer()
+app = track_langgraph(app, opik_tracer)
 
 # Synchronous execution - tracked functions work automatically
-result = app.invoke({"value": 21}, config={"callbacks": [opik_tracer]})
+result = app.invoke({"value": 21})
 ```
 
 ### Asynchronous execution (ainvoke)
@@ -280,7 +281,7 @@ This is due to a LangChain framework limitation that doesn't automatically share
 
 ```python
 from opik import track
-from opik.integrations.langchain import OpikTracer, extract_current_langgraph_span_data
+from opik.integrations.langchain import OpikTracer, track_langgraph, extract_current_langgraph_span_data
 from langgraph.graph import StateGraph, START, END
 
 @track
@@ -307,16 +308,18 @@ graph.add_edge("processor", END)
 
 app = graph.compile()
 opik_tracer = OpikTracer()
+app = track_langgraph(app, opik_tracer)
 
 # Asynchronous execution - requires explicit trace context propagation
-result = await app.ainvoke({"value": 21}, config={"callbacks": [opik_tracer]})
+result = await app.ainvoke({"value": 21})
 ```
 
 Alternatively, if you don't want to use the `@track` decorator, you can use the `opik.start_as_current_span` context manager with distributed headers:
 
 ```python
 import opik
-from opik.integrations.langchain import extract_current_langgraph_span_data
+from opik.integrations.langchain import OpikTracer, track_langgraph, extract_current_langgraph_span_data
+from langgraph.graph import StateGraph, START, END
 
 async def my_async_node(state, config):
     span_data = extract_current_langgraph_span_data(config)
@@ -332,6 +335,18 @@ async def my_async_node(state, config):
         span_data.output = {"output": result}
     
     return {"value": result}
+
+# Build and execute graph
+graph = StateGraph(dict)
+graph.add_node("processor", my_async_node)
+graph.add_edge(START, "processor")
+graph.add_edge("processor", END)
+
+app = graph.compile()
+opik_tracer = OpikTracer()
+app = track_langgraph(app, opik_tracer)
+
+result = await app.ainvoke({"value": 21})
 ```
 
 
@@ -344,7 +359,7 @@ import sqlite3
 from langgraph.checkpoint.sqlite import SqliteSaver
 from typing import Annotated
 from pydantic import BaseModel
-from opik.integrations.langchain import OpikTracer
+from opik.integrations.langchain import OpikTracer, track_langgraph
 from langchain_core.messages import HumanMessage
 from langgraph.graph import StateGraph, START, END
 from langgraph.graph.message import add_messages
@@ -376,11 +391,12 @@ memory = SqliteSaver(conn)
 
 app = graph.compile(checkpointer=memory)
 
-# Create the OpikTracer
+# Create the OpikTracer and track the graph
 opik_tracer = OpikTracer()
+app = track_langgraph(app, opik_tracer)
 
 thread_id = "e424a45e-7763-443a-94ae-434b39b67b72"
-config = {"callbacks": [opik_tracer], "configurable": {"thread_id": thread_id}}
+config = {"configurable": {"thread_id": thread_id}}
 
 # Initialize the state
 state = State(**app.get_state(config).values) or State(messages=[])
