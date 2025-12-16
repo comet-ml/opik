@@ -158,7 +158,7 @@ Opikインストールスクリプトは、異なる開発シナリオ向けの�
 
 ## 💻 OpikクライアントSDK
 
-Opikは、Opikサーバーとやり取りするためのクライアントライブラリ群とREST APIを提供します。Python、TypeScript、Ruby（OpenTelemetry経由）のSDKがあり、ワークフローへのシームレスな統合が可能です。詳細は [Opikクライアントリファレンス](apps/opik-documentation/documentation/fern/docs/reference/overview.mdx) をご覧ください。
+Opikは、Opikサーバーとやり取りするためのクライアントライブラリ群とREST APIを提供します。Python、TypeScript、Ruby（OpenTelemetry経由）のSDKがあり、ワークフローへのシームレスな統合が可能です。詳細は [Opikクライアントリファレンス](https://www.comet.com/docs/opik/reference/overview) をご覧ください。
 
 ### Python SDKクイックスタート
 
@@ -181,7 +181,7 @@ opik configure
 ```
 
 > [!TIP]
-> Pythonコード内で `opik.configure(use_local=True)` を呼び出してローカルセルフホスト構成にしたり、APIキーとワークスペースを直接指定することも可能です。詳細は [Python SDKドキュメント](apps/opik-documentation/documentation/fern/docs/reference/python-sdk/) を参照してください。
+> Pythonコード内で `opik.configure(use_local=True)` を呼び出してローカルセルフホスト構成にしたり、APIキーとワークスペースを直接指定することも可能です。詳細は [Python SDKドキュメント](https://www.comet.com/docs/opik/python-sdk-reference/) を参照してください。
 
 これで [Python SDK](https://www.comet.com/docs/opik/python-sdk-reference/?from=llm&utm_source=opik&utm_medium=github&utm_content=sdk_link2&utm_campaign=opik) を使ったトレースのログ記録が可能になります。
 
