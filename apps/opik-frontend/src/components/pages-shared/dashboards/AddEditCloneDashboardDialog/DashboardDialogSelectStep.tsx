@@ -26,7 +26,7 @@ const DashboardDialogSelectStep: React.FunctionComponent<
                   <Icon className={template.iconColor} />
                 </div>
                 <h4 className="comet-body-s-accented text-foreground">
-                  {template.title}
+                  {template.name}
                 </h4>
               </div>
               <p className="comet-body-xs text-muted-slate">
