@@ -5,6 +5,7 @@ import { Optimization } from "@/types/optimizations";
 import { AxiosError } from "axios";
 import { useToast } from "@/components/ui/use-toast";
 import { extractIdFromLocation } from "@/lib/utils";
+import useAppStore from "@/store/AppStore";
 
 type UseProjectCreateMutationParams = {
   optimization: Partial<Optimization>;
@@ -13,12 +14,21 @@ type UseProjectCreateMutationParams = {
 const useOptimizationCreateMutation = () => {
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const opikApiKey = useAppStore((state) => state.user.apiKey);
 
   return useMutation({
     mutationFn: async ({ optimization }: UseProjectCreateMutationParams) => {
-      const { headers } = await api.post(OPTIMIZATIONS_REST_ENDPOINT, {
-        ...optimization,
-      });
+      const { headers } = await api.post(
+        OPTIMIZATIONS_REST_ENDPOINT,
+        {
+          ...optimization,
+        },
+        {
+          headers: {
+            ...(opikApiKey && { opikApiKey }),
+          },
+        },
+      );
 
       // TODO workaround to return just created resource while implementation on BE is not done
       const id = extractIdFromLocation(headers?.location);

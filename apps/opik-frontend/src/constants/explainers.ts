@@ -90,7 +90,6 @@ export enum EXPLAINER_ID {
   geval_evaluation_criteria = "geval_evaluation_criteria",
   metric_reference_key = "metric_reference_key",
   metric_case_sensitive = "metric_case_sensitive",
-  metric_json_schema = "metric_json_schema",
   // Optimizer config explainers
   optimizer_verbose = "optimizer_verbose",
   optimizer_adaptive_mutation = "optimizer_adaptive_mutation",
@@ -626,11 +625,6 @@ export const EXPLAINERS_MAP: Record<EXPLAINER_ID, Explainer> = {
   [EXPLAINER_ID.metric_case_sensitive]: {
     id: EXPLAINER_ID.metric_case_sensitive,
     description: "Enable case-sensitive comparison when evaluating outputs.",
-  },
-  [EXPLAINER_ID.metric_json_schema]: {
-    id: EXPLAINER_ID.metric_json_schema,
-    description:
-      "Define a JSON schema to validate the structure of the LLM output.",
   },
   // Optimizer config explainers
   [EXPLAINER_ID.optimizer_verbose]: {

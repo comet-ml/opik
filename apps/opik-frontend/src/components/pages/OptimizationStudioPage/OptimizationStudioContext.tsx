@@ -13,6 +13,7 @@ import { OptimizationStudio, OPTIMIZATION_STATUS } from "@/types/optimizations";
 import { Experiment } from "@/types/datasets";
 import { OptimizationTemplate } from "@/constants/optimizations";
 import useOptimizationCreateMutation from "@/api/optimizations/useOptimizationCreateMutation";
+import useDatasetsList from "@/api/datasets/useDatasetsList";
 import useAppStore from "@/store/AppStore";
 import {
   OptimizationConfigFormType,
@@ -20,6 +21,7 @@ import {
   convertFormDataToStudioConfig,
   convertOptimizationStudioToFormData,
 } from "./ConfigureOptimizationSection/schema";
+import { useLastOptimizationRun } from "@/lib/optimizationSessionStorage";
 
 interface OptimizationStudioContextType {
   activeOptimization: OptimizationStudio | null;
@@ -56,6 +58,18 @@ export const OptimizationStudioProvider: React.FC<
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const navigate = useNavigate();
   const createOptimizationMutation = useOptimizationCreateMutation();
+  const { setLastSessionRunId } = useLastOptimizationRun();
+
+  const { data: datasetsData } = useDatasetsList({
+    workspaceName,
+    page: 1,
+    size: 1000,
+  });
+
+  const datasets = useMemo(
+    () => datasetsData?.content || [],
+    [datasetsData?.content],
+  );
 
   const [activeOptimization, setActiveOptimization] =
     useState<OptimizationStudio | null>(null);
@@ -95,15 +109,17 @@ export const OptimizationStudioProvider: React.FC<
     }
 
     const formData = form.getValues();
+    const selectedDataset = datasets.find((ds) => ds.id === formData.datasetId);
+    const datasetName = selectedDataset?.name || "";
 
     setIsSubmitting(true);
 
     try {
-      const studioConfig = convertFormDataToStudioConfig(formData);
+      const studioConfig = convertFormDataToStudioConfig(formData, datasetName);
 
       const optimizationPayload = {
         studio_config: studioConfig,
-        dataset_name: formData.datasetName,
+        dataset_name: datasetName,
         objective_name: studioConfig.evaluation.metrics[0].type,
         status: OPTIMIZATION_STATUS.INITIALIZED,
       };
@@ -113,6 +129,7 @@ export const OptimizationStudioProvider: React.FC<
       });
 
       if (result?.id) {
+        setLastSessionRunId(result.id);
         navigate({
           to: "/$workspaceName/optimization-studio/run",
           params: { workspaceName },
@@ -122,7 +139,14 @@ export const OptimizationStudioProvider: React.FC<
     } finally {
       setIsSubmitting(false);
     }
-  }, [form, createOptimizationMutation, navigate, workspaceName]);
+  }, [
+    form,
+    datasets,
+    createOptimizationMutation,
+    navigate,
+    workspaceName,
+    setLastSessionRunId,
+  ]);
 
   return (
     <OptimizationStudioContext.Provider
