@@ -81,7 +81,7 @@ export const LevenshteinMetricParamsSchema = z.object({
 });
 
 const BaseOptimizationConfigSchema = z.object({
-  datasetName: z.string().min(1, "Dataset is required"),
+  datasetId: z.string().min(1, "Dataset is required"),
   optimizerType: z.nativeEnum(OPTIMIZER_TYPE),
   optimizerParams: z.union([
     GepaOptimizerParamsSchema,
@@ -154,7 +154,7 @@ export const convertOptimizationStudioToFormData = (
     METRIC_TYPE.EQUALS;
 
   return {
-    datasetName: optimization?.dataset_name || "",
+    datasetId: optimization?.dataset_id || "",
     optimizerType,
     optimizerParams:
       optimization?.studio_config?.optimizer.parameters ||
@@ -174,6 +174,7 @@ export const convertOptimizationStudioToFormData = (
 
 export const convertFormDataToStudioConfig = (
   formData: OptimizationConfigFormType,
+  datasetName: string,
 ): OptimizationStudioConfig => {
   const messages = formData.messages.map((m) => ({
     role: m.role,
@@ -182,7 +183,7 @@ export const convertFormDataToStudioConfig = (
   }));
 
   return {
-    dataset_name: formData.datasetName,
+    dataset_name: datasetName,
     prompt: {
       messages,
     },

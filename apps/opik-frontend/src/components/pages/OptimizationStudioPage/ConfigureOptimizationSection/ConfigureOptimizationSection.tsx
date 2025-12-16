@@ -75,7 +75,7 @@ const ConfigureOptimizationSection: React.FC = () => {
     [OPTIMIZER_TYPE.HIERARCHICAL_REFLECTIVE]: {},
   });
 
-  const datasetName = form.watch("datasetName");
+  const datasetId = form.watch("datasetId");
   const optimizerType = form.watch("optimizerType");
   const metricType = form.watch("metricType");
   const model = form.watch("modelName") as PROVIDER_MODEL_TYPE | "";
@@ -92,9 +92,16 @@ const ConfigureOptimizationSection: React.FC = () => {
     [datasetsData?.content],
   );
 
+  const handleDatasetChange = useCallback(
+    (id: string | null) => {
+      form.setValue("datasetId", id || "");
+    },
+    [form],
+  );
+
   const selectedDataset = useMemo(
-    () => datasets.find((ds) => ds.name === datasetName),
-    [datasets, datasetName],
+    () => datasets.find((ds) => ds.id === datasetId),
+    [datasets, datasetId],
   );
 
   // fetch dataset item data when a dataset is selected to infer schema for JSON Schema Validator
@@ -263,7 +270,7 @@ const ConfigureOptimizationSection: React.FC = () => {
         <CardContent className="space-y-4 p-6">
           <FormField
             control={form.control}
-            name="datasetName"
+            name="datasetId"
             render={({ field }) => (
               <FormItem>
                 <div className="mb-2 flex items-center justify-between">
@@ -291,11 +298,8 @@ const ConfigureOptimizationSection: React.FC = () => {
                 </div>
                 <FormControl>
                   <DatasetSelectBox
-                    value={selectedDataset?.id || null}
-                    onChange={(id) => {
-                      const dataset = datasets.find((ds) => ds.id === id);
-                      field.onChange(dataset?.name || "");
-                    }}
+                    value={field.value}
+                    onChange={handleDatasetChange}
                     workspaceName={workspaceName}
                     disabled={disableForm}
                     showClearButton={false}
