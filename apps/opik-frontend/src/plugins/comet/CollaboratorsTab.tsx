@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import useLocalStorageState from "use-local-storage-state";
+import { UserPlus } from "lucide-react";
 import useAllWorkspaceMembers from "@/plugins/comet/useWorkspaceMembers";
 import useWorkspaceUsersPermissions from "@/plugins/comet/api/useWorkspaceUsersPermissions";
 import useOrganizationMembers from "@/plugins/comet/api/useOrganizationMembers";
@@ -9,6 +10,7 @@ import DataTable from "@/components/shared/DataTable/DataTable";
 import ExplainerCallout from "@/components/shared/ExplainerCallout/ExplainerCallout";
 import SearchInput from "@/components/shared/SearchInput/SearchInput";
 import Loader from "@/components/shared/Loader/Loader";
+import { Button } from "@/components/ui/button";
 import { COLUMN_TYPE, ColumnData } from "@/types/shared";
 import { convertColumnDataToColumn } from "@/lib/table";
 import { formatDate } from "@/lib/date";
@@ -166,13 +168,19 @@ const CollaboratorsTab = () => {
         className="mb-4"
         {...EXPLAINERS_MAP[EXPLAINER_ID.why_do_i_need_the_collaborators_tab]}
       />
-      <SearchInput
-        searchText={search}
-        setSearchText={setSearch}
-        placeholder="Search by name or email"
-        className="mb-4 w-[320px]"
-        dimension="sm"
-      />
+      <div className="mb-4 flex items-center justify-between">
+        <SearchInput
+          searchText={search}
+          setSearchText={setSearch}
+          placeholder="Search by name or email"
+          className="w-[320px]"
+          dimension="sm"
+        />
+        <Button variant="default" size="sm">
+          <UserPlus className="mr-1.5 size-3.5" />
+          Add users
+        </Button>
+      </div>
       {renderTable()}
     </>
   );
