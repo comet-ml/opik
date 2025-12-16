@@ -77,6 +77,11 @@ const WorkspacePreloader: React.FunctionComponent<WorkspacePreloaderProps> = ({
     posthog?.identify(user.userName, {
       email: user.email,
     });
+
+    window.Reo?.identify({
+      username: user.userName,
+      type: "email",
+    });
   }, [
     posthog,
     user?.loggedIn,

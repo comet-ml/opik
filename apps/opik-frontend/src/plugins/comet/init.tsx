@@ -5,6 +5,7 @@ import { initGTM } from "@/plugins/comet/analytics/gtm";
 import { loadScript } from "@/plugins/comet/utils";
 import { initNewRelic } from "@/plugins/comet/newrelic";
 import { initPosthog } from "@/plugins/comet/posthog";
+import { initReo } from "@/plugins/comet/reo";
 
 type EnvironmentVariablesOverwrite = {
   OPIK_SEGMENT_ID?: string;
@@ -13,6 +14,7 @@ type EnvironmentVariablesOverwrite = {
   OPIK_NEW_RELIC_APP_ID: string;
   OPIK_POSTHOG_KEY: string;
   OPIK_POSTHOG_HOST: string;
+  OPIK_REO_API_KEY?: string;
   PRODUCTION: boolean;
   ON_PREMISE: boolean;
 };
@@ -22,6 +24,9 @@ declare global {
     analytics: SegmentAnalytics.AnalyticsJS;
     dataLayer: Array<Record<string, unknown>>;
     environmentVariablesOverwrite?: EnvironmentVariablesOverwrite;
+    Reo?: {
+      identify: (params: { username: string; type: string }) => void;
+    };
   }
 }
 
@@ -37,5 +42,6 @@ loadScript(location.origin + `/config.js?version=${new Date().getTime()}`).then(
       window.environmentVariablesOverwrite?.OPIK_NEW_RELIC_LICENSE_KEY,
       window.environmentVariablesOverwrite?.OPIK_NEW_RELIC_APP_ID,
     );
+    initReo(window.environmentVariablesOverwrite?.OPIK_REO_API_KEY);
   },
 );
