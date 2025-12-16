@@ -136,9 +136,9 @@ class ProjectsResourceTest {
     public static final String URL_TEMPLATE_TRACE = "%s/v1/private/traces";
     public static final String[] IGNORED_FIELDS = {"createdBy", "lastUpdatedBy", "createdAt", "lastUpdatedAt",
             "lastUpdatedTraceAt", "feedbackScores", "duration", "totalEstimatedCost", "totalEstimatedCostSum", "usage",
-            "traceCount", "guardrailsFailedCount", "errorCount"};
+            "traceCount", "threadCount", "guardrailsFailedCount", "errorCount"};
     public static final String[] IGNORED_FIELD_MIN = {"createdBy", "lastUpdatedBy", "createdAt", "lastUpdatedAt",
-            "lastUpdatedTraceAt"};
+            "lastUpdatedTraceAt", "threadCount"};
 
     private static final String API_KEY = UUID.randomUUID().toString();
     private static final String USER = UUID.randomUUID().toString();
@@ -1581,6 +1581,7 @@ class ProjectsResourceTest {
                 .feedbackScores(getScoreAverages(traces))
                 .lastUpdatedTraceAt(traces.stream().map(Trace::lastUpdatedAt).max(Instant::compareTo).orElse(null))
                 .traceCount((long) traces.size())
+                .threadCount(calculateExpectedThreadCount(traces))
                 .guardrailsFailedCount(traces.stream()
                         .map(Trace::guardrailsValidations)
                         .filter(Objects::nonNull)

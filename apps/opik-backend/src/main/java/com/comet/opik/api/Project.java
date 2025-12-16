@@ -48,6 +48,8 @@ public record Project(
         @JsonView({
                 Project.View.Detailed.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) @Nullable Long traceCount,
         @JsonView({
+                Project.View.Detailed.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) @Nullable Long threadCount,
+        @JsonView({
                 Project.View.Detailed.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) @Nullable Long guardrailsFailedCount,
         @JsonView({
                 Project.View.Detailed.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) @Nullable ErrorCountWithDeviation errorCount){

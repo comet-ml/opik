@@ -64,7 +64,7 @@ public class StatsMapper {
                 .add(new AvgValueStat(TAGS, row.get("tags", Double.class)));
 
         // Add thread count if available (only for project stats)
-        if (row.getMetadata().contains(THREAD_COUNT)) {
+        if (!entityCountLabel.equals(THREAD_COUNT) && row.getMetadata().contains(THREAD_COUNT)) {
             stats.add(new CountValueStat(THREAD_COUNT, row.get(THREAD_COUNT, Long.class)));
         }
 
