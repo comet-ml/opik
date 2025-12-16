@@ -118,7 +118,9 @@ const inferDefaultValueFromValue = (value: unknown): unknown => {
       return false;
     case "object": {
       const properties: Record<string, unknown> = {};
-      for (const [key, val] of Object.entries(value as Record<string, unknown>)) {
+      for (const [key, val] of Object.entries(
+        value as Record<string, unknown>,
+      )) {
         properties[key] = inferDefaultValueFromValue(val);
       }
       return properties;
