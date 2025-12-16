@@ -116,7 +116,7 @@ const ConfigureOptimizationSection: React.FC = () => {
     },
   );
 
-  // Get the first dataset item's data to infer schema
+  // get the first dataset item's data to infer schema
   const firstDatasetItemData = useMemo(
     () =>
       datasetItemsData?.content?.[0]?.data as
