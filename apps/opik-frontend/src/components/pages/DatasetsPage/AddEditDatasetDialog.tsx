@@ -195,8 +195,11 @@ const AddEditDatasetDialog: React.FunctionComponent<
             },
           );
         }
-      } else if (onDatasetCreated) {
-        onDatasetCreated(newDataset);
+      } else {
+        setOpen(false);
+        if (onDatasetCreated) {
+          onDatasetCreated(newDataset);
+        }
       }
     },
     [
