@@ -34,6 +34,9 @@ export const UNSET_PROJECT_VALUE = "";
 
 export const GLOBAL_PROJECT_CONFIG_MESSAGE = "Using global project config";
 
+export const WIDGET_PROJECT_SELECTOR_DESCRIPTION =
+  "Pick the project for this widget. If not set, the dashboard's global project config will be used.";
+
 export const resolveProjectIdFromConfig = (
   widgetProjectId: string | undefined,
   globalProjectId: string | undefined,

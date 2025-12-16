@@ -29,6 +29,7 @@ import { useDashboardStore, selectMixedConfig } from "@/store/DashboardStore";
 import {
   UNSET_PROJECT_OPTION,
   UNSET_PROJECT_VALUE,
+  WIDGET_PROJECT_SELECTOR_DESCRIPTION,
 } from "@/lib/dashboard/utils";
 import ProjectsSelectBox from "@/components/pages-shared/automations/ProjectsSelectBox";
 import ProjectWidgetFiltersSection from "@/components/shared/Dashboard/widgets/shared/ProjectWidgetFiltersSection/ProjectWidgetFiltersSection";
@@ -255,8 +256,7 @@ const ProjectStatsCardEditor = forwardRef<
                     />
                   </FormControl>
                   <Description>
-                    Pick the project for this widget. If not set, the
-                    dashboard&apos;s global project config will be used.
+                    {WIDGET_PROJECT_SELECTOR_DESCRIPTION}
                   </Description>
                   <FormMessage />
                 </FormItem>
