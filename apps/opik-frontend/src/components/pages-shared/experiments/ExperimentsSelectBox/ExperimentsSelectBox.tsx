@@ -53,6 +53,10 @@ export const useExperimentsSelectData = ({
 
   type CachedExperimentsData = { content: Experiment[]; total: number };
 
+  // Find the longest cached dataset to maximize available data without refetching.
+  // If a user previously loaded 10,000 experiments via "Load more", we prefer
+  // reusing that larger dataset rather than fetching only 1,000 again.
+  // This improves UX by showing more options immediately from cache.
   const longestCachedData = cachedQueries.reduce<CachedExperimentsData | null>(
     (longest, query) => {
       const data = query.state.data as CachedExperimentsData | undefined;
