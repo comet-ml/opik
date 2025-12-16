@@ -1,7 +1,7 @@
 import React from "react";
 import { DatasetItem, DatasetItemColumn } from "@/types/datasets";
-import { DatasetItemEditorProvider } from "./DatasetItemEditorContext";
-import DatasetItemEditorLayout from "./DatasetItemEditorLayout";
+import { DatasetItemEditorAutosaveProvider } from "./DatasetItemEditorAutosaveContext";
+import DatasetItemEditorAutosaveLayout from "./DatasetItemEditorAutosaveLayout";
 
 interface DatasetItemEditorProps {
   datasetItemId: string;
@@ -23,19 +23,19 @@ const DatasetItemEditor: React.FC<DatasetItemEditorProps> = ({
   setActiveRowId,
 }) => {
   return (
-    <DatasetItemEditorProvider
+    <DatasetItemEditorAutosaveProvider
       datasetItemId={datasetItemId}
       datasetId={datasetId}
       columns={columns}
       rows={rows}
       setActiveRowId={setActiveRowId}
     >
-      <DatasetItemEditorLayout
+      <DatasetItemEditorAutosaveLayout
         datasetItemId={datasetItemId}
         isOpen={isOpen}
         onClose={onClose}
       />
-    </DatasetItemEditorProvider>
+    </DatasetItemEditorAutosaveProvider>
   );
 };
 

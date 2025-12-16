@@ -10,13 +10,16 @@ import { Input } from "@/components/ui/input";
 import { useToast } from "@/components/ui/use-toast";
 import RemovableTag from "@/components/shared/RemovableTag/RemovableTag";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
+import { cn } from "@/lib/utils";
 
 export type TagListRendererProps = {
   tags: string[];
+  immutableTags?: string[];
   onAddTag: (tag: string) => void;
   onDeleteTag: (tag: string) => void;
   align?: "start" | "end";
   size?: "md" | "sm";
+  className?: string;
   tooltipText?: string;
   placeholderText?: string;
   addButtonText?: string;
@@ -25,10 +28,12 @@ export type TagListRendererProps = {
 
 const TagListRenderer: React.FC<TagListRendererProps> = ({
   tags = [],
+  immutableTags = [],
   onAddTag,
   onDeleteTag,
   align = "end",
   size = "md",
+  className,
   tooltipText = "Tags list",
   placeholderText = "New tag",
   addButtonText = "Add tag",
@@ -41,10 +46,13 @@ const TagListRenderer: React.FC<TagListRendererProps> = ({
   const tagSizeClass = size === "sm" ? "w-3" : "w-4";
   const tagMarginClass = size === "sm" ? "mx-0" : "mx-1";
 
+  const isImmutableTag = (tag: string): boolean =>
+    immutableTags.some((t) => t.toLowerCase() === tag.toLowerCase());
+
   const handleAddTag = () => {
     if (!newTag) return;
 
-    if (tags.includes(newTag)) {
+    if (tags.includes(newTag) || isImmutableTag(newTag)) {
       toast({
         title: "Error",
         description: `The ${tagType} "${newTag}" already exists`,
@@ -59,20 +67,26 @@ const TagListRenderer: React.FC<TagListRendererProps> = ({
   };
 
   return (
-    <div className="flex min-h-7 w-full flex-wrap items-center gap-2 overflow-x-hidden">
+    <div
+      className={cn(
+        "flex min-h-7 w-full flex-wrap items-center gap-2 overflow-x-hidden",
+        className,
+      )}
+    >
       <TooltipWrapper content={tooltipText}>
         <Tag className={`${tagMarginClass} ${tagSizeClass} text-muted-slate`} />
       </TooltipWrapper>
-      {[...tags].sort().map((tag) => {
-        return (
-          <RemovableTag
-            label={tag}
-            key={tag}
-            size="md"
-            onDelete={() => onDeleteTag(tag)}
-          />
-        );
-      })}
+      {[...immutableTags].sort().map((tag) => (
+        <RemovableTag label={tag} key={`immutable-${tag}`} size="md" />
+      ))}
+      {[...tags].sort().map((tag) => (
+        <RemovableTag
+          label={tag}
+          key={tag}
+          size="md"
+          onDelete={() => onDeleteTag(tag)}
+        />
+      ))}
       <Popover onOpenChange={setOpen} open={open}>
         <PopoverTrigger asChild>
           <Button

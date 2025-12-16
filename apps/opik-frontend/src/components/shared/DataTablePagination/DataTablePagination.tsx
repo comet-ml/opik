@@ -4,6 +4,7 @@ import {
   ChevronLast,
   ChevronLeft,
   ChevronRight,
+  Loader2,
 } from "lucide-react";
 import isFunction from "lodash/isFunction";
 
@@ -28,6 +29,7 @@ type DataTableProps = {
   variant?: "default" | "minimal";
   itemsPerPage?: number[];
   disabled?: boolean;
+  isLoadingTotal?: boolean;
 };
 
 const DEFAULT_ITEMS_PER_PAGE = [5, 10, 25, 50, 100];
@@ -43,6 +45,7 @@ const DataTablePagination = ({
   variant = "default",
   itemsPerPage = DEFAULT_ITEMS_PER_PAGE,
   disabled = false,
+  isLoadingTotal = false,
 }: DataTableProps) => {
   const maxSize =
     supportsTruncation && !truncationEnabled
@@ -59,9 +62,18 @@ const DataTablePagination = ({
   const disabledNext = page === totalPages || !totalPages || disabled;
   const disabledSizeChange = !isFunction(sizeChange) || disabled;
 
-  const text = isMinimal
-    ? `${from}-${to} of ${total}`
-    : `Showing ${from}-${to} of ${total}`;
+  const totalDisplay = isLoadingTotal ? (
+    <span className="inline-flex items-center gap-1 pl-1">
+      <Loader2 className="size-3 animate-spin" />
+      {total.toLocaleString()}
+    </span>
+  ) : (
+    total.toLocaleString()
+  );
+
+  const textPrefix = isMinimal
+    ? `${from}-${to} of `
+    : `Showing ${from}-${to} of `;
   const buttonSize = isMinimal ? "icon-xs" : "icon-sm";
   const navButtonVariant = isMinimal ? "ghost" : "outline";
   const buttonClass = isMinimal ? "w-5" : "";
@@ -115,7 +127,8 @@ const DataTablePagination = ({
                 }`}
                 disabled={disabledSizeChange}
               >
-                {text}
+                {textPrefix}
+                {totalDisplay}
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">

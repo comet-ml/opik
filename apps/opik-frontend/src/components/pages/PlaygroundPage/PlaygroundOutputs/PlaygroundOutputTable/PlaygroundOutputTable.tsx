@@ -224,7 +224,7 @@ const PlaygroundOutputTable = ({
 
   return (
     <div
-      className="playground-table overflow-x-auto pt-11" // eslint-disable-line tailwindcss/no-custom-classname
+      className="playground-table overflow-x-auto" // eslint-disable-line tailwindcss/no-custom-classname
       style={{ "--cell-top-height": "28px" } as React.CSSProperties}
     >
       <DataTable

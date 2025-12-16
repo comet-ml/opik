@@ -1,7 +1,15 @@
 import React, { useCallback } from "react";
-import { DatasetItemColumn } from "@/types/datasets";
-import { DatasetItemEditorProvider } from "./DatasetItemEditor/DatasetItemEditorContext";
-import AddDatasetItemSidebarLayout from "./DatasetItemEditor/AddDatasetItemSidebarLayout";
+import ResizableSidePanel from "@/components/shared/ResizableSidePanel/ResizableSidePanel";
+import { Button } from "@/components/ui/button";
+import Loader from "@/components/shared/Loader/Loader";
+import { useConfirmAction } from "@/components/shared/ConfirmDialog/useConfirmAction";
+import ConfirmDialog from "@/components/shared/ConfirmDialog/ConfirmDialog";
+import { DATASET_ITEM_SOURCE, DatasetItemColumn } from "@/types/datasets";
+import useDatasetItemBatchMutation from "@/api/datasets/useDatasetItemBatchMutation";
+import useAppStore from "@/store/AppStore";
+import { useDatasetItemData } from "./DatasetItemEditor/hooks/useDatasetItemData";
+import { useDatasetItemFormState } from "./DatasetItemEditor/hooks/useDatasetItemFormState";
+import DatasetItemEditorForm from "./DatasetItemEditor/DatasetItemEditorForm";
 
 interface AddDatasetItemSidebarProps {
   datasetId: string;
@@ -16,17 +24,148 @@ const AddDatasetItemSidebar: React.FC<AddDatasetItemSidebarProps> = ({
   setOpen,
   columns,
 }) => {
+  const workspaceName = useAppStore((state) => state.activeWorkspaceName);
+
   const handleClose = useCallback(() => setOpen(false), [setOpen]);
 
+  // Fetch dataset item data (for create mode, no datasetItemId)
+  const { fields, isPending } = useDatasetItemData({
+    datasetItemId: undefined,
+    columns,
+  });
+
+  // Form state
+  const { hasUnsavedChanges, setHasUnsavedChanges, formId } =
+    useDatasetItemFormState({ datasetItemId: undefined });
+
+  // Mutations
+  const { isPending: isSubmitting, mutate: createDatasetItem } =
+    useDatasetItemBatchMutation();
+
+  // Confirm dialog
+  const {
+    isOpen: showConfirmDialog,
+    requestConfirm,
+    confirm,
+    cancel,
+  } = useConfirmAction();
+
+  const handleSave = useCallback(
+    (data: Record<string, unknown>) => {
+      createDatasetItem(
+        {
+          datasetId,
+          datasetItems: [
+            {
+              data,
+              source: DATASET_ITEM_SOURCE.manual,
+            },
+          ],
+          workspaceName,
+        },
+        {
+          onSuccess: () => {
+            setHasUnsavedChanges(false);
+            handleClose();
+          },
+        },
+      );
+    },
+    [
+      createDatasetItem,
+      datasetId,
+      workspaceName,
+      handleClose,
+      setHasUnsavedChanges,
+    ],
+  );
+
+  const handleDiscard = useCallback(() => {
+    handleClose();
+  }, [handleClose]);
+
+  const requestConfirmIfNeeded = useCallback(
+    (action: () => void) => {
+      if (hasUnsavedChanges) {
+        requestConfirm(() => {
+          action();
+          setHasUnsavedChanges(false);
+        });
+      } else {
+        action();
+      }
+    },
+    [hasUnsavedChanges, requestConfirm, setHasUnsavedChanges],
+  );
+
+  const handleDialogOpenChange = useCallback(
+    (open: boolean) => {
+      if (!open) {
+        cancel();
+      }
+    },
+    [cancel],
+  );
+
+  const handleCloseWithConfirm = useCallback(() => {
+    requestConfirmIfNeeded(handleClose);
+  }, [requestConfirmIfNeeded, handleClose]);
+
   return (
-    <DatasetItemEditorProvider
-      datasetId={datasetId}
-      columns={columns}
-      mode="create"
-      onClose={handleClose}
-    >
-      <AddDatasetItemSidebarLayout isOpen={open} onClose={handleClose} />
-    </DatasetItemEditorProvider>
+    <>
+      <ResizableSidePanel
+        panelId="add-dataset-item-sidebar"
+        entity="item"
+        open={open}
+        onClose={handleCloseWithConfirm}
+        initialWidth={0.4}
+      >
+        {isPending ? (
+          <div className="flex size-full items-center justify-center">
+            <Loader />
+          </div>
+        ) : (
+          <div className="relative size-full overflow-y-auto p-6 pt-4">
+            <div className="border-b pb-4">
+              <div className="flex items-center justify-between gap-2">
+                <div className="comet-title-accented">Add dataset item</div>
+                <div className="flex items-center gap-2">
+                  <Button
+                    type="submit"
+                    form={formId}
+                    variant="default"
+                    size="sm"
+                    disabled={isSubmitting}
+                  >
+                    {isSubmitting ? "Saving..." : "Save changes"}
+                  </Button>
+                  <Button variant="outline" size="sm" onClick={handleDiscard}>
+                    Cancel
+                  </Button>
+                </div>
+              </div>
+            </div>
+            <DatasetItemEditorForm
+              formId={formId}
+              fields={fields}
+              onSubmit={handleSave}
+              setHasUnsavedChanges={setHasUnsavedChanges}
+            />
+          </div>
+        )}
+      </ResizableSidePanel>
+      <ConfirmDialog
+        open={showConfirmDialog}
+        setOpen={handleDialogOpenChange}
+        onConfirm={cancel}
+        onCancel={confirm}
+        title="Discard changes?"
+        description="You have unsaved changes. Do you want to discard them and close?"
+        confirmText="Keep editing"
+        cancelText="Discard changes"
+        confirmButtonVariant="default"
+      />
+    </>
   );
 };
 

@@ -5,7 +5,7 @@ import { Dataset } from "@/types/datasets";
 const getDatasetById = async (
   { signal }: QueryFunctionContext,
   { datasetId }: UseDatasetByIdParams,
-) => {
+): Promise<Dataset> => {
   const { data } = await api.get(DATASETS_REST_ENDPOINT + datasetId, {
     signal,
   });

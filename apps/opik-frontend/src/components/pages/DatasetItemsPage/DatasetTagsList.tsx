@@ -6,12 +6,14 @@ type DatasetTagsListProps = {
   tags: string[];
   dataset?: Dataset;
   datasetId: string;
+  className?: string;
 };
 
 const DatasetTagsList: React.FC<DatasetTagsListProps> = ({
   tags = [],
   dataset,
   datasetId,
+  className,
 }) => {
   const { mutate } = useDatasetUpdateMutation();
 
@@ -39,6 +41,7 @@ const DatasetTagsList: React.FC<DatasetTagsListProps> = ({
       onAddTag={handleAddTag}
       onDeleteTag={handleDeleteTag}
       align="start"
+      className={className}
     />
   );
 };

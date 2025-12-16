@@ -14,6 +14,7 @@ import {
 } from "@/types/datasets";
 import useDatasetItemUpdateMutation from "@/api/datasets/useDatasetItemUpdateMutation";
 import useDatasetItemBatchMutation from "@/api/datasets/useDatasetItemBatchMutation";
+import useDatasetItemBatchDeleteMutation from "@/api/datasets/useDatasetItemBatchDeleteMutation";
 import useAppStore from "@/store/AppStore";
 import { DatasetField } from "./hooks/useDatasetItemData";
 import { useDatasetItemNavigation } from "./hooks/useDatasetItemNavigation";
@@ -39,6 +40,7 @@ interface DatasetItemEditorContextValue {
   handleDiscard: () => void;
   handleAddTag: (tag: string) => void;
   handleDeleteTag: (tag: string) => void;
+  handleDelete: (onSuccess: () => void) => void;
   requestConfirmIfNeeded: (action: () => void) => void;
 
   // Form
@@ -87,6 +89,7 @@ export const DatasetItemEditorProvider: React.FC<
   const { mutate: updateDatasetItem } = updateMutation;
   const createMutation = useDatasetItemBatchMutation();
   const { mutate: createDatasetItem } = createMutation;
+  const deleteMutation = useDatasetItemBatchDeleteMutation();
 
   // Fetch dataset item data and parse fields
   const { fields, datasetItem, isPending } = useDatasetItemData({
@@ -196,6 +199,19 @@ export const DatasetItemEditorProvider: React.FC<
     [updateDatasetItem, datasetId, datasetItemId, tags],
   );
 
+  const handleDelete = useCallback(
+    (onSuccess: () => void) => {
+      if (!datasetItemId) return;
+      deleteMutation.mutate(
+        { datasetId, ids: [datasetItemId] },
+        {
+          onSuccess,
+        },
+      );
+    },
+    [deleteMutation, datasetId, datasetItemId],
+  );
+
   const requestConfirmIfNeeded = useCallback(
     (action: () => void) => {
       if (hasUnsavedChanges) {
@@ -250,6 +266,7 @@ export const DatasetItemEditorProvider: React.FC<
       handleDiscard,
       handleAddTag,
       handleDeleteTag,
+      handleDelete,
       requestConfirmIfNeeded,
       formId,
       horizontalNavigation,
@@ -269,6 +286,7 @@ export const DatasetItemEditorProvider: React.FC<
       handleDiscard,
       handleAddTag,
       handleDeleteTag,
+      handleDelete,
       requestConfirmIfNeeded,
       formId,
       horizontalNavigation,

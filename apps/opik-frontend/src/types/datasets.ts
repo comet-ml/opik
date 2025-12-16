@@ -21,6 +21,35 @@ export interface Dataset {
   tags?: string[];
   created_at: string;
   last_updated_at: string;
+  status?: DATASET_STATUS;
+  latest_version?: Pick<
+    DatasetVersion,
+    "id" | "version_hash" | "tags" | "change_description"
+  >;
+}
+
+export interface DatasetVersion {
+  id: string;
+  dataset_id: string;
+  version_hash: string;
+  items_total: number;
+  items_added: number;
+  items_modified: number;
+  items_deleted: number;
+  change_description?: string;
+  metadata?: Record<string, unknown>;
+  tags?: string[];
+  created_at: string;
+  created_by: string;
+  last_updated_at: string;
+  last_updated_by: string;
+}
+
+export enum DATASET_STATUS {
+  unknown = "unknown",
+  processing = "processing",
+  completed = "completed",
+  failed = "failed",
 }
 
 export enum DATASET_ITEM_SOURCE {
