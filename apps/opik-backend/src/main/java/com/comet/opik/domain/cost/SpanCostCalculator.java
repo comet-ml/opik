@@ -100,6 +100,10 @@ class SpanCostCalculator {
         return videoPrice.multiply(BigDecimal.valueOf(durationSeconds));
     }
 
+    public static BigDecimal audioSpeechCost(@NonNull ModelPrice modelPrice, @NonNull Map<String, Integer> usage) {
+        return modelPrice.inputPrice().multiply(BigDecimal.valueOf(usage.getOrDefault("prompt_tokens", 0)));
+    }
+
     private static boolean isPositive(BigDecimal value) {
         return value != null && value.compareTo(BigDecimal.ZERO) > 0;
     }

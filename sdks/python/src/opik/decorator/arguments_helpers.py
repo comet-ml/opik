@@ -35,6 +35,7 @@ class EndSpanParameters(BaseArguments):
     provider: Optional[str] = None
     error_info: Optional[ErrorInfoDict] = None
     total_cost: Optional[float] = None
+    attachments: Optional[List[Any]] = None
 
 
 @dataclasses.dataclass

@@ -47,6 +47,9 @@ def track_openai(
     if hasattr(openai_client, "responses"):
         _patch_openai_responses(openai_client, project_name)
 
+    if hasattr(openai_client, "audio"):
+        _patch_openai_audio_speech(openai_client, project_name)
+
     return openai_client
 
 
@@ -143,3 +146,40 @@ def _patch_openai_responses(
         openai_client.responses.parse = responses_parse_decorator(
             openai_client.responses.parse
         )
+
+
+def _patch_openai_audio_speech(
+    openai_client: OpenAIClient,
+    project_name: Optional[str] = None,
+) -> None:
+    from . import openai_audio_speech_decorator
+
+    audio_speech_decorator_factory = (
+        openai_audio_speech_decorator.OpenaiAudioSpeechTrackDecorator()
+    )
+    if openai_client.base_url.host != "api.openai.com":
+        audio_speech_decorator_factory.provider = openai_client.base_url.host
+
+    if hasattr(openai_client, "audio") and hasattr(openai_client.audio, "speech"):
+        # Track audio.speech.create
+        speech_create_decorator = audio_speech_decorator_factory.track(
+            type="llm",
+            name="audio_speech_create",
+            project_name=project_name,
+        )
+        openai_client.audio.speech.create = speech_create_decorator(
+            openai_client.audio.speech.create
+        )
+
+        
+        # Track audio.speech.with_streaming_response.create
+        if hasattr(openai_client.audio.speech, "with_streaming_response"):
+            speech_stream_decorator = audio_speech_decorator_factory.track(
+                type="llm",
+                name="audio_speech_with_streaming_response_create",
+                project_name=project_name,
+            )
+            openai_client.audio.speech.with_streaming_response.create = speech_stream_decorator(
+                openai_client.audio.speech.with_streaming_response.create
+            )
+
