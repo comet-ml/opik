@@ -1,19 +1,31 @@
 import React from "react";
 import { Button } from "@/components/ui/button";
-import { Link } from "@tanstack/react-router";
+import { Link, useNavigate } from "@tanstack/react-router";
 import { useOptimizationStudioContext } from "./OptimizationStudioContext";
 import { OPTIMIZATION_STATUS } from "@/types/optimizations";
 import useAppStore from "@/store/AppStore";
+import { useLastOptimizationRun } from "@/lib/optimizationSessionStorage";
 
 const OptimizationStudioActions: React.FC = () => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
+  const navigate = useNavigate();
   const { activeOptimization, isSubmitting, submitOptimization } =
     useOptimizationStudioContext();
+  const { clearLastSessionRunId } = useLastOptimizationRun();
 
   const isRunning =
     activeOptimization?.status === OPTIMIZATION_STATUS.RUNNING ||
     activeOptimization?.status === OPTIMIZATION_STATUS.INITIALIZED;
   const showViewTrials = Boolean(activeOptimization?.id);
+  const showStartNew = activeOptimization && !isRunning;
+
+  const handleStartNew = () => {
+    clearLastSessionRunId();
+    navigate({
+      to: "/$workspaceName/optimization-studio",
+      params: { workspaceName },
+    });
+  };
 
   const renderActionButton = () => {
     if (isRunning) {
@@ -61,6 +73,11 @@ const OptimizationStudioActions: React.FC = () => {
           >
             View trials
           </Link>
+        </Button>
+      )}
+      {showStartNew && (
+        <Button size="sm" className="h-8" onClick={handleStartNew}>
+          Start new
         </Button>
       )}
       {renderActionButton()}

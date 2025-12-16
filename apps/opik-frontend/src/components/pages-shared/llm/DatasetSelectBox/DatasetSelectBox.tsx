@@ -85,8 +85,8 @@ const DatasetSelectBox: React.FC<DatasetSelectBoxProps> = ({
   );
 
   const handleDatasetCreated = useCallback(
-    (newDataset: Dataset) => {
-      queryClient.invalidateQueries({
+    async (newDataset: Dataset) => {
+      await queryClient.invalidateQueries({
         queryKey: ["datasets"],
       });
       if (newDataset.id) {

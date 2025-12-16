@@ -16,9 +16,11 @@ import { ACTIVE_OPTIMIZATION_FILTER } from "@/lib/optimizations";
 import { DEMO_TEMPLATES } from "@/constants/optimizations";
 import ExplainerIcon from "@/components/shared/ExplainerIcon/ExplainerIcon";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
+import { useLastOptimizationRun } from "@/lib/optimizationSessionStorage";
 
 const OptimizationStudioPage = () => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
+  const { getLastSessionRunId } = useLastOptimizationRun();
 
   const { data, isPending } = useOptimizationsList({
     workspaceName,
@@ -31,6 +33,7 @@ const OptimizationStudioPage = () => {
     return <Loader />;
   }
 
+  // Priority 1: Redirect to running optimization
   if (data && data.content.length > 0) {
     const activeOptimization = data.content[0];
     return (
@@ -41,6 +44,20 @@ const OptimizationStudioPage = () => {
       />
     );
   }
+
+  // Priority 2: Redirect to last optimization from session storage
+  const lastSessionRunId = getLastSessionRunId();
+  if (lastSessionRunId) {
+    return (
+      <Navigate
+        to="/$workspaceName/optimization-studio/run"
+        params={{ workspaceName }}
+        search={{ optimizationId: lastSessionRunId }}
+      />
+    );
+  }
+
+  // Priority 3: Show home page
 
   return (
     <div className="flex min-h-[calc(100vh-200px)] items-center justify-center">

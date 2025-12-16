@@ -10,8 +10,10 @@ import { generateDefaultLLMPromptMessage } from "@/lib/llm";
 import {
   getDefaultOptimizerConfig,
   getDefaultMetricConfig,
+  getOptimizationDefaultConfigByProvider,
 } from "@/lib/optimizations";
-import { PROVIDER_MODEL_TYPE } from "@/types/providers";
+import { getProviderFromModel } from "@/lib/provider";
+import { PROVIDER_MODEL_TYPE, LLMPromptConfigsType } from "@/types/providers";
 
 export const GepaOptimizerParamsSchema = z.object({
   model: z.string().optional(),
@@ -65,9 +67,8 @@ export const EqualsMetricParamsSchema = z.object({
 });
 
 export const JsonSchemaValidatorMetricParamsSchema = z.object({
-  schema: z
-    .record(z.unknown())
-    .refine((obj) => Object.keys(obj).length > 0, "Schema cannot be empty"),
+  reference_key: z.string().optional(),
+  case_sensitive: z.boolean().optional(),
 });
 
 export const GEvalMetricParamsSchema = z.object({
@@ -81,7 +82,7 @@ export const LevenshteinMetricParamsSchema = z.object({
 });
 
 const BaseOptimizationConfigSchema = z.object({
-  datasetName: z.string().min(1, "Dataset is required"),
+  datasetId: z.string().min(1, "Dataset is required"),
   optimizerType: z.nativeEnum(OPTIMIZER_TYPE),
   optimizerParams: z.union([
     GepaOptimizerParamsSchema,
@@ -92,7 +93,11 @@ const BaseOptimizationConfigSchema = z.object({
     .array(z.custom<LLMMessage>())
     .min(1, "At least one message is required"),
   modelName: z.nativeEnum(PROVIDER_MODEL_TYPE),
-  modelConfig: z.record(z.unknown()).default({ temperature: 1.0 }),
+  modelConfig: z
+    .object({
+      temperature: z.number().optional(),
+    })
+    .passthrough(),
 });
 
 const EqualsMetricConfigSchema = BaseOptimizationConfigSchema.extend({
@@ -127,12 +132,20 @@ export type OptimizationConfigFormType = z.infer<
   typeof OptimizationConfigSchema
 >;
 
+const getDefaultModelConfig = (model: PROVIDER_MODEL_TYPE) => {
+  const provider = getProviderFromModel(model);
+  return getOptimizationDefaultConfigByProvider(provider, model);
+};
+
 export const convertOptimizationStudioToFormData = (
   optimization?: Partial<OptimizationStudio> | null,
 ): OptimizationConfigFormType => {
   const existingConfig = optimization?.studio_config?.llm_model?.parameters as
-    | Record<string, unknown>
+    | LLMPromptConfigsType
     | undefined;
+
+  const hasExistingConfig =
+    existingConfig && Object.keys(existingConfig).length > 0;
 
   const messages: LLMMessage[] =
     optimization?.studio_config?.prompt?.messages?.map((m) => ({
@@ -144,8 +157,6 @@ export const convertOptimizationStudioToFormData = (
       generateDefaultLLMPromptMessage({ role: LLM_MESSAGE_ROLE.user }),
     ];
 
-  console.log(optimization, "OPTIMIZATION_LOL");
-
   const optimizerType =
     (optimization?.studio_config?.optimizer.type as OPTIMIZER_TYPE) ||
     OPTIMIZER_TYPE.GEPA;
@@ -154,8 +165,17 @@ export const convertOptimizationStudioToFormData = (
     (optimization?.studio_config?.evaluation.metrics[0]?.type as METRIC_TYPE) ||
     METRIC_TYPE.EQUALS;
 
+  const modelName =
+    optimization?.studio_config?.llm_model?.model ||
+    PROVIDER_MODEL_TYPE.GPT_4O_MINI;
+
+  const defaultConfig = getDefaultModelConfig(modelName as PROVIDER_MODEL_TYPE);
+  const modelConfig = hasExistingConfig
+    ? { ...defaultConfig, ...existingConfig }
+    : defaultConfig;
+
   return {
-    datasetName: optimization?.dataset_name || "",
+    datasetId: optimization?.dataset_id || "",
     optimizerType,
     optimizerParams:
       optimization?.studio_config?.optimizer.parameters ||
@@ -165,16 +185,14 @@ export const convertOptimizationStudioToFormData = (
       optimization?.studio_config?.evaluation?.metrics?.[0]?.parameters ||
       getDefaultMetricConfig(metricType),
     messages,
-    // Expand it later
-    modelName:
-      optimization?.studio_config?.llm_model?.model ||
-      PROVIDER_MODEL_TYPE.GPT_4O_MINI,
-    modelConfig: existingConfig || { temperature: 1.0 },
+    modelName,
+    modelConfig,
   } as OptimizationConfigFormType;
 };
 
 export const convertFormDataToStudioConfig = (
   formData: OptimizationConfigFormType,
+  datasetName: string,
 ): OptimizationStudioConfig => {
   const messages = formData.messages.map((m) => ({
     role: m.role,
@@ -183,7 +201,7 @@ export const convertFormDataToStudioConfig = (
   }));
 
   return {
-    dataset_name: formData.datasetName,
+    dataset_name: datasetName,
     prompt: {
       messages,
     },

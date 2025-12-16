@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef } from "react";
+import React, { useCallback, useMemo, useRef } from "react";
 import { useFormContext } from "react-hook-form";
 import { Link } from "@tanstack/react-router";
 import { SquareArrowOutUpRight } from "lucide-react";
@@ -15,8 +15,8 @@ import SelectBox from "@/components/shared/SelectBox/SelectBox";
 import useAppStore from "@/store/AppStore";
 import { useOptimizationStudioContext } from "../OptimizationStudioContext";
 import DatasetSelectBox from "@/components/pages-shared/llm/DatasetSelectBox/DatasetSelectBox";
-import PromptModelSelect from "@/components/pages-shared/llm/PromptModelSelect/PromptModelSelect";
-import PromptModelConfigs from "@/components/pages-shared/llm/PromptModelSettings/PromptModelConfigs";
+import OptimizationModelSelect from "@/components/pages-shared/optimizations/OptimizationModelSelect/OptimizationModelSelect";
+import OptimizationTemperatureConfig from "./OptimizationTemperatureConfig";
 import LLMPromptMessages from "@/components/pages-shared/llm/LLMPromptMessages/LLMPromptMessages";
 import AlgorithmConfigs from "@/components/pages-shared/optimizations/AlgorithmSettings/AlgorithmConfigs";
 import MetricConfigs from "@/components/pages-shared/optimizations/MetricSettings/MetricConfigs";
@@ -28,19 +28,17 @@ import {
   MetricParameters,
   OPTIMIZATION_STATUS,
 } from "@/types/optimizations";
-import {
-  PROVIDER_MODEL_TYPE,
-  COMPOSED_PROVIDER_TYPE,
-  LLMPromptConfigsType,
-} from "@/types/providers";
+import { PROVIDER_MODEL_TYPE, LLMPromptConfigsType } from "@/types/providers";
 import { LLM_MESSAGE_ROLE, LLMMessage } from "@/types/llm";
 import { LLM_MESSAGE_ROLE_NAME_MAP } from "@/constants/llm";
 import { generateDefaultLLMPromptMessage } from "@/lib/llm";
 import {
   getDefaultOptimizerConfig,
   getDefaultMetricConfig,
+  getOptimizationDefaultConfigByProvider,
 } from "@/lib/optimizations";
 import useDatasetsList from "@/api/datasets/useDatasetsList";
+import useLLMProviderModelsData from "@/hooks/useLLMProviderModelsData";
 
 const MESSAGE_TYPE_OPTIONS = [
   {
@@ -73,7 +71,7 @@ const ConfigureOptimizationSection: React.FC = () => {
     [OPTIMIZER_TYPE.HIERARCHICAL_REFLECTIVE]: {},
   });
 
-  const datasetName = form.watch("datasetName");
+  const datasetId = form.watch("datasetId");
   const optimizerType = form.watch("optimizerType");
   const metricType = form.watch("metricType");
   const model = form.watch("modelName") as PROVIDER_MODEL_TYPE | "";
@@ -90,29 +88,19 @@ const ConfigureOptimizationSection: React.FC = () => {
     [datasetsData?.content],
   );
 
-  const selectedDataset = useMemo(
-    () => datasets.find((ds) => ds.name === datasetName),
-    [datasets, datasetName],
-  );
-
-  const calculateModelProvider = useCallback(
-    (modelValue: PROVIDER_MODEL_TYPE | ""): COMPOSED_PROVIDER_TYPE | "" => {
-      if (!modelValue) {
-        return "";
-      }
-
-      // ToDo: expand it later
-      const result = "openai";
-
-      return result;
+  const handleDatasetChange = useCallback(
+    (id: string | null) => {
+      form.setValue("datasetId", id || "");
     },
-    [],
+    [form],
   );
 
-  const provider = calculateModelProvider(model);
+  const selectedDataset = useMemo(
+    () => datasets.find((ds) => ds.id === datasetId),
+    [datasets, datasetId],
+  );
 
-  const handleAddProvider = useCallback(() => {}, []);
-  const handleDeleteProvider = useCallback(() => {}, []);
+  const { calculateModelProvider } = useLLMProviderModelsData();
 
   const handleOptimizerTypeChange = useCallback(
     (newOptimizerType: OPTIMIZER_TYPE) => {
@@ -170,13 +158,33 @@ const ConfigureOptimizationSection: React.FC = () => {
     [form],
   );
 
-  useEffect(() => {
-    if (model && (!config || Object.keys(config).length === 0)) {
+  const handleModelConfigChange = useCallback(
+    (newConfigs: Partial<LLMPromptConfigsType>) => {
+      const currentConfig = form.getValues("modelConfig");
       form.setValue("modelConfig", {
-        temperature: 1.0,
-      });
-    }
-  }, [model, config, form]);
+        ...currentConfig,
+        ...newConfigs,
+      } as typeof currentConfig);
+    },
+    [form],
+  );
+
+  const handleModelChange = useCallback(
+    (newModel: PROVIDER_MODEL_TYPE) => {
+      const newProvider = calculateModelProvider(newModel);
+      const defaultConfig = getOptimizationDefaultConfigByProvider(
+        newProvider,
+        newModel,
+      );
+
+      form.setValue("modelName", newModel);
+      form.setValue(
+        "modelConfig",
+        defaultConfig as OptimizationConfigFormType["modelConfig"],
+      );
+    },
+    [form, calculateModelProvider],
+  );
 
   const optimizerOptions = [
     { value: OPTIMIZER_TYPE.GEPA, label: "GEPA" },
@@ -227,7 +235,7 @@ const ConfigureOptimizationSection: React.FC = () => {
         <CardContent className="space-y-4 p-6">
           <FormField
             control={form.control}
-            name="datasetName"
+            name="datasetId"
             render={({ field }) => (
               <FormItem>
                 <div className="mb-2 flex items-center justify-between">
@@ -255,11 +263,8 @@ const ConfigureOptimizationSection: React.FC = () => {
                 </div>
                 <FormControl>
                   <DatasetSelectBox
-                    value={selectedDataset?.id || null}
-                    onChange={(id) => {
-                      const dataset = datasets.find((ds) => ds.id === id);
-                      field.onChange(dataset?.name || "");
-                    }}
+                    value={field.value}
+                    onChange={handleDatasetChange}
                     workspaceName={workspaceName}
                     disabled={disableForm}
                     showClearButton={false}
@@ -362,38 +367,18 @@ const ConfigureOptimizationSection: React.FC = () => {
                 <FormLabel>Model</FormLabel>
                 <FormControl>
                   <div className="flex h-8 items-center gap-2">
-                    <PromptModelSelect
+                    <OptimizationModelSelect
                       value={field.value as PROVIDER_MODEL_TYPE | ""}
-                      onChange={(m) => {
-                        if (m) {
-                          field.onChange(m);
-                          const providerType = calculateModelProvider(m);
-                          console.log(m, providerType, "m, providerType");
-                        }
-                      }}
-                      provider={provider}
+                      onChange={handleModelChange}
                       hasError={Boolean(form.formState.errors.modelName)}
-                      workspaceName={workspaceName}
-                      onAddProvider={handleAddProvider}
-                      onDeleteProvider={handleDeleteProvider}
-                      disabled={true}
+                      disabled={disableForm}
                     />
-
-                    <FormField
-                      control={form.control}
-                      name="modelConfig"
-                      render={({ field: configField }) => (
-                        <PromptModelConfigs
-                          size="icon-sm"
-                          provider={provider}
-                          model={model}
-                          configs={
-                            configField.value as Partial<LLMPromptConfigsType>
-                          }
-                          onChange={configField.onChange}
-                          disabled={disableForm}
-                        />
-                      )}
+                    <OptimizationTemperatureConfig
+                      size="icon-sm"
+                      model={model}
+                      configs={config}
+                      onChange={handleModelConfigChange}
+                      disabled={disableForm}
                     />
                   </div>
                 </FormControl>
