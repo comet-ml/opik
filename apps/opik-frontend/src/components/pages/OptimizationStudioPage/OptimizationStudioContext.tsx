@@ -139,7 +139,14 @@ export const OptimizationStudioProvider: React.FC<
     } finally {
       setIsSubmitting(false);
     }
-  }, [form, datasets, createOptimizationMutation, navigate, workspaceName, setLastSessionRunId]);
+  }, [
+    form,
+    datasets,
+    createOptimizationMutation,
+    navigate,
+    workspaceName,
+    setLastSessionRunId,
+  ]);
 
   return (
     <OptimizationStudioContext.Provider
