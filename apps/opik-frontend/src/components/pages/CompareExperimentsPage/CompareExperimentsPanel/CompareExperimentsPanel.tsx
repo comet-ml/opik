@@ -18,7 +18,6 @@ import useDatasetItemById from "@/api/datasets/useDatasetItemById";
 import useCompareExperimentsList from "@/api/datasets/useCompareExperimentsList";
 import useAppStore from "@/store/AppStore";
 import { useDatasetIdFromCompareExperimentsURL } from "@/hooks/useDatasetIdFromCompareExperimentsURL";
-import { createFilter } from "@/lib/filters";
 import { COLUMN_TYPE } from "@/types/shared";
 import DataTab from "@/components/pages/CompareExperimentsPage/CompareExperimentsPanel/DataTab/DataTab";
 
@@ -58,12 +57,13 @@ const CompareExperimentsPanel: React.FunctionComponent<
       datasetId,
       experimentsIds,
       filters: [
-        createFilter({
+        {
+          id: "",
           field: "id",
           type: COLUMN_TYPE.string,
           operator: "=",
           value: experimentsCompareId as string,
-        }),
+        },
       ],
       truncate: false,
       page: 1,
