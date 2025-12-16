@@ -102,7 +102,6 @@ const ConfigureOptimizationSection: React.FC = () => {
     [datasets, datasetId],
   );
 
-  // fetch dataset item data when a dataset is selected to infer schema for JSON Schema Validator
   const { data: datasetItemsData } = useDatasetItemsList(
     {
       datasetId: selectedDataset?.id || "",
