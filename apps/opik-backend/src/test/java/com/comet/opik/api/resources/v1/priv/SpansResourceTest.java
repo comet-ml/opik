@@ -1451,7 +1451,7 @@ class SpansResourceTest {
 
             String originalInputJson = String.format(
                     "{\"message\": \"Images attached:\", " +
-                            "\"png_data\": \"%s\", " +
+                            "\"png_data\": \"image %s that was used for testing\", " +
                             "\"gif_data\": \"%s\", " +
                             "\"user_id\": \"user123\", " +
                             "\"session_id\": \"session456\", " +
@@ -1515,7 +1515,7 @@ class SpansResourceTest {
             // Create input JSON with large text + attachments at the end
             String originalInputJson = String.format(
                     "{\"message\": \"%s\", " +
-                            "\"png_data\": \"%s\", " +
+                            "\"png_data\": \"image %s that was used for testing\", " +
                             "\"gif_data\": \"%s\"}",
                     largeText, base64Png, base64Gif);
 
@@ -2972,8 +2972,9 @@ class SpansResourceTest {
 
             String updatedInputJson = String.format(
                     "{\"message\": \"Updated with PNG:\", " +
-                            "\"png_data\": \"%s\"}",
-                    base64Png1);
+                            "\"plain_png_data\": \"%s\", " +
+                            "\"png_data\": \"image %s that was used for testing\"}",
+                    base64Png1, base64Png1);
 
             var spanUpdate = SpanUpdate.builder()
                     .traceId(traceId)
@@ -2996,8 +2997,9 @@ class SpansResourceTest {
                 assertThat(updatedInputString).doesNotContain(base64Jpg2);
                 assertThat(updatedInputString).doesNotContain(base64Png1);
 
-                // Verify PNG attachment reference is present
+                // Verify PNG attachments references is present
                 assertThat(updatedInputString).containsPattern("input-attachment-1-\\d+\\.png");
+                assertThat(updatedInputString).containsPattern("input-attachment-2-\\d+\\.png");
             });
 
             // Step 6: Verify attachments - should have 1 new PNG + 1 user-uploaded PDF
@@ -3011,7 +3013,7 @@ class SpansResourceTest {
                     TEST_WORKSPACE,
                     200);
 
-            assertThat(finalAttachmentPage.content()).hasSize(2); // 1 PNG + 1 user PDF
+            assertThat(finalAttachmentPage.content()).hasSize(3); // 2 PNG + 1 user PDF
 
             // Verify the user-uploaded PDF is still there
             boolean userPdfExists = finalAttachmentPage.content().stream()

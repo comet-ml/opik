@@ -421,6 +421,7 @@ from .prompt_version_public_template_structure import PromptVersionPublicTemplat
 from .prompt_version_public_type import PromptVersionPublicType
 from .prompt_version_template_structure import PromptVersionTemplateStructure
 from .prompt_version_type import PromptVersionType
+from .prompt_version_update import PromptVersionUpdate
 from .provider_api_key import ProviderApiKey
 from .provider_api_key_page_public import ProviderApiKeyPagePublic
 from .provider_api_key_provider import ProviderApiKeyProvider
@@ -920,6 +921,7 @@ __all__ = [
     "PromptVersionPublicType",
     "PromptVersionTemplateStructure",
     "PromptVersionType",
+    "PromptVersionUpdate",
     "ProviderApiKey",
     "ProviderApiKeyPagePublic",
     "ProviderApiKeyProvider",

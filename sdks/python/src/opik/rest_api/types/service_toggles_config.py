@@ -33,6 +33,7 @@ class ServiceTogglesConfig(UniversalBaseModel):
     vertexai_provider_enabled: typing_extensions.Annotated[bool, FieldMetadata(alias="vertexaiProviderEnabled")]
     customllm_provider_enabled: typing_extensions.Annotated[bool, FieldMetadata(alias="customllmProviderEnabled")]
     opikbuiltin_provider_enabled: typing_extensions.Annotated[bool, FieldMetadata(alias="opikbuiltinProviderEnabled")]
+    collaborators_tab_enabled: typing_extensions.Annotated[bool, FieldMetadata(alias="collaboratorsTabEnabled")]
 
     if IS_PYDANTIC_V2:
         model_config: typing.ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(extra="allow", frozen=True)  # type: ignore # Pydantic v2

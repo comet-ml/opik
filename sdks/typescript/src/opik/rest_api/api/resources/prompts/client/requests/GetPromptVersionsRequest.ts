@@ -9,4 +9,10 @@
 export interface GetPromptVersionsRequest {
     page?: number;
     size?: number;
+    /**
+     * Search text to find in template or change description fields
+     */
+    search?: string;
+    sorting?: string;
+    filters?: string;
 }
