@@ -25,7 +25,7 @@ const useOptimizationCreateMutation = () => {
         },
         {
           headers: {
-            ...(opikApiKey && { "apiKey": opikApiKey }),
+            ...(opikApiKey && { "opikApiKey": opikApiKey }),
           },
         },
       );
