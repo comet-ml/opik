@@ -206,6 +206,7 @@ class AttachmentClient:
             entity_id=entity_id,
             project_name=project_name,
             encoded_url_override=encoded_url_override,
+            delete_after_upload=False,
         )
 
         file_uploader.upload_attachment(
