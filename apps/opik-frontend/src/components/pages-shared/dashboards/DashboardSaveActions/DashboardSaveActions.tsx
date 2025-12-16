@@ -26,6 +26,7 @@ interface DashboardSaveActionsProps {
   navigateOnCreate?: boolean;
   onDashboardCreated?: (dashboardId: string) => void;
   defaultProjectId?: string;
+  defaultExperimentIds?: string[];
 }
 
 const DashboardSaveActions: React.FunctionComponent<
@@ -38,6 +39,7 @@ const DashboardSaveActions: React.FunctionComponent<
   navigateOnCreate = true,
   onDashboardCreated,
   defaultProjectId,
+  defaultExperimentIds,
 }) => {
   const hasUnsavedChanges = useDashboardStore(selectHasUnsavedChanges);
   const resetKeyRef = useRef(0);
@@ -159,6 +161,7 @@ const DashboardSaveActions: React.FunctionComponent<
         }}
         navigateOnCreate={navigateOnCreate}
         defaultProjectId={defaultProjectId}
+        defaultExperimentIds={defaultExperimentIds}
       />
     </>
   );

@@ -120,6 +120,7 @@ module.exports = {
         "template-icon-metrics": "var(--template-icon-metrics)",
         "template-icon-performance": "var(--template-icon-performance)",
         "template-icon-scratch": "var(--template-icon-scratch)",
+        "template-icon-experiments": "var(--template-icon-experiments)",
       },
       borderRadius: {
         xxl: "calc(var(--radius) + 4px)",

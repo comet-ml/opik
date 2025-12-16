@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { TriangleAlert } from "lucide-react";
+import { TriangleAlert, Info } from "lucide-react";
 import { cn } from "@/lib/utils";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 
@@ -7,6 +7,7 @@ type DashboardWidgetHeaderProps = {
   title: string;
   subtitle?: string;
   warningMessage?: string;
+  infoMessage?: string;
   actions?: React.ReactElement<{ onOpenChange?: (open: boolean) => void }>;
   dragHandle?: React.ReactNode;
   className?: string;
@@ -19,6 +20,7 @@ const DashboardWidgetHeader: React.FunctionComponent<
   title,
   subtitle,
   warningMessage,
+  infoMessage,
   actions,
   dragHandle,
   className,
@@ -52,14 +54,21 @@ const DashboardWidgetHeader: React.FunctionComponent<
         </div>
       )}
       <div className="flex items-start gap-2">
-        {warningMessage && (
-          <TooltipWrapper content={warningMessage}>
-            <TriangleAlert className="mt-0.5 size-3 shrink-0 text-amber-500" />
-          </TooltipWrapper>
-        )}
         <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-          <div className="truncate text-xs font-medium text-foreground">
-            {title}
+          <div className="flex items-center gap-1.5">
+            <div className="truncate text-xs font-medium text-foreground">
+              {title}
+            </div>
+            {warningMessage && (
+              <TooltipWrapper content={warningMessage}>
+                <TriangleAlert className="size-3 shrink-0 text-amber-500" />
+              </TooltipWrapper>
+            )}
+            {infoMessage && (
+              <TooltipWrapper content={infoMessage}>
+                <Info className="size-3 shrink-0 text-light-slate" />
+              </TooltipWrapper>
+            )}
           </div>
           {subtitle && (
             <div className="truncate text-xs font-normal text-muted-slate">

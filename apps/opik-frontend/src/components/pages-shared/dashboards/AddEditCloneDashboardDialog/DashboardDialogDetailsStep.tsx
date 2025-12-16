@@ -16,6 +16,7 @@ import {
   AccordionTrigger,
 } from "@/components/ui/accordion";
 import ProjectsSelectBox from "@/components/pages-shared/automations/ProjectsSelectBox";
+import ExperimentsSelectBox from "@/components/pages-shared/experiments/ExperimentsSelectBox/ExperimentsSelectBox";
 import { Control } from "react-hook-form";
 import { cn } from "@/lib/utils";
 
@@ -23,18 +24,19 @@ interface DashboardFormFields {
   name: string;
   description?: string;
   projectId?: string;
+  experimentIds?: string[];
 }
 
 interface DashboardDialogDetailsStepProps {
   control: Control<DashboardFormFields>;
-  showProjectSelector: boolean;
-  defaultDescriptionOpen?: boolean;
+  showProjectSelect?: boolean;
+  showExperimentsSelect?: boolean;
   onSubmit: () => void;
 }
 
 const DashboardDialogDetailsStep: React.FunctionComponent<
   DashboardDialogDetailsStepProps
-> = ({ control, showProjectSelector, defaultDescriptionOpen, onSubmit }) => {
+> = ({ control, showProjectSelect, showExperimentsSelect, onSubmit }) => {
   return (
     <div className="flex flex-col gap-4">
       {/* Name field */}
@@ -69,7 +71,7 @@ const DashboardDialogDetailsStep: React.FunctionComponent<
       />
 
       {/* Project selector (conditional) */}
-      {showProjectSelector && (
+      {showProjectSelect && (
         <FormField
           control={control}
           name="projectId"
@@ -95,12 +97,36 @@ const DashboardDialogDetailsStep: React.FunctionComponent<
         />
       )}
 
-      {/* Description accordion */}
+      {/* Experiments selector (conditional) */}
+      {showExperimentsSelect && (
+        <FormField
+          control={control}
+          name="experimentIds"
+          render={({ field, formState }) => {
+            const validationErrors = get(formState.errors, ["experimentIds"]);
+
+            return (
+              <FormItem>
+                <FormLabel>Experiments</FormLabel>
+                <FormControl>
+                  <ExperimentsSelectBox
+                    value={field.value || []}
+                    onValueChange={field.onChange}
+                    multiselect
+                    className={cn({
+                      "border-destructive": Boolean(validationErrors?.message),
+                    })}
+                  />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            );
+          }}
+        />
+      )}
+
       <div className="flex flex-col gap-2 border-t border-border pt-2">
-        <Accordion
-          type="multiple"
-          defaultValue={defaultDescriptionOpen ? ["description"] : undefined}
-        >
+        <Accordion type="multiple" defaultValue={["description"]}>
           <AccordionItem value="description">
             <AccordionTrigger>Description</AccordionTrigger>
             <AccordionContent>

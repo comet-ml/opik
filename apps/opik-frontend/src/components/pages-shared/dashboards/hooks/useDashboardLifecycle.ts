@@ -39,7 +39,7 @@ export const useDashboardLifecycle = ({
 
     return {
       id: template.id,
-      name: template.title,
+      name: template.name,
       description: template.description,
       workspace_id: "",
       config: template.config,

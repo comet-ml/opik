@@ -1,13 +1,10 @@
-import React, { useCallback, useRef, useState } from "react";
-import { Split } from "lucide-react";
+import React, { useCallback } from "react";
 import get from "lodash/get";
 import slugify from "slugify";
 import uniq from "lodash/uniq";
 import first from "lodash/first";
 
-import { Button } from "@/components/ui/button";
-import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
-import CompareExperimentsDialog from "@/components/pages/CompareExperimentsPage/CompareExperimentsDialog";
+import CompareExperimentsButton from "@/components/pages/CompareExperimentsPage/CompareExperimentsButton/CompareExperimentsButton";
 import ExportToButton from "@/components/shared/ExportToButton/ExportToButton";
 import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
@@ -27,8 +24,6 @@ import {
   EXPERIMENT_ITEM_OUTPUT_PREFIX,
   EXPERIMENT_ITEM_DATASET_PREFIX,
 } from "@/constants/experiments";
-import ExplainerIcon from "@/components/shared/ExplainerIcon/ExplainerIcon";
-import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 import { Separator } from "@/components/ui/separator";
 
 const EVALUATION_EXPORT_COLUMNS = [
@@ -93,8 +88,6 @@ type CompareExperimentsActionsPanelProps = {
 const CompareExperimentsActionsPanel: React.FC<
   CompareExperimentsActionsPanelProps
 > = ({ getDataForExport, selectedRows = [], columnsToExport, experiments }) => {
-  const resetKeyRef = useRef(0);
-  const [open, setOpen] = useState<boolean>(false);
   const disabled = !selectedRows?.length;
   const isExportEnabled = useIsFeatureEnabled(FeatureToggleKeys.EXPORT_ENABLED);
 
@@ -181,45 +174,23 @@ const CompareExperimentsActionsPanel: React.FC<
 
   return (
     <div className="flex items-center gap-2">
-      <CompareExperimentsDialog
-        key={resetKeyRef.current}
-        open={open}
-        setOpen={setOpen}
-      />
-      <div className="inline-flex items-center gap-2">
-        <TooltipWrapper content="Compare experiments">
-          <Button
-            size="sm"
-            onClick={() => {
-              setOpen(true);
-              resetKeyRef.current = resetKeyRef.current + 1;
-            }}
-          >
-            <Split className="mr-1.5 size-3.5" />
-            Compare
-          </Button>
-        </TooltipWrapper>
-        <ExplainerIcon
-          className="-ml-0.5"
-          {...EXPLAINERS_MAP[
-            EXPLAINER_ID.what_does_it_mean_to_compare_my_experiments
-          ]}
-        />
-        <Separator orientation="vertical" className="mx-2 h-4" />
-      </div>
+      <CompareExperimentsButton />
       {columnsToExport && (
-        <ExportToButton
-          disabled={
-            disabled || columnsToExport.length === 0 || !isExportEnabled
-          }
-          getData={mapRowData}
-          generateFileName={generateFileName}
-          tooltipContent={
-            !isExportEnabled
-              ? "Export functionality is disabled for this installation"
-              : undefined
-          }
-        />
+        <>
+          <Separator orientation="vertical" className="mx-2 h-4" />
+          <ExportToButton
+            disabled={
+              disabled || columnsToExport.length === 0 || !isExportEnabled
+            }
+            getData={mapRowData}
+            generateFileName={generateFileName}
+            tooltipContent={
+              !isExportEnabled
+                ? "Export functionality is disabled for this installation"
+                : undefined
+            }
+          />
+        </>
       )}
     </div>
   );

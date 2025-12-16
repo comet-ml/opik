@@ -2,18 +2,88 @@ import {
   DashboardTemplate,
   WIDGET_TYPE,
   TEMPLATE_TYPE,
+  TEMPLATE_SCOPE,
+  EXPERIMENT_DATA_SOURCE,
 } from "@/types/dashboard";
 import { DASHBOARD_VERSION, createTemplateId } from "@/lib/dashboard/utils";
 import { DEFAULT_DATE_PRESET } from "@/components/pages-shared/traces/MetricDateRangeSelect/constants";
 import { METRIC_NAME_TYPE } from "@/api/projects/useProjectMetric";
 import { CHART_TYPE } from "@/constants/chart";
 import { TRACE_DATA_TYPE } from "@/constants/traces";
-import { LayoutDashboard, SquareActivity } from "lucide-react";
+import { LayoutDashboard, SquareActivity, FlaskConical } from "lucide-react";
+
+const EXPERIMENT_COMPARISON_TEMPLATE: DashboardTemplate = {
+  id: createTemplateId(TEMPLATE_TYPE.EXPERIMENT_COMPARISON),
+  type: TEMPLATE_TYPE.EXPERIMENT_COMPARISON,
+  scope: TEMPLATE_SCOPE.EXPERIMENTS,
+  name: "Experiment insights",
+  description: "Compare feedback scores across experiments",
+  icon: FlaskConical,
+  iconColor: "text-template-icon-experiments",
+  config: {
+    version: DASHBOARD_VERSION,
+    sections: [
+      {
+        id: "template-section-1",
+        title: "Experiment feedback scores",
+        widgets: [
+          {
+            id: "template-widget-1",
+            title: "Feedback scores",
+            type: WIDGET_TYPE.EXPERIMENTS_FEEDBACK_SCORES,
+            config: {
+              dataSource: EXPERIMENT_DATA_SOURCE.SELECT_EXPERIMENTS,
+              chartType: CHART_TYPE.radar,
+              experimentIds: [],
+              filters: [],
+              groups: [],
+            },
+          },
+          {
+            id: "template-widget-2",
+            title: "Feedback scores distribution",
+            type: WIDGET_TYPE.EXPERIMENTS_FEEDBACK_SCORES,
+            config: {
+              dataSource: EXPERIMENT_DATA_SOURCE.SELECT_EXPERIMENTS,
+              chartType: CHART_TYPE.bar,
+              experimentIds: [],
+              filters: [],
+              groups: [],
+            },
+          },
+        ],
+        layout: [
+          {
+            i: "template-widget-1",
+            x: 0,
+            y: 0,
+            w: 2,
+            h: 4,
+          },
+          {
+            i: "template-widget-2",
+            x: 2,
+            y: 0,
+            w: 4,
+            h: 4,
+          },
+        ],
+      },
+    ],
+    lastModified: Date.now(),
+    config: {
+      dateRange: DEFAULT_DATE_PRESET,
+      projectIds: [],
+      experimentIds: [],
+    },
+  },
+};
 
 const PROJECT_METRICS_TEMPLATE: DashboardTemplate = {
   id: createTemplateId(TEMPLATE_TYPE.PROJECT_METRICS),
   type: TEMPLATE_TYPE.PROJECT_METRICS,
-  title: "Project metrics",
+  scope: TEMPLATE_SCOPE.PROJECT,
+  name: "Project metrics",
   description:
     "Track token usage, cost, and performance metrics for traces and threads",
   icon: LayoutDashboard,
@@ -211,7 +281,8 @@ const PROJECT_METRICS_TEMPLATE: DashboardTemplate = {
 const PERFORMANCE_OVERVIEW_TEMPLATE: DashboardTemplate = {
   id: createTemplateId(TEMPLATE_TYPE.PROJECT_PERFORMANCE),
   type: TEMPLATE_TYPE.PROJECT_PERFORMANCE,
-  title: "Performance overview",
+  scope: TEMPLATE_SCOPE.PROJECT,
+  name: "Performance overview",
   description:
     "Comprehensive performance monitoring including traces, threads, quality metrics, and latency",
   icon: SquareActivity,
@@ -473,9 +544,17 @@ const PERFORMANCE_OVERVIEW_TEMPLATE: DashboardTemplate = {
 export const DASHBOARD_TEMPLATES: Record<TEMPLATE_TYPE, DashboardTemplate> = {
   [TEMPLATE_TYPE.PROJECT_METRICS]: PROJECT_METRICS_TEMPLATE,
   [TEMPLATE_TYPE.PROJECT_PERFORMANCE]: PERFORMANCE_OVERVIEW_TEMPLATE,
+  [TEMPLATE_TYPE.EXPERIMENT_COMPARISON]: EXPERIMENT_COMPARISON_TEMPLATE,
 };
 
 export const TEMPLATE_LIST: DashboardTemplate[] = [
+  PERFORMANCE_OVERVIEW_TEMPLATE,
+  PROJECT_METRICS_TEMPLATE,
+  EXPERIMENT_COMPARISON_TEMPLATE,
+];
+
+export const EXPERIMENTS_TEMPLATE_LIST: DashboardTemplate[] = [
+  EXPERIMENT_COMPARISON_TEMPLATE,
   PERFORMANCE_OVERVIEW_TEMPLATE,
   PROJECT_METRICS_TEMPLATE,
 ];

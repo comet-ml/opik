@@ -20,20 +20,21 @@ import {
 } from "@/store/DashboardStore";
 import { DEFAULT_DATE_PRESET } from "@/components/pages-shared/traces/MetricDateRangeSelect/constants";
 import PageBodyStickyContainer from "@/components/layout/PageBodyStickyContainer/PageBodyStickyContainer";
-import { TEMPLATE_LIST } from "@/lib/dashboard/templates";
-import { Separator } from "@/components/ui/separator";
+import { EXPERIMENTS_TEMPLATE_LIST } from "@/lib/dashboard/templates";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
+import CompareExperimentsButton from "@/components/pages/CompareExperimentsPage/CompareExperimentsButton/CompareExperimentsButton";
+import { Separator } from "@/components/ui/separator";
 
 const DASHBOARD_QUERY_PARAM_KEY = "dashboardId";
-const DASHBOARD_LOCAL_STORAGE_KEY_PREFIX = "opik-project-dashboard";
+const DASHBOARD_LOCAL_STORAGE_KEY_PREFIX = "opik-experiments-dashboard";
 
-interface DashboardsTabProps {
-  projectId: string;
+interface ExperimentsDashboardsTabProps {
+  experimentsIds: string[];
 }
 
-const DashboardsTab: React.FunctionComponent<DashboardsTabProps> = ({
-  projectId,
-}) => {
+const ExperimentsDashboardsTab: React.FunctionComponent<
+  ExperimentsDashboardsTabProps
+> = ({ experimentsIds }) => {
   const [dashboardId, setDashboardId] = useQueryParamAndLocalStorageState({
     localStorageKey: DASHBOARD_LOCAL_STORAGE_KEY_PREFIX,
     queryKey: DASHBOARD_QUERY_PARAM_KEY,
@@ -43,8 +44,8 @@ const DashboardsTab: React.FunctionComponent<DashboardsTabProps> = ({
   });
 
   useEffect(() => {
-    if (!dashboardId) {
-      setDashboardId(TEMPLATE_LIST[0].id);
+    if (!dashboardId && EXPERIMENTS_TEMPLATE_LIST.length > 0) {
+      setDashboardId(EXPERIMENTS_TEMPLATE_LIST[0].id);
     }
   }, [dashboardId, setDashboardId]);
 
@@ -61,12 +62,12 @@ const DashboardsTab: React.FunctionComponent<DashboardsTabProps> = ({
   const setRuntimeConfig = useDashboardStore(selectSetRuntimeConfig);
 
   useEffect(() => {
-    setRuntimeConfig({ projectIds: [projectId] });
+    setRuntimeConfig({ experimentIds: experimentsIds });
 
     return () => {
       setRuntimeConfig({});
     };
-  }, [projectId, setRuntimeConfig]);
+  }, [experimentsIds, setRuntimeConfig]);
 
   const dateRangeValue = config?.dateRange || DEFAULT_DATE_PRESET;
 
@@ -94,7 +95,7 @@ const DashboardsTab: React.FunctionComponent<DashboardsTabProps> = ({
   const handleDashboardDeleted = useCallback(
     (deletedDashboardId: string) => {
       if (dashboardId === deletedDashboardId) {
-        setDashboardId(TEMPLATE_LIST[0]?.id || null);
+        setDashboardId(EXPERIMENTS_TEMPLATE_LIST[0]?.id || null);
       }
     },
     [dashboardId, setDashboardId],
@@ -107,8 +108,9 @@ const DashboardsTab: React.FunctionComponent<DashboardsTabProps> = ({
       buttonClassName="w-[300px]"
       onDashboardCreated={handleDashboardCreated}
       onDashboardDeleted={handleDashboardDeleted}
-      defaultProjectId={projectId}
+      defaultExperimentIds={experimentsIds}
       disabled={hasUnsavedChanges}
+      templates={EXPERIMENTS_TEMPLATE_LIST}
     />
   );
 
@@ -128,6 +130,11 @@ const DashboardsTab: React.FunctionComponent<DashboardsTabProps> = ({
         )}
 
         <div className="flex shrink-0 items-center gap-2">
+          <CompareExperimentsButton
+            variant="outline"
+            tooltipContent="Select experiments to compare"
+          />
+          <Separator orientation="vertical" className="mx-2 h-4" />
           {dashboard && (
             <DashboardSaveActions
               onSave={save}
@@ -136,7 +143,7 @@ const DashboardsTab: React.FunctionComponent<DashboardsTabProps> = ({
               isTemplate={isTemplate}
               navigateOnCreate={false}
               onDashboardCreated={handleDashboardCreated}
-              defaultProjectId={projectId}
+              defaultExperimentIds={experimentsIds}
             />
           )}
           <MetricDateRangeSelect
@@ -177,4 +184,4 @@ const DashboardsTab: React.FunctionComponent<DashboardsTabProps> = ({
   );
 };
 
-export default DashboardsTab;
+export default ExperimentsDashboardsTab;

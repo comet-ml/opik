@@ -2,6 +2,7 @@ import uniqid from "uniqid";
 import cloneDeep from "lodash/cloneDeep";
 import map from "lodash/map";
 import get from "lodash/get";
+import isEmpty from "lodash/isEmpty";
 import {
   BaseDashboardConfig,
   DashboardSection,
@@ -21,6 +22,46 @@ export const DASHBOARD_VERSION = 1;
 const DEFAULT_SECTION_NAME = "New section";
 
 const TEMPLATE_ID_PREFIX = "template:";
+
+export const UNSET_PROJECT_OPTION = [
+  {
+    value: "",
+    label: "None",
+  },
+];
+
+export const UNSET_PROJECT_VALUE = "";
+
+export const GLOBAL_PROJECT_CONFIG_MESSAGE = "Using global project config";
+
+export const WIDGET_PROJECT_SELECTOR_DESCRIPTION =
+  "Pick the project for this widget. If not set, the dashboard's global project config will be used.";
+
+export const resolveProjectIdFromConfig = (
+  widgetProjectId: string | undefined,
+  globalProjectId: string | undefined,
+): {
+  projectId: string | undefined;
+  isUsingGlobalProject: boolean;
+  infoMessage: string | undefined;
+} => {
+  const isUsingGlobalProject =
+    isEmpty(widgetProjectId) && !isEmpty(globalProjectId);
+
+  const projectId = !isEmpty(widgetProjectId)
+    ? widgetProjectId
+    : globalProjectId;
+
+  const infoMessage = isUsingGlobalProject
+    ? GLOBAL_PROJECT_CONFIG_MESSAGE
+    : undefined;
+
+  return {
+    projectId,
+    isUsingGlobalProject,
+    infoMessage,
+  };
+};
 
 export const createTemplateId = (templateId: TEMPLATE_TYPE): string => {
   return `${TEMPLATE_ID_PREFIX}${templateId}`;

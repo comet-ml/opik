@@ -11,6 +11,11 @@ export enum WIDGET_TYPE {
   EXPERIMENTS_FEEDBACK_SCORES = "experiments_feedback_scores",
 }
 
+export enum EXPERIMENT_DATA_SOURCE {
+  FILTER_AND_GROUP = "filter_and_group",
+  SELECT_EXPERIMENTS = "select_experiments",
+}
+
 export enum WIDGET_CATEGORY {
   OBSERVABILITY = "observability",
   EVALUATION = "evaluation",
@@ -20,6 +25,12 @@ export enum WIDGET_CATEGORY {
 export enum TEMPLATE_TYPE {
   PROJECT_METRICS = "project-metrics",
   PROJECT_PERFORMANCE = "project-performance",
+  EXPERIMENT_COMPARISON = "experiment-comparison",
+}
+
+export enum TEMPLATE_SCOPE {
+  PROJECT = "project",
+  EXPERIMENTS = "experiments",
 }
 
 export interface ProjectMetricsWidget {
@@ -54,8 +65,10 @@ export interface ProjectStatsCardWidget {
 export interface ExperimentsFeedbackScoresWidgetType {
   type: WIDGET_TYPE.EXPERIMENTS_FEEDBACK_SCORES;
   config: {
+    dataSource?: EXPERIMENT_DATA_SOURCE;
     filters?: Filters;
     groups?: Groups;
+    experimentIds?: string[];
     chartType?: CHART_TYPE;
   } & Record<string, unknown>;
 }
@@ -227,7 +240,8 @@ export interface WidgetConfigDialogProps {
 export interface DashboardTemplate {
   id: string;
   type: TEMPLATE_TYPE;
-  title: string;
+  scope: TEMPLATE_SCOPE;
+  name: string;
   description: string;
   icon: React.ComponentType<{ className?: string }>;
   iconColor: string;

@@ -20,6 +20,7 @@ export type UseExperimentsListParams = {
   search?: string;
   page: number;
   size: number;
+  queryKey?: string;
 };
 
 export type UseExperimentsListResponse = {
@@ -66,7 +67,7 @@ export default function useExperimentsList(
   options?: QueryConfig<UseExperimentsListResponse>,
 ) {
   return useQuery({
-    queryKey: ["experiments", params],
+    queryKey: [params.queryKey ?? "experiments", params],
     queryFn: (context) => getExperimentsList(context, params),
     ...options,
   });
