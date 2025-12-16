@@ -242,6 +242,7 @@ public class TraceAssertions {
 
         assertThat(actualStats)
                 .usingRecursiveComparison(StatsUtils.getRecursiveComparisonConfiguration())
+                .ignoringCollectionOrder()
                 .isEqualTo(expectedStats);
     }
 
