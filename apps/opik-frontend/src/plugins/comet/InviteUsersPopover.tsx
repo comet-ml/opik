@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React from "react";
 import { Mail } from "lucide-react";
 import { DropdownMenuContent } from "@/components/ui/dropdown-menu";
 import SearchInput from "@/components/shared/SearchInput/SearchInput";
@@ -8,9 +8,15 @@ import useWorkspace from "./useWorkspace";
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-const InviteUsersPopover = () => {
-  const [searchQuery, setSearchQuery] = useState("");
+interface InviteUsersPopoverProps {
+  searchQuery: string;
+  setSearchQuery: (query: string) => void;
+}
 
+const InviteUsersPopover: React.FC<InviteUsersPopoverProps> = ({
+  searchQuery,
+  setSearchQuery,
+}) => {
   const workspace = useWorkspace();
   const workspaceId = workspace?.workspaceId;
   const workspaceName = workspace?.workspaceName;

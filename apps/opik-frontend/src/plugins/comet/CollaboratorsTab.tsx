@@ -69,6 +69,7 @@ const CollaboratorsTab = () => {
   });
 
   const [search, setSearch] = useState("");
+  const [inviteSearchQuery, setInviteSearchQuery] = useState("");
 
   const workspace = useWorkspace();
   const workspaceId = workspace?.workspaceId;
@@ -200,14 +201,23 @@ const CollaboratorsTab = () => {
           className="w-[320px]"
           dimension="sm"
         />
-        <DropdownMenu>
+        <DropdownMenu
+          onOpenChange={(open) => {
+            if (!open) {
+              setInviteSearchQuery("");
+            }
+          }}
+        >
           <DropdownMenuTrigger asChild>
             <Button variant="default" size="sm">
               <UserPlus className="mr-1.5 size-3.5" />
               Add users
             </Button>
           </DropdownMenuTrigger>
-          <InviteUsersPopover />
+          <InviteUsersPopover
+            searchQuery={inviteSearchQuery}
+            setSearchQuery={setInviteSearchQuery}
+          />
         </DropdownMenu>
       </div>
       {renderTable()}
