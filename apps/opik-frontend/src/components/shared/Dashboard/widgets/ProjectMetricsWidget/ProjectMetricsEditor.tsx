@@ -24,6 +24,11 @@ import ProjectWidgetFiltersSection from "@/components/shared/Dashboard/widgets/s
 
 import { cn } from "@/lib/utils";
 import { useDashboardStore, selectMixedConfig } from "@/store/DashboardStore";
+import {
+  UNSET_PROJECT_OPTION,
+  UNSET_PROJECT_VALUE,
+  WIDGET_PROJECT_SELECTOR_DESCRIPTION,
+} from "@/lib/dashboard/utils";
 
 import get from "lodash/get";
 
@@ -276,7 +281,7 @@ const ProjectMetricsEditor = forwardRef<
               const validationErrors = get(formState.errors, ["projectId"]);
               return (
                 <FormItem>
-                  <FormLabel>Project (optional)</FormLabel>
+                  <FormLabel>Project</FormLabel>
                   <FormControl>
                     <ProjectsSelectBox
                       className={cn({
@@ -284,16 +289,16 @@ const ProjectMetricsEditor = forwardRef<
                           validationErrors?.message,
                         ),
                       })}
-                      value={field.value || ""}
+                      value={field.value || UNSET_PROJECT_VALUE}
                       onValueChange={(value) => {
                         field.onChange(value);
                         handleProjectChange(value);
                       }}
+                      customOptions={UNSET_PROJECT_OPTION}
                     />
                   </FormControl>
                   <Description>
-                    Pick the project for this widget. If not set, the
-                    dashboard&apos;s default project will be used.
+                    {WIDGET_PROJECT_SELECTOR_DESCRIPTION}
                   </Description>
                   <FormMessage />
                 </FormItem>
