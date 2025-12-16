@@ -1,6 +1,8 @@
 import { OpikClient } from "@/client/Client";
-import type { Span as ISpan, SpanUpdate } from "@/rest_api/api";
+import type { Span as ISpan } from "@/rest_api/api";
 import { generateId } from "@/utils/generateId";
+import type { SpanUpdateData } from "./types";
+import { UpdateService } from "./UpdateService";
 
 export interface SavedSpan extends ISpan {
   id: string;
@@ -32,17 +34,17 @@ export class Span {
     });
   };
 
-  public update = (
-    updates: Omit<
-      SpanUpdate,
-      "traceId" | "parentSpanId" | "projectId" | "projectName"
-    >
-  ) => {
+  public update = (updates: SpanUpdateData) => {
+    const processedUpdates = UpdateService.processSpanUpdate(
+      updates,
+      this.data.metadata
+    );
+
     const spanUpdates = {
       parentSpanId: this.data.parentSpanId,
       projectName: this.data.projectName ?? this.opik.config.projectName,
       traceId: this.data.traceId,
-      ...updates,
+      ...processedUpdates,
     };
 
     this.opik.spanBatchQueue.update(this.data.id, spanUpdates);
