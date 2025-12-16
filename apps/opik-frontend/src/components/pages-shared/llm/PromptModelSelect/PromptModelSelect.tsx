@@ -1,6 +1,4 @@
 import React, { useCallback, useMemo, useRef, useState } from "react";
-import isNull from "lodash/isNull";
-import pick from "lodash/pick";
 
 import {
   Select,
@@ -31,11 +29,8 @@ import {
 import useProviderKeys from "@/api/provider-keys/useProviderKeys";
 import ManageAIProviderDialog from "@/components/pages-shared/llm/ManageAIProviderDialog/ManageAIProviderDialog";
 import useLLMProviderModelsData from "@/hooks/useLLMProviderModelsData";
-import {
-  getProviderDisplayName,
-  getProviderIcon,
-  parseComposedProviderType,
-} from "@/lib/provider";
+import { parseComposedProviderType } from "@/lib/provider";
+import { useModelOptions } from "./useModelOptions";
 
 interface PromptModelSelectProps {
   value: PROVIDER_MODEL_TYPE | "";
@@ -65,9 +60,6 @@ const PromptModelSelect = ({
 }: PromptModelSelectProps) => {
   const resetDialogKeyRef = useRef(0);
   const inputRef = useRef<HTMLInputElement>(null);
-  const modelProviderMapRef = useRef<Record<string, COMPOSED_PROVIDER_TYPE>>(
-    {},
-  );
 
   const [openConfigDialog, setOpenConfigDialog] = React.useState(false);
   const [filterValue, setFilterValue] = useState("");
@@ -89,122 +81,13 @@ const PromptModelSelect = ({
     [data?.content],
   );
 
-  // Free model option (shown directly, not in a dropdown)
-  const freeModelOption = useMemo(() => {
-    const freeProvider = configuredProvidersList.find(
-      (p) => p.provider === PROVIDER_TYPE.OPIK_FREE,
-    );
-
-    if (!freeProvider) {
-      return null;
-    }
-
-    const providerModels = getProviderModels()[PROVIDER_TYPE.OPIK_FREE];
-    if (!providerModels?.length) {
-      return null;
-    }
-
-    const model = providerModels[0];
-    // Use model_label from config (e.g., "gpt-4o-mini") with "(free)" suffix
-    // Handle empty string by falling back to default label
-    const configModelLabel = freeProvider.configuration?.model_label?.trim();
-    const modelLabel = configModelLabel || model.label;
-
-    // Register in provider map for selection handling
-    modelProviderMapRef.current[model.value] = PROVIDER_TYPE.OPIK_FREE;
-
-    return {
-      label: `${modelLabel} (free)`,
-      value: model.value,
-      composedProviderType: PROVIDER_TYPE.OPIK_FREE as COMPOSED_PROVIDER_TYPE,
-      icon: getProviderIcon(freeProvider),
-    };
-  }, [configuredProvidersList, getProviderModels]);
-
-  // Other provider groups (excluding free model)
-  const groupOptions = useMemo(() => {
-    const filteredByConfiguredProviders = pick(
-      getProviderModels(),
-      configuredProvidersList
-        .filter((p) => p.provider !== PROVIDER_TYPE.OPIK_FREE)
-        .map((p) => p.ui_composed_provider),
-    );
-
-    Object.entries(filteredByConfiguredProviders).forEach(
-      ([pn, providerModels]) => {
-        providerModels.forEach(({ value }) => {
-          modelProviderMapRef.current[value] = pn;
-        });
-      },
-    );
-
-    return Object.entries(filteredByConfiguredProviders)
-      .map(([pn, providerModels]) => {
-        const composedProviderType = pn as COMPOSED_PROVIDER_TYPE;
-        const configuredProvider = configuredProvidersList.find(
-          (p) => p.ui_composed_provider === composedProviderType,
-        )!;
-
-        const options = providerModels.map((providerModel) => ({
-          label: providerModel.label,
-          value: providerModel.value,
-        }));
-
-        if (!options.length) {
-          return null;
-        }
-
-        return {
-          label: getProviderDisplayName(configuredProvider),
-          options,
-          icon: getProviderIcon(configuredProvider),
-          composedProviderType: composedProviderType,
-        };
-      })
-      .filter((g): g is NonNullable<typeof g> => !isNull(g));
-  }, [configuredProvidersList, getProviderModels]);
-
-  // Check if free model matches search filter
-  const filteredFreeModel = useMemo(() => {
-    if (!freeModelOption) return null;
-    if (filterValue === "") return freeModelOption;
-
-    const loweredFilterValue = filterValue.toLowerCase();
-    if (
-      freeModelOption.label.toLowerCase().includes(loweredFilterValue) ||
-      freeModelOption.value.toLowerCase().includes(loweredFilterValue)
-    ) {
-      return freeModelOption;
-    }
-    return null;
-  }, [filterValue, freeModelOption]);
-
-  const filteredOptions = useMemo(() => {
-    if (filterValue === "") {
-      return groupOptions;
-    }
-
-    const loweredFilterValue = filterValue.toLowerCase();
-
-    return groupOptions
-      .map((groupOption) => {
-        const filteredChildOptions = groupOption.options.filter(
-          (o) =>
-            o.label.toLowerCase().includes(loweredFilterValue) ||
-            o.value.toLowerCase().includes(loweredFilterValue),
-        );
-
-        if (filteredChildOptions.length === 0) {
-          return null;
-        }
-
-        return {
-          ...groupOption,
-          options: filteredChildOptions,
-        };
-      })
-      .filter((filteredGroupedOption) => !isNull(filteredGroupedOption));
-  }, [filterValue, groupOptions]);
+  const {
+    freeModelOption,
+    groupOptions,
+    filteredFreeModel,
+    filteredGroups,
+    modelProviderMapRef,
+  } = useModelOptions(configuredProvidersList, getProviderModels, filterValue);
 
   const handleOnChange = useCallback(
     (value: PROVIDER_MODEL_TYPE) => {
@@ -213,7 +96,7 @@ const PromptModelSelect = ({
         : modelProviderMapRef.current[value];
       onChange(value, parseComposedProviderType(modelProvider));
     },
-    [onChange, openProviderMenu],
+    [onChange, openProviderMenu, modelProviderMapRef],
   );
 
   const handleSelectOpenChange = useCallback((open: boolean) => {
@@ -232,11 +115,35 @@ const PromptModelSelect = ({
     inputRef.current?.focus();
   };
 
+  // Get selected model info for trigger display
+  const getSelectedModelInfo = useCallback(() => {
+    if (
+      freeModelOption &&
+      provider === PROVIDER_TYPE.OPIK_FREE &&
+      value === freeModelOption.value
+    ) {
+      return { icon: freeModelOption.icon, title: freeModelOption.label };
+    }
+
+    const selectedGroup = groupOptions.find(
+      (o) => o.composedProviderType === provider,
+    );
+    const modelName =
+      selectedGroup?.options?.find((m) => m.value === value)?.label ?? value;
+
+    return {
+      icon: selectedGroup?.icon,
+      title: `${
+        selectedGroup?.label ? selectedGroup.label + " " : ""
+      }${modelName}`,
+    };
+  }, [freeModelOption, provider, value, groupOptions]);
+
   const renderOptions = () => {
     const hasNoProviders =
       !freeModelOption && configuredProvidersList?.length === 0;
     const hasNoResults =
-      !filteredFreeModel && filteredOptions.length === 0 && filterValue !== "";
+      !filteredFreeModel && filteredGroups.length === 0 && filterValue !== "";
 
     if (hasNoProviders) {
       return (
@@ -266,13 +173,13 @@ const PromptModelSelect = ({
               withoutCheck
               className="comet-body-s h-10 hover:bg-primary-foreground"
             >
-              <div className="flex items-center gap-1">
-                {FreeModelIcon && <FreeModelIcon className="size-4" />}
+              <div className="flex w-full items-center gap-2">
+                {FreeModelIcon && <FreeModelIcon className="size-4 shrink-0" />}
                 <span>{filteredFreeModel.label}</span>
               </div>
             </SelectItem>
           )}
-          {filteredOptions.map((groupOption) => {
+          {filteredGroups.map((groupOption) => {
             return (
               <SelectGroup key={groupOption?.label}>
                 <SelectLabel className="h-10">{groupOption?.label}</SelectLabel>
@@ -302,9 +209,9 @@ const PromptModelSelect = ({
             withoutCheck
             className="comet-body-s h-10 hover:bg-primary-foreground"
           >
-            <div className="flex w-full items-center gap-1">
+            <div className="flex w-full items-center gap-2">
               {FreeModelIconNormal && (
-                <FreeModelIconNormal className="size-4" />
+                <FreeModelIconNormal className="size-4 shrink-0" />
               )}
               <span>{freeModelOption.label}</span>
             </div>
@@ -325,15 +232,15 @@ const PromptModelSelect = ({
                 }
                 onMouseLeave={() => setOpenProviderMenu(null)}
                 className={cn(
-                  "comet-body-s flex h-10 w-full items-center rounded-sm p-0 pl-2 hover:bg-primary-foreground justify-center",
+                  "comet-body-s flex h-10 w-full items-center gap-2 rounded-sm p-0 pl-2 hover:bg-primary-foreground",
                   {
                     "bg-primary-foreground":
                       group.composedProviderType === openProviderMenu,
                   },
                 )}
               >
-                {<group.icon className="comet-body mr-1" />}
-                {group.label}
+                <group.icon className="size-4 shrink-0" />
+                <span>{group.label}</span>
                 <ChevronRight className="ml-auto mr-3 size-4 text-light-slate" />
               </div>
             </PopoverTrigger>
@@ -367,47 +274,7 @@ const PromptModelSelect = ({
   };
 
   const renderSelectTrigger = () => {
-    // Check if free model is selected
-    if (
-      freeModelOption &&
-      provider === PROVIDER_TYPE.OPIK_FREE &&
-      value === freeModelOption.value
-    ) {
-      const FreeIcon = freeModelOption.icon;
-      return (
-        <TooltipWrapper content={freeModelOption.label}>
-          <SelectTrigger
-            className={cn("size-full data-[placeholder]:text-light-slate", {
-              "border-destructive": hasError,
-            })}
-          >
-            <SelectValue
-              placeholder="Select an LLM model"
-              data-testid="select-a-llm-model"
-            >
-              <div className="flex items-center gap-2">
-                {FreeIcon && <FreeIcon className="min-w-3.5 text-foreground" />}
-                <span className="truncate">{freeModelOption.label}</span>
-              </div>
-            </SelectValue>
-          </SelectTrigger>
-        </TooltipWrapper>
-      );
-    }
-
-    const selectedGroup = groupOptions.find(
-      (o) => o.composedProviderType === provider,
-    );
-    const modelName =
-      selectedGroup?.options?.find((m) => m.value === value)?.label ?? value;
-
-    const title = `${
-      selectedGroup ? selectedGroup.label + " " : ""
-    }${modelName}`;
-
-    const icon = selectedGroup?.icon ? (
-      <selectedGroup.icon className="min-w-3.5 text-foreground" />
-    ) : null;
+    const { icon: Icon, title } = getSelectedModelInfo();
 
     return (
       <TooltipWrapper content={title}>
@@ -421,7 +288,7 @@ const PromptModelSelect = ({
             data-testid="select-a-llm-model"
           >
             <div className="flex items-center gap-2">
-              {icon}
+              {Icon && <Icon className="size-4 shrink-0 text-foreground" />}
               <span className="truncate">{title}</span>
             </div>
           </SelectValue>
@@ -453,7 +320,7 @@ const PromptModelSelect = ({
               />
             </div>
             <SelectSeparator />
-            <div className="flex-1 overflow-y-auto">{renderOptions()}</div>
+            <div className="flex-1 overflow-y-auto py-1">{renderOptions()}</div>
             <SelectSeparator />
             <Button
               variant="link"
