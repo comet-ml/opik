@@ -21,6 +21,7 @@ import {
   convertFormDataToStudioConfig,
   convertOptimizationStudioToFormData,
 } from "./ConfigureOptimizationSection/schema";
+import { useLastOptimizationRun } from "@/lib/optimizationSessionStorage";
 
 interface OptimizationStudioContextType {
   activeOptimization: OptimizationStudio | null;
@@ -57,6 +58,7 @@ export const OptimizationStudioProvider: React.FC<
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const navigate = useNavigate();
   const createOptimizationMutation = useOptimizationCreateMutation();
+  const { setLastSessionRunId } = useLastOptimizationRun();
 
   const { data: datasetsData } = useDatasetsList({
     workspaceName,
@@ -127,6 +129,7 @@ export const OptimizationStudioProvider: React.FC<
       });
 
       if (result?.id) {
+        setLastSessionRunId(result.id);
         navigate({
           to: "/$workspaceName/optimization-studio/run",
           params: { workspaceName },
@@ -136,7 +139,7 @@ export const OptimizationStudioProvider: React.FC<
     } finally {
       setIsSubmitting(false);
     }
-  }, [form, datasets, createOptimizationMutation, navigate, workspaceName]);
+  }, [form, datasets, createOptimizationMutation, navigate, workspaceName, setLastSessionRunId]);
 
   return (
     <OptimizationStudioContext.Provider
