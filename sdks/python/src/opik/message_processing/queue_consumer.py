@@ -4,7 +4,8 @@ import time
 from queue import Empty
 from typing import Optional
 
-from . import message_processors, message_queue, messages
+from . import message_queue, messages
+from .processors import message_processors
 from .. import exceptions, _logging
 
 LOGGER = logging.getLogger(__name__)
@@ -49,7 +50,8 @@ class QueueConsumer(threading.Thread):
 
             if message is None:
                 return
-            elif message.delivery_time <= now:
+
+            if message.delivery_time <= now:
                 self._process_message(message)
             else:
                 # put a message back to keep an order in the queue

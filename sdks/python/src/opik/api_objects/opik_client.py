@@ -42,9 +42,9 @@ from ..message_processing import (
     messages,
     streamer_constructors,
     message_queue,
-    message_processors_chain,
 )
 from ..message_processing.batching import sequence_splitter
+from ..message_processing.processors import message_processors_chain
 from ..rest_api import client as rest_api_client
 from ..rest_api.core.api_error import ApiError
 from ..rest_api.types import (
@@ -107,13 +107,7 @@ class Opik:
         self._use_batching = _use_batching
 
         self._initialize_streamer(
-            url_override=config_.url_override,
-            workers=config_.background_workers,
-            file_upload_worker_count=config_.file_upload_background_workers,
-            api_key=config_.api_key,
-            check_tls_certificate=config_.check_tls_certificate,
             use_batching=_use_batching,
-            enable_json_request_compression=config_.enable_json_request_compression,
         )
         atexit.register(self.end, timeout=self._flush_timeout)
 
@@ -152,24 +146,17 @@ class Opik:
 
     def _initialize_streamer(
         self,
-        url_override: str,
-        workers: int,
-        file_upload_worker_count: int,
-        api_key: Optional[str],
-        check_tls_certificate: bool,
         use_batching: bool,
-        enable_json_request_compression: bool,
     ) -> None:
-        httpx_client_ = httpx_client.get(
+        self._httpx_client = httpx_client.get(
             workspace=self._workspace,
-            api_key=api_key,
-            check_tls_certificate=check_tls_certificate,
-            compress_json_requests=enable_json_request_compression,
+            api_key=self._config.api_key,
+            check_tls_certificate=self._config.check_tls_certificate,
+            compress_json_requests=self._config.enable_json_request_compression,
         )
-        self._httpx_client = httpx_client_
         self._rest_client = rest_api_client.OpikApi(
-            base_url=url_override,
-            httpx_client=httpx_client_,
+            base_url=self._config.url_override,
+            httpx_client=self._httpx_client,
         )
         self._rest_client._client_wrapper._timeout = (
             httpx.USE_CLIENT_DEFAULT
@@ -181,19 +168,22 @@ class Opik:
             batch_factor=self._config.maximal_queue_size_batch_factor,
         )
 
-        self._message_processor = (
+        self.__internal_api__message_processor__ = (
             message_processors_chain.create_message_processors_chain(
                 rest_client=self._rest_client
             )
         )
         self._streamer = streamer_constructors.construct_online_streamer(
-            n_consumers=workers,
+            n_consumers=self._config.background_workers,
             rest_client=self._rest_client,
-            httpx_client=httpx_client_,
+            httpx_client=self._httpx_client,
             use_batching=use_batching,
-            file_upload_worker_count=file_upload_worker_count,
+            use_attachment_extraction=self._config.is_attachment_extraction_active,
+            min_base64_embedded_attachment_size=self._config.min_base64_embedded_attachment_size,
+            file_upload_worker_count=self._config.file_upload_background_workers,
             max_queue_size=max_queue_size,
-            message_processor=self._message_processor,
+            message_processor=self.__internal_api__message_processor__,
+            url_override=self._config.url_override,
         )
 
     def _display_trace_url(self, trace_id: str, project_name: str) -> None:

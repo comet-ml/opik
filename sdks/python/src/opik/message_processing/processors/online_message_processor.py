@@ -4,21 +4,18 @@ from typing import Callable, Dict, Type, Any
 import pydantic
 import tenacity
 
-from . import encoder_helpers, messages, message_processors
-from .. import (
-    exceptions as exceptions,
-    logging_messages as logging_messages,
-    dict_utils,
-)
-from ..rate_limit import rate_limit
-from ..rest_api import client as rest_api_client, core as rest_api_core
-from ..rest_api.types import (
+from opik import dict_utils, exceptions, logging_messages
+from opik.rate_limit import rate_limit
+from opik.rest_api import client as rest_api_client, core as rest_api_core
+from opik.rest_api.types import (
     feedback_score_batch_item,
     feedback_score_batch_item_thread,
     guardrail,
     experiment_item,
 )
 
+from . import message_processors
+from .. import encoder_helpers, messages
 
 LOGGER = logging.getLogger(__name__)
 
@@ -49,6 +46,7 @@ class OpikMessageProcessor(message_processors.BaseMessageProcessor):
             messages.CreateTraceBatchMessage: self._process_create_traces_batch_message,  # type: ignore
             messages.GuardrailBatchMessage: self._process_guardrail_batch_message,  # type: ignore
             messages.CreateExperimentItemsBatchMessage: self._process_create_experiment_items_batch_message,  # type: ignore
+            messages.AttachmentSupportingMessage: self._noop_handler,  # type: ignore
         }
 
     def is_active(self) -> bool:
@@ -303,6 +301,10 @@ class OpikMessageProcessor(message_processors.BaseMessageProcessor):
         LOGGER.debug(
             "Sent experiment items batch of size %d", len(experiment_items_batch)
         )
+
+    def _noop_handler(self, message: messages.BaseMessage) -> None:
+        # just ignore the message
+        pass
 
 
 def _generate_error_tracking_extra(

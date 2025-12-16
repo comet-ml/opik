@@ -2,7 +2,7 @@ import dataclasses
 import random
 import uuid
 from datetime import datetime, timedelta
-from typing import List
+from typing import List, Optional
 
 from opik.message_processing import messages
 from opik.types import ErrorInfoDict
@@ -24,7 +24,9 @@ ONE_MEGABYTE = ONE_KILOBYTE * ONE_KILOBYTE
 
 
 def fake_create_trace_message_batch(
-    count: int = 1000, approximate_trace_size: int = ONE_MEGABYTE
+    count: int = 1000,
+    approximate_trace_size: int = ONE_MEGABYTE,
+    has_ended: Optional[bool] = None,
 ) -> List[messages.CreateTraceMessage]:
     """
     Factory method to create a batch with a specified number of
@@ -33,6 +35,8 @@ def fake_create_trace_message_batch(
     Args:
         approximate_trace_size: The approximate size of each trace in megabytes
         count: Number of CreateTraceMessage objects to include in the batch (default: 1000)
+        has_ended: the flag to indicate if the trace has ended. If None, the trace will
+            be randomly decided to be ended or not.
 
     Returns:
         CreateTraceBatchMessage containing the specified number of fake CreateTraceMessage objects
@@ -51,7 +55,9 @@ def fake_create_trace_message_batch(
         )
 
         # Randomly decide if the trace has ended
-        has_ended = random.choice([True, False])
+        if has_ended is None:
+            has_ended = random.choice([True, False])
+
         if has_ended:
             end_time = start_time + timedelta(seconds=random.randint(1, 3600))
             last_updated_at = end_time
@@ -140,7 +146,9 @@ def fake_create_trace_message_batch(
 
 
 def fake_span_create_message_batch(
-    count: int = 1000, approximate_span_size: int = ONE_MEGABYTE
+    count: int = 1000,
+    approximate_span_size: int = ONE_MEGABYTE,
+    has_ended: Optional[bool] = None,
 ) -> List[messages.CreateSpanMessage]:
     """
     Factory method to create a list with a specified number of
@@ -149,6 +157,8 @@ def fake_span_create_message_batch(
     Args:
         approximate_span_size: The approximate size of each span in megabytes
         count: Number of CreateSpanMessage objects to include in the batch (default: 1000)
+        has_ended: the flag to indicate if the span has ended. If None, the span will
+            be randomly decided to be ended or not.
 
     Returns:
         CreateSpansBatchMessage containing the specified number of fake CreateSpanMessage objects
@@ -167,7 +177,9 @@ def fake_span_create_message_batch(
         )
 
         # Randomly decide if the span has ended
-        has_ended = random.choice([True, False])
+        if has_ended is None:
+            has_ended = random.choice([True, False])
+
         if has_ended:
             end_time = start_time + timedelta(seconds=random.randint(1, 3600))
             last_updated_at = end_time

@@ -1,12 +1,13 @@
 import logging
 from typing import Optional
 
+from opik.rest_api import client as rest_api_client
+
 from . import (
     message_processors,
     online_message_processor,
 )
-from .emulation import local_emulator_message_processor
-from ..rest_api import client as rest_api_client
+from ..emulation import local_emulator_message_processor
 
 
 LOGGER = logging.getLogger(__name__)

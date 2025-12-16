@@ -16,6 +16,7 @@ class FileUploadOptions:
     entity_id: str
     project_name: str
     encoded_url_override: str
+    delete_after_upload: bool
 
 
 def file_upload_options_from_attachment(
@@ -32,4 +33,5 @@ def file_upload_options_from_attachment(
         entity_id=attachment.entity_id,
         project_name=attachment.project_name,
         encoded_url_override=attachment.encoded_url_override,
+        delete_after_upload=attachment.delete_after_upload,
     )

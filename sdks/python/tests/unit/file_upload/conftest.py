@@ -38,6 +38,30 @@ def attachment(data_file):
 
 
 @pytest.fixture
+def permanent_data_file():
+    with tempfile.NamedTemporaryFile(delete=False) as file:
+        file.write(np.random.bytes(FILE_SIZE))
+        file.seek(0)
+
+        yield file
+
+
+@pytest.fixture
+def attachment_to_be_deleted(permanent_data_file):
+    attachment = messages.CreateAttachmentMessage(
+        file_path=permanent_data_file.name,
+        file_name="test_attachment.dat",
+        mime_type="application/octet-stream",
+        entity_type="span",
+        entity_id="entity_id",
+        project_name="project_name",
+        encoded_url_override="encoded_url_override_path",
+        delete_after_upload=True,
+    )
+    yield attachment
+
+
+@pytest.fixture
 def rest_client_s3():
     # returns response to start_upload request initiating S3 upload
     pre_sign_urls = [
