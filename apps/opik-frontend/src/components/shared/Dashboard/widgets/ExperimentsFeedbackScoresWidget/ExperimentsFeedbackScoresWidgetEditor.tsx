@@ -22,6 +22,9 @@ import { Description } from "@/components/ui/description";
 import SelectBox from "@/components/shared/SelectBox/SelectBox";
 import ExperimentWidgetDataSection from "@/components/shared/Dashboard/widgets/shared/ExperimentWidgetDataSection/ExperimentWidgetDataSection";
 import ExperimentsSelectBox from "@/components/pages-shared/experiments/ExperimentsSelectBox/ExperimentsSelectBox";
+import FeedbackDefinitionsAndScoresSelectBox, {
+  ScoreSource,
+} from "@/components/pages-shared/experiments/FeedbackDefinitionsAndScoresSelectBox/FeedbackDefinitionsAndScoresSelectBox";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Filter, ListFilter } from "lucide-react";
 
@@ -78,6 +81,11 @@ const ExperimentsFeedbackScoresWidgetEditor = forwardRef<
 
   const chartType = widgetConfig?.chartType || CHART_TYPE.line;
 
+  const feedbackScores = useMemo(
+    () => widgetConfig?.feedbackScores || [],
+    [widgetConfig?.feedbackScores],
+  );
+
   const form = useForm<ExperimentsFeedbackScoresWidgetFormData>({
     resolver: zodResolver(ExperimentsFeedbackScoresWidgetSchema),
     mode: "onTouched",
@@ -89,6 +97,7 @@ const ExperimentsFeedbackScoresWidgetEditor = forwardRef<
       groups,
       experimentIds,
       chartType,
+      feedbackScores,
     },
   });
 
@@ -115,6 +124,7 @@ const ExperimentsFeedbackScoresWidgetEditor = forwardRef<
             groups: values.groups,
             experimentIds: values.experimentIds,
             chartType: values.chartType,
+            feedbackScores: values.feedbackScores,
           },
         });
       }
@@ -176,6 +186,16 @@ const ExperimentsFeedbackScoresWidgetEditor = forwardRef<
       config: {
         ...config,
         experimentIds: newExperimentIds,
+      },
+    });
+  };
+
+  const handleFeedbackScoresChange = (newFeedbackScores: string[]) => {
+    form.setValue("feedbackScores", newFeedbackScores);
+    onChange({
+      config: {
+        ...config,
+        feedbackScores: newFeedbackScores,
       },
     });
   };
@@ -359,6 +379,44 @@ const ExperimentsFeedbackScoresWidgetEditor = forwardRef<
                       placeholder="Select chart type"
                     />
                   </FormControl>
+                  <FormMessage />
+                </FormItem>
+              );
+            }}
+          />
+
+          <FormField
+            control={form.control}
+            name="feedbackScores"
+            render={({ field, formState }) => {
+              const validationErrors = get(formState.errors, [
+                "feedbackScores",
+              ]);
+              return (
+                <FormItem>
+                  <FormLabel>Metrics to display (optional)</FormLabel>
+                  <FormControl>
+                    <FeedbackDefinitionsAndScoresSelectBox
+                      value={field.value || []}
+                      onChange={(value) => {
+                        field.onChange(value);
+                        handleFeedbackScoresChange(value);
+                      }}
+                      scoreSource={ScoreSource.EXPERIMENTS}
+                      entityIds={experimentIds}
+                      multiselect={true}
+                      showSelectAll={true}
+                      className={cn({
+                        "border-destructive": Boolean(
+                          validationErrors?.message,
+                        ),
+                      })}
+                    />
+                  </FormControl>
+                  <Description>
+                    Select specific metrics to display. Leave empty to show all
+                    available metrics.
+                  </Description>
                   <FormMessage />
                 </FormItem>
               );
