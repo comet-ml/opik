@@ -1348,7 +1348,8 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
         boolean hasIds = CollectionUtils.isNotEmpty(ids);
         boolean hasDatasetId = datasetId != null;
 
-        Preconditions.checkArgument(hasIds || hasDatasetId, "Either ids or datasetId must be provided");
+        Preconditions.checkArgument(hasIds ^ hasDatasetId,
+                "Either ids or datasetId must be provided, but not both");
 
         if (hasIds) {
             log.info("Deleting '{}' dataset items by IDs", ids.size());
@@ -1359,10 +1360,11 @@ class DatasetItemDAOImpl implements DatasetItemDAO {
         var template = TemplateUtils.newST(DELETE_DATASET_ITEM);
 
         // Add ids or filters to template
+        // Delete by specific IDs (mutually exclusive with dataset_id + filters)
         if (hasIds) {
             template.add("ids", true);
         } else {
-            // Add dataset_id to WHERE clause (independent of filters)
+            // Delete by dataset_id with optional filters (mutually exclusive with ids)
             template.add("dataset_id", true);
 
             // Add additional filters if provided
