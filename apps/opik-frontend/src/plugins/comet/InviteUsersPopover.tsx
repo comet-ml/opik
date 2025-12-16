@@ -1,10 +1,12 @@
 import React, { useState } from "react";
+import { Mail } from "lucide-react";
 import { DropdownMenuContent } from "@/components/ui/dropdown-menu";
 import SearchInput from "@/components/shared/SearchInput/SearchInput";
-import Loader from "@/components/shared/Loader/Loader";
 import useUsernameAutocomplete from "./api/useUsernameAutocomplete";
 import useCurrentOrganization from "./useCurrentOrganization";
 import useWorkspace from "./useWorkspace";
+
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 const InviteUsersPopover = () => {
   const [searchQuery, setSearchQuery] = useState("");
@@ -16,17 +18,18 @@ const InviteUsersPopover = () => {
   const currentOrganization = useCurrentOrganization();
   const organizationId = currentOrganization?.id || "";
 
-  const { data: users = [], isPending: isUsersPending } =
-    useUsernameAutocomplete(
-      {
-        query: searchQuery,
-        organizationId,
-        excludedWorkspaceId: workspaceId || "",
-      },
-      {
-        enabled: Boolean(searchQuery && organizationId),
-      },
-    );
+  const { data: users = [] } = useUsernameAutocomplete(
+    {
+      query: searchQuery,
+      organizationId,
+      excludedWorkspaceId: workspaceId || "",
+    },
+    {
+      enabled: Boolean(searchQuery && organizationId),
+    },
+  );
+
+  const hasEmailQuery = EMAIL_REGEX.test(searchQuery);
 
   const renderUserList = () => {
     if (!searchQuery) {
@@ -37,15 +40,10 @@ const InviteUsersPopover = () => {
       );
     }
 
-    if (isUsersPending) {
-      return (
-        <div className="flex h-32 items-center justify-center">
-          <Loader />
-        </div>
-      );
-    }
+    const hasResults = users.length > 0;
+    const showEmailRow = hasEmailQuery;
 
-    if (users.length === 0) {
+    if (!hasResults && !showEmailRow) {
       return (
         <div className="comet-body-s flex h-32 items-center justify-center text-muted-slate">
           No users found
@@ -65,6 +63,14 @@ const InviteUsersPopover = () => {
             </div>
           </div>
         ))}
+        {showEmailRow && (
+          <div className="flex cursor-pointer items-center gap-3 rounded-sm px-3 py-2.5 transition-colors hover:bg-primary-foreground">
+            <div className="flex flex-1 flex-col">
+              <span className="comet-body-s-accented">{searchQuery}</span>
+            </div>
+            <Mail className="size-4 shrink-0 text-muted-slate" />
+          </div>
+        )}
       </div>
     );
   };
