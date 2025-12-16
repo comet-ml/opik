@@ -54,11 +54,9 @@ const AddTagDialog: React.FunctionComponent<AddTagDialogProps> = ({
     if (!newTag) return;
 
     if (!isAllItemsSelected) {
-      const ids = rows.map((row) => row.id);
-      ids.forEach((id) => {
-        const item = rows.find((r) => r.id === id);
+      rows.forEach((item) => {
         const existingTags = item?.tags || [];
-        bulkEditItems([id], { tags: [...existingTags, newTag] });
+        bulkEditItems([item.id], { tags: [...existingTags, newTag] });
       });
 
       if (onSuccess) {

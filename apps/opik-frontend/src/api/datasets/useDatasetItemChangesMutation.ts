@@ -7,7 +7,7 @@ import { useToast } from "@/components/ui/use-toast";
 
 interface DatasetItemChangesPayload {
   added_items: DatasetItem[];
-  edited_items: DatasetItem[];
+  edited_items: Partial<DatasetItem>[];
   deleted_ids: string[];
   base_version: string;
   tags?: string[];
@@ -75,18 +75,18 @@ const useDatasetItemChangesMutation = (
       });
     },
     onSettled: (data, error, variables) => {
-      // Only invalidate on success (not on 409)
-      if (!error || (error as AxiosError).response?.status !== 409) {
-        queryClient.invalidateQueries({
-          queryKey: ["dataset-items", { datasetId: variables.datasetId }],
-        });
-        queryClient.invalidateQueries({
-          queryKey: ["datasets"],
-        });
-        queryClient.invalidateQueries({
-          queryKey: ["dataset", { datasetId: variables.datasetId }],
-        });
+      if (error) {
+        return;
       }
+      queryClient.invalidateQueries({
+        queryKey: ["dataset-items", { datasetId: variables.datasetId }],
+      });
+      queryClient.invalidateQueries({
+        queryKey: ["datasets"],
+      });
+      queryClient.invalidateQueries({
+        queryKey: ["dataset", { datasetId: variables.datasetId }],
+      });
     },
   });
 };

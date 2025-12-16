@@ -18,7 +18,7 @@ interface DatasetDraftState {
   getChangesSummary: () => { added: number; edited: number; deleted: number };
   getChangesPayload: () => {
     addedItems: DatasetItem[];
-    editedItems: DatasetItem[];
+    editedItems: Partial<DatasetItem>[];
     deletedIds: string[];
   };
 }
@@ -159,11 +159,10 @@ const useDatasetDraftStore = create<DatasetDraftState>((set, get) => ({
     return {
       addedItems: Array.from(state.addedItems.values()),
       editedItems: Array.from(state.editedItems.entries()).map(
-        ([id, changes]) =>
-          ({
-            id,
-            ...changes,
-          }) as DatasetItem,
+        ([id, changes]) => ({
+          id,
+          ...changes,
+        }),
       ),
       deletedIds: Array.from(state.deletedIds),
     };
