@@ -168,7 +168,7 @@ class Opik:
             batch_factor=self._config.maximal_queue_size_batch_factor,
         )
 
-        self.__internal_api__message_processor = (
+        self.__internal_api__message_processor__ = (
             message_processors_chain.create_message_processors_chain(
                 rest_client=self._rest_client
             )
@@ -182,7 +182,7 @@ class Opik:
             min_base64_embedded_attachment_size=self._config.min_base64_embedded_attachment_size,
             file_upload_worker_count=self._config.file_upload_background_workers,
             max_queue_size=max_queue_size,
-            message_processor=self.__internal_api__message_processor,
+            message_processor=self.__internal_api__message_processor__,
             url_override=self._config.url_override,
         )
 

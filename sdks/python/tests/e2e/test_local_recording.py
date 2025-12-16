@@ -71,7 +71,7 @@ def test_cleanup_and_reuse_after_exit__should_save_new_data():
         trace_trees = storage.trace_trees
 
         local = message_processors_chain.get_local_emulator_message_processor(
-            chain=client.__internal_api__message_processor
+            chain=client.__internal_api__message_processor__
         )
         assert local is not None and local.is_active()
 
@@ -103,7 +103,7 @@ def test_cleanup_and_reuse_after_exit__should_save_new_data():
 
     # After context exit: local processor should be inactive and reset on the next activation
     local = message_processors_chain.get_local_emulator_message_processor(
-        chain=client.__internal_api__message_processor
+        chain=client.__internal_api__message_processor__
     )
     assert local is not None and not local.is_active()
 
