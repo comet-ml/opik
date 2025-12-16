@@ -7,6 +7,7 @@ import MetricDateRangeSelect from "@/components/pages-shared/traces/MetricDateRa
 import DashboardSaveActions from "@/components/pages-shared/dashboards/DashboardSaveActions/DashboardSaveActions";
 import DashboardContent from "@/components/pages-shared/dashboards/DashboardContent/DashboardContent";
 import DashboardSelectBox from "@/components/pages-shared/dashboards/DashboardSelectBox/DashboardSelectBox";
+import ShareDashboardButton from "@/components/pages-shared/dashboards/ShareDashboardButton/ShareDashboardButton";
 import { useMetricDateRangeCore } from "@/components/pages-shared/traces/MetricDateRangeSelect/useMetricDateRangeCore";
 import useQueryParamAndLocalStorageState from "@/hooks/useQueryParamAndLocalStorageState";
 import { useDashboardLifecycle } from "@/components/pages-shared/dashboards/hooks/useDashboardLifecycle";
@@ -152,6 +153,8 @@ const ExperimentsDashboardsTab: React.FunctionComponent<
             maxDate={maxDate}
             hideAlltime
           />
+          <Separator orientation="vertical" className="mx-2 h-4" />
+          <ShareDashboardButton />
         </div>
       </PageBodyStickyContainer>
 

@@ -201,18 +201,26 @@ const ExperimentsFeedbackScoresWidget: React.FunctionComponent<
     return groups.filter(isGroupValid);
   }, [widgetConfig?.groups]);
 
-  const experimentIds = useMemo(
-    () =>
-      globalConfig.experimentIds.length
-        ? globalConfig.experimentIds
-        : widgetConfig?.experimentIds ?? [],
-    [globalConfig.experimentIds, widgetConfig?.experimentIds],
-  );
+  const experimentIds = useMemo(() => {
+    const localExperimentIds = widgetConfig?.experimentIds;
+    return !isEmpty(localExperimentIds)
+      ? localExperimentIds!
+      : globalConfig.experimentIds || [];
+  }, [globalConfig.experimentIds, widgetConfig?.experimentIds]);
+
+  const isUsingGlobalExperiments =
+    isEmpty(widgetConfig?.experimentIds) &&
+    !isEmpty(globalConfig.experimentIds);
 
   const hasGroups = validGroups.length > 0;
 
   const isSelectExperimentsMode =
     dataSource === EXPERIMENT_DATA_SOURCE.SELECT_EXPERIMENTS;
+
+  const infoMessage =
+    isUsingGlobalExperiments && isSelectExperimentsMode
+      ? "Using global experiment config"
+      : undefined;
 
   // Limit to first 10 experiments
   const limitedExperimentIds = useMemo(
@@ -433,6 +441,7 @@ const ExperimentsFeedbackScoresWidget: React.FunctionComponent<
         title={widget.title}
         subtitle={widget.subtitle}
         warningMessage={warningMessage}
+        infoMessage={infoMessage}
         preview={preview}
         actions={
           !preview ? (

@@ -16,7 +16,7 @@ const EXPERIMENT_COMPARISON_TEMPLATE: DashboardTemplate = {
   id: createTemplateId(TEMPLATE_TYPE.EXPERIMENT_COMPARISON),
   type: TEMPLATE_TYPE.EXPERIMENT_COMPARISON,
   scope: TEMPLATE_SCOPE.EXPERIMENTS,
-  name: "Experiment comparison",
+  name: "Experiment insights",
   description: "Compare feedback scores across experiments",
   icon: FlaskConical,
   iconColor: "text-template-icon-experiments",

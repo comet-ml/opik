@@ -324,6 +324,10 @@ const ExperimentsFeedbackScoresWidgetEditor = forwardRef<
                         })}
                       />
                     </FormControl>
+                    <Description>
+                      Select experiments for this widget. If not set, the
+                      dashboard&apos;s global experiment config will be used.
+                    </Description>
                     <FormMessage />
                   </FormItem>
                 );
