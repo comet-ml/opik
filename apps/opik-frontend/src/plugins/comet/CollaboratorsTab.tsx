@@ -6,6 +6,7 @@ import useWorkspaceUsersPermissions from "@/plugins/comet/api/useWorkspaceUsersP
 import useOrganizationMembers from "@/plugins/comet/api/useOrganizationMembers";
 import useCurrentOrganization from "@/plugins/comet/useCurrentOrganization";
 import useWorkspace from "@/plugins/comet/useWorkspace";
+import useWorkspaceEmailInvites from "@/plugins/comet/useWorkspaceEmailInvites";
 import DataTable from "@/components/shared/DataTable/DataTable";
 import ExplainerCallout from "@/components/shared/ExplainerCallout/ExplainerCallout";
 import SearchInput from "@/components/shared/SearchInput/SearchInput";
@@ -30,6 +31,7 @@ const DEFAULT_COLUMNS: ColumnData<WorkspaceMember>[] = [
     id: "userName",
     label: "Name / User name",
     type: COLUMN_TYPE.string,
+    accessorFn: (row) => row.userName || "-",
   },
   {
     id: "email",
@@ -68,7 +70,7 @@ const CollaboratorsTab = () => {
 
   const currentOrganization = useCurrentOrganization();
 
-  const { data: workspaceMembers, isPending } = useAllWorkspaceMembers(
+  const { data: workspaceMembers = [], isPending } = useAllWorkspaceMembers(
     { workspaceId: workspaceId || "" },
     {
       enabled: Boolean(workspaceId),
@@ -87,6 +89,14 @@ const CollaboratorsTab = () => {
     organizationId: currentOrganization?.id || "",
   });
 
+  const { data: invitedMembers = [], isPending: isInvitedMembersPending } =
+    useWorkspaceEmailInvites(
+      { workspaceId: workspaceId || "" },
+      {
+        enabled: Boolean(workspaceId),
+      },
+    );
+
   const columns = useMemo(() => {
     return convertColumnDataToColumn<WorkspaceMember, WorkspaceMember>(
       DEFAULT_COLUMNS,
@@ -104,22 +114,25 @@ const CollaboratorsTab = () => {
   );
 
   const tableData = useMemo(() => {
-    if (!workspaceMembers) return [];
+    const allUsers = [...workspaceMembers, ...invitedMembers];
 
     const searchLower = search.toLowerCase();
 
     const filteredMembers = search
-      ? workspaceMembers.filter((member) => {
+      ? allUsers.filter((member) => {
           return (
-            member.userName.toLowerCase().includes(searchLower) ||
+            (member as WorkspaceMember).userName
+              ?.toLowerCase()
+              .includes(searchLower) ||
             member.email.toLowerCase().includes(searchLower)
           );
         })
-      : workspaceMembers;
+      : allUsers;
 
     return filteredMembers.map((member): WorkspaceMember => {
+      const userName = (member as WorkspaceMember).userName;
       const userPermissions = permissionsData?.find(
-        (permission) => permission.userName === member.userName,
+        (permission) => permission.userName === userName,
       )?.permissions;
 
       const permissionByType = getPermissionByType(
@@ -131,7 +144,7 @@ const CollaboratorsTab = () => {
         ? "Workspace owner"
         : "Workspace member";
 
-      const uniqueName = member.userName || member.email;
+      const uniqueName = userName || member.email;
 
       const memberInOrganization = organizationMembers?.find(
         (memberInOrg) =>
@@ -139,17 +152,23 @@ const CollaboratorsTab = () => {
       );
 
       return {
-        id: member.userName,
+        id: uniqueName,
         role,
         isAdmin: memberInOrganization?.role === ORGANIZATION_ROLE_TYPE.admin,
-        permissions: userPermissions,
+        permissions: userPermissions || [],
         ...member,
       };
     });
-  }, [workspaceMembers, permissionsData, organizationMembers, search]);
+  }, [
+    workspaceMembers,
+    invitedMembers,
+    permissionsData,
+    organizationMembers,
+    search,
+  ]);
 
   const renderTable = () => {
-    if (isPending || isPermissionsPending) {
+    if (isPending || isPermissionsPending || isInvitedMembersPending) {
       return <Loader />;
     }
 

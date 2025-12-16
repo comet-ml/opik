@@ -1,10 +1,14 @@
 import { QueryFunctionContext, useQuery } from "@tanstack/react-query";
 import api, { QueryConfig } from "./api";
 
-export interface UseWorkspaceMembersResponse {
-  userName: string;
+interface UseWorkspaceMembersResponse {
+  userName?: string;
   email: string;
-  joinedAt?: string;
+  joinedAt?: number;
+}
+
+export interface APIWorkspaceMember extends UseWorkspaceMembersResponse {
+  isMember: boolean;
 }
 
 interface UseAllWorkspaceMembers {
@@ -14,7 +18,7 @@ interface UseAllWorkspaceMembers {
 const getWorkspaceMembers = async (
   context: QueryFunctionContext,
   workspaceId: string,
-) => {
+): Promise<APIWorkspaceMember[]> => {
   const response = await api.get<UseWorkspaceMembersResponse[]>(
     `/workspaces/${workspaceId}/getAllMembers`,
     {
@@ -22,12 +26,15 @@ const getWorkspaceMembers = async (
     },
   );
 
-  return response?.data;
+  return response?.data.map((member) => ({
+    ...member,
+    isMember: true,
+  }));
 };
 
 const useWorkspaceMembers = (
   { workspaceId }: UseAllWorkspaceMembers,
-  options?: QueryConfig<UseWorkspaceMembersResponse[]>,
+  options?: QueryConfig<APIWorkspaceMember[]>,
 ) => {
   return useQuery({
     queryKey: ["workspace-members", { workspaceId }],
