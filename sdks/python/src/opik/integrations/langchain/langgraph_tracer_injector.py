@@ -44,7 +44,7 @@ def track_langgraph(
 
         # Compile the graph
         graph = builder.compile()
-        
+
         # Create OpikTracer and track the graph once
         # No need to manually extract the graph - it's done automatically!
         opik_tracer = OpikTracer(
@@ -86,4 +86,3 @@ def track_langgraph(
     callbacks.append(opik_tracer)
 
     return graph
-

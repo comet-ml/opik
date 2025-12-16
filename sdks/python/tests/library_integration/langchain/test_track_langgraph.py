@@ -60,11 +60,13 @@ def test_track_langgraph__happyflow__no_config_passed(
         input=initial_state,
         output=result,
         tags=["tag1", "tag2"],
-        metadata=ANY_DICT.containing({
-            "a": "b",
-            "created_from": "langchain",
-            "_opik_graph_definition": ANY_DICT,
-        }),
+        metadata=ANY_DICT.containing(
+            {
+                "a": "b",
+                "created_from": "langchain",
+                "_opik_graph_definition": ANY_DICT,
+            }
+        ),
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
         last_updated_at=ANY_BUT_NONE,
@@ -358,11 +360,13 @@ def test_track_langgraph__with_project_name_tags_metadata__all_applied(
         output=result,
         project_name="metadata-test-project",
         tags=["test-tag-1", "test-tag-2"],
-        metadata=ANY_DICT.containing({
-            "test_key": "test_value",
-            "env": "test",
-            "created_from": "langchain",
-        }),
+        metadata=ANY_DICT.containing(
+            {
+                "test_key": "test_value",
+                "env": "test",
+                "created_from": "langchain",
+            }
+        ),
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
         last_updated_at=ANY_BUT_NONE,
@@ -416,12 +420,16 @@ def test_track_langgraph__graph_visualization_included_in_metadata(
         name="LangGraph",
         input={"text": "input"},
         output=result,
-        metadata=ANY_DICT.containing({
-            "_opik_graph_definition": {
-                "format": "mermaid",
-                "data": ANY_STRING.containing("append_a_node").containing("append_b_node"),
-            },
-        }),
+        metadata=ANY_DICT.containing(
+            {
+                "_opik_graph_definition": {
+                    "format": "mermaid",
+                    "data": ANY_STRING.containing("append_a_node").containing(
+                        "append_b_node"
+                    ),
+                },
+            }
+        ),
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
         last_updated_at=ANY_BUT_NONE,
@@ -447,4 +455,3 @@ def test_track_langgraph__graph_visualization_included_in_metadata(
         ],
     )
     assert_equal(EXPECTED_TRACE, fake_backend.trace_trees[0])
-
