@@ -12,6 +12,11 @@ import ExplainerCallout from "@/components/shared/ExplainerCallout/ExplainerCall
 import SearchInput from "@/components/shared/SearchInput/SearchInput";
 import Loader from "@/components/shared/Loader/Loader";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import InviteUsersPopover from "./InviteUsersPopover";
 import { COLUMN_TYPE, ColumnData } from "@/types/shared";
 import { convertColumnDataToColumn } from "@/lib/table";
 import { formatDate } from "@/lib/date";
@@ -195,10 +200,15 @@ const CollaboratorsTab = () => {
           className="w-[320px]"
           dimension="sm"
         />
-        <Button variant="default" size="sm">
-          <UserPlus className="mr-1.5 size-3.5" />
-          Add users
-        </Button>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="default" size="sm">
+              <UserPlus className="mr-1.5 size-3.5" />
+              Add users
+            </Button>
+          </DropdownMenuTrigger>
+          <InviteUsersPopover />
+        </DropdownMenu>
       </div>
       {renderTable()}
     </>
