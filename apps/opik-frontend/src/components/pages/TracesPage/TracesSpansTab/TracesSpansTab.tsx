@@ -456,7 +456,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
     return () => clearTimeout(timer);
   }, []);
 
-  const { data, isPending, refetch } = useTracesOrSpansList(
+  const { data, isPending, isFetching, refetch } = useTracesOrSpansList(
     {
       projectId,
       type: type as TRACE_DATA_TYPE,
@@ -1076,6 +1076,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
             TableWrapper={PageBodyStickyTableWrapper}
             stickyHeader
             meta={meta}
+            showLoadingOverlay={isFetching && !isPending}
           />
           <PageBodyStickyContainer
             className="py-4"

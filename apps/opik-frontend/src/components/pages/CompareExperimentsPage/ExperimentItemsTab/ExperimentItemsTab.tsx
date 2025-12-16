@@ -280,7 +280,7 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
 
   const truncationEnabled = useTruncationEnabled();
 
-  const { data, isPending } = useCompareExperimentsList(
+  const { data, isPending, isFetching } = useCompareExperimentsList(
     {
       workspaceName,
       datasetId,
@@ -888,6 +888,7 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
         TableBody={DataTableVirtualBody}
         stickyHeader
         meta={meta}
+        showLoadingOverlay={isFetching && !isPending}
       />
       <PageBodyStickyContainer
         className="py-4"

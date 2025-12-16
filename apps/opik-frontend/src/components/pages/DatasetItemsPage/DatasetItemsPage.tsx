@@ -156,8 +156,7 @@ const DatasetItemsPage = () => {
     [filters],
   );
 
-  const { data, isPending, isPlaceholderData, isFetching } =
-    useDatasetItemsList(
+  const { data, isPending, isFetching } = useDatasetItemsList(
       {
         datasetId,
         filters: transformedFilters,
@@ -476,7 +475,7 @@ const DatasetItemsPage = () => {
         onRowClick={handleRowClick}
         activeRowId={activeRowId ?? ""}
         resizeConfig={resizeConfig}
-        showLoadingOverlay={isPlaceholderData && isFetching}
+        showLoadingOverlay={isFetching && !isPending}
         selectionConfig={{
           rowSelection,
           setRowSelection,

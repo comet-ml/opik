@@ -355,7 +355,7 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
     return () => clearTimeout(timer);
   }, []);
 
-  const { data, isPending, refetch } = useThreadList(
+  const { data, isPending, isFetching, refetch } = useThreadList(
     {
       projectId,
       sorting: sortedColumns,
@@ -729,6 +729,7 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
             TableWrapper={PageBodyStickyTableWrapper}
             stickyHeader
             meta={meta}
+            showLoadingOverlay={isFetching && !isPending}
           />
           <PageBodyStickyContainer
             className="py-4"
