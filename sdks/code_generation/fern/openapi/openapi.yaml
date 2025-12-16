@@ -13542,7 +13542,6 @@ components:
       - openaiProviderEnabled
       - openrouterProviderEnabled
       - opikAIEnabled
-      - opikbuiltinProviderEnabled
       - optimizationStudioEnabled
       - pythonEvaluatorEnabled
       - spanLlmAsJudgeEnabled
@@ -13589,8 +13588,6 @@ components:
         vertexaiProviderEnabled:
           type: boolean
         customllmProviderEnabled:
-          type: boolean
-        opikbuiltinProviderEnabled:
           type: boolean
         collaboratorsTabEnabled:
           type: boolean

@@ -600,9 +600,6 @@ serviceToggles:
   # Default: true
   # Description: Whether or not Custom LLM provider is enabled
   customllmProviderEnabled: ${TOGGLE_CUSTOMLLM_PROVIDER_ENABLED:-"true"}
-  # Default: true
-  # Description: Whether or not Opik Free Model provider is enabled
-  opikFreeProviderEnabled: ${TOGGLE_OPIK_FREE_PROVIDER_ENABLED:-"true"}
   # Default: false
   # Description: Whether or not Collaborators tab feature is enabled
   collaboratorsTabEnabled: ${TOGGLE_COLLABORATORS_TAB_ENABLED:-"false"}

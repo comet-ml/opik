@@ -92,8 +92,9 @@ export const PROVIDERS_OPTIONS = Object.values(PROVIDERS);
 export const CUSTOM_PROVIDER_MODEL_PREFIX = "custom-llm";
 
 // Mapping between provider types and their feature toggle keys
+// OPIK_FREE is excluded - its visibility is controlled by freeModel.enabled backend config
 export const PROVIDER_FEATURE_TOGGLE_MAP: Record<
-  PROVIDER_TYPE,
+  Exclude<PROVIDER_TYPE, PROVIDER_TYPE.OPIK_FREE>,
   FeatureToggleKeys
 > = {
   [PROVIDER_TYPE.OPEN_AI]: FeatureToggleKeys.OPENAI_PROVIDER_ENABLED,
@@ -102,7 +103,6 @@ export const PROVIDER_FEATURE_TOGGLE_MAP: Record<
   [PROVIDER_TYPE.OPEN_ROUTER]: FeatureToggleKeys.OPENROUTER_PROVIDER_ENABLED,
   [PROVIDER_TYPE.VERTEX_AI]: FeatureToggleKeys.VERTEXAI_PROVIDER_ENABLED,
   [PROVIDER_TYPE.CUSTOM]: FeatureToggleKeys.CUSTOMLLM_PROVIDER_ENABLED,
-  [PROVIDER_TYPE.OPIK_FREE]: FeatureToggleKeys.OPIK_FREE_PROVIDER_ENABLED,
 };
 
 export const LEGACY_CUSTOM_PROVIDER_NAME = "default";

@@ -459,9 +459,6 @@ serviceToggles:
   # Default: true
   # Description: Whether or not Custom LLM provider is enabled
   customllmProviderEnabled: "true"
-  # Default: true
-  # Description: Whether or not Opik Built-in provider is enabled
-  opikFreeProviderEnabled: "true"
   # Default: false
   # Description: Whether or not Collaborators tab feature is enabled
   collaboratorsTabEnabled: "false"
