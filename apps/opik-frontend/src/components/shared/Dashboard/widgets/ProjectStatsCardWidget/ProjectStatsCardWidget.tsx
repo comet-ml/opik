@@ -21,6 +21,7 @@ import {
   extractFeedbackScoreName,
   formatFeedbackScoreValue,
 } from "./metrics";
+import { resolveProjectIdFromConfig } from "@/lib/dashboard/utils";
 
 const renderMetricDisplay = (label: string, value: string) => (
   <div className="flex h-full flex-col items-stretch justify-center">
@@ -71,15 +72,17 @@ const ProjectStatsCardWidget: React.FunctionComponent<
 
   const widgetProjectId = widget?.config?.projectId as string | undefined;
 
-  const { projectId, intervalStart, intervalEnd } = useMemo(() => {
-    const finalProjectId = globalConfig.projectId || widgetProjectId;
+  const { projectId, infoMessage, intervalStart, intervalEnd } = useMemo(() => {
+    const { projectId: resolvedProjectId, infoMessage } =
+      resolveProjectIdFromConfig(widgetProjectId, globalConfig.projectId);
 
     const { intervalStart, intervalEnd } = calculateIntervalConfig(
       globalConfig.dateRange,
     );
 
     return {
-      projectId: finalProjectId,
+      projectId: resolvedProjectId,
+      infoMessage,
       intervalStart,
       intervalEnd,
     };
@@ -225,6 +228,7 @@ const ProjectStatsCardWidget: React.FunctionComponent<
       <DashboardWidget.Header
         title={widget.title}
         subtitle={widget.subtitle}
+        infoMessage={infoMessage}
         preview={preview}
         actions={
           !preview ? (

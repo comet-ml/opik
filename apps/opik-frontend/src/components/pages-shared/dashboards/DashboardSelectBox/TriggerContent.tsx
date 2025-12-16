@@ -1,10 +1,9 @@
 import React from "react";
 
-import { TEMPLATE_LIST } from "@/lib/dashboard/templates";
-import { Dashboard } from "@/types/dashboard";
+import { Dashboard, DashboardTemplate } from "@/types/dashboard";
 
 interface TriggerContentProps {
-  selectedItem: (typeof TEMPLATE_LIST)[number] | Dashboard | null | undefined;
+  selectedItem: DashboardTemplate | Dashboard | null | undefined;
 }
 
 export const TriggerContent: React.FC<TriggerContentProps> = ({
@@ -21,13 +20,7 @@ export const TriggerContent: React.FC<TriggerContentProps> = ({
   return (
     <div className="flex min-w-0 items-center">
       <span className="shrink-0 text-muted-slate">Dashboard:</span>
-      <span className="ml-1 truncate">
-        {"name" in selectedItem
-          ? selectedItem.name
-          : "title" in selectedItem
-            ? selectedItem.title
-            : ""}
-      </span>
+      <span className="ml-1 truncate">{selectedItem.name ?? ""}</span>
     </div>
   );
 };

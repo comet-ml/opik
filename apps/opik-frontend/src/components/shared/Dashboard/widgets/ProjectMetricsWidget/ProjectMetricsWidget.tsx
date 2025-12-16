@@ -22,6 +22,7 @@ import {
 } from "@/components/pages/TracesPage/MetricsTab/utils";
 import { calculateIntervalConfig } from "@/components/pages-shared/traces/MetricDateRangeSelect/utils";
 import { DEFAULT_DATE_PRESET } from "@/components/pages-shared/traces/MetricDateRangeSelect/constants";
+import { resolveProjectIdFromConfig } from "@/lib/dashboard/utils";
 
 const ProjectMetricsWidget: React.FunctionComponent<
   DashboardWidgetComponentProps
@@ -59,20 +60,23 @@ const ProjectMetricsWidget: React.FunctionComponent<
 
   const widgetProjectId = widget?.config?.projectId as string | undefined;
 
-  const { projectId, interval, intervalStart, intervalEnd } = useMemo(() => {
-    const finalProjectId = globalConfig.projectId || widgetProjectId;
+  const { projectId, infoMessage, interval, intervalStart, intervalEnd } =
+    useMemo(() => {
+      const { projectId: resolvedProjectId, infoMessage } =
+        resolveProjectIdFromConfig(widgetProjectId, globalConfig.projectId);
 
-    const { interval, intervalStart, intervalEnd } = calculateIntervalConfig(
-      globalConfig.dateRange,
-    );
+      const { interval, intervalStart, intervalEnd } = calculateIntervalConfig(
+        globalConfig.dateRange,
+      );
 
-    return {
-      projectId: finalProjectId,
-      interval,
-      intervalStart,
-      intervalEnd,
-    };
-  }, [widgetProjectId, globalConfig.projectId, globalConfig.dateRange]);
+      return {
+        projectId: resolvedProjectId,
+        infoMessage,
+        interval,
+        intervalStart,
+        intervalEnd,
+      };
+    }, [widgetProjectId, globalConfig.projectId, globalConfig.dateRange]);
 
   const metricType = widget?.config?.metricType as string | undefined;
   const metricName = metricType as METRIC_NAME_TYPE | undefined;
@@ -171,6 +175,7 @@ const ProjectMetricsWidget: React.FunctionComponent<
       <DashboardWidget.Header
         title={widget.title}
         subtitle={widget.subtitle}
+        infoMessage={infoMessage}
         preview={preview}
         actions={
           !preview ? (
