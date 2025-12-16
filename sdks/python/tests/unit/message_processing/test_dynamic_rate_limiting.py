@@ -10,13 +10,14 @@ MAX_QUEUE_SIZE = 10
 
 
 @pytest.fixture
-def steamer_with_mock_message_processor():
+def streamer_with_mock_message_processor(noop_file_upload_preprocessor):
     mock_message_processor = mock.Mock()
     streamer = streamer_constructors.construct_streamer(
         message_processor=mock_message_processor,
         n_consumers=1,
         use_batching=False,
-        file_upload_manager=mock.Mock(),
+        use_attachment_extraction=False,
+        upload_preprocessor=noop_file_upload_preprocessor,
         max_queue_size=MAX_QUEUE_SIZE,
     )
 
@@ -26,9 +27,9 @@ def steamer_with_mock_message_processor():
 
 
 def test_dynamic_rate_limiting__rate_limited__check_queue_messages_are_put_back(
-    steamer_with_mock_message_processor,
+    streamer_with_mock_message_processor,
 ):
-    streamer, mock_message_processor = steamer_with_mock_message_processor
+    streamer, mock_message_processor = streamer_with_mock_message_processor
 
     # to allow a few skipped loop iterations
     retry_after = queue_consumer.SLEEP_BETWEEN_LOOP_ITERATIONS * 3
@@ -57,9 +58,9 @@ def test_dynamic_rate_limiting__rate_limited__check_queue_messages_are_put_back(
 
 
 def test_dynamic_rate_limiting__rate_limited__check_queue_size_is_bounded_by_max_queue_size(
-    steamer_with_mock_message_processor,
+    streamer_with_mock_message_processor,
 ):
-    streamer, mock_message_processor = steamer_with_mock_message_processor
+    streamer, mock_message_processor = streamer_with_mock_message_processor
 
     # to allow a few skipped loop iterations
     retry_after = queue_consumer.SLEEP_BETWEEN_LOOP_ITERATIONS * 3
@@ -87,9 +88,9 @@ def test_dynamic_rate_limiting__rate_limited__check_queue_size_is_bounded_by_max
 
 
 def test_dynamic_rate_limiting__rate_limited__check_streamer_flush_is_blocking_until_all_messages_are_processed(
-    steamer_with_mock_message_processor,
+    streamer_with_mock_message_processor,
 ):
-    streamer, mock_message_processor = steamer_with_mock_message_processor
+    streamer, mock_message_processor = streamer_with_mock_message_processor
     retry_after = queue_consumer.SLEEP_BETWEEN_LOOP_ITERATIONS * 3
     max_limit = 5
 
