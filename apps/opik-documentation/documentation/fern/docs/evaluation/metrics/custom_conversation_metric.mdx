@@ -74,7 +74,7 @@ class ConversationLengthMetric(ConversationThreadMetric):
         )
 ```
 
-## Advanced Example: LLM-as-Judge Conversation Metric
+## Advanced Example: LLM-as-a-Judge Conversation Metric
 
 For more sophisticated evaluation, you can use an LLM to judge conversation quality. This pattern is particularly useful when you need nuanced assessment of conversation attributes like helpfulness, coherence, or tone.
 
@@ -197,9 +197,12 @@ class ConversationQualityMetric(ConversationThreadMetric):
             # Parse the LLM response
             score_data = self._parse_llm_output(model_output)
 
+            # Ensure score is within valid range [0.0, 1.0]
+            validated_score = max(0.0, min(1.0, score_data.score_value))
+
             return score_result.ScoreResult(
                 name=self.name,
-                value=score_data.score_value,
+                value=validated_score,
                 reason=score_data.reason,
             )
 
