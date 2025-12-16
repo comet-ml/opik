@@ -22,6 +22,7 @@ import com.comet.opik.api.evaluators.ProjectReference;
 import com.comet.opik.api.filter.Filter;
 import com.comet.opik.api.sorting.AutomationRuleEvaluatorSortingFactory;
 import com.comet.opik.domain.IdGenerator;
+import com.comet.opik.domain.ProjectService;
 import com.comet.opik.domain.filter.FilterQueryBuilder;
 import com.comet.opik.domain.filter.FilterStrategy;
 import com.comet.opik.domain.sorting.SortingQueryBuilder;
@@ -37,7 +38,6 @@ import jakarta.ws.rs.core.Response;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.jdbi.v3.core.Handle;
 import org.jdbi.v3.core.statement.UnableToExecuteStatementException;
 import reactor.core.publisher.Mono;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
@@ -106,6 +106,7 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
     private final @NonNull FilterQueryBuilder filterQueryBuilder;
     private final @NonNull AutomationRuleEvaluatorSortingFactory sortingFactory;
     private final @NonNull SortingQueryBuilder sortingQueryBuilder;
+    private final @NonNull ProjectService projectService;
 
     @Override
     @CacheEvict(name = "automation_rule_evaluators_find_all", key = "'*-' + $workspaceId + '-*'", keyUsesPatternMatching = true)
@@ -329,7 +330,7 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
                     Map.of(), null, null);
 
             // Enrich models with project names for backward compatibility
-            List<AutomationRuleEvaluatorModel<?>> enrichedModels = enrichWithProjectNames(models, workspaceId, handle);
+            List<AutomationRuleEvaluatorModel<?>> enrichedModels = enrichWithProjectNames(models, workspaceId);
 
             return enrichedModels.stream()
                     .findFirst()
@@ -366,7 +367,7 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
                     Map.of(), null, null);
 
             // Enrich models with project names for backward compatibility
-            List<AutomationRuleEvaluatorModel<?>> enrichedModels = enrichWithProjectNames(models, workspaceId, handle);
+            List<AutomationRuleEvaluatorModel<?>> enrichedModels = enrichWithProjectNames(models, workspaceId);
 
             return enrichedModels.stream()
                     .map(ruleEvaluator -> (AutomationRuleEvaluator<?, ?>) switch (ruleEvaluator) {
@@ -451,7 +452,7 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
                     sortingFieldsSql, filtersSQL, filterMapping, offset, size);
 
             // Enrich models with project names for backward compatibility
-            List<AutomationRuleEvaluatorModel<?>> enrichedModels = enrichWithProjectNames(models, workspaceId, handle);
+            List<AutomationRuleEvaluatorModel<?>> enrichedModels = enrichWithProjectNames(models, workspaceId);
 
             List<AutomationRuleEvaluator<?, ?>> automationRuleEvaluators = List.copyOf(
                     enrichedModels.stream()
@@ -520,7 +521,7 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
                     results.size(), projectId, workspaceId, type);
 
             // Enrich models with project names for backward compatibility
-            List<AutomationRuleEvaluatorModel<?>> enrichedModels = enrichWithProjectNames(results, workspaceId, handle);
+            List<AutomationRuleEvaluatorModel<?>> enrichedModels = enrichWithProjectNames(results, workspaceId);
 
             return enrichedModels
                     .stream()
@@ -560,13 +561,11 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
      *
      * @param models the models to enrich
      * @param workspaceId the workspace ID for fetching projects
-     * @param handle the JDBI handle to use for database queries
      * @return the enriched models with projectName populated
      */
     private List<AutomationRuleEvaluatorModel<?>> enrichWithProjectNames(
             List<AutomationRuleEvaluatorModel<?>> models,
-            String workspaceId,
-            Handle handle) {
+            String workspaceId) {
 
         if (models.isEmpty()) {
             return models;
@@ -586,27 +585,11 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
             return models;
         }
 
-        // Bulk fetch projects directly via SQL (ProjectDAO is package-private, so we query directly)
-        // Note: Convert UUIDs to strings for binding to avoid binary conversion errors
-        String sql = "SELECT CAST(id AS CHAR) as id, name FROM projects WHERE workspace_id = :workspaceId AND id IN (<ids>)";
-
-        List<String> projectIdStrings = allProjectIds.stream()
-                .map(UUID::toString)
-                .toList();
-
-        Map<UUID, String> projectNameMap = handle.createQuery(sql)
-                .bind("workspaceId", workspaceId)
-                .bindList("ids", projectIdStrings)
-                .map((rs, ctx) -> Map.entry(
-                        UUID.fromString(rs.getString("id")),
-                        rs.getString("name")))
-                .stream()
-                .collect(java.util.stream.Collectors.toMap(
-                        Map.Entry::getKey,
-                        Map.Entry::getValue));
+        // Use ProjectService to fetch project names (ensures consistent logic and forward compatibility)
+        Map<UUID, String> projectNameMap = projectService.findIdToNameByIds(workspaceId, allProjectIds);
 
         // Log enrichment details
-        log.debug("Fetched {} project names for {} project IDs", projectNameMap.size(), allProjectIds.size());
+        log.debug("Fetched '{}' project names for '{}' project IDs", projectNameMap.size(), allProjectIds.size());
 
         // Enrich each model with its project name
         List<AutomationRuleEvaluatorModel<?>> enrichedModels = models.stream()
@@ -614,9 +597,8 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
                 .toList();
 
         // Log enriched models for debugging
-        enrichedModels
-                .forEach(model -> log.debug("Model after enrichment - id: '{}', projectId: '{}'",
-                        model.id(), model.projectId()));
+        enrichedModels.forEach(model -> log.debug("Model after enrichment - id: '{}', projectId: '{}'",
+                model.id(), model.projectId()));
 
         return enrichedModels;
     }
