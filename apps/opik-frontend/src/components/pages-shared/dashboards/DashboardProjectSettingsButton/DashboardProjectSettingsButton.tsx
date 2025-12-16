@@ -64,8 +64,9 @@ const DashboardProjectSettingsButton: React.FC = () => {
               Global dashboard configuration
             </h3>
             <Description>
-              Set default project and experiments for all widgets. Individual
-              widgets can override these settings with their own configuration.
+              Set the default project and experiments for all widgets.
+              Individual widgets can override these settings with their own
+              configuration.
             </Description>
           </div>
           <div>
