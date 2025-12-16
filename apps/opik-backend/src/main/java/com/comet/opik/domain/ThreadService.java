@@ -3,6 +3,7 @@ package com.comet.opik.domain;
 import com.comet.opik.api.ProjectStats;
 import com.comet.opik.api.TraceThread;
 import com.comet.opik.api.sorting.TraceThreadSortingFactory;
+import com.google.inject.ImplementedBy;
 import io.opentelemetry.instrumentation.annotations.WithSpan;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
@@ -16,6 +17,7 @@ import java.util.UUID;
 
 import static com.comet.opik.utils.ErrorUtils.failWithNotFound;
 
+@ImplementedBy(ThreadServiceImpl.class)
 public interface ThreadService {
 
     Mono<TraceThread.TraceThreadPage> find(int page, int size, TraceSearchCriteria criteria);

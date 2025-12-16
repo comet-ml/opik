@@ -11,6 +11,7 @@ import com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils;
 import com.comet.opik.utils.TruncationUtils;
 import com.comet.opik.utils.template.TemplateUtils;
 import com.google.common.base.Preconditions;
+import com.google.inject.ImplementedBy;
 import io.opentelemetry.instrumentation.annotations.WithSpan;
 import io.r2dbc.spi.Connection;
 import io.r2dbc.spi.Result;
@@ -44,6 +45,7 @@ import static com.comet.opik.utils.AsyncUtils.makeFluxContextAware;
 import static com.comet.opik.utils.AsyncUtils.makeMonoContextAware;
 import static java.util.function.Predicate.not;
 
+@ImplementedBy(ThreadDAOImpl.class)
 public interface ThreadDAO {
 
     Mono<TraceThread.TraceThreadPage> find(int size, int page, TraceSearchCriteria threadSearchCriteria);
