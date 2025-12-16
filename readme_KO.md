@@ -158,7 +158,7 @@ Opik 설치 스크립트는 다양한 개발 시나리오를 위한 service prof
 
 ## 💻 Opik 클라이언트 SDK
 
-Opik은 Opik 서버와 상호작용할 수 있는 클라이언트 라이브러리 suite와 REST API를 제공합니다. Python, TypeScript, Ruby(OpenTelemetry 사용) SDK를 지원하여 워크플로우에 손쉽게 통합할 수 있습니다. 상세한 API 및 SDK 레퍼런스는 [Opik Client Reference Documentation](https://www.comet.com/docs/opik/reference/overview)을 확인하세요.
+Opik은 Opik 서버와 상호작용할 수 있는 클라이언트 라이브러리 suite와 REST API를 제공합니다. Python, TypeScript, Ruby(OpenTelemetry 사용) SDK를 지원하여 워크플로우에 손쉽게 통합할 수 있습니다. 상세한 API 및 SDK 레퍼런스는 [Opik Client Reference Documentation](https://www.comet.com/docs/opik/reference/overview?from=llm&utm_source=opik&utm_medium=github&utm_content=reference_link&utm_campaign=opik)을 확인하세요.
 
 ### Python SDK Quick Start
 
@@ -179,7 +179,7 @@ opik configure
 ```
 
 > [!TIP]
-> Python 코드에서 `opik.configure(use_local=True)`를 호출하여 로컬 self-hosted 설치를 위한 SDK 설정을 할 수도 있고, Comet.com을 위해 API 키와 workspace 정보를 직접 제공할 수도 있습니다. 더 많은 설정 옵션은 [Python SDK documentation](https://www.comet.com/docs/opik/python-sdk-reference/)을 참조하세요.
+> Python 코드에서 `opik.configure(use_local=True)`를 호출하여 로컬 self-hosted 설치를 위한 SDK 설정을 할 수도 있고, Comet.com을 위해 API 키와 workspace 정보를 직접 제공할 수도 있습니다. 더 많은 설정 옵션은 [Python SDK documentation](https://www.comet.com/docs/opik/python-sdk-reference/?from=llm&utm_source=opik&utm_medium=github&utm_content=python_sdk_docs_link&utm_campaign=opik)을 참조하세요.
 
 이제 [Python SDK](https://www.comet.com/docs/opik/python-sdk-reference/?from=llm&utm_source=opik&utm_medium=github&utm_content=sdk_link2&utm_campaign=opik)로 trace 로깅을 시작할 준비가 되었습니다.
 

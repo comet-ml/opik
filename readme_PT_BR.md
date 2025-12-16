@@ -159,7 +159,7 @@ Para implantações de produção ou em maior escala, o Opik pode ser instalado 
 
 ## 💻 SDK Cliente Opik
 
-O Opik fornece um conjunto de bibliotecas cliente e uma API REST para interagir com o servidor Opik. Isso inclui SDKs para Python, TypeScript e Ruby (via OpenTelemetry), permitindo integração fluida em seus fluxos de trabalho. Para referências de API e SDK, consulte a [Documentação de Referência do Cliente Opik](https://www.comet.com/docs/opik/reference/overview).
+O Opik fornece um conjunto de bibliotecas cliente e uma API REST para interagir com o servidor Opik. Isso inclui SDKs para Python, TypeScript e Ruby (via OpenTelemetry), permitindo integração fluida em seus fluxos de trabalho. Para referências de API e SDK, consulte a [Documentação de Referência do Cliente Opik](https://www.comet.com/docs/opik/reference/overview?from=llm&utm_source=opik&utm_medium=github&utm_content=reference_link&utm_campaign=opik).
 
 ### Início Rápido com o SDK Python
 
@@ -182,7 +182,7 @@ opik configure
 ```
 
 > [!TIP]
-> Você também pode chamar `opik.configure(use_local=True)` do seu código Python para configurar o SDK para execução local self-hosted, ou fornecer a chave de API e workspace diretamente para Comet.com. Consulte a [documentação do SDK Python](https://www.comet.com/docs/opik/python-sdk-reference/) para mais opções de configuração.
+> Você também pode chamar `opik.configure(use_local=True)` do seu código Python para configurar o SDK para execução local self-hosted, ou fornecer a chave de API e workspace diretamente para Comet.com. Consulte a [documentação do SDK Python](https://www.comet.com/docs/opik/python-sdk-reference/?from=llm&utm_source=opik&utm_medium=github&utm_content=python_sdk_docs_link&utm_campaign=opik) para mais opções de configuração.
 
 Agora você está pronto para começar a registrar traces usando o [SDK Python](https://www.comet.com/docs/opik/python-sdk-reference/?from=llm&utm_source=opik&utm_medium=github&utm_content=sdk_link2&utm_campaign=opik).
 
