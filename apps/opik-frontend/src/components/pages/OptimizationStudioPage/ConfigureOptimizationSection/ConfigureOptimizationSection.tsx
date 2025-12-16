@@ -38,7 +38,6 @@ import {
   getOptimizationDefaultConfigByProvider,
 } from "@/lib/optimizations";
 import useDatasetsList from "@/api/datasets/useDatasetsList";
-import useDatasetItemsList from "@/api/datasets/useDatasetItemsList";
 import useLLMProviderModelsData from "@/hooks/useLLMProviderModelsData";
 
 const MESSAGE_TYPE_OPTIONS = [
@@ -99,28 +98,6 @@ const ConfigureOptimizationSection: React.FC = () => {
   const selectedDataset = useMemo(
     () => datasets.find((ds) => ds.id === datasetId),
     [datasets, datasetId],
-  );
-
-  const { data: datasetItemsData } = useDatasetItemsList(
-    {
-      datasetId: selectedDataset?.id || "",
-      page: 1,
-      size: 1,
-    },
-    {
-      enabled:
-        !!selectedDataset?.id &&
-        metricType === METRIC_TYPE.JSON_SCHEMA_VALIDATOR,
-    },
-  );
-
-  // get the first dataset item's data to infer schema
-  const firstDatasetItemData = useMemo(
-    () =>
-      datasetItemsData?.content?.[0]?.data as
-        | Record<string, unknown>
-        | undefined,
-    [datasetItemsData?.content],
   );
 
   const { calculateModelProvider } = useLLMProviderModelsData();
