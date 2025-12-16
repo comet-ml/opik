@@ -203,9 +203,10 @@ const ExperimentsFeedbackScoresWidget: React.FunctionComponent<
 
   const experimentIds = useMemo(() => {
     const localExperimentIds = widgetConfig?.experimentIds;
-    return !isEmpty(localExperimentIds)
-      ? localExperimentIds!
-      : globalConfig.experimentIds || [];
+    if (localExperimentIds && localExperimentIds.length > 0) {
+      return localExperimentIds;
+    }
+    return globalConfig.experimentIds || [];
   }, [globalConfig.experimentIds, widgetConfig?.experimentIds]);
 
   const isUsingGlobalExperiments =
