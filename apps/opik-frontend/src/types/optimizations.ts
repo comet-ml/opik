@@ -37,7 +37,6 @@ export interface EqualsMetricParameters {
 
 export interface JsonSchemaValidatorMetricParameters {
   reference_key?: string;
-  case_sensitive?: boolean;
 }
 
 export interface GEvalMetricParameters {
