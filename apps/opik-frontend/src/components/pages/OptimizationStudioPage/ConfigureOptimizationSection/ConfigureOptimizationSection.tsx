@@ -210,7 +210,7 @@ const ConfigureOptimizationSection: React.FC = () => {
     [form, calculateModelProvider],
   );
 
-  // Auto-generate JSON schema when dataset item data is available and JSON Schema Validator is selected
+  // auto-generate JSON schema when dataset item data is available and JSON Schema Validator is selected
   useEffect(() => {
     if (
       metricType === METRIC_TYPE.JSON_SCHEMA_VALIDATOR &&
