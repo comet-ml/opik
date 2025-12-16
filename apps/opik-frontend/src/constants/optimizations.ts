@@ -40,9 +40,8 @@ export const DEFAULT_EQUALS_METRIC_CONFIGS = {
 };
 
 export const DEFAULT_JSON_SCHEMA_VALIDATOR_METRIC_CONFIGS = {
-  SCHEMA: {
-    key: "value",
-  },
+  REFERENCE_KEY: "",
+  CASE_SENSITIVE: false,
 };
 
 export const DEFAULT_G_EVAL_METRIC_CONFIGS = {

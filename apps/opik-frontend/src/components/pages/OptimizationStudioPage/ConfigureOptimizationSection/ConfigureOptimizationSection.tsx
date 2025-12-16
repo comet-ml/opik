@@ -35,7 +35,6 @@ import { generateDefaultLLMPromptMessage } from "@/lib/llm";
 import {
   getDefaultOptimizerConfig,
   getDefaultMetricConfig,
-  generateJsonSchemaFromData,
 } from "@/lib/optimizations";
 import { getDefaultConfigByProvider } from "@/lib/playground";
 import useDatasetsList from "@/api/datasets/useDatasetsList";
@@ -208,17 +207,6 @@ const ConfigureOptimizationSection: React.FC = () => {
     },
     [form, calculateModelProvider],
   );
-
-  // auto-generate JSON schema when dataset item data is available and JSON Schema Validator is selected
-  useEffect(() => {
-    if (
-      metricType === METRIC_TYPE.JSON_SCHEMA_VALIDATOR &&
-      firstDatasetItemData
-    ) {
-      const generatedSchema = generateJsonSchemaFromData(firstDatasetItemData);
-      form.setValue("metricParams", { schema: generatedSchema });
-    }
-  }, [firstDatasetItemData, metricType, form]);
 
   const optimizerOptions = [
     { value: OPTIMIZER_TYPE.GEPA, label: "GEPA" },

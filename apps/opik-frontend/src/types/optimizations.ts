@@ -36,7 +36,8 @@ export interface EqualsMetricParameters {
 }
 
 export interface JsonSchemaValidatorMetricParameters {
-  schema?: Record<string, unknown>;
+  reference_key?: string;
+  case_sensitive?: boolean;
 }
 
 export interface GEvalMetricParameters {

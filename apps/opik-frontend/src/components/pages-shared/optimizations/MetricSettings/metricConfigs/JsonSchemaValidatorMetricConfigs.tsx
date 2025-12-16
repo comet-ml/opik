@@ -1,6 +1,7 @@
-import React, { useState } from "react";
+import React from "react";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
+import { Input } from "@/components/ui/input";
+import { Checkbox } from "@/components/ui/checkbox";
 import { JsonSchemaValidatorMetricParameters } from "@/types/optimizations";
 import { DEFAULT_JSON_SCHEMA_VALIDATOR_METRIC_CONFIGS } from "@/constants/optimizations";
 import ExplainerIcon from "@/components/shared/ExplainerIcon/ExplainerIcon";
@@ -15,50 +16,47 @@ const JsonSchemaValidatorMetricConfigs = ({
   configs,
   onChange,
 }: JsonSchemaValidatorMetricConfigsProps) => {
-  const [schemaText, setSchemaText] = useState(
-    JSON.stringify(
-      configs.schema ?? DEFAULT_JSON_SCHEMA_VALIDATOR_METRIC_CONFIGS.SCHEMA,
-      null,
-      2,
-    ),
-  );
-  const [error, setError] = useState<string>("");
-
-  const handleSchemaChange = (value: string) => {
-    setSchemaText(value);
-    setError("");
-
-    if (!value.trim()) {
-      onChange({ ...configs, schema: {} });
-      return;
-    }
-
-    try {
-      const parsed = JSON.parse(value);
-      onChange({ ...configs, schema: parsed });
-    } catch (e) {
-      setError("Invalid JSON format");
-    }
-  };
+  const referenceKey =
+    configs.reference_key ??
+    DEFAULT_JSON_SCHEMA_VALIDATOR_METRIC_CONFIGS.REFERENCE_KEY;
 
   return (
     <div className="flex w-72 flex-col gap-6">
-      <div className="space-y-2">
-        <div className="flex items-center">
-          <Label htmlFor="json_schema" className="mr-1.5 text-sm">
-            JSON Schema
-          </Label>
-          <ExplainerIcon {...EXPLAINERS_MAP[EXPLAINER_ID.metric_json_schema]} />
+      <div className="space-y-4">
+        <div className="space-y-2">
+          <div className="flex items-center gap-2">
+            <Label htmlFor="reference_key" className="text-sm">
+              Reference key
+            </Label>
+            <ExplainerIcon
+              {...EXPLAINERS_MAP[EXPLAINER_ID.metric_reference_key]}
+            />
+          </div>
+          <Input
+            id="reference_key"
+            value={referenceKey}
+            onChange={(e) =>
+              onChange({ ...configs, reference_key: e.target.value })
+            }
+            placeholder="e.g., expected_output"
+          />
         </div>
-        <Textarea
-          id="json_schema"
-          value={schemaText}
-          onChange={(e) => handleSchemaChange(e.target.value)}
-          placeholder='{"type": "object", "properties": {...}}'
-          className="font-mono text-xs"
-          rows={10}
-        />
-        {error && <p className="text-xs text-warning">{error}</p>}
+
+        <div className="flex items-center space-x-2">
+          <Checkbox
+            id="case_sensitive"
+            checked={configs.case_sensitive}
+            onCheckedChange={(checked) =>
+              onChange({ ...configs, case_sensitive: checked === true })
+            }
+          />
+          <Label htmlFor="case_sensitive" className="cursor-pointer text-sm">
+            Case sensitive
+          </Label>
+          <ExplainerIcon
+            {...EXPLAINERS_MAP[EXPLAINER_ID.metric_case_sensitive]}
+          />
+        </div>
       </div>
     </div>
   );

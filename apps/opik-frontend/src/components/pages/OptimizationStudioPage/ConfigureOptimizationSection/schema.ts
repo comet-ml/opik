@@ -67,9 +67,8 @@ export const EqualsMetricParamsSchema = z.object({
 });
 
 export const JsonSchemaValidatorMetricParamsSchema = z.object({
-  schema: z
-    .record(z.unknown())
-    .refine((obj) => Object.keys(obj).length > 0, "Schema cannot be empty"),
+  reference_key: z.string().optional(),
+  case_sensitive: z.boolean().optional(),
 });
 
 export const GEvalMetricParamsSchema = z.object({
