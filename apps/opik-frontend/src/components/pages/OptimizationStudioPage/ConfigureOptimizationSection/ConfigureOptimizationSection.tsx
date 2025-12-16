@@ -39,8 +39,10 @@ import { generateDefaultLLMPromptMessage } from "@/lib/llm";
 import {
   getDefaultOptimizerConfig,
   getDefaultMetricConfig,
+  generateJsonSchemaFromData,
 } from "@/lib/optimizations";
 import useDatasetsList from "@/api/datasets/useDatasetsList";
+import useDatasetItemsList from "@/api/datasets/useDatasetItemsList";
 
 const MESSAGE_TYPE_OPTIONS = [
   {
@@ -93,6 +95,29 @@ const ConfigureOptimizationSection: React.FC = () => {
   const selectedDataset = useMemo(
     () => datasets.find((ds) => ds.name === datasetName),
     [datasets, datasetName],
+  );
+
+  // fetch dataset item data when a dataset is selected to infer schema for JSON Schema Validator
+  const { data: datasetItemsData } = useDatasetItemsList(
+    {
+      datasetId: selectedDataset?.id || "",
+      page: 1,
+      size: 1,
+    },
+    {
+      enabled:
+        !!selectedDataset?.id &&
+        metricType === METRIC_TYPE.JSON_SCHEMA_VALIDATOR,
+    },
+  );
+
+  // Get the first dataset item's data to infer schema
+  const firstDatasetItemData = useMemo(
+    () =>
+      datasetItemsData?.content?.[0]?.data as
+        | Record<string, unknown>
+        | undefined,
+    [datasetItemsData?.content],
   );
 
   const calculateModelProvider = useCallback(
@@ -177,6 +202,17 @@ const ConfigureOptimizationSection: React.FC = () => {
       });
     }
   }, [model, config, form]);
+
+  // Auto-generate JSON schema when dataset item data is available and JSON Schema Validator is selected
+  useEffect(() => {
+    if (
+      metricType === METRIC_TYPE.JSON_SCHEMA_VALIDATOR &&
+      firstDatasetItemData
+    ) {
+      const generatedSchema = generateJsonSchemaFromData(firstDatasetItemData);
+      form.setValue("metricParams", { schema: generatedSchema });
+    }
+  }, [firstDatasetItemData, metricType, form]);
 
   const optimizerOptions = [
     { value: OPTIMIZER_TYPE.GEPA, label: "GEPA" },

@@ -95,3 +95,51 @@ export const getDefaultMetricConfig = (
       return {};
   }
 };
+
+const inferDefaultValueFromValue = (value: unknown): unknown => {
+  if (value === null) {
+    return null;
+  }
+
+  if (Array.isArray(value)) {
+    if (value.length === 0) {
+      return [];
+    }
+
+    return [inferDefaultValueFromValue(value[0])];
+  }
+
+  switch (typeof value) {
+    case "string":
+      return "";
+    case "number":
+      return 0;
+    case "boolean":
+      return false;
+    case "object": {
+      const properties: Record<string, unknown> = {};
+      for (const [key, val] of Object.entries(value as Record<string, unknown>)) {
+        properties[key] = inferDefaultValueFromValue(val);
+      }
+      return properties;
+    }
+    default:
+      return "";
+  }
+};
+
+export const generateJsonSchemaFromData = (
+  data: Record<string, unknown> | null | undefined,
+): Record<string, unknown> => {
+  if (!data || typeof data !== "object") {
+    return DEFAULT_JSON_SCHEMA_VALIDATOR_METRIC_CONFIGS.SCHEMA;
+  }
+
+  const properties: Record<string, unknown> = {};
+
+  for (const [key, value] of Object.entries(data)) {
+    properties[key] = inferDefaultValueFromValue(value);
+  }
+
+  return properties;
+};

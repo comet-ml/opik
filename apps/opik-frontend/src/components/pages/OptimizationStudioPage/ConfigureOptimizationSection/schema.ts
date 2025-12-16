@@ -144,7 +144,6 @@ export const convertOptimizationStudioToFormData = (
       generateDefaultLLMPromptMessage({ role: LLM_MESSAGE_ROLE.user }),
     ];
 
-  console.log(optimization, "OPTIMIZATION_LOL");
 
   const optimizerType =
     (optimization?.studio_config?.optimizer.type as OPTIMIZER_TYPE) ||
