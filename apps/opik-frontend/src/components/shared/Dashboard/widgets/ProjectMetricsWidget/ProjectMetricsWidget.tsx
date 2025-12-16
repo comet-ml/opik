@@ -1,6 +1,5 @@
 import React, { memo, useMemo, useCallback } from "react";
 import { useShallow } from "zustand/react/shallow";
-import isEmpty from "lodash/isEmpty";
 
 import DashboardWidget from "@/components/shared/Dashboard/DashboardWidget/DashboardWidget";
 import {
@@ -23,6 +22,7 @@ import {
 } from "@/components/pages/TracesPage/MetricsTab/utils";
 import { calculateIntervalConfig } from "@/components/pages-shared/traces/MetricDateRangeSelect/utils";
 import { DEFAULT_DATE_PRESET } from "@/components/pages-shared/traces/MetricDateRangeSelect/constants";
+import { resolveProjectIdFromConfig } from "@/lib/dashboard/utils";
 
 const ProjectMetricsWidget: React.FunctionComponent<
   DashboardWidgetComponentProps
@@ -60,29 +60,23 @@ const ProjectMetricsWidget: React.FunctionComponent<
 
   const widgetProjectId = widget?.config?.projectId as string | undefined;
 
-  const isUsingGlobalProject =
-    isEmpty(widgetProjectId) && !isEmpty(globalConfig.projectId);
+  const { projectId, infoMessage, interval, intervalStart, intervalEnd } =
+    useMemo(() => {
+      const { projectId: resolvedProjectId, infoMessage } =
+        resolveProjectIdFromConfig(widgetProjectId, globalConfig.projectId);
 
-  const infoMessage = isUsingGlobalProject
-    ? "Using global project config"
-    : undefined;
+      const { interval, intervalStart, intervalEnd } = calculateIntervalConfig(
+        globalConfig.dateRange,
+      );
 
-  const { projectId, interval, intervalStart, intervalEnd } = useMemo(() => {
-    const finalProjectId = !isEmpty(widgetProjectId)
-      ? widgetProjectId
-      : globalConfig.projectId;
-
-    const { interval, intervalStart, intervalEnd } = calculateIntervalConfig(
-      globalConfig.dateRange,
-    );
-
-    return {
-      projectId: finalProjectId,
-      interval,
-      intervalStart,
-      intervalEnd,
-    };
-  }, [widgetProjectId, globalConfig.projectId, globalConfig.dateRange]);
+      return {
+        projectId: resolvedProjectId,
+        infoMessage,
+        interval,
+        intervalStart,
+        intervalEnd,
+      };
+    }, [widgetProjectId, globalConfig.projectId, globalConfig.dateRange]);
 
   const metricType = widget?.config?.metricType as string | undefined;
   const metricName = metricType as METRIC_NAME_TYPE | undefined;

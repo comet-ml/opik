@@ -1,6 +1,5 @@
 import React, { memo, useMemo, useCallback } from "react";
 import { useShallow } from "zustand/react/shallow";
-import isEmpty from "lodash/isEmpty";
 
 import DashboardWidget from "@/components/shared/Dashboard/DashboardWidget/DashboardWidget";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
@@ -22,6 +21,7 @@ import {
   extractFeedbackScoreName,
   formatFeedbackScoreValue,
 } from "./metrics";
+import { resolveProjectIdFromConfig } from "@/lib/dashboard/utils";
 
 const renderMetricDisplay = (label: string, value: string) => (
   <div className="flex h-full flex-col items-stretch justify-center">
@@ -72,24 +72,17 @@ const ProjectStatsCardWidget: React.FunctionComponent<
 
   const widgetProjectId = widget?.config?.projectId as string | undefined;
 
-  const isUsingGlobalProject =
-    isEmpty(widgetProjectId) && !isEmpty(globalConfig.projectId);
-
-  const infoMessage = isUsingGlobalProject
-    ? "Using global project config"
-    : undefined;
-
-  const { projectId, intervalStart, intervalEnd } = useMemo(() => {
-    const finalProjectId = !isEmpty(widgetProjectId)
-      ? widgetProjectId
-      : globalConfig.projectId;
+  const { projectId, infoMessage, intervalStart, intervalEnd } = useMemo(() => {
+    const { projectId: resolvedProjectId, infoMessage } =
+      resolveProjectIdFromConfig(widgetProjectId, globalConfig.projectId);
 
     const { intervalStart, intervalEnd } = calculateIntervalConfig(
       globalConfig.dateRange,
     );
 
     return {
-      projectId: finalProjectId,
+      projectId: resolvedProjectId,
+      infoMessage,
       intervalStart,
       intervalEnd,
     };
