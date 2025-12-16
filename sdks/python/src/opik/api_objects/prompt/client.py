@@ -143,7 +143,14 @@ class PromptClient:
                 commit=commit,
             )
 
-            # Client-side validation for template_structure if requested
+            skip_text_prompt_validation_for_old_backend = (
+                prompt_version.template_structure is None
+                and raise_if_not_template_structure == "text"
+            )
+            if skip_text_prompt_validation_for_old_backend:
+                return prompt_version
+
+            # Client-side validation for template_structure if requested and not skipped
             if (
                 raise_if_not_template_structure is not None
                 and prompt_version.template_structure != raise_if_not_template_structure
