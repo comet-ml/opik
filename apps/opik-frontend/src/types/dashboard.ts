@@ -70,6 +70,7 @@ export interface ExperimentsFeedbackScoresWidgetType {
     groups?: Groups;
     experimentIds?: string[];
     chartType?: CHART_TYPE;
+    feedbackScores?: string[];
   } & Record<string, unknown>;
 }
 
