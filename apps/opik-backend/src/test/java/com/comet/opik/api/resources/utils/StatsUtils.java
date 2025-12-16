@@ -16,6 +16,7 @@ import com.comet.opik.domain.stats.StatsMapper;
 import com.comet.opik.utils.ValidationUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.google.common.math.Quantiles;
+import org.apache.commons.collections4.CollectionUtils;
 import org.assertj.core.api.recursive.comparison.RecursiveComparisonConfiguration;
 import org.junit.platform.commons.util.StringUtils;
 
@@ -66,7 +67,7 @@ public class StatsUtils {
     }
 
     public static List<ProjectStatItem<?>> getProjectTraceStatItems(List<Trace> expectedTraces) {
-        return getProjectStatItems(expectedTraces,
+        var stats = getProjectStatItems(expectedTraces,
                 expectedTraces.stream().map(Trace::usage).toList(),
                 expectedTraces.stream().map(Trace::feedbackScores).toList(),
                 expectedTraces.stream().map(Trace::spanFeedbackScores).toList(),
@@ -82,6 +83,12 @@ public class StatsUtils {
                 Trace::guardrailsValidations,
                 Trace::errorInfo,
                 "trace_count");
+
+        if (CollectionUtils.isNotEmpty(expectedTraces)) {
+            stats.add(new CountValueStat(StatsMapper.THREAD_COUNT, calculateExpectedThreadCount(expectedTraces)));
+        }
+
+        return stats;
     }
 
     public static List<ProjectStatItem<?>> getProjectSpanStatItems(List<Span> expectedSpans) {
@@ -127,6 +134,15 @@ public class StatsUtils {
                 null,
                 Span::errorInfo,
                 "span_count");
+    }
+
+    private static long calculateExpectedThreadCount(List<Trace> traces) {
+        return traces.stream()
+                .map(Trace::threadId)
+                .filter(Objects::nonNull)
+                .filter(threadId -> !threadId.isEmpty())
+                .distinct()
+                .count();
     }
 
     private static <T> List<ProjectStatItem<?>> getProjectStatItems(
