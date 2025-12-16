@@ -14,6 +14,8 @@ import java.util.List;
 /**
  * Configuration for Optimization Studio runs.
  * This represents the full payload sent from the frontend to create a Studio optimization.
+ *
+ * The opikApiKey is only required for cloud deployments, as it'll be used to automate SDK in behalf of the user.
  */
 @Builder(toBuilder = true)
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
@@ -22,7 +24,8 @@ public record OptimizationStudioConfig(
         @NotNull @Valid StudioPrompt prompt,
         @NotNull @Valid StudioLlmModel llmModel,
         @NotNull @Valid StudioEvaluation evaluation,
-        @NotNull @Valid StudioOptimizer optimizer) {
+        @NotNull @Valid StudioOptimizer optimizer,
+        String opikApiKey) {
 
     @Builder(toBuilder = true)
     @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
