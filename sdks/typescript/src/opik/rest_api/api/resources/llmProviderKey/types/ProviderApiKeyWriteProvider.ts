@@ -9,7 +9,7 @@ export type ProviderApiKeyWriteProvider =
     | "openrouter"
     | "vertex-ai"
     | "custom-llm"
-    | "opik-builtin";
+    | "opik-free";
 export const ProviderApiKeyWriteProvider = {
     Openai: "openai",
     Anthropic: "anthropic",
@@ -17,5 +17,5 @@ export const ProviderApiKeyWriteProvider = {
     Openrouter: "openrouter",
     VertexAi: "vertex-ai",
     CustomLlm: "custom-llm",
-    OpikBuiltin: "opik-builtin",
+    OpikFree: "opik-free",
 } as const;

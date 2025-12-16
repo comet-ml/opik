@@ -71,9 +71,6 @@ const ProviderSelect: React.FC<ProviderSelectProps> = ({
   const isCustomLLMEnabled = useIsFeatureEnabled(
     FeatureToggleKeys.CUSTOMLLM_PROVIDER_ENABLED,
   );
-  const isOpikBuiltinEnabled = useIsFeatureEnabled(
-    FeatureToggleKeys.OPIKBUILTIN_PROVIDER_ENABLED,
-  );
 
   const providerEnabledMap = useMemo(
     () => ({
@@ -83,7 +80,7 @@ const ProviderSelect: React.FC<ProviderSelectProps> = ({
       [PROVIDER_TYPE.OPEN_ROUTER]: isOpenRouterEnabled,
       [PROVIDER_TYPE.VERTEX_AI]: isVertexAIEnabled,
       [PROVIDER_TYPE.CUSTOM]: isCustomLLMEnabled,
-      [PROVIDER_TYPE.OPIK_BUILTIN]: isOpikBuiltinEnabled,
+      // OPIK_FREE is not included - it's handled separately in PromptModelSelect
     }),
     [
       isOpenAIEnabled,
@@ -92,7 +89,6 @@ const ProviderSelect: React.FC<ProviderSelectProps> = ({
       isOpenRouterEnabled,
       isVertexAIEnabled,
       isCustomLLMEnabled,
-      isOpikBuiltinEnabled,
     ],
   );
 
@@ -101,18 +97,16 @@ const ProviderSelect: React.FC<ProviderSelectProps> = ({
 
     // Filter standard providers based on feature flags
     const standardProviders = PROVIDERS_OPTIONS.filter((option) => {
-      if (option.value === PROVIDER_TYPE.CUSTOM) {
+      if (
+        option.value === PROVIDER_TYPE.CUSTOM ||
+        option.value === PROVIDER_TYPE.OPIK_FREE
+      ) {
         return false;
       }
       return providerEnabledMap[option.value];
     });
 
     standardProviders.forEach((option) => {
-      // Skip read-only providers - they are system-managed and users don't configure them
-      if (option.readOnly) {
-        return;
-      }
-
       const [id] =
         configuredProvidersList
           ?.filter((key) => key.provider === option.value)
