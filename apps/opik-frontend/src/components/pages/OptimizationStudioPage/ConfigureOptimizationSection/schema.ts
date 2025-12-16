@@ -11,7 +11,9 @@ import {
   getDefaultOptimizerConfig,
   getDefaultMetricConfig,
 } from "@/lib/optimizations";
-import { PROVIDER_MODEL_TYPE } from "@/types/providers";
+import { getDefaultConfigByProvider } from "@/lib/playground";
+import { getProviderFromModel } from "@/lib/provider";
+import { PROVIDER_MODEL_TYPE, LLMPromptConfigsType } from "@/types/providers";
 
 export const GepaOptimizerParamsSchema = z.object({
   model: z.string().optional(),
@@ -92,7 +94,27 @@ const BaseOptimizationConfigSchema = z.object({
     .array(z.custom<LLMMessage>())
     .min(1, "At least one message is required"),
   modelName: z.nativeEnum(PROVIDER_MODEL_TYPE),
-  modelConfig: z.record(z.unknown()).default({ temperature: 1.0 }),
+  modelConfig: z
+    .object({
+      temperature: z.number().optional(),
+      maxCompletionTokens: z.number().optional(),
+      topP: z.number().optional(),
+      frequencyPenalty: z.number().optional(),
+      presencePenalty: z.number().optional(),
+      throttling: z.number().optional(),
+      maxConcurrentRequests: z.number().optional(),
+      reasoningEffort: z.string().optional(),
+      // Anthropic specific
+      maxTokens: z.number().optional(),
+      // OpenRouter specific
+      topK: z.number().optional(),
+      repetitionPenalty: z.number().optional(),
+      minP: z.number().optional(),
+      topA: z.number().optional(),
+      // Custom provider
+      custom_parameters: z.record(z.any()).optional(),
+    })
+    .passthrough(),
 });
 
 const EqualsMetricConfigSchema = BaseOptimizationConfigSchema.extend({
@@ -127,12 +149,20 @@ export type OptimizationConfigFormType = z.infer<
   typeof OptimizationConfigSchema
 >;
 
+const getDefaultModelConfig = (model: PROVIDER_MODEL_TYPE) => {
+  const provider = getProviderFromModel(model);
+  return getDefaultConfigByProvider(provider, model);
+};
+
 export const convertOptimizationStudioToFormData = (
   optimization?: Partial<OptimizationStudio> | null,
 ): OptimizationConfigFormType => {
   const existingConfig = optimization?.studio_config?.llm_model?.parameters as
-    | Record<string, unknown>
+    | LLMPromptConfigsType
     | undefined;
+
+  const hasExistingConfig =
+    existingConfig && Object.keys(existingConfig).length > 0;
 
   const messages: LLMMessage[] =
     optimization?.studio_config?.prompt?.messages?.map((m) => ({
@@ -144,7 +174,6 @@ export const convertOptimizationStudioToFormData = (
       generateDefaultLLMPromptMessage({ role: LLM_MESSAGE_ROLE.user }),
     ];
 
-
   const optimizerType =
     (optimization?.studio_config?.optimizer.type as OPTIMIZER_TYPE) ||
     OPTIMIZER_TYPE.GEPA;
@@ -152,6 +181,15 @@ export const convertOptimizationStudioToFormData = (
   const metricType =
     (optimization?.studio_config?.evaluation.metrics[0]?.type as METRIC_TYPE) ||
     METRIC_TYPE.EQUALS;
+
+  const modelName =
+    optimization?.studio_config?.llm_model?.model ||
+    PROVIDER_MODEL_TYPE.GPT_4O_MINI;
+
+  const defaultConfig = getDefaultModelConfig(modelName as PROVIDER_MODEL_TYPE);
+  const modelConfig = hasExistingConfig
+    ? { ...defaultConfig, ...existingConfig }
+    : defaultConfig;
 
   return {
     datasetId: optimization?.dataset_id || "",
@@ -164,11 +202,8 @@ export const convertOptimizationStudioToFormData = (
       optimization?.studio_config?.evaluation?.metrics?.[0]?.parameters ||
       getDefaultMetricConfig(metricType),
     messages,
-    // Expand it later
-    modelName:
-      optimization?.studio_config?.llm_model?.model ||
-      PROVIDER_MODEL_TYPE.GPT_4O_MINI,
-    modelConfig: existingConfig || { temperature: 1.0 },
+    modelName,
+    modelConfig,
   } as OptimizationConfigFormType;
 };
 

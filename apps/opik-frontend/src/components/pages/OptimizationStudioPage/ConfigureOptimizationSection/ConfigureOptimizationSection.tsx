@@ -15,8 +15,8 @@ import SelectBox from "@/components/shared/SelectBox/SelectBox";
 import useAppStore from "@/store/AppStore";
 import { useOptimizationStudioContext } from "../OptimizationStudioContext";
 import DatasetSelectBox from "@/components/pages-shared/llm/DatasetSelectBox/DatasetSelectBox";
-import PromptModelSelect from "@/components/pages-shared/llm/PromptModelSelect/PromptModelSelect";
 import PromptModelConfigs from "@/components/pages-shared/llm/PromptModelSettings/PromptModelConfigs";
+import OptimizationModelSelect from "@/components/pages-shared/optimizations/OptimizationModelSelect/OptimizationModelSelect";
 import LLMPromptMessages from "@/components/pages-shared/llm/LLMPromptMessages/LLMPromptMessages";
 import AlgorithmConfigs from "@/components/pages-shared/optimizations/AlgorithmSettings/AlgorithmConfigs";
 import MetricConfigs from "@/components/pages-shared/optimizations/MetricSettings/MetricConfigs";
@@ -28,11 +28,7 @@ import {
   MetricParameters,
   OPTIMIZATION_STATUS,
 } from "@/types/optimizations";
-import {
-  PROVIDER_MODEL_TYPE,
-  COMPOSED_PROVIDER_TYPE,
-  LLMPromptConfigsType,
-} from "@/types/providers";
+import { PROVIDER_MODEL_TYPE, LLMPromptConfigsType } from "@/types/providers";
 import { LLM_MESSAGE_ROLE, LLMMessage } from "@/types/llm";
 import { LLM_MESSAGE_ROLE_NAME_MAP } from "@/constants/llm";
 import { generateDefaultLLMPromptMessage } from "@/lib/llm";
@@ -41,8 +37,10 @@ import {
   getDefaultMetricConfig,
   generateJsonSchemaFromData,
 } from "@/lib/optimizations";
+import { getDefaultConfigByProvider } from "@/lib/playground";
 import useDatasetsList from "@/api/datasets/useDatasetsList";
 import useDatasetItemsList from "@/api/datasets/useDatasetItemsList";
+import useLLMProviderModelsData from "@/hooks/useLLMProviderModelsData";
 
 const MESSAGE_TYPE_OPTIONS = [
   {
@@ -127,24 +125,9 @@ const ConfigureOptimizationSection: React.FC = () => {
     [datasetItemsData?.content],
   );
 
-  const calculateModelProvider = useCallback(
-    (modelValue: PROVIDER_MODEL_TYPE | ""): COMPOSED_PROVIDER_TYPE | "" => {
-      if (!modelValue) {
-        return "";
-      }
-
-      // ToDo: expand it later
-      const result = "openai";
-
-      return result;
-    },
-    [],
-  );
+  const { calculateModelProvider } = useLLMProviderModelsData();
 
   const provider = calculateModelProvider(model);
-
-  const handleAddProvider = useCallback(() => {}, []);
-  const handleDeleteProvider = useCallback(() => {}, []);
 
   const handleOptimizerTypeChange = useCallback(
     (newOptimizerType: OPTIMIZER_TYPE) => {
@@ -202,13 +185,30 @@ const ConfigureOptimizationSection: React.FC = () => {
     [form],
   );
 
-  useEffect(() => {
-    if (model && (!config || Object.keys(config).length === 0)) {
+  const handleModelConfigChange = useCallback(
+    (newConfigs: Partial<LLMPromptConfigsType>) => {
+      const currentConfig = form.getValues("modelConfig");
       form.setValue("modelConfig", {
-        temperature: 1.0,
-      });
-    }
-  }, [model, config, form]);
+        ...currentConfig,
+        ...newConfigs,
+      } as typeof currentConfig);
+    },
+    [form],
+  );
+
+  const handleModelChange = useCallback(
+    (newModel: PROVIDER_MODEL_TYPE) => {
+      const newProvider = calculateModelProvider(newModel);
+      const defaultConfig = getDefaultConfigByProvider(newProvider, newModel);
+
+      form.setValue("modelName", newModel);
+      form.setValue(
+        "modelConfig",
+        defaultConfig as OptimizationConfigFormType["modelConfig"],
+      );
+    },
+    [form, calculateModelProvider],
+  );
 
   // Auto-generate JSON schema when dataset item data is available and JSON Schema Validator is selected
   useEffect(() => {
@@ -402,38 +402,19 @@ const ConfigureOptimizationSection: React.FC = () => {
                 <FormLabel>Model</FormLabel>
                 <FormControl>
                   <div className="flex h-8 items-center gap-2">
-                    <PromptModelSelect
+                    <OptimizationModelSelect
                       value={field.value as PROVIDER_MODEL_TYPE | ""}
-                      onChange={(m) => {
-                        if (m) {
-                          field.onChange(m);
-                          const providerType = calculateModelProvider(m);
-                          console.log(m, providerType, "m, providerType");
-                        }
-                      }}
-                      provider={provider}
+                      onChange={handleModelChange}
                       hasError={Boolean(form.formState.errors.modelName)}
-                      workspaceName={workspaceName}
-                      onAddProvider={handleAddProvider}
-                      onDeleteProvider={handleDeleteProvider}
-                      disabled={true}
+                      disabled={disableForm}
                     />
-
-                    <FormField
-                      control={form.control}
-                      name="modelConfig"
-                      render={({ field: configField }) => (
-                        <PromptModelConfigs
-                          size="icon-sm"
-                          provider={provider}
-                          model={model}
-                          configs={
-                            configField.value as Partial<LLMPromptConfigsType>
-                          }
-                          onChange={configField.onChange}
-                          disabled={disableForm}
-                        />
-                      )}
+                    <PromptModelConfigs
+                      size="icon-sm"
+                      provider={provider}
+                      model={model}
+                      configs={config}
+                      onChange={handleModelConfigChange}
+                      disabled={disableForm}
                     />
                   </div>
                 </FormControl>
