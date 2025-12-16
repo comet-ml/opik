@@ -336,7 +336,7 @@ const TraceQueueItemsTab: React.FC<TraceQueueItemsTabProps> = ({
     [annotationQueue.id, filters],
   );
 
-  const { data, isPending } = useTracesList(
+  const { data, isPending, isFetching } = useTracesList(
     {
       projectId: annotationQueue.project_id,
       sorting: sortedColumns,
@@ -604,6 +604,7 @@ const TraceQueueItemsTab: React.FC<TraceQueueItemsTabProps> = ({
         noData={<DataTableNoData title={noDataText} />}
         TableWrapper={PageBodyStickyTableWrapper}
         stickyHeader
+        showLoadingOverlay={isFetching && !isPending}
       />
       <PageBodyStickyContainer
         className="py-4"
