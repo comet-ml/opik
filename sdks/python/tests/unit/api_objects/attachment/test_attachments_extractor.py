@@ -1,16 +1,12 @@
-import os
 import re
-from typing import Optional
 
 import pytest
 
 from opik.api_objects.attachment import (
-    attachment,
     attachment_context,
     attachments_extractor,
     decoder_helpers,
 )
-
 from . import constants
 
 
@@ -26,7 +22,7 @@ def extractor_big_threshold():
     return attachments_extractor.AttachmentsExtractor(min_attachment_size=100)
 
 
-def test_extract_and_replace_single_attachment(extractor):
+def test_extract_and_replace_single_attachment(extractor, files_to_remove):
     """Test extraction of a single attachment from data."""
     data = {"image": constants.PNG_BASE64}
 
@@ -40,6 +36,9 @@ def test_extract_and_replace_single_attachment(extractor):
 
     # Verify attachments were extracted
     assert len(result) == 1
+    # Register for cleanup
+    files_to_remove.append(result[0].attachment_data.data)
+
     assert isinstance(result[0], attachment_context.AttachmentWithContext)
     assert result[0].entity_type == "span"
     assert result[0].entity_id == "span-123"
@@ -51,11 +50,10 @@ def test_extract_and_replace_single_attachment(extractor):
     pattern = re.compile(decoder_helpers.ATTACHMENT_FILE_NAME_PLACEHOLDER_REGEX)
     assert bool(pattern.fullmatch(data["image"])) is True
 
-    # Cleanup
-    _cleanup(result[0].attachment_data)
 
-
-def test_extract_and_replace_multiple_attachments_single_key(extractor):
+def test_extract_and_replace_multiple_attachments_single_key(
+    extractor, files_to_remove
+):
     """Test extraction of multiple attachments from a single key."""
     # Combine two different base64 strings with some text
     data = {
@@ -69,6 +67,9 @@ def test_extract_and_replace_multiple_attachments_single_key(extractor):
         context="output",
         project_name="test",
     )
+    # Register for cleanup
+    for r in result:
+        files_to_remove.append(r.attachment_data.data)
 
     # Verify both attachments were extracted
     assert len(result) == 2
@@ -94,12 +95,8 @@ def test_extract_and_replace_multiple_attachments_single_key(extractor):
         assert m.group(1) == result[index].attachment_data.file_name
         index += 1
 
-    # Cleanup
-    for r in result:
-        _cleanup(r.attachment_data)
 
-
-def test_extract_and_replace_multiple_keys_with_attachments(extractor):
+def test_extract_and_replace_multiple_keys_with_attachments(extractor, files_to_remove):
     """Test extraction from multiple keys in the data dictionary."""
     data = {
         "input_image": constants.PNG_BASE64,
@@ -114,6 +111,9 @@ def test_extract_and_replace_multiple_keys_with_attachments(extractor):
         context="metadata",
         project_name="test",
     )
+    # Register for cleanup
+    for r in result:
+        files_to_remove.append(r.attachment_data.data)
 
     # Verify two attachments were extracted (text should be ignored)
     assert len(result) == 2
@@ -125,10 +125,6 @@ def test_extract_and_replace_multiple_keys_with_attachments(extractor):
     assert constants.PNG_BASE64 not in data["input_image"]
     assert constants.PDF_BASE64 not in data["output_pdf"]
     assert data["text"] == "regular text"  # Text unchanged
-
-    # Cleanup
-    for r in result:
-        _cleanup(r.attachment_data)
 
 
 def test_extract_and_replace_non_string_primitive_values_ignored(extractor):
@@ -228,7 +224,7 @@ def test_extract_and_replace_below_size_threshold(extractor_big_threshold):
     assert len(result) == 0
 
 
-def test_extract_and_replace_mixed_valid_invalid(extractor):
+def test_extract_and_replace_mixed_valid_invalid(extractor, files_to_remove):
     """Test extraction with a mix of valid and invalid attachments."""
     data = {
         "valid_png": constants.PNG_BASE64,
@@ -244,6 +240,9 @@ def test_extract_and_replace_mixed_valid_invalid(extractor):
         context="input",
         project_name="test",
     )
+    # Register for cleanup
+    for r in result:
+        files_to_remove.append(r.attachment_data.data)
 
     # Only valid image attachments should be extracted (plain text excluded by decoder)
     assert len(result) == 2
@@ -257,12 +256,8 @@ def test_extract_and_replace_mixed_valid_invalid(extractor):
     assert data["invalid"] == "not base64!"
     assert data["plain_text"] == constants.PLAIN_TEXT_BASE64
 
-    # Cleanup
-    for r in result:
-        _cleanup(r.attachment_data)
 
-
-def test_extract_and_replace_context_preservation(extractor):
+def test_extract_and_replace_context_preservation(extractor, files_to_remove):
     """Test that context is properly preserved in AttachmentWithContext."""
     contexts = ["input", "output", "metadata"]
 
@@ -278,13 +273,13 @@ def test_extract_and_replace_context_preservation(extractor):
         )
 
         assert len(result) == 1
+        # Register for cleanup
+        files_to_remove.append(result[0].attachment_data.data)
+
         assert result[0].context == ctx
 
-        # Cleanup
-        _cleanup(result[0].attachment_data)
 
-
-def test_extract_and_replace_entity_info_preservation(extractor):
+def test_extract_and_replace_entity_info_preservation(extractor, files_to_remove):
     """Test that entity type and ID are properly preserved."""
     entity_types = ["span", "trace"]
     entity_ids = ["id-001", "id-002", "id-003"]
@@ -302,11 +297,11 @@ def test_extract_and_replace_entity_info_preservation(extractor):
             )
 
             assert len(result) == 1
+            # Register for cleanup
+            files_to_remove.append(result[0].attachment_data.data)
+
             assert result[0].entity_type == entity_type
             assert result[0].entity_id == entity_id
-
-            # Cleanup
-            _cleanup(result[0].attachment_data)
 
 
 def test_extract_and_replace_empty_string(extractor):
@@ -358,7 +353,7 @@ def test_extract_and_replace_bytes_data(extractor):
     assert len(result) == 0
 
 
-def test_extract_and_replace_attachment_filename_format(extractor):
+def test_extract_and_replace_attachment_filename_format(extractor, files_to_remove):
     """Test that extracted attachments have a correct filename format."""
     data = {"image": constants.PNG_BASE64}
 
@@ -371,15 +366,15 @@ def test_extract_and_replace_attachment_filename_format(extractor):
     )
 
     assert len(result) == 1
+    # Register for cleanup
+    files_to_remove.append(result[0].attachment_data.data)
+
     filename = result[0].attachment_data.file_name
     assert filename.startswith("output-attachment-")
     assert filename.endswith(".png")
 
-    # Cleanup
-    _cleanup(result[0].attachment_data)
 
-
-def test_extract_and_replace_sanitized_data_format(extractor):
+def test_extract_and_replace_sanitized_data_format(extractor, files_to_remove):
     """Test that sanitized data contains the attachment filename."""
     data = {"doc": constants.PDF_BASE64}
 
@@ -392,14 +387,14 @@ def test_extract_and_replace_sanitized_data_format(extractor):
     )
 
     assert len(result) == 1
+    # Register for cleanup
+    files_to_remove.append(result[0].attachment_data.data)
+
     filename = result[0].attachment_data.file_name
     assert f"[{filename}]" == data["doc"]
 
-    # Cleanup
-    _cleanup(result[0].attachment_data)
 
-
-def test_extract_and_replace_multiple_same_attachment(extractor):
+def test_extract_and_replace_multiple_same_attachment(extractor, files_to_remove):
     """Test extraction when the same attachment appears multiple times."""
     # Use the same base64 twice
     data = {"images": f"{constants.PNG_BASE64} and {constants.PNG_BASE64}"}
@@ -412,6 +407,10 @@ def test_extract_and_replace_multiple_same_attachment(extractor):
         project_name="test",
     )
 
+    # Register for cleanup
+    for r in result:
+        files_to_remove.append(r.attachment_data.data)
+
     # Both instances should be extracted
     assert len(result) == 2
     assert all(r.attachment_data.content_type == "image/png" for r in result)
@@ -422,12 +421,8 @@ def test_extract_and_replace_multiple_same_attachment(extractor):
     matches = pattern.findall(data["images"])
     assert len(matches) == 2
 
-    # Cleanup
-    for r in result:
-        _cleanup(r.attachment_data)
 
-
-def test_extract_and_replace_gif_attachment(extractor):
+def test_extract_and_replace_gif_attachment(extractor, files_to_remove):
     """Test extraction of a GIF attachment."""
     data = {"gif": constants.GIF89_BASE64}
 
@@ -440,14 +435,14 @@ def test_extract_and_replace_gif_attachment(extractor):
     )
 
     assert len(result) == 1
+    # Register for cleanup
+    files_to_remove.append(result[0].attachment_data.data)
+
     assert result[0].attachment_data.content_type == "image/gif"
     assert result[0].attachment_data.file_name.endswith(".gif")
 
-    # Cleanup
-    _cleanup(result[0].attachment_data)
 
-
-def test_extract_and_replace_webp_attachment(extractor):
+def test_extract_and_replace_webp_attachment(extractor, files_to_remove):
     """Test extraction of WebP attachment."""
     data = {"webp": constants.WEBP_BASE64}
 
@@ -460,14 +455,14 @@ def test_extract_and_replace_webp_attachment(extractor):
     )
 
     assert len(result) == 1
+    # Register for cleanup
+    files_to_remove.append(result[0].attachment_data.data)
+
     assert result[0].attachment_data.content_type == "image/webp"
     assert result[0].attachment_data.file_name.endswith(".webp")
 
-    # Cleanup
-    _cleanup(result[0].attachment_data)
 
-
-def test_extract_and_replace_svg_attachment(extractor):
+def test_extract_and_replace_svg_attachment(extractor, files_to_remove):
     """Test extraction of SVG attachment."""
     data = {"svg": constants.SVG_BASE64}
 
@@ -480,14 +475,14 @@ def test_extract_and_replace_svg_attachment(extractor):
     )
 
     assert len(result) == 1
+    # Register for cleanup
+    files_to_remove.append(result[0].attachment_data.data)
+
     assert result[0].attachment_data.content_type == "image/svg+xml"
     assert result[0].attachment_data.file_name.endswith(".svg")
 
-    # Cleanup
-    _cleanup(result[0].attachment_data)
 
-
-def test_extract_and_replace_json_attachment(extractor):
+def test_extract_and_replace_json_attachment(extractor, files_to_remove):
     """Test extraction of JSON attachment."""
     data = {"json": constants.JSON_BASE64}
 
@@ -500,11 +495,11 @@ def test_extract_and_replace_json_attachment(extractor):
     )
 
     assert len(result) == 1
+    # Register for cleanup
+    files_to_remove.append(result[0].attachment_data.data)
+
     assert result[0].attachment_data.content_type == "application/json"
     assert result[0].attachment_data.file_name.endswith(".json")
-
-    # Cleanup
-    _cleanup(result[0].attachment_data)
 
 
 def test_extract_and_replace_octet_stream_not_extracted(extractor):
@@ -524,7 +519,7 @@ def test_extract_and_replace_octet_stream_not_extracted(extractor):
     assert data["binary"] == constants.RANDOM_BINARY_BASE64
 
 
-def test_extract_and_replace_data_mutation(extractor):
+def test_extract_and_replace_data_mutation(extractor, files_to_remove):
     """Test that the original data dictionary is mutated in place."""
     data = {"image": constants.PNG_BASE64}
     original_data_ref = data
@@ -537,16 +532,16 @@ def test_extract_and_replace_data_mutation(extractor):
         project_name="test",
     )
 
+    assert len(result) == 1
+    # Register for cleanup
+    files_to_remove.append(result[0].attachment_data.data)
+
     # Verify the same object was mutated
     assert data is original_data_ref
-    assert len(result) == 1
     assert constants.PNG_BASE64 not in data["image"]
 
-    # Cleanup
-    _cleanup(result[0].attachment_data)
 
-
-def test_extract_and_replace_complex_text_with_base64(extractor):
+def test_extract_and_replace_complex_text_with_base64(extractor, files_to_remove):
     """Test extraction from text containing base64 among other content."""
     data = {
         "message": f"Here is an image: {constants.PNG_BASE64} and some text after",
@@ -561,6 +556,9 @@ def test_extract_and_replace_complex_text_with_base64(extractor):
     )
 
     assert len(result) == 1
+    # Register for cleanup
+    files_to_remove.append(result[0].attachment_data.data)
+
     assert result[0].attachment_data.content_type == "image/png"
 
     # Verify surrounding text is preserved
@@ -578,11 +576,8 @@ def test_extract_and_replace_complex_text_with_base64(extractor):
     assert m.group(1) == result[0].attachment_data.file_name
     assert m.start() == 18
 
-    # Cleanup
-    _cleanup(result[0].attachment_data)
 
-
-def test_extract_and_replace_nested_dict_with_attachments(extractor):
+def test_extract_and_replace_nested_dict_with_attachments(extractor, files_to_remove):
     """Test extraction of attachments from nested dictionaries."""
     data = {
         "outer": {
@@ -602,6 +597,9 @@ def test_extract_and_replace_nested_dict_with_attachments(extractor):
         context="input",
         project_name="test",
     )
+    # Register for cleanup
+    for r in result:
+        files_to_remove.append(r.attachment_data.data)
 
     # Should extract 2 attachments (PNG and PDF)
     assert len(result) == 2
@@ -620,12 +618,8 @@ def test_extract_and_replace_nested_dict_with_attachments(extractor):
     assert bool(pattern.fullmatch(data["outer"]["inner_image"])) is True
     assert bool(pattern.fullmatch(data["outer"]["deeply_nested"]["pdf_doc"])) is True
 
-    # Cleanup
-    for r in result:
-        _cleanup(r.attachment_data)
 
-
-def test_extract_and_replace_list_with_attachments(extractor):
+def test_extract_and_replace_list_with_attachments(extractor, files_to_remove):
     """Test extraction of attachments from lists."""
     data = {
         "images": [
@@ -643,6 +637,9 @@ def test_extract_and_replace_list_with_attachments(extractor):
         context="output",
         project_name="test",
     )
+    # Register for cleanup
+    for r in result:
+        files_to_remove.append(r.attachment_data.data)
 
     # Should extract 2 attachments (PNG and JPEG)
     assert len(result) == 2
@@ -661,12 +658,8 @@ def test_extract_and_replace_list_with_attachments(extractor):
     assert bool(pattern.fullmatch(data["images"][0])) is True
     assert bool(pattern.fullmatch(data["images"][2])) is True
 
-    # Cleanup
-    for r in result:
-        _cleanup(r.attachment_data)
 
-
-def test_extract_and_replace_deeply_nested_structures(extractor):
+def test_extract_and_replace_deeply_nested_structures(extractor, files_to_remove):
     """Test extraction from deeply nested mixed structures (dicts and lists)."""
     data = {
         "level1": {
@@ -692,6 +685,10 @@ def test_extract_and_replace_deeply_nested_structures(extractor):
         project_name="test",
     )
 
+    # Register for cleanup
+    for r in result:
+        files_to_remove.append(r.attachment_data.data)
+
     # Should extract 3 attachments (PNG, JPEG, PDF)
     assert len(result) == 3
     content_types = [r.attachment_data.content_type for r in result]
@@ -713,12 +710,8 @@ def test_extract_and_replace_deeply_nested_structures(extractor):
     assert bool(pattern.fullmatch(data["level1"]["level2"][1])) is True
     assert bool(pattern.fullmatch(data["level1"]["level2"][2]["docs"][0])) is True
 
-    # Cleanup
-    for r in result:
-        _cleanup(r.attachment_data)
 
-
-def test_extract_and_replace_nested_empty_structures(extractor):
+def test_extract_and_replace_nested_empty_structures(extractor, files_to_remove):
     """Test extraction from nested structures with empty dicts and lists."""
     data = {
         "empty_dict": {},
@@ -745,6 +738,9 @@ def test_extract_and_replace_nested_empty_structures(extractor):
     assert len(result) == 1
     assert result[0].attachment_data.content_type == "image/png"
 
+    # Register for cleanup
+    files_to_remove.append(result[0].attachment_data.data)
+
     # Verify the structure is preserved
     assert data["empty_dict"] == {}
     assert data["empty_list"] == []
@@ -757,11 +753,8 @@ def test_extract_and_replace_nested_empty_structures(extractor):
     pattern = re.compile(decoder_helpers.ATTACHMENT_FILE_NAME_PLACEHOLDER_REGEX)
     assert bool(pattern.fullmatch(data["mixed"]["has_data"][0])) is True
 
-    # Cleanup
-    _cleanup(result[0].attachment_data)
 
-
-def test_extract_and_replace_list_of_dicts_with_attachments(extractor):
+def test_extract_and_replace_list_of_dicts_with_attachments(extractor, files_to_remove):
     """Test extraction from a list of dictionaries."""
     data = {
         "items": [
@@ -779,6 +772,10 @@ def test_extract_and_replace_list_of_dicts_with_attachments(extractor):
         context="input",
         project_name="test",
     )
+
+    # Register for cleanup
+    for r in result:
+        files_to_remove.append(r.attachment_data.data)
 
     # Should extract 3 attachments (PNG, JPEG, PDF)
     assert len(result) == 3
@@ -799,12 +796,8 @@ def test_extract_and_replace_list_of_dicts_with_attachments(extractor):
     assert bool(pattern.fullmatch(data["items"][1]["image"])) is True
     assert bool(pattern.fullmatch(data["items"][3]["pdf"])) is True
 
-    # Cleanup
-    for r in result:
-        _cleanup(r.attachment_data)
 
-
-def test_extract_and_replace_nested_mixed_types(extractor):
+def test_extract_and_replace_nested_mixed_types(extractor, files_to_remove):
     """Test extraction with nested structures containing various data types."""
     data = {
         "mixed": {
@@ -825,6 +818,10 @@ def test_extract_and_replace_nested_mixed_types(extractor):
         context="output",
         project_name="test",
     )
+
+    # Register for cleanup
+    for r in result:
+        files_to_remove.append(r.attachment_data.data)
 
     # Should extract 3 attachments (PNG, JPEG, PDF)
     assert len(result) == 3
@@ -853,14 +850,3 @@ def test_extract_and_replace_nested_mixed_types(extractor):
     assert bool(pattern.fullmatch(data["mixed"]["image"])) is True
     assert bool(pattern.fullmatch(data["mixed"]["list"][2])) is True
     assert bool(pattern.fullmatch(data["mixed"]["dict"]["nested_pdf"])) is True
-
-    # Cleanup
-    for r in result:
-        _cleanup(r.attachment_data)
-
-
-def _cleanup(attachment_: Optional[attachment.Attachment]):
-    """Helper to cleanup temporary attachment files."""
-    if attachment_ is not None:
-        if os.path.exists(attachment_.data):
-            os.unlink(attachment_.data)

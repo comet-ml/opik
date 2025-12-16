@@ -1,3 +1,5 @@
+import os
+
 import pytest
 import logging
 
@@ -22,3 +24,16 @@ def capture_log_debug(caplog):
     yield caplog
 
     logger.propagate = False
+
+
+@pytest.fixture
+def files_to_remove():
+    """Helper to clean up temporary files that was created during tests."""
+    created_files = []
+
+    yield created_files
+
+    # cleanup phase
+    for path in created_files:
+        if path and os.path.exists(path):
+            os.unlink(path)
