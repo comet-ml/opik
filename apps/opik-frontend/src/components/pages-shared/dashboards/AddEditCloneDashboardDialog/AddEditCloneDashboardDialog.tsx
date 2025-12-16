@@ -356,7 +356,7 @@ const AddEditCloneDashboardDialog: React.FC<
                   }
                   showExperimentsSelect={
                     isCreateMode &&
-                    !defaultExperimentIds &&
+                    !defaultExperimentIds?.length &&
                     getTemplateScope(form.watch("templateType")) ===
                       TEMPLATE_SCOPE.EXPERIMENTS
                   }
