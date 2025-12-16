@@ -88,7 +88,7 @@ const MetricConfigs = ({
       </DropdownMenuTrigger>
 
       <DropdownMenuContent
-        className="max-h-[70vh] overflow-y-auto p-6"
+        className="max-h-[50vh] overflow-y-auto p-6"
         side="bottom"
         align="end"
       >

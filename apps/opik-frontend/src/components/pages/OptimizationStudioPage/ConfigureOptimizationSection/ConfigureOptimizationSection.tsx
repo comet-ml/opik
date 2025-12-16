@@ -15,8 +15,8 @@ import SelectBox from "@/components/shared/SelectBox/SelectBox";
 import useAppStore from "@/store/AppStore";
 import { useOptimizationStudioContext } from "../OptimizationStudioContext";
 import DatasetSelectBox from "@/components/pages-shared/llm/DatasetSelectBox/DatasetSelectBox";
-import PromptModelConfigs from "@/components/pages-shared/llm/PromptModelSettings/PromptModelConfigs";
 import OptimizationModelSelect from "@/components/pages-shared/optimizations/OptimizationModelSelect/OptimizationModelSelect";
+import OptimizationTemperatureConfig from "./OptimizationTemperatureConfig";
 import LLMPromptMessages from "@/components/pages-shared/llm/LLMPromptMessages/LLMPromptMessages";
 import AlgorithmConfigs from "@/components/pages-shared/optimizations/AlgorithmSettings/AlgorithmConfigs";
 import MetricConfigs from "@/components/pages-shared/optimizations/MetricSettings/MetricConfigs";
@@ -35,8 +35,8 @@ import { generateDefaultLLMPromptMessage } from "@/lib/llm";
 import {
   getDefaultOptimizerConfig,
   getDefaultMetricConfig,
+  getOptimizationDefaultConfigByProvider,
 } from "@/lib/optimizations";
-import { getDefaultConfigByProvider } from "@/lib/playground";
 import useDatasetsList from "@/api/datasets/useDatasetsList";
 import useDatasetItemsList from "@/api/datasets/useDatasetItemsList";
 import useLLMProviderModelsData from "@/hooks/useLLMProviderModelsData";
@@ -125,8 +125,6 @@ const ConfigureOptimizationSection: React.FC = () => {
 
   const { calculateModelProvider } = useLLMProviderModelsData();
 
-  const provider = calculateModelProvider(model);
-
   const handleOptimizerTypeChange = useCallback(
     (newOptimizerType: OPTIMIZER_TYPE) => {
       const currentOptimizerType = form.getValues("optimizerType");
@@ -197,7 +195,10 @@ const ConfigureOptimizationSection: React.FC = () => {
   const handleModelChange = useCallback(
     (newModel: PROVIDER_MODEL_TYPE) => {
       const newProvider = calculateModelProvider(newModel);
-      const defaultConfig = getDefaultConfigByProvider(newProvider, newModel);
+      const defaultConfig = getOptimizationDefaultConfigByProvider(
+        newProvider,
+        newModel,
+      );
 
       form.setValue("modelName", newModel);
       form.setValue(
@@ -395,9 +396,8 @@ const ConfigureOptimizationSection: React.FC = () => {
                       hasError={Boolean(form.formState.errors.modelName)}
                       disabled={disableForm}
                     />
-                    <PromptModelConfigs
+                    <OptimizationTemperatureConfig
                       size="icon-sm"
-                      provider={provider}
                       model={model}
                       configs={config}
                       onChange={handleModelConfigChange}

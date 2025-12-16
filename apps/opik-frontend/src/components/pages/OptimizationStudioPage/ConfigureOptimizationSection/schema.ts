@@ -10,8 +10,8 @@ import { generateDefaultLLMPromptMessage } from "@/lib/llm";
 import {
   getDefaultOptimizerConfig,
   getDefaultMetricConfig,
+  getOptimizationDefaultConfigByProvider,
 } from "@/lib/optimizations";
-import { getDefaultConfigByProvider } from "@/lib/playground";
 import { getProviderFromModel } from "@/lib/provider";
 import { PROVIDER_MODEL_TYPE, LLMPromptConfigsType } from "@/types/providers";
 
@@ -96,22 +96,6 @@ const BaseOptimizationConfigSchema = z.object({
   modelConfig: z
     .object({
       temperature: z.number().optional(),
-      maxCompletionTokens: z.number().optional(),
-      topP: z.number().optional(),
-      frequencyPenalty: z.number().optional(),
-      presencePenalty: z.number().optional(),
-      throttling: z.number().optional(),
-      maxConcurrentRequests: z.number().optional(),
-      reasoningEffort: z.string().optional(),
-      // Anthropic specific
-      maxTokens: z.number().optional(),
-      // OpenRouter specific
-      topK: z.number().optional(),
-      repetitionPenalty: z.number().optional(),
-      minP: z.number().optional(),
-      topA: z.number().optional(),
-      // Custom provider
-      custom_parameters: z.record(z.any()).optional(),
     })
     .passthrough(),
 });
@@ -150,7 +134,7 @@ export type OptimizationConfigFormType = z.infer<
 
 const getDefaultModelConfig = (model: PROVIDER_MODEL_TYPE) => {
   const provider = getProviderFromModel(model);
-  return getDefaultConfigByProvider(provider, model);
+  return getOptimizationDefaultConfigByProvider(provider, model);
 };
 
 export const convertOptimizationStudioToFormData = (

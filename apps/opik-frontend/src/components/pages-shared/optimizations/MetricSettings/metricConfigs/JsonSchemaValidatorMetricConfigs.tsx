@@ -1,7 +1,6 @@
 import React from "react";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
-import { Checkbox } from "@/components/ui/checkbox";
 import { JsonSchemaValidatorMetricParameters } from "@/types/optimizations";
 import { DEFAULT_JSON_SCHEMA_VALIDATOR_METRIC_CONFIGS } from "@/constants/optimizations";
 import ExplainerIcon from "@/components/shared/ExplainerIcon/ExplainerIcon";
@@ -39,22 +38,6 @@ const JsonSchemaValidatorMetricConfigs = ({
               onChange({ ...configs, reference_key: e.target.value })
             }
             placeholder="e.g., expected_output"
-          />
-        </div>
-
-        <div className="flex items-center space-x-2">
-          <Checkbox
-            id="case_sensitive"
-            checked={configs.case_sensitive}
-            onCheckedChange={(checked) =>
-              onChange({ ...configs, case_sensitive: checked === true })
-            }
-          />
-          <Label htmlFor="case_sensitive" className="cursor-pointer text-sm">
-            Case sensitive
-          </Label>
-          <ExplainerIcon
-            {...EXPLAINERS_MAP[EXPLAINER_ID.metric_case_sensitive]}
           />
         </div>
       </div>

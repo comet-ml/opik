@@ -14,6 +14,17 @@ import {
   DEFAULT_G_EVAL_METRIC_CONFIGS,
   DEFAULT_LEVENSHTEIN_METRIC_CONFIGS,
 } from "@/constants/optimizations";
+import { DEFAULT_ANTHROPIC_CONFIGS } from "@/constants/llm";
+import { getDefaultTemperatureForModel } from "@/lib/modelUtils";
+import {
+  LLMAnthropicConfigsType,
+  LLMOpenAIConfigsType,
+  LLMPromptConfigsType,
+  PROVIDER_MODEL_TYPE,
+  PROVIDER_TYPE,
+  COMPOSED_PROVIDER_TYPE,
+} from "@/types/providers";
+import { parseComposedProviderType } from "@/lib/provider";
 import { COLUMN_TYPE } from "@/types/shared";
 import { Filters } from "@/types/filters";
 
@@ -75,13 +86,14 @@ export const getDefaultMetricConfig = (
   switch (metricType) {
     case METRIC_TYPE.EQUALS:
       return {
-        reference_key: DEFAULT_JSON_SCHEMA_VALIDATOR_METRIC_CONFIGS.REFERENCE_KEY,
+        reference_key:
+          DEFAULT_JSON_SCHEMA_VALIDATOR_METRIC_CONFIGS.REFERENCE_KEY,
         case_sensitive: DEFAULT_EQUALS_METRIC_CONFIGS.CASE_SENSITIVE,
       };
     case METRIC_TYPE.JSON_SCHEMA_VALIDATOR:
       return {
-        reference_key: DEFAULT_JSON_SCHEMA_VALIDATOR_METRIC_CONFIGS.REFERENCE_KEY,
-        case_sensitive: DEFAULT_JSON_SCHEMA_VALIDATOR_METRIC_CONFIGS.CASE_SENSITIVE,
+        reference_key:
+          DEFAULT_JSON_SCHEMA_VALIDATOR_METRIC_CONFIGS.REFERENCE_KEY,
       };
     case METRIC_TYPE.G_EVAL:
       return {
@@ -98,3 +110,24 @@ export const getDefaultMetricConfig = (
   }
 };
 
+// @ToDo: remove when we support all params
+export const getOptimizationDefaultConfigByProvider = (
+  provider: COMPOSED_PROVIDER_TYPE,
+  model?: PROVIDER_MODEL_TYPE | "",
+): LLMPromptConfigsType => {
+  const providerType = parseComposedProviderType(provider);
+
+  if (providerType === PROVIDER_TYPE.OPEN_AI) {
+    return {
+      temperature: getDefaultTemperatureForModel(model),
+    } as LLMOpenAIConfigsType;
+  }
+
+  if (providerType === PROVIDER_TYPE.ANTHROPIC) {
+    return {
+      temperature: DEFAULT_ANTHROPIC_CONFIGS.TEMPERATURE,
+    } as LLMAnthropicConfigsType;
+  }
+
+  return {};
+};
