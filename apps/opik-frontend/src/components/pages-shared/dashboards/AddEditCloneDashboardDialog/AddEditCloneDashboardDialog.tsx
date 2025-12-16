@@ -59,31 +59,28 @@ const DashboardFormSchema = z
     experimentIds: z.array(z.string()).optional(),
     templateType: z.string().optional(),
   })
-  .refine(
-    (data) => {
-      const scope = getTemplateScope(data.templateType);
-      if (scope === TEMPLATE_SCOPE.PROJECT) return !!data.projectId;
-      return true;
-    },
-    {
-      message: "Project is required when using a project template",
-      path: ["projectId"],
-    },
-  )
-  .refine(
-    (data) => {
-      const scope = getTemplateScope(data.templateType);
-      if (scope === TEMPLATE_SCOPE.EXPERIMENTS) {
-        return data.experimentIds && data.experimentIds.length > 0;
+  .superRefine((data, ctx) => {
+    const scope = getTemplateScope(data.templateType);
+
+    if (scope === TEMPLATE_SCOPE.PROJECT && !data.projectId) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Project is required when using a project template",
+        path: ["projectId"],
+      });
+    }
+
+    if (scope === TEMPLATE_SCOPE.EXPERIMENTS) {
+      if (!data.experimentIds || data.experimentIds.length === 0) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message:
+            "At least one experiment is required when using an experiments template",
+          path: ["experimentIds"],
+        });
       }
-      return true;
-    },
-    {
-      message:
-        "At least one experiment is required when using an experiments template",
-      path: ["experimentIds"],
-    },
-  );
+    }
+  });
 
 type DashboardFormData = z.infer<typeof DashboardFormSchema>;
 
