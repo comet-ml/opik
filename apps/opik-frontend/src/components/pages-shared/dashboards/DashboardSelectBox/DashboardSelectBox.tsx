@@ -18,7 +18,7 @@ import { cn } from "@/lib/utils";
 import useAppStore from "@/store/AppStore";
 import { TEMPLATE_LIST } from "@/lib/dashboard/templates";
 import { isTemplateId } from "@/lib/dashboard/utils";
-import { Dashboard } from "@/types/dashboard";
+import { Dashboard, DashboardTemplate } from "@/types/dashboard";
 import SearchInput from "@/components/shared/SearchInput/SearchInput";
 import ConfirmDialog from "@/components/shared/ConfirmDialog/ConfirmDialog";
 import useDashboardBatchDeleteMutation from "@/api/dashboards/useDashboardBatchDeleteMutation";
@@ -36,6 +36,8 @@ interface DashboardSelectBoxProps {
   onDashboardCreated?: (dashboardId: string) => void;
   onDashboardDeleted?: (deletedDashboardId: string) => void;
   defaultProjectId?: string;
+  defaultExperimentIds?: string[];
+  templates?: DashboardTemplate[];
 }
 
 interface DialogState {
@@ -57,6 +59,8 @@ const DashboardSelectBox: React.FC<DashboardSelectBoxProps> = ({
   onDashboardCreated,
   onDashboardDeleted,
   defaultProjectId,
+  defaultExperimentIds,
+  templates = TEMPLATE_LIST,
 }) => {
   const [isLoadedMore, setIsLoadedMore] = useState(false);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
@@ -73,7 +77,7 @@ const DashboardSelectBox: React.FC<DashboardSelectBoxProps> = ({
   });
 
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
-  const deleteDashboardMutation = useDashboardBatchDeleteMutation();
+  const { mutate: deleteMutate } = useDashboardBatchDeleteMutation();
 
   const { data: dashboardsData } = useDashboardsList(
     {
@@ -93,10 +97,10 @@ const DashboardSelectBox: React.FC<DashboardSelectBoxProps> = ({
   const dashboardTotal = dashboardsData?.total;
 
   const filteredTemplates = useMemo(() => {
-    return TEMPLATE_LIST.filter((template) =>
-      template.title.toLowerCase().includes(search.toLowerCase()),
+    return templates.filter((template) =>
+      template.name.toLowerCase().includes(search.toLowerCase()),
     );
-  }, [search]);
+  }, [search, templates]);
 
   const filteredDashboards = useMemo(() => {
     return dashboards.filter((dashboard) =>
@@ -106,10 +110,10 @@ const DashboardSelectBox: React.FC<DashboardSelectBoxProps> = ({
 
   const selectedItem = useMemo(() => {
     if (isTemplateId(value)) {
-      return TEMPLATE_LIST.find((t) => t.id === value);
+      return templates.find((t) => t.id === value);
     }
     return dashboards.find((d) => d.id === value);
-  }, [value, dashboards]);
+  }, [value, dashboards, templates]);
 
   const handleChangeDashboardId = useCallback(
     (id: string) => {
@@ -142,7 +146,7 @@ const DashboardSelectBox: React.FC<DashboardSelectBoxProps> = ({
 
     const deletedDashboardId = deleteState.dashboard.id;
 
-    deleteDashboardMutation.mutate(
+    deleteMutate(
       {
         ids: [deletedDashboardId],
       },
@@ -157,7 +161,7 @@ const DashboardSelectBox: React.FC<DashboardSelectBoxProps> = ({
 
     setDeleteState({ isOpen: false });
     setIsDropdownOpen(false);
-  }, [deleteState.dashboard, deleteDashboardMutation, onDashboardDeleted]);
+  }, [deleteState.dashboard, deleteMutate, onDashboardDeleted]);
 
   const handleCreateNew = useCallback(() => {
     resetDialogKeyRef.current = resetDialogKeyRef.current + 1;
@@ -246,7 +250,7 @@ const DashboardSelectBox: React.FC<DashboardSelectBoxProps> = ({
                       <SelectItem
                         key={template.id}
                         id={template.id}
-                        name={template.title}
+                        name={template.name}
                         description={template.description}
                         icon={template.icon}
                         iconColor={template.iconColor}
@@ -324,6 +328,7 @@ const DashboardSelectBox: React.FC<DashboardSelectBoxProps> = ({
         onCreateSuccess={handleDialogCreateSuccess}
         navigateOnCreate={false}
         defaultProjectId={defaultProjectId}
+        defaultExperimentIds={defaultExperimentIds}
       />
 
       <ConfirmDialog

@@ -55,7 +55,11 @@ export function FeatureTogglesProvider({ children }: FeatureTogglesProps) {
 
   useEffect(() => {
     if (data) {
-      setFeatures(data);
+      // TODO: Remove this temporary override before merge - dashboard feature is still in development
+      setFeatures({
+        ...data,
+        [FeatureToggleKeys.DASHBOARDS_ENABLED]: true,
+      });
     }
   }, [data]);
 

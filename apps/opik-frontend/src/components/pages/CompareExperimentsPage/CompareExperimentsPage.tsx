@@ -8,17 +8,27 @@ import ConfigurationTab from "@/components/pages/CompareExperimentsPage/Configur
 import PageBodyScrollContainer from "@/components/layout/PageBodyScrollContainer/PageBodyScrollContainer";
 import PageBodyStickyContainer from "@/components/layout/PageBodyStickyContainer/PageBodyStickyContainer";
 import ExperimentFeedbackScoresTab from "@/components/pages/CompareExperimentsPage/ExperimentFeedbackScoresTab/ExperimentFeedbackScoresTab";
+import ExperimentsDashboardsTab from "@/components/pages/CompareExperimentsPage/ExperimentsDashboardsTab/ExperimentsDashboardsTab";
 import useExperimentsByIds from "@/api/datasets/useExperimenstByIds";
 import useDeepMemo from "@/hooks/useDeepMemo";
 import { Experiment } from "@/types/datasets";
 import CompareExperimentsDetails from "@/components/pages/CompareExperimentsPage/CompareExperimentsDetails/CompareExperimentsDetails";
 import ExplainerIcon from "@/components/shared/ExplainerIcon/ExplainerIcon";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
+import { VIEW_TYPE } from "@/components/pages-shared/dashboards/ViewSelector/ViewSelector";
 
 const CompareExperimentsPage: React.FunctionComponent = () => {
   const [tab = "items", setTab] = useQueryParam("tab", StringParam, {
     updateType: "replaceIn",
   });
+
+  const [view = VIEW_TYPE.DETAILS, setView] = useQueryParam(
+    "view",
+    StringParam,
+    {
+      updateType: "replaceIn",
+    },
+  );
 
   const [experimentsIds = []] = useQueryParam("experiments", JsonParam, {
     updateType: "replaceIn",
@@ -41,6 +51,63 @@ const CompareExperimentsPage: React.FunctionComponent = () => {
     return experiments ?? [];
   }, [experiments]);
 
+  const renderContent = () => {
+    if (view === VIEW_TYPE.DETAILS) {
+      return (
+        <Tabs
+          defaultValue="input"
+          value={tab as string}
+          onValueChange={setTab}
+          className="min-w-min"
+        >
+          <PageBodyStickyContainer direction="horizontal" limitWidth>
+            <TabsList variant="underline">
+              <TabsTrigger variant="underline" value="items">
+                Experiment items
+              </TabsTrigger>
+              <TabsTrigger variant="underline" value="config">
+                Configuration
+              </TabsTrigger>
+              <TabsTrigger variant="underline" value="scores">
+                Feedback scores
+                <ExplainerIcon
+                  className="ml-1"
+                  {...EXPLAINERS_MAP[EXPLAINER_ID.what_are_feedback_scores]}
+                />
+              </TabsTrigger>
+            </TabsList>
+          </PageBodyStickyContainer>
+          <TabsContent value="items">
+            <ExperimentItemsTab
+              experimentsIds={experimentsIds}
+              experiments={memorizedExperiments}
+            />
+          </TabsContent>
+          <TabsContent value="config">
+            <ConfigurationTab
+              experimentsIds={experimentsIds}
+              experiments={memorizedExperiments}
+              isPending={isPending}
+            />
+          </TabsContent>
+          <TabsContent value="scores">
+            <ExperimentFeedbackScoresTab
+              experimentsIds={experimentsIds}
+              experiments={memorizedExperiments}
+              isPending={isPending}
+            />
+          </TabsContent>
+        </Tabs>
+      );
+    }
+
+    if (view === VIEW_TYPE.DASHBOARDS) {
+      return <ExperimentsDashboardsTab experimentsIds={experimentsIds} />;
+    }
+
+    return null;
+  };
+
   return (
     <PageBodyScrollContainer>
       <PageBodyStickyContainer direction="horizontal" limitWidth>
@@ -48,52 +115,11 @@ const CompareExperimentsPage: React.FunctionComponent = () => {
           experimentsIds={experimentsIds}
           experiments={memorizedExperiments}
           isPending={isPending}
+          view={view as VIEW_TYPE}
+          onViewChange={setView}
         />
       </PageBodyStickyContainer>
-      <Tabs
-        defaultValue="input"
-        value={tab as string}
-        onValueChange={setTab}
-        className="min-w-min"
-      >
-        <PageBodyStickyContainer direction="horizontal" limitWidth>
-          <TabsList variant="underline">
-            <TabsTrigger variant="underline" value="items">
-              Experiment items
-            </TabsTrigger>
-            <TabsTrigger variant="underline" value="config">
-              Configuration
-            </TabsTrigger>
-            <TabsTrigger variant="underline" value="scores">
-              Feedback scores
-              <ExplainerIcon
-                className="ml-1"
-                {...EXPLAINERS_MAP[EXPLAINER_ID.what_are_feedback_scores]}
-              />
-            </TabsTrigger>
-          </TabsList>
-        </PageBodyStickyContainer>
-        <TabsContent value="items">
-          <ExperimentItemsTab
-            experimentsIds={experimentsIds}
-            experiments={memorizedExperiments}
-          />
-        </TabsContent>
-        <TabsContent value="config">
-          <ConfigurationTab
-            experimentsIds={experimentsIds}
-            experiments={memorizedExperiments}
-            isPending={isPending}
-          />
-        </TabsContent>
-        <TabsContent value="scores">
-          <ExperimentFeedbackScoresTab
-            experimentsIds={experimentsIds}
-            experiments={memorizedExperiments}
-            isPending={isPending}
-          />
-        </TabsContent>
-      </Tabs>
+      {renderContent()}
     </PageBodyScrollContainer>
   );
 };

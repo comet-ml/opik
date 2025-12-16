@@ -1,5 +1,6 @@
 import React, { memo, useMemo, useCallback } from "react";
 import { useShallow } from "zustand/react/shallow";
+import isEmpty from "lodash/isEmpty";
 
 import DashboardWidget from "@/components/shared/Dashboard/DashboardWidget/DashboardWidget";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
@@ -71,8 +72,17 @@ const ProjectStatsCardWidget: React.FunctionComponent<
 
   const widgetProjectId = widget?.config?.projectId as string | undefined;
 
+  const isUsingGlobalProject =
+    isEmpty(widgetProjectId) && !isEmpty(globalConfig.projectId);
+
+  const infoMessage = isUsingGlobalProject
+    ? "Using global project config"
+    : undefined;
+
   const { projectId, intervalStart, intervalEnd } = useMemo(() => {
-    const finalProjectId = globalConfig.projectId || widgetProjectId;
+    const finalProjectId = !isEmpty(widgetProjectId)
+      ? widgetProjectId
+      : globalConfig.projectId;
 
     const { intervalStart, intervalEnd } = calculateIntervalConfig(
       globalConfig.dateRange,
@@ -225,6 +235,7 @@ const ProjectStatsCardWidget: React.FunctionComponent<
       <DashboardWidget.Header
         title={widget.title}
         subtitle={widget.subtitle}
+        infoMessage={infoMessage}
         preview={preview}
         actions={
           !preview ? (

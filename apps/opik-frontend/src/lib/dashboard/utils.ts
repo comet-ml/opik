@@ -22,6 +22,15 @@ const DEFAULT_SECTION_NAME = "New section";
 
 const TEMPLATE_ID_PREFIX = "template:";
 
+export const UNSET_PROJECT_OPTION = [
+  {
+    value: "",
+    label: "None",
+  },
+];
+
+export const UNSET_PROJECT_VALUE = "";
+
 export const createTemplateId = (templateId: TEMPLATE_TYPE): string => {
   return `${TEMPLATE_ID_PREFIX}${templateId}`;
 };
