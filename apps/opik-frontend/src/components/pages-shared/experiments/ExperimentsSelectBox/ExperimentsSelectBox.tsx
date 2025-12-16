@@ -2,7 +2,9 @@ import React, { useCallback, useMemo, useState } from "react";
 import { keepPreviousData, useQueryClient } from "@tanstack/react-query";
 
 import LoadableSelectBox from "@/components/shared/LoadableSelectBox/LoadableSelectBox";
-import useExperimentsList from "@/api/datasets/useExperimentsList";
+import useExperimentsList, {
+  UseExperimentsListParams,
+} from "@/api/datasets/useExperimentsList";
 import { DropdownOption } from "@/types/shared";
 import useAppStore from "@/store/AppStore";
 import { Experiment } from "@/types/datasets";
@@ -32,9 +34,21 @@ export const useExperimentsSelectData = ({
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const queryClient = useQueryClient();
 
+  // Find cached queries that match the current workspace and sorting
+  // to avoid returning stale data from different contexts
   const cachedQueries = queryClient.getQueryCache().findAll({
     queryKey: [EXPERIMENTS_SELECT_QUERY_KEY],
     exact: false,
+    predicate: (query) => {
+      const queryParams = query.queryKey[1] as
+        | UseExperimentsListParams
+        | undefined;
+      // Only consider queries from the same workspace with matching sorting
+      return (
+        queryParams?.workspaceName === workspaceName &&
+        JSON.stringify(queryParams?.sorting) === JSON.stringify(sorting)
+      );
+    },
   });
 
   type CachedExperimentsData = { content: Experiment[]; total: number };
