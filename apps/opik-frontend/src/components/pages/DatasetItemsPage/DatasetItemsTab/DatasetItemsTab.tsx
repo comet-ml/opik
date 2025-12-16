@@ -20,7 +20,12 @@ import SearchInput from "@/components/shared/SearchInput/SearchInput";
 import FiltersButton from "@/components/shared/FiltersButton/FiltersButton";
 import useDatasetItemsList from "@/api/datasets/useDatasetItemsList";
 import StatusMessage from "@/components/shared/StatusMessage/StatusMessage";
-import { DatasetItem, DATASET_STATUS } from "@/types/datasets";
+import {
+  DatasetItem,
+  DatasetItemWithDraft,
+  DATASET_ITEM_DRAFT_STATUS,
+  DATASET_STATUS,
+} from "@/types/datasets";
 import { Filter, Filters } from "@/types/filters";
 import {
   COLUMN_DATA_ID,
@@ -54,6 +59,10 @@ import {
   generateSelectColumDef,
 } from "@/components/shared/DataTable/utils";
 import { DATASET_ITEM_DATA_PREFIX } from "@/constants/datasets";
+import { useDatasetItemsWithDraft } from "./hooks/useMergedDatasetItems";
+import useDatasetDraftStore, {
+  selectIsDraftMode,
+} from "@/store/DatasetDraftStore";
 
 /**
  * Transform data column filters from "data.columnName" format to backend format.
@@ -161,8 +170,10 @@ const DatasetItemsTab: React.FC<DatasetItemsTabProps> = ({
     [filters],
   );
 
+  const isDraftMode = useDatasetDraftStore(selectIsDraftMode);
+
   const { data, isPending, isPlaceholderData, isFetching } =
-    useDatasetItemsList(
+    useDatasetItemsWithDraft(
       {
         datasetId,
         filters: transformedFilters,
@@ -177,6 +188,8 @@ const DatasetItemsTab: React.FC<DatasetItemsTabProps> = ({
       },
     );
   const totalCount = data?.total ?? 0;
+
+  const rows = useMemo(() => data?.content ?? [], [data?.content]);
 
   const datasetColumns = useMemo(
     () =>
@@ -232,7 +245,6 @@ const DatasetItemsTab: React.FC<DatasetItemsTabProps> = ({
     defaultValue: {},
   });
 
-  const rows: Array<DatasetItem> = useMemo(() => data?.content ?? [], [data]);
   const noDataText = "There are no dataset items yet";
 
   const handleSearchChange = useCallback(
@@ -396,9 +408,32 @@ const DatasetItemsTab: React.FC<DatasetItemsTabProps> = ({
     [setActiveRowId],
   );
 
+  const getDraftStatusBorderClass = useCallback(
+    (item: DatasetItemWithDraft): string => {
+      const { draftStatus } = item;
+
+      if (!draftStatus || draftStatus === DATASET_ITEM_DRAFT_STATUS.unchanged) {
+        return "border-l-2 border-l-transparent";
+      }
+
+      const DRAFT_STATUS_STYLES: Record<string, string> = {
+        [DATASET_ITEM_DRAFT_STATUS.added]: "border-l-2 border-l-green-500",
+        [DATASET_ITEM_DRAFT_STATUS.edited]: "border-l-2 border-l-amber-500",
+      };
+
+      return DRAFT_STATUS_STYLES[draftStatus] ?? "border-l-2";
+    },
+    [],
+  );
+
   const columns = useMemo(() => {
     return [
-      generateSelectColumDef<DatasetItem>(),
+      generateSelectColumDef<DatasetItem>({
+        cellClassName: (context) => {
+          const item = context.row.original as DatasetItemWithDraft;
+          return getDraftStatusBorderClass(item);
+        },
+      }),
       mapColumnDataFields<DatasetItem, DatasetItem>({
         id: COLUMN_ID_ID,
         label: "ID",
@@ -417,7 +452,13 @@ const DatasetItemsTab: React.FC<DatasetItemsTabProps> = ({
         cell: DatasetItemRowActionsCell,
       }),
     ];
-  }, [columnsData, columnsOrder, handleRowClick, selectedColumns]);
+  }, [
+    columnsData,
+    columnsOrder,
+    handleRowClick,
+    selectedColumns,
+    getDraftStatusBorderClass,
+  ]);
 
   const columnsToExport = useMemo(() => {
     return columns
@@ -493,6 +534,7 @@ const DatasetItemsTab: React.FC<DatasetItemsTabProps> = ({
             filters={filters}
             search={search ?? ""}
             totalCount={totalCount}
+            isDraftMode={isDraftMode}
           />
           <Separator orientation="vertical" className="mx-2 h-4" />
           <DataTableRowHeightSelector
@@ -571,16 +613,18 @@ const DatasetItemsTab: React.FC<DatasetItemsTabProps> = ({
           </DataTableNoData>
         }
       />
-      <div className="py-4">
-        <DataTablePagination
-          page={page as number}
-          pageChange={setPage}
-          size={size as number}
-          sizeChange={setSize}
-          total={data?.total ?? 0}
-          isLoadingTotal={isProcessing}
-        />
-      </div>
+      {!isDraftMode && (
+        <div className="py-4">
+          <DataTablePagination
+            page={page as number}
+            pageChange={setPage}
+            size={size as number}
+            sizeChange={setSize}
+            total={data?.total ?? 0}
+            isLoadingTotal={isProcessing}
+          />
+        </div>
+      )}
       <DatasetItemEditor
         datasetItemId={activeRowId as string}
         datasetId={datasetId}
@@ -599,7 +643,6 @@ const DatasetItemsTab: React.FC<DatasetItemsTabProps> = ({
       />
 
       <AddDatasetItemSidebar
-        datasetId={datasetId}
         open={openAddSidebar}
         setOpen={setOpenAddSidebar}
         columns={datasetColumns}
