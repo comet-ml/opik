@@ -280,6 +280,9 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
 
   const truncationEnabled = useTruncationEnabled();
 
+  // Disable auto-refresh when sidebar is open to prevent UI flickering
+  const isSidebarOpen = Boolean(activeRowId) || Boolean(traceId);
+
   const { data, isPending, isFetching } = useCompareExperimentsList(
     {
       workspaceName,
@@ -294,7 +297,7 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
     },
     {
       placeholderData: keepPreviousData,
-      refetchInterval: REFETCH_INTERVAL,
+      refetchInterval: isSidebarOpen ? false : REFETCH_INTERVAL,
     },
   );
 
@@ -326,7 +329,7 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
       },
       {
         placeholderData: keepPreviousData,
-        refetchInterval: REFETCH_INTERVAL,
+        refetchInterval: isSidebarOpen ? false : REFETCH_INTERVAL,
       },
     );
 
@@ -337,7 +340,7 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
       },
       {
         placeholderData: keepPreviousData,
-        refetchInterval: REFETCH_INTERVAL,
+        refetchInterval: isSidebarOpen ? false : REFETCH_INTERVAL,
       },
     );
 
@@ -349,7 +352,7 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
     },
     {
       placeholderData: keepPreviousData,
-      refetchInterval: REFETCH_INTERVAL,
+      refetchInterval: isSidebarOpen ? false : REFETCH_INTERVAL,
     },
   );
 
