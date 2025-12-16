@@ -22,13 +22,18 @@ const CompareExperimentsPage: React.FunctionComponent = () => {
     updateType: "replaceIn",
   });
 
-  const [view = VIEW_TYPE.DETAILS, setView] = useQueryParam(
+  const [rawView = VIEW_TYPE.DETAILS, setView] = useQueryParam(
     "view",
     StringParam,
     {
       updateType: "replaceIn",
     },
   );
+
+  const view =
+    rawView === VIEW_TYPE.DETAILS || rawView === VIEW_TYPE.DASHBOARDS
+      ? rawView
+      : VIEW_TYPE.DETAILS;
 
   const [experimentsIds = []] = useQueryParam("experiments", JsonParam, {
     updateType: "replaceIn",
@@ -101,11 +106,7 @@ const CompareExperimentsPage: React.FunctionComponent = () => {
       );
     }
 
-    if (view === VIEW_TYPE.DASHBOARDS) {
-      return <ExperimentsDashboardsTab experimentsIds={experimentsIds} />;
-    }
-
-    return null;
+    return <ExperimentsDashboardsTab experimentsIds={experimentsIds} />;
   };
 
   return (
