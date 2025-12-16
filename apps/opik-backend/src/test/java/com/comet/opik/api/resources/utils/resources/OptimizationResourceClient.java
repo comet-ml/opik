@@ -12,6 +12,7 @@ import jakarta.ws.rs.client.Entity;
 import jakarta.ws.rs.client.WebTarget;
 import lombok.RequiredArgsConstructor;
 import org.apache.commons.collections4.CollectionUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.http.HttpStatus;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import uk.co.jemos.podam.api.PodamFactory;
@@ -40,11 +41,20 @@ public class OptimizationResourceClient {
     }
 
     public UUID create(Optimization optimization, String apiKey, String workspaceName) {
-        try (var response = client.target(RESOURCE_PATH.formatted(baseURI))
+        return create(optimization, apiKey, workspaceName, null);
+    }
+
+    public UUID create(Optimization optimization, String apiKey, String workspaceName, String opikApiKey) {
+        var requestBuilder = client.target(RESOURCE_PATH.formatted(baseURI))
                 .request()
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
-                .header(RequestContext.WORKSPACE_HEADER, workspaceName)
-                .post(Entity.json(optimization))) {
+                .header(RequestContext.WORKSPACE_HEADER, workspaceName);
+
+        if (StringUtils.isNotBlank(opikApiKey)) {
+            requestBuilder = requestBuilder.header(RequestContext.OPIK_API_KEY, opikApiKey);
+        }
+
+        try (var response = requestBuilder.post(Entity.json(optimization))) {
             assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_CREATED);
             return TestUtils.getIdFromLocation(response.getLocation());
         }
