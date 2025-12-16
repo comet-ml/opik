@@ -129,9 +129,7 @@ const CollaboratorsTab = () => {
         ? "Workspace owner"
         : "Workspace member";
 
-      const uniqueName = member.isMember
-        ? member.userName || member.email
-        : member.email;
+      const uniqueName = member.userName || member.email;
 
       const memberInOrganization = organizationMembers?.find(
         (memberInOrg) =>

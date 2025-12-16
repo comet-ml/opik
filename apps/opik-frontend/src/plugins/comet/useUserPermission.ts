@@ -3,7 +3,7 @@ import find from "lodash/find";
 import useAppStore, { useLoggedInUserName } from "@/store/AppStore";
 import useCurrentOrganization from "./useCurrentOrganization";
 import useUserPermissions from "./useUserPermissions";
-import { MANAGEMENT_PERMISSIONS } from "@/constants/permissions";
+import { MANAGEMENT_PERMISSION } from "@/constants/permissions";
 import { ManagementPermissionsNames, ORGANIZATION_ROLE_TYPE } from "./types";
 import {
   getPermissionByType,
@@ -35,27 +35,19 @@ const useUserPermission = (config?: { enabled?: boolean }) => {
   );
 
   const getPermissionStatus = useCallback(
-    (
-      permissionKey: (typeof MANAGEMENT_PERMISSIONS)[keyof typeof MANAGEMENT_PERMISSIONS],
-    ) => {
-      if (!currentOrganization) {
-        return false;
-      }
+    (permissionKey: MANAGEMENT_PERMISSION) => {
+      if (!currentOrganization) return false;
 
       if (
         permissionKey ===
-        MANAGEMENT_PERMISSIONS.CHANGE_WORKSPACE_ROLE_FOR_YOURSELF
+        MANAGEMENT_PERMISSION.CHANGE_WORKSPACE_ROLE_FOR_YOURSELF
       ) {
         return false;
       }
 
-      if (isAdmin) {
-        return true;
-      }
+      if (isAdmin) return true;
 
-      if (!userPermissions?.length) {
-        return false;
-      }
+      if (!userPermissions?.length) return false;
 
       const workspacePermissions =
         find(
@@ -63,9 +55,7 @@ const useUserPermission = (config?: { enabled?: boolean }) => {
           (permission) => permission?.workspaceName === workspaceName,
         )?.permissions || [];
 
-      if (!workspacePermissions?.length) {
-        return false;
-      }
+      if (!workspacePermissions?.length) return false;
 
       const inviteUsersStatus = isUserPermissionValid(
         getPermissionByType(

@@ -16,15 +16,6 @@ import { useUpdateWorkspaceUsersPermissionsMutation } from "@/plugins/comet/api/
 import { useLoggedInUserName } from "@/store/AppStore";
 import { getKeyForChangingRole } from "@/lib/permissions";
 
-interface PopoverData extends WorkspaceMember {
-  avatar?: string;
-  firstName?: string | null;
-  gitHub?: boolean;
-  lastActivityAt?: string | null;
-  lastName?: string | null;
-  userId?: string;
-}
-
 const WorkspaceRoleCell = (context: CellContext<WorkspaceMember, string>) => {
   const value = context.getValue();
   const row = context.row.original;
@@ -35,7 +26,7 @@ const WorkspaceRoleCell = (context: CellContext<WorkspaceMember, string>) => {
 
   const workspace = useWorkspace();
 
-  const [popoverData, setPopoverData] = useState<PopoverData | null>(null);
+  const [popoverData, setPopoverData] = useState<WorkspaceMember | null>(null);
 
   const { mutate: updateWorkspaceUsersPermissions } =
     useUpdateWorkspaceUsersPermissionsMutation();

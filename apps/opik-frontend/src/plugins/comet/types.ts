@@ -84,6 +84,5 @@ export interface WorkspaceMember {
   joinedAt?: string;
   role?: string;
   isAdmin?: boolean;
-  isMember?: boolean;
   permissions?: UserPermission[];
 }

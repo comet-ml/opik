@@ -1,5 +1,5 @@
 import {
-  MANAGEMENT_PERMISSIONS,
+  MANAGEMENT_PERMISSION,
   WORKSPACE_OWNER_VALUE,
 } from "@/constants/permissions";
 import {
@@ -47,8 +47,8 @@ export const getKeyForChangingRole = (
   userName: string,
 ) => {
   return currentUserName === userName
-    ? MANAGEMENT_PERMISSIONS.CHANGE_WORKSPACE_ROLE_FOR_YOURSELF
-    : MANAGEMENT_PERMISSIONS.CHANGE_WORKSPACE_ROLE;
+    ? MANAGEMENT_PERMISSION.CHANGE_WORKSPACE_ROLE_FOR_YOURSELF
+    : MANAGEMENT_PERMISSION.CHANGE_WORKSPACE_ROLE;
 };
 
 export const getPermissionStatusByKey = ({
@@ -56,15 +56,15 @@ export const getPermissionStatusByKey = ({
   inviteUsersStatus,
   onlyAdminsCanInviteOutsideOrganizationStatus,
 }: {
-  permissionKey: (typeof MANAGEMENT_PERMISSIONS)[keyof typeof MANAGEMENT_PERMISSIONS];
+  permissionKey: MANAGEMENT_PERMISSION;
   inviteUsersStatus: boolean;
   onlyAdminsCanInviteOutsideOrganizationStatus: boolean;
 }) => {
-  if (permissionKey === MANAGEMENT_PERMISSIONS.INVITE_USERS_FROM_ORGANIZATION)
+  if (permissionKey === MANAGEMENT_PERMISSION.INVITE_USERS_FROM_ORGANIZATION)
     return inviteUsersStatus;
 
   if (
-    permissionKey === MANAGEMENT_PERMISSIONS.INVITE_USERS_OUT_OF_ORGANIZATION
+    permissionKey === MANAGEMENT_PERMISSION.INVITE_USERS_OUT_OF_ORGANIZATION
   ) {
     if (onlyAdminsCanInviteOutsideOrganizationStatus) return false;
     return inviteUsersStatus;
