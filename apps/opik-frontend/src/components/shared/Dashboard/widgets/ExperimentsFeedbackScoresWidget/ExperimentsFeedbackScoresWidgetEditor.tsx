@@ -283,19 +283,19 @@ const ExperimentsFeedbackScoresWidgetEditor = forwardRef<
                   >
                     <ToggleGroupItem
                       value={EXPERIMENT_DATA_SOURCE.FILTER_AND_GROUP}
-                      aria-label="Filter and group"
+                      aria-label="Filter experiments"
                       className="gap-1.5"
                     >
                       <Filter className="size-3.5" />
-                      <span>Filter and group</span>
+                      <span>Filter experiments</span>
                     </ToggleGroupItem>
                     <ToggleGroupItem
                       value={EXPERIMENT_DATA_SOURCE.SELECT_EXPERIMENTS}
-                      aria-label="Select experiments"
+                      aria-label="Manual selection"
                       className="gap-1.5"
                     >
                       <ListChecks className="size-3.5" />
-                      <span>Select experiments</span>
+                      <span>Manual selection</span>
                     </ToggleGroupItem>
                   </ToggleGroup>
                 </FormControl>
@@ -328,7 +328,7 @@ const ExperimentsFeedbackScoresWidgetEditor = forwardRef<
                 ]);
                 return (
                   <FormItem>
-                    <FormLabel>Select experiments</FormLabel>
+                    <FormLabel>Manual selection</FormLabel>
                     <FormControl>
                       <ExperimentsSelectBox
                         value={field.value || []}
