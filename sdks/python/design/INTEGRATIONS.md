@@ -264,7 +264,7 @@ Extractors:
 
 Each extractor knows where to find usage in that provider's Run structure.
 
-**LangGraph Support**: 
+**LangGraph Support**:
 
 The integration provides enhanced support for LangGraph through:
 
