@@ -147,6 +147,7 @@ const PROJECT_METRICS_TEMPLATE: DashboardTemplate = {
               metricType: METRIC_NAME_TYPE.THREAD_FEEDBACK_SCORES,
               chartType: CHART_TYPE.line,
               threadFilters: [],
+              feedbackScores: [],
             },
           },
           {
@@ -206,6 +207,7 @@ const PROJECT_METRICS_TEMPLATE: DashboardTemplate = {
               metricType: METRIC_NAME_TYPE.FEEDBACK_SCORES,
               chartType: CHART_TYPE.line,
               traceFilters: [],
+              feedbackScores: [],
             },
           },
           {
@@ -472,6 +474,7 @@ const PERFORMANCE_OVERVIEW_TEMPLATE: DashboardTemplate = {
               metricType: METRIC_NAME_TYPE.THREAD_FEEDBACK_SCORES,
               chartType: CHART_TYPE.line,
               threadFilters: [],
+              feedbackScores: [],
             },
           },
           {
@@ -482,6 +485,7 @@ const PERFORMANCE_OVERVIEW_TEMPLATE: DashboardTemplate = {
               metricType: METRIC_NAME_TYPE.FEEDBACK_SCORES,
               chartType: CHART_TYPE.line,
               traceFilters: [],
+              feedbackScores: [],
             },
           },
         ],
