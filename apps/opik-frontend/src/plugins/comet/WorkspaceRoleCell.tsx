@@ -60,12 +60,14 @@ const WorkspaceRoleCell = (context: CellContext<WorkspaceMember, string>) => {
     };
   }, [debouncedUpdatePermissions]);
 
-  const ifChangeWsRoleDisabled = !getPermissionStatus(
-    getKeyForChangingRole(
-      currentUserName!,
-      popoverData?.userName || popoverData?.email || "",
-    ),
-  );
+  const ifChangeWsRoleDisabled =
+    !currentUserName ||
+    !getPermissionStatus(
+      getKeyForChangingRole(
+        currentUserName,
+        popoverData?.userName || popoverData?.email || "",
+      ),
+    );
 
   const setPermissions = (newPermissions: UserPermission[]) => {
     const userName = popoverData?.userName || popoverData?.email;

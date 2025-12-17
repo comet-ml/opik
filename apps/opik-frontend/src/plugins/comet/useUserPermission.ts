@@ -64,11 +64,19 @@ const useUserPermission = (config?: { enabled?: boolean }) => {
         )?.permissionValue,
       );
 
+      const managementStatus = isUserPermissionValid(
+        getPermissionByType(
+          workspacePermissions,
+          ManagementPermissionsNames.MANAGEMENT,
+        )?.permissionValue,
+      );
+
       return getPermissionStatusByKey({
         permissionKey,
         inviteUsersStatus,
         onlyAdminsCanInviteOutsideOrganizationStatus:
           currentOrganization?.onlyAdminsInviteByEmail,
+        managementStatus,
       });
     },
     [userPermissions, currentOrganization, isAdmin, workspaceName],

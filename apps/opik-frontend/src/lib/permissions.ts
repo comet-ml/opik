@@ -14,16 +14,13 @@ export const getPermissionByType = (
   userPermissions: UserPermission[] = [],
   type: ManagementPermissionsNames,
 ) => {
-  const isArray = Array.isArray(userPermissions);
   const isTypeValid = Object.values(ManagementPermissionsNames).includes(type);
+  if (!isTypeValid) return null;
 
-  if (!isArray || !isTypeValid) return null;
-
-  const permission = userPermissions?.filter(
-    ({ permissionName }) => permissionName === type,
+  return (
+    userPermissions?.find(({ permissionName }) => permissionName === type) ??
+    null
   );
-
-  return permission?.[0] || null;
 };
 
 export const updatePermissionByType = (
@@ -55,10 +52,12 @@ export const getPermissionStatusByKey = ({
   permissionKey,
   inviteUsersStatus,
   onlyAdminsCanInviteOutsideOrganizationStatus,
+  managementStatus,
 }: {
   permissionKey: MANAGEMENT_PERMISSION;
   inviteUsersStatus: boolean;
   onlyAdminsCanInviteOutsideOrganizationStatus: boolean;
+  managementStatus: boolean;
 }) => {
   if (permissionKey === MANAGEMENT_PERMISSION.INVITE_USERS_FROM_ORGANIZATION)
     return inviteUsersStatus;
@@ -68,6 +67,10 @@ export const getPermissionStatusByKey = ({
   ) {
     if (onlyAdminsCanInviteOutsideOrganizationStatus) return false;
     return inviteUsersStatus;
+  }
+
+  if (permissionKey === MANAGEMENT_PERMISSION.CHANGE_WORKSPACE_ROLE) {
+    return managementStatus;
   }
 
   console.error(`${permissionKey} is not considered for the system`);

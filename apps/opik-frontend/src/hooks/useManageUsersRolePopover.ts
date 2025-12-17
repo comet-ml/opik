@@ -21,7 +21,7 @@ export interface WorkspaceMemberPermission {
 }
 
 const useManageUsersRolePopover = (
-  permissions: UserPermission[],
+  permissions: UserPermission[] = [],
   username: string,
   ifChangeWsRoleDisabled: boolean,
   ifUserAdmin: boolean,
@@ -84,14 +84,14 @@ const useManageUsersRolePopover = (
       onChange: onRadioChange,
       options: [
         {
-          key: `${ManagementPermissionsNames.MANAGEMENT}-owner`,
+          key: `${ManagementPermissionsNames.MANAGEMENT}-${WORKSPACE_OWNER_VALUE}`,
           value: WORKSPACE_OWNER_VALUE,
           label: "Workspace Owner",
           text: "Full permissions to all workspace resources",
           controlType: "radio" as const,
         },
         {
-          key: `${ManagementPermissionsNames.MANAGEMENT}-member`,
+          key: `${ManagementPermissionsNames.MANAGEMENT}-${WORKSPACE_MEMBER_VALUE}`,
           value: WORKSPACE_MEMBER_VALUE,
           label: "Workspace Member",
           text: "Limited permissions. You can give customized ones",

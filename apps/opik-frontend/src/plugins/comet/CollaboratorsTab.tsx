@@ -17,6 +17,7 @@ import { getPermissionByType, isUserPermissionValid } from "@/lib/permissions";
 import {
   ManagementPermissionsNames,
   ORGANIZATION_ROLE_TYPE,
+  WORKSPACE_ROLE_TYPE,
   WorkspaceMember,
 } from "./types";
 import WorkspaceRoleCell from "./WorkspaceRoleCell";
@@ -121,13 +122,13 @@ const CollaboratorsTab = () => {
       )?.permissions;
 
       const permissionByType = getPermissionByType(
-        userPermissions,
+        userPermissions || [],
         ManagementPermissionsNames.MANAGEMENT,
       );
 
       const role = isUserPermissionValid(permissionByType?.permissionValue)
-        ? "Workspace owner"
-        : "Workspace member";
+        ? WORKSPACE_ROLE_TYPE.owner
+        : WORKSPACE_ROLE_TYPE.member;
 
       const uniqueName = member.userName || member.email;
 
