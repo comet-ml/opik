@@ -2,12 +2,14 @@ import {
   PROVIDER_TYPE,
   ProviderObject,
   COMPOSED_PROVIDER_TYPE,
+  PROVIDER_MODEL_TYPE,
 } from "@/types/providers";
 import {
   CUSTOM_PROVIDER_MODEL_PREFIX,
   LEGACY_CUSTOM_PROVIDER_NAME,
   PROVIDERS,
 } from "@/constants/providers";
+import { PROVIDER_MODELS } from "@/hooks/useLLMProviderModelsData";
 
 export const getProviderDisplayName = (providerKey: ProviderObject) => {
   const { provider, provider_name } = providerKey;
@@ -64,4 +66,15 @@ export const convertCustomProviderModel = (
   } else {
     return model.startsWith(prefix) ? model.replace(prefix, "") : model;
   }
+};
+
+export const getProviderFromModel = (
+  model: PROVIDER_MODEL_TYPE,
+): PROVIDER_TYPE => {
+  for (const [providerType, models] of Object.entries(PROVIDER_MODELS)) {
+    if (models.some((m) => m.value === model)) {
+      return providerType as PROVIDER_TYPE;
+    }
+  }
+  return PROVIDER_TYPE.OPEN_AI;
 };

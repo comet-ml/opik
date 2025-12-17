@@ -29,6 +29,8 @@ export interface ProjectStatistic {
   duration?: AggregatedDuration;
   guardrails_failed_count?: number;
   error_count?: ProjectErrorCount;
+  trace_count?: number;
+  thread_count?: number;
 }
 
 export type ProjectWithStatistic = Project & ProjectStatistic;

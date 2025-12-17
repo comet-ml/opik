@@ -21,6 +21,12 @@ import { Description } from "@/components/ui/description";
 
 import SelectBox from "@/components/shared/SelectBox/SelectBox";
 import ExperimentWidgetDataSection from "@/components/shared/Dashboard/widgets/shared/ExperimentWidgetDataSection/ExperimentWidgetDataSection";
+import ExperimentsSelectBox from "@/components/pages-shared/experiments/ExperimentsSelectBox/ExperimentsSelectBox";
+import FeedbackDefinitionsAndScoresSelectBox, {
+  ScoreSource,
+} from "@/components/pages-shared/experiments/FeedbackDefinitionsAndScoresSelectBox/FeedbackDefinitionsAndScoresSelectBox";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import { Filter, ListFilter } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { Filters } from "@/types/filters";
@@ -29,6 +35,7 @@ import { CHART_TYPE } from "@/constants/chart";
 
 import {
   AddWidgetConfig,
+  EXPERIMENT_DATA_SOURCE,
   ExperimentsFeedbackScoresWidgetType,
   WidgetEditorHandle,
 } from "@/types/dashboard";
@@ -54,6 +61,9 @@ const ExperimentsFeedbackScoresWidgetEditor = forwardRef<
 >(({ title, subtitle, config, onChange }, ref) => {
   const widgetConfig = config as ExperimentsFeedbackScoresWidgetType["config"];
 
+  const dataSource = (widgetConfig?.dataSource ||
+    EXPERIMENT_DATA_SOURCE.FILTER_AND_GROUP) as EXPERIMENT_DATA_SOURCE;
+
   const filters = useMemo(
     () => widgetConfig?.filters || [],
     [widgetConfig?.filters],
@@ -64,7 +74,17 @@ const ExperimentsFeedbackScoresWidgetEditor = forwardRef<
     [widgetConfig?.groups],
   );
 
+  const experimentIds = useMemo(
+    () => widgetConfig?.experimentIds || [],
+    [widgetConfig?.experimentIds],
+  );
+
   const chartType = widgetConfig?.chartType || CHART_TYPE.line;
+
+  const feedbackScores = useMemo(
+    () => widgetConfig?.feedbackScores || [],
+    [widgetConfig?.feedbackScores],
+  );
 
   const form = useForm<ExperimentsFeedbackScoresWidgetFormData>({
     resolver: zodResolver(ExperimentsFeedbackScoresWidgetSchema),
@@ -72,9 +92,12 @@ const ExperimentsFeedbackScoresWidgetEditor = forwardRef<
     defaultValues: {
       title,
       subtitle: subtitle || "",
+      dataSource,
       filters,
       groups,
+      experimentIds,
       chartType,
+      feedbackScores,
     },
   });
 
@@ -96,9 +119,12 @@ const ExperimentsFeedbackScoresWidgetEditor = forwardRef<
           subtitle: values.subtitle,
           config: {
             ...config,
+            dataSource: values.dataSource,
             filters: values.filters,
             groups: values.groups,
+            experimentIds: values.experimentIds,
             chartType: values.chartType,
+            feedbackScores: values.feedbackScores,
           },
         });
       }
@@ -113,6 +139,17 @@ const ExperimentsFeedbackScoresWidgetEditor = forwardRef<
 
   const handleSubtitleChange = (value: string) => {
     onChange({ subtitle: value });
+  };
+
+  const handleDataSourceChange = (value: string) => {
+    const newDataSource = value as EXPERIMENT_DATA_SOURCE;
+    form.setValue("dataSource", newDataSource);
+    onChange({
+      config: {
+        ...config,
+        dataSource: newDataSource,
+      },
+    });
   };
 
   const handleChartTypeChange = (value: string) => {
@@ -139,6 +176,26 @@ const ExperimentsFeedbackScoresWidgetEditor = forwardRef<
       config: {
         ...config,
         groups: newGroups,
+      },
+    });
+  };
+
+  const handleExperimentIdsChange = (newExperimentIds: string[]) => {
+    form.setValue("experimentIds", newExperimentIds);
+    onChange({
+      config: {
+        ...config,
+        experimentIds: newExperimentIds,
+      },
+    });
+  };
+
+  const handleFeedbackScoresChange = (newFeedbackScores: string[]) => {
+    form.setValue("feedbackScores", newFeedbackScores);
+    onChange({
+      config: {
+        ...config,
+        feedbackScores: newFeedbackScores,
       },
     });
   };
@@ -203,15 +260,101 @@ const ExperimentsFeedbackScoresWidgetEditor = forwardRef<
             </Description>
           </div>
 
-          <ExperimentWidgetDataSection
+          <FormField
             control={form.control}
-            filtersFieldName="filters"
-            groupsFieldName="groups"
-            filters={filters}
-            groups={groups}
-            onFiltersChange={handleFiltersChange}
-            onGroupsChange={handleGroupsChange}
+            name="dataSource"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Data source</FormLabel>
+                <FormControl>
+                  <ToggleGroup
+                    type="single"
+                    variant="ghost"
+                    value={
+                      field.value || EXPERIMENT_DATA_SOURCE.FILTER_AND_GROUP
+                    }
+                    onValueChange={(value) => {
+                      if (value) {
+                        field.onChange(value);
+                        handleDataSourceChange(value);
+                      }
+                    }}
+                    className="w-fit justify-start"
+                  >
+                    <ToggleGroupItem
+                      value={EXPERIMENT_DATA_SOURCE.FILTER_AND_GROUP}
+                      aria-label="Filter and group"
+                      className="gap-1.5"
+                    >
+                      <Filter className="size-3.5" />
+                      <span>Filter and group</span>
+                    </ToggleGroupItem>
+                    <ToggleGroupItem
+                      value={EXPERIMENT_DATA_SOURCE.SELECT_EXPERIMENTS}
+                      aria-label="Select experiments"
+                      className="gap-1.5"
+                    >
+                      <ListFilter className="size-3.5" />
+                      <span>Select experiments</span>
+                    </ToggleGroupItem>
+                  </ToggleGroup>
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
           />
+
+          {form.watch("dataSource") ===
+            EXPERIMENT_DATA_SOURCE.FILTER_AND_GROUP && (
+            <ExperimentWidgetDataSection
+              control={form.control}
+              filtersFieldName="filters"
+              groupsFieldName="groups"
+              filters={filters}
+              groups={groups}
+              onFiltersChange={handleFiltersChange}
+              onGroupsChange={handleGroupsChange}
+            />
+          )}
+
+          {form.watch("dataSource") ===
+            EXPERIMENT_DATA_SOURCE.SELECT_EXPERIMENTS && (
+            <FormField
+              control={form.control}
+              name="experimentIds"
+              render={({ field, formState }) => {
+                const validationErrors = get(formState.errors, [
+                  "experimentIds",
+                ]);
+                return (
+                  <FormItem>
+                    <FormLabel>Select experiments</FormLabel>
+                    <FormControl>
+                      <ExperimentsSelectBox
+                        value={field.value || []}
+                        onValueChange={(value) => {
+                          field.onChange(value);
+                          handleExperimentIdsChange(value);
+                        }}
+                        multiselect
+                        className={cn({
+                          "border-destructive": Boolean(
+                            validationErrors?.message,
+                          ),
+                        })}
+                      />
+                    </FormControl>
+                    <Description>
+                      Select experiments for this widget. If not set, the
+                      dashboard&apos;s global experiment configuration will be
+                      used.
+                    </Description>
+                    <FormMessage />
+                  </FormItem>
+                );
+              }}
+            />
+          )}
 
           <FormField
             control={form.control}
@@ -237,6 +380,45 @@ const ExperimentsFeedbackScoresWidgetEditor = forwardRef<
                       placeholder="Select chart type"
                     />
                   </FormControl>
+                  <FormMessage />
+                </FormItem>
+              );
+            }}
+          />
+
+          <FormField
+            control={form.control}
+            name="feedbackScores"
+            render={({ field, formState }) => {
+              const validationErrors = get(formState.errors, [
+                "feedbackScores",
+              ]);
+              return (
+                <FormItem>
+                  <FormLabel>Metrics</FormLabel>
+                  <FormControl>
+                    <FeedbackDefinitionsAndScoresSelectBox
+                      value={field.value || []}
+                      onChange={(value) => {
+                        field.onChange(value);
+                        handleFeedbackScoresChange(value);
+                      }}
+                      scoreSource={ScoreSource.EXPERIMENTS}
+                      entityIds={experimentIds}
+                      multiselect={true}
+                      showSelectAll={true}
+                      placeholder="All metrics"
+                      className={cn({
+                        "border-destructive": Boolean(
+                          validationErrors?.message,
+                        ),
+                      })}
+                    />
+                  </FormControl>
+                  <Description>
+                    Select specific metrics to display. Leave empty to show all
+                    available metrics.
+                  </Description>
                   <FormMessage />
                 </FormItem>
               );

@@ -67,6 +67,21 @@ class LlamaIndexCallbackHandler(base_handler.BaseCallbackHandler):
         self._map_event_id_to_span_data: Dict[str, span.SpanData] = {}
         self._map_event_id_to_output: Dict[str, Any] = {}
 
+        # For streaming: end_trace may be called before event_end, so we need to
+        # defer the trace output update until the event output is available
+        self._pending_root_output_updates: Dict[
+            str, Union[span.SpanData, trace.TraceData]
+        ] = {}
+
+    def _send_root_to_backend(
+        self, root: Union[span.SpanData, trace.TraceData]
+    ) -> None:
+        """Send root trace or span data to the backend."""
+        if isinstance(root, span.SpanData):
+            self._opik_client.span(**root.as_parameters)
+        elif isinstance(root, trace.TraceData):
+            self._opik_client.trace(**root.as_parameters)
+
     def start_trace(self, trace_id: Optional[str] = None) -> None:
         if (
             self._skip_index_construction_trace
@@ -111,17 +126,29 @@ class LlamaIndexCallbackHandler(base_handler.BaseCallbackHandler):
             return
 
         last_event = _get_last_event(trace_map)
-        last_event_output = self._map_event_id_to_output.get(last_event, None)
 
-        root.init_end_time().update(output=last_event_output)
+        # Check if the output for the last event is already available.
+        # For streaming calls, LlamaIndex calls end_trace() BEFORE event_end(),
+        # so the output won't be stored yet.
+        if last_event in self._map_event_id_to_output:
+            last_event_output = self._map_event_id_to_output.get(last_event)
+            root.init_end_time().update(output=last_event_output)
 
+            # Send the trace/span with output
+            self._send_root_to_backend(root)
+        else:
+            # Output not available yet (streaming scenario).
+            # Store the root so we can update it when event_end is called.
+            # Don't send the trace/span yet - it will be sent in on_event_end
+            # with the output and correct end_time to avoid race conditions.
+            # Note: We don't set end_time here because the actual end is when
+            # the last event ends, not when LlamaIndex calls end_trace().
+            self._pending_root_output_updates[last_event] = root
+
+        # Clean up context storage
         if isinstance(root, span.SpanData):
-            # We created a wrapper span (external trace existed)
-            self._opik_client.span(**root.as_parameters)
             self._opik_context_storage.pop_span_data(ensure_id=root.id)
         elif isinstance(root, trace.TraceData):
-            # We created a trace (no external trace existed)
-            self._opik_client.trace(**root.as_parameters)
             self._opik_context_storage.pop_trace_data(ensure_id=root.id)
 
         # Clean up
@@ -212,6 +239,16 @@ class LlamaIndexCallbackHandler(base_handler.BaseCallbackHandler):
 
         # Store output for end_trace
         self._map_event_id_to_output[event_id] = span_output
+
+        # Check if there's a pending root trace/span output update for this event.
+        # This happens when end_trace() was called before event_end() (streaming scenario).
+        if event_id in self._pending_root_output_updates:
+            root = self._pending_root_output_updates.pop(event_id)
+            # Set end_time now (the actual end) and update with output
+            root.init_end_time().update(output=span_output)
+
+            # Send the trace/span to the backend with correct end_time and output
+            self._send_root_to_backend(root)
 
         # Finalize span if it exists
         if event_id in self._map_event_id_to_span_data:

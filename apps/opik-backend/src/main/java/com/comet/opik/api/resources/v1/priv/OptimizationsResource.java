@@ -145,7 +145,20 @@ public class OptimizationsResource {
         var workspaceId = requestContext.get().getWorkspaceId();
         log.info("Creating optimization with id '{}', name '{}', datasetName '{}', workspaceId '{}'",
                 optimization.id(), optimization.name(), optimization.datasetName(), workspaceId);
-        var id = optimizationService.upsert(optimization)
+
+        // For Studio optimizations, inject the API key from the request header
+        var optimizationToCreate = optimization;
+        if (optimization.studioConfig() != null) {
+            var opikApiKey = requestContext.get().getHeaders().getFirst(RequestContext.OPIK_API_KEY);
+            var enrichedConfig = optimization.studioConfig().toBuilder()
+                    .opikApiKey(opikApiKey)
+                    .build();
+            optimizationToCreate = optimization.toBuilder()
+                    .studioConfig(enrichedConfig)
+                    .build();
+        }
+
+        var id = optimizationService.upsert(optimizationToCreate)
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
         var uri = uriInfo.getAbsolutePathBuilder().path("/%s".formatted(id)).build();

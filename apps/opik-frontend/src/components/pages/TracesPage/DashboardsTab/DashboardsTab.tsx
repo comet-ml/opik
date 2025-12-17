@@ -7,6 +7,7 @@ import MetricDateRangeSelect from "@/components/pages-shared/traces/MetricDateRa
 import DashboardSaveActions from "@/components/pages-shared/dashboards/DashboardSaveActions/DashboardSaveActions";
 import DashboardContent from "@/components/pages-shared/dashboards/DashboardContent/DashboardContent";
 import DashboardSelectBox from "@/components/pages-shared/dashboards/DashboardSelectBox/DashboardSelectBox";
+import ShareDashboardButton from "@/components/pages-shared/dashboards/ShareDashboardButton/ShareDashboardButton";
 import { useMetricDateRangeCore } from "@/components/pages-shared/traces/MetricDateRangeSelect/useMetricDateRangeCore";
 import useQueryParamAndLocalStorageState from "@/hooks/useQueryParamAndLocalStorageState";
 import { useDashboardLifecycle } from "@/components/pages-shared/dashboards/hooks/useDashboardLifecycle";
@@ -20,6 +21,7 @@ import {
 import { DEFAULT_DATE_PRESET } from "@/components/pages-shared/traces/MetricDateRangeSelect/constants";
 import PageBodyStickyContainer from "@/components/layout/PageBodyStickyContainer/PageBodyStickyContainer";
 import { TEMPLATE_LIST } from "@/lib/dashboard/templates";
+import { Separator } from "@/components/ui/separator";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 
 const DASHBOARD_QUERY_PARAM_KEY = "dashboardId";
@@ -41,7 +43,7 @@ const DashboardsTab: React.FunctionComponent<DashboardsTabProps> = ({
   });
 
   useEffect(() => {
-    if (!dashboardId && TEMPLATE_LIST.length > 0) {
+    if (!dashboardId) {
       setDashboardId(TEMPLATE_LIST[0].id);
     }
   }, [dashboardId, setDashboardId]);
@@ -144,6 +146,8 @@ const DashboardsTab: React.FunctionComponent<DashboardsTabProps> = ({
             maxDate={maxDate}
             hideAlltime
           />
+          <Separator orientation="vertical" className="mx-2 h-4" />
+          <ShareDashboardButton />
         </div>
       </PageBodyStickyContainer>
 

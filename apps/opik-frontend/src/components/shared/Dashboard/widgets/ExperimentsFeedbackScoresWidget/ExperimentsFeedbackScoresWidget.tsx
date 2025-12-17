@@ -4,9 +4,10 @@ import isEmpty from "lodash/isEmpty";
 import uniq from "lodash/uniq";
 
 import DashboardWidget from "@/components/shared/Dashboard/DashboardWidget/DashboardWidget";
-import { useDashboardStore } from "@/store/DashboardStore";
+import { useDashboardStore, selectMixedConfig } from "@/store/DashboardStore";
 import {
   DashboardWidgetComponentProps,
+  EXPERIMENT_DATA_SOURCE,
   ExperimentsFeedbackScoresWidgetType,
 } from "@/types/dashboard";
 import { Filters } from "@/types/filters";
@@ -15,6 +16,7 @@ import { isFilterValid } from "@/lib/filters";
 import { isGroupValid, calculateGroupLabel } from "@/lib/groups";
 import useExperimentsList from "@/api/datasets/useExperimentsList";
 import useExperimentsGroupsAggregations from "@/api/datasets/useExperimentsGroupsAggregations";
+import useExperimentsByIds from "@/api/datasets/useExperimenstByIds";
 import useAppStore from "@/store/AppStore";
 import { getDefaultHashedColorsChartConfig } from "@/lib/charts";
 import { formatDate } from "@/lib/date";
@@ -30,6 +32,7 @@ import BarChart from "@/components/shared/Charts/BarChart/BarChart";
 import RadarChart from "@/components/shared/Charts/RadarChart/RadarChart";
 
 const MAX_EXPERIMENTS_LIMIT = 100;
+const MAX_SELECTED_EXPERIMENTS = 10;
 
 type DataRecord = {
   entityId: string;
@@ -43,11 +46,23 @@ type ChartData = {
   lines: string[];
 };
 
+const shouldIncludeScore = (
+  scoreName: string,
+  feedbackScores?: string[],
+): boolean => {
+  return (
+    !feedbackScores ||
+    feedbackScores.length === 0 ||
+    feedbackScores.includes(scoreName)
+  );
+};
+
 function transformGroupedExperimentsToChartData(
   groupsAggregationsData:
     | { content: Record<string, ExperimentsGroupNodeWithAggregations> }
     | undefined,
   validGroups: Groups,
+  feedbackScores?: string[],
 ): ChartData {
   if (!groupsAggregationsData?.content) {
     return { data: [], lines: [] };
@@ -78,18 +93,24 @@ function transformGroupedExperimentsToChartData(
         processGroup(value.groups!, depth + 1, currentValues);
       } else if (value.aggregations) {
         const scores: Record<string, number> = {};
-        const feedbackScores = value.aggregations.feedback_scores || [];
-        const experimentScores = value.aggregations.experiment_scores || [];
+        const aggregatedFeedbackScores =
+          value.aggregations.feedback_scores || [];
+        const aggregatedExperimentScores =
+          value.aggregations.experiment_scores || [];
 
-        feedbackScores.forEach((score) => {
+        aggregatedFeedbackScores.forEach((score) => {
           const scoreName = `${score.name} (avg)`;
-          scores[scoreName] = score.value;
-          allLines.push(scoreName);
+          if (shouldIncludeScore(score.name, feedbackScores)) {
+            scores[scoreName] = score.value;
+            allLines.push(scoreName);
+          }
         });
 
-        experimentScores.forEach((score) => {
-          scores[score.name] = score.value;
-          allLines.push(score.name);
+        aggregatedExperimentScores.forEach((score) => {
+          if (shouldIncludeScore(score.name, feedbackScores)) {
+            scores[score.name] = score.value;
+            allLines.push(score.name);
+          }
         });
 
         if (Object.keys(scores).length > 0) {
@@ -114,6 +135,7 @@ function transformGroupedExperimentsToChartData(
 
 function transformUngroupedExperimentsToChartData(
   experiments: Experiment[],
+  feedbackScores?: string[],
 ): ChartData {
   const allLines: string[] = [];
 
@@ -122,13 +144,17 @@ function transformUngroupedExperimentsToChartData(
 
     (experiment.feedback_scores || []).forEach((score) => {
       const scoreName = `${score.name} (avg)`;
-      scores[scoreName] = score.value;
-      allLines.push(scoreName);
+      if (shouldIncludeScore(score.name, feedbackScores)) {
+        scores[scoreName] = score.value;
+        allLines.push(scoreName);
+      }
     });
 
     (experiment.experiment_scores || []).forEach((score) => {
-      scores[score.name] = score.value;
-      allLines.push(score.name);
+      if (shouldIncludeScore(score.name, feedbackScores)) {
+        scores[score.name] = score.value;
+        allLines.push(score.name);
+      }
     });
 
     return {
@@ -161,6 +187,15 @@ const ExperimentsFeedbackScoresWidget: React.FunctionComponent<
     }),
   );
 
+  const globalConfig = useDashboardStore(
+    useShallow((state) => {
+      const config = selectMixedConfig(state);
+      return {
+        experimentIds: config?.experimentIds || [],
+      };
+    }),
+  );
+
   const onAddEditWidgetCallback = useDashboardStore(
     (state) => state.onAddEditWidgetCallback,
   );
@@ -174,16 +209,56 @@ const ExperimentsFeedbackScoresWidget: React.FunctionComponent<
   const widgetConfig = widget?.config as
     | ExperimentsFeedbackScoresWidgetType["config"]
     | undefined;
+
+  const dataSource =
+    widgetConfig?.dataSource || EXPERIMENT_DATA_SOURCE.FILTER_AND_GROUP;
+  const chartType = widgetConfig?.chartType || CHART_TYPE.line;
+  const feedbackScores = widgetConfig?.feedbackScores;
+
   const validFilters = useMemo(() => {
     const filters = (widgetConfig?.filters || []) as Filters;
     return filters.filter(isFilterValid);
   }, [widgetConfig?.filters]);
+
   const validGroups = useMemo(() => {
     const groups = (widgetConfig?.groups || []) as Groups;
     return groups.filter(isGroupValid);
   }, [widgetConfig?.groups]);
+
+  const experimentIds = useMemo(() => {
+    const localExperimentIds = widgetConfig?.experimentIds;
+    if (localExperimentIds && localExperimentIds.length > 0) {
+      return localExperimentIds;
+    }
+    return globalConfig.experimentIds || [];
+  }, [globalConfig.experimentIds, widgetConfig?.experimentIds]);
+
+  const isUsingGlobalExperiments =
+    isEmpty(widgetConfig?.experimentIds) &&
+    !isEmpty(globalConfig.experimentIds);
+
   const hasGroups = validGroups.length > 0;
-  const chartType = widgetConfig?.chartType || CHART_TYPE.line;
+
+  const isSelectExperimentsMode =
+    dataSource === EXPERIMENT_DATA_SOURCE.SELECT_EXPERIMENTS;
+
+  const infoMessage =
+    isUsingGlobalExperiments && isSelectExperimentsMode
+      ? "Using global experiment configuration"
+      : undefined;
+
+  // Limit to first 10 experiments
+  const limitedExperimentIds = useMemo(
+    () => experimentIds.slice(0, MAX_SELECTED_EXPERIMENTS),
+    [experimentIds],
+  );
+
+  const hasMoreThanMaxSelected =
+    experimentIds.length > MAX_SELECTED_EXPERIMENTS;
+
+  const experimentsByIdsResults = useExperimentsByIds({
+    experimentsIds: isSelectExperimentsMode ? limitedExperimentIds : [],
+  });
 
   const { data: experimentsData, isPending: isExperimentsPending } =
     useExperimentsList(
@@ -194,7 +269,7 @@ const ExperimentsFeedbackScoresWidget: React.FunctionComponent<
         size: MAX_EXPERIMENTS_LIMIT,
       },
       {
-        enabled: !hasGroups,
+        enabled: !hasGroups && !isSelectExperimentsMode,
       },
     );
 
@@ -217,28 +292,62 @@ const ExperimentsFeedbackScoresWidget: React.FunctionComponent<
       return transformGroupedExperimentsToChartData(
         groupsAggregationsData,
         validGroups,
+        feedbackScores,
+      );
+    }
+
+    if (isSelectExperimentsMode) {
+      const experiments = experimentsByIdsResults
+        .map((result) => result.data)
+        .filter((exp): exp is Experiment => exp !== undefined);
+      return transformUngroupedExperimentsToChartData(
+        experiments,
+        feedbackScores,
       );
     }
 
     if (experimentsData?.content) {
-      return transformUngroupedExperimentsToChartData(experimentsData.content);
+      return transformUngroupedExperimentsToChartData(
+        experimentsData.content,
+        feedbackScores,
+      );
     }
 
     return { data: [], lines: [] };
-  }, [hasGroups, groupsAggregationsData, experimentsData, validGroups]);
+  }, [
+    hasGroups,
+    groupsAggregationsData,
+    validGroups,
+    isSelectExperimentsMode,
+    experimentsByIdsResults,
+    experimentsData?.content,
+    feedbackScores,
+  ]);
+
+  const isExperimentsByIdsPending =
+    isSelectExperimentsMode &&
+    experimentsByIdsResults.some((result) => result.isPending);
 
   const isPending = hasGroups
     ? isGroupsAggregationsPending
-    : isExperimentsPending;
+    : isSelectExperimentsMode
+      ? isExperimentsByIdsPending
+      : isExperimentsPending;
+
   const noData =
     !isPending && chartData.data.every((record) => isEmpty(record.scores));
 
   const totalExperiments = experimentsData?.total ?? 0;
   const hasMoreThanLimit =
-    !hasGroups && totalExperiments > MAX_EXPERIMENTS_LIMIT;
+    !hasGroups &&
+    !isSelectExperimentsMode &&
+    totalExperiments > MAX_EXPERIMENTS_LIMIT;
+
   const warningMessage = hasMoreThanLimit
     ? `Showing first ${MAX_EXPERIMENTS_LIMIT} of ${totalExperiments} experiments`
-    : undefined;
+    : isSelectExperimentsMode && hasMoreThanMaxSelected
+      ? `Showing first ${MAX_SELECTED_EXPERIMENTS} of ${experimentIds.length} selected experiments`
+      : undefined;
 
   const { transformedData, chartConfig } = useMemo(() => {
     if (chartType === CHART_TYPE.radar) {
@@ -305,10 +414,19 @@ const ExperimentsFeedbackScoresWidget: React.FunctionComponent<
     }
 
     if (chartData.data.length === 0 || noData) {
+      const hasFeedbackScoresFilter =
+        feedbackScores && feedbackScores.length > 0;
+
+      const emptyMessage = hasFeedbackScoresFilter
+        ? "No data available for selected metrics"
+        : isSelectExperimentsMode
+          ? "Selected experiments have no feedback scores"
+          : "Configure filters to display experiment metrics";
+
       return (
         <DashboardWidget.EmptyState
           title="No data available"
-          message="Configure filters to display experiment metrics"
+          message={emptyMessage}
           onAction={!preview ? handleEdit : undefined}
           actionLabel="Configure widget"
         />
@@ -361,6 +479,7 @@ const ExperimentsFeedbackScoresWidget: React.FunctionComponent<
         title={widget.title}
         subtitle={widget.subtitle}
         warningMessage={warningMessage}
+        infoMessage={infoMessage}
         preview={preview}
         actions={
           !preview ? (
