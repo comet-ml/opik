@@ -1,11 +1,12 @@
 import React from "react";
 import { Mail } from "lucide-react";
+import useCurrentOrganization from "@/plugins/comet/useCurrentOrganization";
+import useWorkspace from "@/plugins/comet/useWorkspace";
 import { DropdownMenuContent } from "@/components/ui/dropdown-menu";
 import SearchInput from "@/components/shared/SearchInput/SearchInput";
 import useUsernameAutocomplete from "./api/useUsernameAutocomplete";
-import useCurrentOrganization from "./useCurrentOrganization";
-import useWorkspace from "./useWorkspace";
 import { useInviteEmailMutation } from "./api/useInviteEmailMutation";
+import { useInviteUsernameMutation } from "./api/useInviteUsernameMutation";
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -37,6 +38,7 @@ const InviteUsersPopover: React.FC<InviteUsersPopoverProps> = ({
   );
 
   const inviteEmailMutation = useInviteEmailMutation();
+  const inviteUsernameMutation = useInviteUsernameMutation();
 
   const hasEmailQuery = EMAIL_REGEX.test(searchQuery);
 
@@ -47,6 +49,22 @@ const InviteUsersPopover: React.FC<InviteUsersPopoverProps> = ({
       {
         workspaceId,
         email: searchQuery,
+      },
+      {
+        onSuccess: () => {
+          setSearchQuery("");
+        },
+      },
+    );
+  };
+
+  const handleUsernameClick = (userName: string) => {
+    if (!workspaceId) return;
+
+    inviteUsernameMutation.mutate(
+      {
+        workspaceId,
+        userName,
       },
       {
         onSuccess: () => {
@@ -81,6 +99,7 @@ const InviteUsersPopover: React.FC<InviteUsersPopoverProps> = ({
         {users.map((user) => (
           <div
             key={user}
+            onClick={() => handleUsernameClick(user)}
             className="flex cursor-pointer items-center gap-3 rounded-sm px-3 py-2.5 transition-colors hover:bg-primary-foreground"
           >
             <div className="flex flex-1 flex-col">
