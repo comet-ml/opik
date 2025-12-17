@@ -10,13 +10,14 @@ export const ProjectMetricsWidgetSchema = z.object({
   subtitle: z.string().optional(),
   metricType: z
     .string({
-      required_error: "Metric is required",
+      required_error: "Metric type is required",
     })
-    .min(1, { message: "Metric is required" }),
+    .min(1, { message: "Metric type is required" }),
   chartType: z.enum(["line", "bar"]),
   projectId: z.string().optional(),
   traceFilters: FiltersArraySchema.optional(),
   threadFilters: FiltersArraySchema.optional(),
+  feedbackScores: z.array(z.string()).optional(),
 });
 
 export type ProjectMetricsWidgetFormData = z.infer<

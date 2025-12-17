@@ -21,6 +21,7 @@ import ViewSelector, {
 } from "@/components/pages-shared/dashboards/ViewSelector/ViewSelector";
 import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
+import { Separator } from "@/components/ui/separator";
 
 type ExperimentScoreTagsProps = {
   experiment: Experiment;
@@ -110,7 +111,7 @@ const CompareExperimentsDetails: React.FunctionComponent<
   });
 
   const renderCompareFeedbackScoresButton = () => {
-    if (!isCompare || isDashboardsEnabled) return null;
+    if (!isCompare) return null;
 
     const text = showCharts ? "Collapse charts" : "Expand charts";
     const Icon = showCharts ? Minimize2 : Maximize2;
@@ -161,7 +162,7 @@ const CompareExperimentsDetails: React.FunctionComponent<
   };
 
   const renderCharts = () => {
-    if (!isCompare || !showCharts || isPending || isDashboardsEnabled)
+    if (!isCompare || !showCharts || isPending || view === VIEW_TYPE.DASHBOARDS)
       return null;
 
     return (
@@ -204,15 +205,19 @@ const CompareExperimentsDetails: React.FunctionComponent<
     <div className="pb-4 pt-6">
       <div className="mb-4 flex min-h-8 items-center justify-between">
         <h1 className="comet-title-l truncate break-words">{title}</h1>
-        {isDashboardsEnabled ? (
-          <ViewSelector value={view} onChange={onViewChange} />
-        ) : (
-          isCompare && (
-            <div className="flex shrink-0 items-center gap-2">
-              {renderCompareFeedbackScoresButton()}
-            </div>
-          )
-        )}
+        <div className="flex shrink-0 items-center gap-2">
+          {isCompare &&
+            view !== VIEW_TYPE.DASHBOARDS &&
+            renderCompareFeedbackScoresButton()}
+          {isDashboardsEnabled && (
+            <>
+              {isCompare && view !== VIEW_TYPE.DASHBOARDS && (
+                <Separator orientation="vertical" className="mx-2 h-6" />
+              )}
+              <ViewSelector value={view} onChange={onViewChange} />
+            </>
+          )}
+        </div>
       </div>
       <div className="mb-1 flex gap-2 overflow-x-auto">
         {!isCompare && (

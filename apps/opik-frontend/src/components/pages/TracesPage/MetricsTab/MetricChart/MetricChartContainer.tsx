@@ -49,6 +49,7 @@ interface MetricContainerChartProps {
   chartId: string;
   traceFilters?: Filter[];
   threadFilters?: Filter[];
+  filterLineCallback?: (lineName: string) => boolean;
   chartOnly?: boolean;
 }
 
@@ -84,6 +85,7 @@ const MetricContainerChart = ({
   chartType = CHART_TYPE.line,
   traceFilters,
   threadFilters,
+  filterLineCallback,
   chartOnly = false,
 }: MetricContainerChartProps) => {
   const { data: traces, isPending } = useProjectMetric(
@@ -114,17 +116,23 @@ const MetricContainerChart = ({
     }));
 
     traces.forEach((trace) => {
-      lines.push(trace.name);
+      const shouldInclude = filterLineCallback
+        ? filterLineCallback(trace.name)
+        : true;
 
-      trace.data.forEach((d, dataIndex) => {
-        if (transformedData[dataIndex]) {
-          transformedData[dataIndex][trace.name] = d.value;
-        }
-      });
+      if (shouldInclude) {
+        lines.push(trace.name);
+
+        trace.data.forEach((d, dataIndex) => {
+          if (transformedData[dataIndex]) {
+            transformedData[dataIndex][trace.name] = d.value;
+          }
+        });
+      }
     });
 
     return [transformedData, lines.sort()];
-  }, [traces]);
+  }, [traces, filterLineCallback]);
 
   const noData = useMemo(() => {
     if (isPending) return false;

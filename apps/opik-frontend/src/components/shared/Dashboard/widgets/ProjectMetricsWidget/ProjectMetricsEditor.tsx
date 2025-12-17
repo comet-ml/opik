@@ -21,6 +21,9 @@ import { Description } from "@/components/ui/description";
 import SelectBox from "@/components/shared/SelectBox/SelectBox";
 import ProjectsSelectBox from "@/components/pages-shared/automations/ProjectsSelectBox";
 import ProjectWidgetFiltersSection from "@/components/shared/Dashboard/widgets/shared/ProjectWidgetFiltersSection/ProjectWidgetFiltersSection";
+import FeedbackDefinitionsAndScoresSelectBox, {
+  ScoreSource,
+} from "@/components/pages-shared/experiments/FeedbackDefinitionsAndScoresSelectBox/FeedbackDefinitionsAndScoresSelectBox";
 
 import { cn } from "@/lib/utils";
 import { useDashboardStore, selectMixedConfig } from "@/store/DashboardStore";
@@ -118,6 +121,10 @@ const ProjectMetricsEditor = forwardRef<
     () => widgetConfig?.threadFilters || [],
     [widgetConfig?.threadFilters],
   );
+  const feedbackScores = useMemo(
+    () => widgetConfig?.feedbackScores || [],
+    [widgetConfig?.feedbackScores],
+  );
 
   const globalProjectId = useDashboardStore((state) => {
     const config = selectMixedConfig(state);
@@ -128,6 +135,9 @@ const ProjectMetricsEditor = forwardRef<
   const selectedMetric = METRIC_OPTIONS.find((m) => m.value === metricType);
   const isTraceMetric = !metricType || selectedMetric?.filterType === "trace";
   const isThreadMetric = metricType && selectedMetric?.filterType === "thread";
+  const isFeedbackScoreMetric =
+    metricType === METRIC_NAME_TYPE.FEEDBACK_SCORES ||
+    metricType === METRIC_NAME_TYPE.THREAD_FEEDBACK_SCORES;
 
   const form = useForm<ProjectMetricsWidgetFormData>({
     resolver: zodResolver(ProjectMetricsWidgetSchema),
@@ -140,6 +150,7 @@ const ProjectMetricsEditor = forwardRef<
       projectId: localProjectId,
       traceFilters,
       threadFilters,
+      feedbackScores,
     },
   });
 
@@ -171,6 +182,7 @@ const ProjectMetricsEditor = forwardRef<
             projectId: values.projectId,
             traceFilters: values.traceFilters,
             threadFilters: values.threadFilters,
+            feedbackScores: values.feedbackScores,
           },
         });
       }
@@ -210,6 +222,15 @@ const ProjectMetricsEditor = forwardRef<
       config: {
         ...config,
         projectId,
+      },
+    });
+  };
+
+  const handleFeedbackScoresChange = (newFeedbackScores: string[]) => {
+    onChange({
+      config: {
+        ...config,
+        feedbackScores: newFeedbackScores,
       },
     });
   };
@@ -313,7 +334,7 @@ const ProjectMetricsEditor = forwardRef<
               const validationErrors = get(formState.errors, ["metricType"]);
               return (
                 <FormItem>
-                  <FormLabel>Metric</FormLabel>
+                  <FormLabel>Metric type</FormLabel>
                   <FormControl>
                     <SelectBox
                       className={cn({
@@ -327,17 +348,62 @@ const ProjectMetricsEditor = forwardRef<
                         handleMetricTypeChange(value);
                       }}
                       options={METRIC_OPTIONS}
-                      placeholder="Select a metric"
+                      placeholder="Select a metric type"
                     />
                   </FormControl>
                   <Description>
-                    Select the metric you want this widget to display.
+                    Select the metric type you want this widget to display.
                   </Description>
                   <FormMessage />
                 </FormItem>
               );
             }}
           />
+
+          {isFeedbackScoreMetric && projectId && (
+            <FormField
+              control={form.control}
+              name="feedbackScores"
+              render={({ field, formState }) => {
+                const validationErrors = get(formState.errors, [
+                  "feedbackScores",
+                ]);
+                return (
+                  <FormItem>
+                    <FormLabel>Metrics</FormLabel>
+                    <FormControl>
+                      <FeedbackDefinitionsAndScoresSelectBox
+                        value={field.value || []}
+                        onChange={(value) => {
+                          field.onChange(value);
+                          handleFeedbackScoresChange(value);
+                        }}
+                        scoreSource={
+                          metricType === METRIC_NAME_TYPE.THREAD_FEEDBACK_SCORES
+                            ? ScoreSource.THREADS
+                            : ScoreSource.TRACES
+                        }
+                        entityIds={[projectId]}
+                        multiselect={true}
+                        showSelectAll={true}
+                        placeholder="All metrics"
+                        className={cn({
+                          "border-destructive": Boolean(
+                            validationErrors?.message,
+                          ),
+                        })}
+                      />
+                    </FormControl>
+                    <Description>
+                      Select specific metrics to display. Leave empty to show
+                      all available metrics.
+                    </Description>
+                    <FormMessage />
+                  </FormItem>
+                );
+              }}
+            />
+          )}
 
           <ProjectWidgetFiltersSection
             control={form.control}
