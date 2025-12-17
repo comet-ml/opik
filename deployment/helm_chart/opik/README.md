@@ -303,6 +303,7 @@ Call opik api on http://localhost:5173/api
 | component.python-backend.backendConfigMap.enabled | bool | `true` |  |
 | component.python-backend.enabled | bool | `true` |  |
 | component.python-backend.env.OPIK_REVERSE_PROXY_URL | string | `"http://opik-frontend:5173/api"` |  |
+| component.python-backend.env.OPIK_URL_OVERRIDE | string | `"http://opik-backend:8080"` |  |
 | component.python-backend.env.OTEL_EXPERIMENTAL_EXPORTER_OTLP_RETRY_ENABLED | bool | `true` |  |
 | component.python-backend.env.OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE | string | `"cumulative"` |  |
 | component.python-backend.env.OTEL_METRIC_EXPORT_INTERVAL | string | `"60000"` |  |

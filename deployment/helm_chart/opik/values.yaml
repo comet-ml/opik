@@ -189,6 +189,8 @@ component:
       OTEL_PROPAGATORS: "tracecontext,baggage"
       OTEL_EXPERIMENTAL_EXPORTER_OTLP_RETRY_ENABLED: true
       OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE: cumulative
+      # Opik SDK URL for optimizer to reach Java backend
+      OPIK_URL_OVERRIDE: "http://opik-backend:8080"
     
     # Optional: Reference external Kubernetes secrets for sensitive configuration
     # Use this to inject LLM API keys (OPENAI_API_KEY, ANTHROPIC_API_KEY, etc.)
