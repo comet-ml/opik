@@ -1,7 +1,29 @@
-from typing import Any, Literal, Union
+from typing import Any, Literal, Protocol, Union
 from collections.abc import Callable
 
 import pydantic
+from opik.evaluation.metrics import score_result
+
+
+class MetricFunction(Protocol):
+    """Protocol for metric functions used in optimization.
+
+    Metric functions take a dataset item and LLM output, returning a score.
+    All Python functions have __name__ by default.
+
+    Example:
+        def my_metric(dataset_item: dict[str, Any], llm_output: str) -> float:
+            return 1.0 if llm_output == dataset_item["expected"] else 0.0
+    """
+
+    __name__: str
+
+    def __call__(
+        self,
+        dataset_item: dict[str, Any],
+        llm_output: str,
+        **kwargs: Any,
+    ) -> Union[float, score_result.ScoreResult, list[score_result.ScoreResult]]: ...
 
 
 class PropertySchema(pydantic.BaseModel):
@@ -111,7 +133,7 @@ def rebuild_content_with_new_text(original_content: Content, new_text: str) -> C
         if isinstance(part, dict) and part.get("type") == "text":
             result.append({"type": "text", "text": new_text})
         else:
-            result.append(copy.deepcopy(part))
+            result.append(copy.deepcopy(part))  # type: ignore[arg-type]
     return result  # type: ignore[return-value]
 
 

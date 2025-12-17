@@ -52,7 +52,7 @@ class LiteLLMAgent(optimizable_agent.OptimizableAgent):
                     "project_name": self.project_name,
                 },
             },
-            **model_kwargs,
+            **(model_kwargs or {}),
         )
         return response
 

@@ -4,10 +4,10 @@ import opik
 from opik.evaluation.evaluation_result import EvaluationResult
 
 from typing import Any
-from collections.abc import Callable
 from ... import _llm_calls
 from ...base_optimizer import BaseOptimizer
 from ...api_objects import chat_prompt
+from ...api_objects.types import MetricFunction
 from ...agents import OptimizableAgent, LiteLLMAgent
 
 from opik_optimizer.optimization_result import OptimizationResult
@@ -207,7 +207,7 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
         original_prompts: dict[str, chat_prompt.ChatPrompt],
         dataset: opik.Dataset,
         validation_dataset: opik.Dataset | None,
-        metric: Callable,
+        metric: MetricFunction,
         agent: OptimizableAgent,
         optimization_id: str,
         n_samples: int | None,
@@ -258,6 +258,8 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
             responses = [improved_prompts_response]
 
         for response_item in responses:
+            if not response_item:
+                continue
             improved_chat_prompts: dict[str, chat_prompt.ChatPrompt] = {}
             response_reasoning = ""
             for prompt_name, improved_prompt in response_item.items():
@@ -271,6 +273,7 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
                     messages=messages_as_dicts,
                     tools=best_prompts[prompt_name].tools,
                     function_map=best_prompts[prompt_name].function_map,
+                    model=original.model,
                     model_parameters=original.model_kwargs,
                 )
             improved_chat_prompts_candidates.append(improved_chat_prompts)
@@ -288,6 +291,27 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
             indent="│   ",
             baseline_score=best_score,  # Pass baseline for comparison
         ) as improved_reporter:
+            if not improved_chat_prompts_candidates:
+                fallback_result = self.evaluate_prompt(
+                    prompt=best_prompts,
+                    dataset=evaluation_dataset,
+                    metric=metric,
+                    agent=agent,
+                    n_samples=n_samples,
+                    n_threads=self.n_threads,
+                    return_evaluation_result=True,
+                )
+                fallback_scores = [
+                    x.score_results[0].value for x in fallback_result.test_results
+                ]
+                fallback_score = (
+                    sum(fallback_scores) / len(fallback_scores)
+                    if fallback_scores
+                    else best_score
+                )
+                improved_reporter.set_score(fallback_score)
+                return best_prompts, fallback_score, fallback_result
+
             best_prompt_bundle = improved_chat_prompts_candidates[0]
             best_result = self.evaluate_prompt(
                 prompt=best_prompt_bundle,
@@ -340,11 +364,11 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
 
         return best_prompt_bundle, best_score_local, best_result
 
-    def optimize_prompt(
+    def optimize_prompt(  # type: ignore[override]
         self,
         prompt: chat_prompt.ChatPrompt | dict[str, chat_prompt.ChatPrompt],
         dataset: opik.Dataset,
-        metric: Callable[..., Any],
+        metric: MetricFunction,
         agent: OptimizableAgent | None = None,
         experiment_config: dict | None = None,
         n_samples: int | None = None,

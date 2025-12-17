@@ -5,6 +5,7 @@ from collections.abc import Callable
 from opik import Dataset
 from ...base_optimizer import BaseOptimizer, OptimizationRound
 from ...api_objects import chat_prompt
+from ...api_objects.types import MetricFunction
 from ...optimization_result import OptimizationResult
 from ...agents import OptimizableAgent, LiteLLMAgent
 from ... import _throttle
@@ -148,7 +149,7 @@ class MetaPromptOptimizer(BaseOptimizer):
         try:
             from litellm import get_max_tokens
 
-            model_max_tokens = get_max_tokens(self.model)
+            model_max_tokens: int = get_max_tokens(self.model)  # type: ignore[assignment]
             # Use ~25% of model's context for dataset examples
             calculated_max = int(model_max_tokens * self.DEFAULT_DATASET_CONTEXT_RATIO)
             logger.debug(
@@ -190,7 +191,7 @@ class MetaPromptOptimizer(BaseOptimizer):
         self,
         prompt: chat_prompt.ChatPrompt | dict[str, chat_prompt.ChatPrompt],
         dataset: Dataset,
-        metric: Callable,
+        metric: MetricFunction,
         agent: OptimizableAgent | None = None,
         experiment_config: dict | None = None,
         n_samples: int | None = None,
@@ -307,7 +308,7 @@ class MetaPromptOptimizer(BaseOptimizer):
         try:
             optimization = self.opik_client.create_optimization(
                 dataset_name=dataset_name,
-                objective_name=getattr(metric, "__name__", str(metric)),
+                objective_name=metric.__name__,
                 metadata=self._build_optimization_metadata(),
                 name=self.name,
                 optimization_id=optimization_id,
@@ -375,7 +376,7 @@ class MetaPromptOptimizer(BaseOptimizer):
         dataset: Dataset,
         agent: OptimizableAgent,
         validation_dataset: Dataset | None,
-        metric: Callable,
+        metric: MetricFunction,
         experiment_config: dict | None,
         max_trials: int,
         n_samples: int | None,
@@ -651,7 +652,7 @@ class MetaPromptOptimizer(BaseOptimizer):
             improvement_this_round=improvement_this_round,
         )
 
-    def _get_task_context(self, metric: Callable) -> tuple[str, int]:
+    def _get_task_context(self, metric: MetricFunction) -> tuple[str, int]:
         """Get task-specific context from the dataset and metric (delegates to ops)."""
         return context_ops.get_task_context(
             dataset=self.dataset,
@@ -669,7 +670,7 @@ class MetaPromptOptimizer(BaseOptimizer):
         best_score: float,
         round_num: int,
         previous_rounds: list[OptimizationRound],
-        metric: Callable,
+        metric: MetricFunction,
         optimization_id: str | None = None,
         project_name: str | None = None,
     ) -> list[chat_prompt.ChatPrompt]:

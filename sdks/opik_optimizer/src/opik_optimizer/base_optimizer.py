@@ -1,5 +1,4 @@
 from typing import Any, cast, overload, Literal
-from collections.abc import Callable
 
 import copy
 import inspect
@@ -19,6 +18,7 @@ from pydantic import BaseModel
 
 from . import optimization_result
 from .api_objects import chat_prompt
+from .api_objects.types import MetricFunction
 from .agents import LiteLLMAgent, OptimizableAgent
 from . import task_evaluator, helpers
 
@@ -136,7 +136,7 @@ class BaseOptimizer(ABC):
         self,
         prompt: "chat_prompt.ChatPrompt | dict[str, chat_prompt.ChatPrompt]",
         dataset: "Dataset",
-        metric: Callable,
+        metric: MetricFunction,
         support_content_parts: bool = False,
     ) -> None:
         """
@@ -401,7 +401,7 @@ class BaseOptimizer(ABC):
         self,
         prompt: "chat_prompt.ChatPrompt | dict[str, chat_prompt.ChatPrompt]",
         dataset: Dataset,
-        metric: Callable,
+        metric: MetricFunction,
         agent: OptimizableAgent | None = None,
         validation_dataset: Dataset | None = None,
         experiment_config: dict[str, Any] | None = None,
@@ -435,10 +435,11 @@ class BaseOptimizer(ABC):
                 prompt_name = getattr(first_prompt, "name", None)
                 prompt_project_name = getattr(first_prompt, "project_name", None)
             else:
-                prompt_messages = {k: p.get_messages() for k, p in prompt.items()}
-                prompt_name = {k: getattr(p, "name", None) for k, p in prompt.items()}
+                prompt_dict = cast(dict[str, chat_prompt.ChatPrompt], prompt)
+                prompt_messages = {k: p.get_messages() for k, p in prompt_dict.items()}
+                prompt_name = {k: getattr(p, "name", None) for k, p in prompt_dict.items()}
                 prompt_project_name = {
-                    k: getattr(p, "project_name", None) for k, p in prompt.items()
+                    k: getattr(p, "project_name", None) for k, p in prompt_dict.items()
                 }
 
             tools = self._serialize_tools(first_prompt)
@@ -453,7 +454,7 @@ class BaseOptimizer(ABC):
         base_config: dict[str, Any] = {
             "project_name": project_name,
             "agent_config": agent_config,
-            "metric": getattr(metric, "__name__", str(metric)),
+            "metric": metric.__name__,
             "dataset_training": dataset.name,
             "dataset_training_id": dataset.id,
             "optimizer": self.__class__.__name__,
@@ -492,7 +493,7 @@ class BaseOptimizer(ABC):
         self,
         prompt: "chat_prompt.ChatPrompt | dict[str, chat_prompt.ChatPrompt]",
         dataset: Dataset,
-        metric: Callable,
+        metric: MetricFunction,
         agent: OptimizableAgent | None = None,
         experiment_config: dict | None = None,
         n_samples: int | None = None,
@@ -570,7 +571,7 @@ class BaseOptimizer(ABC):
         self,
         prompt: chat_prompt.ChatPrompt | dict[str, chat_prompt.ChatPrompt],
         dataset: Dataset,
-        metric: Callable,
+        metric: MetricFunction,
         agent: OptimizableAgent | None = None,
         n_threads: int | None = None,
         verbose: int = 1,
@@ -586,7 +587,7 @@ class BaseOptimizer(ABC):
         self,
         prompt: chat_prompt.ChatPrompt | dict[str, chat_prompt.ChatPrompt],
         dataset: Dataset,
-        metric: Callable,
+        metric: MetricFunction,
         agent: OptimizableAgent | None = None,
         n_threads: int | None = None,
         verbose: int = 1,
@@ -601,7 +602,7 @@ class BaseOptimizer(ABC):
         self,
         prompt: chat_prompt.ChatPrompt | dict[str, chat_prompt.ChatPrompt],
         dataset: Dataset,
-        metric: Callable,
+        metric: MetricFunction,
         agent: OptimizableAgent | None = None,
         n_threads: int | None = None,
         verbose: int = 1,
@@ -620,7 +621,7 @@ class BaseOptimizer(ABC):
             # Wrap single prompt in dict for invoke_agent
             prompts_dict: dict[str, chat_prompt.ChatPrompt]
             if isinstance(prompt, dict):
-                prompts_dict = prompt
+                prompts_dict = cast(dict[str, chat_prompt.ChatPrompt], prompt)
             else:
                 prompts_dict = {prompt.name: prompt}
 

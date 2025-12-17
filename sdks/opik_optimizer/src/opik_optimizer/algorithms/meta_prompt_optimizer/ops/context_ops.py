@@ -4,7 +4,6 @@ Context building operations for the Meta-Prompt Optimizer.
 This module contains functions for building task context and history context.
 """
 
-from collections.abc import Callable
 from typing import Any
 import logging
 import random
@@ -12,6 +11,7 @@ import re
 
 import opik
 from ....base_optimizer import OptimizationRound
+from ....api_objects.types import MetricFunction
 from ..prompts import START_DELIM, END_DELIM
 
 logger = logging.getLogger(__name__)
@@ -52,7 +52,7 @@ def count_tokens(text: str, model: str = "gpt-4") -> int:
 
 def get_task_context(
     dataset: opik.Dataset | None,
-    metric: Callable,
+    metric: MetricFunction,
     num_examples: int = 3,
     columns: list[str] | None = None,
     max_tokens: int = 2000,
@@ -140,7 +140,7 @@ def get_task_context(
         # Conditionally extract and add metric information
         if extract_metric_understanding:
             # Extract metric information
-            metric_name = getattr(metric, "__name__", str(metric))
+            metric_name = metric.__name__
             metric_doc = getattr(metric, "__doc__", None)
             metric_direction = getattr(metric, "direction", None)
 

@@ -47,19 +47,19 @@ def _truthful_custom_loader(
 ) -> list[dict[str, Any]]:
     import datasets as ds
 
-    download_config = ds.DownloadConfig(download_desc=False, disable_tqdm=True)
+    download_config = ds.DownloadConfig(download_desc=False, disable_tqdm=True)  # type: ignore[arg-type]
     gen_dataset = ds.load_dataset(
         "truthful_qa", "generation", download_config=download_config
-    )[source_split]
+    )[source_split]  # type: ignore[index]
     mc_dataset = ds.load_dataset(
         "truthful_qa", "multiple_choice", download_config=download_config
-    )[source_split]
+    )[source_split]  # type: ignore[index]
     available = max(0, len(gen_dataset) - start)
     total = available if count is None else min(count, available)
     pairs = list(
         zip(
-            gen_dataset.select(range(start, start + total)),
-            mc_dataset.select(range(start, start + total)),
+            gen_dataset.select(range(start, start + total)),  # type: ignore[union-attr]
+            mc_dataset.select(range(start, start + total)),  # type: ignore[union-attr]
         )
     )
     return [{"gen": gen, "mc": mc} for gen, mc in pairs]
