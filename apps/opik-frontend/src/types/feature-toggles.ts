@@ -8,6 +8,7 @@ export enum FeatureToggleKeys {
   WELCOME_WIZARD_ENABLED = "welcome_wizard_enabled",
   CSV_UPLOAD_ENABLED = "csv_upload_enabled",
   EXPORT_ENABLED = "export_enabled",
+  DATASET_VERSIONING_ENABLED = "dataset_versioning_enabled",
   SPAN_LLM_AS_JUDGE_ENABLED = "span_llm_as_judge_enabled",
   SPAN_USER_DEFINED_METRIC_PYTHON_ENABLED = "span_user_defined_metric_python_enabled",
   DASHBOARDS_ENABLED = "dashboards_enabled",
@@ -19,6 +20,5 @@ export enum FeatureToggleKeys {
   OPENROUTER_PROVIDER_ENABLED = "openrouter_provider_enabled",
   VERTEXAI_PROVIDER_ENABLED = "vertexai_provider_enabled",
   CUSTOMLLM_PROVIDER_ENABLED = "customllm_provider_enabled",
-  OPIKBUILTIN_PROVIDER_ENABLED = "opikbuiltin_provider_enabled",
   COLLABORATORS_TAB_ENABLED = "collaborators_tab_enabled",
 }

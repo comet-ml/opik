@@ -21,13 +21,17 @@ import { COLUMN_TYPE, ColumnData } from "@/types/shared";
 import { convertColumnDataToColumn } from "@/lib/table";
 import { formatDate } from "@/lib/date";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
-import { getPermissionByType, isUserPermissionValid } from "@/lib/permissions";
+import {
+  getPermissionByType,
+  isUserPermissionValid,
+} from "@/plugins/comet/lib/permissions";
 import {
   ManagementPermissionsNames,
   ORGANIZATION_ROLE_TYPE,
+  WORKSPACE_ROLE_TYPE,
   WorkspaceMember,
 } from "./types";
-import WorkspaceRoleCell from "./WorkspaceRoleCell";
+import WorkspaceRoleCell from "./WorkspaceRoleCell/WorkspaceRoleCell";
 
 const COLUMNS_WIDTH_KEY = "workspace-members-columns-width";
 
@@ -125,31 +129,20 @@ const CollaboratorsTab = () => {
 
     const searchLower = search.toLowerCase();
 
-    const filteredMembers = search
-      ? allUsers.filter((member) => {
-          return (
-            (member as WorkspaceMember).userName
-              ?.toLowerCase()
-              .includes(searchLower) ||
-            member.email.toLowerCase().includes(searchLower)
-          );
-        })
-      : allUsers;
-
-    return filteredMembers.map((member): WorkspaceMember => {
+    const mappedMembers = allUsers.map((member): WorkspaceMember => {
       const userName = (member as WorkspaceMember).userName;
       const userPermissions = permissionsData?.find(
         (permission) => permission.userName === userName,
       )?.permissions;
 
       const permissionByType = getPermissionByType(
-        userPermissions,
+        userPermissions || [],
         ManagementPermissionsNames.MANAGEMENT,
       );
 
       const role = isUserPermissionValid(permissionByType?.permissionValue)
-        ? "Workspace owner"
-        : "Workspace member";
+        ? WORKSPACE_ROLE_TYPE.owner
+        : WORKSPACE_ROLE_TYPE.member;
 
       const uniqueName = userName || member.email;
 
@@ -166,13 +159,17 @@ const CollaboratorsTab = () => {
         ...member,
       };
     });
-  }, [
-    workspaceMembers,
-    invitedMembers,
-    permissionsData,
-    organizationMembers,
-    search,
-  ]);
+
+    return search
+      ? mappedMembers.filter((member) => {
+        return (
+          member.userName?.toLowerCase().includes(searchLower) ||
+          member.email.toLowerCase().includes(searchLower) ||
+          member.role?.toLowerCase().includes(searchLower)
+        );
+      })
+      : mappedMembers;
+  }, [workspaceMembers, invitedMembers, permissionsData, organizationMembers, search]);
 
   const renderTable = () => {
     if (isPending || isPermissionsPending || isInvitedMembersPending) {
@@ -198,7 +195,7 @@ const CollaboratorsTab = () => {
         <SearchInput
           searchText={search}
           setSearchText={setSearch}
-          placeholder="Search by name or email"
+          placeholder="Search by name or email, or role"
           className="w-[320px]"
           dimension="sm"
         />

@@ -677,18 +677,18 @@ public class FilterQueryBuilder {
                 .collect(groupingBy(Map.Entry::getKey, mapping(Map.Entry::getValue, toList())));
     }
 
-    public String toAnalyticsDbOperator(@NonNull Filter filter) {
+    public static String toAnalyticsDbOperator(@NonNull Filter filter) {
         return ANALYTICS_DB_OPERATOR_MAP.get(filter.operator()).get(filter.field().getType());
     }
 
-    public Optional<Boolean> hasGuardrailsFilter(@NonNull List<? extends Filter> filters) {
+    public static Optional<Boolean> hasGuardrailsFilter(@NonNull List<? extends Filter> filters) {
         return filters.stream()
                 .filter(filter -> filter.field() == TraceField.GUARDRAILS)
                 .findFirst()
                 .map(filter -> true);
     }
 
-    public Optional<String> toAnalyticsDbFilters(
+    public static Optional<String> toAnalyticsDbFilters(
             @NonNull List<? extends Filter> filters, @NonNull FilterStrategy filterStrategy) {
         var stringJoiner = new StringJoiner(" %s ".formatted(ANALYTICS_DB_AND_OPERATOR));
         stringJoiner.setEmptyValue("");
@@ -705,7 +705,7 @@ public class FilterQueryBuilder {
                 : Optional.of("(%s)".formatted(analyticsDbFilters));
     }
 
-    private Optional<Set<? extends Field>> getFieldsByStrategy(FilterStrategy filterStrategy, Filter filter) {
+    private static Optional<Set<? extends Field>> getFieldsByStrategy(FilterStrategy filterStrategy, Filter filter) {
         // we want to apply the is empty filter only in the case below
         if (filter.operator() == Operator.IS_EMPTY && filterStrategy == FilterStrategy.FEEDBACK_SCORES_IS_EMPTY) {
             return Optional.of(FILTER_STRATEGY_MAP.get(FilterStrategy.FEEDBACK_SCORES));
@@ -736,13 +736,13 @@ public class FilterQueryBuilder {
         return FEEDBACK_SCORE_FIELDS.contains(filter.field());
     }
 
-    private String toAnalyticsDbFilter(Filter filter, int i, FilterStrategy filterStrategy) {
+    private static String toAnalyticsDbFilter(Filter filter, int i, FilterStrategy filterStrategy) {
         var template = toAnalyticsDbOperator(filter);
         var formattedTemplate = template.formatted(getAnalyticsDbField(filter.field(), filterStrategy, i), i);
         return "(%s)".formatted(formattedTemplate);
     }
 
-    private String getAnalyticsDbField(Field field, FilterStrategy filterStrategy, int i) {
+    private static String getAnalyticsDbField(Field field, FilterStrategy filterStrategy, int i) {
         // this is a special case where the DB field is determined by the filter strategy rather than the filter field
         if (filterStrategy == FilterStrategy.FEEDBACK_SCORES_IS_EMPTY) {
             return FEEDBACK_SCORE_COUNT_DB;
@@ -780,7 +780,7 @@ public class FilterQueryBuilder {
         };
     }
 
-    public Statement bind(
+    public static Statement bind(
             @NonNull Statement statement,
             @NonNull List<? extends Filter> filters,
             @NonNull FilterStrategy filterStrategy) {
@@ -869,16 +869,16 @@ public class FilterQueryBuilder {
      * @param fieldName Full field name like "metadata.environment"
      * @return JSON path in format $."key" e.g: $."environment"
      */
-    private String getStateSQLJsonPath(String fieldName) {
+    private static String getStateSQLJsonPath(String fieldName) {
         var jsonKey = fieldName.substring(fieldName.indexOf('.') + 1);
         return getSQLJsonPath(jsonKey);
     }
 
-    private String getSQLJsonPath(String jsonKey) {
+    private static String getSQLJsonPath(String jsonKey) {
         return "%s.\"%s\"".formatted(JSONPATH_ROOT, jsonKey);
     }
 
-    private String getKey(Filter filter) {
+    private static String getKey(Filter filter) {
 
         if (filter.key().startsWith(JSONPATH_ROOT)
                 || (filter.field().getType() != FieldType.DICTIONARY

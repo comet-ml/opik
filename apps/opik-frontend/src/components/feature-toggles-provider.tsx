@@ -22,6 +22,7 @@ const DEFAULT_STATE: FeatureToggles = {
   [FeatureToggleKeys.WELCOME_WIZARD_ENABLED]: false,
   [FeatureToggleKeys.CSV_UPLOAD_ENABLED]: false,
   [FeatureToggleKeys.EXPORT_ENABLED]: true,
+  [FeatureToggleKeys.DATASET_VERSIONING_ENABLED]: false,
   [FeatureToggleKeys.OPTIMIZATION_STUDIO_ENABLED]: false,
   [FeatureToggleKeys.SPAN_LLM_AS_JUDGE_ENABLED]: false,
   [FeatureToggleKeys.SPAN_USER_DEFINED_METRIC_PYTHON_ENABLED]: false,
@@ -33,7 +34,6 @@ const DEFAULT_STATE: FeatureToggles = {
   [FeatureToggleKeys.OPENROUTER_PROVIDER_ENABLED]: true,
   [FeatureToggleKeys.VERTEXAI_PROVIDER_ENABLED]: true,
   [FeatureToggleKeys.CUSTOMLLM_PROVIDER_ENABLED]: true,
-  [FeatureToggleKeys.OPIKBUILTIN_PROVIDER_ENABLED]: true,
   [FeatureToggleKeys.COLLABORATORS_TAB_ENABLED]: false,
 };
 

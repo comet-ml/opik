@@ -465,14 +465,30 @@ class DatasetsClient:
         return _response.data
 
     def delete_dataset_items(
-        self, *, item_ids: typing.Sequence[str], request_options: typing.Optional[RequestOptions] = None
+        self,
+        *,
+        item_ids: typing.Optional[typing.Sequence[str]] = OMIT,
+        dataset_id: typing.Optional[str] = OMIT,
+        filters: typing.Optional[typing.Sequence[DatasetItemFilter]] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
-        Delete dataset items
+        Delete dataset items using one of two modes:
+        1. **Delete by IDs**: Provide 'item_ids' to delete specific items by their IDs
+        2. **Delete by filters**: Provide 'dataset_id' with optional 'filters' to delete items matching criteria
+
+        When using filters, an empty 'filters' array will delete all items in the specified dataset.
 
         Parameters
         ----------
-        item_ids : typing.Sequence[str]
+        item_ids : typing.Optional[typing.Sequence[str]]
+            List of dataset item IDs to delete (max 1000). Use this to delete specific items by their IDs. Mutually exclusive with 'dataset_id' and 'filters'.
+
+        dataset_id : typing.Optional[str]
+            Dataset ID to scope the deletion. Required when using 'filters'. Mutually exclusive with 'item_ids'.
+
+        filters : typing.Optional[typing.Sequence[DatasetItemFilter]]
+            Filters to select dataset items to delete within the specified dataset. Must be used with 'dataset_id'. Mutually exclusive with 'item_ids'. Empty array means 'delete all items in the dataset'.
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -485,9 +501,11 @@ class DatasetsClient:
         --------
         from Opik import OpikApi
         client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
-        client.datasets.delete_dataset_items(item_ids=['item_ids'], )
+        client.datasets.delete_dataset_items()
         """
-        _response = self._raw_client.delete_dataset_items(item_ids=item_ids, request_options=request_options)
+        _response = self._raw_client.delete_dataset_items(
+            item_ids=item_ids, dataset_id=dataset_id, filters=filters, request_options=request_options
+        )
         return _response.data
 
     def delete_datasets_batch(
@@ -1627,14 +1645,30 @@ class AsyncDatasetsClient:
         return _response.data
 
     async def delete_dataset_items(
-        self, *, item_ids: typing.Sequence[str], request_options: typing.Optional[RequestOptions] = None
+        self,
+        *,
+        item_ids: typing.Optional[typing.Sequence[str]] = OMIT,
+        dataset_id: typing.Optional[str] = OMIT,
+        filters: typing.Optional[typing.Sequence[DatasetItemFilter]] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
-        Delete dataset items
+        Delete dataset items using one of two modes:
+        1. **Delete by IDs**: Provide 'item_ids' to delete specific items by their IDs
+        2. **Delete by filters**: Provide 'dataset_id' with optional 'filters' to delete items matching criteria
+
+        When using filters, an empty 'filters' array will delete all items in the specified dataset.
 
         Parameters
         ----------
-        item_ids : typing.Sequence[str]
+        item_ids : typing.Optional[typing.Sequence[str]]
+            List of dataset item IDs to delete (max 1000). Use this to delete specific items by their IDs. Mutually exclusive with 'dataset_id' and 'filters'.
+
+        dataset_id : typing.Optional[str]
+            Dataset ID to scope the deletion. Required when using 'filters'. Mutually exclusive with 'item_ids'.
+
+        filters : typing.Optional[typing.Sequence[DatasetItemFilter]]
+            Filters to select dataset items to delete within the specified dataset. Must be used with 'dataset_id'. Mutually exclusive with 'item_ids'. Empty array means 'delete all items in the dataset'.
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -1649,10 +1683,12 @@ class AsyncDatasetsClient:
         import asyncio
         client = AsyncOpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
         async def main() -> None:
-            await client.datasets.delete_dataset_items(item_ids=['item_ids'], )
+            await client.datasets.delete_dataset_items()
         asyncio.run(main())
         """
-        _response = await self._raw_client.delete_dataset_items(item_ids=item_ids, request_options=request_options)
+        _response = await self._raw_client.delete_dataset_items(
+            item_ids=item_ids, dataset_id=dataset_id, filters=filters, request_options=request_options
+        )
         return _response.data
 
     async def delete_datasets_batch(

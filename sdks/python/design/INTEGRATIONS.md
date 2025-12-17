@@ -199,6 +199,8 @@ Framework execution → Fires events → Callback methods
 
 **Files**:
 - `opik_tracer.py` - Implements `BaseTracer`
+- `langgraph_tracer_injector.py` - Graph configuration injection for LangGraph
+- `langgraph_async_context_bridge.py` - Context propagation for async LangGraph nodes
 - `provider_usage_extractors/` - Provider-specific usage extraction
 - `helpers.py` - Utility functions
 - `base_llm_patcher.py` - Adds `base_url` to LLM dict (for provider ID)
@@ -262,7 +264,40 @@ Extractors:
 
 Each extractor knows where to find usage in that provider's Run structure.
 
-**LangGraph Support**: Stores Mermaid graph visualization in trace metadata when `graph` parameter provided.
+**LangGraph Support**:
+
+The integration provides enhanced support for LangGraph through:
+
+1. **`track_langgraph()` Function**: High-level wrapper that injects `OpikTracer` into the graph's default configuration, eliminating the need to pass `config={"callbacks": [opik_tracer]}` on every invocation.
+
+2. **Automatic Graph Visualization**: Extracts and stores Mermaid graph structure in trace metadata via `OpikTracer.set_graph()` method.
+
+3. **Async Context Bridge**: `extract_current_langgraph_span_data()` helper for propagating trace context to `@track`-decorated functions in async LangGraph nodes.
+
+**Usage Pattern**:
+```python
+from opik.integrations.langchain import OpikTracer, track_langgraph
+from langgraph.graph import StateGraph, START, END
+
+# Build and compile graph
+builder = StateGraph(State)
+builder.add_node("my_node", my_node_function)
+builder.add_edge(START, "my_node")
+builder.add_edge("my_node", END)
+app = builder.compile()
+
+# Track once
+opik_tracer = OpikTracer(tags=["production"])
+app = track_langgraph(app, opik_tracer)
+
+# All invocations automatically tracked
+result = app.invoke({"message": "Hello"})
+```
+
+**Implementation Details**:
+- `langgraph_tracer_injector.py` - Injects `OpikTracer` into graph's default config
+- `langgraph_async_context_bridge.py` - Extracts span data from LangGraph config for async context propagation
+- `OpikTracer.set_graph()` - Stores graph visualization in `_trace_default_metadata["_opik_graph_definition"]`
 
 ### LlamaIndex Integration
 

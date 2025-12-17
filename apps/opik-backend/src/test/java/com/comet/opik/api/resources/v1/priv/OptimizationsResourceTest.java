@@ -731,7 +731,10 @@ class OptimizationsResourceTest {
     class OptimizationStudioTests {
 
         private OptimizationStudioConfig createStudioConfig() {
-            return podamFactory.manufacturePojo(OptimizationStudioConfig.class);
+            // opikApiKey is @JsonIgnore and populated server-side, so we don't include it
+            return podamFactory.manufacturePojo(OptimizationStudioConfig.class).toBuilder()
+                    .opikApiKey(null)
+                    .build();
         }
 
         @Test
@@ -755,7 +758,7 @@ class OptimizationsResourceTest {
         }
 
         @Test
-        @DisplayName("Create Studio optimization and verify Redis job enqueued")
+        @DisplayName("Create Studio optimization and verify Redis job enqueued with opikApiKey")
         void createStudioOptimization__thenVerifyRedisJobEnqueued() {
             Mockito.reset(defaultEventBus);
 
@@ -770,8 +773,9 @@ class OptimizationsResourceTest {
             Integer initialSize = queue.size().block();
             assertThat(initialSize).isNotNull();
 
-            // Create Studio optimization
-            var id = optimizationResourceClient.create(optimization, API_KEY, TEST_WORKSPACE_NAME);
+            // Create Studio optimization with custom opikApiKey header
+            var customOpikApiKey = "test-opik-api-key-" + UUID.randomUUID();
+            var id = optimizationResourceClient.create(optimization, API_KEY, TEST_WORKSPACE_NAME, customOpikApiKey);
 
             // Wait for async job enqueueing to complete (max 2 seconds)
             await().atMost(2, java.util.concurrent.TimeUnit.SECONDS)
@@ -790,16 +794,22 @@ class OptimizationsResourceTest {
                         RMapReactive<String, Object> jobMap = redisClient.getMap(jobKey, StringCodec.INSTANCE);
                         String jobData = (String) jobMap.get("data").block();
 
-                        // Verify job data contains our optimization ID and workspace name
+                        // Verify job data contains our optimization ID, workspace name, and opikApiKey
                         return jobData != null
                                 && jobData.contains(id.toString())
-                                && jobData.contains(TEST_WORKSPACE_NAME);
+                                && jobData.contains(TEST_WORKSPACE_NAME)
+                                && jobData.contains(customOpikApiKey);
                     });
 
             assertThat(foundJob)
-                    .as("Expected to find RQ job with optimization ID: %s and workspace name: %s", id,
-                            TEST_WORKSPACE_NAME)
+                    .as("Expected to find RQ job with optimization ID: %s, workspace name: %s, and opikApiKey: %s",
+                            id, TEST_WORKSPACE_NAME, customOpikApiKey)
                     .isTrue();
+
+            // Verify opikApiKey is NOT returned when retrieving the optimization
+            var studioResponse = optimizationResourceClient.getStudio(id, API_KEY, TEST_WORKSPACE_NAME, 200);
+            assertThat(studioResponse.studioConfig()).isNotNull();
+            assertThat(studioResponse.studioConfig().opikApiKey()).isNull();
 
             // Verify event was posted
             ArgumentCaptor<OptimizationCreated> captor = ArgumentCaptor.forClass(OptimizationCreated.class);
@@ -872,7 +882,7 @@ class OptimizationsResourceTest {
             // Get using dedicated Studio endpoint
             var actualOptimization = optimizationResourceClient.getStudio(id, API_KEY, TEST_WORKSPACE_NAME, 200);
 
-            // Studio config should be included by default
+            // Studio config should be included (opikApiKey is null in both since it's @JsonIgnore)
             assertThat(actualOptimization).isNotNull();
             assertThat(actualOptimization.id()).isEqualTo(id);
             assertThat(actualOptimization.studioConfig()).isNotNull();

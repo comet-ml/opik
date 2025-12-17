@@ -42,6 +42,11 @@ export enum ORGANIZATION_ROLE_TYPE {
   emAndMPMOnly = "EM_AND_MPM_ONLY",
 }
 
+export enum WORKSPACE_ROLE_TYPE {
+  owner = "Workspace owner",
+  member = "Workspace member",
+}
+
 export interface Organization {
   id: string;
   name: string;

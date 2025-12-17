@@ -90,7 +90,6 @@ export enum EXPLAINER_ID {
   geval_evaluation_criteria = "geval_evaluation_criteria",
   metric_reference_key = "metric_reference_key",
   metric_case_sensitive = "metric_case_sensitive",
-  metric_json_schema = "metric_json_schema",
   // Optimizer config explainers
   optimizer_verbose = "optimizer_verbose",
   optimizer_adaptive_mutation = "optimizer_adaptive_mutation",
@@ -589,7 +588,7 @@ export const EXPLAINERS_MAP: Record<EXPLAINER_ID, Explainer> = {
   [EXPLAINER_ID.what_are_dashboards]: {
     id: EXPLAINER_ID.what_are_dashboards,
     description:
-      "Set up a new dashboard to organize, isolate, and monitor different scenarios.",
+      "Set up dashboards to monitor quality, cost, and performance of your projects and share experiment results",
     docLink: "/production/dashboards",
   },
   [EXPLAINER_ID.whats_the_optimization_studio]: {
@@ -626,11 +625,6 @@ export const EXPLAINERS_MAP: Record<EXPLAINER_ID, Explainer> = {
   [EXPLAINER_ID.metric_case_sensitive]: {
     id: EXPLAINER_ID.metric_case_sensitive,
     description: "Enable case-sensitive comparison when evaluating outputs.",
-  },
-  [EXPLAINER_ID.metric_json_schema]: {
-    id: EXPLAINER_ID.metric_json_schema,
-    description:
-      "Define a JSON schema to validate the structure of the LLM output.",
   },
   // Optimizer config explainers
   [EXPLAINER_ID.optimizer_verbose]: {

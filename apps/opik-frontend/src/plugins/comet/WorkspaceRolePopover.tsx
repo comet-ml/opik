@@ -4,7 +4,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { DropdownMenuContent } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
-import useManageUsersRolePopover from "@/hooks/useManageUsersRolePopover";
+import useManageUsersRolePopover from "@/plugins/comet/WorkspaceRoleCell/useManageUsersRolePopover";
 
 const WorkspaceRolePopover = ({
   controlValue,
