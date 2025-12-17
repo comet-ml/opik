@@ -42,7 +42,7 @@ const VersionTags: React.FC<VersionTagsProps> = ({ tags }) => {
       <span
         className={cn(
           "text-muted-slate/60 shrink-0 text-xs transition-opacity",
-          hasMoreItems ? "opacity-100" : "opacity-0",
+          tags.length > 0 ? "opacity-100" : "opacity-0",
         )}
       >
         ·
