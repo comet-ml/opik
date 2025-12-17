@@ -26,7 +26,7 @@ import FeedbackDefinitionsAndScoresSelectBox, {
   ScoreSource,
 } from "@/components/pages-shared/experiments/FeedbackDefinitionsAndScoresSelectBox/FeedbackDefinitionsAndScoresSelectBox";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
-import { Filter, ListFilter } from "lucide-react";
+import { Filter, ListChecks } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { Filters } from "@/types/filters";
@@ -294,7 +294,7 @@ const ExperimentsFeedbackScoresWidgetEditor = forwardRef<
                       aria-label="Select experiments"
                       className="gap-1.5"
                     >
-                      <ListFilter className="size-3.5" />
+                      <ListChecks className="size-3.5" />
                       <span>Select experiments</span>
                     </ToggleGroupItem>
                   </ToggleGroup>
