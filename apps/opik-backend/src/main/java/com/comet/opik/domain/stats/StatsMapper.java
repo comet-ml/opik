@@ -58,17 +58,17 @@ public class StatsMapper {
                                 getP(durations, 1),
                                 getP(durations, 2)))
                         .orElse(null)))
-                .add(new CountValueStat(INPUT, row.get("input", Long.class)))
-                .add(new CountValueStat(OUTPUT, row.get("output", Long.class)))
-                .add(new CountValueStat(METADATA, row.get("metadata", Long.class)))
-                .add(new AvgValueStat(TAGS, row.get("tags", Double.class)));
+                .add(new CountValueStat(INPUT, row.get(INPUT, Long.class)))
+                .add(new CountValueStat(OUTPUT, row.get(OUTPUT, Long.class)))
+                .add(new CountValueStat(METADATA, row.get(METADATA, Long.class)))
+                .add(new AvgValueStat(TAGS, row.get(TAGS, Double.class)));
 
         // Add thread count if available (only for project stats)
         if (!entityCountLabel.equals(THREAD_COUNT) && row.getMetadata().contains(THREAD_COUNT)) {
             stats.add(new CountValueStat(THREAD_COUNT, row.get(THREAD_COUNT, Long.class)));
         }
 
-        if (entityCountLabel.equals("trace_count")) {
+        if (entityCountLabel.equals(TRACE_COUNT)) {
             stats.add(new AvgValueStat(LLM_SPAN_COUNT, row.get(LLM_SPAN_COUNT_AVG, Double.class)));
             stats.add(new AvgValueStat(SPAN_COUNT, row.get(SPAN_COUNT_AVG, Double.class)));
         }
@@ -90,13 +90,13 @@ public class StatsMapper {
         addMapStats(row, USAGE, stats);
         addMapStats(row, FEEDBACK_SCORE, stats);
         // Only add span feedback scores statistics for traces (not spans)
-        if (entityCountLabel.equals("trace_count") && row.getMetadata().contains(SPAN_FEEDBACK_SCORE)) {
+        if (entityCountLabel.equals(TRACE_COUNT) && row.getMetadata().contains(SPAN_FEEDBACK_SCORE)) {
             addMapStats(row, SPAN_FEEDBACK_SCORE, stats);
         }
 
         // spans cannot accept guardrails and therefore will not have guardrails_failed_count in the result set
-        if (row.getMetadata().contains("guardrails_failed_count")) {
-            Optional.ofNullable(row.get("guardrails_failed_count", Long.class)).ifPresent(
+        if (row.getMetadata().contains(GUARDRAILS_FAILED_COUNT)) {
+            Optional.ofNullable(row.get(GUARDRAILS_FAILED_COUNT, Long.class)).ifPresent(
                     guardrailsFailedCount -> stats
                             .add(new CountValueStat(GUARDRAILS_FAILED_COUNT, guardrailsFailedCount)));
         }

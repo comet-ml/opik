@@ -86,7 +86,6 @@ class TraceServiceImplTest {
                 new IdGeneratorImpl(),
                 DUMMY_LOCK_SERVICE,
                 eventBus,
-                traceThreadSortingFactory,
                 traceSortingFactory,
                 attachmentStripperService,
                 attachmentService,

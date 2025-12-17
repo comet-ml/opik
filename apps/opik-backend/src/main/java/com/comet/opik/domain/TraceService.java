@@ -21,7 +21,6 @@ import com.comet.opik.api.events.TracesCreated;
 import com.comet.opik.api.events.TracesDeleted;
 import com.comet.opik.api.events.TracesUpdated;
 import com.comet.opik.api.sorting.TraceSortingFactory;
-import com.comet.opik.api.sorting.TraceThreadSortingFactory;
 import com.comet.opik.domain.attachment.AttachmentReinjectorService;
 import com.comet.opik.domain.attachment.AttachmentService;
 import com.comet.opik.domain.attachment.AttachmentStripperService;
@@ -63,7 +62,6 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 
 import static com.comet.opik.api.Trace.TracePage;
-import static com.comet.opik.api.TraceThread.TraceThreadPage;
 import static com.comet.opik.infrastructure.DatabaseUtils.ANALYTICS_DELETE_BATCH_SIZE;
 import static com.comet.opik.utils.ErrorUtils.failWithNotFound;
 
@@ -100,23 +98,15 @@ public interface TraceService {
 
     Mono<ProjectStats> getStats(TraceSearchCriteria searchCriteria);
 
-    Mono<ProjectStats> getThreadStats(TraceSearchCriteria searchCriteria);
-
     Mono<Long> getDailyCreatedCount();
 
     Mono<Map<UUID, Instant>> getLastUpdatedTraceAt(Set<UUID> projectIds, String workspaceId);
 
-    Mono<TraceThreadPage> getTraceThreads(int page, int size, TraceSearchCriteria criteria);
-
     Mono<Void> deleteTraceThreads(DeleteTraceThreads traceThreads);
-
-    Mono<TraceThread> getThreadById(UUID projectId, String threadId, boolean truncate);
 
     Flux<Trace> search(int limit, TraceSearchCriteria searchCriteria);
 
     Mono<Long> countTraces(Set<UUID> projectIds);
-
-    Flux<TraceThread> threadsSearch(int limit, @NonNull TraceSearchCriteria criteria);
 
     Mono<List<TraceThread>> getMinimalThreadInfoByIds(UUID projectId, Set<String> threadId);
 }
@@ -134,7 +124,6 @@ class TraceServiceImpl implements TraceService {
     private final @NonNull IdGenerator idGenerator;
     private final @NonNull LockService lockService;
     private final @NonNull EventBus eventBus;
-    private final @NonNull TraceThreadSortingFactory traceThreadSortingFactory;
     private final @NonNull TraceSortingFactory traceSortingFactory;
     private final @NonNull AttachmentStripperService attachmentStripperService;
     private final @NonNull AttachmentService attachmentService;
@@ -550,14 +539,6 @@ class TraceServiceImpl implements TraceService {
 
     @Override
     @WithSpan
-    public Mono<ProjectStats> getThreadStats(@NonNull TraceSearchCriteria criteria) {
-        return findProjectAndVerifyVisibility(criteria)
-                .flatMap(dao::getThreadStats)
-                .switchIfEmpty(Mono.just(ProjectStats.empty()));
-    }
-
-    @Override
-    @WithSpan
     public Mono<Long> getDailyCreatedCount() {
         return projectService.getDemoProjectIdsWithTimestamps()
                 .switchIfEmpty(Mono.just(Map.of())).flatMap(dao::getDailyTraces);
@@ -567,13 +548,6 @@ class TraceServiceImpl implements TraceService {
     public Mono<Map<UUID, Instant>> getLastUpdatedTraceAt(Set<UUID> projectIds, String workspaceId) {
         return template
                 .nonTransaction(connection -> dao.getLastUpdatedTraceAt(projectIds, workspaceId, connection));
-    }
-
-    @Override
-    public Mono<TraceThreadPage> getTraceThreads(int page, int size, @NonNull TraceSearchCriteria criteria) {
-        return findProjectAndVerifyVisibility(criteria)
-                .flatMap(it -> dao.findThreads(size, page, it))
-                .switchIfEmpty(Mono.just(TraceThreadPage.empty(page, traceThreadSortingFactory.getSortableFields())));
     }
 
     @Override
@@ -609,12 +583,6 @@ class TraceServiceImpl implements TraceService {
     }
 
     @Override
-    public Mono<TraceThread> getThreadById(@NonNull UUID projectId, @NonNull String threadId, boolean truncate) {
-        return dao.findThreadById(projectId, threadId, truncate)
-                .switchIfEmpty(Mono.defer(() -> Mono.error(failWithNotFound("Trace Thread", threadId))));
-    }
-
-    @Override
     public Flux<Trace> search(int limit, @NonNull TraceSearchCriteria criteria) {
         return findProjectAndVerifyVisibility(criteria)
                 .flatMapMany(it -> dao.search(limit, it)
@@ -625,12 +593,6 @@ class TraceServiceImpl implements TraceService {
     @Override
     public Mono<Long> countTraces(@NonNull Set<UUID> projectIds) {
         return dao.countTraces(projectIds);
-    }
-
-    @Override
-    public Flux<TraceThread> threadsSearch(int limit, @NonNull TraceSearchCriteria criteria) {
-        return findProjectAndVerifyVisibility(criteria)
-                .flatMapMany(it -> dao.threadsSearch(limit, it));
     }
 
     @Override
