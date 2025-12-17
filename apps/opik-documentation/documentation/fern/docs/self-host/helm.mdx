@@ -13,6 +13,22 @@ title: Migrating from Bitnami Charts and Images
 
 Opik's Helm chart has migrated from Bitnami charts and images to official Docker images and alternative Helm charts. This migration provides better compatibility, security, and maintainability.
 
+## Why Migrate from Bitnami?
+
+Bitnami changed its distribution model in 2025:
+
+- **Free old public images deprecated**: Versioned images were moved to a "legacy" unmaintained repository with no security updates
+- **Hardened images now subscription-based**: Access to maintained, secure images requires a paid subscription
+- **Bitnami charts tightly depend on Bitnami images**: Bitnami charts cannot switch to official images, creating a dependency on the subscription model
+
+By migrating to official Docker images and alternative Helm charts, we ensure:
+
+- **Continued Free Access**: Official images from upstream projects (e.g., `mysql`, `redis`, `zookeeper`, `minio`) remain freely available with full version support
+- **Security Updates**: Direct access to security patches and updates from the official maintainers
+- **Production Stability**: Ability to pin specific versions for production deployments
+- **Long-term Sustainability**: Reduced dependency on third-party commercial services
+- **Community Standards**: Official images follow industry best practices and are widely adopted, making it easier to find documentation and community support
+
 ## Upgrade Instructions
 
 If you're upgrading the Opik Helm chart from version **1.9.39** or older, you need to enable the chart migration:
