@@ -9,10 +9,10 @@ metadata:
     {{- if .Values.global.argocd }}
     argocd.argoproj.io/hook: PreSync
     argocd.argoproj.io/hook-delete-policy: HookSucceeded
-    argocd.argoproj.io/sync-wave: "-10"
+    argocd.argoproj.io/sync-wave: "-15"
     {{- else }}
     "helm.sh/hook": pre-upgrade
-    "helm.sh/hook-weight": "-10"
+    "helm.sh/hook-weight": "-15"
     "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
     {{- end }}
 ---
@@ -25,10 +25,10 @@ metadata:
    {{- if .Values.global.argocd }}
     argocd.argoproj.io/hook: PreSync
     argocd.argoproj.io/hook-delete-policy: HookSucceeded
-    argocd.argoproj.io/sync-wave: "-10"
+    argocd.argoproj.io/sync-wave: "-15"
     {{- else }}
     "helm.sh/hook": pre-upgrade
-    "helm.sh/hook-weight": "-10"
+    "helm.sh/hook-weight": "-15"
     "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
     {{- end }}
 rules:
@@ -48,10 +48,10 @@ metadata:
     {{- if .Values.global.argocd }}
     argocd.argoproj.io/hook: PreSync
     argocd.argoproj.io/hook-delete-policy: HookSucceeded
-    argocd.argoproj.io/sync-wave: "-10"
+    argocd.argoproj.io/sync-wave: "-15"
     {{- else }}
     "helm.sh/hook": pre-upgrade
-    "helm.sh/hook-weight": "-10"
+    "helm.sh/hook-weight": "-15"
     "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
     {{- end }}
 roleRef:
@@ -85,7 +85,7 @@ metadata:
     "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
     {{- end }}
 spec:
-  ttlSecondsAfterFinished: 14400  # Keep for 4 hours
+  ttlSecondsAfterFinished: 7200  # Keep for 2 hours
   backoffLimit: 2
   template:
     metadata:
