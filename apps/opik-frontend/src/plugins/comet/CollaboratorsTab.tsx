@@ -70,6 +70,7 @@ const CollaboratorsTab = () => {
 
   const [search, setSearch] = useState("");
   const [inviteSearchQuery, setInviteSearchQuery] = useState("");
+  const [isInvitePopoverOpen, setIsInvitePopoverOpen] = useState(false);
 
   const workspace = useWorkspace();
   const workspaceId = workspace?.workspaceId;
@@ -202,7 +203,9 @@ const CollaboratorsTab = () => {
           dimension="sm"
         />
         <DropdownMenu
+          open={isInvitePopoverOpen}
           onOpenChange={(open) => {
+            setIsInvitePopoverOpen(open);
             if (!open) {
               setInviteSearchQuery("");
             }
@@ -217,6 +220,7 @@ const CollaboratorsTab = () => {
           <InviteUsersPopover
             searchQuery={inviteSearchQuery}
             setSearchQuery={setInviteSearchQuery}
+            onClose={() => setIsInvitePopoverOpen(false)}
           />
         </DropdownMenu>
       </div>

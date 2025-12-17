@@ -13,11 +13,13 @@ const MIN_USERNAME_LENGTH = 3;
 interface InviteUsersPopoverProps {
   searchQuery: string;
   setSearchQuery: (query: string) => void;
+  onClose: () => void;
 }
 
 const InviteUsersPopover: React.FC<InviteUsersPopoverProps> = ({
   searchQuery,
   setSearchQuery,
+  onClose,
 }) => {
   const workspace = useWorkspace();
   const workspaceId = workspace?.workspaceId;
@@ -55,6 +57,7 @@ const InviteUsersPopover: React.FC<InviteUsersPopoverProps> = ({
       {
         onSuccess: () => {
           setSearchQuery("");
+          onClose();
         },
       },
     );
@@ -71,6 +74,7 @@ const InviteUsersPopover: React.FC<InviteUsersPopoverProps> = ({
       {
         onSuccess: () => {
           setSearchQuery("");
+          onClose();
         },
       },
     );
