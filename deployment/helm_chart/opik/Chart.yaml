@@ -30,23 +30,23 @@ appVersion: 1.9.52
 
 dependencies:
 - name: mysql
-  version: "11.1.9"
-  repository: "https://charts.bitnami.com/bitnami"
+  version: 1.0.6
+  repository: "https://comet-ml.github.io/comet-mysql-helm/"
   condition: mysql.enabled
 - name: zookeeper
-  version: 13.8.3
-  repository: https://charts.bitnami.com/bitnami
+  version: 0.3.7
+  repository: oci://registry-1.docker.io/cloudpirates
   condition: zookeeper.enabled
 - name: redis
-  version: "18.19.2"
-  repository: https://charts.bitnami.com/bitnami
+  version: 0.16.0
+  repository: oci://registry-1.docker.io/cloudpirates
   condition: redis.enabled
 - name: minio
-  version: 15.0.7
-  repository: https://charts.bitnami.com/bitnami
+  version: 0.5.6
+  repository: oci://registry-1.docker.io/cloudpirates
   condition: minio.enabled
 - name: altinity-clickhouse-operator
-  version: "0.25.4"
+  version: 0.25.4
   repository: https://docs.altinity.com/clickhouse-operator/
   condition: clickhouse.enabled
 - name: common
