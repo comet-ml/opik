@@ -3,7 +3,7 @@ import {
   getPermissionByType,
   isUserPermissionValid,
   updatePermissionByType,
-} from "@/lib/permissions";
+} from "@/plugins/comet/lib/permissions";
 import {
   ManagementPermissionsNames,
   UserPermission,
@@ -11,7 +11,7 @@ import {
 import {
   WORKSPACE_MEMBER_VALUE,
   WORKSPACE_OWNER_VALUE,
-} from "@/constants/permissions";
+} from "@/plugins/comet/constants/permissions";
 import { useLoggedInUserName } from "@/store/AppStore";
 
 export interface WorkspaceMemberPermission {

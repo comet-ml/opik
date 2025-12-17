@@ -1,7 +1,7 @@
 import {
   MANAGEMENT_PERMISSION,
   WORKSPACE_OWNER_VALUE,
-} from "@/constants/permissions";
+} from "@/plugins/comet/constants/permissions";
 import {
   ManagementPermissionsNames,
   UserPermission,

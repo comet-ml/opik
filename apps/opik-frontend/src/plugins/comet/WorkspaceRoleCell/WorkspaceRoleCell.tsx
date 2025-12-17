@@ -7,14 +7,14 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import CellWrapper from "@/components/shared/DataTableCells/CellWrapper";
-import useManageUsersRolePopover from "@/hooks/useManageUsersRolePopover";
 import useUserPermission from "@/plugins/comet/useUserPermission";
+import { getKeyForChangingRole } from "@/plugins/comet/lib/permissions";
 import { UserPermission, WorkspaceMember } from "@/plugins/comet/types";
 import useWorkspace from "@/plugins/comet/useWorkspace";
 import WorkspaceRolePopover from "@/plugins/comet/WorkspaceRolePopover";
 import { useUpdateWorkspaceUsersPermissionsMutation } from "@/plugins/comet/api/useUpdateWorkspaceUsersPermissionsMutation";
 import { useLoggedInUserName } from "@/store/AppStore";
-import { getKeyForChangingRole } from "@/lib/permissions";
+import useManageUsersRolePopover from "./useManageUsersRolePopover";
 
 const WorkspaceRoleCell = (context: CellContext<WorkspaceMember, string>) => {
   const value = context.getValue();

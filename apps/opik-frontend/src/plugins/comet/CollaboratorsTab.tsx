@@ -13,14 +13,17 @@ import { COLUMN_TYPE, ColumnData } from "@/types/shared";
 import { convertColumnDataToColumn } from "@/lib/table";
 import { formatDate } from "@/lib/date";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
-import { getPermissionByType, isUserPermissionValid } from "@/lib/permissions";
+import {
+  getPermissionByType,
+  isUserPermissionValid,
+} from "@/plugins/comet/lib/permissions";
 import {
   ManagementPermissionsNames,
   ORGANIZATION_ROLE_TYPE,
   WORKSPACE_ROLE_TYPE,
   WorkspaceMember,
 } from "./types";
-import WorkspaceRoleCell from "./WorkspaceRoleCell";
+import WorkspaceRoleCell from "./WorkspaceRoleCell/WorkspaceRoleCell";
 
 const COLUMNS_WIDTH_KEY = "workspace-members-columns-width";
 
