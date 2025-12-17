@@ -56,25 +56,30 @@ class TestMetricFactory:
 
     def test_build_json_schema_validator_metric(self):
         """Test building a json_schema_validator metric."""
-        params = {
-            "json_schema": {
-                "type": "object",
-                "properties": {
-                    "name": {"type": "string"}
-                }
-            }
-        }
+        # The metric reads schema from dataset items via schema_key parameter
+        metric_fn = MetricFactory.build("json_schema_validator", {}, "openai/gpt-4o")
+        
+        assert metric_fn.__name__ == "json_schema_validator"
+        assert callable(metric_fn)
+
+    def test_build_json_schema_validator_metric_with_custom_schema_key(self):
+        """Test building a json_schema_validator metric with custom schema_key."""
+        params = {"schema_key": "my_schema"}
         metric_fn = MetricFactory.build("json_schema_validator", params, "openai/gpt-4o")
         
         assert metric_fn.__name__ == "json_schema_validator"
         assert callable(metric_fn)
 
-    def test_build_json_schema_validator_without_schema_raises_error(self):
-        """Test that json_schema_validator without schema raises InvalidMetricError."""
-        with pytest.raises(InvalidMetricError) as exc_info:
-            MetricFactory.build("json_schema_validator", {}, "openai/gpt-4o")
+    def test_json_schema_validator_missing_schema_returns_zero(self):
+        """Test that json_schema_validator returns 0.0 when schema is missing from dataset item."""
+        metric_fn = MetricFactory.build("json_schema_validator", {}, "openai/gpt-4o")
         
-        assert "json_schema" in str(exc_info.value)
+        # Dataset item without json_schema key
+        dataset_item = {"other_field": "value"}
+        result = metric_fn(dataset_item, '{"name": "test"}')
+        
+        assert result.value == 0.0
+        assert "Missing schema" in result.reason
 
 
 class TestEqualsMetricExecution:

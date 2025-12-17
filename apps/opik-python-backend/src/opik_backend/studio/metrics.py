@@ -182,7 +182,7 @@ def _build_json_schema_validator_metric(params: Dict[str, Any], model: str) -> C
     def metric_fn(dataset_item, llm_output):
         schema = dataset_item.get(schema_key)
         if not schema:
-            from opik.evaluation.metrics import ScoreResult
+            from opik.evaluation.metrics.score_result import ScoreResult
             return ScoreResult(
                 value=0.0, 
                 name="json_schema_validator", 
