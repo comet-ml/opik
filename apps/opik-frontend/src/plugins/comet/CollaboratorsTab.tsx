@@ -110,16 +110,7 @@ const CollaboratorsTab = () => {
 
     const searchLower = search.toLowerCase();
 
-    const filteredMembers = search
-      ? workspaceMembers.filter((member) => {
-          return (
-            member.userName.toLowerCase().includes(searchLower) ||
-            member.email.toLowerCase().includes(searchLower)
-          );
-        })
-      : workspaceMembers;
-
-    return filteredMembers.map((member): WorkspaceMember => {
+    const mappedMembers = workspaceMembers.map((member): WorkspaceMember => {
       const userPermissions = permissionsData?.find(
         (permission) => permission.userName === member.userName,
       )?.permissions;
@@ -148,6 +139,16 @@ const CollaboratorsTab = () => {
         ...member,
       };
     });
+
+    return search
+      ? mappedMembers.filter((member) => {
+          return (
+            member.userName.toLowerCase().includes(searchLower) ||
+            member.email.toLowerCase().includes(searchLower) ||
+            member.role?.toLowerCase().includes(searchLower)
+          );
+        })
+      : mappedMembers;
   }, [workspaceMembers, permissionsData, organizationMembers, search]);
 
   const renderTable = () => {
@@ -173,7 +174,7 @@ const CollaboratorsTab = () => {
       <SearchInput
         searchText={search}
         setSearchText={setSearch}
-        placeholder="Search by name or email"
+        placeholder="Search by name, email, or role"
         className="mb-4 w-[320px]"
         dimension="sm"
       />
