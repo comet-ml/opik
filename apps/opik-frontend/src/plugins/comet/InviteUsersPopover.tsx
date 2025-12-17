@@ -2,11 +2,10 @@ import React from "react";
 import { Mail } from "lucide-react";
 import useCurrentOrganization from "@/plugins/comet/useCurrentOrganization";
 import useWorkspace from "@/plugins/comet/useWorkspace";
+import useUsernameAutocomplete from "@/plugins/comet/api/useUsernameAutocomplete";
+import { useInviteUsersMutation } from "@/plugins/comet/api/useInviteMembersMutation";
 import { DropdownMenuContent } from "@/components/ui/dropdown-menu";
 import SearchInput from "@/components/shared/SearchInput/SearchInput";
-import useUsernameAutocomplete from "./api/useUsernameAutocomplete";
-import { useInviteEmailMutation } from "./api/useInviteEmailMutation";
-import { useInviteUsernameMutation } from "./api/useInviteUsernameMutation";
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const MIN_USERNAME_LENGTH = 3;
@@ -43,35 +42,19 @@ const InviteUsersPopover: React.FC<InviteUsersPopoverProps> = ({
     },
   );
 
-  const inviteEmailMutation = useInviteEmailMutation();
-  const inviteUsernameMutation = useInviteUsernameMutation();
+  const inviteUsersMutation = useInviteUsersMutation();
 
   const hasEmailQuery = EMAIL_REGEX.test(searchQuery);
 
-  const handleEmailClick = () => {
-    if (!workspaceId || !hasEmailQuery) return;
-
-    inviteEmailMutation.mutate(
-      {
-        workspaceId,
-        email: searchQuery,
-      },
-      {
-        onSuccess: () => {
-          setSearchQuery("");
-          onClose();
-        },
-      },
-    );
-  };
-
-  const handleUsernameClick = (userName: string) => {
+  const handleInviteUser = (userName?: string) => {
     if (!workspaceId) return;
 
-    inviteUsernameMutation.mutate(
+    const userToInvite = userName ?? searchQuery;
+
+    inviteUsersMutation.mutate(
       {
         workspaceId,
-        userName,
+        users: [userToInvite],
       },
       {
         onSuccess: () => {
@@ -107,7 +90,7 @@ const InviteUsersPopover: React.FC<InviteUsersPopoverProps> = ({
         {users.map((user) => (
           <div
             key={user}
-            onClick={() => handleUsernameClick(user)}
+            onClick={() => handleInviteUser(user)}
             className="flex cursor-pointer items-center gap-3 rounded-sm px-3 py-2.5 transition-colors hover:bg-primary-foreground"
           >
             <div className="flex flex-1 flex-col">
@@ -117,7 +100,7 @@ const InviteUsersPopover: React.FC<InviteUsersPopoverProps> = ({
         ))}
         {showEmailRow && (
           <div
-            onClick={handleEmailClick}
+            onClick={() => handleInviteUser()}
             className="flex cursor-pointer items-center gap-3 rounded-sm px-3 py-2.5 transition-colors hover:bg-primary-foreground"
           >
             <div className="flex flex-1 flex-col">
