@@ -5,10 +5,7 @@ from dataclasses import dataclass
 from importlib import resources
 from typing import Any, Union
 
-try:  # pragma: no cover - optional dependency
-    import opik  # type: ignore
-except ImportError:  # pragma: no cover - fallback for tests
-    opik = None
+import opik
 
 from opik_optimizer.utils.dataset_utils import attach_uuids, dataset_suffix
 
@@ -60,9 +57,6 @@ def load_context7_dataset(test_mode: bool = False) -> DatasetResult:
 
     examples = _load_examples()
     dataset_name = _dataset_name(test_mode)
-
-    if opik is None:
-        return _ListDataset(dataset_name, examples)
 
     try:
         client = opik.Opik()

@@ -2,7 +2,8 @@ import json
 import logging
 import re
 from contextlib import contextmanager
-from typing import Any
+from functools import wraps
+from typing import Any, Callable, TypeVar, cast
 
 from rich import box
 from rich.console import Console, Group, RenderableType
@@ -14,6 +15,32 @@ from .utils import get_optimization_run_url_by_id
 from .api_objects import chat_prompt
 
 PANEL_WIDTH = 70
+
+F = TypeVar('F', bound=Callable[..., Any])
+
+
+def suppress_experiment_reporting(func: F) -> F:
+    """Decorator to suppress opik experiment result/link display."""
+    @wraps(func)
+    def wrapper(*args: Any, **kwargs: Any) -> Any:
+        from opik.evaluation import report
+
+        original_results: Callable[..., None] = report.display_experiment_results
+        original_link: Callable[..., None] = report.display_experiment_link
+
+        def noop(*args: Any, **kwargs: Any) -> None:
+            pass
+
+        report.display_experiment_results = noop  # type: ignore[assignment]
+        report.display_experiment_link = noop  # type: ignore[assignment]
+
+        try:
+            return func(*args, **kwargs)
+        finally:
+            report.display_experiment_results = original_results  # type: ignore[assignment]
+            report.display_experiment_link = original_link  # type: ignore[assignment]
+
+    return wrapper  # type: ignore[return-value]
 
 
 def safe_percentage_change(current: float, baseline: float) -> tuple[float, bool]:
@@ -42,7 +69,7 @@ def get_console(*args: Any, **kwargs: Any) -> Console:
 
 @contextmanager
 def convert_tqdm_to_rich(description: str | None = None, verbose: int = 1) -> Any:
-    """Context manager to convert tqdm to rich."""
+    """Context manager to convert tqdm to rich progress bars."""
     import opik.evaluation.engine.evaluation_tasks_executor
 
     def _tqdm_to_track(iterable: Any, desc: str, disable: bool, total: int) -> Any:
@@ -52,25 +79,12 @@ def convert_tqdm_to_rich(description: str | None = None, verbose: int = 1) -> An
         )
 
     original__tqdm = opik.evaluation.engine.evaluation_tasks_executor._tqdm
-    opik.evaluation.engine.evaluation_tasks_executor._tqdm = _tqdm_to_track
-
-    from opik.evaluation import report
-
-    # Store original functions
-    original_display_experiment_results = report.display_experiment_results
-    original_display_experiment_link = report.display_experiment_link
-
-    # Replace with no-ops
-    report.display_experiment_results = lambda *args, **kwargs: None
-    report.display_experiment_link = lambda *args, **kwargs: None
+    opik.evaluation.engine.evaluation_tasks_executor._tqdm = _tqdm_to_track  # type: ignore[assignment]
 
     try:
         yield
     finally:
-        # Restore everything
         opik.evaluation.engine.evaluation_tasks_executor._tqdm = original__tqdm
-        report.display_experiment_results = original_display_experiment_results
-        report.display_experiment_link = original_display_experiment_link
 
 
 @contextmanager
@@ -439,7 +453,8 @@ def display_result(
     # Handle both single ChatPrompt and dict of ChatPrompts
     if isinstance(prompt, dict):
         # Dictionary of prompts - display each with its key
-        for key, chat_p in prompt.items():
+        prompt_dict = cast(dict[str, chat_prompt.ChatPrompt], prompt)
+        for key, chat_p in prompt_dict.items():
             prompt_items = _display_chat_prompt_messages_and_tools(chat_p, key=key)
             content.extend(prompt_items)
     else:
@@ -490,15 +505,16 @@ def display_configuration(
         pass  # Skip prompt display
     elif isinstance(messages, dict):
         # Dictionary of ChatPrompts
-        if len(messages) == 1:
+        messages_dict = cast(dict[str, chat_prompt.ChatPrompt], messages)
+        if len(messages_dict) == 1:
             # Single-prompt optimization: display without key header
-            chat_p = list(messages.values())[0]
+            chat_p = list(messages_dict.values())[0]
             prompt_items = _display_chat_prompt_messages_and_tools(chat_p, key=None)
             for item in prompt_items:
                 console.print(item)
         else:
             # Multi-prompt optimization: display each with its key
-            for key, chat_p in messages.items():
+            for key, chat_p in messages_dict.items():
                 prompt_items = _display_chat_prompt_messages_and_tools(chat_p, key=key)
                 for item in prompt_items:
                     console.print(item)

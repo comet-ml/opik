@@ -1,9 +1,9 @@
 from typing import Any, TYPE_CHECKING
-from collections.abc import Callable
 
 
 from .... import task_evaluator, helpers
 from ....api_objects import chat_prompt
+from ....api_objects.types import MetricFunction
 import opik
 from opik import opik_context  # noqa: F401 - used in llm_task closure
 
@@ -16,7 +16,7 @@ def evaluate_bundle(
     bundle_messages: dict[str, list[dict[str, Any]]],
     prompts_metadata: dict[str, dict[str, Any]],
     dataset: opik.Dataset,
-    metric: Callable,
+    metric: MetricFunction,
     n_samples: int | None = None,
     dataset_item_ids: list[str] | None = None,
     experiment_config: dict | None = None,

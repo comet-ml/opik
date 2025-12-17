@@ -102,9 +102,9 @@ def create_improved_prompts_response_model(prompt_names: list[str]) -> type[Base
     # Create fields mapping prompt_name -> ImprovedPrompt
     fields = {name: (ImprovedPrompt, ...) for name in prompt_names}
 
-    DynamicModel = create_model(
+    DynamicModel = create_model(  # type: ignore[call-overload]
         "ImprovedPromptsResponse",
-        **fields,  # type: ignore[call-overload]
+        **fields,
     )
     DynamicModel.model_config = ConfigDict(extra="forbid")
 

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Any
-from collections.abc import Callable, Iterable
+from collections.abc import Iterable
 
 import logging
 
@@ -11,6 +11,7 @@ from opik import Dataset
 
 from ... import helpers, task_evaluator
 from ...api_objects import chat_prompt
+from ...api_objects.types import MetricFunction
 from ...agents import OptimizableAgent
 
 
@@ -43,7 +44,7 @@ class OpikGEPAAdapter(GEPAAdapter[OpikDataInst, dict[str, Any], dict[str, Any]])
         base_prompts: dict[str, chat_prompt.ChatPrompt],
         agent: OptimizableAgent,
         optimizer: Any,
-        metric: Callable[[dict[str, Any], str], Any],
+        metric: MetricFunction,
         dataset: Dataset,
         experiment_config: dict[str, Any] | None,
     ) -> None:
@@ -53,7 +54,7 @@ class OpikGEPAAdapter(GEPAAdapter[OpikDataInst, dict[str, Any], dict[str, Any]])
         self._metric = metric
         self._dataset = dataset
         self._experiment_config = experiment_config
-        self._metric_name = getattr(metric, "__name__", str(metric))
+        self._metric_name = metric.__name__
 
     def _rebuild_prompts_from_candidate(
         self, candidate: dict[str, str]
@@ -154,11 +155,11 @@ class OpikGEPAAdapter(GEPAAdapter[OpikDataInst, dict[str, Any], dict[str, Any]])
 
                 metric_result = self._metric(dataset_item, raw_output)
                 if hasattr(metric_result, "value"):
-                    score = float(metric_result.value)
+                    score = float(metric_result.value)  # type: ignore[arg-type]
                 elif hasattr(metric_result, "score"):
-                    score = float(metric_result.score)
+                    score = float(metric_result.score)  # type: ignore[arg-type]
                 else:
-                    score = float(metric_result)
+                    score = float(metric_result)  # type: ignore[arg-type]
 
                 outputs.append({"output": raw_output})
                 scores.append(score)

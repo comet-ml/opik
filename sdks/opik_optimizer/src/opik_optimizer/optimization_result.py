@@ -1,9 +1,13 @@
 """Module containing the OptimizationResult class."""
 
-from typing import Any
+from typing import Any, cast
 
 import pydantic
-import rich
+import rich.box
+import rich.console
+import rich.panel
+import rich.table
+import rich.text
 
 from .reporting_utils import (
     _format_message_content,
@@ -28,8 +32,9 @@ def _format_prompt_for_plaintext(
 ) -> str:
     """Format a prompt (single or dict) for plain text display."""
     if isinstance(prompt, dict):
+        prompt_dict = cast(dict[str, chat_prompt.ChatPrompt], prompt)
         parts = []
-        for key, chat_p in prompt.items():
+        for key, chat_p in prompt_dict.items():
             parts.append(f"[{key}]")
             for msg in chat_p.get_messages():
                 role = msg.get("role", "unknown")
@@ -323,7 +328,8 @@ class OptimizationResult(pydantic.BaseModel):
             # Handle both single ChatPrompt and dict of ChatPrompts
             if isinstance(self.prompt, dict):
                 # Dictionary of prompts
-                for key, chat_p in self.prompt.items():
+                prompt_dict = cast(dict[str, chat_prompt.ChatPrompt], self.prompt)
+                for key, chat_p in prompt_dict.items():
                     # Add key header
                     key_header = rich.text.Text(f"[{key}]", style="bold yellow")
                     chat_group_items.append(key_header)

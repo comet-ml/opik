@@ -59,10 +59,10 @@ def create_few_shot_response_model(prompt_names: list[str]) -> type[BaseModel]:
     custom JSON schema that satisfies OpenAI's structured output requirements.
     """
     fields = {name: (list[types.Message], ...) for name in prompt_names}
-    DynamicModel = create_model(
+    DynamicModel = create_model(  # type: ignore[call-overload]
         "FewShotPromptMessages",
         __base__=FewShotPromptMessagesBase,
-        **fields,  # type: ignore[call-overload]
+        **fields,
     )
     DynamicModel.model_config = ConfigDict(extra="forbid")
 

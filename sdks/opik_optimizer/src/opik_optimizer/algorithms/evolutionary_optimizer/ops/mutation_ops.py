@@ -411,7 +411,7 @@ def deap_mutation(
             mutated_data[prompt_name] = copy.deepcopy(messages)
 
     # Create new Individual
-    new_individual = creator.Individual(mutated_data)
+    new_individual = creator.Individual(mutated_data)  # type: ignore[attr-defined]
     setattr(new_individual, "prompts_metadata", copy.deepcopy(prompts_metadata))
 
     return new_individual

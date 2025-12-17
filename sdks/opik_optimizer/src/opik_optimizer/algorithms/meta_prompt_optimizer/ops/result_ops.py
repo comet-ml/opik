@@ -4,11 +4,11 @@ Result formatting operations for the Meta-Prompt Optimizer.
 This module contains functions for calculating improvements and creating result objects.
 """
 
-from typing import Any
-from collections.abc import Callable
+from typing import Any, cast
 import copy
 
 from ....api_objects import chat_prompt
+from ....api_objects.types import MetricFunction
 from ....optimization_result import OptimizationResult
 from ....base_optimizer import OptimizationRound
 
@@ -73,7 +73,8 @@ def create_round_data(
             tool_entries = copy.deepcopy(list(prompt.tools or []))
 
         if isinstance(prompt, dict):
-            prompt_payload: Any = {name: p.get_messages() for name, p in prompt.items()}
+            prompt_dict = cast(dict[str, chat_prompt.ChatPrompt], prompt)
+            prompt_payload: Any = {name: p.get_messages() for name, p in prompt_dict.items()}
         else:
             prompt_payload = prompt.get_messages()
 
@@ -99,7 +100,7 @@ def create_round_data(
 
 def create_result(
     optimizer_class_name: str,
-    metric: Callable,
+    metric: MetricFunction,
     prompt: dict[str, chat_prompt.ChatPrompt] | chat_prompt.ChatPrompt,
     initial_prompt: dict[str, chat_prompt.ChatPrompt] | chat_prompt.ChatPrompt,
     best_score: float,
@@ -133,7 +134,7 @@ def create_result(
     details = {
         "rounds": rounds,
         "total_rounds": len(rounds),
-        "metric_name": getattr(metric, "__name__", str(metric)),
+        "metric_name": metric.__name__,
     }
 
     return OptimizationResult(
@@ -142,7 +143,7 @@ def create_result(
         score=best_score,
         initial_prompt=initial_prompt,
         initial_score=initial_score,
-        metric_name=getattr(metric, "__name__", str(metric)),
+        metric_name=metric.__name__,
         details=details,
         llm_calls=llm_call_counter,
         tool_calls=tool_call_counter,

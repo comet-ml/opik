@@ -1,7 +1,6 @@
 import logging
 import sys
 from typing import Any
-from collections.abc import Callable
 
 import opik
 from opik import Dataset
@@ -13,13 +12,11 @@ from ...reporting_utils import (
     suppress_opik_logs,
 )
 from ...api_objects import chat_prompt
-from ...api_objects.types import rebuild_content_with_new_text
+from ...api_objects.types import rebuild_content_with_new_text, MetricFunction
 from ...optimization_result import OptimizationResult
 from ...agents import OptimizableAgent, LiteLLMAgent
 from ...utils import (
     optimization_context,
-    disable_experiment_reporting,
-    enable_experiment_reporting,
     unique_ordered_by_key,
 )
 from . import reporting as gepa_reporting
@@ -145,11 +142,11 @@ class GepaOptimizer(BaseOptimizer):
     # Base optimizer overrides
     # ------------------------------------------------------------------
 
-    def optimize_prompt(
+    def optimize_prompt(  # type: ignore[override]
         self,
         prompt: chat_prompt.ChatPrompt | dict[str, chat_prompt.ChatPrompt],
         dataset: Dataset,
-        metric: Callable,
+        metric: MetricFunction,
         agent: OptimizableAgent | None = None,
         experiment_config: dict | None = None,
         n_samples: int | None = None,
@@ -304,8 +301,6 @@ class GepaOptimizer(BaseOptimizer):
 
         opik_client = opik.Opik(project_name=self.project_name)
 
-        disable_experiment_reporting()
-
         # Hold the optimization context open for the entire run (other optimizers already
         # behave like this). The original `with ...` block exited immediately, which
         # marked GEPA optimizations as completed before any work happened.
@@ -453,7 +448,6 @@ class GepaOptimizer(BaseOptimizer):
                 # until we put GEPA behind a native Opik adapter that can manage its lifecycle
                 # without manual enter/exit plumbing.
                 optimization_cm.__exit__(exc_type, exc_val, exc_tb)
-            enable_experiment_reporting()
 
         # ------------------------------------------------------------------
         # Rescoring & result assembly

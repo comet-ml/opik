@@ -4,10 +4,10 @@ import opik
 from opik.evaluation.evaluation_result import EvaluationResult
 
 from typing import Any
-from collections.abc import Callable
 from ... import _llm_calls
 from ...base_optimizer import BaseOptimizer
 from ...api_objects import chat_prompt
+from ...api_objects.types import MetricFunction
 from ...agents import OptimizableAgent, LiteLLMAgent
 
 from opik_optimizer.optimization_result import OptimizationResult
@@ -207,7 +207,7 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
         original_prompts: dict[str, chat_prompt.ChatPrompt],
         dataset: opik.Dataset,
         validation_dataset: opik.Dataset | None,
-        metric: Callable,
+        metric: MetricFunction,
         agent: OptimizableAgent,
         optimization_id: str,
         n_samples: int | None,
@@ -298,11 +298,11 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
 
         return improved_chat_prompts, improved_score, improved_experiment_result
 
-    def optimize_prompt(
+    def optimize_prompt(  # type: ignore[override]
         self,
         prompt: chat_prompt.ChatPrompt | dict[str, chat_prompt.ChatPrompt],
         dataset: opik.Dataset,
-        metric: Callable[..., Any],
+        metric: MetricFunction,
         agent: OptimizableAgent | None = None,
         experiment_config: dict | None = None,
         n_samples: int | None = None,
@@ -359,7 +359,7 @@ class HierarchicalReflectiveOptimizer(BaseOptimizer):
 
         optimization = self.opik_client.create_optimization(
             dataset_name=dataset.name,
-            objective_name=getattr(metric, "__name__", str(metric)),
+            objective_name=metric.__name__,
             metadata=self._build_optimization_metadata(),
             name=self.name,
             optimization_id=optimization_id,

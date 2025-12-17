@@ -16,6 +16,7 @@ from opik import Dataset
 from ...base_optimizer import BaseOptimizer
 from ...agents import OptimizableAgent, LiteLLMAgent
 from ...api_objects import chat_prompt
+from ...api_objects.types import MetricFunction
 from ...optimization_result import OptimizationResult
 from .parameter_search_space import ParameterSearchSpace
 from .search_space_types import ParameterType
@@ -82,7 +83,7 @@ class ParameterOptimizer(BaseOptimizer):
         self,
         prompt: chat_prompt.ChatPrompt | dict[str, chat_prompt.ChatPrompt],
         dataset: Dataset,
-        metric: Callable,
+        metric: MetricFunction,
         agent: OptimizableAgent | None = None,
         experiment_config: dict | None = None,
         n_samples: int | None = None,
@@ -104,7 +105,7 @@ class ParameterOptimizer(BaseOptimizer):
         self,
         prompt: chat_prompt.ChatPrompt | dict[str, chat_prompt.ChatPrompt],
         dataset: Dataset,
-        metric: Callable[[Any, Any], float],
+        metric: MetricFunction,
         parameter_space: ParameterSearchSpace | Mapping[str, Any],
         validation_dataset: Dataset | None = None,
         experiment_config: dict | None = None,
@@ -218,7 +219,7 @@ class ParameterOptimizer(BaseOptimizer):
             base_p.model_kwargs = merged_kwargs
             base_prompts[name] = base_p
 
-        metric_name = getattr(metric, "__name__", str(metric))
+        metric_name = metric.__name__
 
         # Create optimization run
         optimization = self.opik_client.create_optimization(

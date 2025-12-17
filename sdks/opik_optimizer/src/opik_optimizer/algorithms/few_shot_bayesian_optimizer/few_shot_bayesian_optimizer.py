@@ -16,6 +16,7 @@ from opik import Dataset, opik_context
 
 from ... import base_optimizer, _llm_calls, helpers
 from ...api_objects import chat_prompt
+from ...api_objects.types import MetricFunction
 from ...agents import LiteLLMAgent, OptimizableAgent
 from ... import _throttle, optimization_result, task_evaluator, utils
 from . import reporting, types
@@ -367,7 +368,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         agent: OptimizableAgent,
         dataset: Dataset,
         validation_dataset: Dataset | None,
-        metric: Callable,
+        metric: MetricFunction,
         baseline_score: float,
         n_trials: int = 10,
         optimization_id: str | None = None,
@@ -669,7 +670,7 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         self,
         prompt: chat_prompt.ChatPrompt | dict[str, chat_prompt.ChatPrompt],
         dataset: Dataset,
-        metric: Callable,
+        metric: MetricFunction,
         agent: OptimizableAgent | None = None,
         experiment_config: dict | None = None,
         n_samples: int | None = None,
@@ -754,8 +755,6 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
             validation_dataset if validation_dataset is not None else dataset
         )
 
-        utils.disable_experiment_reporting()
-
         # Step 1. Compute the baseline evaluation
         with reporting.display_evaluation(
             message="First we will establish the baseline performance:",
@@ -816,7 +815,6 @@ class FewShotBayesianOptimizer(base_optimizer.BaseOptimizer):
         if optimization:
             self._update_optimization(optimization, status="completed")
 
-        utils.enable_experiment_reporting()
         return result
 
     def _build_task_from_messages(

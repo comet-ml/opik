@@ -15,6 +15,7 @@ import random
 from pydantic import BaseModel, Field
 
 from ....api_objects import chat_prompt, types
+from ....api_objects.types import MetricFunction
 from .... import _llm_calls
 from ....base_optimizer import OptimizationRound
 from ..prompts import (
@@ -204,7 +205,7 @@ def generate_candidate_prompts(
     best_score: float,
     round_num: int,
     previous_rounds: list[OptimizationRound],
-    metric: Callable,
+    metric: MetricFunction,
     build_history_context_fn: Callable,
     get_task_context_fn: Callable,
     optimization_id: str | None = None,
@@ -368,7 +369,7 @@ def generate_candidate_prompts(
                 )
 
             # Sanitize generated prompts to remove data leakage
-            metric_name = getattr(metric, "__name__", str(metric))
+            metric_name = metric.__name__
             json_result = sanitize_generated_prompts(json_result, metric_name)
 
             # Extract and log valid prompts
@@ -454,7 +455,7 @@ def generate_agent_bundle_candidates(
     best_score: float,
     round_num: int,
     previous_rounds: list[OptimizationRound],
-    metric: Callable,
+    metric: MetricFunction,
     build_history_context_fn: Callable,
     get_task_context_fn: Callable,
     optimization_id: str | None = None,
@@ -629,7 +630,7 @@ def generate_synthesis_prompts(
     current_prompt: chat_prompt.ChatPrompt,
     best_score: float,
     previous_rounds: list[OptimizationRound],
-    metric: Callable,
+    metric: MetricFunction,
     get_task_context_fn: Callable,
     optimization_id: str | None = None,
     project_name: str | None = None,

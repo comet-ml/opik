@@ -36,7 +36,7 @@ def compute_sensitivity_from_trials(
         scores: list[float] = []
 
         for trial in trials:
-            if trial.value is None:
+            if trial.value is None:  # type: ignore[attr-defined]
                 continue
 
             raw_value = trial.params.get(param_name)
@@ -48,7 +48,7 @@ def compute_sensitivity_from_trials(
                 continue
 
             values.append(processed)
-            scores.append(float(trial.value))
+            scores.append(float(trial.value))  # type: ignore[attr-defined]
 
         if len(values) < 2 or len(set(values)) == 1:
             sensitivities[param_name] = 0.0

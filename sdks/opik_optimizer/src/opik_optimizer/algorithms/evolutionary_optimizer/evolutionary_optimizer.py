@@ -3,7 +3,6 @@ import json
 import logging
 import random
 from typing import Any, cast
-from collections.abc import Callable
 import sys
 import warnings
 
@@ -18,6 +17,7 @@ from opik.environment import get_tqdm_for_current_environment
 
 from opik_optimizer.base_optimizer import BaseOptimizer, OptimizationRound
 from ...api_objects import chat_prompt
+from ...api_objects.types import MetricFunction
 from opik_optimizer.optimization_result import OptimizationResult
 from opik_optimizer.agents import OptimizableAgent, LiteLLMAgent
 
@@ -396,7 +396,7 @@ class EvolutionaryOptimizer(BaseOptimizer):
         self,
         prompt: chat_prompt.ChatPrompt | dict[str, chat_prompt.ChatPrompt],
         dataset: opik.Dataset,
-        metric: Callable,
+        metric: MetricFunction,
         agent: OptimizableAgent | None = None,
         experiment_config: dict | None = None,
         n_samples: int | None = None,

@@ -16,6 +16,7 @@ from types import TracebackType
 
 
 import opik
+import opik.config
 from opik.api_objects.opik_client import Opik
 from opik.api_objects.optimization import Optimization
 
@@ -174,33 +175,6 @@ def random_chars(n: int) -> str:
     return "".join(random.choice(string.ascii_letters) for _ in range(n))
 
 
-def disable_experiment_reporting() -> None:
-    import opik.evaluation.report
-
-    opik.evaluation.report._patch_display_experiment_results = (
-        opik.evaluation.report.display_experiment_results
-    )
-    opik.evaluation.report._patch_display_experiment_link = (
-        opik.evaluation.report.display_experiment_link
-    )
-    opik.evaluation.report.display_experiment_results = lambda *args, **kwargs: None
-    opik.evaluation.report.display_experiment_link = lambda *args, **kwargs: None
-
-
-def enable_experiment_reporting() -> None:
-    import opik.evaluation.report
-
-    try:
-        opik.evaluation.report.display_experiment_results = (
-            opik.evaluation.report._patch_display_experiment_results
-        )
-        opik.evaluation.report.display_experiment_link = (
-            opik.evaluation.report._patch_display_experiment_link
-        )
-    except AttributeError:
-        pass
-
-
 def json_to_dict(json_str: str) -> Any:
     cleaned_json_string = json_str.strip()
 
@@ -357,7 +331,7 @@ def function_to_tool_definition(
     return {
         "type": "function",
         "function": {
-            "name": func.__name__,
+            "name": getattr(func, "__name__", "<unknown>"),
             "description": doc.strip(),
             "parameters": {
                 "type": "object",

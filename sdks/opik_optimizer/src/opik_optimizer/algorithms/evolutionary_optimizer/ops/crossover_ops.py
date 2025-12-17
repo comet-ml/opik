@@ -148,8 +148,8 @@ def deap_crossover(ind1: Any, ind2: Any, verbose: int = 1) -> tuple[Any, Any]:
             child1_data[prompt_name] = copy.deepcopy(ind2[prompt_name])
             child2_data[prompt_name] = copy.deepcopy(ind2[prompt_name])
 
-    child1 = creator.Individual(child1_data)
-    child2 = creator.Individual(child2_data)
+    child1 = creator.Individual(child1_data)  # type: ignore[attr-defined]
+    child2 = creator.Individual(child2_data)  # type: ignore[attr-defined]
 
     # Preserve prompts_metadata from parents (merge, preferring ind1)
     metadata_1 = getattr(ind1, "prompts_metadata", {})
@@ -259,8 +259,8 @@ def llm_deap_crossover(
                 child1_data[prompt_name] = copy.deepcopy(ind2[prompt_name])
                 child2_data[prompt_name] = copy.deepcopy(ind2[prompt_name])
 
-        child1 = creator.Individual(child1_data)
-        child2 = creator.Individual(child2_data)
+        child1 = creator.Individual(child1_data)  # type: ignore[attr-defined]
+        child2 = creator.Individual(child2_data)  # type: ignore[attr-defined]
 
         # Preserve prompts_metadata from parents (merge, preferring ind1)
         metadata_1 = getattr(ind1, "prompts_metadata", {})
