@@ -999,25 +999,29 @@ export class Datasets {
     }
 
     /**
-     * Delete dataset items
+     * Delete dataset items using one of two modes:
+     * 1. **Delete by IDs**: Provide 'item_ids' to delete specific items by their IDs
+     * 2. **Delete by filters**: Provide 'dataset_id' with optional 'filters' to delete items matching criteria
+     *
+     * When using filters, an empty 'filters' array will delete all items in the specified dataset.
      *
      * @param {OpikApi.DatasetItemsDelete} request
      * @param {Datasets.RequestOptions} requestOptions - Request-specific configuration.
      *
+     * @throws {@link OpikApi.BadRequestError}
+     *
      * @example
-     *     await client.datasets.deleteDatasetItems({
-     *         itemIds: ["item_ids"]
-     *     })
+     *     await client.datasets.deleteDatasetItems()
      */
     public deleteDatasetItems(
-        request: OpikApi.DatasetItemsDelete,
+        request: OpikApi.DatasetItemsDelete = {},
         requestOptions?: Datasets.RequestOptions,
     ): core.HttpResponsePromise<void> {
         return core.HttpResponsePromise.fromPromise(this.__deleteDatasetItems(request, requestOptions));
     }
 
     private async __deleteDatasetItems(
-        request: OpikApi.DatasetItemsDelete,
+        request: OpikApi.DatasetItemsDelete = {},
         requestOptions?: Datasets.RequestOptions,
     ): Promise<core.WithRawResponse<void>> {
         const _response = await core.fetcher({
@@ -1052,11 +1056,16 @@ export class Datasets {
         }
 
         if (_response.error.reason === "status-code") {
-            throw new errors.OpikApiError({
-                statusCode: _response.error.statusCode,
-                body: _response.error.body,
-                rawResponse: _response.rawResponse,
-            });
+            switch (_response.error.statusCode) {
+                case 400:
+                    throw new OpikApi.BadRequestError(_response.error.body, _response.rawResponse);
+                default:
+                    throw new errors.OpikApiError({
+                        statusCode: _response.error.statusCode,
+                        body: _response.error.body,
+                        rawResponse: _response.rawResponse,
+                    });
+            }
         }
 
         switch (_response.error.reason) {
