@@ -9,7 +9,7 @@ import { useInviteEmailMutation } from "./api/useInviteEmailMutation";
 import { useInviteUsernameMutation } from "./api/useInviteUsernameMutation";
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-
+const MIN_USERNAME_LENGTH = 3;
 interface InviteUsersPopoverProps {
   searchQuery: string;
   setSearchQuery: (query: string) => void;
@@ -33,7 +33,9 @@ const InviteUsersPopover: React.FC<InviteUsersPopoverProps> = ({
       excludedWorkspaceId: workspaceId || "",
     },
     {
-      enabled: Boolean(searchQuery && organizationId),
+      enabled:
+        Boolean(searchQuery && organizationId) &&
+        searchQuery.length >= MIN_USERNAME_LENGTH,
     },
   );
 
