@@ -6144,6 +6144,8 @@ class DatasetsResourceTest {
                             FieldType.STRING, Operator.NOT_EQUAL, null, "sql_test")),
                     arguments(new ExperimentsComparisonFilter("sql_tag",
                             FieldType.STRING, Operator.CONTAINS, null, "sql_")),
+                    arguments(new ExperimentsComparisonFilter("sql_urls",
+                            FieldType.LIST, Operator.CONTAINS, null, "sql_match")),
                     arguments(new ExperimentsComparisonFilter("json_node",
                             FieldType.DICTIONARY, Operator.EQUAL, "test2", "12338")),
                     arguments(new ExperimentsComparisonFilter("json_node",
@@ -6329,6 +6331,8 @@ class DatasetsResourceTest {
                                 {
                                     put("sql_tag", JsonUtils.readTree("sql_test"));
                                     put("sql_rate", JsonUtils.readTree(100));
+                                    put("sql_urls", JsonUtils.readTree(List.of("https://example.com",
+                                            "https://test.org", "https://sql_match.io")));
                                     put("input", JsonUtils
                                             .getJsonNodeFromString(
                                                     JsonUtils.writeValueAsString(Map.of("input", "sql_cost"))));
@@ -6611,12 +6615,7 @@ class DatasetsResourceTest {
                             field,
                             FieldType.DATE_TIME.getQueryParamType(),
                             Operator.EQUAL.getQueryParamOperator(),
-                            Instant.now().toString())),
-                    Arguments.of(template.formatted(
-                            field,
-                            FieldType.LIST.getQueryParamType(),
-                            Operator.CONTAINS.getQueryParamOperator(),
-                            RandomStringUtils.randomAlphanumeric(10))));
+                            Instant.now().toString())));
         }
     }
 

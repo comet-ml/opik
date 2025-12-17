@@ -57,6 +57,7 @@ public enum FilterStrategy {
                 case STRING -> "JSON_VALUE(%s, :dynamicJsonPath%%1$d)".formatted(columnName);
                 case NUMBER -> "toFloat64OrNull(JSON_VALUE(%s, :dynamicJsonPath%%1$d))".formatted(columnName);
                 case DICTIONARY -> columnName;
+                case LIST -> "JSONExtract(%s, :dynamicJsonPath%%1$d, 'Array(String)')".formatted(columnName);
                 default -> throw new IllegalArgumentException("Invalid field type: " + field.getType());
             };
         }
@@ -70,6 +71,7 @@ public enum FilterStrategy {
                 case STRING -> "data[:dynamicField%1$d]";
                 case NUMBER -> "toFloat64OrNull(data[:dynamicField%1$d])";
                 case DICTIONARY -> "data[:dynamicField%1$d]";
+                case LIST -> "JSONExtract(data[:dynamicField%1$d], 'Array(String)')";
                 default -> throw new IllegalArgumentException("Invalid field type: " + field.getType());
             };
         }
@@ -80,6 +82,7 @@ public enum FilterStrategy {
             case STRING -> "JSON_VALUE(data[:dynamicField%1$d], '$')";
             case DICTIONARY -> "data[:dynamicField%1$d]";
             case NUMBER -> "toFloat64OrNull(JSON_VALUE(data[:dynamicField%1$d], '$'))";
+            case LIST -> "JSONExtract(data[:dynamicField%1$d], 'Array(String)')";
             default -> throw new IllegalArgumentException("Invalid field type: " + field.getType());
         };
     }
