@@ -77,18 +77,16 @@ services:
     pull_policy: always
     hostname: zookeeper
     environment:
-      ZOO_MY_ID: 1
-      ZOO_SERVERS: zookeeper=zookeeper:2888:3888;2181
-      ZOO_DATA_DIR: /bitnami/zookeeper/data
-      ZOO_DATA_LOG_DIR: /bitnami/zookeeper/dataLog
-      ZK_HEAP_SIZE: 512M
+      JVMFLAGS: "-Xmx512m"
+      ZOO_4LW_COMMANDS_WHITELIST: "srvr,ruok"
     healthcheck:
-      test: [ "CMD", "nc", "-z", "localhost", "2181" ]
-      interval: 1s
-      timeout: 1s
-      retries: 300
+      test: [ "CMD-SHELL", "echo ruok | nc localhost 2181 | grep -q imok" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
     volumes:
-      - zookeeper:/bitnami/zookeeper
+      - zookeeper:/data
 
   minio:
     image: minio/minio:RELEASE.2025-03-12T18-04-18Z

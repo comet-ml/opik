@@ -52,7 +52,8 @@ public class ClickHouseContainerUtils {
                 .withExposedPorts(2181)
                 .withNetworkAliases("zookeeper")
                 .withNetwork(network)
-                .withReuse(reusable);
+                .withReuse(reusable)
+                .withEnv("JVMFLAGS", "-Xmx512m");
 
         CONTAINERS.add(container);
 
