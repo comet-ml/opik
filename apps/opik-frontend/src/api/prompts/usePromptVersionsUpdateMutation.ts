@@ -31,11 +31,6 @@ export default function usePromptVersionsUpdateMutation() {
 
   return useMutation({
     mutationFn: updatePromptVersions,
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["prompt-versions"] });
-      queryClient.invalidateQueries({ queryKey: ["prompt-version"] });
-      queryClient.invalidateQueries({ queryKey: ["prompt"] });
-    },
     onError: (error: AxiosError) => {
       const message = get(
         error,
@@ -48,6 +43,11 @@ export default function usePromptVersionsUpdateMutation() {
         description: message,
         variant: "destructive",
       });
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ["prompt-versions"] });
+      queryClient.invalidateQueries({ queryKey: ["prompt-version"] });
+      queryClient.invalidateQueries({ queryKey: ["prompt"] });
     },
   });
 }
