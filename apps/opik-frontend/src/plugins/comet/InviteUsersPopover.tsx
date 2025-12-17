@@ -68,7 +68,7 @@ const InviteUsersPopover: React.FC<InviteUsersPopoverProps> = ({
   const renderUserList = () => {
     if (!searchQuery) {
       return (
-        <div className="comet-body-s flex h-32 items-center justify-center text-muted-slate">
+        <div className="comet-body-s flex h-full items-center justify-center text-muted-slate">
           Start typing to search for users
         </div>
       );
@@ -79,14 +79,14 @@ const InviteUsersPopover: React.FC<InviteUsersPopoverProps> = ({
 
     if (!hasResults && !showEmailRow) {
       return (
-        <div className="comet-body-s flex h-32 items-center justify-center text-muted-slate">
+        <div className="comet-body-s flex h-full items-center justify-center text-muted-slate">
           No users found
         </div>
       );
     }
 
     return (
-      <div className="max-h-[300px] space-y-1 overflow-y-auto">
+      <div className="h-full space-y-1 overflow-y-auto">
         {users.map((user) => (
           <div
             key={user}
@@ -126,7 +126,7 @@ const InviteUsersPopover: React.FC<InviteUsersPopoverProps> = ({
           setSearchText={setSearchQuery}
           placeholder="Search"
         />
-        {renderUserList()}
+        <div className="h-[300px]">{renderUserList()}</div>
       </div>
     </DropdownMenuContent>
   );
