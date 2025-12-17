@@ -330,6 +330,9 @@ navigation:
           - page: Alerts
             path: docs/production/alerts.mdx
             slug: alerts
+          - page: Dashboards
+            path: docs/production/dashboards.mdx
+            slug: dashboards
       - section: Configuration
         slug: /configuration
         contents:
