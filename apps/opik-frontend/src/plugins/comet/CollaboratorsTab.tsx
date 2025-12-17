@@ -162,14 +162,20 @@ const CollaboratorsTab = () => {
 
     return search
       ? mappedMembers.filter((member) => {
-        return (
-          member.userName?.toLowerCase().includes(searchLower) ||
-          member.email.toLowerCase().includes(searchLower) ||
-          member.role?.toLowerCase().includes(searchLower)
-        );
-      })
+          return (
+            member.userName?.toLowerCase().includes(searchLower) ||
+            member.email.toLowerCase().includes(searchLower) ||
+            member.role?.toLowerCase().includes(searchLower)
+          );
+        })
       : mappedMembers;
-  }, [workspaceMembers, invitedMembers, permissionsData, organizationMembers, search]);
+  }, [
+    workspaceMembers,
+    invitedMembers,
+    permissionsData,
+    organizationMembers,
+    search,
+  ]);
 
   const renderTable = () => {
     if (isPending || isPermissionsPending || isInvitedMembersPending) {

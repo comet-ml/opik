@@ -31,7 +31,15 @@ const SidebarInviteDevButton: React.FC<SidebarInviteDevButtonProps> = ({
   };
 
   return (
-    <DropdownMenu open={open} onOpenChange={setOpen}>
+    <DropdownMenu
+      open={open}
+      onOpenChange={(open) => {
+        setOpen(open);
+        if (!open) {
+          setSearchQuery("");
+        }
+      }}
+    >
       <DropdownMenuTrigger asChild>
         <div>
           <SidebarMenuItem
