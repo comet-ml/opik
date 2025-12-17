@@ -11940,7 +11940,7 @@ components:
           - openrouter
           - vertex-ai
           - custom-llm
-          - opik-builtin
+          - opik-free
         api_key:
           type: string
         name:
@@ -12004,7 +12004,7 @@ components:
           - openrouter
           - vertex-ai
           - custom-llm
-          - opik-builtin
+          - opik-free
         api_key:
           type: string
         name:
@@ -12064,7 +12064,7 @@ components:
           - openrouter
           - vertex-ai
           - custom-llm
-          - opik-builtin
+          - opik-free
         api_key:
           type: string
         name:
@@ -13581,7 +13581,6 @@ components:
       - openaiProviderEnabled
       - openrouterProviderEnabled
       - opikAIEnabled
-      - opikbuiltinProviderEnabled
       - optimizationStudioEnabled
       - pythonEvaluatorEnabled
       - spanLlmAsJudgeEnabled
@@ -13628,8 +13627,6 @@ components:
         vertexaiProviderEnabled:
           type: boolean
         customllmProviderEnabled:
-          type: boolean
-        opikbuiltinProviderEnabled:
           type: boolean
         collaboratorsTabEnabled:
           type: boolean

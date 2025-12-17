@@ -21,10 +21,10 @@ import com.comet.opik.infrastructure.job.JobModule;
 import com.comet.opik.infrastructure.llm.LlmModule;
 import com.comet.opik.infrastructure.llm.antropic.AnthropicModule;
 import com.comet.opik.infrastructure.llm.customllm.CustomLlmModule;
+import com.comet.opik.infrastructure.llm.freemodel.FreeModelModule;
 import com.comet.opik.infrastructure.llm.gemini.GeminiModule;
 import com.comet.opik.infrastructure.llm.openai.OpenAIModule;
 import com.comet.opik.infrastructure.llm.openrouter.OpenRouterModule;
-import com.comet.opik.infrastructure.llm.opikbuiltin.OpikBuiltinModule;
 import com.comet.opik.infrastructure.llm.vertexai.VertexAIModule;
 import com.comet.opik.infrastructure.ratelimit.RateLimitModule;
 import com.comet.opik.infrastructure.redis.RedisModule;
@@ -98,7 +98,7 @@ public class OpikApplication extends Application<OpikConfiguration> {
                         new ConfigurationModule(), new CacheModule(), new JobModule(), new AnthropicModule(),
                         new GeminiModule(), new OpenAIModule(), new OpenRouterModule(), new LlmModule(),
                         new AwsModule(), new UsageLimitModule(), new VertexAIModule(), new CustomLlmModule(),
-                        new OpikBuiltinModule())
+                        new FreeModelModule())
                 .installers(JobGuiceyInstaller.class)
                 .listen(new OpikGuiceyLifecycleEventListener(), new EventListenerRegistrar())
                 .enableAutoConfig()
