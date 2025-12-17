@@ -588,7 +588,7 @@ export const EXPLAINERS_MAP: Record<EXPLAINER_ID, Explainer> = {
   [EXPLAINER_ID.what_are_dashboards]: {
     id: EXPLAINER_ID.what_are_dashboards,
     description:
-      "Set up a new dashboard to organize, isolate, and monitor different scenarios.",
+      "Set up dashboards to monitor quality, cost, and performance of your projects and share experiment results",
     docLink: "/production/dashboards",
   },
   [EXPLAINER_ID.whats_the_optimization_studio]: {
