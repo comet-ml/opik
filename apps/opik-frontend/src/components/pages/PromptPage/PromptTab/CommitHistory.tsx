@@ -9,6 +9,8 @@ import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/use-toast";
 import { PromptVersion } from "@/types/prompts";
 import ColoredTag from "@/components/shared/ColoredTag/ColoredTag";
+import TagListTooltipContent from "@/components/shared/TagListTooltipContent/TagListTooltipContent";
+import { useVisibleTags } from "@/hooks/useVisibleTags";
 
 interface CommitHistoryProps {
   versions: PromptVersion[];
@@ -17,6 +19,102 @@ interface CommitHistoryProps {
   onRestoreVersionClick: (version: PromptVersion) => void;
   latestVersionId?: string;
 }
+
+interface VersionTagsProps {
+  tags: string[];
+}
+
+interface VersionActionsProps {
+  version: PromptVersion;
+  latestVersionId?: string;
+  isHovered: boolean;
+  onCopyClick: (commit: string) => void;
+  onRestoreVersionClick: (version: PromptVersion) => void;
+}
+
+const VersionTags: React.FC<VersionTagsProps> = ({ tags }) => {
+  const { visibleItems, hasMoreItems, remainingCount } = useVisibleTags(tags);
+
+  if (!tags || tags.length === 0) return null;
+
+  return (
+    <>
+      <span
+        className={cn(
+          "text-muted-slate/60 shrink-0 text-xs transition-opacity",
+          hasMoreItems ? "opacity-100" : "opacity-0",
+        )}
+      >
+        ·
+      </span>
+      <div className="flex max-w-[160px] shrink flex-nowrap items-center gap-1 overflow-hidden">
+        {visibleItems.map((tag) => (
+          <ColoredTag
+            key={tag}
+            label={tag}
+            size="sm"
+            className="min-w-0 max-w-[65px] shrink origin-left scale-[0.85] truncate"
+          />
+        ))}
+        {hasMoreItems && (
+          <TooltipWrapper
+            content={<TagListTooltipContent tags={tags} label="version tags" />}
+          >
+            <div className="comet-body-s-accented flex h-4 items-center rounded-md border border-border pl-1 pr-1.5 text-[9px] text-muted-slate">
+              +{remainingCount}
+            </div>
+          </TooltipWrapper>
+        )}
+      </div>
+    </>
+  );
+};
+
+const VersionActions: React.FC<VersionActionsProps> = ({
+  version,
+  latestVersionId,
+  isHovered,
+  onCopyClick,
+  onRestoreVersionClick,
+}) => {
+  const canRestore = version.id !== latestVersionId;
+
+  return (
+    <div
+      className={cn(
+        "ml-auto flex gap-1 shrink-0 transition-opacity",
+        isHovered ? "opacity-100" : "opacity-0",
+      )}
+    >
+      <TooltipWrapper content="Copy commit">
+        <Button
+          size="icon-3xs"
+          variant="minimal"
+          onClick={(e) => {
+            e.stopPropagation();
+            onCopyClick(version.commit);
+          }}
+        >
+          <Copy />
+        </Button>
+      </TooltipWrapper>
+      {canRestore && (
+        <TooltipWrapper content="Restore this version">
+          <Button
+            size="icon-3xs"
+            variant="minimal"
+            onClick={(e) => {
+              e.stopPropagation();
+              onRestoreVersionClick(version);
+            }}
+          >
+            <Undo2 />
+          </Button>
+        </TooltipWrapper>
+      )}
+    </div>
+  );
+};
 
 const CommitHistory = ({
   versions,
@@ -40,13 +138,16 @@ const CommitHistory = ({
     <>
       <ul className="max-h-[500px] overflow-y-auto overflow-x-hidden rounded border bg-background p-1">
         {versions?.map((version) => {
+          const isActive = activeVersionId === version.id;
+          const isHovered = hoveredVersionId === version.id;
+
           return (
             <li
               key={version.id}
               className={cn(
                 "cursor-pointer hover:bg-primary-foreground rounded-sm px-4 py-2.5 flex flex-col overflow-hidden",
                 {
-                  "bg-primary-foreground": activeVersionId === version.id,
+                  "bg-primary-foreground": isActive,
                 },
               )}
               onMouseEnter={() => setHoveredVersionId(version.id)}
@@ -57,98 +158,19 @@ const CommitHistory = ({
                 <GitCommitVertical className="size-4 shrink-0 text-muted-slate" />
                 <span
                   className={cn("comet-body-s shrink-0", {
-                    "comet-body-s-accented": activeVersionId === version.id,
+                    "comet-body-s-accented": isActive,
                   })}
                 >
                   {version.commit}
                 </span>
-                <>
-                  <span
-                    className={cn(
-                      "text-muted-slate/60 shrink-0 text-xs transition-opacity",
-                      version.tags && version.tags.length > 0
-                        ? "opacity-100"
-                        : "opacity-0",
-                    )}
-                  >
-                    ·
-                  </span>
-                  <div className="flex max-w-[160px] shrink flex-nowrap items-center gap-1 overflow-hidden">
-                    {version.tags &&
-                      version.tags.length > 0 &&
-                      [...version.tags]
-                        .sort()
-                        .slice(0, 3)
-                        .map((tag) => (
-                          <ColoredTag
-                            key={tag}
-                            label={tag}
-                            size="sm"
-                            className="min-w-0 max-w-[65px] shrink origin-left scale-[0.85] truncate"
-                          />
-                        ))}
-                    {version.tags && version.tags.length > 3 && (
-                      <TooltipWrapper
-                        content={
-                          <div className="flex max-w-[200px] flex-col gap-1">
-                            <span className="text-xs font-medium">
-                              All version tags ({version.tags.length}):
-                            </span>
-                            <div className="flex flex-wrap gap-1">
-                              {[...version.tags].sort().map((tag) => (
-                                <span
-                                  key={tag}
-                                  className="text-xs text-muted-foreground"
-                                >
-                                  {tag}
-                                </span>
-                              ))}
-                            </div>
-                          </div>
-                        }
-                      >
-                        <span className="inline-flex shrink-0 cursor-help items-center whitespace-nowrap rounded bg-muted-slate/10 px-1 py-0.5 text-[9px] font-medium text-muted-slate">
-                          +{version.tags.length - 3}
-                        </span>
-                      </TooltipWrapper>
-                    )}
-                  </div>
-                </>
-                <div
-                  className={cn(
-                    "ml-auto flex gap-1 shrink-0 transition-opacity",
-                    hoveredVersionId === version.id
-                      ? "opacity-100"
-                      : "opacity-0",
-                  )}
-                >
-                  <TooltipWrapper content="Copy commit">
-                    <Button
-                      size="icon-3xs"
-                      variant="minimal"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleCopyClick(version.commit);
-                      }}
-                    >
-                      <Copy />
-                    </Button>
-                  </TooltipWrapper>
-                  {version.id !== latestVersionId && (
-                    <TooltipWrapper content="Restore this version">
-                      <Button
-                        size="icon-3xs"
-                        variant="minimal"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onRestoreVersionClick(version);
-                        }}
-                      >
-                        <Undo2 />
-                      </Button>
-                    </TooltipWrapper>
-                  )}
-                </div>
+                <VersionTags tags={version.tags || []} />
+                <VersionActions
+                  version={version}
+                  latestVersionId={latestVersionId}
+                  isHovered={isHovered}
+                  onCopyClick={handleCopyClick}
+                  onRestoreVersionClick={onRestoreVersionClick}
+                />
               </div>
               <p className="comet-body-s pl-6 text-light-slate">
                 {formatDate(version.created_at)}
