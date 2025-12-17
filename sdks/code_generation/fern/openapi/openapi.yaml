@@ -1560,7 +1560,12 @@ paths:
       tags:
       - Datasets
       summary: Delete dataset items
-      description: Delete dataset items
+      description: |
+        Delete dataset items using one of two modes:
+        1. **Delete by IDs**: Provide 'item_ids' to delete specific items by their IDs
+        2. **Delete by filters**: Provide 'dataset_id' with optional 'filters' to delete items matching criteria
+
+        When using filters, an empty 'filters' array will delete all items in the specified dataset.
       operationId: deleteDatasetItems
       requestBody:
         content:
@@ -1570,6 +1575,8 @@ paths:
       responses:
         "204":
           description: No content
+        "400":
+          description: Bad request - invalid parameters or conflicting fields
   /v1/private/datasets/delete-batch:
     post:
       tags:
@@ -8627,6 +8634,9 @@ components:
           type: string
         value:
           type: string
+      description: Filters to select dataset items to delete within the specified
+        dataset. Must be used with 'dataset_id'. Mutually exclusive with 'item_ids'.
+        Empty array means 'delete all items in the dataset'.
     DatasetItemUpdate:
       type: object
       properties:
@@ -9141,17 +9151,35 @@ components:
           minLength: 1
           type: string
     DatasetItemsDelete:
-      required:
-      - item_ids
       type: object
       properties:
         item_ids:
           maxItems: 1000
           minItems: 1
+          uniqueItems: true
           type: array
+          description: List of dataset item IDs to delete (max 1000). Use this to
+            delete specific items by their IDs. Mutually exclusive with 'dataset_id'
+            and 'filters'.
           items:
             type: string
+            description: List of dataset item IDs to delete (max 1000). Use this to
+              delete specific items by their IDs. Mutually exclusive with 'dataset_id'
+              and 'filters'.
             format: uuid
+        dataset_id:
+          type: string
+          description: Dataset ID to scope the deletion. Required when using 'filters'.
+            Mutually exclusive with 'item_ids'.
+          format: uuid
+        filters:
+          type: array
+          description: Filters to select dataset items to delete within the specified
+            dataset. Must be used with 'dataset_id'. Mutually exclusive with 'item_ids'.
+            Empty array means 'delete all items in the dataset'.
+          items:
+            $ref: "#/components/schemas/DatasetItemFilter"
+      description: Request to delete multiple dataset items
     DatasetExpansionResponse:
       type: object
       properties:
@@ -12659,6 +12687,10 @@ components:
           type: integer
           format: int64
           readOnly: true
+        thread_count:
+          type: integer
+          format: int64
+          readOnly: true
         guardrails_failed_count:
           type: integer
           format: int64
@@ -12870,6 +12902,9 @@ components:
         trace_count:
           type: integer
           format: int64
+        thread_count:
+          type: integer
+          format: int64
         guardrails_failed_count:
           type: integer
           format: int64
@@ -12972,6 +13007,10 @@ components:
             readOnly: true
           readOnly: true
         trace_count:
+          type: integer
+          format: int64
+          readOnly: true
+        thread_count:
           type: integer
           format: int64
           readOnly: true

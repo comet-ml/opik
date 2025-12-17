@@ -17,6 +17,7 @@ class ProjectStatsSummaryItem(UniversalBaseModel):
     total_estimated_cost_sum: typing.Optional[float] = None
     usage: typing.Optional[typing.Dict[str, float]] = None
     trace_count: typing.Optional[int] = None
+    thread_count: typing.Optional[int] = None
     guardrails_failed_count: typing.Optional[int] = None
     error_count: typing.Optional[ErrorCountWithDeviation] = None
 
