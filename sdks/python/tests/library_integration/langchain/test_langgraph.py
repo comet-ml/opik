@@ -8,7 +8,10 @@ from typing_extensions import TypedDict
 import langchain_openai
 
 import opik
-from opik.integrations.langchain import OpikTracer, extract_current_langgraph_span_data
+from opik.integrations.langchain import (
+    OpikTracer,
+    extract_current_langgraph_span_data,
+)
 from opik import jsonable_encoder, context_storage
 from opik.api_objects import span, trace
 from opik.api_objects import opik_client

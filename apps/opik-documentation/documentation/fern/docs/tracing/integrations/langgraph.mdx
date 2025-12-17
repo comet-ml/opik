@@ -36,9 +36,57 @@ Configure the Opik Python SDK for your deployment type. See the [Python SDK Conf
 - **Self-hosted vs Cloud vs Enterprise** setup
 - **Configuration files** and environment variables
 
-## Using the OpikTracer
+## Using Opik with LangGraph
 
-You can use the [`OpikTracer`](https://www.comet.com/docs/opik/python-sdk-reference/integrations/langchain/OpikTracer.html) callback with any LangGraph graph by passing it in as an argument to the `stream` or `invoke` functions:
+Opik provides two ways to track LangGraph applications. We recommend using the `track_langgraph` function for a simpler experience, but you can also use the `OpikTracer` callback directly if you need more control.
+
+### Option 1: Using `track_langgraph` (Recommended)
+
+The simplest way to track your LangGraph applications is using the [`track_langgraph`](https://www.comet.com/docs/opik/python-sdk-reference/integrations/langchain/track_langgraph.html) function. This function wraps your compiled graph once, and all subsequent invocations are automatically tracked without needing to pass callbacks:
+
+```python
+from typing import List, Annotated
+from pydantic import BaseModel
+from opik.integrations.langchain import OpikTracer, track_langgraph
+from langchain_core.messages import HumanMessage
+from langgraph.graph import StateGraph, START, END
+from langgraph.graph.message import add_messages
+
+# create your LangGraph graph
+class State(BaseModel):
+    messages: Annotated[list, add_messages]
+
+def chatbot(state):
+    # Typically your LLM calls would be done here
+    return {"messages": "Hello, how can I help you today?"}
+
+graph = StateGraph(State)
+graph.add_node("chatbot", chatbot)
+graph.add_edge(START, "chatbot")
+graph.add_edge("chatbot", END)
+app = graph.compile()
+
+# Create OpikTracer and track the graph once - no need to pass callbacks anymore!
+# The graph visualization is automatically extracted by track_langgraph
+opik_tracer = OpikTracer(
+    tags=["production"],
+    metadata={"version": "1.0"}
+)
+app = track_langgraph(app, opik_tracer)
+
+# Now all invocations are automatically tracked
+for s in app.stream({"messages": [HumanMessage(content = "How to use LangGraph ?")]}):
+    print(s)
+
+# No callbacks needed here either!
+result = app.invoke({"messages": [HumanMessage(content = "How to use LangGraph ?")]})
+```
+
+This is similar to how other Opik integrations work (like OpenAI, Anthropic, etc.), where you wrap the client or object once and then use it normally.
+
+### Option 2: Using `OpikTracer` callback
+
+If you need more fine-grained control or want to use different tracers for different invocations, you can use the [`OpikTracer`](https://www.comet.com/docs/opik/python-sdk-reference/integrations/langchain/OpikTracer.html) callback directly:
 
 ```python
 from typing import List, Annotated
@@ -63,19 +111,20 @@ graph.add_edge("chatbot", END)
 app = graph.compile()
 
 # Create the OpikTracer
-opik_tracer = OpikTracer(graph=app.get_graph(xray=True))
+opik_tracer = OpikTracer()
 
-# Pass the OpikTracer callback to the Graph.stream function
+# Pass the OpikTracer callback to each invocation
 for s in app.stream({"messages": [HumanMessage(content = "How to use LangGraph ?")]},
                       config={"callbacks": [opik_tracer]}):
     print(s)
 
-# Pass the OpikTracer callback to the Graph.invoke function
 result = app.invoke({"messages": [HumanMessage(content = "How to use LangGraph ?")]},
                       config={"callbacks": [opik_tracer]})
 ```
 
-Once the OpikTracer is configured, you will start to see the traces in the Opik UI:
+### Viewing Traces in the UI
+
+Once tracking is enabled using either method, you will start to see the traces in the Opik UI:
 
 <Frame>
   <img src="/img/cookbook/langgraph_cookbook.png" />
@@ -156,17 +205,26 @@ app = workflow.compile()
 
 ### Executing with Opik Tracing
 
-Now let's execute the workflow with Opik tracing enabled:
+Now let's execute the workflow with Opik tracing enabled using `track_langgraph`:
 
 ```python
-from opik.integrations.langchain import OpikTracer
+from opik.integrations.langchain import OpikTracer, track_langgraph
 
-# Create the OpikTracer with graph visualization
-tracer = OpikTracer(graph=app.get_graph(xray=True))
+# Create OpikTracer and track the graph once
+# The graph visualization is automatically extracted by track_langgraph
+opik_tracer = OpikTracer(
+    project_name="classification-workflow"
+)
+app = track_langgraph(app, opik_tracer)
 
-# Execute the workflow
+# Execute the workflow - no callbacks needed!
 inputs = {"question": "Hello, how are you?"}
-result = app.invoke(inputs, config={"callbacks": [tracer]})
+result = app.invoke(inputs)
+print(result)
+
+# Test with a different input - still tracked automatically
+inputs = {"question": "What is machine learning?"}
+result = app.invoke(inputs)
 print(result)
 ```
 
@@ -183,7 +241,7 @@ For synchronous graph execution using `invoke()`, everything works out of the bo
 ```python
 import opik_context
 from opik import track
-from opik.integrations.langchain import OpikTracer
+from opik.integrations.langchain import OpikTracer, track_langgraph
 from langgraph.graph import StateGraph, START, END
 
 @track
@@ -207,9 +265,10 @@ graph.add_edge("processor", END)
 
 app = graph.compile()
 opik_tracer = OpikTracer()
+app = track_langgraph(app, opik_tracer)
 
 # Synchronous execution - tracked functions work automatically
-result = app.invoke({"value": 21}, config={"callbacks": [opik_tracer]})
+result = app.invoke({"value": 21})
 ```
 
 ### Asynchronous execution (ainvoke)
@@ -222,7 +281,7 @@ This is due to a LangChain framework limitation that doesn't automatically share
 
 ```python
 from opik import track
-from opik.integrations.langchain import OpikTracer, extract_current_langgraph_span_data
+from opik.integrations.langchain import OpikTracer, track_langgraph, extract_current_langgraph_span_data
 from langgraph.graph import StateGraph, START, END
 
 @track
@@ -249,16 +308,18 @@ graph.add_edge("processor", END)
 
 app = graph.compile()
 opik_tracer = OpikTracer()
+app = track_langgraph(app, opik_tracer)
 
 # Asynchronous execution - requires explicit trace context propagation
-result = await app.ainvoke({"value": 21}, config={"callbacks": [opik_tracer]})
+result = await app.ainvoke({"value": 21})
 ```
 
 Alternatively, if you don't want to use the `@track` decorator, you can use the `opik.start_as_current_span` context manager with distributed headers:
 
 ```python
 import opik
-from opik.integrations.langchain import extract_current_langgraph_span_data
+from opik.integrations.langchain import OpikTracer, track_langgraph, extract_current_langgraph_span_data
+from langgraph.graph import StateGraph, START, END
 
 async def my_async_node(state, config):
     span_data = extract_current_langgraph_span_data(config)
@@ -274,6 +335,18 @@ async def my_async_node(state, config):
         span_data.output = {"output": result}
     
     return {"value": result}
+
+# Build and execute graph
+graph = StateGraph(dict)
+graph.add_node("processor", my_async_node)
+graph.add_edge(START, "processor")
+graph.add_edge("processor", END)
+
+app = graph.compile()
+opik_tracer = OpikTracer()
+app = track_langgraph(app, opik_tracer)
+
+result = await app.ainvoke({"value": 21})
 ```
 
 
@@ -286,7 +359,7 @@ import sqlite3
 from langgraph.checkpoint.sqlite import SqliteSaver
 from typing import Annotated
 from pydantic import BaseModel
-from opik.integrations.langchain import OpikTracer
+from opik.integrations.langchain import OpikTracer, track_langgraph
 from langchain_core.messages import HumanMessage
 from langgraph.graph import StateGraph, START, END
 from langgraph.graph.message import add_messages
@@ -318,11 +391,12 @@ memory = SqliteSaver(conn)
 
 app = graph.compile(checkpointer=memory)
 
-# Create the OpikTracer
-opik_tracer = OpikTracer(graph=app.get_graph(xray=True))
+# Create the OpikTracer and track the graph
+opik_tracer = OpikTracer()
+app = track_langgraph(app, opik_tracer)
 
 thread_id = "e424a45e-7763-443a-94ae-434b39b67b72"
-config = {"callbacks": [opik_tracer], "configurable": {"thread_id": thread_id}}
+config = {"configurable": {"thread_id": thread_id}}
 
 # Initialize the state
 state = State(**app.get_state(config).values) or State(messages=[])
