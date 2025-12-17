@@ -650,7 +650,8 @@ zookeeper:
     enabled: true
   persistence:
     # Use bitnami zookeeper data directory path for compatibility
-    mountPath: /bitnami/zookeeper/data
+    mountPath: /bitnami/zookeeper
+    dataDir: /bitnami/zookeeper/data
     enabled: true
     size: "50Gi"
   headless:
