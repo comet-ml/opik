@@ -5,6 +5,7 @@ import SearchInput from "@/components/shared/SearchInput/SearchInput";
 import useUsernameAutocomplete from "./api/useUsernameAutocomplete";
 import useCurrentOrganization from "./useCurrentOrganization";
 import useWorkspace from "./useWorkspace";
+import { useInviteEmailMutation } from "./api/useInviteEmailMutation";
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -35,7 +36,25 @@ const InviteUsersPopover: React.FC<InviteUsersPopoverProps> = ({
     },
   );
 
+  const inviteEmailMutation = useInviteEmailMutation();
+
   const hasEmailQuery = EMAIL_REGEX.test(searchQuery);
+
+  const handleEmailClick = () => {
+    if (!workspaceId || !hasEmailQuery) return;
+
+    inviteEmailMutation.mutate(
+      {
+        workspaceId,
+        email: searchQuery,
+      },
+      {
+        onSuccess: () => {
+          setSearchQuery("");
+        },
+      },
+    );
+  };
 
   const renderUserList = () => {
     if (!searchQuery) {
@@ -70,7 +89,10 @@ const InviteUsersPopover: React.FC<InviteUsersPopoverProps> = ({
           </div>
         ))}
         {showEmailRow && (
-          <div className="flex cursor-pointer items-center gap-3 rounded-sm px-3 py-2.5 transition-colors hover:bg-primary-foreground">
+          <div
+            onClick={handleEmailClick}
+            className="flex cursor-pointer items-center gap-3 rounded-sm px-3 py-2.5 transition-colors hover:bg-primary-foreground"
+          >
             <div className="flex flex-1 flex-col">
               <span className="comet-body-s-accented">{searchQuery}</span>
             </div>
