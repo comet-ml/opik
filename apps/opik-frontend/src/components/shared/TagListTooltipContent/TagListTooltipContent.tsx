@@ -24,7 +24,10 @@ const TagListTooltipContent: React.FC<TagListTooltipContentProps> = ({
       </span>
       <div className="flex max-h-[300px] flex-col gap-1 overflow-y-auto">
         {visibleItems.map((tag) => (
-          <span key={tag} className="text-xs text-muted-foreground">
+          <span
+            key={tag}
+            className="block truncate text-xs text-muted-foreground"
+          >
             {tag}
           </span>
         ))}
