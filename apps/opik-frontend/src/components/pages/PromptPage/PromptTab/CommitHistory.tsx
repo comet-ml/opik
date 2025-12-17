@@ -33,7 +33,8 @@ interface VersionActionsProps {
 }
 
 const VersionTags: React.FC<VersionTagsProps> = ({ tags }) => {
-  const { visibleItems, hasMoreItems, remainingCount } = useVisibleTags(tags);
+  const { visibleItems, hiddenItems, hasMoreItems, remainingCount } =
+    useVisibleTags(tags);
 
   if (!tags || tags.length === 0) return null;
 
@@ -47,7 +48,7 @@ const VersionTags: React.FC<VersionTagsProps> = ({ tags }) => {
       >
         ·
       </span>
-      <div className="flex max-w-[160px] shrink flex-nowrap items-center gap-1 overflow-hidden">
+      <div className="flex max-w-[160px] shrink flex-nowrap items-center gap-0.5 overflow-hidden">
         {visibleItems.map((tag) => (
           <ColoredTag
             key={tag}
@@ -58,7 +59,7 @@ const VersionTags: React.FC<VersionTagsProps> = ({ tags }) => {
         ))}
         {hasMoreItems && (
           <TooltipWrapper
-            content={<TagListTooltipContent tags={tags} label="version tags" />}
+            content={<TagListTooltipContent tags={hiddenItems} />}
           >
             <div className="comet-body-s-accented flex h-4 items-center rounded-md border border-border pl-1 pr-1.5 text-[9px] text-muted-slate">
               +{remainingCount}

@@ -3,13 +3,11 @@ import { useVisibleTags } from "@/hooks/useVisibleTags";
 
 interface TagListTooltipContentProps {
   tags: string[];
-  label?: string;
   maxDisplayCount?: number;
 }
 
 const TagListTooltipContent: React.FC<TagListTooltipContentProps> = ({
   tags,
-  label = "tags",
   maxDisplayCount = 50,
 }) => {
   const { visibleItems, hasMoreItems, remainingCount } = useVisibleTags(
@@ -18,25 +16,23 @@ const TagListTooltipContent: React.FC<TagListTooltipContentProps> = ({
   );
 
   return (
-    <div className="flex max-w-[200px] flex-col gap-1">
-      <span className="text-xs font-medium">
-        All {label} ({tags.length}):
-      </span>
-      <div className="flex max-h-[300px] flex-col gap-1 overflow-y-auto">
-        {visibleItems.map((tag) => (
-          <span
-            key={tag}
-            className="block truncate text-xs text-muted-foreground"
-          >
-            {tag}
-          </span>
-        ))}
-        {hasMoreItems && (
+    <div className="flex max-w-[300px] flex-wrap gap-1">
+      {visibleItems.map((tag, index) => (
+        <React.Fragment key={`${tag}-${index}`}>
+          {index > 0 && (
+            <span className="text-xs text-muted-foreground">•</span>
+          )}
+          <span className="text-xs text-muted-foreground">{tag}</span>
+        </React.Fragment>
+      ))}
+      {hasMoreItems && (
+        <>
+          <span className="text-xs text-muted-foreground">•</span>
           <span className="text-xs italic text-muted-foreground">
             ... and {remainingCount} more
           </span>
-        )}
-      </div>
+        </>
+      )}
     </div>
   );
 };

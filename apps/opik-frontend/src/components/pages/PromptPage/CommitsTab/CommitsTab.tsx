@@ -85,9 +85,6 @@ export const DEFAULT_COLUMNS: ColumnData<PromptVersion>[] = [
     iconType: "tags",
     accessorFn: (row) => row.tags || [],
     cell: ListCell as never,
-    customMeta: {
-      tooltipLabel: "version tags",
-    },
   },
   {
     id: "created_at",
