@@ -1,4 +1,4 @@
-package com.comet.opik.infrastructure.llm.opikbuiltin;
+package com.comet.opik.infrastructure.llm.freemodel;
 
 import com.comet.opik.domain.llm.LlmProviderFactory;
 import com.comet.opik.infrastructure.LlmProviderClientConfig;
@@ -12,20 +12,20 @@ import jakarta.inject.Named;
 import lombok.NonNull;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
-public class OpikBuiltinModule extends AbstractModule {
+public class FreeModelModule extends AbstractModule {
 
     @Provides
     @Singleton
-    @Named("opikBuiltin")
-    public LlmServiceProvider opikBuiltinServiceProvider(
+    @Named("freeModel")
+    public LlmServiceProvider freeModelServiceProvider(
             @NonNull LlmProviderFactory llmProviderFactory,
             @NonNull @Named("openaiGenerator") OpenAIClientGenerator clientGenerator,
             @NonNull @Config OpikConfiguration configuration,
             @NonNull @Config("llmProviderClient") LlmProviderClientConfig llmProviderClientConfig) {
-        return new OpikBuiltinServiceProvider(
+        return new FreeModelServiceProvider(
                 clientGenerator,
                 llmProviderFactory,
-                configuration.getBuiltinLlmProvider(),
+                configuration.getFreeModel(),
                 llmProviderClientConfig);
     }
 }

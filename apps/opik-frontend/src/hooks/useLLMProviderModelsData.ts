@@ -22,10 +22,10 @@ export type ModelResolver = (
 ) => PROVIDER_MODEL_TYPE | "";
 
 export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
-  [PROVIDER_TYPE.OPIK_BUILTIN]: [
+  [PROVIDER_TYPE.OPIK_FREE]: [
     {
-      value: PROVIDER_MODEL_TYPE.OPIK_BUILTIN_MODEL,
-      label: "Built-in Model",
+      value: PROVIDER_MODEL_TYPE.OPIK_FREE_MODEL,
+      label: "Free model", // This is overridden by model_label from config (e.g., "openai/gpt-4o-mini")
     },
   ],
   [PROVIDER_TYPE.OPEN_AI]: [

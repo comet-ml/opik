@@ -1,4 +1,4 @@
-package com.comet.opik.infrastructure.llm.opikbuiltin;
+package com.comet.opik.infrastructure.llm.freemodel;
 
 import com.comet.opik.domain.llm.LlmProviderService;
 import com.comet.opik.infrastructure.llm.LlmProviderLangChainMapper;
@@ -14,12 +14,12 @@ import java.util.Optional;
 import java.util.function.Consumer;
 
 /**
- * LLM Provider service for Opik Built-in that transforms the model name
- * from "opik-builtin-model" to the actual model (e.g., "gpt-4o-mini").
+ * LLM Provider service for Opik Free Model that transforms the model name
+ * from "opik-free-model" to the actual model.
  */
 @RequiredArgsConstructor
 @Slf4j
-public class OpikBuiltinLlmProvider implements LlmProviderService {
+public class FreeModelLlmProvider implements LlmProviderService {
     private final @NonNull OpenAiClient openAiClient;
     private final @NonNull String actualModel;
 
@@ -27,7 +27,7 @@ public class OpikBuiltinLlmProvider implements LlmProviderService {
     public ChatCompletionResponse generate(@NonNull ChatCompletionRequest request, @NonNull String workspaceId) {
         // Transform the model name to the actual model
         var transformedRequest = transformRequest(request);
-        log.debug("Transformed model from '{}' to '{}' for Opik Built-in provider",
+        log.debug("Transformed model from '{}' to '{}' for Free Model provider",
                 request.model(), transformedRequest.model());
         return openAiClient.chatCompletion(transformedRequest).execute();
     }
@@ -41,7 +41,7 @@ public class OpikBuiltinLlmProvider implements LlmProviderService {
             @NonNull Consumer<Throwable> handleError) {
         // Transform the model name to the actual model
         var transformedRequest = transformRequest(request);
-        log.debug("Transformed model from '{}' to '{}' for Opik Built-in provider (streaming)",
+        log.debug("Transformed model from '{}' to '{}' for Free Model provider (streaming)",
                 request.model(), transformedRequest.model());
         openAiClient.chatCompletion(transformedRequest)
                 .onPartialResponse(handleMessage)
@@ -61,7 +61,7 @@ public class OpikBuiltinLlmProvider implements LlmProviderService {
     }
 
     /**
-     * Transforms the request to use the actual model name instead of "opik-builtin-model".
+     * Transforms the request to use the actual model name instead of "opik-free-model".
      */
     private ChatCompletionRequest transformRequest(ChatCompletionRequest request) {
         return ChatCompletionRequest.builder()

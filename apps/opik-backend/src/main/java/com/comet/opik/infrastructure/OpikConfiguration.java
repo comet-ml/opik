@@ -102,5 +102,5 @@ public class OpikConfiguration extends JobConfiguration {
     private AttachmentsConfig attachmentsConfig = new AttachmentsConfig();
 
     @Valid @NotNull @JsonProperty
-    private BuiltinLlmProviderConfig builtinLlmProvider = new BuiltinLlmProviderConfig();
+    private FreeModelConfig freeModel = new FreeModelConfig();
 }

@@ -1,10 +1,10 @@
-package com.comet.opik.infrastructure.llm.opikbuiltin;
+package com.comet.opik.infrastructure.llm.freemodel;
 
 import com.comet.opik.api.LlmProvider;
 import com.comet.opik.api.evaluators.LlmAsJudgeModelParameters;
 import com.comet.opik.domain.llm.LlmProviderFactory;
 import com.comet.opik.domain.llm.LlmProviderService;
-import com.comet.opik.infrastructure.BuiltinLlmProviderConfig;
+import com.comet.opik.infrastructure.FreeModelConfig;
 import com.comet.opik.infrastructure.LlmProviderClientConfig;
 import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
 import com.comet.opik.infrastructure.llm.LlmServiceProvider;
@@ -18,36 +18,36 @@ import org.apache.commons.lang3.StringUtils;
 import java.util.Optional;
 
 /**
- * Service provider for the Opik Built-in LLM provider.
- * This provider transforms the model name from "opik-builtin-model" to the actual model.
+ * Service provider for the Opik Free Model LLM provider.
+ * This provider transforms the model name from "opik-free-model" to the actual model.
  */
 @Slf4j
-public class OpikBuiltinServiceProvider implements LlmServiceProvider {
+public class FreeModelServiceProvider implements LlmServiceProvider {
 
     private final OpenAIClientGenerator clientGenerator;
-    private final BuiltinLlmProviderConfig builtinConfig;
+    private final FreeModelConfig freeModelConfig;
     private final LlmProviderClientConfig llmProviderClientConfig;
 
-    public OpikBuiltinServiceProvider(
+    public FreeModelServiceProvider(
             @NonNull OpenAIClientGenerator clientGenerator,
             @NonNull LlmProviderFactory factory,
-            @NonNull BuiltinLlmProviderConfig builtinConfig,
+            @NonNull FreeModelConfig freeModelConfig,
             @NonNull LlmProviderClientConfig llmProviderClientConfig) {
         this.clientGenerator = clientGenerator;
-        this.builtinConfig = builtinConfig;
+        this.freeModelConfig = freeModelConfig;
         this.llmProviderClientConfig = llmProviderClientConfig;
 
-        if (builtinConfig.isEnabled()) {
-            factory.register(LlmProvider.OPIK_BUILTIN, this);
-            log.info("Registered OPIK_BUILTIN provider with actual model '{}'", builtinConfig.getActualModel());
+        if (freeModelConfig.isEnabled()) {
+            factory.register(LlmProvider.OPIK_FREE, this);
+            log.info("Registered OPIK_FREE provider with actual model '{}'", freeModelConfig.getActualModel());
         }
     }
 
     @Override
     public LlmProviderService getService(@NonNull LlmProviderClientApiConfig config) {
-        return new OpikBuiltinLlmProvider(
+        return new FreeModelLlmProvider(
                 clientGenerator.newOpenAiClient(config),
-                builtinConfig.getActualModel());
+                freeModelConfig.getActualModel());
     }
 
     @Override
@@ -55,7 +55,7 @@ public class OpikBuiltinServiceProvider implements LlmServiceProvider {
             @NonNull LlmAsJudgeModelParameters modelParameters) {
         // Transform the model name for LLM as Judge
         var transformedParameters = LlmAsJudgeModelParameters.builder()
-                .name(builtinConfig.getActualModel())
+                .name(freeModelConfig.getActualModel())
                 .temperature(modelParameters.temperature())
                 .seed(modelParameters.seed())
                 .build();

@@ -13,8 +13,8 @@ import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.api.resources.utils.resources.LlmProviderApiKeyResourceClient;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
-import com.comet.opik.infrastructure.BuiltinLlmProviderConfig;
 import com.comet.opik.infrastructure.DatabaseAnalyticsFactory;
+import com.comet.opik.infrastructure.FreeModelConfig;
 import com.redis.testcontainers.RedisContainer;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
@@ -50,7 +50,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 @ExtendWith(DropwizardAppExtensionProvider.class)
 class LlmProviderApiKeyResourceBuiltinProviderTest {
     private static final String USER = UUID.randomUUID().toString();
-    private static final String BUILTIN_MODEL = "opik-builtin-model";
+    private static final String FREE_MODEL = "opik-free-model";
     private static final String ACTUAL_MODEL = "gpt-4o-mini";
     private static final String SPAN_PROVIDER = "openai";
 
@@ -76,7 +76,7 @@ class LlmProviderApiKeyResourceBuiltinProviderTest {
         MigrationUtils.runMysqlDbMigration(MYSQL);
         MigrationUtils.runClickhouseDbMigration(CLICKHOUSE_CONTAINER);
 
-        // Create app with built-in provider ENABLED
+        // Create app with free model provider ENABLED
         APP = TestDropwizardAppExtensionUtils.newTestDropwizardAppExtension(
                 TestDropwizardAppExtensionUtils.AppContextConfig.builder()
                         .jdbcUrl(MYSQL.getJdbcUrl())
@@ -84,12 +84,14 @@ class LlmProviderApiKeyResourceBuiltinProviderTest {
                         .runtimeInfo(wireMock.runtimeInfo())
                         .redisUrl(REDIS.getRedisURI())
                         .customConfigs(List.of(
-                                new TestDropwizardAppExtensionUtils.CustomConfig("builtinLlmProvider.enabled", "true"),
-                                new TestDropwizardAppExtensionUtils.CustomConfig("builtinLlmProvider.actualModel",
+                                new TestDropwizardAppExtensionUtils.CustomConfig("freeModel.enabled", "true"),
+                                new TestDropwizardAppExtensionUtils.CustomConfig("freeModel.actualModel",
                                         ACTUAL_MODEL),
-                                new TestDropwizardAppExtensionUtils.CustomConfig("builtinLlmProvider.spanProvider",
+                                new TestDropwizardAppExtensionUtils.CustomConfig("freeModel.spanProvider",
                                         SPAN_PROVIDER),
-                                new TestDropwizardAppExtensionUtils.CustomConfig("builtinLlmProvider.apiKey",
+                                new TestDropwizardAppExtensionUtils.CustomConfig("freeModel.baseUrl",
+                                        "https://test-endpoint.example.com"),
+                                new TestDropwizardAppExtensionUtils.CustomConfig("freeModel.apiKey",
                                         "test-api-key")))
                         .build());
     }
@@ -129,8 +131,8 @@ class LlmProviderApiKeyResourceBuiltinProviderTest {
         assertThat(providerApiKeyPage.total()).isEqualTo(1);
 
         var builtinProvider = providerApiKeyPage.content().get(0);
-        assertThat(builtinProvider.provider()).isEqualTo(LlmProvider.OPIK_BUILTIN);
-        assertThat(builtinProvider.id()).isEqualTo(BuiltinLlmProviderConfig.BUILTIN_PROVIDER_ID);
+        assertThat(builtinProvider.provider()).isEqualTo(LlmProvider.OPIK_FREE);
+        assertThat(builtinProvider.id()).isEqualTo(FreeModelConfig.FREE_MODEL_PROVIDER_ID);
     }
 
     @Test
@@ -145,7 +147,7 @@ class LlmProviderApiKeyResourceBuiltinProviderTest {
         var providerApiKeyPage = llmProviderApiKeyResourceClient.getAll(workspaceName, apiKey);
 
         var builtinProvider = providerApiKeyPage.content().stream()
-                .filter(p -> p.provider() == LlmProvider.OPIK_BUILTIN)
+                .filter(p -> p.provider() == LlmProvider.OPIK_FREE)
                 .findFirst()
                 .orElseThrow();
 
@@ -164,12 +166,12 @@ class LlmProviderApiKeyResourceBuiltinProviderTest {
         var providerApiKeyPage = llmProviderApiKeyResourceClient.getAll(workspaceName, apiKey);
 
         var builtinProvider = providerApiKeyPage.content().stream()
-                .filter(p -> p.provider() == LlmProvider.OPIK_BUILTIN)
+                .filter(p -> p.provider() == LlmProvider.OPIK_FREE)
                 .findFirst()
                 .orElseThrow();
 
         assertThat(builtinProvider.configuration()).isNotNull();
-        assertThat(builtinProvider.configuration().get("models")).isEqualTo(BUILTIN_MODEL);
+        assertThat(builtinProvider.configuration().get("models")).isEqualTo(FREE_MODEL);
     }
 
     @Test
@@ -181,15 +183,15 @@ class LlmProviderApiKeyResourceBuiltinProviderTest {
 
         mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
-        // Try to delete the built-in provider
+        // Try to delete the free model provider
         llmProviderApiKeyResourceClient.batchDeleteProviderApiKey(
-                Set.of(BuiltinLlmProviderConfig.BUILTIN_PROVIDER_ID), apiKey, workspaceName);
+                Set.of(FreeModelConfig.FREE_MODEL_PROVIDER_ID), apiKey, workspaceName);
 
         // Verify the built-in provider still exists
         var providerApiKeyPage = llmProviderApiKeyResourceClient.getAll(workspaceName, apiKey);
 
         var builtinProvider = providerApiKeyPage.content().stream()
-                .filter(p -> p.provider() == LlmProvider.OPIK_BUILTIN)
+                .filter(p -> p.provider() == LlmProvider.OPIK_FREE)
                 .findFirst();
 
         assertThat(builtinProvider).isPresent();
@@ -222,7 +224,7 @@ class LlmProviderApiKeyResourceBuiltinProviderTest {
         assertThat(providerApiKeyPage.content().get(0).provider()).isEqualTo(LlmProvider.OPEN_AI);
 
         // Built-in provider should be last (index 1)
-        assertThat(providerApiKeyPage.content().get(1).provider()).isEqualTo(LlmProvider.OPIK_BUILTIN);
+        assertThat(providerApiKeyPage.content().get(1).provider()).isEqualTo(LlmProvider.OPIK_FREE);
     }
 
     @Test
