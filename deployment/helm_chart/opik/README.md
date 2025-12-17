@@ -86,7 +86,7 @@ Call opik api on http://localhost:5173/api
 | oci://registry-1.docker.io/bitnamicharts | common | 2.x.x |
 | oci://registry-1.docker.io/cloudpirates | minio | 0.5.6 |
 | oci://registry-1.docker.io/cloudpirates | redis | 0.16.0 |
-| oci://registry-1.docker.io/cloudpirates | zookeeper | 0.3.5 |
+| oci://registry-1.docker.io/cloudpirates | zookeeper | 0.3.7 |
 
 ## Values
 
@@ -413,8 +413,9 @@ Call opik api on http://localhost:5173/api
 | zookeeper.image.registry | string | `"docker.io"` |  |
 | zookeeper.image.repository | string | `"zookeeper"` |  |
 | zookeeper.image.tag | string | `"3.9.4"` |  |
+| zookeeper.persistence.dataDir | string | `"/bitnami/zookeeper/data"` |  |
 | zookeeper.persistence.enabled | bool | `true` |  |
-| zookeeper.persistence.mountPath | string | `"/bitnami/zookeeper/data"` |  |
+| zookeeper.persistence.mountPath | string | `"/bitnami/zookeeper"` |  |
 | zookeeper.persistence.size | string | `"50Gi"` |  |
 | zookeeper.podDisruptionBudget.enabled | bool | `true` |  |
 | zookeeper.replicaCount | int | `1` |  |
