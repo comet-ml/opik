@@ -14,12 +14,14 @@ interface InviteUsersPopoverProps {
   searchQuery: string;
   setSearchQuery: (query: string) => void;
   onClose: () => void;
+  side?: "top" | "right" | "bottom" | "left";
 }
 
 const InviteUsersPopover: React.FC<InviteUsersPopoverProps> = ({
   searchQuery,
   setSearchQuery,
   onClose,
+  side = "bottom",
 }) => {
   const workspace = useWorkspace();
   const workspaceId = workspace?.workspaceId;
@@ -129,7 +131,7 @@ const InviteUsersPopover: React.FC<InviteUsersPopoverProps> = ({
   };
 
   return (
-    <DropdownMenuContent align="start" className="w-[400px] p-4">
+    <DropdownMenuContent side={side} align="start" className="w-[400px] p-4">
       <div className="mb-3">
         <h3 className="comet-title-s">
           Invite to {workspaceName || "workspace"}
