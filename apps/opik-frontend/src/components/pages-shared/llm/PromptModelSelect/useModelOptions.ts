@@ -5,7 +5,7 @@ import isNull from "lodash/isNull";
 import {
   COMPOSED_PROVIDER_TYPE,
   PROVIDER_TYPE,
-  ProviderKey,
+  ProviderObject,
 } from "@/types/providers";
 import { getProviderDisplayName, getProviderIcon } from "@/lib/provider";
 
@@ -37,8 +37,8 @@ interface UseModelOptionsResult {
 }
 
 export function useModelOptions(
-  configuredProvidersList: ProviderKey[],
-  getProviderModels: () => Record<string, { label: string; value: string }[]>,
+  configuredProvidersList: ProviderObject[],
+  getProviderModels: () => Record<string, ModelOption[]>,
   filterValue: string,
 ): UseModelOptionsResult {
   const modelProviderMapRef = useRef<Record<string, COMPOSED_PROVIDER_TYPE>>(
