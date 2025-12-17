@@ -37,6 +37,7 @@ const EXPERIMENT_COMPARISON_TEMPLATE: DashboardTemplate = {
               experimentIds: [],
               filters: [],
               groups: [],
+              feedbackScores: [],
             },
           },
           {
@@ -49,6 +50,7 @@ const EXPERIMENT_COMPARISON_TEMPLATE: DashboardTemplate = {
               experimentIds: [],
               filters: [],
               groups: [],
+              feedbackScores: [],
             },
           },
         ],
@@ -145,6 +147,7 @@ const PROJECT_METRICS_TEMPLATE: DashboardTemplate = {
               metricType: METRIC_NAME_TYPE.THREAD_FEEDBACK_SCORES,
               chartType: CHART_TYPE.line,
               threadFilters: [],
+              feedbackScores: [],
             },
           },
           {
@@ -204,6 +207,7 @@ const PROJECT_METRICS_TEMPLATE: DashboardTemplate = {
               metricType: METRIC_NAME_TYPE.FEEDBACK_SCORES,
               chartType: CHART_TYPE.line,
               traceFilters: [],
+              feedbackScores: [],
             },
           },
           {
@@ -302,20 +306,33 @@ const PERFORMANCE_OVERVIEW_TEMPLATE: DashboardTemplate = {
               source: TRACE_DATA_TYPE.traces,
               projectId: "",
               metric: "trace_count",
+              traceFilters: [],
             },
           },
           {
             id: "template-widget-2",
+            title: "Threads",
+            type: WIDGET_TYPE.PROJECT_STATS_CARD,
+            config: {
+              source: TRACE_DATA_TYPE.traces,
+              projectId: "",
+              metric: "thread_count",
+              traceFilters: [],
+            },
+          },
+          {
+            id: "template-widget-3",
             title: "Errors",
             type: WIDGET_TYPE.PROJECT_STATS_CARD,
             config: {
               source: TRACE_DATA_TYPE.traces,
               projectId: "",
               metric: "error_count",
+              traceFilters: [],
             },
           },
           {
-            id: "template-widget-3",
+            id: "template-widget-4",
             title: "Average Latency",
             type: WIDGET_TYPE.PROJECT_STATS_CARD,
             config: {
@@ -326,13 +343,14 @@ const PERFORMANCE_OVERVIEW_TEMPLATE: DashboardTemplate = {
             },
           },
           {
-            id: "template-widget-4",
+            id: "template-widget-5",
             title: "Cost",
             type: WIDGET_TYPE.PROJECT_STATS_CARD,
             config: {
               source: TRACE_DATA_TYPE.traces,
               projectId: "",
               metric: "total_estimated_cost_sum",
+              traceFilters: [],
             },
           },
         ],
@@ -363,7 +381,7 @@ const PERFORMANCE_OVERVIEW_TEMPLATE: DashboardTemplate = {
             i: "template-widget-3",
             x: 2,
             y: 0,
-            w: 2,
+            w: 1,
             h: 2,
             minW: 1,
             maxW: 6,
@@ -372,6 +390,17 @@ const PERFORMANCE_OVERVIEW_TEMPLATE: DashboardTemplate = {
           },
           {
             i: "template-widget-4",
+            x: 3,
+            y: 0,
+            w: 1,
+            h: 2,
+            minW: 1,
+            maxW: 6,
+            minH: 2,
+            maxH: 12,
+          },
+          {
+            i: "template-widget-5",
             x: 4,
             y: 0,
             w: 2,
@@ -388,7 +417,7 @@ const PERFORMANCE_OVERVIEW_TEMPLATE: DashboardTemplate = {
         title: "Threads and traces volume",
         widgets: [
           {
-            id: "template-widget-5",
+            id: "template-widget-6",
             title: "Number of threads",
             type: WIDGET_TYPE.PROJECT_METRICS,
             config: {
@@ -398,7 +427,7 @@ const PERFORMANCE_OVERVIEW_TEMPLATE: DashboardTemplate = {
             },
           },
           {
-            id: "template-widget-6",
+            id: "template-widget-7",
             title: "Number of traces",
             type: WIDGET_TYPE.PROJECT_METRICS,
             config: {
@@ -410,7 +439,7 @@ const PERFORMANCE_OVERVIEW_TEMPLATE: DashboardTemplate = {
         ],
         layout: [
           {
-            i: "template-widget-5",
+            i: "template-widget-6",
             x: 0,
             y: 0,
             w: 3,
@@ -421,7 +450,7 @@ const PERFORMANCE_OVERVIEW_TEMPLATE: DashboardTemplate = {
             maxH: 12,
           },
           {
-            i: "template-widget-6",
+            i: "template-widget-7",
             x: 3,
             y: 0,
             w: 3,
@@ -438,27 +467,31 @@ const PERFORMANCE_OVERVIEW_TEMPLATE: DashboardTemplate = {
         title: "Quality overview",
         widgets: [
           {
-            id: "template-widget-7",
+            id: "template-widget-8",
             title: "Thread quality",
             type: WIDGET_TYPE.PROJECT_METRICS,
             config: {
               metricType: METRIC_NAME_TYPE.THREAD_FEEDBACK_SCORES,
               chartType: CHART_TYPE.line,
+              threadFilters: [],
+              feedbackScores: [],
             },
           },
           {
-            id: "template-widget-8",
+            id: "template-widget-9",
             title: "Trace quality",
             type: WIDGET_TYPE.PROJECT_METRICS,
             config: {
               metricType: METRIC_NAME_TYPE.FEEDBACK_SCORES,
               chartType: CHART_TYPE.line,
+              traceFilters: [],
+              feedbackScores: [],
             },
           },
         ],
         layout: [
           {
-            i: "template-widget-7",
+            i: "template-widget-8",
             x: 0,
             y: 0,
             w: 3,
@@ -469,7 +502,7 @@ const PERFORMANCE_OVERVIEW_TEMPLATE: DashboardTemplate = {
             maxH: 12,
           },
           {
-            i: "template-widget-8",
+            i: "template-widget-9",
             x: 3,
             y: 0,
             w: 3,
@@ -486,7 +519,7 @@ const PERFORMANCE_OVERVIEW_TEMPLATE: DashboardTemplate = {
         title: "Duration & Latency",
         widgets: [
           {
-            id: "template-widget-9",
+            id: "template-widget-10",
             title: "Trace duration",
             type: WIDGET_TYPE.PROJECT_METRICS,
             config: {
@@ -496,7 +529,7 @@ const PERFORMANCE_OVERVIEW_TEMPLATE: DashboardTemplate = {
             },
           },
           {
-            id: "template-widget-10",
+            id: "template-widget-11",
             title: "Thread duration",
             type: WIDGET_TYPE.PROJECT_METRICS,
             config: {
@@ -508,7 +541,7 @@ const PERFORMANCE_OVERVIEW_TEMPLATE: DashboardTemplate = {
         ],
         layout: [
           {
-            i: "template-widget-9",
+            i: "template-widget-10",
             x: 0,
             y: 0,
             w: 3,
@@ -519,7 +552,7 @@ const PERFORMANCE_OVERVIEW_TEMPLATE: DashboardTemplate = {
             maxH: 12,
           },
           {
-            i: "template-widget-10",
+            i: "template-widget-11",
             x: 3,
             y: 0,
             w: 3,

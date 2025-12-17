@@ -23,6 +23,7 @@ import {
   COMPOSED_PROVIDER_TYPE,
   LLMPromptConfigsType,
   PROVIDER_MODEL_TYPE,
+  PROVIDER_TYPE,
 } from "@/types/providers";
 import { ProviderMessageType } from "@/types/llm";
 import { parseCompletionOutput } from "@/lib/playground";
@@ -170,6 +171,9 @@ const getSpanFromRun = (run: LogQueueParams, traceId: string): LogSpan => {
       usage: run.usage,
       model: spanModel,
       parameters: run.configs,
+      ...(run.provider === PROVIDER_TYPE.OPIK_FREE && {
+        opik_free_model: true,
+      }),
     },
   };
 };

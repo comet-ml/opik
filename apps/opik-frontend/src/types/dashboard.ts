@@ -41,6 +41,7 @@ export interface ProjectMetricsWidget {
     chartType?: CHART_TYPE.line | CHART_TYPE.bar;
     traceFilters?: Filters;
     threadFilters?: Filters;
+    feedbackScores?: string[];
   } & Record<string, unknown>;
 }
 
@@ -70,6 +71,7 @@ export interface ExperimentsFeedbackScoresWidgetType {
     groups?: Groups;
     experimentIds?: string[];
     chartType?: CHART_TYPE;
+    feedbackScores?: string[];
   } & Record<string, unknown>;
 }
 

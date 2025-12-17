@@ -20,6 +20,7 @@ export interface ProjectDetailed {
     totalEstimatedCostSum?: number;
     usage?: Record<string, number>;
     traceCount?: number;
+    threadCount?: number;
     guardrailsFailedCount?: number;
     errorCount?: OpikApi.ErrorCountWithDeviationDetailed;
 }

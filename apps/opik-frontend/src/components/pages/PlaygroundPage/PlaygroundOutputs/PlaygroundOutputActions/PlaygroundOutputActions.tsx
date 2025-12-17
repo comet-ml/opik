@@ -54,6 +54,7 @@ interface PlaygroundOutputActionsProps {
   size: number;
   onChangeSize: (size: number) => void;
   total: number;
+  isLoadingTotal?: boolean;
 }
 
 const RUN_HOT_KEYS = ["⌘", "⏎"];
@@ -72,6 +73,7 @@ const PlaygroundOutputActions = ({
   size,
   onChangeSize,
   total,
+  isLoadingTotal,
 }: PlaygroundOutputActionsProps) => {
   const [isRuleDialogOpen, setIsRuleDialogOpen] = useState(false);
   const [ruleDialogProjectId, setRuleDialogProjectId] = useState<
@@ -400,7 +402,7 @@ const PlaygroundOutputActions = ({
           <PlaygroundProgressIndicator />
         </div>
       )}
-      <div className="sticky right-0 ml-auto flex h-0 gap-2">
+      <div className="sticky right-0 ml-auto flex gap-2">
         {createdExperiments.length > 0 && (
           <TooltipWrapper
             content={
@@ -462,6 +464,7 @@ const PlaygroundOutputActions = ({
               variant="minimal"
               itemsPerPage={[10, 50, 100, 200, 500, 1000]}
               disabled={isRunning}
+              isLoadingTotal={isLoadingTotal}
             />
             <Separator orientation="vertical" className="mx-2 h-4" />
           </div>

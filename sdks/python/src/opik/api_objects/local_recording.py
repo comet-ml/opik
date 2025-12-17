@@ -1,9 +1,10 @@
 import contextlib
 from typing import Iterator, List
 from typing import Optional
+
 from . import opik_client
-from ..message_processing import message_processors_chain
 from ..message_processing.emulation import local_emulator_message_processor, models
+from ..message_processing.processors import message_processors_chain
 
 
 class _LocalRecordingHandle:
@@ -53,7 +54,7 @@ def record_traces_locally(
 
     # Disallow nested/local concurrent recordings in the same process
     existing_local = message_processors_chain.get_local_emulator_message_processor(
-        chain=client._message_processor
+        chain=client.__internal_api__message_processor__
     )
     if existing_local is not None and existing_local.is_active():
         raise RuntimeError(
@@ -61,10 +62,10 @@ def record_traces_locally(
         )
 
     message_processors_chain.toggle_local_emulator_message_processor(
-        active=True, chain=client._message_processor, reset=True
+        active=True, chain=client.__internal_api__message_processor__, reset=True
     )
     local = message_processors_chain.get_local_emulator_message_processor(
-        chain=client._message_processor
+        chain=client.__internal_api__message_processor__
     )
     if local is None:
         # Should not happen given the default chain, but guard just in case
@@ -76,5 +77,5 @@ def record_traces_locally(
     finally:
         client.flush()
         message_processors_chain.toggle_local_emulator_message_processor(
-            active=False, chain=client._message_processor, reset=True
+            active=False, chain=client.__internal_api__message_processor__, reset=True
         )
