@@ -25,10 +25,12 @@ Opik integrates with Langchain to allow you to log your Langchain calls to the O
    translation = llm_chain.run("Hello, how are you?", callbacks=[opik_tracer])
    print(translation)
 
-You can learn more about the `OpikTracer` decorator in the following section:
+You can learn more about the LangChain integration functions in the following sections:
 
 .. toctree::
    :maxdepth: 4
    :titlesonly:
 
    OpikTracer
+   track_langgraph
+   extract_current_langgraph_span_data
