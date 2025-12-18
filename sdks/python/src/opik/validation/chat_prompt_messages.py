@@ -165,15 +165,15 @@ class ChatPromptMessagesValidator(validator.RaisableValidator):
     ) -> None:
         """Validate type-specific requirements for content parts."""
         if content_type == "image_url":
-            self._validate_required_string_key(
+            self._validate_required_url_object(
                 content_prefix, content_part, "image_url", "image_url", failure_reasons
             )
         elif content_type == "video_url":
-            self._validate_required_string_key(
+            self._validate_required_url_object(
                 content_prefix, content_part, "video_url", "video_url", failure_reasons
             )
         elif content_type == "audio_url":
-            self._validate_required_string_key(
+            self._validate_required_url_object(
                 content_prefix, content_part, "audio_url", "audio_url", failure_reasons
             )
         elif content_type == "text":
@@ -197,6 +197,39 @@ class ChatPromptMessagesValidator(validator.RaisableValidator):
             msg = (
                 f"{prefix}.{key_name}: must be a string "
                 f"but {type(content_part.get(key_name)).__name__} was given"
+            )
+            failure_reasons.append(msg)
+
+    def _validate_required_url_object(
+        self,
+        prefix: str,
+        content_part: dict,
+        key_name: str,
+        type_name: str,
+        failure_reasons: List[str],
+    ) -> None:
+        """Validate that a required key exists and is a dict with a 'url' key that is a string."""
+        if key_name not in content_part:
+            msg = f"{prefix}: must have '{key_name}' key when type is '{type_name}'"
+            failure_reasons.append(msg)
+            return
+
+        url_object = content_part.get(key_name)
+        if not isinstance(url_object, dict):
+            msg = (
+                f"{prefix}.{key_name}: must be a dict "
+                f"but {type(url_object).__name__} was given"
+            )
+            failure_reasons.append(msg)
+            return
+
+        if "url" not in url_object:
+            msg = f"{prefix}.{key_name}: must have 'url' key"
+            failure_reasons.append(msg)
+        elif not isinstance(url_object.get("url"), str):
+            msg = (
+                f"{prefix}.{key_name}.url: must be a string "
+                f"but {type(url_object.get('url')).__name__} was given"
             )
             failure_reasons.append(msg)
 

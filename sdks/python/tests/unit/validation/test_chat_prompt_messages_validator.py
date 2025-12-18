@@ -25,7 +25,7 @@ from opik.validation import chat_prompt_messages
                         {"type": "text", "text": "Hello"},
                         {
                             "type": "image_url",
-                            "image_url": "https://example.com/image.jpg",
+                            "image_url": {"url": "https://example.com/image.jpg"},
                         },
                     ],
                 }
@@ -90,7 +90,7 @@ from opik.validation import chat_prompt_messages
                     "content": [
                         {
                             "type": "image_url",
-                            "image_url": "https://example.com/image.jpg",
+                            "image_url": {"url": "https://example.com/image.jpg"},
                         }
                     ],
                 }
@@ -104,7 +104,7 @@ from opik.validation import chat_prompt_messages
                     "content": [
                         {
                             "type": "video_url",
-                            "video_url": "https://example.com/video.mp4",
+                            "video_url": {"url": "https://example.com/video.mp4"},
                         }
                     ],
                 }
@@ -118,7 +118,7 @@ from opik.validation import chat_prompt_messages
                     "content": [
                         {
                             "type": "audio_url",
-                            "audio_url": "https://example.com/audio.mp3",
+                            "audio_url": {"url": "https://example.com/audio.mp3"},
                         }
                     ],
                 }
@@ -133,11 +133,11 @@ from opik.validation import chat_prompt_messages
                         {"type": "text", "text": "Hello"},
                         {
                             "type": "image_url",
-                            "image_url": "https://example.com/image.jpg",
+                            "image_url": {"url": "https://example.com/image.jpg"},
                         },
                         {
                             "type": "video_url",
-                            "video_url": "https://example.com/video.mp4",
+                            "video_url": {"url": "https://example.com/video.mp4"},
                         },
                     ],
                 }
@@ -161,29 +161,68 @@ from opik.validation import chat_prompt_messages
             [{"role": "user", "content": [{"type": "audio_url"}]}],
             False,  # Missing audio_url key
         ),
-        # Invalid cases - wrong type for URL values
+        # Invalid cases - wrong type for URL objects
         (
             [{"role": "user", "content": [{"type": "image_url", "image_url": 123}]}],
-            False,  # image_url is not a string
+            False,  # image_url is not a dict
         ),
         (
             [{"role": "user", "content": [{"type": "image_url", "image_url": None}]}],
             False,  # image_url is None
         ),
         (
+            [
+                {
+                    "role": "user",
+                    "content": [{"type": "image_url", "image_url": "string"}],
+                }
+            ],
+            False,  # image_url is a string, should be dict
+        ),
+        (
+            [{"role": "user", "content": [{"type": "image_url", "image_url": {}}]}],
+            False,  # image_url dict missing 'url' key
+        ),
+        (
+            [
+                {
+                    "role": "user",
+                    "content": [{"type": "image_url", "image_url": {"url": 123}}],
+                }
+            ],
+            False,  # image_url.url is not a string
+        ),
+        (
             [{"role": "user", "content": [{"type": "video_url", "video_url": 123}]}],
-            False,  # video_url is not a string
+            False,  # video_url is not a dict
+        ),
+        (
+            [{"role": "user", "content": [{"type": "video_url", "video_url": {}}]}],
+            False,  # video_url dict missing 'url' key
         ),
         (
             [
                 {
                     "role": "user",
                     "content": [
-                        {"type": "audio_url", "audio_url": ["not", "a", "string"]}
+                        {"type": "audio_url", "audio_url": ["not", "a", "dict"]}
                     ],
                 }
             ],
-            False,  # audio_url is not a string
+            False,  # audio_url is not a dict
+        ),
+        (
+            [{"role": "user", "content": [{"type": "audio_url", "audio_url": {}}]}],
+            False,  # audio_url dict missing 'url' key
+        ),
+        (
+            [
+                {
+                    "role": "user",
+                    "content": [{"type": "audio_url", "audio_url": {"url": None}}],
+                }
+            ],
+            False,  # audio_url.url is None
         ),
         (
             [{"role": "user", "content": [{"type": "text", "text": 123}]}],
@@ -203,7 +242,10 @@ from opik.validation import chat_prompt_messages
                 {
                     "role": "user",
                     "content": [
-                        {"type": "text", "image_url": "https://example.com/image.jpg"}
+                        {
+                            "type": "text",
+                            "image_url": {"url": "https://example.com/image.jpg"},
+                        }
                     ],
                 }
             ],
