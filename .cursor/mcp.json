@@ -9,13 +9,10 @@
         "-e",
         "GITHUB_PERSONAL_ACCESS_TOKEN",
         "-e",
-        "GITHUB_TOOLSETS",
+        "GITHUB_TOOLSETS=repos,pull_requests,issues",
         "ghcr.io/github/github-mcp-server"
       ],
-      "env": {
-        "GITHUB_PERSONAL_ACCESS_TOKEN": "${GITHUB_PERSONAL_ACCESS_TOKEN}",
-        "GITHUB_TOOLSETS": "repos,pull_requests,issues"
-      }
+      "envFile": "${workspaceFolder}/.env.local"
     },
     "Atlassian": {
       "command": "npx -y mcp-remote https://mcp.atlassian.com/v1/sse",
