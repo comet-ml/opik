@@ -18,6 +18,30 @@ import { ProviderMessageType } from "@/types/llm";
 
 const DATA_PREFIX = "data:";
 
+/**
+ * Processes SSE chunk data with buffering for incomplete lines.
+ * SSE messages can be split across network chunks, so we buffer incomplete
+ * lines and only process complete lines (those ending with newline).
+ */
+export const processSSEChunk = (
+  chunk: string,
+  buffer: string,
+): { lines: string[]; newBuffer: string } => {
+  const data = buffer + chunk;
+  const lines = data.split("\n");
+
+  // if the data doesn't end with newline, the last element is incomplete
+  // save it for the next iteration
+  let newBuffer = "";
+  if (!data.endsWith("\n")) {
+    newBuffer = lines.pop() || "";
+  }
+
+  const completeLines = lines.filter((line) => line.trim() !== "");
+
+  return { lines: completeLines, newBuffer };
+};
+
 const getNowUtcTimeISOString = (): string => {
   return dayjs().utc().toISOString();
 };
@@ -192,6 +216,9 @@ const useCompletionProxyStreaming = ({
           }
         };
 
+        // buffer to hold incomplete lines across chunks
+        let lineBuffer = "";
+
         // an analogue of true && reader
         // we need it to wait till the stream is closed
         while (reader) {
@@ -202,7 +229,8 @@ const useCompletionProxyStreaming = ({
           }
 
           const chunk = decoder.decode(value, { stream: true });
-          const lines = chunk.split("\n").filter((line) => line.trim() !== "");
+          const { lines, newBuffer } = processSSEChunk(chunk, lineBuffer);
+          lineBuffer = newBuffer;
 
           for (const line of lines) {
             const JSONData = line.startsWith(DATA_PREFIX)
