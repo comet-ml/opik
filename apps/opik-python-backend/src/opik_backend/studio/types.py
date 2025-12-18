@@ -96,7 +96,7 @@ class OptimizationConfig:
         for msg in config["prompt"]["messages"]:
             converted_msg = {
                 "role": msg["role"],
-                "content": _convert_template_syntax(msg["content"])
+                "content": _convert_template_syntax(msg["content"]) if isinstance(msg["content"], str) else msg["content"]
             }
             prompt_messages.append(converted_msg)
         
