@@ -40,19 +40,28 @@ export enum ORGANIZATION_ROLE_TYPE {
   emAndMPMOnly = "EM_AND_MPM_ONLY",
 }
 
+export enum WORKSPACE_ROLE_TYPE {
+  owner = "Workspace owner",
+  member = "Workspace member",
+}
+
 export interface Organization {
   id: string;
   name: string;
   paymentPlan: string;
   academic: boolean;
   role: ORGANIZATION_ROLE_TYPE;
+  onlyAdminsInviteByEmail: boolean;
+}
+
+export enum ManagementPermissionsNames {
+  MANAGEMENT = "management",
+  PROJECT_VISIBILITY = "project_visibility",
+  INVITE_USERS = "invite_users_to_workspace",
 }
 
 export interface UserPermission {
-  permissionName:
-    | "management"
-    | "invite_users_to_workspace"
-    | "project_visibility";
+  permissionName: ManagementPermissionsNames;
   permissionValue: "true" | "false";
 }
 
@@ -71,4 +80,14 @@ export interface OrganizationMember {
   userName: string;
   email: string;
   role: ORGANIZATION_ROLE_TYPE;
+}
+
+export interface WorkspaceMember {
+  id: string;
+  userName: string;
+  email: string;
+  joinedAt?: string;
+  role?: string;
+  isAdmin?: boolean;
+  permissions?: UserPermission[];
 }
