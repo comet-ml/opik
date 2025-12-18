@@ -32,10 +32,11 @@ export const UNSET_PROJECT_OPTION = [
 
 export const UNSET_PROJECT_VALUE = "";
 
-export const GLOBAL_PROJECT_CONFIG_MESSAGE = "Using global project config";
+export const GLOBAL_PROJECT_CONFIG_MESSAGE =
+  "Using the dashboard's default project settings";
 
 export const WIDGET_PROJECT_SELECTOR_DESCRIPTION =
-  "Pick the project for this widget. If not set, the dashboard's global project config will be used.";
+  "Widgets use the dashboard's project settings by default. You can override them here and select a different project.";
 
 export const resolveProjectIdFromConfig = (
   widgetProjectId: string | undefined,
