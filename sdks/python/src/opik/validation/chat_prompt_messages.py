@@ -15,6 +15,7 @@ class ChatPromptMessagesValidator(validator.RaisableValidator):
     """
 
     VALID_ROLES = {"system", "user", "assistant"}
+    URL_BASED_CONTENT_TYPES = {"image_url", "video_url", "audio_url"}
 
     def __init__(self, messages: Any):
         self.messages = messages
@@ -164,17 +165,13 @@ class ChatPromptMessagesValidator(validator.RaisableValidator):
         failure_reasons: List[str],
     ) -> None:
         """Validate type-specific requirements for content parts."""
-        if content_type == "image_url":
+        if content_type in self.URL_BASED_CONTENT_TYPES:
             self._validate_required_url_object(
-                content_prefix, content_part, "image_url", "image_url", failure_reasons
-            )
-        elif content_type == "video_url":
-            self._validate_required_url_object(
-                content_prefix, content_part, "video_url", "video_url", failure_reasons
-            )
-        elif content_type == "audio_url":
-            self._validate_required_url_object(
-                content_prefix, content_part, "audio_url", "audio_url", failure_reasons
+                content_prefix,
+                content_part,
+                content_type,
+                content_type,
+                failure_reasons,
             )
         elif content_type == "text":
             self._validate_required_string_key(
