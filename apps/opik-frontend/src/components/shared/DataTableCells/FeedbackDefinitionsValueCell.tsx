@@ -34,9 +34,7 @@ const FeedbackDefinitionsValueCell = (
       metadata={context.column.columnDef.meta}
       tableMetadata={context.table.options.meta}
     >
-      <div className="flex max-h-full flex-row gap-2 overflow-x-auto">
-        {items}
-      </div>
+      <div className="min-w-0 truncate">{items}</div>
     </CellWrapper>
   );
 };
