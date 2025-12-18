@@ -41,11 +41,6 @@ interface AutomationRuleProjectsDAO {
     Set<UUID> findProjectIdsByRuleId(@Bind("ruleId") UUID ruleId,
             @Bind("workspaceId") String workspaceId);
 
-    @SqlUpdate("DELETE FROM automation_rule_projects " +
-            "WHERE rule_id = :ruleId AND workspace_id = :workspaceId")
-    int deleteByRuleId(@Bind("ruleId") UUID ruleId,
-            @Bind("workspaceId") String workspaceId);
-
     @SqlUpdate("""
             DELETE FROM automation_rule_projects
             WHERE workspace_id = :workspaceId

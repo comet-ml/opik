@@ -240,7 +240,7 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
                         evaluatorUpdate.getSamplingRate(), evaluatorUpdate.isEnabled(), filtersJson);
 
                 // Update project associations in junction table
-                projectsDAO.deleteByRuleId(id, workspaceId);
+                projectsDAO.deleteByRuleIds(Set.of(id), workspaceId);
                 projectsDAO.saveRuleProjects(id, projectIds, workspaceId);
 
                 // Clear legacy project_id field to prevent stale data
