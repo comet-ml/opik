@@ -5,6 +5,7 @@ from unittest.mock import MagicMock, patch
 
 from opik_backend.studio.metrics import MetricFactory
 from opik_backend.studio.exceptions import InvalidMetricError
+from opik_backend.studio.types import _convert_template_syntax, OptimizationConfig
 
 
 class TestMetricFactory:
@@ -158,5 +159,93 @@ class TestLevenshteinMetricExecution:
         result = metric_fn(dataset_item, "xyz")
         
         assert result.value == 0.0
+
+
+class TestMetricReasons:
+    """Tests for metric reason fields (required for hierarchical_reflective optimizer)."""
+
+    def test_equals_metric_includes_reason_on_match(self):
+        """Test equals metric includes reason field on match."""
+        metric_fn = MetricFactory.build("equals", {}, "model")
+        dataset_item = {"answer": "test"}
+        result = metric_fn(dataset_item, "test")
+        
+        assert result.reason is not None
+        assert "match" in result.reason.lower()
+
+    def test_equals_metric_includes_reason_on_no_match(self):
+        """Test equals metric includes reason field on no match."""
+        metric_fn = MetricFactory.build("equals", {}, "model")
+        dataset_item = {"answer": "test"}
+        result = metric_fn(dataset_item, "different")
+        
+        assert result.reason is not None
+        assert "no match" in result.reason.lower()
+
+    def test_levenshtein_metric_includes_reason(self):
+        """Test levenshtein metric includes reason field with similarity percentage."""
+        metric_fn = MetricFactory.build("levenshtein_ratio", {}, "model")
+        dataset_item = {"answer": "hello"}
+        result = metric_fn(dataset_item, "hallo")
+        
+        assert result.reason is not None
+        assert "similarity" in result.reason.lower()
+        assert "%" in result.reason
+
+
+class TestTemplateSyntaxConversion:
+    """Tests for template syntax conversion from {{var}} to {var}."""
+
+    def test_convert_single_variable(self):
+        """Test converting single variable."""
+        result = _convert_template_syntax("Hello {{name}}")
+        assert result == "Hello {name}"
+
+    def test_convert_multiple_variables(self):
+        """Test converting multiple variables."""
+        result = _convert_template_syntax("{{greeting}} {{name}}!")
+        assert result == "{greeting} {name}!"
+
+    def test_preserve_single_braces(self):
+        """Test that single braces are preserved."""
+        result = _convert_template_syntax("Already {converted}")
+        assert result == "Already {converted}"
+
+    def test_no_variables(self):
+        """Test string without variables."""
+        result = _convert_template_syntax("No variables here")
+        assert result == "No variables here"
+
+    def test_empty_string(self):
+        """Test empty string."""
+        result = _convert_template_syntax("")
+        assert result == ""
+
+    def test_variable_in_sentence(self):
+        """Test variable embedded in sentence."""
+        result = _convert_template_syntax("What is the mime type for {{url}}?")
+        assert result == "What is the mime type for {url}?"
+
+    def test_optimization_config_converts_templates(self):
+        """Test OptimizationConfig.from_dict converts template syntax in prompt messages."""
+        config = {
+            "dataset_name": "test_dataset",
+            "prompt": {
+                "messages": [
+                    {"role": "system", "content": "Be helpful"},
+                    {"role": "user", "content": "What is {{question}}? Answer: {{answer}}"}
+                ]
+            },
+            "llm_model": {"model": "gpt-4o-mini", "parameters": {}},
+            "evaluation": {"metrics": [{"type": "equals", "parameters": {}}]},
+            "optimizer": {"type": "gepa", "parameters": {}}
+        }
+        
+        opt_config = OptimizationConfig.from_dict(config)
+        
+        # System message should be unchanged (no variables)
+        assert opt_config.prompt_messages[0]["content"] == "Be helpful"
+        # User message should have converted variables
+        assert opt_config.prompt_messages[1]["content"] == "What is {question}? Answer: {answer}"
 
 

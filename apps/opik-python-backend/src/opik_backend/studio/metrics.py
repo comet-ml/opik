@@ -88,13 +88,23 @@ def _build_equals_metric(params: Dict[str, Any], model: str) -> Callable:
     Returns:
         Metric function
     """
+    from opik.evaluation.metrics.score_result import ScoreResult
+    
     case_sensitive = params.get("case_sensitive", DEFAULT_CASE_SENSITIVE)
     reference_key = params.get("reference_key", DEFAULT_REFERENCE_KEY)
     equals_metric = Equals(case_sensitive=case_sensitive)
     
     def metric_fn(dataset_item, llm_output):
         reference = dataset_item.get(reference_key, "")
-        return equals_metric.score(reference=reference, output=llm_output)
+        result = equals_metric.score(reference=reference, output=llm_output)
+        
+        # Add reason for hierarchical_reflective optimizer compatibility
+        if result.value == 1.0:
+            reason = "Exact match: output equals reference"
+        else:
+            reason = "No match: output does not equal reference"
+        
+        return ScoreResult(value=result.value, name=result.name, reason=reason)
     
     metric_fn.__name__ = "equals"
     return metric_fn
@@ -108,18 +118,25 @@ def _build_levenshtein_metric(params: Dict[str, Any], model: str) -> Callable:
     
     Args:
         params: Metric parameters
+            - case_sensitive (bool): Whether comparison is case-sensitive
             - reference_key (str): Key in dataset item containing reference value
         model: LLM model (not used for this metric)
         
     Returns:
         Metric function
     """
+    from opik.evaluation.metrics.score_result import ScoreResult
+    
+    case_sensitive = params.get("case_sensitive", DEFAULT_CASE_SENSITIVE)
     reference_key = params.get("reference_key", DEFAULT_REFERENCE_KEY)
-    levenshtein_metric = LevenshteinRatio()
+    levenshtein_metric = LevenshteinRatio(case_sensitive=case_sensitive)
     
     def metric_fn(dataset_item, llm_output):
         reference = dataset_item.get(reference_key, "")
-        return levenshtein_metric.score(reference=reference, output=llm_output)
+        result = levenshtein_metric.score(reference=reference, output=llm_output)
+        
+        reason = f"Similarity: {result.value * 100:.0f}%"
+        return ScoreResult(value=result.value, name=result.name, reason=reason)
     
     metric_fn.__name__ = "levenshtein_ratio"
     return metric_fn
