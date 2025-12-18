@@ -125,7 +125,9 @@ export const THINKING_LEVEL_OPTIONS_FLASH: Array<{
   { label: "High (Default)", value: "high" },
 ];
 
-// Legacy export for backwards compatibility
+// Legacy export for backwards compatibility.
+// Prefer using model-specific constants instead: THINKING_LEVEL_OPTIONS_PRO or THINKING_LEVEL_OPTIONS_FLASH.
+/** @deprecated Use THINKING_LEVEL_OPTIONS_PRO or THINKING_LEVEL_OPTIONS_FLASH instead. */
 export const THINKING_LEVEL_OPTIONS = THINKING_LEVEL_OPTIONS_PRO;
 
 export const LLM_PROMPT_CUSTOM_TRACE_TEMPLATE: LLMPromptTemplate = {
