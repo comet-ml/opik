@@ -326,8 +326,8 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
             var dao = handle.attach(AutomationRuleEvaluatorDAO.class);
             var singleIdSet = Collections.singleton(id);
             var criteria = AutomationRuleEvaluatorCriteria.builder().ids(singleIdSet).build();
-            List<AutomationRuleEvaluatorModel<?>> models = dao.find(workspaceId, projectIds, criteria, null, null,
-                    Map.of(), null, null);
+            List<AutomationRuleEvaluatorModel<?>> models = findRulesWithProjects(dao, workspaceId, projectIds,
+                    criteria, null, null, Map.of(), null, null);
 
             // Enrich models with project names for backward compatibility
             List<AutomationRuleEvaluatorModel<?>> enrichedModels = enrichWithProjectNames(models, workspaceId);
@@ -363,8 +363,8 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
         return template.inTransaction(READ_ONLY, handle -> {
             var dao = handle.attach(AutomationRuleEvaluatorDAO.class);
             var criteria = AutomationRuleEvaluatorCriteria.builder().ids(ids).build();
-            List<AutomationRuleEvaluatorModel<?>> models = dao.find(workspaceId, projectIds, criteria, null, null,
-                    Map.of(), null, null);
+            List<AutomationRuleEvaluatorModel<?>> models = findRulesWithProjects(dao, workspaceId, projectIds,
+                    criteria, null, null, Map.of(), null, null);
 
             // Enrich models with project names for backward compatibility
             List<AutomationRuleEvaluatorModel<?>> enrichedModels = enrichWithProjectNames(models, workspaceId);
@@ -448,8 +448,8 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
             var total = dao.findCount(workspaceId, searchCriteria.projectId(), criteria);
             var offset = (pageNum - 1) * size;
 
-            List<AutomationRuleEvaluatorModel<?>> models = dao.find(workspaceId, searchCriteria.projectId(), criteria,
-                    sortingFieldsSql, filtersSQL, filterMapping, offset, size);
+            List<AutomationRuleEvaluatorModel<?>> models = findRulesWithProjects(dao, workspaceId,
+                    searchCriteria.projectId(), criteria, sortingFieldsSql, filtersSQL, filterMapping, offset, size);
 
             // Enrich models with project names for backward compatibility
             List<AutomationRuleEvaluatorModel<?>> enrichedModels = enrichWithProjectNames(models, workspaceId);
@@ -516,7 +516,7 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
         return template.inTransaction(READ_ONLY, handle -> {
             var dao = handle.attach(AutomationRuleEvaluatorDAO.class);
             var criteria = AutomationRuleEvaluatorCriteria.builder().type(type).build();
-            var results = dao.find(workspaceId, projectId, criteria);
+            var results = findRulesWithProjects(dao, workspaceId, projectId, criteria);
             log.debug("Found {} evaluators for projectId '{}', workspaceId '{}', type '{}'",
                     results.size(), projectId, workspaceId, type);
 
@@ -553,6 +553,71 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
                         .total(logs.size())
                         .size(logs.size())
                         .build());
+    }
+
+    private List<AutomationRuleEvaluatorModel<?>> findRulesWithProjects(
+            AutomationRuleEvaluatorDAO dao,
+            String workspaceId,
+            Set<UUID> projectIds,
+            AutomationRuleEvaluatorCriteria criteria,
+            String sortingFields,
+            String filters,
+            Map<String, Object> filterMapping,
+            Integer offset,
+            Integer limit) {
+
+        // Query 1: Get paginated rules without project data (no duplication)
+        var rules = dao.findRulesWithoutProjects(workspaceId, projectIds, criteria.action(), criteria.type(),
+                criteria.ids(), criteria.id(), criteria.name(), sortingFields, filters, filterMapping, offset, limit);
+
+        if (rules.isEmpty()) {
+            return List.of();
+        }
+
+        // Query 2: Bulk fetch project associations for these rules
+        var ruleIds = rules.stream().map(AutomationRuleEvaluatorModel::id).toList();
+        var projectMappings = dao.findProjectMappings(ruleIds, workspaceId);
+
+        // Merge project IDs into rules with legacy fallback (business logic)
+        return rules.stream()
+                .<AutomationRuleEvaluatorModel<?>>map(rule -> {
+                    var projectsFromJunction = projectMappings.getOrDefault(rule.id(), Set.of());
+
+                    // Legacy fallback: If junction table is empty but rule has legacy project_id,
+                    // keep the legacy value (set by row mapper)
+                    if (projectsFromJunction.isEmpty() && !rule.projectIds().isEmpty()) {
+                        // Rule was created before multi-project support, use legacy value
+                        return rule;
+                    }
+
+                    // Use junction table data (new/updated rules)
+                    return rule.withProjectIds(projectsFromJunction);
+                })
+                .toList();
+    }
+
+    private List<AutomationRuleEvaluatorModel<?>> findRulesWithProjects(
+            AutomationRuleEvaluatorDAO dao,
+            String workspaceId,
+            UUID projectId,
+            AutomationRuleEvaluatorCriteria criteria,
+            String sortingFields,
+            String filters,
+            Map<String, Object> filterMapping,
+            Integer offset,
+            Integer limit) {
+        // Backward compatibility: convert single projectId to set
+        return findRulesWithProjects(dao, workspaceId,
+                Optional.ofNullable(projectId).map(Set::of).orElse(null),
+                criteria, sortingFields, filters, filterMapping, offset, limit);
+    }
+
+    private List<AutomationRuleEvaluatorModel<?>> findRulesWithProjects(
+            AutomationRuleEvaluatorDAO dao,
+            String workspaceId,
+            UUID projectId,
+            AutomationRuleEvaluatorCriteria criteria) {
+        return findRulesWithProjects(dao, workspaceId, projectId, criteria, null, null, Map.of(), null, null);
     }
 
     /**

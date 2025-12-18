@@ -132,53 +132,6 @@ public interface AutomationRuleEvaluatorDAO extends AutomationRuleDAO {
         }
     }
 
-    default List<AutomationRuleEvaluatorModel<?>> find(String workspaceId, Set<UUID> projectIds,
-            AutomationRuleEvaluatorCriteria criteria, String sortingFields, String filters,
-            Map<String, Object> filterMapping, Integer offset, Integer limit) {
-
-        // Query 1: Get paginated rules without project data (no duplication)
-        var rules = findRulesWithoutProjects(workspaceId, projectIds, criteria.action(), criteria.type(),
-                criteria.ids(), criteria.id(), criteria.name(), sortingFields, filters, filterMapping, offset, limit);
-
-        if (rules.isEmpty()) {
-            return List.of();
-        }
-
-        // Query 2: Bulk fetch project associations for these rules
-        var ruleIds = rules.stream().map(AutomationRuleEvaluatorModel::id).toList();
-        var projectMappings = findProjectMappings(ruleIds, workspaceId);
-
-        // Merge project IDs into rules with legacy fallback
-        return rules.stream()
-                .<AutomationRuleEvaluatorModel<?>>map(rule -> {
-                    var projectsFromJunction = projectMappings.getOrDefault(rule.id(), Set.of());
-
-                    // Legacy fallback: If junction table is empty but rule has legacy project_id,
-                    // keep the legacy value (set by row mapper)
-                    if (projectsFromJunction.isEmpty() && !rule.projectIds().isEmpty()) {
-                        // Rule was created before multi-project support, use legacy value
-                        return rule;
-                    }
-
-                    // Use junction table data (new/updated rules)
-                    return rule.withProjectIds(projectsFromJunction);
-                })
-                .toList();
-    }
-
-    default List<AutomationRuleEvaluatorModel<?>> find(String workspaceId, UUID projectId,
-            AutomationRuleEvaluatorCriteria criteria, String sortingFields, String filters,
-            Map<String, Object> filterMapping, Integer offset, Integer limit) {
-        // Backward compatibility: convert single projectId to set
-        return find(workspaceId, Optional.ofNullable(projectId).map(Set::of).orElse(null),
-                criteria, sortingFields, filters, filterMapping, offset, limit);
-    }
-
-    default List<AutomationRuleEvaluatorModel<?>> find(String workspaceId, UUID projectId,
-            AutomationRuleEvaluatorCriteria criteria) {
-        return find(workspaceId, projectId, criteria, null, null, Map.of(), null, null);
-    }
-
     @SqlQuery("""
             SELECT COUNT(DISTINCT rule.id)
             FROM automation_rules rule
