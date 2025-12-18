@@ -1,13 +1,13 @@
-from typing import Any, List
+from typing import Any, List, Optional
 
 import opik.exceptions as exceptions
 from . import validator, result
 
 
-class ChatPromptMessagesValidator(validator.Validator):
+class ChatPromptMessagesValidator(validator.RaisableValidator):
     """
     Validator for ChatPrompt messages list.
-    
+
     Validates that messages is a list of dicts with:
     - "role" key with value "system", "user", or "assistant"
     - "content" key with value either string or list of dicts
@@ -18,7 +18,7 @@ class ChatPromptMessagesValidator(validator.Validator):
 
     def __init__(self, messages: Any):
         self.messages = messages
-        self.validation_result: result.ValidationResult | None = None
+        self.validation_result: Optional[result.ValidationResult] = None
 
     def validate(self) -> result.ValidationResult:
         failure_reasons: List[str] = []
@@ -40,9 +40,7 @@ class ChatPromptMessagesValidator(validator.Validator):
 
             # Validate message is a dict
             if not isinstance(message, dict):
-                msg = (
-                    f"{prefix}: must be a dict but {type(message).__name__} was given"
-                )
+                msg = f"{prefix}: must be a dict but {type(message).__name__} was given"
                 failure_reasons.append(msg)
                 continue
 
@@ -53,9 +51,7 @@ class ChatPromptMessagesValidator(validator.Validator):
             if message_keys != expected_keys:
                 if not message_keys.issubset(expected_keys):
                     missing_keys = expected_keys - message_keys
-                    msg = (
-                        f"{prefix}: missing required keys: {sorted(missing_keys)}"
-                    )
+                    msg = f"{prefix}: missing required keys: {sorted(missing_keys)}"
                     failure_reasons.append(msg)
                 if not expected_keys.issubset(message_keys):
                     extra_keys = message_keys - expected_keys
@@ -69,7 +65,9 @@ class ChatPromptMessagesValidator(validator.Validator):
             # Validate role
             role = message.get("role")
             if role not in self.VALID_ROLES:
-                valid_roles_str = ", ".join([f"'{r}'" for r in sorted(self.VALID_ROLES)])
+                valid_roles_str = ", ".join(
+                    [f"'{r}'" for r in sorted(self.VALID_ROLES)]
+                )
                 msg = (
                     f"{prefix}.role: must be one of [{valid_roles_str}] "
                     f"but {repr(role)} was given"
@@ -120,4 +118,3 @@ class ChatPromptMessagesValidator(validator.Validator):
                 prefix="ChatPrompt.__init__",
                 failure_reasons=self.validation_result.failure_reasons,
             )
-

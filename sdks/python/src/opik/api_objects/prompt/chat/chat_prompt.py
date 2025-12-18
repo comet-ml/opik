@@ -1,10 +1,11 @@
 import copy
 import json
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple, Type
+
 from typing_extensions import override
 
 from opik.rest_api import types as rest_api_types
-from opik.validation import chat_prompt_messages
+from opik.validation import chat_prompt_messages, validator
 from . import chat_prompt_template
 from .. import client as prompt_client
 from .. import types as prompt_types
@@ -16,6 +17,10 @@ class ChatPrompt(base_prompt.BasePrompt):
     ChatPrompt class represents a chat-style prompt with a name, message array template and commit hash.
     Similar to Prompt but uses a list of chat messages instead of a string template.
     """
+
+    _parameter_validators: List[Tuple[str, Type[validator.RaisableValidator]]] = [
+        ("messages", chat_prompt_messages.ChatPromptMessagesValidator),
+    ]
 
     def __init__(
         self,
@@ -42,9 +47,7 @@ class ChatPrompt(base_prompt.BasePrompt):
         """
 
         # Validate messages structure
-        validator = chat_prompt_messages.ChatPromptMessagesValidator(messages)
-        validator.validate()
-        validator.raise_validation_error()
+        self._validate_inputs(messages=messages)
 
         self._chat_template = chat_prompt_template.ChatPromptTemplate(
             messages=messages,
@@ -60,6 +63,13 @@ class ChatPrompt(base_prompt.BasePrompt):
         self.__internal_api__version_id__: str
 
         self._sync_with_backend()
+
+    def _validate_inputs(self, **kwargs: Any) -> None:
+        for parameter, validator_class in self._parameter_validators:
+            if parameter in kwargs:
+                validator_instance = validator_class(kwargs[parameter])
+                validator_instance.validate()
+                validator_instance.raise_validation_error()
 
     def _sync_with_backend(self) -> None:
         from opik.api_objects import opik_client
