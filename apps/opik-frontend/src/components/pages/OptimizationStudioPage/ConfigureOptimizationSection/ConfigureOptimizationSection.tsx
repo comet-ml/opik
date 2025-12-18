@@ -139,11 +139,12 @@ const ConfigureOptimizationSection: React.FC = () => {
   const handleMetricTypeChange = useCallback(
     (newMetricType: METRIC_TYPE) => {
       const defaultConfig = getDefaultMetricConfig(newMetricType);
+      // Set metricType first so the discriminated union validates against the correct schema
+      form.setValue("metricType", newMetricType);
       form.setValue(
         "metricParams",
         defaultConfig as OptimizationConfigFormType["metricParams"],
       );
-      form.setValue("metricType", newMetricType);
     },
     [form],
   );

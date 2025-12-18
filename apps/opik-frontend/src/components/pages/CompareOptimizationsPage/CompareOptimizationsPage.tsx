@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { keepPreviousData } from "@tanstack/react-query";
 import { ColumnPinningState, ColumnSort } from "@tanstack/react-table";
@@ -25,6 +25,7 @@ import {
   STATUS_TO_VARIANT_MAP,
 } from "@/constants/experiments";
 import { Experiment, EXPERIMENT_TYPE } from "@/types/datasets";
+import { OPTIMIZATION_STATUS } from "@/types/optimizations";
 import { formatDate } from "@/lib/date";
 import { toString } from "@/lib/utils";
 import { convertColumnDataToColumn, mapColumnDataFields } from "@/lib/table";
@@ -55,8 +56,13 @@ import FeedbackScoreHeader from "@/components/shared/DataTableHeaders/FeedbackSc
 import { BestPrompt } from "@/components/pages-shared/experiments/BestPromptCard";
 import OptimizationProgressChartContainer from "@/components/pages-shared/experiments/OptimizationProgressChart";
 import { RESOURCE_TYPE } from "@/components/shared/ResourceLink/ResourceLink";
+import OptimizationViewSelector, {
+  OPTIMIZATION_VIEW_TYPE,
+} from "@/components/pages/CompareOptimizationsPage/OptimizationViewSelector";
+import OptimizationLogs from "@/components/pages-shared/optimizations/OptimizationLogs/OptimizationLogs";
 
 const REFETCH_INTERVAL = 30000;
+const ACTIVE_REFETCH_INTERVAL = 3000;
 const MAX_EXPERIMENTS_LOADED = 1000;
 
 export const getRowId = (e: Experiment) => e.id;
@@ -96,6 +102,9 @@ const StickyTableWrapperWithBorder: React.FC<DataTableWrapperProps> = ({
 const CompareOptimizationsPage: React.FC = () => {
   const navigate = useNavigate();
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
+  const [view, setView] = useState<OPTIMIZATION_VIEW_TYPE>(
+    OPTIMIZATION_VIEW_TYPE.LOGS,
+  );
   const [search = "", setSearch] = useQueryParam("search", StringParam, {
     updateType: "replaceIn",
   });
@@ -150,9 +159,23 @@ const CompareOptimizationsPage: React.FC = () => {
     {
       placeholderData: keepPreviousData,
       enabled: !!optimizationId,
-      refetchInterval: REFETCH_INTERVAL,
+      refetchInterval: (query) => {
+        if (!optimizationId) return false;
+        const status = query.state.data?.status;
+        if (
+          status === OPTIMIZATION_STATUS.RUNNING ||
+          status === OPTIMIZATION_STATUS.INITIALIZED
+        ) {
+          return ACTIVE_REFETCH_INTERVAL;
+        }
+        return REFETCH_INTERVAL;
+      },
     },
   );
+
+  const isActiveOptimization =
+    optimization?.status === OPTIMIZATION_STATUS.RUNNING ||
+    optimization?.status === OPTIMIZATION_STATUS.INITIALIZED;
 
   const {
     data,
@@ -177,7 +200,9 @@ const CompareOptimizationsPage: React.FC = () => {
     },
     {
       placeholderData: keepPreviousData,
-      refetchInterval: REFETCH_INTERVAL,
+      refetchInterval: isActiveOptimization
+        ? ACTIVE_REFETCH_INTERVAL
+        : REFETCH_INTERVAL,
     },
   );
 
@@ -392,40 +417,47 @@ const CompareOptimizationsPage: React.FC = () => {
           limitWidth
         >
           <div className="flex items-center gap-2">
-            <SearchInput
-              searchText={search!}
-              setSearchText={setSearch}
-              placeholder="Search by name"
-              className="w-[320px]"
-              dimension="sm"
-            ></SearchInput>
+            {optimization?.studio_config ? (
+              <OptimizationViewSelector value={view} onChange={setView} />
+            ) : (
+              <SearchInput
+                searchText={search!}
+                setSearchText={setSearch}
+                placeholder="Search by name"
+                className="w-[320px]"
+                dimension="sm"
+              ></SearchInput>
+            )}
           </div>
-          <div className="flex items-center gap-2">
-            <TooltipWrapper content={`Refresh trials list`}>
-              <Button
-                variant="outline"
-                size="icon-sm"
-                className="shrink-0"
-                onClick={() => {
-                  refetchOptimization();
-                  refetchExperiments();
-                }}
-              >
-                <RotateCw />
-              </Button>
-            </TooltipWrapper>
-            <DataTableRowHeightSelector
-              type={height as ROW_HEIGHT}
-              setType={setHeight}
-            />
-            <ColumnsButton
-              columns={columnsDef}
-              selectedColumns={selectedColumns}
-              onSelectionChange={setSelectedColumns}
-              order={columnsOrder}
-              onOrderChange={setColumnsOrder}
-            ></ColumnsButton>
-          </div>
+          {(!optimization?.studio_config ||
+            view === OPTIMIZATION_VIEW_TYPE.TRIALS) && (
+            <div className="flex items-center gap-2">
+              <TooltipWrapper content={`Refresh trials list`}>
+                <Button
+                  variant="outline"
+                  size="icon-sm"
+                  className="shrink-0"
+                  onClick={() => {
+                    refetchOptimization();
+                    refetchExperiments();
+                  }}
+                >
+                  <RotateCw />
+                </Button>
+              </TooltipWrapper>
+              <DataTableRowHeightSelector
+                type={height as ROW_HEIGHT}
+                setType={setHeight}
+              />
+              <ColumnsButton
+                columns={columnsDef}
+                selectedColumns={selectedColumns}
+                onSelectionChange={setSelectedColumns}
+                order={columnsOrder}
+                onOrderChange={setColumnsOrder}
+              ></ColumnsButton>
+            </div>
+          )}
         </PageBodyStickyContainer>
         <PageBodyStickyContainer
           className="flex flex-row gap-x-4 pb-6"
@@ -433,22 +465,27 @@ const CompareOptimizationsPage: React.FC = () => {
           limitWidth
         >
           <div className="flex min-w-0 flex-1">
-            <Card className="h-full flex-1 overflow-hidden">
-              <DataTable
-                columns={columns}
-                data={rows}
-                onRowClick={handleRowClick}
-                sortConfig={sortConfig}
-                resizeConfig={resizeConfig}
-                getRowId={getRowId}
-                rowHeight={height}
-                columnPinning={DEFAULT_COLUMN_PINNING}
-                noData={<DataTableNoData title={noDataText} />}
-                TableWrapper={StickyTableWrapperWithBorder}
-                TableBody={DataTableVirtualBody}
-                stickyHeader
-              />
-            </Card>
+            {optimization?.studio_config &&
+            view === OPTIMIZATION_VIEW_TYPE.LOGS ? (
+              <OptimizationLogs optimization={optimization} />
+            ) : (
+              <Card className="h-full flex-1 overflow-hidden">
+                <DataTable
+                  columns={columns}
+                  data={rows}
+                  onRowClick={handleRowClick}
+                  sortConfig={sortConfig}
+                  resizeConfig={resizeConfig}
+                  getRowId={getRowId}
+                  rowHeight={height}
+                  columnPinning={DEFAULT_COLUMN_PINNING}
+                  noData={<DataTableNoData title={noDataText} />}
+                  TableWrapper={StickyTableWrapperWithBorder}
+                  TableBody={DataTableVirtualBody}
+                  stickyHeader
+                />
+              </Card>
+            )}
           </div>
           <div className="w-2/5 shrink-0">
             {bestExperiment && optimization ? (

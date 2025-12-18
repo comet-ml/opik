@@ -36,6 +36,7 @@ import OnlineEvaluationPage from "@/components/pages/OnlineEvaluationPage/Online
 import AnnotationQueuesPage from "@/components/pages/AnnotationQueuesPage/AnnotationQueuesPage";
 import AnnotationQueuePage from "@/components/pages/AnnotationQueuePage/AnnotationQueuePage";
 import OptimizationsPage from "@/components/pages/OptimizationsPage/OptimizationsPage";
+import OptimizationsNewPage from "@/components/pages/OptimizationsPage/OptimizationsNewPage/OptimizationsNewPage";
 import OptimizationPage from "@/components/pages/OptimizationPage/OptimizationPage";
 import CompareOptimizationsPage from "@/components/pages/CompareOptimizationsPage/CompareOptimizationsPage";
 import CompareTrialsPage from "@/components/pages/CompareTrialsPage/CompareTrialsPage";
@@ -237,12 +238,12 @@ const compareExperimentsRoute = createRoute({
   },
 });
 
-// Optimization runs
+// Optimization studio
 const optimizationsRoute = createRoute({
   path: "/optimizations",
   getParentRoute: () => workspaceRoute,
   staticData: {
-    title: "Optimization runs",
+    title: "Optimization studio",
   },
 });
 
@@ -250,6 +251,16 @@ const optimizationsListRoute = createRoute({
   path: "/",
   getParentRoute: () => optimizationsRoute,
   component: OptimizationsPage,
+});
+
+const optimizationsNewRoute = createRoute({
+  path: "/new",
+  getParentRoute: () => optimizationsRoute,
+  component: OptimizationsNewPage,
+  staticData: {
+    param: "optimizationsNew",
+    paramValue: "new",
+  },
 });
 
 const compareOptimizationsRoute = createRoute({
@@ -514,6 +525,7 @@ const routeTree = rootRoute.addChildren([
       ]),
       optimizationsRoute.addChildren([
         optimizationsListRoute,
+        optimizationsNewRoute,
         compareOptimizationsRoute,
         optimizationBaseRoute.addChildren([
           optimizationRoute,

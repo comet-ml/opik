@@ -42,8 +42,6 @@ export const useOptimizationScores = (
     retVal.baseScore =
       getFeedbackScoreValue(sortedRows[0].feedback_scores, objectiveName) ?? 0;
 
-    if (retVal.baseScore === 0) return retVal;
-
     experiments.forEach((e) => {
       const score = getFeedbackScoreValue(
         e.feedback_scores ?? [],
