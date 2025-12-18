@@ -6,7 +6,17 @@ from typing import Dict, Any, Optional, List
 from uuid import UUID
 
 
-    String with {{variable}} or {{ name }} converted to {variable} or {name}
+def _convert_template_syntax(text: str) -> str:
+    """Convert double curly braces to single curly braces for template variables.
+    
+    The frontend uses Mustache-style {{variable}} syntax, but the optimizer
+    expects Python-style {variable} syntax.
+    
+    Args:
+        text: String that may contain {{variable}} patterns
+        
+    Returns:
+        String with {{variable}} or {{ name }} converted to {variable} or {name}
     """
     # Convert {{variable}} to {variable}, handling spaces, dots, and hyphens
     return re.sub(r'\{\{\s*([^}]+?)\s*\}\}', r'{\1}', text)
