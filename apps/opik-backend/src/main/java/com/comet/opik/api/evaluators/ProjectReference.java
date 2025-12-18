@@ -1,6 +1,8 @@
 package com.comet.opik.api.evaluators;
 
-import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.databind.PropertyNamingStrategies;
+import com.fasterxml.jackson.databind.annotation.JsonNaming;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotNull;
 
@@ -12,11 +14,13 @@ import java.util.UUID;
  * Used in automation rules to represent project assignments.
  * Implements Comparable for natural ordering by project name, then by project ID.
  */
+@JsonIgnoreProperties(ignoreUnknown = true)
+@JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
 @Schema(description = "Project reference with ID and name")
 public record ProjectReference(
-        @NotNull @JsonProperty("project_id") @Schema(description = "Project ID") UUID projectId,
+        @NotNull @Schema(description = "Project ID") UUID projectId,
 
-        @NotNull @JsonProperty("project_name") @Schema(description = "Project name") String projectName)
+        @NotNull @Schema(description = "Project name") String projectName)
         implements
             Comparable<ProjectReference> {
 
