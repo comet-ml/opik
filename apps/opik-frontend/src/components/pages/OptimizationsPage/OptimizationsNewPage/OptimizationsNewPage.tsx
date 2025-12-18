@@ -31,7 +31,7 @@ import {
   OptimizationConfigSchema,
   convertFormDataToStudioConfig,
   convertOptimizationStudioToFormData,
-} from "@/components/pages/OptimizationStudioPage/ConfigureOptimizationSection/schema";
+} from "@/components/pages-shared/optimizations/OptimizationConfigForm/schema";
 import {
   OPTIMIZATION_STATUS,
   OPTIMIZER_TYPE,
@@ -56,7 +56,7 @@ import DatasetSelectBox from "@/components/pages-shared/llm/DatasetSelectBox/Dat
 import OptimizationModelSelect from "@/components/pages-shared/optimizations/OptimizationModelSelect/OptimizationModelSelect";
 import AlgorithmConfigs from "@/components/pages-shared/optimizations/AlgorithmSettings/AlgorithmConfigs";
 import MetricConfigs from "@/components/pages-shared/optimizations/MetricSettings/MetricConfigs";
-import OptimizationTemperatureConfig from "@/components/pages/OptimizationStudioPage/ConfigureOptimizationSection/OptimizationTemperatureConfig";
+import OptimizationTemperatureConfig from "@/components/pages-shared/optimizations/OptimizationConfigForm/OptimizationTemperatureConfig";
 import CodeHighlighter, {
   SUPPORTED_LANGUAGE,
 } from "@/components/shared/CodeHighlighter/CodeHighlighter";
