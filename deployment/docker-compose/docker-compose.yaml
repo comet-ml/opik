@@ -76,16 +76,34 @@ services:
     image: zookeeper:3.9.4
     pull_policy: always
     hostname: zookeeper
+    user: root
+    entrypoint:
+      - /bin/bash
+      - -c
+      - |
+        # Create data directory if it doesn't exist (for fresh installations)
+        # We use /bitnami/zookeeper/data path for compatibility with upgrades from Bitnami images
+        # Fresh installs need this directory created, while upgrades already have it with existing data
+        mkdir -p /bitnami/zookeeper/data
+        chown -R zookeeper:zookeeper /bitnami/zookeeper
+        # Run the original entrypoint as zookeeper user
+        exec gosu zookeeper /docker-entrypoint.sh zkServer.sh start-foreground
     environment:
       JVMFLAGS: "-Xmx512m"
       ZOO_4LW_COMMANDS_WHITELIST: "srvr,ruok"
+      # Use Bitnami-compatible data directory for seamless migration from Bitnami images
+      # Both dataDir and dataLogDir point to the same location (Bitnami stored both together)
+      ZOO_DATA_DIR: /bitnami/zookeeper/data
+      ZOO_DATA_LOG_DIR: /bitnami/zookeeper/data
     healthcheck:
       test: [ "CMD-SHELL", "echo ruok | nc localhost 2181 | grep -q imok" ]
       interval: 1s
       timeout: 1s
       retries: 300
     volumes:
-      - zookeeper:/data
+      # Mount to /bitnami/zookeeper for compatibility with existing Bitnami installations
+      # Bitnami stored data at /bitnami/zookeeper/data, so ZOO_DATA_DIR points there
+      - zookeeper:/bitnami/zookeeper
 
   minio:
     image: minio/minio:RELEASE.2025-03-12T18-04-18Z
