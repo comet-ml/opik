@@ -4,7 +4,10 @@ import useCurrentOrganization from "@/plugins/comet/useCurrentOrganization";
 import useWorkspace from "@/plugins/comet/useWorkspace";
 import useUsernameAutocomplete from "@/plugins/comet/api/useUsernameAutocomplete";
 import { useInviteUsersMutation } from "@/plugins/comet/api/useInviteMembersMutation";
-import { DropdownMenuContent } from "@/components/ui/dropdown-menu";
+import {
+  DropdownMenuContent,
+  DropdownMenuSubContent,
+} from "@/components/ui/dropdown-menu";
 import SearchInput from "@/components/shared/SearchInput/SearchInput";
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -14,6 +17,7 @@ interface InviteUsersPopoverProps {
   setSearchQuery: (query: string) => void;
   onClose: () => void;
   side?: "top" | "right" | "bottom" | "left";
+  asSubContent?: boolean;
 }
 
 const InviteUsersPopover: React.FC<InviteUsersPopoverProps> = ({
@@ -21,6 +25,7 @@ const InviteUsersPopover: React.FC<InviteUsersPopoverProps> = ({
   setSearchQuery,
   onClose,
   side = "bottom",
+  asSubContent = false,
 }) => {
   const workspace = useWorkspace();
   const workspaceId = workspace?.workspaceId;
@@ -117,14 +122,8 @@ const InviteUsersPopover: React.FC<InviteUsersPopoverProps> = ({
     );
   };
 
-  return (
-    <DropdownMenuContent
-      side={side}
-      align="end"
-      alignOffset={-16}
-      collisionPadding={{ bottom: 16 }}
-      className="w-[400px] p-4"
-    >
+  const content = (
+    <>
       <div className="mb-3">
         <h3 className="comet-title-s">
           Invite to {workspaceName || "workspace"}
@@ -138,6 +137,26 @@ const InviteUsersPopover: React.FC<InviteUsersPopoverProps> = ({
         />
         <div className="h-[200px]">{renderUserList()}</div>
       </div>
+    </>
+  );
+
+  if (asSubContent) {
+    return (
+      <DropdownMenuSubContent className="w-[400px] p-4">
+        {content}
+      </DropdownMenuSubContent>
+    );
+  }
+
+  return (
+    <DropdownMenuContent
+      side={side}
+      align="end"
+      alignOffset={-16}
+      collisionPadding={{ bottom: 16 }}
+      className="w-[400px] p-4"
+    >
+      {content}
     </DropdownMenuContent>
   );
 };
