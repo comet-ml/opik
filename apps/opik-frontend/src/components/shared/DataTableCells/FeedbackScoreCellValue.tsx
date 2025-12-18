@@ -26,7 +26,7 @@ const FeedbackScoreCellValue = ({
   // If no feedback score, show only dash with optional edit button
   if (!feedbackScore) {
     return (
-      <div className="flex items-center gap-1">
+      <div className="flex min-w-0 items-center gap-1 overflow-hidden">
         {shouldShowEditDropdown && (
           <FeedbackScoreEditDropdown
             feedbackScore={feedbackScore}
@@ -47,7 +47,7 @@ const FeedbackScoreCellValue = ({
   const category = feedbackScore.category_name;
 
   return (
-    <div className="flex items-center gap-1">
+    <div className="flex min-w-0 items-center gap-1 overflow-hidden">
       {shouldShowEditDropdown && (
         <FeedbackScoreEditDropdown
           feedbackScore={feedbackScore}
