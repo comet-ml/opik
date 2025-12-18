@@ -1,6 +1,15 @@
 {{ template "chart.header" . }}
 {{ template "chart.description" . }}
 
+{{- $chartFile := .Files.Get "Chart.yaml" }}
+{{- if $chartFile }}
+{{- $chart := fromYaml $chartFile }}
+
+![Version: {{ $chart.version }}](https://img.shields.io/badge/Version-{{ $chart.version }}-informational?style=flat-square) ![Type: {{ $chart.type }}](https://img.shields.io/badge/Type-{{ $chart.type }}-informational?style=flat-square) ![AppVersion: {{ $chart.appVersion }}](https://img.shields.io/badge/AppVersion-{{ $chart.appVersion }}-informational?style=flat-square)
+[![Artifact Hub](https://img.shields.io/endpoint?url=https://artifacthub.io/badge/repository/opik)](https://artifacthub.io/packages/search?repo=opik)
+
+{{- end }}
+
 # Run Comet Opik with Helm
 
 ## Installation Prerequisites for local installation
