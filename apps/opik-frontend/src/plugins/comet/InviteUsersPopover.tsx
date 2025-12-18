@@ -114,7 +114,12 @@ const InviteUsersPopover: React.FC<InviteUsersPopoverProps> = ({
   };
 
   return (
-    <DropdownMenuContent side={side} align="start" className="w-[400px] p-4">
+    <DropdownMenuContent
+      side={side}
+      align="end"
+      alignOffset={-16}
+      className="w-[400px] p-4"
+    >
       <div className="mb-3">
         <h3 className="comet-title-s">
           Invite to {workspaceName || "workspace"}
