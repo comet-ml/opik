@@ -162,22 +162,17 @@ def _build_geval_metric(params: Dict[str, Any], model: str) -> Callable:
 def _build_json_schema_validator_metric(params: Dict[str, Any], model: str) -> Callable:
     """Build a JSON Schema Validator metric function.
     
-    Validates that the LLM output complies with a JSON schema.
+    Validates that the LLM output complies with a JSON schema from the dataset item.
     
     Args:
         params: Metric parameters
-            - json_schema (dict): JSON schema to validate against
+            - schema_key (str): Key in dataset item containing the JSON schema (default: "json_schema")
         model: LLM model to use for validation
         
     Returns:
         Metric function
-        
-    Raises:
-        InvalidMetricError: If json_schema parameter is missing
     """
-    schema = params.get("json_schema")
-    if not schema:
-        raise InvalidMetricError("json_schema_validator", "requires 'json_schema' parameter")
+    schema_key = params.get("schema_key", "json_schema")
     
     structured_metric = StructuredOutputCompliance(
         model=model,
@@ -185,6 +180,14 @@ def _build_json_schema_validator_metric(params: Dict[str, Any], model: str) -> C
     )
     
     def metric_fn(dataset_item, llm_output):
+        schema = dataset_item.get(schema_key)
+        if not schema:
+            from opik.evaluation.metrics.score_result import ScoreResult
+            return ScoreResult(
+                value=0.0, 
+                name="json_schema_validator", 
+                reason=f"Missing schema in dataset item key '{schema_key}'"
+            )
         return structured_metric.score(
             output=llm_output,
             schema=schema
