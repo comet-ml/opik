@@ -27,7 +27,7 @@ export const useVisibleTags = (
     [sortedItems, maxVisible],
   );
   const hasMoreItems = sortedItems.length > maxVisible;
-  const remainingCount = sortedItems.length - maxVisible;
+  const remainingCount = Math.max(0, sortedItems.length - maxVisible);
 
   return {
     sortedItems,
