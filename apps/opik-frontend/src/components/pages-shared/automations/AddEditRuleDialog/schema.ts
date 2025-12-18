@@ -32,11 +32,9 @@ const RuleNameSchema = z
   })
   .min(1, { message: "Rule name is required" });
 
-const ProjectIdSchema = z
-  .string({
-    required_error: "Project is required",
-  })
-  .min(1, { message: "Project is required" });
+const ProjectIdsSchema = z
+  .array(z.string())
+  .min(1, { message: "At least one project is required" });
 
 const SamplingRateSchema = z.number();
 
@@ -383,7 +381,7 @@ export const PythonCodeDetailsSpanFormSchema = BasePythonCodeFormSchema.extend({
 
 export const BaseEvaluationRuleFormSchema = z.object({
   ruleName: RuleNameSchema,
-  projectId: ProjectIdSchema,
+  projectIds: ProjectIdsSchema,
   samplingRate: SamplingRateSchema,
   scope: ScopeSchema,
   uiType: z.nativeEnum(UI_EVALUATORS_RULE_TYPE),

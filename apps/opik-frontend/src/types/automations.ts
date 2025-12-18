@@ -73,11 +73,18 @@ export interface PythonCodeDetails {
   code: PythonCodeObject;
 }
 
+export interface ProjectReference {
+  project_id: string;
+  project_name: string;
+}
+
 export type EvaluatorsRule = {
   id: string;
   name: string;
-  project_id: string;
-  project_name?: string;
+  project_ids?: string[]; // For WRITE operations (CREATE/UPDATE) - just IDs
+  projects?: ProjectReference[]; // For READ operations (GET responses) - ID + name pairs, sorted alphabetically by name
+  project_id?: string; // Legacy field for backward compatibility (first project's ID)
+  project_name?: string; // Legacy field for backward compatibility (first project's name)
   sampling_rate: number;
   enabled?: boolean;
   filters?: Filters;

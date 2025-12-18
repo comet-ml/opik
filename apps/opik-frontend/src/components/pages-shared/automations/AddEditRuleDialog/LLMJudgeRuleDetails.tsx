@@ -335,7 +335,7 @@ const LLMJudgeRuleDetails: React.FC<LLMJudgeRuleDetailsProps> = ({
                   <LLMPromptMessagesVariables
                     parsingError={parsingVariablesError}
                     validationErrors={validationErrors}
-                    projectId={form.watch("projectId")}
+                    projectId={form.watch("projectIds")[0] || ""}
                     variables={field.value}
                     onChange={field.onChange}
                     projectName={projectName}

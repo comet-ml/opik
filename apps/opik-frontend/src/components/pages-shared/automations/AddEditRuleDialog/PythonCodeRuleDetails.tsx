@@ -114,7 +114,7 @@ const PythonCodeRuleDetails: React.FC<PythonCodeRuleDetailsProps> = ({
               <LLMPromptMessagesVariables
                 parsingError={parsingArgumentsError}
                 validationErrors={validationErrors}
-                projectId={form.watch("projectId")}
+                projectId={form.watch("projectIds")[0] || ""}
                 variables={field.value}
                 onChange={field.onChange}
                 description="All variables are automatically added based on the code snippet. They are extracted from the `score` method and are required."

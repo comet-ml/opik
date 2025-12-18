@@ -16,6 +16,8 @@ import java.beans.ConstructorProperties;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.SortedSet;
 import java.util.UUID;
 
 import static com.comet.opik.api.evaluators.AutomationRuleEvaluatorSpanLlmAsJudge.SpanLlmAsJudgeCode;
@@ -40,18 +42,22 @@ public final class AutomationRuleEvaluatorSpanLlmAsJudge
             @JsonView({View.Public.class, View.Write.class}) @NotNull List<LlmAsJudgeOutputSchema> schema){
     }
 
-    @ConstructorProperties({"id", "projectId", "projectName", "name", "samplingRate", "enabled", "filters", "code",
+    @ConstructorProperties({"id", "projectId", "projectName", "projects", "projectIds", "name", "samplingRate",
+            "enabled", "filters", "code",
             "createdAt",
             "createdBy",
             "lastUpdatedAt", "lastUpdatedBy"})
-    public AutomationRuleEvaluatorSpanLlmAsJudge(UUID id, @NotNull UUID projectId, String projectName,
+    public AutomationRuleEvaluatorSpanLlmAsJudge(UUID id, UUID projectId, String projectName,
+            SortedSet<ProjectReference> projects,
+            Set<UUID> projectIds,
             @NotBlank String name,
             float samplingRate,
             boolean enabled,
             List<SpanFilter> filters,
             @NotNull SpanLlmAsJudgeCode code, Instant createdAt, String createdBy, Instant lastUpdatedAt,
             String lastUpdatedBy) {
-        super(id, projectId, projectName, name, samplingRate, enabled, filters, code, createdAt, createdBy,
+        super(id, projectId, projectName, projects, projectIds, name, samplingRate, enabled, filters, code,
+                createdAt, createdBy,
                 lastUpdatedAt,
                 lastUpdatedBy);
     }
