@@ -201,10 +201,13 @@ export const processFilters = (
 export const mapDynamicColumnTypesToColumnType = (
   types: DYNAMIC_COLUMN_TYPE[] = [],
 ) => {
-  if (
-    types.includes(DYNAMIC_COLUMN_TYPE.object) ||
-    types.includes(DYNAMIC_COLUMN_TYPE.array)
-  ) {
+  // Handle array first - map to LIST for simple element filtering (no key required)
+  if (types.includes(DYNAMIC_COLUMN_TYPE.array)) {
+    return COLUMN_TYPE.list;
+  }
+
+  // Only objects require dictionary type (with key input)
+  if (types.includes(DYNAMIC_COLUMN_TYPE.object)) {
     return COLUMN_TYPE.dictionary;
   }
 
