@@ -4,6 +4,7 @@ from typing import Any, Dict, List, Optional
 from typing_extensions import override
 
 from opik.rest_api import types as rest_api_types
+from opik.validation import chat_prompt_messages
 from . import chat_prompt_template
 from .. import client as prompt_client
 from .. import types as prompt_types
@@ -37,7 +38,13 @@ class ChatPrompt(base_prompt.BasePrompt):
 
         Raises:
             PromptTemplateStructureMismatch: If a text prompt with the same name already exists (template structure is immutable).
+            ValidationError: If messages structure is invalid.
         """
+
+        # Validate messages structure
+        validator = chat_prompt_messages.ChatPromptMessagesValidator(messages)
+        validator.validate()
+        validator.raise_validation_error()
 
         self._chat_template = chat_prompt_template.ChatPromptTemplate(
             messages=messages,
