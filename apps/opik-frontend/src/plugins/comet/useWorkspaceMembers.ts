@@ -2,6 +2,7 @@ import { QueryFunctionContext, useQuery } from "@tanstack/react-query";
 import api, { QueryConfig } from "./api";
 
 interface UseWorkspaceMembersResponse {
+  // userName is absent for email-only workspace invitations that have not yet been accepted.
   userName?: string;
   email: string;
   joinedAt?: number;

@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { UserPlus } from "lucide-react";
 import useWorkspace from "@/plugins/comet/useWorkspace";
+import useInviteMembersURL from "@/plugins/comet/useInviteMembersURL";
 import SidebarMenuItem, {
   MENU_ITEM_TYPE,
 } from "@/components/layout/SideBar/MenuItem/SidebarMenuItem";
@@ -8,6 +9,8 @@ import {
   DropdownMenu,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { useIsFeatureEnabled } from "@/components/feature-toggles-provider";
+import { FeatureToggleKeys } from "@/types/feature-toggles";
 import InviteUsersPopover from "./InviteUsersPopover";
 
 export type SidebarInviteDevButtonProps = {
@@ -20,9 +23,33 @@ const SidebarInviteDevButton: React.FC<SidebarInviteDevButtonProps> = ({
   const [open, setOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const workspace = useWorkspace();
+  const inviteMembersURL = useInviteMembersURL();
+  const isCollaboratorsTabEnabled = useIsFeatureEnabled(
+    FeatureToggleKeys.COLLABORATORS_TAB_ENABLED,
+  );
 
   if (!workspace) {
     return null;
+  }
+
+  if (!isCollaboratorsTabEnabled) {
+    if (!inviteMembersURL) {
+      return null;
+    }
+
+    return (
+      <SidebarMenuItem
+        item={{
+          id: "inviteTeamMember",
+          icon: UserPlus,
+          label: "Invite a teammate",
+          type: MENU_ITEM_TYPE.link,
+          path: inviteMembersURL,
+        }}
+        expanded={expanded}
+        compact
+      />
+    );
   }
 
   const handleClose = () => {
