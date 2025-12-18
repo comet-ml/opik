@@ -15,7 +15,9 @@ import { WorkspaceMember } from "@/plugins/comet/types";
 import { useRemoveFromTeamMutation } from "@/plugins/comet/api/useRemoveFromTeamMutation";
 import useWorkspace from "@/plugins/comet/useWorkspace";
 
-const DeleteUserCell = (context: CellContext<WorkspaceMember, unknown>) => {
+const WorkspaceMemberActionsCell = (
+  context: CellContext<WorkspaceMember, unknown>,
+) => {
   const row = context.row.original;
   const resetKeyRef = useRef(0);
   const [open, setOpen] = useState(false);
@@ -89,4 +91,4 @@ const DeleteUserCell = (context: CellContext<WorkspaceMember, unknown>) => {
   );
 };
 
-export default DeleteUserCell;
+export default WorkspaceMemberActionsCell;
