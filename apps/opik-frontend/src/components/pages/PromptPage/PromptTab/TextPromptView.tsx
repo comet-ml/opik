@@ -1,9 +1,7 @@
 import React, { useState } from "react";
 import { Code2, Type } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import CodeHighlighter, {
-  SUPPORTED_LANGUAGE,
-} from "@/components/shared/CodeHighlighter/CodeHighlighter";
+import CodeHighlighter from "@/components/shared/CodeHighlighter/CodeHighlighter";
 import MediaTagsList from "@/components/pages-shared/llm/PromptMessageMediaTags/MediaTagsList";
 import MarkdownPreview from "@/components/shared/MarkdownPreview/MarkdownPreview";
 
