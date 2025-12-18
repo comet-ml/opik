@@ -147,6 +147,7 @@ export enum PROVIDER_MODEL_TYPE {
   GOOGLE_GEMINI_2_5_PRO = "google/gemini-2.5-pro",
   GOOGLE_GEMINI_2_5_PRO_PREVIEW = "google/gemini-2.5-pro-preview",
   GOOGLE_GEMINI_2_5_PRO_PREVIEW_05_06 = "google/gemini-2.5-pro-preview-05-06",
+  GOOGLE_GEMINI_3_FLASH_PREVIEW = "google/gemini-3-flash-preview",
   GOOGLE_GEMINI_3_PRO_IMAGE_PREVIEW = "google/gemini-3-pro-image-preview",
   GOOGLE_GEMINI_3_PRO_PREVIEW = "google/gemini-3-pro-preview",
   GOOGLE_GEMMA_2_27B_IT = "google/gemma-2-27b-it",
@@ -409,6 +410,7 @@ export enum PROVIDER_MODEL_TYPE {
   Z_AI_GLM_4_6_EXACTO = "z-ai/glm-4.6:exacto",
 
   //   <----- gemini
+  GEMINI_3_FLASH = "gemini-3-flash-preview",
   GEMINI_3_PRO = "gemini-3-pro-preview",
   GEMINI_2_0_FLASH = "gemini-2.0-flash-exp",
   GEMINI_2_0_FLASH_LITE = "gemini-2.0-flash-lite",
@@ -524,6 +526,8 @@ export interface LLMOpenRouterConfigsType {
   maxConcurrentRequests?: number;
 }
 
+export type GeminiThinkingLevel = "minimal" | "low" | "medium" | "high";
+
 export interface LLMGeminiConfigsType {
   temperature: number;
   maxCompletionTokens: number;
@@ -531,7 +535,7 @@ export interface LLMGeminiConfigsType {
   seed?: number | null;
   throttling?: number;
   maxConcurrentRequests?: number;
-  thinkingLevel?: "low" | "high";
+  thinkingLevel?: GeminiThinkingLevel;
 }
 
 export interface LLMVertexAIConfigsType {
@@ -539,7 +543,7 @@ export interface LLMVertexAIConfigsType {
   maxCompletionTokens: number;
   topP: number;
   seed?: number | null;
-  thinkingLevel?: "low" | "high";
+  thinkingLevel?: GeminiThinkingLevel;
   throttling?: number;
   maxConcurrentRequests?: number;
 }

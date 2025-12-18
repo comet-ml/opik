@@ -104,14 +104,29 @@ export const REASONING_MODELS = [
   PROVIDER_MODEL_TYPE.GPT_O4_MINI,
 ] as const;
 
-// Thinking level options for Gemini 3 Pro models
-export const THINKING_LEVEL_OPTIONS: Array<{
+// Thinking level options for Gemini 3 Pro models (low, high)
+export const THINKING_LEVEL_OPTIONS_PRO: Array<{
   label: string;
   value: "low" | "high";
 }> = [
   { label: "Low", value: "low" },
-  { label: "High", value: "high" },
+  { label: "High (Default)", value: "high" },
 ];
+
+// Thinking level options for Gemini 3 Flash models (all 4 levels)
+// Flash supports: minimal, low, medium, high
+export const THINKING_LEVEL_OPTIONS_FLASH: Array<{
+  label: string;
+  value: "minimal" | "low" | "medium" | "high";
+}> = [
+  { label: "Minimal", value: "minimal" },
+  { label: "Low", value: "low" },
+  { label: "Medium", value: "medium" },
+  { label: "High (Default)", value: "high" },
+];
+
+// Legacy export for backwards compatibility
+export const THINKING_LEVEL_OPTIONS = THINKING_LEVEL_OPTIONS_PRO;
 
 export const LLM_PROMPT_CUSTOM_TRACE_TEMPLATE: LLMPromptTemplate = {
   label: "Custom LLM-as-judge",
