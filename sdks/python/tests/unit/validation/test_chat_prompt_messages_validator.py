@@ -23,7 +23,10 @@ from opik.validation import chat_prompt_messages
                     "role": "user",
                     "content": [
                         {"type": "text", "text": "Hello"},
-                        {"type": "image", "image_url": "..."},
+                        {
+                            "type": "image_url",
+                            "image_url": "https://example.com/image.jpg",
+                        },
                     ],
                 }
             ],
@@ -74,6 +77,137 @@ from opik.validation import chat_prompt_messages
                 {"role": "user", "content": [{"text": "hello"}]},
             ],
             False,
+        ),
+        # Valid cases - content list with type-specific keys
+        (
+            [{"role": "user", "content": [{"type": "text", "text": "Hello"}]}],
+            True,
+        ),
+        (
+            [
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "image_url",
+                            "image_url": "https://example.com/image.jpg",
+                        }
+                    ],
+                }
+            ],
+            True,
+        ),
+        (
+            [
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "video_url",
+                            "video_url": "https://example.com/video.mp4",
+                        }
+                    ],
+                }
+            ],
+            True,
+        ),
+        (
+            [
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "audio_url",
+                            "audio_url": "https://example.com/audio.mp3",
+                        }
+                    ],
+                }
+            ],
+            True,
+        ),
+        (
+            [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": "Hello"},
+                        {
+                            "type": "image_url",
+                            "image_url": "https://example.com/image.jpg",
+                        },
+                        {
+                            "type": "video_url",
+                            "video_url": "https://example.com/video.mp4",
+                        },
+                    ],
+                }
+            ],
+            True,
+        ),
+        # Invalid cases - missing required keys for specific types
+        (
+            [{"role": "user", "content": [{"type": "text"}]}],
+            False,  # Missing text key
+        ),
+        (
+            [{"role": "user", "content": [{"type": "image_url"}]}],
+            False,  # Missing image_url key
+        ),
+        (
+            [{"role": "user", "content": [{"type": "video_url"}]}],
+            False,  # Missing video_url key
+        ),
+        (
+            [{"role": "user", "content": [{"type": "audio_url"}]}],
+            False,  # Missing audio_url key
+        ),
+        # Invalid cases - wrong type for URL values
+        (
+            [{"role": "user", "content": [{"type": "image_url", "image_url": 123}]}],
+            False,  # image_url is not a string
+        ),
+        (
+            [{"role": "user", "content": [{"type": "image_url", "image_url": None}]}],
+            False,  # image_url is None
+        ),
+        (
+            [{"role": "user", "content": [{"type": "video_url", "video_url": 123}]}],
+            False,  # video_url is not a string
+        ),
+        (
+            [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "audio_url", "audio_url": ["not", "a", "string"]}
+                    ],
+                }
+            ],
+            False,  # audio_url is not a string
+        ),
+        (
+            [{"role": "user", "content": [{"type": "text", "text": 123}]}],
+            False,  # text is not a string
+        ),
+        (
+            [{"role": "user", "content": [{"type": "text", "text": None}]}],
+            False,  # text is None
+        ),
+        # Invalid cases - wrong key for type
+        (
+            [{"role": "user", "content": [{"type": "image_url", "text": "Hello"}]}],
+            False,  # Has text but missing image_url
+        ),
+        (
+            [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "image_url": "https://example.com/image.jpg"}
+                    ],
+                }
+            ],
+            False,  # Has image_url but missing text
         ),
     ],
 )
