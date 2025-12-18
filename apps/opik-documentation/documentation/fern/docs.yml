@@ -782,6 +782,9 @@ navigation:
       - page: Kubernetes deployment
         path: docs/self-host/kubernetes.mdx
         slug: kubernetes
+      - page: Helm chart migration
+        path: docs/self-host/helm.mdx
+        slug: helm
       - page: Platform Architecture
         path: docs/self-host/architecture.mdx
         slug: architecture
