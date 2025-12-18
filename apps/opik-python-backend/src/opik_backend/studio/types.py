@@ -1,8 +1,25 @@
 """Data types and context objects for Optimization Studio."""
 
+import re
 from dataclasses import dataclass
 from typing import Dict, Any, Optional, List
 from uuid import UUID
+
+
+def _convert_template_syntax(text: str) -> str:
+    """Convert double curly braces to single curly braces for template variables.
+    
+    The frontend uses Mustache-style {{variable}} syntax, but the optimizer
+    expects Python-style {variable} syntax.
+    
+    Args:
+        text: String that may contain {{variable}} patterns
+        
+    Returns:
+        String with {{variable}} converted to {variable}
+    """
+    # Convert {{variable}} to {variable}
+    return re.sub(r'\{\{(\w+)\}\}', r'{\1}', text)
 
 
 @dataclass
@@ -84,9 +101,18 @@ class OptimizationConfig:
         
         metric_config = metric_config_list[0]
         
+        # Convert prompt messages template syntax from {{var}} (FE-style) to {var} (optimizer-style)
+        prompt_messages = []
+        for msg in config["prompt"]["messages"]:
+            converted_msg = {
+                "role": msg["role"],
+                "content": _convert_template_syntax(msg["content"])
+            }
+            prompt_messages.append(converted_msg)
+        
         return cls(
             dataset_name=config["dataset_name"],
-            prompt_messages=config["prompt"]["messages"],
+            prompt_messages=prompt_messages,
             model=config["llm_model"]["model"],
             model_params=config["llm_model"].get("parameters", {}),
             metric_type=metric_config["type"],
