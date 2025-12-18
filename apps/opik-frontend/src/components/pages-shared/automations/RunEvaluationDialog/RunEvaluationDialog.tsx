@@ -62,7 +62,7 @@ const RunEvaluationDialog: React.FunctionComponent<
       workspaceName,
       projectId,
       page: 1,
-      size: 1000, // Load all rules for the project
+      size: 1000, // Load all rules in the workspace
     },
     {
       enabled: open,
@@ -189,10 +189,11 @@ const RunEvaluationDialog: React.FunctionComponent<
         <div className="flex flex-col items-center justify-center gap-2 py-8">
           <Sparkles className="size-4 text-muted-foreground" />
           <p className="comet-body-s-accented text-center">
-            This project doesn&apos;t have any online evaluation rules yet
+            No online evaluation rules assigned to this project
           </p>
           <p className="comet-body-s text-center text-muted-foreground">
-            Create a new online evaluation rule for this project.
+            Create a new rule, or assign an existing rule in the Online
+            evaluation page
           </p>
           <Button
             variant="link"
