@@ -201,7 +201,7 @@ const CollaboratorsTab = () => {
         <SearchInput
           searchText={search}
           setSearchText={setSearch}
-          placeholder="Search by name or email, or role"
+          placeholder="Search by name, email, or role"
           className="w-[320px]"
           dimension="sm"
         />
