@@ -1,16 +1,13 @@
-import { Copy, GitCommitVertical, Undo2 } from "lucide-react";
+import { GitCommitVertical } from "lucide-react";
 import copy from "clipboard-copy";
 import { cn } from "@/lib/utils";
 
 import { formatDate } from "@/lib/date";
 import React, { useState } from "react";
-import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
-import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/use-toast";
 import { PromptVersion } from "@/types/prompts";
-import ColoredTag from "@/components/shared/ColoredTag/ColoredTag";
-import TagListTooltipContent from "@/components/shared/TagListTooltipContent/TagListTooltipContent";
-import { useVisibleTags } from "@/hooks/useVisibleTags";
+import VersionTags from "@/components/pages/PromptPage/PromptTab/VersionTags";
+import VersionActions from "@/components/pages/PromptPage/PromptTab/VersionActions";
 
 interface CommitHistoryProps {
   versions: PromptVersion[];
@@ -19,103 +16,6 @@ interface CommitHistoryProps {
   onRestoreVersionClick: (version: PromptVersion) => void;
   latestVersionId?: string;
 }
-
-interface VersionTagsProps {
-  tags: string[];
-}
-
-interface VersionActionsProps {
-  version: PromptVersion;
-  latestVersionId?: string;
-  isHovered: boolean;
-  onCopyClick: (commit: string) => void;
-  onRestoreVersionClick: (version: PromptVersion) => void;
-}
-
-const VersionTags: React.FC<VersionTagsProps> = ({ tags }) => {
-  const { visibleItems, hiddenItems, hasMoreItems, remainingCount } =
-    useVisibleTags(tags);
-
-  if (!tags || tags.length === 0) return null;
-
-  return (
-    <>
-      <span
-        className={cn(
-          "text-muted-slate/60 shrink-0 text-xs transition-opacity",
-          tags.length > 0 ? "opacity-100" : "opacity-0",
-        )}
-      >
-        ·
-      </span>
-      <div className="flex max-w-[160px] shrink flex-nowrap items-center gap-0.5 overflow-hidden">
-        {visibleItems.map((tag) => (
-          <ColoredTag
-            key={tag}
-            label={tag}
-            size="sm"
-            className="min-w-0 max-w-[65px] shrink origin-left scale-[0.85] truncate"
-          />
-        ))}
-        {hasMoreItems && (
-          <TooltipWrapper
-            content={<TagListTooltipContent tags={hiddenItems} />}
-          >
-            <div className="comet-body-s-accented flex h-4 items-center rounded-md border border-border pl-1 pr-1.5 text-[9px] text-muted-slate">
-              +{remainingCount}
-            </div>
-          </TooltipWrapper>
-        )}
-      </div>
-    </>
-  );
-};
-
-const VersionActions: React.FC<VersionActionsProps> = ({
-  version,
-  latestVersionId,
-  isHovered,
-  onCopyClick,
-  onRestoreVersionClick,
-}) => {
-  const canRestore = version.id !== latestVersionId;
-
-  return (
-    <div
-      className={cn(
-        "ml-auto flex gap-1 shrink-0 transition-opacity",
-        isHovered ? "opacity-100" : "opacity-0",
-      )}
-    >
-      <TooltipWrapper content="Copy commit">
-        <Button
-          size="icon-3xs"
-          variant="minimal"
-          onClick={(e) => {
-            e.stopPropagation();
-            onCopyClick(version.commit);
-          }}
-        >
-          <Copy />
-        </Button>
-      </TooltipWrapper>
-      {canRestore && (
-        <TooltipWrapper content="Restore this version">
-          <Button
-            size="icon-3xs"
-            variant="minimal"
-            onClick={(e) => {
-              e.stopPropagation();
-              onRestoreVersionClick(version);
-            }}
-          >
-            <Undo2 />
-          </Button>
-        </TooltipWrapper>
-      )}
-    </div>
-  );
-};
 
 const CommitHistory = ({
   versions,
@@ -164,7 +64,14 @@ const CommitHistory = ({
                 >
                   {version.commit}
                 </span>
-                <VersionTags tags={version.tags || []} />
+                {version.tags && version.tags.length > 0 && (
+                  <>
+                    <span className="shrink-0 text-xs text-muted-slate/60 transition-opacity">
+                      ·
+                    </span>
+                    <VersionTags tags={version.tags} />
+                  </>
+                )}
                 <VersionActions
                   version={version}
                   latestVersionId={latestVersionId}
