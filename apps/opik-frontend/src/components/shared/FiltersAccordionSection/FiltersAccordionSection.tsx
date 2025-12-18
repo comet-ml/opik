@@ -60,7 +60,13 @@ const FiltersAccordionSection = <TColumnData,>({
   return (
     <Accordion type="single" collapsible className={cn("w-full", className)}>
       <AccordionItem value="filters" className={hideBorder ? "" : "border-t"}>
-        <AccordionTrigger className="py-3 hover:no-underline">
+        <AccordionTrigger
+          className={cn(
+            "py-3 hover:no-underline",
+            hasErrors &&
+              "text-destructive hover:text-destructive active:text-destructive",
+          )}
+        >
           {label} {filters.length > 0 && `(${filters.length})`}
         </AccordionTrigger>
         <AccordionContent className="flex flex-col gap-4 px-3 pb-3">
