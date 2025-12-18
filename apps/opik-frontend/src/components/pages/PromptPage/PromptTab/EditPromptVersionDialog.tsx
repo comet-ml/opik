@@ -47,7 +47,6 @@ import LLMPromptMessages from "@/components/pages-shared/llm/LLMPromptMessages/L
 import { LLMMessage } from "@/types/llm";
 import ChatPromptRawView from "@/components/pages-shared/llm/ChatPromptRawView/ChatPromptRawView";
 import { PROMPT_TEMPLATE_STRUCTURE } from "@/types/prompts";
-import TextPromptEditor from "@/components/pages-shared/TextPromptEditor/TextPromptEditor";
 
 enum PROMPT_PREVIEW_MODE {
   write = "write",
@@ -315,7 +314,9 @@ const EditPromptVersionDialog: React.FC<EditPromptVersionDialogProps> = ({
                     className="comet-code"
                     placeholder="Prompt"
                     value={localText}
-                    onChange={(event) => handleContentChange(event.target.value)}
+                    onChange={(event) =>
+                      handleContentChange(event.target.value)
+                    }
                   />
                   <Description>
                     {
