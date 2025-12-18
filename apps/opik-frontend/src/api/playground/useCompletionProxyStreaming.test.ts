@@ -76,9 +76,14 @@ describe("processSSEChunk", () => {
       expect(result1.lines).toEqual([]);
       expect(result1.newBuffer).toBe('data: {"choices":[{"del');
 
-      const result2 = processSSEChunk('ta":{"content":"test', result1.newBuffer);
+      const result2 = processSSEChunk(
+        'ta":{"content":"test',
+        result1.newBuffer,
+      );
       expect(result2.lines).toEqual([]);
-      expect(result2.newBuffer).toBe('data: {"choices":[{"delta":{"content":"test');
+      expect(result2.newBuffer).toBe(
+        'data: {"choices":[{"delta":{"content":"test',
+      );
 
       const result3 = processSSEChunk('"}}]}\n', result2.newBuffer);
       expect(result3.lines).toEqual([
