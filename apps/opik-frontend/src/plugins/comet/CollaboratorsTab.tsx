@@ -1,7 +1,10 @@
 import { useMemo, useState } from "react";
 import useLocalStorageState from "use-local-storage-state";
 import useAllWorkspaceMembers from "@/plugins/comet/useWorkspaceMembers";
-import useAllWorkspaces from "@/plugins/comet/useAllWorkspaces";
+import useWorkspaceUsersPermissions from "@/plugins/comet/api/useWorkspaceUsersPermissions";
+import useOrganizationMembers from "@/plugins/comet/api/useOrganizationMembers";
+import useCurrentOrganization from "@/plugins/comet/useCurrentOrganization";
+import useWorkspace from "@/plugins/comet/useWorkspace";
 import DataTable from "@/components/shared/DataTable/DataTable";
 import ExplainerCallout from "@/components/shared/ExplainerCallout/ExplainerCallout";
 import SearchInput from "@/components/shared/SearchInput/SearchInput";
@@ -10,16 +13,19 @@ import { COLUMN_TYPE, ColumnData } from "@/types/shared";
 import { convertColumnDataToColumn } from "@/lib/table";
 import { formatDate } from "@/lib/date";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
-import useAppStore from "@/store/AppStore";
+import {
+  getPermissionByType,
+  isUserPermissionValid,
+} from "@/plugins/comet/lib/permissions";
+import {
+  ManagementPermissionsNames,
+  ORGANIZATION_ROLE_TYPE,
+  WORKSPACE_ROLE_TYPE,
+  WorkspaceMember,
+} from "./types";
+import WorkspaceRoleCell from "./WorkspaceRoleCell/WorkspaceRoleCell";
 
 const COLUMNS_WIDTH_KEY = "workspace-members-columns-width";
-
-interface WorkspaceMember {
-  id: string;
-  userName: string;
-  email: string;
-  joinedAt?: string;
-}
 
 const DEFAULT_COLUMNS: ColumnData<WorkspaceMember>[] = [
   {
@@ -46,6 +52,7 @@ const DEFAULT_COLUMNS: ColumnData<WorkspaceMember>[] = [
     id: "role",
     label: "Workspace role",
     type: COLUMN_TYPE.category,
+    cell: WorkspaceRoleCell as never,
   },
 ];
 
@@ -58,20 +65,29 @@ const CollaboratorsTab = () => {
 
   const [search, setSearch] = useState("");
 
-  const workspaceName = useAppStore((state) => state.activeWorkspaceName);
+  const workspace = useWorkspace();
+  const workspaceId = workspace?.workspaceId;
 
-  const { data: allWorkspaces } = useAllWorkspaces();
-
-  const workspace = allWorkspaces?.find(
-    (w) => w.workspaceName === workspaceName,
-  );
+  const currentOrganization = useCurrentOrganization();
 
   const { data: workspaceMembers, isPending } = useAllWorkspaceMembers(
-    { workspaceId: workspace?.workspaceId || "" },
+    { workspaceId: workspaceId || "" },
     {
-      enabled: Boolean(workspace?.workspaceId),
+      enabled: Boolean(workspaceId),
     },
   );
+
+  const { data: permissionsData, isPending: isPermissionsPending } =
+    useWorkspaceUsersPermissions(
+      { workspaceId: workspaceId || "" },
+      {
+        enabled: Boolean(workspaceId),
+      },
+    );
+
+  const { data: organizationMembers } = useOrganizationMembers({
+    organizationId: currentOrganization?.id || "",
+  });
 
   const columns = useMemo(() => {
     return convertColumnDataToColumn<WorkspaceMember, WorkspaceMember>(
@@ -94,25 +110,49 @@ const CollaboratorsTab = () => {
 
     const searchLower = search.toLowerCase();
 
-    const filteredMembers = search
-      ? workspaceMembers.filter((member) => {
+    const mappedMembers = workspaceMembers.map((member): WorkspaceMember => {
+      const userPermissions = permissionsData?.find(
+        (permission) => permission.userName === member.userName,
+      )?.permissions;
+
+      const permissionByType = getPermissionByType(
+        userPermissions || [],
+        ManagementPermissionsNames.MANAGEMENT,
+      );
+
+      const role = isUserPermissionValid(permissionByType?.permissionValue)
+        ? WORKSPACE_ROLE_TYPE.owner
+        : WORKSPACE_ROLE_TYPE.member;
+
+      const uniqueName = member.userName || member.email;
+
+      const memberInOrganization = organizationMembers?.find(
+        (memberInOrg) =>
+          (memberInOrg?.userName || memberInOrg?.email) === uniqueName,
+      );
+
+      return {
+        id: member.userName,
+        role,
+        isAdmin: memberInOrganization?.role === ORGANIZATION_ROLE_TYPE.admin,
+        permissions: userPermissions,
+        ...member,
+      };
+    });
+
+    return search
+      ? mappedMembers.filter((member) => {
           return (
             member.userName.toLowerCase().includes(searchLower) ||
-            member.email.toLowerCase().includes(searchLower)
+            member.email.toLowerCase().includes(searchLower) ||
+            member.role?.toLowerCase().includes(searchLower)
           );
         })
-      : workspaceMembers;
-
-    return filteredMembers.map(
-      (member): WorkspaceMember => ({
-        id: member.userName,
-        ...member,
-      }),
-    );
-  }, [workspaceMembers, search]);
+      : mappedMembers;
+  }, [workspaceMembers, permissionsData, organizationMembers, search]);
 
   const renderTable = () => {
-    if (isPending) {
+    if (isPending || isPermissionsPending) {
       return <Loader />;
     }
 
@@ -134,7 +174,7 @@ const CollaboratorsTab = () => {
       <SearchInput
         searchText={search}
         setSearchText={setSearch}
-        placeholder="Search by name or email"
+        placeholder="Search by name, email, or role"
         className="mb-4 w-[320px]"
         dimension="sm"
       />
