@@ -275,7 +275,7 @@ def test_chat_prompt_messages_validator_error_messages():
 
 
 def test_chat_prompt_messages_validator_raise_validation_error():
-    """Test that raise_validation_error raises ValidationError."""
+    """Test that raise_if_validation_failed raises ValidationError."""
     import opik.exceptions
 
     validator = chat_prompt_messages.ChatPromptMessagesValidator(
