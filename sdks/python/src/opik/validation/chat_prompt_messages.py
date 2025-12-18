@@ -109,7 +109,7 @@ class ChatPromptMessagesValidator(validator.RaisableValidator):
 
         return self.validation_result
 
-    def raise_validation_error(self) -> None:
+    def raise_if_validation_failed(self) -> None:
         if (
             self.validation_result is not None
             and len(self.validation_result.failure_reasons) > 0

@@ -69,7 +69,7 @@ class ChatPrompt(base_prompt.BasePrompt):
             if parameter in kwargs:
                 validator_instance = validator_class(kwargs[parameter])
                 validator_instance.validate()
-                validator_instance.raise_validation_error()
+                validator_instance.raise_if_validation_failed()
 
     def _sync_with_backend(self) -> None:
         from opik.api_objects import opik_client

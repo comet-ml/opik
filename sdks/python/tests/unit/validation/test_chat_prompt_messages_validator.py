@@ -108,7 +108,7 @@ def test_chat_prompt_messages_validator_raise_validation_error():
     validator.validate()
 
     with pytest.raises(opik.exceptions.ValidationError) as exc_info:
-        validator.raise_validation_error()
+        validator.raise_if_validation_failed()
 
     assert "ChatPrompt.__init__" in str(exc_info.value)
     assert "messages[0].role" in str(exc_info.value)

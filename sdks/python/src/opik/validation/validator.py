@@ -12,7 +12,7 @@ class Validator(abc.ABC):
 
 class RaisableValidator(Validator):
     """
-    Abstract validator class that extends Validator and adds raise_validation_error method.
+    Abstract validator class that extends Validator and adds raise_if_validation_failed method.
 
     This is used for validators that need to raise ValidationError exceptions
     when validation fails, typically used in class initialization.
@@ -27,7 +27,7 @@ class RaisableValidator(Validator):
         pass
 
     @abc.abstractmethod
-    def raise_validation_error(self) -> None:
+    def raise_if_validation_failed(self) -> None:
         """
         Raise a ValidationError if validation failed.
 
