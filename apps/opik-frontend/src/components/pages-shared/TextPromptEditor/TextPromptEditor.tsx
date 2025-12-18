@@ -27,7 +27,7 @@ const TextPromptEditor: React.FC<TextPromptEditorProps> = ({
   currentImages = [],
   currentVideos = [],
 }) => {
-  const [showPreview, setShowPreview] = useState(false);
+  const [showPrettyView, setShowPrettyView] = useState(false);
 
   return (
     <div className="flex flex-col gap-2 pb-4">
@@ -36,9 +36,9 @@ const TextPromptEditor: React.FC<TextPromptEditorProps> = ({
         <Button
           variant="ghost"
           size="sm"
-          onClick={() => setShowPreview(!showPreview)}
+          onClick={() => setShowPrettyView(!showPrettyView)}
         >
-          {showPreview ? (
+          {showPrettyView ? (
             <>
               <FileText className="mr-1.5 size-3.5" />
               Edit view
@@ -46,12 +46,12 @@ const TextPromptEditor: React.FC<TextPromptEditorProps> = ({
           ) : (
             <>
               <Eye className="mr-1.5 size-3.5" />
-              Preview
+              Pretty view
             </>
           )}
         </Button>
       </div>
-      {showPreview ? (
+      {showPrettyView ? (
         <div className="min-h-44 rounded-md border border-border bg-primary-foreground p-3">
           <MarkdownPreview>{value}</MarkdownPreview>
         </div>
@@ -74,7 +74,7 @@ const TextPromptEditor: React.FC<TextPromptEditorProps> = ({
           )}
         </>
       )}
-      {!showPreview && currentImages.length > 0 && (
+      {!showPrettyView && currentImages.length > 0 && (
         <div className="flex flex-col gap-2">
           <Label>Images</Label>
           <MediaTagsList
@@ -85,7 +85,7 @@ const TextPromptEditor: React.FC<TextPromptEditorProps> = ({
           />
         </div>
       )}
-      {!showPreview && currentVideos.length > 0 && (
+      {!showPrettyView && currentVideos.length > 0 && (
         <div className="flex flex-col gap-2">
           <Label>Videos</Label>
           <MediaTagsList
