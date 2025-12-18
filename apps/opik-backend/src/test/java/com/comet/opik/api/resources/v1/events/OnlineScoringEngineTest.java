@@ -81,6 +81,7 @@ import java.math.BigDecimal;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -465,7 +466,7 @@ class OnlineScoringEngineTest {
 
     private AutomationRuleEvaluatorLlmAsJudge createRule(UUID projectId, LlmAsJudgeCode evaluatorCode) {
         return AutomationRuleEvaluatorLlmAsJudge.builder()
-                .projectId(projectId)
+                .projectIds(Set.of(projectId))
                 .name("evaluator-test-" + RandomStringUtils.secure().nextAlphanumeric(36))
                 .createdBy(USER_NAME)
                 .code(evaluatorCode)
