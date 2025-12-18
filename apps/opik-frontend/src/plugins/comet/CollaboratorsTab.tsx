@@ -33,6 +33,7 @@ import {
 } from "./types";
 import WorkspaceRoleCell from "./WorkspaceRoleCell/WorkspaceRoleCell";
 import WorkspaceMemberActionsCell from "./WorkspaceMemberActionsCell/WorkspaceMemberActionsCell";
+import { generateActionsColumDef } from "@/components/shared/DataTable/utils";
 
 const COLUMNS_WIDTH_KEY = "workspace-members-columns-width";
 
@@ -63,12 +64,6 @@ const DEFAULT_COLUMNS: ColumnData<WorkspaceMember>[] = [
     label: "Workspace role",
     type: COLUMN_TYPE.category,
     cell: WorkspaceRoleCell as never,
-  },
-  {
-    id: "actions",
-    label: "",
-    cell: WorkspaceMemberActionsCell as never,
-    size: 30,
   },
 ];
 
@@ -116,10 +111,15 @@ const CollaboratorsTab = () => {
     );
 
   const columns = useMemo(() => {
-    return convertColumnDataToColumn<WorkspaceMember, WorkspaceMember>(
-      DEFAULT_COLUMNS,
-      {},
-    );
+    return [
+      ...convertColumnDataToColumn<WorkspaceMember, WorkspaceMember>(
+        DEFAULT_COLUMNS,
+        {},
+      ),
+      generateActionsColumDef({
+        cell: WorkspaceMemberActionsCell,
+      }),
+    ];
   }, []);
 
   const resizeConfig = useMemo(

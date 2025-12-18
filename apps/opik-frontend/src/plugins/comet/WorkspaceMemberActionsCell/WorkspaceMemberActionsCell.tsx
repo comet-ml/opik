@@ -62,7 +62,7 @@ const WorkspaceMemberActionsCell = (
     <CellWrapper
       metadata={context.column.columnDef.meta}
       tableMetadata={context.table.options.meta}
-      className="justify-start p-0"
+      className="justify-end p-0"
       stopClickPropagation
     >
       <ConfirmDialog
