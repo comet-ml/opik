@@ -703,20 +703,7 @@ class AutomationRuleEvaluatorServiceImpl implements AutomationRuleEvaluatorServi
         UUID projectId = projects.isEmpty() ? null : projects.first().projectId();
         String projectName = projects.isEmpty() ? null : projects.first().projectName();
 
-        // Use builder pattern to update the model with projects and legacy fields
-        return switch (model) {
-            case LlmAsJudgeAutomationRuleEvaluatorModel m ->
-                m.toBuilder().projectId(projectId).projectName(projectName).projects(projects).build();
-            case UserDefinedMetricPythonAutomationRuleEvaluatorModel m ->
-                m.toBuilder().projectId(projectId).projectName(projectName).projects(projects).build();
-            case TraceThreadLlmAsJudgeAutomationRuleEvaluatorModel m ->
-                m.toBuilder().projectId(projectId).projectName(projectName).projects(projects).build();
-            case TraceThreadUserDefinedMetricPythonAutomationRuleEvaluatorModel m ->
-                m.toBuilder().projectId(projectId).projectName(projectName).projects(projects).build();
-            case SpanLlmAsJudgeAutomationRuleEvaluatorModel m ->
-                m.toBuilder().projectId(projectId).projectName(projectName).projects(projects).build();
-            case SpanUserDefinedMetricPythonAutomationRuleEvaluatorModel m ->
-                m.toBuilder().projectId(projectId).projectName(projectName).projects(projects).build();
-        };
+        // Use polymorphic method to update the model with projects and legacy fields
+        return model.withProjectDetails(projectId, projectName, projects);
     }
 }

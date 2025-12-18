@@ -41,6 +41,12 @@ public record TraceThreadUserDefinedMetricPythonAutomationRuleEvaluatorModel(
         return toBuilder().projectIds(projectIds).build();
     }
 
+    @Override
+    public AutomationRuleEvaluatorModel<?> withProjectDetails(
+            UUID projectId, String projectName, SortedSet<ProjectReference> projects) {
+        return toBuilder().projectId(projectId).projectName(projectName).projects(projects).build();
+    }
+
     public record TraceThreadUserDefinedMetricPythonCode(String metric) {
     }
 }
