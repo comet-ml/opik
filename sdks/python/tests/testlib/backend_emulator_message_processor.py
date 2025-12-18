@@ -16,6 +16,34 @@ class BackendEmulatorMessageProcessor(
 
     def __init__(self, active: bool = True, merge_duplicates: bool = True) -> None:
         super().__init__(active=active, merge_duplicates=merge_duplicates)
+        self._handlers[messages.CreateAttachmentMessage] = (
+            self._handle_create_attachment_message
+        )
+        self._handlers[messages.AttachmentSupportingMessage] = (
+            self._handle_attachment_supporting_message
+        )
+
+    def _handle_create_attachment_message(
+        self, message: messages.CreateAttachmentMessage
+    ) -> None:
+        with self._rlock:
+            if message.entity_id in self._span_observations:
+                span = self._span_observations[message.entity_id]
+                span.attachments.append(message.as_payload_dict())
+                return
+
+            if message.entity_id in self._trace_observations:
+                trace = self._trace_observations[message.entity_id]
+                # TraceModel in models.py does NOT have attachments field yet?
+                # Check models.py. It has metadata, input, output.
+                # If TraceModel doesn't have it, we might ignore or add it dynamically?
+                # For now let's focus on Spans as requested by TTS feature.
+                pass
+
+    def _handle_attachment_supporting_message(
+        self, message: messages.AttachmentSupportingMessage
+    ) -> None:
+        self._dispatch_message(message.original_message)
 
     def create_trace_model(
         self,
@@ -76,11 +104,14 @@ class BackendEmulatorMessageProcessor(
         error_info: Optional[ErrorInfoDict],
         total_cost: Optional[float],
         last_updated_at: Optional[datetime.datetime],
+        attachments: Optional[List[Dict[str, Any]]] = None,
     ) -> models.SpanModel:
         if spans is None:
             spans = []
         if feedback_scores is None:
             feedback_scores = []
+        if attachments is None: # Accept attachments argument
+            attachments = []
 
         return models.SpanModel(
             id=span_id,
@@ -101,6 +132,7 @@ class BackendEmulatorMessageProcessor(
             error_info=error_info,
             total_cost=total_cost,
             last_updated_at=last_updated_at,
+            attachments=attachments,
         )
 
     def create_feedback_score_model(

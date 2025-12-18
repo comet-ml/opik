@@ -5,6 +5,7 @@ import openai
 from . import (
     chat_completion_chunks_aggregator,
     openai_chat_completions_decorator,
+    openai_audio_speech_decorator,
 )
 import opik.semantic_version as semantic_version
 
@@ -150,10 +151,8 @@ def _patch_openai_responses(
 
 def _patch_openai_audio_speech(
     openai_client: OpenAIClient,
-    project_name: Optional[str] = None,
+    project_name: Optional[str],
 ) -> None:
-    from . import openai_audio_speech_decorator
-
     audio_speech_decorator_factory = (
         openai_audio_speech_decorator.OpenaiAudioSpeechTrackDecorator()
     )

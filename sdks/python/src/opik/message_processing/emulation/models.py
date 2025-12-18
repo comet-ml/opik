@@ -85,7 +85,9 @@ class SpanModel:
     provider: Optional[str] = None
     error_info: Optional[ErrorInfoDict] = None
     total_cost: Optional[float] = None
+
     last_updated_at: Optional[datetime.datetime] = None
+    attachments: List[Dict[str, Any]] = dataclasses.field(default_factory=list)
 
 
 @dataclasses.dataclass

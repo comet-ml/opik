@@ -9,9 +9,10 @@ import java.util.Map;
 @UtilityClass
 class SpanCostCalculator {
     private static final String VIDEO_DURATION_KEY = "video_duration_seconds";
+    private static final String PROMPT_TOKENS_KEY = "prompt_tokens";
 
     public static BigDecimal textGenerationCost(@NonNull ModelPrice modelPrice, @NonNull Map<String, Integer> usage) {
-        return modelPrice.inputPrice().multiply(BigDecimal.valueOf(usage.getOrDefault("prompt_tokens", 0)))
+        return modelPrice.inputPrice().multiply(BigDecimal.valueOf(usage.getOrDefault(PROMPT_TOKENS_KEY, 0)))
                 .add(modelPrice.outputPrice()
                         .multiply(BigDecimal.valueOf(usage.getOrDefault("completion_tokens", 0))));
     }
@@ -23,7 +24,7 @@ class SpanCostCalculator {
         // Don't generalize yet as other providers seems to separate the cached tokens from non-cached tokens
 
         // Get the input tokens (SDK version below 1.6.0 logged prompt_tokens, while 1.6.0+ logged original_usage.prompt_tokens)
-        int inputTokens = usage.getOrDefault("original_usage.prompt_tokens", usage.getOrDefault("prompt_tokens", 0));
+        int inputTokens = usage.getOrDefault("original_usage.prompt_tokens", usage.getOrDefault(PROMPT_TOKENS_KEY, 0));
 
         // Get the cached read input tokens
         int cachedReadInputTokens = usage.getOrDefault("original_usage.prompt_tokens_details.cached_tokens", 0);
@@ -76,7 +77,7 @@ class SpanCostCalculator {
 
         return modelPrice.inputPrice()
                 .multiply(
-                        BigDecimal.valueOf(usage.getOrDefault(inputTokensKey, usage.getOrDefault("prompt_tokens", 0))))
+                        BigDecimal.valueOf(usage.getOrDefault(inputTokensKey, usage.getOrDefault(PROMPT_TOKENS_KEY, 0))))
                 .add(modelPrice.outputPrice()
                         .multiply(BigDecimal.valueOf(
                                 usage.getOrDefault(outputTokensKey, usage.getOrDefault("completion_tokens", 0)))))
@@ -101,7 +102,12 @@ class SpanCostCalculator {
     }
 
     public static BigDecimal audioSpeechCost(@NonNull ModelPrice modelPrice, @NonNull Map<String, Integer> usage) {
-        return modelPrice.inputPrice().multiply(BigDecimal.valueOf(usage.getOrDefault("prompt_tokens", 0)));
+        int promptTokens = usage.getOrDefault(PROMPT_TOKENS_KEY, 0);
+        BigDecimal inputPrice = modelPrice.inputPrice();
+        if (promptTokens <= 0 || !isPositive(inputPrice)) {
+            return BigDecimal.ZERO;
+        }
+        return inputPrice.multiply(BigDecimal.valueOf(promptTokens));
     }
 
     private static boolean isPositive(BigDecimal value) {

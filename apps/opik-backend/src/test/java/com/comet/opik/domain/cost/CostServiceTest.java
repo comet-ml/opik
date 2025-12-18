@@ -2,12 +2,19 @@ package com.comet.opik.domain.cost;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.comet.opik.domain.model.ModelPrice;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 
+import java.lang.reflect.Field;
+import java.lang.reflect.Modifier;
 import java.math.BigDecimal;
+import java.util.Collections;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.stream.Stream;
 
@@ -16,6 +23,49 @@ import static org.assertj.core.api.Assertions.assertThat;
 class CostServiceTest {
 
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
+    private static Map<String, ModelPrice> originalModelPrices;
+
+    @BeforeAll
+    static void setup() throws Exception {
+        // Inject tts-1 price using Reflection
+        Field field = CostService.class.getDeclaredField("modelProviderPrices");
+        field.setAccessible(true);
+        
+        Field modifiersField = Field.class.getDeclaredField("modifiers");
+        modifiersField.setAccessible(true);
+        modifiersField.setInt(field, field.getModifiers() & ~Modifier.FINAL);
+
+        originalModelPrices = (Map<String, ModelPrice>) field.get(null);
+        
+        Map<String, ModelPrice> newPrices = new HashMap<>(originalModelPrices);
+        
+        ModelPrice ttsPrice = ModelPrice.builder()
+                .inputPrice(new BigDecimal("0.000015"))
+                .outputPrice(BigDecimal.ZERO)
+                .cacheCreationInputTokenPrice(BigDecimal.ZERO)
+                .cacheReadInputTokenPrice(BigDecimal.ZERO)
+                .videoOutputPrice(BigDecimal.ZERO)
+                .calculator(SpanCostCalculator::audioSpeechCost)
+                .build();
+
+        newPrices.put("tts-1", ttsPrice);
+        
+        field.set(null, Collections.unmodifiableMap(newPrices));
+    }
+    
+    @AfterAll
+    static void tearDown() throws Exception {
+        if (originalModelPrices != null) {
+            Field field = CostService.class.getDeclaredField("modelProviderPrices");
+            field.setAccessible(true);
+            Field modifiersField = Field.class.getDeclaredField("modifiers");
+            modifiersField.setAccessible(true);
+            modifiersField.setInt(field, field.getModifiers() & ~Modifier.FINAL);
+            
+            field.set(null, originalModelPrices);
+        }
+    }
+
 
     @Test
     void calculateCostForVideoGenerationUsesDuration() {
@@ -98,4 +148,35 @@ class CostServiceTest {
                 Arguments.of("claude-3.5.1", "anthropic", false),
                 Arguments.of("unknown-model-with-dots.1.2.3", "unknown", false));
     }
+
+    @ParameterizedTest
+    @MethodSource("provideUseCasesForCostCalculation")
+    void calculateCost_shouldCalculateCorrectly(String modelName, String provider, Map<String, Integer> usage,
+            BigDecimal expectedCost) {
+        BigDecimal cost = CostService.calculateCost(modelName, provider, usage, null);
+
+        assertThat(cost).isEqualByComparingTo(expectedCost);
+    }
+
+    private static Stream<Arguments> provideUseCasesForCostCalculation() {
+        return Stream.of(
+                // Video generation positive
+                Arguments.of("sora-2", "openai", Map.of("video_duration_seconds", 4), new BigDecimal("0.4")),
+                // Video generation zero duration
+                Arguments.of("sora-2", "openai", Map.of("video_duration_seconds", 0), BigDecimal.ZERO),
+                // Video generation negative duration
+                Arguments.of("sora-2", "openai", Map.of("video_duration_seconds", -5), BigDecimal.ZERO),
+                // Video generation unknown model (no price)
+                Arguments.of("unknown-video-model", "openai", Map.of("video_duration_seconds", 4), BigDecimal.ZERO),
+
+                // Audio speech positive
+                Arguments.of("tts-1", "openai", Map.of("prompt_tokens", 1000), new BigDecimal("0.015")),
+                
+                // Audio speech zero chars
+                Arguments.of("tts-1", "openai", Map.of("prompt_tokens", 0), BigDecimal.ZERO),
+                // Audio speech negative chars
+                Arguments.of("tts-1", "openai", Map.of("prompt_tokens", -10), BigDecimal.ZERO)
+        );
+    }
+
 }

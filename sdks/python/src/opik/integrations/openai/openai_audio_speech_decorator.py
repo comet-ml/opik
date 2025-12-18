@@ -149,12 +149,11 @@ class OpenaiAudioSpeechTrackDecorator(base_track_decorator.BaseTrackDecorator):
     ) -> Optional[Any]:
         
         # Handle context manager returned by with_streaming_response.create
-        # It's usually a contextlib._GeneratorContextManager or similar
-        # We check if it has __enter__ and __exit__
+        
+        # Sync context manager
         if hasattr(output, "__enter__") and hasattr(output, "__exit__"):
             span_to_end, trace_to_end = base_track_decorator.pop_end_candidates()
             
-            # We patch the context manager to return a wrapped stream
             original_enter = output.__enter__
 
             def enter_wrapper(*args, **kwargs):
@@ -167,10 +166,24 @@ class OpenaiAudioSpeechTrackDecorator(base_track_decorator.BaseTrackDecorator):
                 )
 
             output.__enter__ = enter_wrapper
-            # We also need to handle __exit__ to ensure we don't break cleanup, 
-            # but usually __exit__ is called on the original context manager instance which we modified.
-            # Assuming the context manager object reuse.
+            return output
             
+        # Async context manager
+        if hasattr(output, "__aenter__") and hasattr(output, "__aexit__"):
+            span_to_end, trace_to_end = base_track_decorator.pop_end_candidates()
+            
+            original_aenter = output.__aenter__
+
+            async def aenter_wrapper(*args, **kwargs):
+                stream = await original_aenter(*args, **kwargs)
+                return patch_async_binary_stream(
+                    stream=stream,
+                    span_to_end=span_to_end,
+                    trace_to_end=trace_to_end,
+                    finally_callback=self._after_call
+                )
+
+            output.__aenter__ = aenter_wrapper
             return output
 
         return None
@@ -184,9 +197,6 @@ def patch_binary_stream(
     """
     Wraps StreamedBinaryAPIResponse to capture audio bytes.
     """
-    # We can't easily subclass/wrap in place because it's already instantiated.
-    # We can patch its iter_bytes method.
-    
     if not hasattr(stream, "iter_bytes"):
         return stream
 
@@ -214,5 +224,44 @@ def patch_binary_stream(
             )
 
     stream.iter_bytes = iter_bytes_wrapper
+    
+    return stream
+
+def patch_async_binary_stream(
+    stream: Any, # AsyncStreamedBinaryAPIResponse
+    span_to_end: span.SpanData,
+    trace_to_end: Optional[span.SpanData], # Actually TraceData
+    finally_callback: generator_wrappers.FinishGeneratorCallback,
+) -> Any:
+    """
+    Wraps AsyncStreamedBinaryAPIResponse to capture audio bytes.
+    """
+    if not hasattr(stream, "aiter_bytes"):
+        return stream
+
+    original_aiter_bytes = stream.aiter_bytes
+
+    async def aiter_bytes_wrapper(chunk_size: Optional[int] = None):
+        accumulated_bytes = bytearray()
+        error_info = None
+        
+        try:
+            async for chunk in original_aiter_bytes(chunk_size=chunk_size):
+                accumulated_bytes.extend(chunk)
+                yield chunk
+        except Exception as e:
+            error_info = base_track_decorator.error_info_collector.collect(e)
+            raise e
+        finally:
+            output = bytes(accumulated_bytes) if error_info is None else None
+            finally_callback(
+                output=output,
+                error_info=error_info,
+                capture_output=True,
+                generators_span_to_end=span_to_end,
+                generators_trace_to_end=trace_to_end
+            )
+
+    stream.aiter_bytes = aiter_bytes_wrapper
     
     return stream
