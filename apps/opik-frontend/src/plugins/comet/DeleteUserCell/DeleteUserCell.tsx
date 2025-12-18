@@ -1,7 +1,13 @@
 import React, { useCallback, useRef, useState } from "react";
 import { CellContext } from "@tanstack/react-table";
-import { Trash2 } from "lucide-react";
+import { MoreHorizontal, Trash } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import ConfirmDialog from "@/components/shared/ConfirmDialog/ConfirmDialog";
 import CellWrapper from "@/components/shared/DataTableCells/CellWrapper";
 import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
@@ -36,20 +42,18 @@ const DeleteUserCell = (context: CellContext<WorkspaceMember, unknown>) => {
 
   const displayName = row.userName || row.email || "User";
 
-  const tooltipContent = isInvitedByEmail
-    ? "Cannot remove users invited by email"
-    : "Remove user from workspace";
-
-  const button = (
-    <Button
-      variant="ghost"
-      size="icon"
-      onClick={handleDeleteClick}
-      disabled={isInvitedByEmail}
-      className="size-8"
-    >
-      <Trash2 className="size-4" />
+  const menuButton = (
+    <Button variant="ghost" size="icon" className="size-8">
+      <MoreHorizontal className="size-4" />
+      <span className="sr-only">Actions menu</span>
     </Button>
+  );
+
+  const deleteMenuItem = (
+    <DropdownMenuItem onClick={handleDeleteClick} disabled={isInvitedByEmail}>
+      <Trash className="mr-2 size-4" />
+      Delete
+    </DropdownMenuItem>
   );
 
   return (
@@ -65,13 +69,22 @@ const DeleteUserCell = (context: CellContext<WorkspaceMember, unknown>) => {
         setOpen={setOpen}
         onConfirm={deleteUserHandler}
         title="Remove user from workspace"
-        description={`Are you sure you want to remove ${displayName} from this workspace? This action can't be undone.`}
+        description={`Are you sure you want to remove ${displayName} from this workspace?`}
         confirmText="Remove user"
         confirmButtonVariant="destructive"
       />
-      <TooltipWrapper content={tooltipContent}>
-        <span className="inline-block cursor-not-allowed">{button}</span>
-      </TooltipWrapper>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>{menuButton}</DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="w-52">
+          {isInvitedByEmail ? (
+            <TooltipWrapper content="Cannot remove users invited by email">
+              <div className="w-full">{deleteMenuItem}</div>
+            </TooltipWrapper>
+          ) : (
+            deleteMenuItem
+          )}
+        </DropdownMenuContent>
+      </DropdownMenu>
     </CellWrapper>
   );
 };
