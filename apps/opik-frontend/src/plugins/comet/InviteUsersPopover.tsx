@@ -118,6 +118,7 @@ const InviteUsersPopover: React.FC<InviteUsersPopoverProps> = ({
       side={side}
       align="end"
       alignOffset={-16}
+      collisionPadding={{ bottom: 16 }}
       className="w-[400px] p-4"
     >
       <div className="mb-3">
@@ -131,7 +132,7 @@ const InviteUsersPopover: React.FC<InviteUsersPopoverProps> = ({
           setSearchText={setSearchQuery}
           placeholder="Search"
         />
-        <div className="h-[300px]">{renderUserList()}</div>
+        <div className="h-[200px]">{renderUserList()}</div>
       </div>
     </DropdownMenuContent>
   );
