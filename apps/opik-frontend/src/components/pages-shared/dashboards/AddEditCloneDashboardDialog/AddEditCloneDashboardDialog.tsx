@@ -158,6 +158,8 @@ const AddEditCloneDashboardDialog: React.FC<
       shouldDirty: true,
       shouldTouch: true,
     });
+
+    form.clearErrors();
   };
 
   const handleBack = () => {

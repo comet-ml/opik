@@ -9,6 +9,7 @@ import { DropdownOption } from "@/types/shared";
 import useAppStore from "@/store/AppStore";
 import { Experiment } from "@/types/datasets";
 import { Sorting } from "@/types/sorting";
+import TooltipWrapper from "@/components/shared/TooltipWrapper/TooltipWrapper";
 
 const DEFAULT_LOADED_EXPERIMENT_ITEMS = 1000;
 const MORE_LOADED_EXPERIMENT_ITEMS = 10000;
@@ -159,6 +160,22 @@ const ExperimentsSelectBox: React.FC<ExperimentsSelectBoxProps> = (props) => {
       : experimentOptions;
   }, [experiments, customOptions]);
 
+  const renderExperimentsTitle = useCallback(
+    (selectedOptions: DropdownOption<string>[]) => {
+      const count = selectedOptions.length;
+      if (count === 1) {
+        return <div className="truncate">{selectedOptions[0].label}</div>;
+      }
+      const experimentNames = selectedOptions.map((o) => o.label).join(", ");
+      return (
+        <TooltipWrapper content={experimentNames}>
+          <div className="truncate">{count} experiments</div>
+        </TooltipWrapper>
+      );
+    },
+    [],
+  );
+
   const loadableSelectBoxProps = props.multiselect
     ? {
         options,
@@ -168,6 +185,7 @@ const ExperimentsSelectBox: React.FC<ExperimentsSelectBoxProps> = (props) => {
         multiselect: true as const,
         showSelectAll: props.showSelectAll,
         selectAllLabel: props.selectAllLabel || "All experiments",
+        renderTitle: renderExperimentsTitle,
       }
     : {
         options,

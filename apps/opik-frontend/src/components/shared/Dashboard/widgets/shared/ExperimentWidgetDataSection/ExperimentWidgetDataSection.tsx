@@ -24,6 +24,7 @@ import GroupsAccordionSection, {
 } from "@/components/shared/GroupsAccordionSection/GroupsAccordionSection";
 import DatasetSelectBox from "@/components/pages-shared/experiments/DatasetSelectBox/DatasetSelectBox";
 import ExperimentsPathsAutocomplete from "@/components/pages-shared/experiments/ExperimentsPathsAutocomplete/ExperimentsPathsAutocomplete";
+import { Description } from "@/components/ui/description";
 
 type ExperimentColumnData = {
   id: string;
@@ -167,14 +168,18 @@ const ExperimentWidgetDataSection = <T extends FieldValues>({
       : undefined;
 
   return (
-    <div className={cn("flex flex-col gap-4", className)}>
+    <div className={cn("flex flex-col", className)}>
+      <Description className="mb-2">
+        Add filters to focus on specific experiments and group them by
+        configuration to aggregate feedback scores.
+      </Description>
+
       <FiltersAccordionSection
         columns={EXPERIMENT_DATA_COLUMNS as ColumnData<unknown>[]}
         config={dataConfig}
         filters={filters}
         onChange={setFilters}
         label="Filters"
-        description="Add filters to focus the widget on specific experiments."
         errors={parsedFilterErrors}
       />
 
@@ -184,10 +189,10 @@ const ExperimentWidgetDataSection = <T extends FieldValues>({
         groups={groups}
         onChange={setGroups}
         label="Group by"
-        description="Group experiments by configuration to aggregate feedback scores."
         errors={parsedGroupErrors}
         className="w-full"
         hideSorting
+        hideBorder
       />
     </div>
   );

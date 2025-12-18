@@ -56,14 +56,14 @@ export const SelectItem: React.FC<SelectItemProps> = ({
     return (
       <DropdownMenuItem
         className={cn(
-          "min-h-12 cursor-pointer items-start gap-2 py-2 pl-6",
+          "min-h-12 cursor-pointer items-start gap-2 py-2 pl-8",
           isSelected && "bg-primary-foreground",
         )}
         onSelect={() => onSelect(id)}
       >
         {isSelected && (
           <Check
-            className="absolute left-1 top-2.5 size-3.5 text-foreground"
+            className="absolute left-2 top-2.5 size-3.5 text-muted-slate"
             strokeWidth="3"
           />
         )}
@@ -74,7 +74,7 @@ export const SelectItem: React.FC<SelectItemProps> = ({
           )}
         />
         <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-          <div className="comet-body-s truncate">{name}</div>
+          <div className="comet-body-s truncate text-foreground">{name}</div>
           {description && (
             <TooltipWrapper content={description}>
               <div className="comet-body-xs line-clamp-2 text-muted-foreground">
@@ -91,14 +91,14 @@ export const SelectItem: React.FC<SelectItemProps> = ({
   return (
     <div
       className={cn(
-        "group relative flex min-h-12 cursor-pointer items-start gap-2 rounded-md py-2 pl-6 pr-4 hover:bg-primary-foreground",
+        "group relative flex min-h-12 cursor-pointer items-start gap-2 rounded-md py-2 pl-8 pr-4 hover:bg-primary-foreground",
         isSelected && "bg-primary-foreground",
       )}
       onClick={() => onSelect(id)}
     >
       {isSelected && (
         <Check
-          className="absolute left-1 top-2.5 size-3.5 text-foreground"
+          className="absolute left-2 top-2.5 size-3.5 text-muted-slate"
           strokeWidth="3"
         />
       )}
@@ -109,7 +109,7 @@ export const SelectItem: React.FC<SelectItemProps> = ({
         )}
       />
       <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-        <div className="comet-body-s truncate">{name}</div>
+        <div className="comet-body-s truncate text-foreground">{name}</div>
         {description && (
           <TooltipWrapper content={description}>
             <div className="comet-body-xs line-clamp-2 text-muted-foreground">
@@ -124,7 +124,7 @@ export const SelectItem: React.FC<SelectItemProps> = ({
             <Button
               variant="ghost"
               size="icon-xs"
-              className="mt-0.5 opacity-0 group-hover:opacity-100"
+              className="mt-0.5 text-muted-slate opacity-0 group-hover:opacity-100"
               onClick={(e) => e.stopPropagation()}
             >
               <MoreVertical className="size-4" />
@@ -140,6 +140,7 @@ export const SelectItem: React.FC<SelectItemProps> = ({
                 e.stopPropagation();
                 onEdit?.(dashboard);
               }}
+              className="hover:text-primary"
             >
               <Pencil className="mr-2 size-4" />
               Edit
@@ -159,7 +160,7 @@ export const SelectItem: React.FC<SelectItemProps> = ({
                 e.stopPropagation();
                 onDelete?.(dashboard);
               }}
-              className="text-destructive focus:text-destructive"
+              className="text-destructive focus:bg-transparent focus:text-destructive"
             >
               <Trash2 className="mr-2 size-4" />
               Delete

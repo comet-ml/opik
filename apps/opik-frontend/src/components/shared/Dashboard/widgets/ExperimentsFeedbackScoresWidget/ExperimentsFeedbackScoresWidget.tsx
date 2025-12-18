@@ -244,7 +244,7 @@ const ExperimentsFeedbackScoresWidget: React.FunctionComponent<
 
   const infoMessage =
     isUsingGlobalExperiments && isSelectExperimentsMode
-      ? "Using global experiment configuration"
+      ? "Using the dashboard's default experiment settings"
       : undefined;
 
   // Limit to first 10 experiments

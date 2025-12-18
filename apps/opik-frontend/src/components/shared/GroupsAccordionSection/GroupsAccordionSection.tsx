@@ -2,7 +2,6 @@ import React, { useCallback } from "react";
 import { Plus } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { Label } from "@/components/ui/label";
 import { Description } from "@/components/ui/description";
 import { FormErrorSkeleton } from "@/components/ui/form";
 import {
@@ -36,6 +35,7 @@ type GroupsAccordionSectionProps<TColumnData> = {
   className?: string;
   errors?: (GroupValidationError | undefined)[];
   hideSorting?: boolean;
+  hideBorder?: boolean;
 };
 
 const GroupsAccordionSection = <TColumnData,>({
@@ -48,6 +48,7 @@ const GroupsAccordionSection = <TColumnData,>({
   className = "",
   errors,
   hideSorting = false,
+  hideBorder = false,
 }: GroupsAccordionSectionProps<TColumnData>) => {
   const handleAddGroup = useCallback(() => {
     if (groups.length >= MAX_GROUP_LEVELS) return;
@@ -65,11 +66,9 @@ const GroupsAccordionSection = <TColumnData,>({
 
   return (
     <Accordion type="single" collapsible className={className}>
-      <AccordionItem value="groups" className="border-t">
+      <AccordionItem value="groups" className={hideBorder ? "" : "border-t"}>
         <AccordionTrigger className="py-3 hover:no-underline">
-          <Label className="text-sm font-medium">
-            {label} {groups.length > 0 && `(${groups.length})`}
-          </Label>
+          {label} {groups.length > 0 && `(${groups.length})`}
         </AccordionTrigger>
         <AccordionContent className="flex flex-col gap-4 px-3 pb-3">
           <Description>{description}</Description>
