@@ -1,67 +1,26 @@
 package com.comet.opik.api.evaluators;
 
-import com.comet.opik.domain.evaluators.AutomationRuleEvaluatorModel;
-import com.comet.opik.domain.evaluators.AutomationRuleEvaluatorWithProjectRowMapper;
-import com.comet.opik.domain.evaluators.LlmAsJudgeAutomationRuleEvaluatorModel;
-import com.comet.opik.domain.evaluators.RowMapperFactory;
-import com.comet.opik.domain.evaluators.SpanLlmAsJudgeAutomationRuleEvaluatorModel;
-import com.comet.opik.domain.evaluators.SpanUserDefinedMetricPythonAutomationRuleEvaluatorModel;
-import com.comet.opik.domain.evaluators.TraceThreadLlmAsJudgeAutomationRuleEvaluatorModel;
-import com.comet.opik.domain.evaluators.TraceThreadUserDefinedMetricPythonAutomationRuleEvaluatorModel;
-import com.comet.opik.domain.evaluators.UserDefinedMetricPythonAutomationRuleEvaluatorModel;
 import com.fasterxml.jackson.annotation.JsonValue;
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import lombok.AllArgsConstructor;
+import lombok.AccessLevel;
 import lombok.Getter;
+import lombok.RequiredArgsConstructor;
 import lombok.experimental.UtilityClass;
 
 import java.util.Arrays;
 
 @Getter
-@AllArgsConstructor
+@RequiredArgsConstructor(access = AccessLevel.PRIVATE)
 public enum AutomationRuleEvaluatorType {
 
-    LLM_AS_JUDGE(Constants.LLM_AS_JUDGE,
-            LlmAsJudgeAutomationRuleEvaluatorModel::fromRowMapper),
-
-    USER_DEFINED_METRIC_PYTHON(Constants.USER_DEFINED_METRIC_PYTHON,
-            UserDefinedMetricPythonAutomationRuleEvaluatorModel::fromRowMapper),
-
-    TRACE_THREAD_LLM_AS_JUDGE(Constants.TRACE_THREAD_LLM_AS_JUDGE,
-            TraceThreadLlmAsJudgeAutomationRuleEvaluatorModel::fromRowMapper),
-
-    TRACE_THREAD_USER_DEFINED_METRIC_PYTHON(Constants.TRACE_THREAD_USER_DEFINED_METRIC_PYTHON,
-            TraceThreadUserDefinedMetricPythonAutomationRuleEvaluatorModel::fromRowMapper),
-
-    SPAN_LLM_AS_JUDGE(Constants.SPAN_LLM_AS_JUDGE,
-            SpanLlmAsJudgeAutomationRuleEvaluatorModel::fromRowMapper),
-
-    SPAN_USER_DEFINED_METRIC_PYTHON(Constants.SPAN_USER_DEFINED_METRIC_PYTHON,
-            SpanUserDefinedMetricPythonAutomationRuleEvaluatorModel::fromRowMapper);
+    LLM_AS_JUDGE(Constants.LLM_AS_JUDGE),
+    USER_DEFINED_METRIC_PYTHON(Constants.USER_DEFINED_METRIC_PYTHON),
+    TRACE_THREAD_LLM_AS_JUDGE(Constants.TRACE_THREAD_LLM_AS_JUDGE),
+    TRACE_THREAD_USER_DEFINED_METRIC_PYTHON(Constants.TRACE_THREAD_USER_DEFINED_METRIC_PYTHON),
+    SPAN_LLM_AS_JUDGE(Constants.SPAN_LLM_AS_JUDGE),
+    SPAN_USER_DEFINED_METRIC_PYTHON(Constants.SPAN_USER_DEFINED_METRIC_PYTHON);
 
     @JsonValue
     private final String type;
-    private final RowMapperFactory factory;
-
-    /**
-     * Creates an AutomationRuleEvaluatorModel instance using the type-specific factory.
-     * Delegates to the appropriate model's fromRowMapper method via method reference.
-     * This eliminates switch statements by using the Strategy pattern with functional interfaces.
-     *
-     * @param common Common fields from ResultSet
-     * @param codeNode JSON representation of code field
-     * @param objectMapper ObjectMapper for deserialization
-     * @return Constructed model instance
-     * @throws JsonProcessingException if JSON parsing fails
-     */
-    public AutomationRuleEvaluatorModel<?> fromRowMapper(
-            AutomationRuleEvaluatorWithProjectRowMapper.CommonFields common,
-            JsonNode codeNode,
-            ObjectMapper objectMapper) throws JsonProcessingException {
-        return factory.create(common, codeNode, objectMapper);
-    }
 
     public static AutomationRuleEvaluatorType fromString(String type) {
         return Arrays.stream(values())

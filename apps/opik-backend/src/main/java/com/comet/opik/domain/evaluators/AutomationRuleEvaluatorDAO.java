@@ -29,7 +29,7 @@ import java.util.stream.Collectors;
 
 @RegisterArgumentFactory(UUIDArgumentFactory.class)
 @RegisterArgumentFactory(JsonNodeArgumentFactory.class)
-@RegisterRowMapper(AutomationRuleEvaluatorWithProjectRowMapper.class)
+@RegisterRowMapper(AutomationRuleEvaluatorRowMapper.class)
 public interface AutomationRuleEvaluatorDAO extends AutomationRuleDAO {
 
     @SqlUpdate("INSERT INTO automation_rule_evaluators(id, `type`, code, created_by, last_updated_by) " +
