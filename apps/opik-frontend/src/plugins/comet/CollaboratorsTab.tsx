@@ -32,6 +32,7 @@ import {
   WorkspaceMember,
 } from "./types";
 import WorkspaceRoleCell from "./WorkspaceRoleCell/WorkspaceRoleCell";
+import DeleteUserCell from "./DeleteUserCell/DeleteUserCell";
 
 const COLUMNS_WIDTH_KEY = "workspace-members-columns-width";
 
@@ -62,6 +63,12 @@ const DEFAULT_COLUMNS: ColumnData<WorkspaceMember>[] = [
     label: "Workspace role",
     type: COLUMN_TYPE.category,
     cell: WorkspaceRoleCell as never,
+  },
+  {
+    id: "actions",
+    label: "",
+    cell: DeleteUserCell as never,
+    size: 30,
   },
 ];
 
