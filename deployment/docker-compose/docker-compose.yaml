@@ -81,10 +81,9 @@ services:
       ZOO_4LW_COMMANDS_WHITELIST: "srvr,ruok"
     healthcheck:
       test: [ "CMD-SHELL", "echo ruok | nc localhost 2181 | grep -q imok" ]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 30s
+      interval: 1s
+      timeout: 1s
+      retries: 300
     volumes:
       - zookeeper:/data
 
