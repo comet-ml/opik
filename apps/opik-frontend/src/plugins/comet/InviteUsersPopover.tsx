@@ -66,10 +66,14 @@ const InviteUsersPopover: React.FC<InviteUsersPopoverProps> = ({
   };
 
   const renderUserList = () => {
-    if (!searchQuery) {
+    const isQueryTooShort =
+      searchQuery.length < MIN_USERNAME_LENGTH && !hasEmailQuery;
+
+    if (!searchQuery || isQueryTooShort) {
       return (
         <div className="comet-body-s flex h-full items-center justify-center text-muted-slate">
-          Start typing to search for users
+          Type at least {MIN_USERNAME_LENGTH} characters or enter an email
+          address
         </div>
       );
     }
@@ -80,7 +84,7 @@ const InviteUsersPopover: React.FC<InviteUsersPopoverProps> = ({
     if (!hasResults && !showEmailRow) {
       return (
         <div className="comet-body-s flex h-full items-center justify-center text-muted-slate">
-          No users found
+          No users found. You can also invite by email address
         </div>
       );
     }
@@ -130,7 +134,7 @@ const InviteUsersPopover: React.FC<InviteUsersPopoverProps> = ({
         <SearchInput
           searchText={searchQuery}
           setSearchText={setSearchQuery}
-          placeholder="Search"
+          placeholder="Search by username or email"
         />
         <div className="h-[200px]">{renderUserList()}</div>
       </div>
