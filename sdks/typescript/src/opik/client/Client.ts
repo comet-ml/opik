@@ -602,7 +602,6 @@ export class OpikClient {
               template: options.prompt,
               metadata: options.metadata,
               type: normalizedType,
-              tags: options.tags,
             },
           },
           this.api.requestOptions
@@ -927,44 +926,51 @@ export class OpikClient {
    * Updates tags for one or more prompt versions in a single batch operation.
    *
    * @param versionIds - Array of prompt version IDs to update
-   * @param tags - Tags to set. Behavior depends on mergeTags parameter
-   * @param mergeTags - If true, adds new tags to existing tags (union). If false, replaces all existing tags (default)
+   * @param options - Update options
+   * @param options.tags - Tags to set or merge:
+   *   - `[]`: Clear all tags (when mergeTags is false or unspecified)
+   *   - `['tag1', 'tag2']`: Set or merge tags (based on mergeTags)
+   * @param options.mergeTags - If true, adds new tags to existing tags (union). If false, replaces all existing tags (default: false)
    * @returns Promise that resolves when update is complete
    * @throws OpikApiError if update fails
    *
    * @example
    * ```typescript
-   * // Replace tags
-   * await client.updatePromptVersionTags(
-   *   ["version-id-1", "version-id-2"],
-   *   ["production", "v2"],
-   *   false
-   * );
+   * // Replace tags on multiple versions (default behavior)
+   * await client.updatePromptVersionTags(["version-id-1", "version-id-2"], {
+   *   tags: ["production", "v2"]
+   * });
    *
-   * // Merge tags
-   * await client.updatePromptVersionTags(
-   *   ["version-id-1"],
-   *   ["new-tag"],
-   *   true
-   * );
+   * // Merge new tags with existing tags
+   * await client.updatePromptVersionTags(["version-id-1"], {
+   *   tags: ["hotfix"],
+   *   mergeTags: true
+   * });
+   *
+   * // Clear all tags
+   * await client.updatePromptVersionTags(["version-id-1"], {
+   *   tags: []
+   * });
    * ```
    */
   public updatePromptVersionTags = async (
     versionIds: string[],
-    tags: string[],
-    mergeTags?: boolean
+    options?: {
+      tags?: string[] | null;
+      mergeTags?: boolean;
+    }
   ): Promise<void> => {
     logger.debug("Updating prompt version tags", {
       count: versionIds.length,
-      mergeTags,
+      options,
     });
 
     try {
       await this.api.prompts.updatePromptVersions(
         {
           ids: versionIds,
-          update: { tags },
-          mergeTags,
+          update: { tags: options?.tags ?? undefined },
+          mergeTags: options?.mergeTags,
         },
         this.api.requestOptions
       );

@@ -8,18 +8,28 @@ import {
 
 const shouldRunApiTests = shouldRunIntegrationTests();
 
-describe.skipIf(!shouldRunApiTests)("Prompt Real API Integration", () => {
+// LOCAL TESTING: Force tests to run (skip check disabled)
+describe("Prompt Real API Integration", () => {
   let client: Opik;
   const createdPromptIds: string[] = [];
 
   beforeAll(() => {
     console.log(getIntegrationTestStatus());
 
-    if (!shouldRunApiTests) {
-      return;
+    // if (!shouldRunApiTests) {
+    //   return;
+    // }
+
+    // LOCAL TESTING: Configure for localhost:8080 with default workspace
+    // Set a dummy API key if not provided (local testing may not require auth)
+    if (!process.env.OPIK_API_KEY) {
+      process.env.OPIK_API_KEY = "local-test-key";
     }
 
-    client = new Opik();
+    client = new Opik({
+      apiUrl: "http://localhost:8080/",
+      workspaceName: "default",
+    });
   });
 
   afterEach(async () => {
@@ -104,7 +114,8 @@ describe.skipIf(!shouldRunApiTests)("Prompt Real API Integration", () => {
       });
       createdPromptIds.push(prompt.id);
 
-      expect(prompt.tags).toEqual(tags);
+      expect(prompt.tags).toEqual(expect.arrayContaining(tags));
+      expect(prompt.tags?.length).toBe(tags.length);
     }, 30000);
 
     it("should handle prompt with complex metadata", async () => {
@@ -290,14 +301,16 @@ describe.skipIf(!shouldRunApiTests)("Prompt Real API Integration", () => {
       // Verify local state updated
       expect(prompt.name).toBe(updatedName);
       expect(prompt.description).toBe("Updated description");
-      expect(prompt.tags).toEqual(["production", "v2", "qa"]);
+      expect(prompt.tags).toEqual(expect.arrayContaining(["production", "v2", "qa"]));
+      expect(prompt.tags?.length).toBe(3);
 
       // Verify backend state updated
       const retrieved = await client.getPrompt({ name: updatedName });
       expect(retrieved).not.toBeNull();
       expect(retrieved?.name).toBe(updatedName);
       expect(retrieved?.description).toBe("Updated description");
-      expect(retrieved?.tags).toEqual(["qa", "production", "v2"]);
+      expect(retrieved?.tags).toEqual(expect.arrayContaining(["qa", "production", "v2"]));
+      expect(retrieved?.tags?.length).toBe(3);
     }, 30000);
 
     it("should update only specific properties", async () => {
@@ -315,7 +328,8 @@ describe.skipIf(!shouldRunApiTests)("Prompt Real API Integration", () => {
       });
 
       expect(prompt.name).toBe(promptName); // Name unchanged
-      expect(prompt.tags).toEqual(["new-tag"]);
+      expect(prompt.tags).toEqual(expect.arrayContaining(["new-tag"]));
+      expect(prompt.tags?.length).toBe(1);
 
       // Update only description
       await prompt.updateProperties({
@@ -323,7 +337,8 @@ describe.skipIf(!shouldRunApiTests)("Prompt Real API Integration", () => {
       });
 
       expect(prompt.description).toBe("New description");
-      expect(prompt.tags).toEqual(["new-tag"]); // Tags unchanged
+      expect(prompt.tags).toEqual(expect.arrayContaining(["new-tag"])); // Tags unchanged
+      expect(prompt.tags?.length).toBe(1);
     }, 30000);
 
     it("should handle prompt deletion via instance method", async () => {
@@ -552,13 +567,15 @@ describe.skipIf(!shouldRunApiTests)("Prompt Real API Integration", () => {
 
       // Verify local state
       expect(prompt.description).toBe("Initial description");
-      expect(prompt.tags).toEqual(["initial", "test"]);
+      expect(prompt.tags).toEqual(expect.arrayContaining(["initial", "test"]));
+      expect(prompt.tags?.length).toBe(2);
 
       // Verify backend state
       const retrieved = await client.getPrompt({ name: promptName });
       expect(retrieved?.description).toBe("Initial description");
       expect(retrieved?.tags).toContain("initial");
       expect(retrieved?.tags).toContain("test");
+      expect(retrieved?.tags?.length).toBe(2);
     }, 30000);
 
     it("should support A/B testing scenario with multiple versions", async () => {
@@ -739,30 +756,90 @@ describe.skipIf(!shouldRunApiTests)("Prompt Real API Integration", () => {
     }, 30000);
   });
 
-  describe("Tags Functionality", () => {
-    it("should update prompt version tags in replace mode", async () => {
-      const promptName = `test-tags-replace-${Date.now()}`;
-      const initialTags = ["tag1", "tag2"];
+  describe("Update Prompt Version Tags Functionality", () => {
+    it("should update prompt version tags in default (replace) mode", async () => {
+      const promptName = `test-tags-default-replace-${Date.now()}`;
 
-      const prompt = await client.createPrompt({
+      const version1 = await client.createPrompt({
         name: promptName,
-        prompt: "Test template",
-        tags: initialTags,
+        prompt: "Test template v1",
       });
-      createdPromptIds.push(prompt.id);
+      createdPromptIds.push(version1.id);
+      await client.updatePromptVersionTags([version1.versionId], {
+        tags: ["tag1", "tag2"],
+      });
 
-      // Update tags (replace mode)
-      const newTags = ["tag3", "tag4"];
+      const version2 = await client.createPrompt({
+        name: promptName,
+        prompt: "Test template v2",
+      });
+      createdPromptIds.push(version2.id);
+      await client.updatePromptVersionTags([version2.versionId], {
+        tags: ["tag3", "tag4"],
+      });
+
+      const newTags = ["tag5", "tag6"];
       await client.updatePromptVersionTags(
-        [prompt.versionId],
-        newTags,
-        false
+        [version1.versionId, version2.versionId],
+        {
+          tags: newTags,
+        }
       );
 
-      // Fetch the prompt again to verify tags were updated
       const updated = await client.getPrompt({ name: promptName });
-      expect(updated?.tags).toEqual(newTags);
+      const versions = await updated!.getVersions();
+
+      const updatedVersion1 = versions.find((v) => v.id === version1.versionId);
+      expect(updatedVersion1?.tags).toEqual(expect.arrayContaining(newTags));
+      expect(updatedVersion1?.tags?.length).toBe(newTags.length);
+
+      const updatedVersion2 = versions.find((v) => v.id === version2.versionId);
+      expect(updatedVersion2?.tags).toEqual(expect.arrayContaining(newTags));
+      expect(updatedVersion2?.tags?.length).toBe(newTags.length);
     }, 30000);
+
+    it("should update prompt version tags in replace mode", async () => {
+        const promptName = `test-tags-replace-${Date.now()}`;
+
+          const version1 = await client.createPrompt({
+              name: promptName,
+              prompt: "Test template v1",
+          });
+          createdPromptIds.push(version1.id);
+          await client.updatePromptVersionTags([version1.versionId], {
+              tags: ["tag1", "tag2"],
+          });
+
+          const version2 = await client.createPrompt({
+              name: promptName,
+              prompt: "Test template v2",
+          });
+          createdPromptIds.push(version2.id);
+          await client.updatePromptVersionTags([version2.versionId], {
+              tags: ["tag3", "tag4"],
+          });
+
+          const newTags = ["tag5", "tag6"];
+          await client.updatePromptVersionTags(
+              [version1.versionId, version2.versionId],
+              {
+                  tags: newTags,
+                  mergeTags: false,
+              }
+          );
+
+          const updated = await client.getPrompt({ name: promptName });
+          const versions = await updated!.getVersions();
+
+          const updatedVersion1 = versions.find((v) => v.id === version1.versionId);
+          expect(updatedVersion1?.tags).toEqual(expect.arrayContaining(newTags));
+          expect(updatedVersion1?.tags?.length).toBe(newTags.length);
+
+          const updatedVersion2 = versions.find((v) => v.id === version2.versionId);
+          expect(updatedVersion2?.tags).toEqual(expect.arrayContaining(newTags));
+          expect(updatedVersion2?.tags?.length).toBe(newTags.length);
+      }, 30000);
+
 
     it("should update prompt version tags in merge mode", async () => {
       const promptName = `test-tags-merge-${Date.now()}`;
@@ -771,25 +848,42 @@ describe.skipIf(!shouldRunApiTests)("Prompt Real API Integration", () => {
       const prompt = await client.createPrompt({
         name: promptName,
         prompt: "Test template",
-        tags: initialTags,
+        tags: initialTags, // Container-level only
       });
       createdPromptIds.push(prompt.id);
 
-      // Update tags (merge mode)
-      const additionalTags = ["tag3", "tag4"];
-      await client.updatePromptVersionTags(
-        [prompt.versionId],
-        additionalTags,
-        true
-      );
+      // First set initial version-level tags
+      await client.updatePromptVersionTags([prompt.versionId], {
+        tags: initialTags,
+      });
 
-      // Fetch the prompt again to verify tags were merged
+      // Wait for backend to process
+      await new Promise((resolve) => setTimeout(resolve, 500));
+
+      // Now merge additional tags (merge mode)
+      const additionalTags = ["tag3", "tag4"];
+      await client.updatePromptVersionTags([prompt.versionId], {
+        tags: additionalTags,
+        mergeTags: true,
+      });
+
+      // Wait for backend to process the merge
+      await new Promise((resolve) => setTimeout(resolve, 1500));
+
+      // Verify version-specific tags were merged (check via version history)
       const updated = await client.getPrompt({ name: promptName });
-      // Tags should be merged (union of both sets)
-      expect(updated?.tags).toEqual(
+      const versions = await updated!.getVersions();
+      const currentVersion = versions.find(v => v.id === prompt.versionId);
+
+      // Version tags should be merged (union of both sets)
+      expect(currentVersion?.tags).toEqual(
         expect.arrayContaining([...initialTags, ...additionalTags])
       );
-      expect(updated?.tags?.length).toBe(4);
+      expect(currentVersion?.tags?.length).toBe(4);
+
+      // Container-level tags should remain unchanged
+      expect(updated?.tags).toEqual(expect.arrayContaining(initialTags));
+      expect(updated?.tags?.length).toBe(initialTags.length);
     }, 30000);
 
     it("should update multiple version tags at once", async () => {
@@ -809,40 +903,103 @@ describe.skipIf(!shouldRunApiTests)("Prompt Real API Integration", () => {
         tags: ["v2"],
       });
 
-      // Update both versions with the same tags
+      // Update both version-specific tags with the same tags
       const newTags = ["production", "tested"];
       await client.updatePromptVersionTags(
         [version1.versionId, version2.versionId],
-        newTags,
-        false
+        {
+          tags: newTags,
+        }
       );
 
-      // Verify both versions have the new tags
+      // Verify both versions have the new version-specific tags
       const versions = await version1.getVersions();
       for (const version of versions) {
-        expect(version.tags).toEqual(newTags);
+        expect(version.tags).toEqual(expect.arrayContaining(newTags));
+        expect(version.tags?.length).toBe(newTags.length);
       }
+
+      // Container-level tags should remain as "v2" (from latest version creation)
+      const prompt = await client.getPrompt({ name: promptName });
+      expect(prompt?.tags).toEqual(expect.arrayContaining(["v2"]));
     }, 30000);
+
+    it("should clear all tags when empty array is provided", async () => {
+      const promptName = `test-clear-tags-${Date.now()}`;
+      const initialTags = ["tag1", "tag2", "tag3"];
+
+      // Create prompt with container tags
+      const prompt = await client.createPrompt({
+        name: promptName,
+        prompt: "Template with tags",
+        tags: initialTags,
+      });
+      createdPromptIds.push(prompt.id);
+
+      // Set initial version-level tags
+      await client.updatePromptVersionTags([prompt.versionId], {
+        tags: initialTags,
+      });
+
+      // Wait for backend to process
+      await new Promise((resolve) => setTimeout(resolve, 500));
+
+      // Clear all version-level tags with empty array
+      await client.updatePromptVersionTags([prompt.versionId], {
+        tags: [],
+      });
+
+      // Wait for backend indexing
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+
+      // Verify version-level tags were cleared (backend may return undefined or [])
+      const versions = await prompt.getVersions();
+      const currentVersion = versions.find((v) => v.versionId === prompt.versionId);
+      expect(currentVersion?.tags ?? []).toEqual([]);
+
+      // Container-level tags should remain unchanged
+      const updated = await client.getPrompt({ name: promptName });
+      expect(updated?.tags).toEqual(expect.arrayContaining(initialTags));
+    }, 30000);
+
+
+
+
+
+
+
+
 
     it("should preserve tags in version history", async () => {
       const promptName = `test-tags-history-${Date.now()}`;
 
-      // Create version 1 with tags
+      // Create version 1 with container tags
       const version1 = await client.createPrompt({
         name: promptName,
         prompt: "Template v1",
-        tags: ["v1", "baseline"],
+        tags: ["v1", "baseline"], // Container-level only
       });
       createdPromptIds.push(version1.id);
+      // Explicitly set version-level tags for v1
+      await client.updatePromptVersionTags([version1.versionId], {
+        tags: ["v1", "baseline"],
+      });
 
-      // Create version 2 with different tags
+      // Create version 2 with different container tags
       const version2 = await client.createPrompt({
         name: promptName,
         prompt: "Template v2",
+        tags: ["v2", "experimental"], // Container-level only
+      });
+      // Explicitly set version-level tags for v2
+      await client.updatePromptVersionTags([version2.versionId], {
         tags: ["v2", "experimental"],
       });
 
-      // Get history and verify tags are preserved
+      // Wait for backend indexing
+      await new Promise((resolve) => setTimeout(resolve, 1500));
+
+      // Get history and verify version-specific tags are preserved for each version
       const history = await version1.getVersions();
 
       expect(history.length).toBe(2);
@@ -851,27 +1008,422 @@ describe.skipIf(!shouldRunApiTests)("Prompt Real API Integration", () => {
       const v1InHistory = history.find((v) => v.commit === version1.commit);
       const v2InHistory = history.find((v) => v.commit === version2.commit);
 
-      expect(v1InHistory?.tags).toEqual(["v1", "baseline"]);
-      expect(v2InHistory?.tags).toEqual(["v2", "experimental"]);
+      // Each version should have its own version-specific tags preserved
+      expect(v1InHistory?.tags).toEqual(expect.arrayContaining(["v1", "baseline"]));
+      expect(v1InHistory?.tags?.length).toBe(2);
+      expect(v2InHistory?.tags).toEqual(expect.arrayContaining(["v2", "experimental"]));
+      expect(v2InHistory?.tags?.length).toBe(2);
+
+      // Container-level tags should be from latest version
+      const prompt = await client.getPrompt({ name: promptName });
+      expect(prompt?.tags).toEqual(expect.arrayContaining(["v2", "experimental"]));
     }, 30000);
 
-    it("should return tags as readonly property", async () => {
+    it("should return tags as readonly property at both container and version level", async () => {
       const promptName = `test-tags-readonly-${Date.now()}`;
       const tags = ["tag1", "tag2"];
 
+      // Create prompt with container tags
       const prompt = await client.createPrompt({
         name: promptName,
         prompt: "Test template",
-        tags,
+        tags, // Container-level only
       });
       createdPromptIds.push(prompt.id);
 
-      // Verify tags property exists and matches
-      expect(prompt.tags).toEqual(tags);
+      // Explicitly set version-level tags
+      await client.updatePromptVersionTags([prompt.versionId], {
+        tags,
+      });
 
-      // Get versions and verify tags are included
+      // Wait for backend indexing
+      await new Promise((resolve) => setTimeout(resolve, 1500));
+
+      // Verify container-level tags
+      expect(prompt.tags).toEqual(expect.arrayContaining(tags));
+      expect(prompt.tags?.length).toBe(tags.length);
+
+      // Get versions and verify version-specific tags are also set
       const versions = await prompt.getVersions();
-      expect(versions[0].tags).toEqual(tags);
+      expect(versions[0].tags).toEqual(expect.arrayContaining(tags));
+      expect(versions[0].tags?.length).toBe(tags.length);
+    }, 30000);
+  });
+
+  describe("Version History - Filtering, Sorting, and Searching", () => {
+    it("should filter versions by tags", async () => {
+      const promptName = `test-filter-tags-${Date.now()}`;
+
+      // Create version 1 with container tags
+      const v1 = await client.createPrompt({
+        name: promptName,
+        prompt: "Version 1 template",
+        tags: ["production", "stable"], // Container-level only
+      });
+      createdPromptIds.push(v1.id);
+      // Explicitly set version-level tags
+      await client.updatePromptVersionTags([v1.versionId], {
+        tags: ["production", "stable"],
+      });
+
+      // Create version 2 with container tags
+      const v2 = await client.createPrompt({
+        name: promptName,
+        prompt: "Version 2 template",
+        tags: ["experimental", "beta"], // Container-level only
+      });
+      // Explicitly set version-level tags
+      await client.updatePromptVersionTags([v2.versionId], {
+        tags: ["experimental", "beta"],
+      });
+
+      // Create version 3 with container tags
+      const v3 = await client.createPrompt({
+        name: promptName,
+        prompt: "Version 3 template",
+        tags: ["production", "tested"], // Container-level only
+      });
+      // Explicitly set version-level tags
+      await client.updatePromptVersionTags([v3.versionId], {
+        tags: ["production", "tested"],
+      });
+
+      // Small delay to ensure backend indexing of version tags
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+
+      // Filter versions with "production" tag (version-level)
+      const productionVersions = await v1.getVersions({
+        filters: JSON.stringify([
+          { field: "tags", operator: "contains", value: "production" },
+        ]),
+      });
+
+      // Should only return v1 and v3
+      expect(productionVersions.length).toBeGreaterThanOrEqual(2);
+      const commits = productionVersions.map((v) => v.commit);
+      expect(commits).toContain(v1.commit);
+      expect(commits).toContain(v3.commit);
+      expect(commits).not.toContain(v2.commit);
+    }, 30000);
+
+    it("should filter versions by multiple tags", async () => {
+      const promptName = `test-filter-multi-tags-${Date.now()}`;
+
+      // Create version 1 with container tags
+      const v1 = await client.createPrompt({
+        name: promptName,
+        prompt: "Version 1",
+        tags: ["production", "stable"], // Container-level only
+      });
+      createdPromptIds.push(v1.id);
+      // Explicitly set version-level tags
+      await client.updatePromptVersionTags([v1.versionId], {
+        tags: ["production", "stable"],
+      });
+
+      // Create version 2 with container tags
+      const v2 = await client.createPrompt({
+        name: promptName,
+        prompt: "Version 2",
+        tags: ["production", "experimental"], // Container-level only
+      });
+      // Explicitly set version-level tags
+      await client.updatePromptVersionTags([v2.versionId], {
+        tags: ["production", "experimental"],
+      });
+
+      // Create version 3 with container tags
+      const v3 = await client.createPrompt({
+        name: promptName,
+        prompt: "Version 3",
+        tags: ["dev", "unstable"], // Container-level only
+      });
+      // Explicitly set version-level tags
+      await client.updatePromptVersionTags([v3.versionId], {
+        tags: ["dev", "unstable"],
+      });
+
+      // Small delay to ensure backend indexing of version tags
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+
+      // Filter for versions with "stable" tag (version-level)
+      const stableVersions = await v1.getVersions({
+        filters: JSON.stringify([
+          { field: "tags", operator: "contains", value: "stable" },
+        ]),
+      });
+
+      expect(stableVersions.length).toBeGreaterThanOrEqual(1);
+      const commits = stableVersions.map((v) => v.commit);
+      expect(commits).toContain(v1.commit);
+    }, 30000);
+
+    it("should search versions by template content", async () => {
+      const promptName = `test-search-template-${Date.now()}`;
+      const searchTerm = "unique-search-term";
+
+      // Create version 1 with search term
+      const v1 = await client.createPrompt({
+        name: promptName,
+        prompt: `This template contains ${searchTerm} for testing`,
+      });
+      createdPromptIds.push(v1.id);
+
+      // Create version 2 without search term
+      const v2 = await client.createPrompt({
+        name: promptName,
+        prompt: "This template has different content",
+      });
+
+      // Create version 3 with search term
+      const v3 = await client.createPrompt({
+        name: promptName,
+        prompt: `Another template with ${searchTerm} included`,
+      });
+
+      // Small delay to ensure backend indexing
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+
+      // Search for versions containing the search term
+      const searchResults = await v1.getVersions({
+        search: searchTerm,
+      });
+
+      // Should return v1 and v3
+      expect(searchResults.length).toBeGreaterThanOrEqual(2);
+      const commits = searchResults.map((v) => v.commit);
+      expect(commits).toContain(v1.commit);
+      expect(commits).toContain(v3.commit);
+      expect(commits).not.toContain(v2.commit);
+    }, 30000);
+
+    it("should search versions across multiple versions", async () => {
+      const promptName = `test-search-multi-${Date.now()}`;
+      const searchTerm = "search-keyword-xyz";
+
+      // Create version 1 with search term
+      const v1 = await client.createPrompt({
+        name: promptName,
+        prompt: `Template with ${searchTerm} in v1`,
+      });
+      createdPromptIds.push(v1.id);
+
+      // Create version 2 without the search term
+      const v2 = await client.createPrompt({
+        name: promptName,
+        prompt: "Template without keyword in v2",
+      });
+
+      // Create version 3 with the search term
+      const v3 = await client.createPrompt({
+        name: promptName,
+        prompt: `Template with ${searchTerm} in v3`,
+      });
+
+      // Small delay to ensure backend indexing
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+
+      // Search for versions with the search term
+      const searchResults = await v1.getVersions({
+        search: searchTerm,
+      });
+
+      // Should find at least the versions with matching content
+      expect(searchResults.length).toBeGreaterThanOrEqual(2);
+      const commits = searchResults.map((v) => v.commit);
+      expect(commits).toContain(v1.commit);
+      expect(commits).toContain(v3.commit);
+    }, 30000);
+
+    it("should sort versions by created_at in descending order", async () => {
+      const promptName = `test-sort-desc-${Date.now()}`;
+
+      // Create versions with small delays to ensure different timestamps
+      const v1 = await client.createPrompt({
+        name: promptName,
+        prompt: "Version 1",
+      });
+      createdPromptIds.push(v1.id);
+
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      const v2 = await client.createPrompt({
+        name: promptName,
+        prompt: "Version 2",
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      const v3 = await client.createPrompt({
+        name: promptName,
+        prompt: "Version 3",
+      });
+
+      // Sort by created_at descending (newest first)
+      const sortedVersions = await v1.getVersions({
+        sorting: JSON.stringify([
+          { field: "created_at", direction: "DESC" },
+        ]),
+      });
+
+      expect(sortedVersions.length).toBe(3);
+      // v3 should be first (newest), v1 should be last (oldest)
+      expect(sortedVersions[0].commit).toBe(v3.commit);
+      expect(sortedVersions[2].commit).toBe(v1.commit);
+    }, 30000);
+
+    it("should sort versions by created_at in ascending order", async () => {
+      const promptName = `test-sort-asc-${Date.now()}`;
+
+      // Create versions with small delays
+      const v1 = await client.createPrompt({
+        name: promptName,
+        prompt: "Version 1",
+      });
+      createdPromptIds.push(v1.id);
+
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      const v2 = await client.createPrompt({
+        name: promptName,
+        prompt: "Version 2",
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      const v3 = await client.createPrompt({
+        name: promptName,
+        prompt: "Version 3",
+      });
+
+      // Sort by created_at ascending (oldest first)
+      const sortedVersions = await v1.getVersions({
+        sorting: JSON.stringify([
+          { field: "created_at", direction: "ASC" },
+        ]),
+      });
+
+      expect(sortedVersions.length).toBe(3);
+      // v1 should be first (oldest), v3 should be last (newest)
+      expect(sortedVersions[0].commit).toBe(v1.commit);
+      expect(sortedVersions[2].commit).toBe(v3.commit);
+    }, 30000);
+
+    it("should combine filtering, sorting, and searching", async () => {
+      const promptName = `test-combined-${Date.now()}`;
+      const searchTerm = "advanced-feature";
+
+      // Create v1 with search term and container tag
+      const v1 = await client.createPrompt({
+        name: promptName,
+        prompt: `Template with ${searchTerm}`,
+        tags: ["production"], // Container-level only
+      });
+      createdPromptIds.push(v1.id);
+      // Explicitly set version-level tags
+      await client.updatePromptVersionTags([v1.versionId], {
+        tags: ["production"],
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      // Create v2 without search term but with container tag
+      const v2 = await client.createPrompt({
+        name: promptName,
+        prompt: "Different template",
+        tags: ["production"], // Container-level only
+      });
+      // Explicitly set version-level tags
+      await client.updatePromptVersionTags([v2.versionId], {
+        tags: ["production"],
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      // Create v3 with search term and container tag
+      const v3 = await client.createPrompt({
+        name: promptName,
+        prompt: `Another template with ${searchTerm}`,
+        tags: ["production"], // Container-level only
+      });
+      // Explicitly set version-level tags
+      await client.updatePromptVersionTags([v3.versionId], {
+        tags: ["production"],
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      // Create v4 with search term but experimental container tag
+      const v4 = await client.createPrompt({
+        name: promptName,
+        prompt: `Template with ${searchTerm} in experimental`,
+        tags: ["experimental"], // Container-level only
+      });
+      // Explicitly set version-level tags
+      await client.updatePromptVersionTags([v4.versionId], {
+        tags: ["experimental"],
+      });
+
+      // Small delay to ensure backend indexing of version tags
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+
+      // Search for "advanced-feature", filter by "production" tag (version-level), sort descending
+      const results = await v1.getVersions({
+        search: searchTerm,
+        filters: JSON.stringify([
+          { field: "tags", operator: "contains", value: "production" },
+        ]),
+        sorting: JSON.stringify([
+          { field: "created_at", direction: "DESC" },
+        ]),
+      });
+
+      // Should return v3 and v1 (both have search term and production tag), with v3 first
+      expect(results.length).toBeGreaterThanOrEqual(2);
+      expect(results[0].commit).toBe(v3.commit); // Newest
+      expect(results[1].commit).toBe(v1.commit); // Oldest
+
+      // v2 excluded (no search term), v4 excluded (no production tag)
+      const commits = results.map((v) => v.commit);
+      expect(commits).not.toContain(v2.commit);
+      expect(commits).not.toContain(v4.commit);
+    }, 30000);
+
+    it("should return empty array when filter matches no versions", async () => {
+      const promptName = `test-no-match-${Date.now()}`;
+
+      const prompt = await client.createPrompt({
+        name: promptName,
+        prompt: "Some template",
+        tags: ["production"],
+      });
+      createdPromptIds.push(prompt.id);
+
+      // Filter for a tag that doesn't exist
+      const results = await prompt.getVersions({
+        filters: JSON.stringify([
+          { field: "tags", operator: "contains", value: "nonexistent-tag" },
+        ]),
+      });
+
+      expect(results).toEqual([]);
+    }, 30000);
+
+    it("should return empty array when search matches no versions", async () => {
+      const promptName = `test-search-no-match-${Date.now()}`;
+
+      const prompt = await client.createPrompt({
+        name: promptName,
+        prompt: "Template without special terms",
+      });
+      createdPromptIds.push(prompt.id);
+
+      // Search for text that doesn't exist
+      const results = await prompt.getVersions({
+        search: "nonexistent-search-term-12345",
+      });
+
+      expect(results).toEqual([]);
     }, 30000);
   });
 });

@@ -259,7 +259,7 @@ export class Prompt {
    *
    * // Get versions with tags filter
    * const prodVersions = await prompt.getVersions({
-   *   filters: JSON.stringify([{ field: "tags", operator: "=", value: "production" }])
+   *   filters: JSON.stringify([{ field: "tags", operator: "contains", value: "production" }])
    * });
    *
    * // Search in templates
