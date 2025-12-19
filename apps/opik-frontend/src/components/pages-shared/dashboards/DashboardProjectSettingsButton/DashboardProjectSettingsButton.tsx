@@ -15,21 +15,19 @@ import {
   selectConfig,
   selectSetConfig,
 } from "@/store/DashboardStore";
-import { UNSET_PROJECT_VALUE } from "@/lib/dashboard/utils";
 
 const DashboardProjectSettingsButton: React.FC = () => {
   const config = useDashboardStore(selectConfig);
   const setConfig = useDashboardStore(selectSetConfig);
 
-  const selectedProjectValue = config?.projectIds?.[0] || UNSET_PROJECT_VALUE;
+  const selectedProjectValue = config?.projectIds?.[0] || "";
   const selectedExperimentIds = config?.experimentIds || [];
 
   const handleProjectChange = useCallback(
     (value: string) => {
       if (!config) return;
 
-      const projectIds = value === UNSET_PROJECT_VALUE ? [] : [value];
-      setConfig({ ...config, projectIds });
+      setConfig({ ...config, projectIds: [value] });
     },
     [config, setConfig],
   );
