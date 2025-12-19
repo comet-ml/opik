@@ -1,3 +1,5 @@
+import { APIWorkspaceMember } from "@/plugins/comet/useWorkspaceMembers";
+
 export interface User {
   apiKeys: string[];
   defaultWorkspace: string;
@@ -82,12 +84,9 @@ export interface OrganizationMember {
   role: ORGANIZATION_ROLE_TYPE;
 }
 
-export interface WorkspaceMember {
+export interface WorkspaceMember extends APIWorkspaceMember {
   id: string;
-  userName: string;
-  email: string;
-  joinedAt?: string;
-  role?: string;
-  isAdmin?: boolean;
-  permissions?: UserPermission[];
+  role: string;
+  isAdmin: boolean;
+  permissions: UserPermission[];
 }
