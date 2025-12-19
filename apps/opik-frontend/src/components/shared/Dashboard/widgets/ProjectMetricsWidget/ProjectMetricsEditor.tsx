@@ -54,7 +54,7 @@ import { CHART_TYPE } from "@/constants/chart";
 const METRIC_OPTIONS = [
   {
     value: METRIC_NAME_TYPE.FEEDBACK_SCORES,
-    label: "Trace feedback scores",
+    label: "Trace metrics",
     filterType: "trace" as const,
   },
   {
@@ -94,7 +94,7 @@ const METRIC_OPTIONS = [
   },
   {
     value: METRIC_NAME_TYPE.THREAD_FEEDBACK_SCORES,
-    label: "Thread feedback scores",
+    label: "Thread metrics",
     filterType: "thread" as const,
   },
 ];

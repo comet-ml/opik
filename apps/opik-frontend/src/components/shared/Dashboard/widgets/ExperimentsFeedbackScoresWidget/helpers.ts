@@ -79,7 +79,7 @@ const buildFilterAndGroupTitle = (
   }
 
   if (hasGroups && groupByLabel) {
-    return `${baseLabel} by ${groupByLabel}`;
+    return `${baseLabel} grouped by ${groupByLabel}`;
   }
 
   return baseLabel;
