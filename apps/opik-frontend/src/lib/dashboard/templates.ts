@@ -17,7 +17,8 @@ const EXPERIMENT_COMPARISON_TEMPLATE: DashboardTemplate = {
   type: TEMPLATE_TYPE.EXPERIMENT_COMPARISON,
   scope: TEMPLATE_SCOPE.EXPERIMENTS,
   name: "Experiment insights",
-  description: "Compare feedback scores across experiments",
+  description:
+    "Monitor experiment results and evaluation metrics over time to spot quality changes.",
   icon: FlaskConical,
   iconColor: "text-template-icon-experiments",
   config: {
@@ -87,7 +88,7 @@ const PROJECT_METRICS_TEMPLATE: DashboardTemplate = {
   scope: TEMPLATE_SCOPE.PROJECT,
   name: "Project metrics",
   description:
-    "Track token usage, cost, and performance metrics for traces and threads",
+    "Track key metrics for your project, including token usage, cost, latency, and errors.",
   icon: LayoutDashboard,
   iconColor: "text-template-icon-metrics",
   config: {
@@ -288,7 +289,7 @@ const PERFORMANCE_OVERVIEW_TEMPLATE: DashboardTemplate = {
   scope: TEMPLATE_SCOPE.PROJECT,
   name: "Performance overview",
   description:
-    "Comprehensive performance monitoring including traces, threads, quality metrics, and latency",
+    "Monitor latency, throughput, and error rates to keep your app running smoothly.",
   icon: SquareActivity,
   iconColor: "text-template-icon-performance",
   config: {

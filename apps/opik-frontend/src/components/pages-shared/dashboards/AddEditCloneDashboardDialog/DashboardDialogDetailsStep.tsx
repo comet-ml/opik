@@ -19,6 +19,9 @@ import ProjectsSelectBox from "@/components/pages-shared/automations/ProjectsSel
 import ExperimentsSelectBox from "@/components/pages-shared/experiments/ExperimentsSelectBox/ExperimentsSelectBox";
 import { Control } from "react-hook-form";
 import { cn } from "@/lib/utils";
+import { DASHBOARD_TEMPLATES } from "@/lib/dashboard/templates";
+import { TEMPLATE_TYPE } from "@/types/dashboard";
+import DashboardTemplateCard from "./DashboardTemplateCard";
 
 interface DashboardFormFields {
   name: string;
@@ -29,6 +32,7 @@ interface DashboardFormFields {
 
 interface DashboardDialogDetailsStepProps {
   control: Control<DashboardFormFields>;
+  templateType?: string;
   showProjectSelect?: boolean;
   showExperimentsSelect?: boolean;
   onSubmit: () => void;
@@ -36,10 +40,28 @@ interface DashboardDialogDetailsStepProps {
 
 const DashboardDialogDetailsStep: React.FunctionComponent<
   DashboardDialogDetailsStepProps
-> = ({ control, showProjectSelect, showExperimentsSelect, onSubmit }) => {
+> = ({
+  control,
+  templateType,
+  showProjectSelect,
+  showExperimentsSelect,
+  onSubmit,
+}) => {
+  const template = templateType
+    ? DASHBOARD_TEMPLATES[templateType as TEMPLATE_TYPE]
+    : null;
+
   return (
     <div className="flex flex-col gap-4">
-      {/* Name field */}
+      {template && (
+        <DashboardTemplateCard
+          name={template.name}
+          description={template.description}
+          icon={template.icon}
+          iconColor={template.iconColor}
+        />
+      )}
+
       <FormField
         control={control}
         name="name"
@@ -70,7 +92,6 @@ const DashboardDialogDetailsStep: React.FunctionComponent<
         }}
       />
 
-      {/* Project selector (conditional) */}
       {showProjectSelect && (
         <FormField
           control={control}
@@ -97,7 +118,6 @@ const DashboardDialogDetailsStep: React.FunctionComponent<
         />
       )}
 
-      {/* Experiments selector (conditional) */}
       {showExperimentsSelect && (
         <FormField
           control={control}
