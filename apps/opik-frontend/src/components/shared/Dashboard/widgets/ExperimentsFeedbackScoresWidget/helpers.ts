@@ -61,6 +61,11 @@ const buildFilterAndGroupTitle = (
   const groupByLabel = getGroupByLabel(groups);
   const metricsLabel = getMetricsLabel(feedbackScores);
 
+  // If no metrics are selected, always return the default title
+  if (metricsLabel === "metrics") {
+    return DEFAULT_TITLE;
+  }
+
   let baseLabel: string;
   if (hasFilters) {
     baseLabel = `Filtered ${metricsLabel.toLowerCase()}`;
@@ -70,16 +75,11 @@ const buildFilterAndGroupTitle = (
   } else if (feedbackScores && feedbackScores.length === 1) {
     baseLabel = metricsLabel;
   } else {
-    baseLabel =
-      metricsLabel === "metrics" ? "Experiment metrics" : metricsLabel;
+    baseLabel = metricsLabel;
   }
 
   if (hasGroups && groupByLabel) {
     return `${baseLabel} by ${groupByLabel}`;
-  }
-
-  if (!hasFilters && metricsLabel === "metrics") {
-    return DEFAULT_TITLE;
   }
 
   return baseLabel;
