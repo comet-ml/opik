@@ -3,8 +3,6 @@ import { FiltersArraySchema } from "@/components/shared/FiltersAccordionSection/
 import { TRACE_DATA_TYPE } from "@/constants/traces";
 
 export const ProjectStatsCardWidgetSchema = z.object({
-  title: z.string().min(1, "Title is required"),
-  subtitle: z.string().optional(),
   source: z.nativeEnum(TRACE_DATA_TYPE),
   projectId: z.string().optional(),
   metric: z.string().min(1, "Metric is required"),

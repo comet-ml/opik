@@ -152,3 +152,11 @@ export const areLayoutsEqual = (
     );
   });
 };
+
+export const getLayoutItemSize = (
+  layout: DashboardLayout,
+  widgetId: string,
+): { w: number; h: number } | undefined => {
+  const item = layout.find((item) => item.i === widgetId);
+  return item ? { w: item.w, h: item.h } : undefined;
+};

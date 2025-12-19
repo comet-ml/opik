@@ -10,7 +10,6 @@ import {
   DashboardState,
   DashboardWidget,
   WIDGET_TYPE,
-  AddWidgetConfig,
   WidgetResolver,
   TEMPLATE_TYPE,
 } from "@/types/dashboard";
@@ -117,6 +116,7 @@ export const areWidgetsEqual = (
     prev.id === next.id &&
     prev.type === next.type &&
     prev.title === next.title &&
+    prev.generatedTitle === next.generatedTitle &&
     prev.subtitle === next.subtitle &&
     isLooseEqual(prev.config, next.config)
   );
@@ -173,26 +173,28 @@ export const isDashboardChanged = (
 export const createDefaultWidgetConfig = (
   widgetType: string,
   widgetResolver: WidgetResolver | null,
-): AddWidgetConfig => {
+): Omit<DashboardWidget, "id"> => {
   if (!widgetResolver) {
     return {
       type: widgetType as WIDGET_TYPE,
       title: "",
+      generatedTitle: "",
       subtitle: "",
       config: {},
-    } as AddWidgetConfig;
+    };
   }
 
   const widgetComponents = widgetResolver(widgetType);
   const defaultConfig = widgetComponents.getDefaultConfig();
-  const defaultTitle = widgetComponents.calculateTitle(defaultConfig);
+  const generatedTitle = widgetComponents.calculateTitle(defaultConfig);
 
   return {
     type: widgetType as WIDGET_TYPE,
-    title: defaultTitle,
+    title: "",
+    generatedTitle: generatedTitle,
     subtitle: "",
     config: defaultConfig,
-  } as AddWidgetConfig;
+  };
 };
 
 export const regenerateAllIds = (
@@ -248,5 +250,29 @@ export const regenerateAllIds = (
     sections: newSections,
     lastModified: Date.now(),
     config: clonedConfig,
+  };
+};
+
+export const updateWidgetWithGeneratedTitle = (
+  currentWidget: DashboardWidget,
+  updates: Partial<DashboardWidget>,
+  widgetResolver: WidgetResolver | null,
+): DashboardWidget => {
+  const merged = {
+    ...currentWidget,
+    ...updates,
+    config:
+      updates.config !== undefined
+        ? { ...currentWidget.config, ...updates.config }
+        : currentWidget.config,
+  };
+
+  const generatedTitle = widgetResolver
+    ? widgetResolver(merged.type).calculateTitle(merged.config)
+    : "";
+
+  return {
+    ...merged,
+    generatedTitle,
   };
 };

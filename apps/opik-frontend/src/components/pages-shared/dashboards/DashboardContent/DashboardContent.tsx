@@ -10,12 +10,7 @@ import DashboardSectionsContainer from "@/components/shared/Dashboard/Dashboard"
 import AddSectionButton from "@/components/shared/Dashboard/DashboardSection/AddSectionButton";
 import WidgetConfigDialog from "@/components/shared/Dashboard/WidgetConfigDialog/WidgetConfigDialog";
 import useNavigationBlocker from "@/hooks/useNavigationBlocker";
-import {
-  DashboardWidget,
-  WIDGET_TYPE,
-  AddWidgetConfig,
-  UpdateWidgetConfig,
-} from "@/types/dashboard";
+import { DashboardWidget } from "@/types/dashboard";
 
 const DashboardContent: React.FunctionComponent = () => {
   const hasUnsavedChanges = useDashboardStore(selectHasUnsavedChanges);
@@ -42,22 +37,13 @@ const DashboardContent: React.FunctionComponent = () => {
   }, []);
 
   const handleSaveWidget = useCallback(
-    (widgetData: Partial<DashboardWidget>) => {
+    (widgetData: DashboardWidget) => {
       if (!targetSectionId) return;
 
       if (targetWidgetId) {
-        updateWidget(targetSectionId, targetWidgetId, {
-          title: widgetData.title,
-          subtitle: widgetData.subtitle,
-          config: widgetData.config,
-        } as UpdateWidgetConfig);
-      } else if (widgetData.type && widgetData.title) {
-        addWidget(targetSectionId, {
-          type: widgetData.type as WIDGET_TYPE,
-          title: widgetData.title,
-          subtitle: widgetData.subtitle,
-          config: widgetData.config || {},
-        } as AddWidgetConfig);
+        updateWidget(targetSectionId, targetWidgetId, widgetData);
+      } else {
+        addWidget(targetSectionId, widgetData);
       }
     },
     [targetSectionId, targetWidgetId, addWidget, updateWidget],

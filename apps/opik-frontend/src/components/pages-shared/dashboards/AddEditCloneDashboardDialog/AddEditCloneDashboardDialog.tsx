@@ -347,6 +347,9 @@ const AddEditCloneDashboardDialog: React.FC<
               >
                 <DashboardDialogDetailsStep
                   control={form.control}
+                  templateType={
+                    isCreateMode ? form.watch("templateType") : undefined
+                  }
                   showProjectSelect={
                     isCreateMode &&
                     !defaultProjectId &&

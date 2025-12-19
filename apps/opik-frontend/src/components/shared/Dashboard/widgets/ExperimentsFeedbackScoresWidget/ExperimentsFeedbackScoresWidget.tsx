@@ -475,23 +475,24 @@ const ExperimentsFeedbackScoresWidget: React.FunctionComponent<
 
   return (
     <DashboardWidget>
-      <DashboardWidget.Header
-        title={widget.title}
-        subtitle={widget.subtitle}
-        warningMessage={warningMessage}
-        infoMessage={infoMessage}
-        preview={preview}
-        actions={
-          !preview ? (
+      {preview ? (
+        <DashboardWidget.PreviewHeader />
+      ) : (
+        <DashboardWidget.Header
+          title={widget.title || widget.generatedTitle || ""}
+          subtitle={widget.subtitle}
+          warningMessage={warningMessage}
+          infoMessage={infoMessage}
+          actions={
             <DashboardWidget.ActionsMenu
               sectionId={sectionId!}
               widgetId={widgetId!}
               widgetTitle={widget.title}
             />
-          ) : undefined
-        }
-        dragHandle={!preview ? <DashboardWidget.DragHandle /> : undefined}
-      />
+          }
+          dragHandle={<DashboardWidget.DragHandle />}
+        />
+      )}
       <DashboardWidget.Content>{renderChartContent()}</DashboardWidget.Content>
     </DashboardWidget>
   );

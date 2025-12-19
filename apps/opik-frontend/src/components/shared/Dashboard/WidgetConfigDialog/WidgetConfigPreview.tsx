@@ -1,35 +1,34 @@
 import React from "react";
-import { AddWidgetConfig } from "@/types/dashboard";
 import {
   useDashboardStore,
   selectWidgetResolver,
   selectPreviewWidget,
 } from "@/store/DashboardStore";
 
-interface WidgetConfigPreviewProps {
-  widgetData: AddWidgetConfig;
-}
-
-const WidgetConfigPreview: React.FunctionComponent<
-  WidgetConfigPreviewProps
-> = ({ widgetData }) => {
+const WidgetConfigPreview: React.FunctionComponent = () => {
   const widgetResolver = useDashboardStore(selectWidgetResolver);
   const previewWidget = useDashboardStore(selectPreviewWidget);
 
-  const WidgetComponent = widgetResolver?.(widgetData.type)?.Widget;
+  const WidgetComponent = previewWidget
+    ? widgetResolver?.(previewWidget.type)?.Widget
+    : null;
 
   if (!WidgetComponent || !previewWidget) {
     return (
-      <div className="flex h-full min-h-0 items-center justify-center rounded-md border bg-white p-4">
-        <p className="text-center text-2xl font-black text-slate-300">
-          &lt;preview&gt;
-        </p>
+      <div className="flex h-full min-h-0 flex-col gap-2">
+        <p className="comet-body-s pl-0.5 text-muted-slate">Widget preview</p>
+        <div className="flex flex-1 items-center justify-center rounded-md border bg-white p-4">
+          <p className="text-center text-2xl font-black text-slate-300">
+            &lt;preview&gt;
+          </p>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="h-full min-h-0 overflow-hidden rounded-md bg-white">
+    <div className="flex h-full min-h-0 flex-col gap-2">
+      <p className="comet-body-s pl-0.5 text-muted-slate">Widget preview</p>
       <WidgetComponent preview />
     </div>
   );
