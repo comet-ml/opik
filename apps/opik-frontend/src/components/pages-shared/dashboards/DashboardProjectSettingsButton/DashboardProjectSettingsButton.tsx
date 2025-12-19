@@ -15,26 +15,19 @@ import {
   selectConfig,
   selectSetConfig,
 } from "@/store/DashboardStore";
-import {
-  UNSET_PROJECT_OPTION,
-  UNSET_PROJECT_VALUE,
-} from "@/lib/dashboard/utils";
-
-const NONE_VALUE = UNSET_PROJECT_VALUE;
 
 const DashboardProjectSettingsButton: React.FC = () => {
   const config = useDashboardStore(selectConfig);
   const setConfig = useDashboardStore(selectSetConfig);
 
-  const selectedProjectValue = config?.projectIds?.[0] || NONE_VALUE;
+  const selectedProjectValue = config?.projectIds?.[0] || "";
   const selectedExperimentIds = config?.experimentIds || [];
 
   const handleProjectChange = useCallback(
     (value: string) => {
       if (!config) return;
 
-      const projectIds = value === NONE_VALUE ? [] : [value];
-      setConfig({ ...config, projectIds });
+      setConfig({ ...config, projectIds: [value] });
     },
     [config, setConfig],
   );
@@ -71,7 +64,6 @@ const DashboardProjectSettingsButton: React.FC = () => {
             <ProjectsSelectBox
               value={selectedProjectValue}
               onValueChange={handleProjectChange}
-              customOptions={UNSET_PROJECT_OPTION}
               minWidth={280}
             />
           </div>

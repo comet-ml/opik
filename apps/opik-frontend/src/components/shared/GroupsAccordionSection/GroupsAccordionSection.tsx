@@ -13,7 +13,7 @@ import {
 import { Groups, Group, GroupRowConfig } from "@/types/groups";
 import { MAX_GROUP_LEVELS } from "@/constants/groups";
 import { ColumnData } from "@/types/shared";
-import { generateRandomString } from "@/lib/utils";
+import { cn, generateRandomString } from "@/lib/utils";
 import GroupsContent from "@/components/shared/GroupsContent/GroupsContent";
 
 export type GroupValidationError = {
@@ -62,12 +62,23 @@ const GroupsAccordionSection = <TColumnData,>({
     onChange((prev) => [...prev, newGroup]);
   }, [groups.length, onChange]);
 
-  const hasErrors = errors && errors.length > 0;
+  const hasErrors =
+    errors &&
+    errors.some((error) => {
+      if (!error) return false;
+      return error.field?.message || error.key?.message;
+    });
 
   return (
     <Accordion type="single" collapsible className={className}>
       <AccordionItem value="groups" className={hideBorder ? "" : "border-t"}>
-        <AccordionTrigger className="py-3 hover:no-underline">
+        <AccordionTrigger
+          className={cn(
+            "py-3 hover:no-underline",
+            hasErrors &&
+              "text-destructive hover:text-destructive active:text-destructive",
+          )}
+        >
           {label} {groups.length > 0 && `(${groups.length})`}
         </AccordionTrigger>
         <AccordionContent className="flex flex-col gap-4 px-3 pb-3">
