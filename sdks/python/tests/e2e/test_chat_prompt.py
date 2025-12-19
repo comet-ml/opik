@@ -554,3 +554,18 @@ def test_chat_prompt__template_structure_immutable__error(opik_client: opik.Opik
         prompt_id=chat_prompt.__internal_api__prompt_id__,
         version_id=chat_prompt.__internal_api__version_id__,
     )
+
+
+def test_chat_prompt__invalid_messages__raises_validation_error(opik_client: opik.Opik):
+    """Test that invalid messages raise ValidationError."""
+    unique_identifier = str(uuid.uuid4())[-6:]
+    prompt_name = f"chat-prompt-invalid-{unique_identifier}"
+
+    with pytest.raises(opik.exceptions.ValidationError) as exc_info:
+        ChatPrompt(
+            name=prompt_name,
+            messages=[{"role": "invalid", "content": "hello"}],
+        )
+
+    assert "ChatPrompt.__init__" in str(exc_info.value)
+    assert "messages[0].role" in str(exc_info.value)
