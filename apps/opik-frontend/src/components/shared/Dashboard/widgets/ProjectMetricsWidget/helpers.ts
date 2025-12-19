@@ -16,6 +16,11 @@ const METRIC_LABELS: Record<string, string> = {
   [METRIC_NAME_TYPE.THREAD_FEEDBACK_SCORES]: "Thread metrics",
 };
 
+const FEEDBACK_SCORE_METRIC_TYPES = [
+  METRIC_NAME_TYPE.FEEDBACK_SCORES,
+  METRIC_NAME_TYPE.THREAD_FEEDBACK_SCORES,
+];
+
 const calculateProjectMetricsTitle = (
   config: Record<string, unknown>,
 ): string => {
@@ -26,7 +31,16 @@ const calculateProjectMetricsTitle = (
     return DEFAULT_TITLE;
   }
 
-  return METRIC_LABELS[metricType] || DEFAULT_TITLE;
+  const baseTitle = METRIC_LABELS[metricType] || DEFAULT_TITLE;
+
+  if (
+    FEEDBACK_SCORE_METRIC_TYPES.includes(metricType as METRIC_NAME_TYPE) &&
+    widgetConfig.feedbackScores?.length === 1
+  ) {
+    return `${baseTitle} - ${widgetConfig.feedbackScores[0]}`;
+  }
+
+  return baseTitle;
 };
 
 export const widgetHelpers = {
