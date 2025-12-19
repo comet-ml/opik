@@ -32,7 +32,7 @@ import {
   WorkspaceMember,
 } from "./types";
 import WorkspaceRoleCell from "./WorkspaceRoleCell/WorkspaceRoleCell";
-import WorkspaceMemberActionsCell from "./WorkspaceMemberActionsCell/WorkspaceMemberActionsCell";
+import WorkspaceMemberActionsCell from "./WorkspaceMemberActionsCell";
 import { generateActionsColumDef } from "@/components/shared/DataTable/utils";
 
 const COLUMNS_WIDTH_KEY = "workspace-members-columns-width";
