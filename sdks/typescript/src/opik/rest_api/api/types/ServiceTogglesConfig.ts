@@ -22,6 +22,5 @@ export interface ServiceTogglesConfig {
     openrouterProviderEnabled: boolean;
     vertexaiProviderEnabled: boolean;
     customllmProviderEnabled: boolean;
-    opikbuiltinProviderEnabled: boolean;
     collaboratorsTabEnabled: boolean;
 }

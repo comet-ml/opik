@@ -29,9 +29,9 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.function.Function;
 
-import static com.comet.opik.infrastructure.BuiltinLlmProviderConfig.BUILTIN_PROVIDER_ID;
 import static com.comet.opik.infrastructure.EncryptionUtils.decrypt;
 import static com.comet.opik.infrastructure.EncryptionUtils.encrypt;
+import static com.comet.opik.infrastructure.FreeModelConfig.FREE_MODEL_PROVIDER_ID;
 
 @Slf4j
 @RequiredArgsConstructor(onConstructor_ = @Inject)
@@ -90,10 +90,10 @@ class LlmProviderFactoryImpl implements LlmProviderFactory {
      * The agreed requirement is to resolve the LLM provider and its API key based on the model.
      */
     public LlmProvider getLlmProvider(@NonNull String model) {
-        // Check if this is the built-in model
-        var builtinConfig = configuration.getBuiltinLlmProvider();
-        if (builtinConfig.isEnabled() && model.equals(builtinConfig.getModel())) {
-            return LlmProvider.OPIK_BUILTIN;
+        // Check if this is the free model
+        var freeModelConfig = configuration.getFreeModel();
+        if (freeModelConfig.isEnabled() && model.equals(freeModelConfig.getModel())) {
+            return LlmProvider.OPIK_FREE;
         }
 
         if (isModelBelongToProvider(model, OpenaiModelName.class, OpenaiModelName::toString)) {
@@ -129,18 +129,18 @@ class LlmProviderFactoryImpl implements LlmProviderFactory {
      * making it impossible to reliably extract the provider name from the model string alone.
      */
     private ProviderApiKey getProviderApiKey(String workspaceId, LlmProvider llmProvider, String model) {
-        // Handle the built-in provider - return virtual config
-        if (llmProvider == LlmProvider.OPIK_BUILTIN) {
-            var builtinConfig = configuration.getBuiltinLlmProvider();
+        // Handle the free model provider - return virtual config
+        if (llmProvider == LlmProvider.OPIK_FREE) {
+            var freeModelConfig = configuration.getFreeModel();
             return ProviderApiKey.builder()
-                    .id(BUILTIN_PROVIDER_ID)
-                    .provider(LlmProvider.OPIK_BUILTIN)
-                    .apiKey(encrypt(builtinConfig.getApiKey()))
-                    .baseUrl(builtinConfig.getBaseUrl())
+                    .id(FREE_MODEL_PROVIDER_ID)
+                    .provider(LlmProvider.OPIK_FREE)
+                    .apiKey(encrypt(freeModelConfig.getApiKey()))
+                    .baseUrl(freeModelConfig.getBaseUrl())
                     .configuration(Map.of(
-                            "models", builtinConfig.getModel(),
-                            "actual_model", builtinConfig.getActualModel(),
-                            "span_provider", builtinConfig.getSpanProvider()))
+                            "models", freeModelConfig.getModel(),
+                            "actual_model", freeModelConfig.getActualModel(),
+                            "span_provider", freeModelConfig.getSpanProvider()))
                     .build();
         }
 
@@ -206,11 +206,11 @@ class LlmProviderFactoryImpl implements LlmProviderFactory {
     public ResolvedModelInfo getResolvedModelInfo(@NonNull String model) {
         var llmProvider = getLlmProvider(model);
 
-        if (llmProvider == LlmProvider.OPIK_BUILTIN) {
-            var builtinConfig = configuration.getBuiltinLlmProvider();
+        if (llmProvider == LlmProvider.OPIK_FREE) {
+            var freeModelConfig = configuration.getFreeModel();
             return new ResolvedModelInfo(
-                    builtinConfig.getActualModel(),
-                    builtinConfig.getSpanProvider());
+                    freeModelConfig.getActualModel(),
+                    freeModelConfig.getSpanProvider());
         }
 
         // For other providers, return the original model and provider type

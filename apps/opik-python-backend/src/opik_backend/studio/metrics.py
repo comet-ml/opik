@@ -88,13 +88,23 @@ def _build_equals_metric(params: Dict[str, Any], model: str) -> Callable:
     Returns:
         Metric function
     """
+    from opik.evaluation.metrics.score_result import ScoreResult
+    
     case_sensitive = params.get("case_sensitive", DEFAULT_CASE_SENSITIVE)
     reference_key = params.get("reference_key", DEFAULT_REFERENCE_KEY)
     equals_metric = Equals(case_sensitive=case_sensitive)
     
     def metric_fn(dataset_item, llm_output):
         reference = dataset_item.get(reference_key, "")
-        return equals_metric.score(reference=reference, output=llm_output)
+        result = equals_metric.score(reference=reference, output=llm_output)
+        
+        # Add reason for hierarchical_reflective optimizer compatibility
+        if result.value == 1.0:
+            reason = "Exact match: output equals reference"
+        else:
+            reason = "No match: output does not equal reference"
+        
+        return ScoreResult(value=result.value, name=result.name, reason=reason)
     
     metric_fn.__name__ = "equals"
     return metric_fn
@@ -108,18 +118,25 @@ def _build_levenshtein_metric(params: Dict[str, Any], model: str) -> Callable:
     
     Args:
         params: Metric parameters
+            - case_sensitive (bool): Whether comparison is case-sensitive
             - reference_key (str): Key in dataset item containing reference value
         model: LLM model (not used for this metric)
         
     Returns:
         Metric function
     """
+    from opik.evaluation.metrics.score_result import ScoreResult
+    
+    case_sensitive = params.get("case_sensitive", DEFAULT_CASE_SENSITIVE)
     reference_key = params.get("reference_key", DEFAULT_REFERENCE_KEY)
-    levenshtein_metric = LevenshteinRatio()
+    levenshtein_metric = LevenshteinRatio(case_sensitive=case_sensitive)
     
     def metric_fn(dataset_item, llm_output):
         reference = dataset_item.get(reference_key, "")
-        return levenshtein_metric.score(reference=reference, output=llm_output)
+        result = levenshtein_metric.score(reference=reference, output=llm_output)
+        
+        reason = f"Similarity: {result.value * 100:.0f}%"
+        return ScoreResult(value=result.value, name=result.name, reason=reason)
     
     metric_fn.__name__ = "levenshtein_ratio"
     return metric_fn
@@ -162,22 +179,17 @@ def _build_geval_metric(params: Dict[str, Any], model: str) -> Callable:
 def _build_json_schema_validator_metric(params: Dict[str, Any], model: str) -> Callable:
     """Build a JSON Schema Validator metric function.
     
-    Validates that the LLM output complies with a JSON schema.
+    Validates that the LLM output complies with a JSON schema from the dataset item.
     
     Args:
         params: Metric parameters
-            - json_schema (dict): JSON schema to validate against
+            - schema_key (str): Key in dataset item containing the JSON schema (default: "json_schema")
         model: LLM model to use for validation
         
     Returns:
         Metric function
-        
-    Raises:
-        InvalidMetricError: If json_schema parameter is missing
     """
-    schema = params.get("json_schema")
-    if not schema:
-        raise InvalidMetricError("json_schema_validator", "requires 'json_schema' parameter")
+    schema_key = params.get("schema_key", "json_schema")
     
     structured_metric = StructuredOutputCompliance(
         model=model,
@@ -185,6 +197,14 @@ def _build_json_schema_validator_metric(params: Dict[str, Any], model: str) -> C
     )
     
     def metric_fn(dataset_item, llm_output):
+        schema = dataset_item.get(schema_key)
+        if not schema:
+            from opik.evaluation.metrics.score_result import ScoreResult
+            return ScoreResult(
+                value=0.0, 
+                name="json_schema_validator", 
+                reason=f"Missing schema in dataset item key '{schema_key}'"
+            )
         return structured_metric.score(
             output=llm_output,
             schema=schema

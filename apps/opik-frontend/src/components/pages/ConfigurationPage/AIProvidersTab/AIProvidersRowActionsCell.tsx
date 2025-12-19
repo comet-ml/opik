@@ -43,7 +43,7 @@ const AIProvidersRowActionsCell: React.FunctionComponent<
         stopClickPropagation
       >
         <span className="pr-2 text-xs text-muted-foreground">
-          Read-Only Provider
+          Read-only provider
         </span>
       </CellWrapper>
     );

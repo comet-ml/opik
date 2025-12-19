@@ -26,7 +26,7 @@ import FeedbackDefinitionsAndScoresSelectBox, {
   ScoreSource,
 } from "@/components/pages-shared/experiments/FeedbackDefinitionsAndScoresSelectBox/FeedbackDefinitionsAndScoresSelectBox";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
-import { Filter, ListFilter } from "lucide-react";
+import { Filter, ListChecks } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { Filters } from "@/types/filters";
@@ -283,19 +283,19 @@ const ExperimentsFeedbackScoresWidgetEditor = forwardRef<
                   >
                     <ToggleGroupItem
                       value={EXPERIMENT_DATA_SOURCE.FILTER_AND_GROUP}
-                      aria-label="Filter and group"
+                      aria-label="Filter experiments"
                       className="gap-1.5"
                     >
                       <Filter className="size-3.5" />
-                      <span>Filter and group</span>
+                      <span>Filter experiments</span>
                     </ToggleGroupItem>
                     <ToggleGroupItem
                       value={EXPERIMENT_DATA_SOURCE.SELECT_EXPERIMENTS}
-                      aria-label="Select experiments"
+                      aria-label="Manual selection"
                       className="gap-1.5"
                     >
-                      <ListFilter className="size-3.5" />
-                      <span>Select experiments</span>
+                      <ListChecks className="size-3.5" />
+                      <span>Manual selection</span>
                     </ToggleGroupItem>
                   </ToggleGroup>
                 </FormControl>
@@ -328,7 +328,7 @@ const ExperimentsFeedbackScoresWidgetEditor = forwardRef<
                 ]);
                 return (
                   <FormItem>
-                    <FormLabel>Select experiments</FormLabel>
+                    <FormLabel>Manual selection</FormLabel>
                     <FormControl>
                       <ExperimentsSelectBox
                         value={field.value || []}
@@ -345,9 +345,9 @@ const ExperimentsFeedbackScoresWidgetEditor = forwardRef<
                       />
                     </FormControl>
                     <Description>
-                      Select experiments for this widget. If not set, the
-                      dashboard&apos;s global experiment configuration will be
-                      used.
+                      Widgets use the dashboard&apos;s experiment settings by
+                      default. You can override them here and select different
+                      experiments.
                     </Description>
                     <FormMessage />
                   </FormItem>

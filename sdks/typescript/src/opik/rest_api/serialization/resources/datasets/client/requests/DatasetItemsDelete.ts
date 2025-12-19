@@ -5,16 +5,21 @@
 import * as serializers from "../../../../index";
 import * as OpikApi from "../../../../../api/index";
 import * as core from "../../../../../core";
+import { DatasetItemFilter } from "../../../../types/DatasetItemFilter";
 
 export const DatasetItemsDelete: core.serialization.Schema<
     serializers.DatasetItemsDelete.Raw,
     OpikApi.DatasetItemsDelete
 > = core.serialization.object({
-    itemIds: core.serialization.property("item_ids", core.serialization.list(core.serialization.string())),
+    itemIds: core.serialization.property("item_ids", core.serialization.list(core.serialization.string()).optional()),
+    datasetId: core.serialization.property("dataset_id", core.serialization.string().optional()),
+    filters: core.serialization.list(DatasetItemFilter).optional(),
 });
 
 export declare namespace DatasetItemsDelete {
     export interface Raw {
-        item_ids: string[];
+        item_ids?: string[] | null;
+        dataset_id?: string | null;
+        filters?: DatasetItemFilter.Raw[] | null;
     }
 }

@@ -125,10 +125,7 @@ class OpikTracer(BaseTracer):
         self._trace_default_metadata["created_from"] = "langchain"
 
         if graph:
-            self._trace_default_metadata["_opik_graph_definition"] = {
-                "format": "mermaid",
-                "data": graph.draw_mermaid(),
-            }
+            self.set_graph(graph)
 
         self._trace_default_tags = tags
 
@@ -163,6 +160,21 @@ class OpikTracer(BaseTracer):
         ] = contextvars.ContextVar("root_run_external_parent_span_id", default=None)
 
         self._skip_error_callback = skip_error_callback
+
+    def set_graph(self, graph: "Graph") -> None:
+        """
+        Set the LangGraph graph structure for visualization in Opik traces.
+
+        This method extracts the graph structure and stores it in trace metadata,
+        allowing the graph to be visualized in the Opik UI.
+
+        Args:
+            graph: A LangGraph Graph object (typically obtained via graph.get_graph(xray=True)).
+        """
+        self._trace_default_metadata["_opik_graph_definition"] = {
+            "format": "mermaid",
+            "data": graph.draw_mermaid(),
+        }
 
     def _is_opik_span_created_by_this_tracer(self, span_id: str) -> bool:
         return any(span_.id == span_id for span_ in self._span_data_map.values())

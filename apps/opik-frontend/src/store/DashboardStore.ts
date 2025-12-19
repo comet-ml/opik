@@ -286,7 +286,7 @@ export const useDashboardStore = create<DashboardStore<BaseDashboardConfig>>()(
           const newWidget: DashboardWidget = {
             id: uniqid(),
             type: widget.type,
-            title: widget.title,
+            title: `${widget.title} (copy)`,
             subtitle: widget.subtitle,
             config: widget.config || {},
           };

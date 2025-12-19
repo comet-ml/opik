@@ -573,9 +573,9 @@ serviceToggles:
   # Default: true
   # Description: Whether or not export/download functionality is enabled
   exportEnabled: ${TOGGLE_EXPORT_ENABLED:-"true"}
-  # Default: false
+  # Default: true
   # Description: Whether or not Dashboards feature is enabled
-  dashboardsEnabled: ${TOGGLE_DASHBOARDS_ENABLED:-"false"}
+  dashboardsEnabled: ${TOGGLE_DASHBOARDS_ENABLED:-"true"}
   # Default: false
   # Description: Whether or not dataset versioning feature is enabled
   datasetVersioningEnabled: ${TOGGLE_DATASET_VERSIONING_ENABLED:-"false"}
@@ -600,9 +600,6 @@ serviceToggles:
   # Default: true
   # Description: Whether or not Custom LLM provider is enabled
   customllmProviderEnabled: ${TOGGLE_CUSTOMLLM_PROVIDER_ENABLED:-"true"}
-  # Default: true
-  # Description: Whether or not Opik Built-in provider is enabled
-  opikbuiltinProviderEnabled: ${TOGGLE_OPIKBUILTIN_PROVIDER_ENABLED:-"true"}
   # Default: false
   # Description: Whether or not Collaborators tab feature is enabled
   collaboratorsTabEnabled: ${TOGGLE_COLLABORATORS_TAB_ENABLED:-"false"}
@@ -753,22 +750,22 @@ webhook:
     # Description: Maximum time to wait for acquiring metrics alert job lock
     metricsAlertJobLockWaitTimeout: ${WEBHOOK_METRICS_ALERT_JOB_LOCK_WAIT_TIMEOUT:-1s}
 
-# Built-in LLM Provider configuration
-# Note: The model name "opik-builtin-model" is hardcoded and cannot be changed.
+# Free Model configuration (admin-configured server-side LLM provider)
+# Note: The model name "opik-free-model" is hardcoded and cannot be changed.
 # This ensures backward compatibility with automation rules that store the model name.
-builtinLlmProvider:
+freeModel:
+  # Description: Whether or not to enable the free model provider
   # Default: false
-  # Description: Whether or not to enable the built-in LLM provider
-  enabled: ${BUILTIN_LLM_PROVIDER_ENABLED:-false}
-  # Default: gpt-4o-mini
+  enabled: ${OPIK_FREE_MODEL_ENABLED:-false}
   # Description: Actual model name sent to the AI server (the underlying LLM)
-  actualModel: ${BUILTIN_LLM_PROVIDER_ACTUAL_MODEL:-gpt-4o-mini}
-  # Default: openai
-  # Description: Provider name stored in spans for cost tracking
-  spanProvider: ${BUILTIN_LLM_PROVIDER_SPAN_PROVIDER:-openai}
   # Default: empty
-  # Description: API key for the OpenAI endpoint
-  apiKey: ${BUILTIN_LLM_PROVIDER_API_KEY:-}
+  actualModel: ${OPIK_FREE_MODEL_ACTUAL_MODEL:-}
+  # Description: Provider name stored in spans for cost tracking (e.g., "openai")
   # Default: empty
-  # Description: Base URL for OpenAI-compatible endpoint (empty for built-in OpenAI)
-  baseUrl: ${BUILTIN_LLM_PROVIDER_BASE_URL:-}
+  spanProvider: ${OPIK_FREE_MODEL_SPAN_PROVIDER:-}
+  # Description: Base URL for OpenAI-compatible endpoint (e.g., "https://api.openai.com/v1")
+  # Default: empty
+  baseUrl: ${OPIK_FREE_MODEL_BASE_URL:-}
+  # Description: API key for the endpoint (optional for auth-less endpoints)
+  # Default: empty
+  apiKey: ${OPIK_FREE_MODEL_API_KEY:-}

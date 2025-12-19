@@ -26,7 +26,7 @@ public class DatasetItemFilter extends FilterImpl {
     public static class DatasetItemDynamicField implements Field {
 
         private static final Set<FieldType> DYNAMIC_FIELD_TYPES = Set.of(FieldType.STRING, FieldType.NUMBER,
-                FieldType.DICTIONARY);
+                FieldType.DICTIONARY, FieldType.LIST);
 
         public static boolean validType(FieldType type) {
             return DYNAMIC_FIELD_TYPES.contains(type);
