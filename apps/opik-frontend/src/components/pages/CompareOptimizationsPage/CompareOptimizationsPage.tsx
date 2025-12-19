@@ -50,6 +50,7 @@ import CompareOptimizationsToolbar from "./CompareOptimizationsToolbar";
 import CompareOptimizationsTrialsControls from "./CompareOptimizationsTrialsControls";
 import CompareOptimizationsTrialsTable from "./CompareOptimizationsTrialsTable";
 import CompareOptimizationsParams from "./CompareOptimizationsParams";
+import BestPromptPlaceholder from "./BestPromptPlaceholder";
 
 const REFETCH_INTERVAL = 30000;
 const ACTIVE_REFETCH_INTERVAL = 3000;
@@ -432,13 +433,20 @@ const CompareOptimizationsPage: React.FC = () => {
           )}
         </div>
         <div className="w-2/5 shrink-0">
-          {bestExperiment && optimization && (
+          {bestExperiment && optimization ? (
             <BestPrompt
               experiment={bestExperiment}
               optimization={optimization}
               scoreMap={scoreMap}
               baselineExperiment={baselineExperiment}
             />
+          ) : (
+            optimization?.studio_config && (
+              <BestPromptPlaceholder
+                objectiveName={optimization.objective_name}
+                studioConfig={optimization.studio_config}
+              />
+            )
           )}
         </div>
       </PageBodyStickyContainer>

@@ -41,3 +41,4 @@ const CompareOptimizationsToolbar: React.FC<CompareOptimizationsToolbarProps> = 
 };
 
 export default CompareOptimizationsToolbar;
+

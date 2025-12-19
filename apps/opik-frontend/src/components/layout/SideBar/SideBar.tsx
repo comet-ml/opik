@@ -25,6 +25,8 @@ import useDatasetsList from "@/api/datasets/useDatasetsList";
 import useExperimentsList from "@/api/datasets/useExperimentsList";
 import useRulesList from "@/api/automations/useRulesList";
 import useOptimizationsList from "@/api/optimizations/useOptimizationsList";
+import { OPTIMIZATION_STATUS } from "@/types/optimizations";
+import { COLUMN_TYPE } from "@/types/shared";
 import useAlertsList from "@/api/alerts/useAlertsList";
 import useDashboardsList from "@/api/dashboards/useDashboardsList";
 import { OnChangeFn } from "@/types/shared";
@@ -155,6 +157,7 @@ const MENU_ITEMS: MenuItemGroup[] = [
         icon: SparklesIcon,
         label: "Optimization studio",
         count: "optimizations",
+        showIndicator: "optimizations_running",
       },
     ],
   },
@@ -276,6 +279,27 @@ const SideBar: React.FunctionComponent<SideBarProps> = ({
     },
   );
 
+  const { data: runningOptimizationsData } = useOptimizationsList(
+    {
+      workspaceName,
+      filters: [
+        {
+          id: "status-running",
+          field: "status",
+          operator: "=",
+          type: COLUMN_TYPE.string,
+          value: OPTIMIZATION_STATUS.RUNNING,
+        },
+      ],
+      page: 1,
+      size: 1,
+    },
+    {
+      placeholderData: keepPreviousData,
+      refetchInterval: 5000,
+    },
+  );
+
   const { data: annotationQueuesData } = useAnnotationQueuesList(
     {
       workspaceName,
@@ -324,6 +348,12 @@ const SideBar: React.FunctionComponent<SideBarProps> = ({
     dashboards: dashboardsData?.total,
   };
 
+  const hasActiveOptimizations = (runningOptimizationsData?.total ?? 0) > 0;
+
+  const indicatorDataMap: Record<string, boolean> = {
+    optimizations_running: hasActiveOptimizations,
+  };
+
   const logo = LogoComponent ? (
     <LogoComponent expanded={expanded} />
   ) : (
@@ -337,6 +367,7 @@ const SideBar: React.FunctionComponent<SideBarProps> = ({
         item={item}
         expanded={expanded}
         count={countDataMap[item.count!]}
+        hasIndicator={indicatorDataMap[item.showIndicator!]}
       />
     ));
   };
