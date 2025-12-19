@@ -750,8 +750,10 @@ class OptimizationsResourceTest {
             var id = optimizationResourceClient.create(optimization, API_KEY, TEST_WORKSPACE_NAME);
             var actualOptimization = optimizationResourceClient.get(id, API_KEY, TEST_WORKSPACE_NAME, 200);
 
-            assertThat(actualOptimization.studioConfig()).isNull(); // Scrubbed by default
-            assertOptimization(optimization.toBuilder().studioConfig(null).build(), actualOptimization);
+            // studioConfig is now returned (opikApiKey is null since it's @JsonIgnore)
+            assertThat(actualOptimization.studioConfig()).isNotNull();
+            assertThat(actualOptimization.studioConfig()).isEqualTo(studioConfig);
+            assertOptimization(optimization, actualOptimization);
 
             ArgumentCaptor<OptimizationCreated> captor = ArgumentCaptor.forClass(OptimizationCreated.class);
             Mockito.verify(defaultEventBus).post(captor.capture());
@@ -807,7 +809,7 @@ class OptimizationsResourceTest {
                     .isTrue();
 
             // Verify opikApiKey is NOT returned when retrieving the optimization
-            var studioResponse = optimizationResourceClient.getStudio(id, API_KEY, TEST_WORKSPACE_NAME, 200);
+            var studioResponse = optimizationResourceClient.get(id, API_KEY, TEST_WORKSPACE_NAME, 200);
             assertThat(studioResponse.studioConfig()).isNotNull();
             assertThat(studioResponse.studioConfig().opikApiKey()).isNull();
 
@@ -836,8 +838,8 @@ class OptimizationsResourceTest {
         }
 
         @Test
-        @DisplayName("Find Studio optimizations using dedicated endpoint")
-        void findStudioOptimizations() {
+        @DisplayName("Find optimizations returns studioConfig when present")
+        void findOptimizationsReturnsStudioConfig() {
             // Mock target workspace
             String apiKey = UUID.randomUUID().toString();
             String workspaceName = "test-workspace-" + UUID.randomUUID();
@@ -858,20 +860,30 @@ class OptimizationsResourceTest {
                     .build();
             var studioId = optimizationResourceClient.create(studioOptimization, apiKey, workspaceName);
 
-            // Find using dedicated Studio endpoint
-            var page = optimizationResourceClient.findStudio(apiKey, workspaceName, 1, 10, null, null, null, 200);
+            // Find all optimizations - both should be returned
+            var page = optimizationResourceClient.find(apiKey, workspaceName, 1, 10, null, null, null, 200);
 
-            // Should only return Studio optimizations
-            assertThat(page.content()).isNotEmpty();
-            assertThat(page.content()).hasSize(1);
-            assertThat(page.content().get(0).id()).isEqualTo(studioId);
-            // Studio config should be included by default in studio endpoint
-            assertThat(page.content().get(0).studioConfig()).isNotNull();
+            // Should return both optimizations
+            assertThat(page.content()).hasSize(2);
+
+            // Studio optimization should have studioConfig included
+            var studioOpt = page.content().stream()
+                    .filter(opt -> opt.id().equals(studioId))
+                    .findFirst()
+                    .orElseThrow();
+            assertThat(studioOpt.studioConfig()).isNotNull();
+
+            // Regular optimization should have null studioConfig
+            var regularOpt = page.content().stream()
+                    .filter(opt -> opt.id().equals(regularId))
+                    .findFirst()
+                    .orElseThrow();
+            assertThat(regularOpt.studioConfig()).isNull();
         }
 
         @Test
-        @DisplayName("Get Studio optimization by ID using dedicated endpoint")
-        void getStudioOptimizationById() {
+        @DisplayName("Get optimization by ID returns studioConfig when present")
+        void getOptimizationByIdReturnsStudioConfig() {
             var studioConfig = createStudioConfig();
             var optimization = optimizationResourceClient.createPartialOptimization()
                     .studioConfig(studioConfig)
@@ -879,8 +891,8 @@ class OptimizationsResourceTest {
 
             var id = optimizationResourceClient.create(optimization, API_KEY, TEST_WORKSPACE_NAME);
 
-            // Get using dedicated Studio endpoint
-            var actualOptimization = optimizationResourceClient.getStudio(id, API_KEY, TEST_WORKSPACE_NAME, 200);
+            // Get using standard endpoint
+            var actualOptimization = optimizationResourceClient.get(id, API_KEY, TEST_WORKSPACE_NAME, 200);
 
             // Studio config should be included (opikApiKey is null in both since it's @JsonIgnore)
             assertThat(actualOptimization).isNotNull();
@@ -900,7 +912,7 @@ class OptimizationsResourceTest {
             var id = optimizationResourceClient.create(optimization, API_KEY, TEST_WORKSPACE_NAME);
 
             // Verify initial state - should have studio_config and INITIALIZED status
-            var initialOptimization = optimizationResourceClient.getStudio(id, API_KEY, TEST_WORKSPACE_NAME, 200);
+            var initialOptimization = optimizationResourceClient.get(id, API_KEY, TEST_WORKSPACE_NAME, 200);
             assertThat(initialOptimization.studioConfig()).isNotNull();
             assertThat(initialOptimization.studioConfig()).isEqualTo(studioConfig);
             assertThat(initialOptimization.status()).isEqualTo(OptimizationStatus.INITIALIZED);
@@ -912,7 +924,7 @@ class OptimizationsResourceTest {
             optimizationResourceClient.update(id, runningUpdate, API_KEY, TEST_WORKSPACE_NAME, 204);
 
             // Verify studio_config is preserved after RUNNING update
-            var runningOptimization = optimizationResourceClient.getStudio(id, API_KEY, TEST_WORKSPACE_NAME, 200);
+            var runningOptimization = optimizationResourceClient.get(id, API_KEY, TEST_WORKSPACE_NAME, 200);
             assertThat(runningOptimization.status()).isEqualTo(OptimizationStatus.RUNNING);
             assertThat(runningOptimization.studioConfig()).isNotNull();
             assertThat(runningOptimization.studioConfig()).isEqualTo(studioConfig);
@@ -924,7 +936,7 @@ class OptimizationsResourceTest {
             optimizationResourceClient.update(id, completedUpdate, API_KEY, TEST_WORKSPACE_NAME, 204);
 
             // Verify studio_config is still preserved after COMPLETED update
-            var completedOptimization = optimizationResourceClient.getStudio(id, API_KEY, TEST_WORKSPACE_NAME, 200);
+            var completedOptimization = optimizationResourceClient.get(id, API_KEY, TEST_WORKSPACE_NAME, 200);
             assertThat(completedOptimization.status()).isEqualTo(OptimizationStatus.COMPLETED);
             assertThat(completedOptimization.studioConfig()).isNotNull();
             assertThat(completedOptimization.studioConfig()).isEqualTo(studioConfig);
@@ -1034,21 +1046,6 @@ class OptimizationsResourceTest {
             assertThat(completedPage.content()).hasSize(1);
             assertThat(completedPage.content().get(0).id()).isEqualTo(regularCompletedOptId);
             assertThat(completedPage.content().get(0).status()).isEqualTo(OptimizationStatus.COMPLETED);
-
-            // Test 3: Filter by INITIALIZED + studio_only - should get 1 (studio only)
-            var studioInitializedPage = optimizationResourceClient.findStudio(apiKey, workspaceName, 1, 10,
-                    null, null, List.of(initializedFilter), 200);
-
-            assertThat(studioInitializedPage.content()).hasSize(1);
-            assertThat(studioInitializedPage.content().get(0).id()).isEqualTo(studioOptId);
-            assertThat(studioInitializedPage.content().get(0).status()).isEqualTo(OptimizationStatus.INITIALIZED);
-            assertThat(studioInitializedPage.content().get(0).studioConfig()).isNotNull();
-
-            // Test 4: Filter by COMPLETED + studio_only - should get 0 (no completed studio optimizations)
-            var studioCompletedPage = optimizationResourceClient.findStudio(apiKey, workspaceName, 1, 10,
-                    null, null, List.of(completedFilter), 200);
-
-            assertThat(studioCompletedPage.content()).isEmpty();
         }
 
         @Test
