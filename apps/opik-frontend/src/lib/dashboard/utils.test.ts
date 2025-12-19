@@ -107,6 +107,7 @@ describe("areWidgetsEqual", () => {
     id: "widget-1",
     type: WIDGET_TYPE.TEXT_MARKDOWN,
     title: "Test Widget",
+    generatedTitle: "Text",
     subtitle: "Subtitle",
     config: { content: "test" } as never,
   };
@@ -135,6 +136,12 @@ describe("areWidgetsEqual", () => {
   it("should return false for different titles", () => {
     const widget1 = { ...baseWidget };
     const widget2 = { ...baseWidget, title: "Different Title" };
+    expect(areWidgetsEqual(widget1, widget2)).toBe(false);
+  });
+
+  it("should return false for different generatedTitles", () => {
+    const widget1 = { ...baseWidget };
+    const widget2 = { ...baseWidget, generatedTitle: "Different Generated" };
     expect(areWidgetsEqual(widget1, widget2)).toBe(false);
   });
 
@@ -174,6 +181,7 @@ describe("areWidgetArraysEqual", () => {
     id: "widget-1",
     type: WIDGET_TYPE.TEXT_MARKDOWN,
     title: "Widget 1",
+    generatedTitle: "Text",
     config: {},
   };
 
@@ -181,6 +189,7 @@ describe("areWidgetArraysEqual", () => {
     id: "widget-2",
     type: WIDGET_TYPE.TEXT_MARKDOWN,
     title: "Widget 2",
+    generatedTitle: "Text",
     config: {},
   };
 
@@ -215,6 +224,7 @@ describe("areSectionsEqual", () => {
     id: "widget-1",
     type: WIDGET_TYPE.TEXT_MARKDOWN,
     title: "Widget 1",
+    generatedTitle: "Text",
     config: {},
   };
 
@@ -359,6 +369,7 @@ describe("createDefaultWidgetConfig", () => {
     const config = createDefaultWidgetConfig(WIDGET_TYPE.TEXT_MARKDOWN, null);
     expect(config.type).toBe(WIDGET_TYPE.TEXT_MARKDOWN);
     expect(config.title).toBe("");
+    expect(config.generatedTitle).toBe("");
     expect(config.subtitle).toBe("");
     expect(config.config).toEqual({});
   });
@@ -368,7 +379,7 @@ describe("createDefaultWidgetConfig", () => {
       Widget: () => null,
       Editor: null,
       getDefaultConfig: () => ({ content: "default" }),
-      calculateTitle: () => "Custom Title",
+      calculateTitle: () => "Generated Title",
       metadata: {
         title: "Test Widget",
         description: "Test",
@@ -383,7 +394,8 @@ describe("createDefaultWidgetConfig", () => {
     );
 
     expect(config.type).toBe(WIDGET_TYPE.TEXT_MARKDOWN);
-    expect(config.title).toBe("Custom Title");
+    expect(config.title).toBe("Generated Title");
+    expect(config.generatedTitle).toBe("Generated Title");
     expect(config.subtitle).toBe("");
     expect(config.config).toEqual({ content: "default" });
     expect(mockResolver).toHaveBeenCalledWith(WIDGET_TYPE.TEXT_MARKDOWN);

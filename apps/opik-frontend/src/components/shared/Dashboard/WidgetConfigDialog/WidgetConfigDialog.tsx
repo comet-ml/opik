@@ -15,10 +15,7 @@ import {
   selectSetPreviewWidget,
 } from "@/store/DashboardStore";
 import WidgetConfigDialogAddStep from "./WidgetConfigDialogAddStep";
-import WidgetConfigDialogEditStep from "./WidgetConfigDialogEditStep";
 import {
-  AddWidgetConfig,
-  WIDGET_TYPE,
   DashboardWidget,
   WidgetConfigDialogProps,
   WidgetEditorHandle,
@@ -29,15 +26,6 @@ enum DialogStep {
   ADD = "add",
   EDIT = "edit",
 }
-
-const convertWidgetToAddConfig = (widget: DashboardWidget): AddWidgetConfig => {
-  return {
-    type: widget.type as WIDGET_TYPE,
-    title: widget.title,
-    subtitle: widget.subtitle,
-    config: widget.config,
-  } as AddWidgetConfig;
-};
 
 const WidgetConfigDialog: React.FunctionComponent<WidgetConfigDialogProps> = ({
   open,
@@ -50,16 +38,16 @@ const WidgetConfigDialog: React.FunctionComponent<WidgetConfigDialogProps> = ({
   const [currentStep, setCurrentStep] = useState<DialogStep>(
     isEditMode ? DialogStep.EDIT : DialogStep.ADD,
   );
-  const [widgetData, setWidgetData] = useState<AddWidgetConfig | null>(null);
   const editorRef = useRef<WidgetEditorHandle>(null);
 
   const widgetResolver = useDashboardStore(selectWidgetResolver);
   const getWidgetById = useDashboardStore((state) => state.getWidgetById);
+  const previewWidget = useDashboardStore((state) => state.previewWidget);
   const setPreviewWidget = useDashboardStore(selectSetPreviewWidget);
 
-  const editorComponent =
-    widgetData?.type && widgetResolver
-      ? widgetResolver(widgetData.type)?.Editor || null
+  const EditorComponent =
+    previewWidget?.type && widgetResolver
+      ? widgetResolver(previewWidget.type)?.Editor || null
       : null;
 
   useEffect(() => {
@@ -69,35 +57,21 @@ const WidgetConfigDialog: React.FunctionComponent<WidgetConfigDialogProps> = ({
       setCurrentStep(DialogStep.EDIT);
       const widget = getWidgetById(sectionId, widgetId);
       if (widget) {
-        setWidgetData(convertWidgetToAddConfig(widget));
+        setPreviewWidget(widget);
       }
     }
-  }, [isEditMode, open, widgetId, sectionId, getWidgetById]);
-
-  useEffect(() => {
-    if (open && currentStep === DialogStep.EDIT && widgetData) {
-      const previewWidget: DashboardWidget = {
-        id: "preview",
-        title: widgetData.title || "",
-        subtitle: widgetData.subtitle,
-        type: widgetData.type,
-        config: widgetData.config || {},
-      };
-      setPreviewWidget(previewWidget);
-    }
-  }, [widgetData, currentStep, setPreviewWidget, open]);
+  }, [isEditMode, open, widgetId, sectionId, getWidgetById, setPreviewWidget]);
 
   useEffect(() => {
     if (!open) {
       setPreviewWidget(null);
-      setWidgetData(null);
       setCurrentStep(isEditMode ? DialogStep.EDIT : DialogStep.ADD);
     }
   }, [open, setPreviewWidget, isEditMode]);
 
   const handleSelectWidget = (widgetType: string) => {
-    const newData = createDefaultWidgetConfig(widgetType, widgetResolver);
-    setWidgetData(newData);
+    const newWidget = createDefaultWidgetConfig(widgetType, widgetResolver);
+    setPreviewWidget({ ...newWidget, id: "preview" } as DashboardWidget);
     setCurrentStep(DialogStep.EDIT);
   };
 
@@ -107,19 +81,11 @@ const WidgetConfigDialog: React.FunctionComponent<WidgetConfigDialogProps> = ({
     }
   };
 
-  const handleChange = (data: Partial<AddWidgetConfig>) => {
-    setWidgetData((prev) => {
-      if (!prev) return prev;
-      const merged = { ...prev, ...data };
-      return merged as AddWidgetConfig;
-    });
-  };
-
   const handleSave = async () => {
-    if (!widgetData) return;
+    if (!previewWidget) return;
     const isValid = await editorRef.current?.submit();
     if (isValid) {
-      onSave(widgetData);
+      onSave(previewWidget);
       onOpenChange(false);
     }
   };
@@ -150,13 +116,8 @@ const WidgetConfigDialog: React.FunctionComponent<WidgetConfigDialogProps> = ({
           </div>
         )}
 
-        {currentStep === DialogStep.EDIT && widgetData && (
-          <WidgetConfigDialogEditStep
-            widgetData={widgetData}
-            onChange={handleChange}
-            editorComponent={editorComponent}
-            editorRef={editorRef}
-          />
+        {currentStep === DialogStep.EDIT && EditorComponent && (
+          <EditorComponent ref={editorRef} />
         )}
 
         <DialogFooter className="flex flex-row justify-between gap-2 border-t pt-4 sm:flex-row sm:justify-between">
