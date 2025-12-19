@@ -42,8 +42,12 @@ export namespace AutomationRuleEvaluatorObjectObjectPublic {
 
     export interface _Base {
         id?: string;
-        projectId: string;
+        /** Primary project ID (legacy field for backwards compatibility) */
+        projectId?: string;
+        /** Primary project name (legacy field for backwards compatibility) */
         projectName?: string;
+        /** Projects assigned to this rule (unique, sorted alphabetically by name) */
+        projects?: OpikApi.ProjectReferencePublic[];
         name: string;
         samplingRate?: number;
         enabled?: boolean;

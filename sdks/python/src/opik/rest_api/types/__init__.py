@@ -389,6 +389,8 @@ from .project_metric_response_public_metric_type import ProjectMetricResponsePub
 from .project_page_public import ProjectPagePublic
 from .project_public import ProjectPublic
 from .project_public_visibility import ProjectPublicVisibility
+from .project_reference import ProjectReference
+from .project_reference_public import ProjectReferencePublic
 from .project_stat_item_object_public import (
     ProjectStatItemObjectPublic,
     ProjectStatItemObjectPublic_Avg,
@@ -891,6 +893,8 @@ __all__ = [
     "ProjectPagePublic",
     "ProjectPublic",
     "ProjectPublicVisibility",
+    "ProjectReference",
+    "ProjectReferencePublic",
     "ProjectStatItemObjectPublic",
     "ProjectStatItemObjectPublic_Avg",
     "ProjectStatItemObjectPublic_Count",
