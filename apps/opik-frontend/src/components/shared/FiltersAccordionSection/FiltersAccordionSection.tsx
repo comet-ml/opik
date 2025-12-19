@@ -55,7 +55,17 @@ const FiltersAccordionSection = <TColumnData,>({
     onChange((prev) => [...prev, newFilter]);
   }, [onChange]);
 
-  const hasErrors = errors && errors.length > 0;
+  const hasErrors =
+    errors &&
+    errors.some((error) => {
+      if (!error) return false;
+      return (
+        error.field?.message ||
+        error.operator?.message ||
+        error.value?.message ||
+        error.key?.message
+      );
+    });
 
   return (
     <Accordion type="single" collapsible className={cn("w-full", className)}>
