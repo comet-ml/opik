@@ -5,6 +5,7 @@ import {
 } from "@/types/optimizations";
 import { LLM_MESSAGE_ROLE } from "@/types/llm";
 import { PROVIDER_MODEL_TYPE } from "@/types/providers";
+import { LLM_MESSAGE_ROLE_NAME_MAP } from "@/constants/llm";
 
 export const DEFAULT_GEPA_OPTIMIZER_CONFIGS = {
   VERBOSE: false,
@@ -55,6 +56,36 @@ export const DEFAULT_LEVENSHTEIN_METRIC_CONFIGS = {
   CASE_SENSITIVE: false,
   REFERENCE_KEY: "",
 };
+
+export const OPTIMIZATION_MESSAGE_TYPE_OPTIONS = [
+  {
+    label: LLM_MESSAGE_ROLE_NAME_MAP[LLM_MESSAGE_ROLE.system],
+    value: LLM_MESSAGE_ROLE.system,
+  },
+  {
+    label: LLM_MESSAGE_ROLE_NAME_MAP[LLM_MESSAGE_ROLE.user],
+    value: LLM_MESSAGE_ROLE.user,
+  },
+  {
+    label: LLM_MESSAGE_ROLE_NAME_MAP[LLM_MESSAGE_ROLE.assistant],
+    value: LLM_MESSAGE_ROLE.assistant,
+  },
+];
+
+export const OPTIMIZER_OPTIONS = [
+  { value: OPTIMIZER_TYPE.GEPA, label: "GEPA optimizer" },
+  {
+    value: OPTIMIZER_TYPE.HIERARCHICAL_REFLECTIVE,
+    label: "Hierarchical Reflective",
+  },
+];
+
+export const OPTIMIZATION_METRIC_OPTIONS = [
+  { value: METRIC_TYPE.EQUALS, label: "Equals" },
+  { value: METRIC_TYPE.JSON_SCHEMA_VALIDATOR, label: "JSON Schema Validator" },
+  { value: METRIC_TYPE.G_EVAL, label: "Custom (G-Eval)" },
+  { value: METRIC_TYPE.LEVENSHTEIN, label: "Levenshtein" },
+];
 
 // Type for demo dataset items - keys should match template variables
 export type DemoDatasetItem = Record<string, unknown>;
@@ -322,7 +353,7 @@ const JSON_OUTPUT_DATASET_ITEMS: DemoDatasetItem[] = [
   },
 ];
 
-export const DEMO_TEMPLATES: OptimizationTemplate[] = [
+export const OPTIMIZATION_DEMO_TEMPLATES: OptimizationTemplate[] = [
   {
     id: "opik-chatbot",
     title: "Demo - Opik Chatbot",
@@ -338,7 +369,7 @@ export const DEMO_TEMPLATES: OptimizationTemplate[] = [
             role: LLM_MESSAGE_ROLE.system,
             content: "You are an Opik assistant.",
           },
-          { role: LLM_MESSAGE_ROLE.user, content: "{question}" },
+          { role: LLM_MESSAGE_ROLE.user, content: "{{question}}" },
         ],
       },
       llm_model: {
@@ -385,7 +416,7 @@ export const DEMO_TEMPLATES: OptimizationTemplate[] = [
             content:
               "You are a JSON generator. Generate valid JSON based on the user's description.",
           },
-          { role: LLM_MESSAGE_ROLE.user, content: "{input_description}" },
+          { role: LLM_MESSAGE_ROLE.user, content: "{{input_description}}" },
         ],
       },
       llm_model: {

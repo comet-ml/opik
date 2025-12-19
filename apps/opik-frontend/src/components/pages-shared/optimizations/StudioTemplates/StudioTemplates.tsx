@@ -10,7 +10,7 @@ import ColoredTag from "@/components/shared/ColoredTag/ColoredTag";
 import { Zap } from "lucide-react";
 import { Link } from "@tanstack/react-router";
 import useAppStore from "@/store/AppStore";
-import { DEMO_TEMPLATES } from "@/constants/optimizations";
+import { OPTIMIZATION_DEMO_TEMPLATES } from "@/constants/optimizations";
 
 const StudioTemplates: React.FC = () => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
@@ -46,7 +46,7 @@ const StudioTemplates: React.FC = () => {
         </Card>
 
         {/* Template cards */}
-        {DEMO_TEMPLATES.map((template) => (
+        {OPTIMIZATION_DEMO_TEMPLATES.map((template) => (
           <Card
             key={template.id}
             className="cursor-pointer transition-shadow hover:shadow-md"
