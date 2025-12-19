@@ -479,7 +479,7 @@ const ExperimentsFeedbackScoresWidget: React.FunctionComponent<
         <DashboardWidget.PreviewHeader />
       ) : (
         <DashboardWidget.Header
-          title={widget.title}
+          title={widget.title || widget.generatedTitle || ""}
           subtitle={widget.subtitle}
           warningMessage={warningMessage}
           infoMessage={infoMessage}

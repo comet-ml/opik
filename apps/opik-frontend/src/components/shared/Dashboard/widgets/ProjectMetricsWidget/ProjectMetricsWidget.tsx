@@ -192,7 +192,7 @@ const ProjectMetricsWidget: React.FunctionComponent<
         <DashboardWidget.PreviewHeader />
       ) : (
         <DashboardWidget.Header
-          title={widget.title}
+          title={widget.title || widget.generatedTitle || ""}
           subtitle={widget.subtitle}
           infoMessage={infoMessage}
           actions={
