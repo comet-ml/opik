@@ -49,8 +49,6 @@ public interface OptimizationService {
 
     Mono<Optimization> getById(UUID id);
 
-    Mono<Optimization> getById(UUID id, boolean includeStudioConfig);
-
     Mono<Optimization.OptimizationPage> find(int page, int size, OptimizationSearchCriteria searchCriteria);
 
     Mono<Void> delete(@NonNull Set<UUID> ids);
@@ -83,23 +81,11 @@ class OptimizationServiceImpl implements OptimizationService {
     @Override
     @WithSpan
     public Mono<Optimization> getById(@NonNull UUID id) {
-        return getById(id, false);
-    }
-
-    @Override
-    @WithSpan
-    public Mono<Optimization> getById(@NonNull UUID id, boolean includeStudioConfig) {
-        log.info("Getting optimization by id '{}', includeStudioConfig: '{}'", id, includeStudioConfig);
+        log.info("Getting optimization by id '{}'", id);
         return optimizationDAO.getById(id)
                 .flatMap(optimization -> Mono.deferContextual(ctx -> {
                     String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
                     var enriched = enrichOptimizations(List.of(optimization), workspaceId).getFirst();
-
-                    // Scrub studioConfig unless explicitly requested
-                    if (!includeStudioConfig) {
-                        enriched = enriched.toBuilder().studioConfig(null).build();
-                    }
-
                     return Mono.just(enriched);
                 }))
                 .switchIfEmpty(Mono.defer(
@@ -114,16 +100,8 @@ class OptimizationServiceImpl implements OptimizationService {
                 .flatMap(optimizationPage -> Mono.deferContextual(ctx -> {
                     String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
                     var enrichedOptimizations = enrichOptimizations(optimizationPage.content(), workspaceId);
-
-                    // Scrub studioConfig unless explicitly requesting Studio-only optimizations
-                    var finalOptimizations = Boolean.TRUE.equals(searchCriteria.studioOnly())
-                            ? enrichedOptimizations
-                            : enrichedOptimizations.stream()
-                                    .map(opt -> opt.toBuilder().studioConfig(null).build())
-                                    .toList();
-
                     return Mono.just(optimizationPage.toBuilder()
-                            .content(finalOptimizations).build());
+                            .content(enrichedOptimizations).build());
                 }));
     }
 
