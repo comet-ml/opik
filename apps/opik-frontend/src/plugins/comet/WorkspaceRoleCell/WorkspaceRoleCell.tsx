@@ -98,7 +98,7 @@ const WorkspaceRoleCell = (context: CellContext<WorkspaceMember, string>) => {
 
   const button = (
     <button
-      className="-ml-1 flex items-center gap-1 rounded-sm px-1 py-0.5 focus:outline-none focus:ring-2 focus:ring-offset-1 disabled:cursor-not-allowed disabled:opacity-50"
+      className="-ml-1 flex min-w-0 items-center gap-1 rounded-sm px-1 py-0.5 focus:outline-none focus:ring-2 focus:ring-offset-1 disabled:cursor-not-allowed disabled:opacity-50"
       onClick={(e) => {
         e.stopPropagation();
         if (isInvitedByEmail) {
@@ -107,8 +107,8 @@ const WorkspaceRoleCell = (context: CellContext<WorkspaceMember, string>) => {
       }}
       disabled={isInvitedByEmail}
     >
-      <span>{value}</span>
-      <ChevronDown className="size-4" />
+      <span className="min-w-0 truncate">{value}</span>
+      <ChevronDown className="size-4 shrink-0" />
     </button>
   );
 
