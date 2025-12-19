@@ -55,8 +55,10 @@ const InlineEditableText: React.FunctionComponent<InlineEditableTextProps> = ({
   const handleReset = useCallback(() => {
     if (defaultValue !== undefined) {
       setEditValue(defaultValue);
+      onChange("");
+      setIsEditing(false);
     }
-  }, [defaultValue]);
+  }, [defaultValue, onChange]);
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -152,38 +154,40 @@ const InlineEditableText: React.FunctionComponent<InlineEditableTextProps> = ({
 
   // Default/Hover state
   return (
-    <div
-      className={cn(
-        "group/inline-edit flex h-8 cursor-pointer items-center gap-1 overflow-hidden rounded-md transition-colors hover:bg-muted",
-        className,
-      )}
-      onClick={handleStartEdit}
-      role="button"
-      tabIndex={0}
-      onKeyDown={(e) => {
-        if (e.key === "Enter" || e.key === " ") {
-          e.preventDefault();
-          handleStartEdit();
-        }
-      }}
-    >
-      <div className="min-w-0 flex-1 pl-2">
-        <span
-          className={cn(
-            "block truncate text-sm leading-5",
-            isTitle ? "font-medium text-foreground" : "text-foreground",
-            !value && "text-muted-slate",
-          )}
-        >
-          {displayValue}
-        </span>
-      </div>
-      <div className="hidden h-full items-center pr-2 group-hover/inline-edit:flex">
-        <div className="flex size-7 items-center justify-center rounded">
-          <Pencil className="size-3.5 text-foreground" />
+    <TooltipWrapper content={displayValue} side="top">
+      <div
+        className={cn(
+          "group/inline-edit flex h-8 cursor-pointer items-center gap-1 overflow-hidden rounded-md transition-colors hover:bg-muted",
+          className,
+        )}
+        onClick={handleStartEdit}
+        role="button"
+        tabIndex={0}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            handleStartEdit();
+          }
+        }}
+      >
+        <div className="min-w-0 flex-1 pl-2">
+          <span
+            className={cn(
+              "block truncate text-sm leading-5",
+              isTitle ? "font-medium text-foreground" : "text-foreground",
+              !value && "text-muted-slate",
+            )}
+          >
+            {displayValue}
+          </span>
+        </div>
+        <div className="hidden h-full items-center pr-2 group-hover/inline-edit:flex">
+          <div className="flex size-7 items-center justify-center rounded">
+            <Pencil className="size-3.5 text-foreground" />
+          </div>
         </div>
       </div>
-    </div>
+    </TooltipWrapper>
   );
 };
 
