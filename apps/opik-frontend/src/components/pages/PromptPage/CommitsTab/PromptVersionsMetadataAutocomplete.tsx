@@ -1,10 +1,12 @@
 import React, { useMemo } from "react";
 import uniq from "lodash/uniq";
 import isObject from "lodash/isObject";
+import isArray from "lodash/isArray";
 
 import Autocomplete from "@/components/shared/Autocomplete/Autocomplete";
 import usePromptVersionsById from "@/api/prompts/usePromptVersionsById";
 import { Prompt } from "@/types/prompts";
+import { getJSONPaths } from "@/lib/utils";
 
 type PromptVersionsMetadataAutocompleteProps = {
   prompt: Prompt;
@@ -24,31 +26,31 @@ const PromptVersionsMetadataAutocomplete: React.FC<
     size: 100,
   });
 
-  const metadataKeys = useMemo(() => {
-    const versions = data?.content || [];
+  const items = useMemo(() => {
+    const key = "metadata";
 
-    // Extract all unique metadata keys from versions
-    const keys = versions.reduce<string[]>((acc, version) => {
-      if (version.metadata && isObject(version.metadata)) {
-        return acc.concat(Object.keys(version.metadata));
-      }
-      return acc;
-    }, []);
-
-    // Deduplicate and sort
-    const uniqueKeys = uniq(keys).sort();
-
-    // Filter based on current input value
-    return uniqueKeys.filter((key) =>
-      value ? key.toLowerCase().includes(value.toLowerCase()) : true,
-    );
+    return uniq(
+      (data?.content || []).reduce<string[]>((acc, version) => {
+        return acc.concat(
+          isObject(version[key]) || isArray(version[key])
+            ? getJSONPaths(version[key], key).map((path) =>
+                path.substring(path.indexOf(".") + 1),
+              )
+            : [],
+        );
+      }, []),
+    )
+      .filter((p) =>
+        value ? p.toLowerCase().includes(value.toLowerCase()) : true,
+      )
+      .sort();
   }, [data, value]);
 
   return (
     <Autocomplete
       value={value}
       onValueChange={onValueChange}
-      items={metadataKeys}
+      items={items}
       hasError={hasError}
       isLoading={isPending}
       placeholder={placeholder}
